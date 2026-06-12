@@ -11,7 +11,7 @@
 
 ## The database and its three roles
 
-Postgres 17 runs via `docker-compose.yml`. On first start, `infra/db/bootstrap.sql` creates the
+Postgres 18 runs via `docker-compose.yml`. On first start, `infra/db/bootstrap.sql` creates the
 `leasebook` database and three **purpose-separated** login roles. This separation is what makes
 Row-Level Security a real boundary: RLS does not apply to a table's owner by default, so the role
 that runs traffic must not be the role that owns the tables (see CLAUDE.md → Multi-tenancy).

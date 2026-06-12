@@ -2,7 +2,7 @@
 # PostgreSQL Flexible Server with managed identity / Key Vault (see infra/, WP-10).
 services:
   db:
-    image: postgres:17
+    image: postgres:18
     container_name: leasebook-db
     environment:
       # Superuser password (dev-only). The three application roles are created by bootstrap.sql.
@@ -13,7 +13,10 @@ services:
       # locally (e.g. another project's Postgres). The container always listens on 5432.
       - "${LEASEBOOK_DB_PORT:-5432}:5432"
     volumes:
-      - leasebook-pgdata:/var/lib/postgresql/data
+      # postgres:18+ images put PGDATA at /var/lib/postgresql/<major>/docker and declare the
+      # volume one level up (enables pg_upgrade --link across majors). Mounting the pre-18
+      # path /var/lib/postgresql/data would be silently ignored — data would not persist.
+      - leasebook-pgdata:/var/lib/postgresql
       # Runs once on first init (empty data dir): creates the leasebook DB, the three roles,
       # and default privileges. `reset-db` wipes the volume so this re-runs from scratch.
       - ./infra/db/bootstrap.sql:/docker-entrypoint-initdb.d/01-bootstrap.sql:ro
