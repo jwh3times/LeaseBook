@@ -1,4 +1,5 @@
 using LeaseBook.Modules.Accounting.Contracts;
+using LeaseBook.Modules.Accounting.Features.Posting;
 using LeaseBook.Modules.Accounting.Periods;
 using LeaseBook.Modules.Accounting.Posting;
 using LeaseBook.Modules.Accounting.Provisioning;
@@ -20,6 +21,11 @@ public static class AccountingModuleServiceCollectionExtensions
         services.AddScoped<IPostingService, PostingService>();
         services.AddScoped<IReversalService, ReversalService>();
         services.AddScoped<IPostingLock, PostingLock>();
+
+        // One event-template instance behind both surfaces (the catalog and the cutover-only contract).
+        services.AddScoped<AccountingEventService>();
+        services.AddScoped<IAccountingEvents>(sp => sp.GetRequiredService<AccountingEventService>());
+        services.AddScoped<IBalanceForward>(sp => sp.GetRequiredService<AccountingEventService>());
         return services;
     }
 }

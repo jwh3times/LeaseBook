@@ -1,8 +1,11 @@
 using LeaseBook.Modules.Accounting.Contracts;
+using LeaseBook.Modules.Accounting.Domain;
+using LeaseBook.Modules.Accounting.Features.Posting;
 using LeaseBook.Modules.Accounting.Periods;
 using LeaseBook.Modules.Accounting.Posting;
 using LeaseBook.Modules.Accounting.Provisioning;
 using LeaseBook.Tests.Common;
+using Microsoft.EntityFrameworkCore;
 
 namespace LeaseBook.Tests.Accounting.Support;
 
@@ -35,4 +38,44 @@ internal static class AccountingTestHarness
     public static ReversalService Reversal(OrgScope scope) => new(scope.Db, scope.Tenant, Posting(scope));
 
     public static AccountingPeriods Periods(OrgScope scope) => new(scope.Db);
+
+    public static AccountingEventService Events(OrgScope scope) =>
+        new(scope.Db, Posting(scope), new PostingLock(scope.Db, scope.Tenant));
+
+    /// <summary>A posted line projected to its resolved account code + amounts/basis/dims, for exact assertions.</summary>
+    public sealed record LineView(
+        string Code, decimal? Debit, decimal? Credit, EntryBasis Basis,
+        Guid? TenantId, Guid? OwnerId, Guid? PropertyId, Guid? UnitId, Guid? BankAccountId);
+
+    public static async Task<List<LineView>> ReadLinesAsync(OrgScope scope, Guid entryId, CancellationToken ct)
+    {
+        List<LineView> lines = [];
+        await scope.RunAsync(async () =>
+        {
+            var rows = await (
+                from line in scope.Db.Set<JournalLine>().AsNoTracking()
+                join account in scope.Db.Set<Account>().AsNoTracking() on line.AccountId equals account.Id
+                where line.EntryId == entryId
+                select new
+                {
+                    account.Code,
+                    line.Debit,
+                    line.Credit,
+                    line.Basis,
+                    line.TenantId,
+                    line.OwnerId,
+                    line.PropertyId,
+                    line.UnitId,
+                    line.BankAccountId,
+                }).ToListAsync(ct);
+
+            lines = rows
+                .Select(r => new LineView(
+                    r.Code, r.Debit?.Amount, r.Credit?.Amount, r.Basis,
+                    r.TenantId, r.OwnerId, r.PropertyId, r.UnitId, r.BankAccountId))
+                .ToList();
+        }, ct);
+
+        return lines;
+    }
 }
