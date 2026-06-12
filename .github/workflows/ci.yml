@@ -64,6 +64,9 @@ jobs:
         env:
           PGPASSWORD: dev_postgres_pw
       - run: dotnet tool restore
+      # dotnet ef builds LeaseBook.Web before applying migrations; restore its packages first so
+      # project.assets.json exists (the design-time build does not restore on its own).
+      - run: dotnet restore src/LeaseBook.Web
       - name: Apply migrations as the migrator role
         run: dotnet ef database update --project src/LeaseBook.Web
         env:

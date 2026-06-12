@@ -45,6 +45,7 @@ jobs:
       - name: Apply EF migrations
         run: |
           dotnet tool restore
+          dotnet restore src/LeaseBook.Web
           dotnet ef database update --project src/LeaseBook.Web
         env:
           ConnectionStrings__Migrations: ${{ secrets.MIGRATIONS_CONNECTION_STRING }}
