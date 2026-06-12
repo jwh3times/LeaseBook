@@ -4,6 +4,8 @@ using LeaseBook.SharedKernel.Cqrs;
 using LeaseBook.SharedKernel.Endpoints;
 using LeaseBook.SharedKernel.Observability;
 using LeaseBook.SharedKernel.Tenancy;
+using LeaseBook.Web.Auth;
+using LeaseBook.Web.Endpoints;
 using LeaseBook.Web.Persistence;
 using LeaseBook.Web.Tenancy;
 using Microsoft.EntityFrameworkCore;
@@ -12,8 +14,8 @@ using OpenTelemetry.Trace;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Module assemblies the host composes. CQRS handlers/validators and endpoint modules are
-// discovered from these. (Identity and real slices are wired in later WPs.)
+// Module assemblies the host composes. CQRS handlers/validators are discovered from these; endpoint
+// modules are discovered from these plus the host (which owns auth/meta/diagnostics endpoints).
 Assembly[] moduleAssemblies =
 [
     typeof(LeaseBook.Modules.Accounting.ModuleMarker).Assembly,
@@ -23,8 +25,13 @@ Assembly[] moduleAssemblies =
     typeof(LeaseBook.Modules.Operations.ModuleMarker).Assembly,
     typeof(LeaseBook.Modules.Payments.ModuleMarker).Assembly,
 ];
+Assembly[] endpointAssemblies = [.. moduleAssemblies, typeof(Program).Assembly];
 
 builder.Services.AddLeaseBookCqrs(moduleAssemblies);
+
+// RFC 7807 everywhere (P17): ProblemDetails defaults + the CQRS ValidationException → 400 mapping.
+builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<ValidationExceptionHandler>();
 
 // Data access (runtime = app role, RLS-subject). Migrations use the migrator connection via the
 // design-time factory; the running app never connects as migrator.
@@ -32,6 +39,9 @@ builder.Services.AddDbContext<AppDbContext>(options => options
     .UseNpgsql(builder.Configuration.GetConnectionString("Default"),
         npgsql => npgsql.SetPostgresVersion(18, 0))
     .UseSnakeCaseNamingConvention());
+
+// Identity, cookie auth, antiforgery, deny-by-default authorization (P12).
+builder.Services.AddLeaseBookIdentity();
 
 // Tenancy ergonomics: one request-scoped TenantContext, exposed read-only as ITenantContext (which
 // the DbContext query filter reads). DbContext is also resolvable as its base type so the
@@ -58,16 +68,24 @@ if (!string.IsNullOrWhiteSpace(appInsightsConnection))
 
 var app = builder.Build();
 
-// Establishes app.org_id inside a per-request transaction for authenticated requests (§C.4). Sits
-// after authentication (added in WP-06); with no auth yet it passes anonymous requests through.
+app.UseExceptionHandler();
+
+app.UseAuthentication();
+// XSRF on unsafe /api requests, before authorization/org-context so a rejected request opens no tx.
+app.UseMiddleware<ApiAntiforgeryMiddleware>();
+app.UseAuthorization();
+// Establishes app.org_id inside a per-request transaction for authenticated requests (§C.4).
 app.UseMiddleware<OrgContextMiddleware>();
 
-app.MapModuleEndpoints(moduleAssemblies);
-app.MapGet("/", () => "LeaseBook host. Health endpoint (/api/health) arrives in WP-06/§C.7.");
+app.MapModuleEndpoints(endpointAssemblies);
+app.MapGet("/", () => "LeaseBook host. See /api/health.").AllowAnonymous();
+
+// The four fixed roles must exist before sign-in/seeding (idempotent).
+await RoleSeeder.EnsureRolesAsync(app.Services);
 
 app.Run();
 
-// Exposed so the integration test project can drive the host with WebApplicationFactory (later WPs).
+// Exposed so the integration test project can drive the host with WebApplicationFactory.
 public partial class Program
 {
 }

@@ -14,12 +14,23 @@ namespace LeaseBook.Tests.Integration;
 public sealed class SchemaGuardTests(PostgresFixture fixture)
 {
     /// <summary>
-    /// Non-org-scoped tables, each justified. Identity tables join this set in WP-06.
+    /// Global-class tables: no <c>org_id</c>, no RLS, each justified (§C.3).
     /// </summary>
-    private static readonly HashSet<string> GlobalOrIdentityTables = new(StringComparer.Ordinal)
+    private static readonly HashSet<string> GlobalTables = new(StringComparer.Ordinal)
     {
         "orgs",                  // global-class: the org IS the tenant — it has no org_id
         "__EFMigrationsHistory", // EF migration bookkeeping — not org data
+    };
+
+    /// <summary>
+    /// Identity-class tables (§C.3 / pitfall E6): exempt from RLS even though <c>asp_net_users</c>
+    /// carries an <c>org_id</c> — authentication must work before any org context exists, so user
+    /// isolation is enforced by app logic, not by a row-security policy.
+    /// </summary>
+    private static readonly HashSet<string> IdentityTables = new(StringComparer.Ordinal)
+    {
+        "asp_net_users", "asp_net_roles", "asp_net_user_claims", "asp_net_user_roles",
+        "asp_net_user_logins", "asp_net_role_claims", "asp_net_user_tokens",
     };
 
     [Fact]
@@ -39,6 +50,11 @@ public sealed class SchemaGuardTests(PostgresFixture fixture)
         var failures = new List<string>();
         foreach (var (name, rowSecurity, forceRowSecurity) in tables)
         {
+            if (IdentityTables.Contains(name))
+            {
+                continue; // identity-class — protected by app logic, not RLS
+            }
+
             if (orgScoped.Contains(name))
             {
                 if (!rowSecurity || !forceRowSecurity)
@@ -52,7 +68,7 @@ public sealed class SchemaGuardTests(PostgresFixture fixture)
                     failures.Add($"{name}: org-scoped but has no row-level security policy.");
                 }
             }
-            else if (!GlobalOrIdentityTables.Contains(name))
+            else if (!GlobalTables.Contains(name))
             {
                 failures.Add($"{name}: has no org_id and is not in the §C.3 table-class allowlist.");
             }

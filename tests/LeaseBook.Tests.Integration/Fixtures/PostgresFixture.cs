@@ -24,9 +24,14 @@ public sealed class PostgresFixture : IAsyncLifetime
             "/docker-entrypoint-initdb.d/")
         .Build();
 
+    private ApiFactory? _api;
+
     public string MigratorConnectionString { get; private set; } = string.Empty;
 
     public string AppConnectionString { get; private set; } = string.Empty;
+
+    /// <summary>The host running against this container as the app role, started on first use.</summary>
+    public ApiFactory Api => _api ??= new ApiFactory(AppConnectionString);
 
     public async ValueTask InitializeAsync()
     {
@@ -41,7 +46,15 @@ public sealed class PostgresFixture : IAsyncLifetime
         await migratorDb.Database.MigrateAsync();
     }
 
-    public async ValueTask DisposeAsync() => await _container.DisposeAsync();
+    public async ValueTask DisposeAsync()
+    {
+        if (_api is not null)
+        {
+            await _api.DisposeAsync();
+        }
+
+        await _container.DisposeAsync();
+    }
 
     /// <summary>Builds an AppDbContext on the given role's connection (snake_case, like the host).</summary>
     public AppDbContext CreateContext(string connectionString) =>

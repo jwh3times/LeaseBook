@@ -2,7 +2,10 @@ using System.Reflection;
 using System.Text.Json;
 using LeaseBook.SharedKernel;
 using LeaseBook.SharedKernel.Tenancy;
+using LeaseBook.Web.Auth;
 using LeaseBook.Web.Tenancy;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 
@@ -21,7 +24,7 @@ namespace LeaseBook.Web.Persistence;
 /// </para>
 /// </summary>
 public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenantContext? tenantContext = null)
-    : DbContext(options)
+    : IdentityDbContext<AppUser, IdentityRole<Guid>, Guid>(options)
 {
     private readonly ITenantContext _tenant = tenantContext ?? NullTenantContext.Instance;
 
@@ -32,6 +35,17 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+        // EFCore.NamingConventions snake_cases Identity's columns and key names but leaves the table
+        // names PascalCase; map them explicitly so the whole schema is snake_case (§C.3). These are
+        // identity-class (no RLS, pitfall E6) and are allowlisted in the schema guard.
+        modelBuilder.Entity<AppUser>().ToTable("asp_net_users");
+        modelBuilder.Entity<IdentityRole<Guid>>().ToTable("asp_net_roles");
+        modelBuilder.Entity<IdentityUserClaim<Guid>>().ToTable("asp_net_user_claims");
+        modelBuilder.Entity<IdentityUserRole<Guid>>().ToTable("asp_net_user_roles");
+        modelBuilder.Entity<IdentityUserLogin<Guid>>().ToTable("asp_net_user_logins");
+        modelBuilder.Entity<IdentityRoleClaim<Guid>>().ToTable("asp_net_role_claims");
+        modelBuilder.Entity<IdentityUserToken<Guid>>().ToTable("asp_net_user_tokens");
 
         foreach (var assembly in PersistenceAssemblies.ModelAssemblies)
         {
