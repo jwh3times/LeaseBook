@@ -6,6 +6,7 @@ using LeaseBook.SharedKernel.Endpoints;
 using LeaseBook.SharedKernel.Observability;
 using LeaseBook.SharedKernel.Tenancy;
 using LeaseBook.Web.Auth;
+using LeaseBook.Web.Cli;
 using LeaseBook.Web.Endpoints;
 using LeaseBook.Web.Persistence;
 using LeaseBook.Web.Seeding;
@@ -110,6 +111,14 @@ await RoleSeeder.EnsureRolesAsync(app.Services);
 if (args is ["seed", ..])
 {
     await DemoSeeder.SeedAsync(app.Services);
+    return;
+}
+
+// CLI: `dotnet run --project src/LeaseBook.Web -- check-invariants [--org <id|demo>|--all]` sweeps the
+// core correctness invariants and exits non-zero on any violation (P33).
+if (args is ["check-invariants", ..])
+{
+    Environment.ExitCode = await InvariantSweep.RunAsync(app.Services, args);
     return;
 }
 

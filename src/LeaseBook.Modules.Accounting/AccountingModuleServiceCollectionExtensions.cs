@@ -1,4 +1,5 @@
 using LeaseBook.Modules.Accounting.Contracts;
+using LeaseBook.Modules.Accounting.Diagnostics;
 using LeaseBook.Modules.Accounting.Features.Posting;
 using LeaseBook.Modules.Accounting.Periods;
 using LeaseBook.Modules.Accounting.Posting;
@@ -26,6 +27,8 @@ public static class AccountingModuleServiceCollectionExtensions
         services.AddScoped<AccountingEventService>();
         services.AddScoped<IAccountingEvents>(sp => sp.GetRequiredService<AccountingEventService>());
         services.AddScoped<IBalanceForward>(sp => sp.GetRequiredService<AccountingEventService>());
+
+        services.AddScoped<IInvariantChecks, InvariantChecks>();
         return services;
     }
 }
