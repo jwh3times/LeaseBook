@@ -1,5 +1,6 @@
 using System.Reflection;
 using Azure.Monitor.OpenTelemetry.Exporter;
+using LeaseBook.Modules.Accounting;
 using LeaseBook.SharedKernel.Cqrs;
 using LeaseBook.SharedKernel.Endpoints;
 using LeaseBook.SharedKernel.Observability;
@@ -51,6 +52,10 @@ builder.Services.AddScoped<TenantContext>();
 builder.Services.AddScoped<ITenantContext>(sp => sp.GetRequiredService<TenantContext>());
 builder.Services.AddScoped<DbContext>(sp => sp.GetRequiredService<AppDbContext>());
 builder.Services.AddScoped<OrgScopedExecutor>();
+
+// Accounting module services (chart-of-accounts provisioning, period lifecycle; the posting engine
+// and event catalog register here in later WPs). They consume the ambient DbContext + ITenantContext.
+builder.Services.AddAccountingModule();
 
 // OpenAPI document (P11) — the SPA's `npm run api:generate` reads /openapi/v1.json.
 builder.Services.AddOpenApi();
