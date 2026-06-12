@@ -1,9 +1,11 @@
-// Smoke shell. The real design system (WP-07) and routed application shell (WP-08) replace this.
+import { ThemeProvider } from '@/design';
+import { KitchenSink } from '@/dev/KitchenSink';
+
+// WP-07 shows the design system here; WP-08 replaces this with the routed application shell.
 export function App() {
   return (
-    <main>
-      <h1>LeaseBook</h1>
-      <p>Web scaffold is alive. Design system and routing arrive in the next work packages.</p>
-    </main>
+    <ThemeProvider>
+      <KitchenSink />
+    </ThemeProvider>
   );
 }
