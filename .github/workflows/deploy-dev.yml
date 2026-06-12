@@ -1,0 +1,60 @@
+name: Deploy (dev)
+
+# Runs after CI succeeds on main. Requires the operator to have configured the dev environment's
+# OIDC federated credentials and ACR/Container App vars; until then the Azure login step fails with
+# a clear message (this workflow is authored but its enablement is deferred — see Status Ledger).
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    environment: dev
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Build and push image to ACR
+        run: |
+          az acr login --name "$ACR_NAME"
+          IMAGE="$ACR_NAME.azurecr.io/leasebook:${{ github.sha }}"
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
+        env:
+          ACR_NAME: ${{ vars.ACR_NAME }}
+
+      # Migrations run as the migrator role from a one-shot job — never by the running app (§C.5).
+      - name: Apply EF migrations
+        run: |
+          dotnet tool restore
+          dotnet ef database update --project src/LeaseBook.Web
+        env:
+          ConnectionStrings__Migrations: ${{ secrets.MIGRATIONS_CONNECTION_STRING }}
+
+      - name: Update Container App revision
+        run: |
+          az containerapp update \
+            --name "$APP_NAME" --resource-group "$RESOURCE_GROUP" \
+            --image "$ACR_NAME.azurecr.io/leasebook:${{ github.sha }}"
+        env:
+          APP_NAME: ${{ vars.APP_NAME }}
+          RESOURCE_GROUP: ${{ vars.RESOURCE_GROUP }}
+          ACR_NAME: ${{ vars.ACR_NAME }}

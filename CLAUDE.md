@@ -27,9 +27,33 @@ reconstructing it from this summary.
 
 ## Commands
 
-There is no build system yet. When M0 scaffolding lands (.NET solution + Vite/React web app),
-replace this section with the real commands (build, test, single-test filter, dev server,
-migrations, seed). Do not guess commands before they exist.
+Solution is `LeaseBook.slnx`; the SPA lives in `web/`. .NET 10 SDK + Node 24, Docker for local
+Postgres and integration tests.
+
+**Backend (.NET, run from repo root):**
+- Build: `dotnet build LeaseBook.slnx -c Debug` (nullable + warnings-as-errors)
+- All tests: `dotnet test LeaseBook.slnx`
+- One project: `dotnet test tests/LeaseBook.Tests.Integration/LeaseBook.Tests.Integration.csproj`
+- Single test (xUnit v3): `dotnet test <proj> --filter "FullyQualifiedName~TenantIsolationTests"`
+- Format check (CI gate): `dotnet format --verify-no-changes --exclude src/LeaseBook.Web/Migrations`
+- Run API (dev, :5080): `$env:ASPNETCORE_ENVIRONMENT='Development'; dotnet run --project src/LeaseBook.Web`
+- Integration tests use Testcontainers — Docker must be running; they don't need local compose.
+
+**Database (run from repo root; `dotnet tool restore` once for `dotnet-ef`):**
+- Local Postgres: `./scripts/dev.ps1 up` | `down` | `reset-db` | `psql` (see docs/runbooks/local-dev.md)
+- Add migration: `dotnet ef migrations add <Name> --project src/LeaseBook.Web`
+- Apply migrations (migrator role): `dotnet ef database update --project src/LeaseBook.Web`
+- Seed demo org: `$env:ASPNETCORE_ENVIRONMENT='Development'; dotnet run --project src/LeaseBook.Web -- seed --org demo`
+
+**Web (run from `web/`):**
+- Dev server (:5173, proxies `/api` → :5080): `npm run dev`
+- Lint / typecheck / test / build: `npm run lint` · `npm run typecheck` · `npm run test` · `npm run build`
+- Single test: `npm run test -- src/design/formatMoney.test.ts`
+- Regenerate API client (host must be running on :5080): `npm run api:generate`
+- e2e (Playwright, specs land later): `npm run e2e`
+
+**Container:** `docker build -t leasebook .` then run with `ConnectionStrings__Default` set — serves the
+SPA and `/api` on port 8080.
 
 ## Planned architecture (private/TODO.md §1 is the full blueprint)
 

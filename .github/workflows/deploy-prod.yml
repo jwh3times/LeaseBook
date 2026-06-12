@@ -1,0 +1,49 @@
+name: Deploy (prod)
+
+# Manual, gated on the 'prod' environment's required reviewers. Promotes an already-built image
+# (by digest/tag) and runs migrations before swapping the revision. Enablement is deferred until the
+# operator configures prod OIDC + approvals (see Status Ledger).
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Image tag (git SHA) already pushed to ACR by deploy-dev
+        required: true
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: prod # required reviewers gate this deployment
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Apply EF migrations
+        run: |
+          dotnet tool restore
+          dotnet ef database update --project src/LeaseBook.Web
+        env:
+          ConnectionStrings__Migrations: ${{ secrets.MIGRATIONS_CONNECTION_STRING }}
+
+      - name: Update Container App revision
+        run: |
+          az containerapp update \
+            --name "$APP_NAME" --resource-group "$RESOURCE_GROUP" \
+            --image "$ACR_NAME.azurecr.io/leasebook:${{ inputs.image_tag }}"
+        env:
+          APP_NAME: ${{ vars.APP_NAME }}
+          RESOURCE_GROUP: ${{ vars.RESOURCE_GROUP }}
+          ACR_NAME: ${{ vars.ACR_NAME }}

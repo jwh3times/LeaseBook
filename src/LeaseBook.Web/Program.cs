@@ -79,6 +79,11 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi().AllowAnonymous(); // GET /openapi/v1.json
 }
 
+// Production serving model (P16): one container serves the API under /api and the built SPA as
+// static files with SPA fallback. In dev these are no-ops (Vite serves the SPA; wwwroot is empty).
+app.UseDefaultFiles();
+app.UseStaticFiles();
+
 app.UseAuthentication();
 // XSRF on unsafe /api requests, before authorization/org-context so a rejected request opens no tx.
 app.UseMiddleware<ApiAntiforgeryMiddleware>();
@@ -87,7 +92,9 @@ app.UseAuthorization();
 app.UseMiddleware<OrgContextMiddleware>();
 
 app.MapModuleEndpoints(endpointAssemblies);
-app.MapGet("/", () => "LeaseBook host. See /api/health.").AllowAnonymous();
+
+// SPA fallback: client-side routes resolve to index.html (served from wwwroot in the container).
+app.MapFallbackToFile("index.html").AllowAnonymous();
 
 // The four fixed roles must exist before sign-in/seeding (idempotent).
 await RoleSeeder.EnsureRolesAsync(app.Services);
