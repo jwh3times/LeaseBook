@@ -19,6 +19,11 @@
     <PackageReference Include="Azure.Monitor.OpenTelemetry.Exporter" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- The golden demo dataset (WP-09), embedded so the seeder finds it regardless of CWD. -->
+    <EmbeddedResource Include="..\..\seed\demo-org.json" Link="Seeding\demo-org.json" />
+  </ItemGroup>
+
   <!-- Composition root: references SharedKernel + every module (host-only rule). -->
   <ItemGroup>
     <ProjectReference Include="..\LeaseBook.SharedKernel\LeaseBook.SharedKernel.csproj" />

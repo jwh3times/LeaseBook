@@ -60,3 +60,27 @@ Verify the app role can connect:
 ```
 docker compose exec db psql -U leasebook_app -d leasebook -c "SELECT current_user;"
 ```
+
+## Migrations and seed
+
+Restore the local tool manifest once (`dotnet tool restore`), then apply migrations as the
+**migrator** role (the design-time factory uses `ConnectionStrings:Migrations`):
+
+```
+dotnet ef database update --project src/LeaseBook.Web
+```
+
+Seed the demo org (`Tarheel Property Group`) and its admin — idempotent, safe to re-run:
+
+```
+$env:ASPNETCORE_ENVIRONMENT = "Development"   # loads the dev connection strings
+dotnet run --project src/LeaseBook.Web -- seed --org demo
+```
+
+The dataset is `seed/demo-org.json` (ported from the prototype; the golden-file fixture from M1
+on). In M0 the seeder creates only the org and the admin user — later milestones extend it as
+their schemas land.
+
+**Seeded dev admin — DEV ONLY:** `renee.calloway@tarheelpg.test` / `Tarheel-Trust-2026!`. MFA is
+not enrolled (enroll on first login). Real environments provision operators by invite; passwords
+never live in the repo.

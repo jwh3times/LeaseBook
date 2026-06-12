@@ -1,0 +1,120 @@
+{
+  "_comment": "Demo org dataset ported verbatim from the prototype (data.jsx). The figures are fictional AND reconcile to the cent: owner ending balances, bank book balances, and the tenant ledger are internally consistent. This file is the golden-file fixture the accounting engine is validated against (golden tests arrive in M1). Do NOT casually edit figures — a change here is a deliberate change to the golden tests. In M0 only `pm.company` and `pm.user` are consumed (org + admin); the rest seeds in later milestones as their schemas land.",
+  "pm": {
+    "company": "Tarheel Property Group",
+    "city": "Asheville, NC",
+    "user": { "name": "Renée Calloway", "role": "Broker-in-Charge", "initials": "RC" },
+    "units": 152,
+    "properties": 64,
+    "owners": 23
+  },
+  "banks": [
+    { "id": "oper", "name": "Operating Trust", "bank": "First Citizens", "mask": "4021", "book": 248930.14, "cleared": 254300.14, "uncleared": 5370.00, "unclearedN": 3, "type": "trust" },
+    { "id": "dep", "name": "Security Deposit Trust", "bank": "First Citizens", "mask": "8847", "book": 196450.00, "cleared": 196450.00, "uncleared": 0, "unclearedN": 0, "type": "deposit" },
+    { "id": "mgmt", "name": "PM Operating", "bank": "Wells Fargo", "mask": "1190", "book": 38240.55, "cleared": 37115.30, "uncleared": 1125.25, "unclearedN": 2, "type": "operating" }
+  ],
+  "owners": [
+    { "id": "o1", "name": "Hargrove Family Trust", "initials": "HF", "units": 6, "properties": 3, "oper": 14820.50, "dep": 8400.00 },
+    { "id": "o2", "name": "Coastal Holdings LLC", "initials": "CH", "units": 18, "properties": 7, "oper": 41280.75, "dep": 26100.00 },
+    { "id": "o3", "name": "Marcus & Dana Bell", "initials": "MB", "units": 2, "properties": 1, "oper": 3210.00, "dep": 2900.00 },
+    { "id": "o4", "name": "Patricia Nunez", "initials": "PN", "units": 3, "properties": 2, "oper": -420.00, "dep": 4350.00 },
+    { "id": "o5", "name": "Ridgeline Investments", "initials": "RI", "units": 11, "properties": 5, "oper": 22640.30, "dep": 14200.00 },
+    { "id": "o6", "name": "The Okafor Group", "initials": "OK", "units": 9, "properties": 4, "oper": 9870.00, "dep": 11650.00 },
+    { "id": "o7", "name": "Sandra Whitfield", "initials": "SW", "units": 1, "properties": 1, "oper": 1840.25, "dep": 1450.00 },
+    { "id": "o8", "name": "Beacon Street Partners", "initials": "BS", "units": 14, "properties": 6, "oper": 18305.60, "dep": 17800.00 }
+  ],
+  "properties": [
+    { "id": "p1", "addr": "412 Oakmont Ave", "city": "Asheville", "ownerId": "o1", "units": 4, "occ": 4 },
+    { "id": "p2", "addr": "88 Riverside Dr", "city": "Asheville", "ownerId": "o1", "units": 1, "occ": 1 },
+    { "id": "p3", "addr": "1029 Charlotte St", "city": "Asheville", "ownerId": "o2", "units": 6, "occ": 5 },
+    { "id": "p4", "addr": "55 Westwood Pl", "city": "Weaverville", "ownerId": "o2", "units": 3, "occ": 3 },
+    { "id": "p5", "addr": "230 Haywood Rd", "city": "Asheville", "ownerId": "o5", "units": 4, "occ": 4 },
+    { "id": "p6", "addr": "17 Sunset Ter", "city": "Black Mtn", "ownerId": "o4", "units": 2, "occ": 1 }
+  ],
+  "focalTenant": {
+    "id": "t1",
+    "name": "Jasmine Carter",
+    "unit": "412 Oakmont Ave · #2B",
+    "propertyId": "p1",
+    "ownerId": "o1",
+    "phone": "(828) 555-0148",
+    "email": "jcarter@email.com",
+    "leaseStart": "Jun 1, 2024",
+    "leaseEnd": "May 31, 2026",
+    "rent": 1450.00,
+    "depositHeld": 1450.00,
+    "status": "Current",
+    "balance": 1450.00
+  },
+  "ledger": [
+    { "id": "l12", "date": "Jun 1, 2026", "type": "charge", "cat": "Rent", "desc": "Rent — June 2026", "charge": 1450.00, "payment": 0, "balance": 1450.00 },
+    { "id": "l11", "date": "May 3, 2026", "type": "payment", "cat": "Payment", "desc": "ACH payment · ••4021", "charge": 0, "payment": 1450.00, "balance": 0.00, "method": "ACH" },
+    { "id": "l10", "date": "May 1, 2026", "type": "charge", "cat": "Rent", "desc": "Rent — May 2026", "charge": 1450.00, "payment": 0, "balance": 1450.00 },
+    { "id": "l9", "date": "Apr 6, 2026", "type": "payment", "cat": "Payment", "desc": "ACH payment · ••4021", "charge": 0, "payment": 1475.00, "balance": 0.00, "method": "ACH" },
+    { "id": "l8", "date": "Apr 6, 2026", "type": "charge", "cat": "Late Fee", "desc": "Late fee — April", "charge": 25.00, "payment": 0, "balance": 1475.00 },
+    { "id": "l7", "date": "Apr 1, 2026", "type": "charge", "cat": "Rent", "desc": "Rent — April 2026", "charge": 1450.00, "payment": 0, "balance": 1450.00 },
+    { "id": "l6", "date": "Mar 2, 2026", "type": "payment", "cat": "Payment", "desc": "Card payment · Visa ••6612", "charge": 0, "payment": 1450.00, "balance": 0.00, "method": "Card" },
+    { "id": "l5", "date": "Mar 1, 2026", "type": "charge", "cat": "Rent", "desc": "Rent — March 2026", "charge": 1450.00, "payment": 0, "balance": 1450.00 },
+    { "id": "l4", "date": "Feb 18, 2026", "type": "charge", "cat": "Maintenance", "desc": "Recharge — garbage disposal repair", "charge": 85.00, "payment": 0, "balance": 1450.00 },
+    { "id": "l3", "date": "Feb 17, 2026", "type": "credit", "cat": "Credit", "desc": "Goodwill credit — maintenance delay", "charge": 0, "payment": 85.00, "balance": 1365.00 },
+    { "id": "l2", "date": "Feb 3, 2026", "type": "payment", "cat": "Payment", "desc": "ACH payment · ••4021", "charge": 0, "payment": 1450.00, "balance": 1365.00, "method": "ACH" },
+    { "id": "l1", "date": "Feb 1, 2026", "type": "charge", "cat": "Rent", "desc": "Rent — February 2026", "charge": 1450.00, "payment": 0, "balance": 2815.00 }
+  ],
+  "tenants": [
+    { "id": "t1", "name": "Jasmine Carter", "unit": "412 Oakmont Ave · #2B", "rent": 1450, "balance": 1450, "status": "Current" },
+    { "id": "t2", "name": "Devon Pryor", "unit": "412 Oakmont Ave · #1A", "rent": 1380, "balance": 0, "status": "Current" },
+    { "id": "t3", "name": "Aisha Bello", "unit": "1029 Charlotte St · #3", "rent": 1620, "balance": 1620, "status": "Late" },
+    { "id": "t4", "name": "Cole Ramsey", "unit": "230 Haywood Rd · #B", "rent": 1295, "balance": 0, "status": "Current" },
+    { "id": "t5", "name": "The Mercer Family", "unit": "88 Riverside Dr", "rent": 2150, "balance": -75, "status": "Prepaid" },
+    { "id": "t6", "name": "Lena Vasquez", "unit": "55 Westwood Pl · #2", "rent": 1410, "balance": 2820, "status": "Late" },
+    { "id": "t7", "name": "Brandon Tate", "unit": "1029 Charlotte St · #5", "rent": 1550, "balance": 0, "status": "Current" }
+  ],
+  "bankTxns": [
+    { "id": "b1", "date": "Jun 3, 2026", "desc": "Deposit — Carter rent", "prop": "412 Oakmont Ave", "type": "Deposit", "amount": 1450.00, "status": "uncleared" },
+    { "id": "b2", "date": "Jun 3, 2026", "desc": "Deposit — Pryor rent", "prop": "412 Oakmont Ave", "type": "Deposit", "amount": 1380.00, "status": "uncleared" },
+    { "id": "b3", "date": "Jun 2, 2026", "desc": "Owner disbursement — Hargrove Family Trust", "prop": "Multiple", "type": "Withdrawal", "amount": -8200.00, "status": "uncleared" },
+    { "id": "b4", "date": "May 30, 2026", "desc": "Deposit — Bello rent", "prop": "1029 Charlotte St", "type": "Deposit", "amount": 1620.00, "status": "cleared" },
+    { "id": "b5", "date": "May 29, 2026", "desc": "Vendor — Asheville Plumbing Co.", "prop": "230 Haywood Rd", "type": "Withdrawal", "amount": -340.00, "status": "cleared" },
+    { "id": "b6", "date": "May 28, 2026", "desc": "Deposit — Ramsey rent", "prop": "230 Haywood Rd", "type": "Deposit", "amount": 1295.00, "status": "reconciled" },
+    { "id": "b7", "date": "May 27, 2026", "desc": "Mgmt fee transfer → PM Operating", "prop": "Multiple", "type": "Withdrawal", "amount": -2840.00, "status": "reconciled" },
+    { "id": "b8", "date": "May 26, 2026", "desc": "Deposit — Tate rent", "prop": "1029 Charlotte St", "type": "Deposit", "amount": 1550.00, "status": "reconciled" },
+    { "id": "b9", "date": "May 24, 2026", "desc": "Refund check #1043 — Vasquez overpay", "prop": "55 Westwood Pl", "type": "Withdrawal", "amount": -75.00, "status": "reconciled" },
+    { "id": "b10", "date": "May 22, 2026", "desc": "Deposit — Mercer rent", "prop": "88 Riverside Dr", "type": "Deposit", "amount": 2150.00, "status": "reconciled" }
+  ],
+  "statement": {
+    "owner": "Hargrove Family Trust",
+    "property": "412 Oakmont Ave",
+    "period": "May 1 – May 31, 2026",
+    "beginning": 12480.50,
+    "income": [
+      { "desc": "Rent collected — #1A Pryor", "amount": 1380.00 },
+      { "desc": "Rent collected — #2B Carter", "amount": 1450.00 },
+      { "desc": "Rent collected — #3A Okonkwo", "amount": 1510.00 },
+      { "desc": "Rent collected — #3B Liu", "amount": 1495.00 }
+    ],
+    "expenses": [
+      { "desc": "Management fee (8% of collected)", "amount": -466.80 },
+      { "desc": "Maintenance — garbage disposal (#2B)", "amount": -85.00 },
+      { "desc": "Landscaping — May", "amount": -180.00 }
+    ],
+    "applied": [
+      { "desc": "Applied security deposit — #1C move-out", "amount": 950.00, "note": "Recognized as income on application" },
+      { "desc": "Tenant credit — maintenance delay (#2B)", "amount": -85.00 }
+    ],
+    "disbursement": -8200.00
+  },
+  "kpis": {
+    "trustTotal": 483620.69,
+    "ownersPayable": 132447.00,
+    "uncleared": 5370.00,
+    "collectedMTD": 198420.00,
+    "collectedTarget": 221600.00,
+    "vacancy": 4
+  },
+  "actionItems": [
+    { "id": "a1", "kind": "alert", "title": "2 deposits awaiting application", "detail": "Security deposits held as liability — apply on move-out", "screen": "ledger" },
+    { "id": "a2", "kind": "warn", "title": "Bank reconciliation due", "detail": "Operating Trust · 3 uncleared items · last reconciled May 1", "screen": "bank" },
+    { "id": "a3", "kind": "info", "title": "Owner disbursement run ready", "detail": "8 owners · $132,447.00 net payable this cycle", "screen": "owner" }
+  ],
+  "collectionsByWeek": [42, 58, 71, 88, 96, 100]
+}

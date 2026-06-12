@@ -7,6 +7,7 @@ using LeaseBook.SharedKernel.Tenancy;
 using LeaseBook.Web.Auth;
 using LeaseBook.Web.Endpoints;
 using LeaseBook.Web.Persistence;
+using LeaseBook.Web.Seeding;
 using LeaseBook.Web.Tenancy;
 using Microsoft.EntityFrameworkCore;
 using OpenTelemetry.Resources;
@@ -82,6 +83,13 @@ app.MapGet("/", () => "LeaseBook host. See /api/health.").AllowAnonymous();
 
 // The four fixed roles must exist before sign-in/seeding (idempotent).
 await RoleSeeder.EnsureRolesAsync(app.Services);
+
+// CLI: `dotnet run --project src/LeaseBook.Web -- seed --org demo` provisions the demo org and exits.
+if (args is ["seed", ..])
+{
+    await DemoSeeder.SeedAsync(app.Services);
+    return;
+}
 
 app.Run();
 
