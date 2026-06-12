@@ -1,0 +1,27 @@
+# Local development infrastructure. DEV ONLY — real environments use Azure Database for
+# PostgreSQL Flexible Server with managed identity / Key Vault (see infra/, WP-10).
+services:
+  db:
+    image: postgres:17
+    container_name: leasebook-db
+    environment:
+      # Superuser password (dev-only). The three application roles are created by bootstrap.sql.
+      POSTGRES_PASSWORD: dev_postgres_pw
+      POSTGRES_DB: postgres
+    ports:
+      # Host port defaults to 5432 (P20); override with LEASEBOOK_DB_PORT if 5432 is taken
+      # locally (e.g. another project's Postgres). The container always listens on 5432.
+      - "${LEASEBOOK_DB_PORT:-5432}:5432"
+    volumes:
+      - leasebook-pgdata:/var/lib/postgresql/data
+      # Runs once on first init (empty data dir): creates the leasebook DB, the three roles,
+      # and default privileges. `reset-db` wipes the volume so this re-runs from scratch.
+      - ./infra/db/bootstrap.sql:/docker-entrypoint-initdb.d/01-bootstrap.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+volumes:
+  leasebook-pgdata:
