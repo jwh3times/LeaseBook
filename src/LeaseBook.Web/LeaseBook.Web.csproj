@@ -11,6 +11,13 @@
     </PackageReference>
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Telemetry baseline (WP-05) — the ActivitySource lives in SharedKernel; the host exports it. -->
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" />
+    <PackageReference Include="Azure.Monitor.OpenTelemetry.Exporter" />
+  </ItemGroup>
+
   <!-- Composition root: references SharedKernel + every module (host-only rule). -->
   <ItemGroup>
     <ProjectReference Include="..\LeaseBook.SharedKernel\LeaseBook.SharedKernel.csproj" />

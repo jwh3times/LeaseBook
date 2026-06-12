@@ -11,6 +11,8 @@
     <PackageReference Include="FluentValidation" />
     <!-- For the Money EF value converter and IOrgScoped primitives (registered now, used M1). -->
     <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <!-- OrgScopedExecutor opens transactions and runs set_config via the relational facade. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
   </ItemGroup>
 
 </Project>

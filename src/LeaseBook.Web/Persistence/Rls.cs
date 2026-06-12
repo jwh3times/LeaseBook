@@ -12,13 +12,16 @@ public static class Rls
 {
     public static void EnableOrgRls(this MigrationBuilder migrationBuilder, string table)
     {
+        // NULLIF(..., '') is load-bearing: a custom GUC placeholder that has been SET LOCAL once in
+        // a session reverts to '' (empty string), not NULL, after the transaction ends. Casting
+        // ''::uuid raises 22P02 instead of failing closed, so we map empty → NULL → no rows match.
         migrationBuilder.Sql($"""
             ALTER TABLE {table} ENABLE ROW LEVEL SECURITY;
             ALTER TABLE {table} FORCE ROW LEVEL SECURITY;
             CREATE POLICY {table}_org_isolation ON {table}
               FOR ALL
-              USING (org_id = current_setting('app.org_id', true)::uuid)
-              WITH CHECK (org_id = current_setting('app.org_id', true)::uuid);
+              USING (org_id = NULLIF(current_setting('app.org_id', true), '')::uuid)
+              WITH CHECK (org_id = NULLIF(current_setting('app.org_id', true), '')::uuid);
             """);
     }
 

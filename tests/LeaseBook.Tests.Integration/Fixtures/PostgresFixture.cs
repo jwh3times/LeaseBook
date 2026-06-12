@@ -1,5 +1,7 @@
+using LeaseBook.SharedKernel.Tenancy;
 using LeaseBook.Web.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Testcontainers.PostgreSql;
 
 namespace LeaseBook.Tests.Integration.Fixtures;
@@ -42,14 +44,31 @@ public sealed class PostgresFixture : IAsyncLifetime
     public async ValueTask DisposeAsync() => await _container.DisposeAsync();
 
     /// <summary>Builds an AppDbContext on the given role's connection (snake_case, like the host).</summary>
-    public AppDbContext CreateContext(string connectionString)
+    public AppDbContext CreateContext(string connectionString) =>
+        new(BuildOptions(connectionString));
+
+    /// <summary>
+    /// AppDbContext bound to a tenant context — what the EF query filter and org stamping read.
+    /// Pass the same <paramref name="tenant"/> to an <see cref="OrgScopedExecutor"/> so the SET LOCAL
+    /// it issues and the in-process ergonomics agree.
+    /// </summary>
+    public AppDbContext CreateContext(string connectionString, ITenantContext tenant) =>
+        new(BuildOptions(connectionString), tenant);
+
+    /// <summary>An open raw connection as the RLS-subject app role — the isolation pack drives the
+    /// database directly through this so it proves RLS, not the EF query filter (pitfall E2).</summary>
+    public async Task<NpgsqlConnection> OpenAppConnectionAsync(CancellationToken ct)
     {
-        var options = new DbContextOptionsBuilder<AppDbContext>()
+        var connection = new NpgsqlConnection(AppConnectionString);
+        await connection.OpenAsync(ct);
+        return connection;
+    }
+
+    private static DbContextOptions<AppDbContext> BuildOptions(string connectionString) =>
+        new DbContextOptionsBuilder<AppDbContext>()
             .UseNpgsql(connectionString, npgsql => npgsql.SetPostgresVersion(18, 0))
             .UseSnakeCaseNamingConvention()
             .Options;
-        return new AppDbContext(options);
-    }
 
     private static string ConnectionString(string host, int port, string user, string password) =>
         $"Host={host};Port={port};Database=leasebook;Username={user};Password={password};Include Error Detail=true";
