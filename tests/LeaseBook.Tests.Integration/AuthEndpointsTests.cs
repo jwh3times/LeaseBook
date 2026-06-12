@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
 using LeaseBook.SharedKernel;
+using LeaseBook.Tests.Common;
 using LeaseBook.Tests.Integration.Fixtures;
 using LeaseBook.Web.Auth;
 using LeaseBook.Web.Endpoints;

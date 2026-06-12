@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Shared test infrastructure (WP-02): the Postgres/Testcontainers fixture, the host factory, and
+       the OrgScope harness entry point, consumed by both LeaseBook.Tests.Integration and
+       LeaseBook.Tests.Accounting. Not a test project itself (no tests, no runner) — xUnit is
+       referenced only for the IAsyncLifetime/collection-fixture abstractions. -->
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="xunit.v3.extensibility.core" />
+    <PackageReference Include="Testcontainers.PostgreSql" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="EFCore.NamingConventions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\LeaseBook.Web\LeaseBook.Web.csproj" />
+  </ItemGroup>
+
+  <!-- The bootstrap SQL is the single source of truth for the three DB roles/grants. Copying it here
+       flows transitively to every referencing test project's output, so the Testcontainers fixture
+       mounts the exact same roles as local compose regardless of which suite runs. -->
+  <ItemGroup>
+    <None Include="..\..\infra\db\bootstrap.sql" Link="bootstrap.sql" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>

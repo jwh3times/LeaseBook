@@ -13,6 +13,7 @@
   <Folder Name="/tests/">
     <Project Path="tests/LeaseBook.Tests.Accounting/LeaseBook.Tests.Accounting.csproj" />
     <Project Path="tests/LeaseBook.Tests.Architecture/LeaseBook.Tests.Architecture.csproj" />
+    <Project Path="tests/LeaseBook.Tests.Common/LeaseBook.Tests.Common.csproj" />
     <Project Path="tests/LeaseBook.Tests.Integration/LeaseBook.Tests.Integration.csproj" />
     <Project Path="tests/LeaseBook.Tests.SharedKernel/LeaseBook.Tests.SharedKernel.csproj" />
   </Folder>

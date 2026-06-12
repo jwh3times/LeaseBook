@@ -1,6 +1,6 @@
 using Npgsql;
 
-namespace LeaseBook.Tests.Integration.Fixtures;
+namespace LeaseBook.Tests.Common;
 
 /// <summary>
 /// Raw-SQL operations against <c>audit_events</c> used by the tenant-isolation pack. Deliberately
@@ -8,7 +8,7 @@ namespace LeaseBook.Tests.Integration.Fixtures;
 /// <b>database</b> enforces through RLS — not the ergonomic layer (pitfall E2). All writes go
 /// through the app role connection the fixture hands out.
 /// </summary>
-internal static class RlsProbe
+public static class RlsProbe
 {
     /// <summary>Sets <c>app.org_id</c> transaction-locally — the parameterized <c>SET LOCAL</c>.</summary>
     public static async Task SetOrgAsync(NpgsqlConnection conn, NpgsqlTransaction tx, Guid orgId, CancellationToken ct)

@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using LeaseBook.Tests.Common;
 using LeaseBook.Tests.Integration.Fixtures;
 using LeaseBook.Web.Auth;
 using LeaseBook.Web.Seeding;

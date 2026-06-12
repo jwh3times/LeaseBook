@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Testcontainers.PostgreSql;
 
-namespace LeaseBook.Tests.Integration.Fixtures;
+namespace LeaseBook.Tests.Common;
 
 /// <summary>
 /// One Postgres 18 container per test run. Runs the same <c>bootstrap.sql</c> as local compose

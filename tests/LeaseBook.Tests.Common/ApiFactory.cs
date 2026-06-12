@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
-namespace LeaseBook.Tests.Integration.Fixtures;
+namespace LeaseBook.Tests.Common;
 
 /// <summary>
 /// Boots the real host (<c>Program</c>) against the shared Postgres container, connecting as the

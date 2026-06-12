@@ -1,6 +1,7 @@
 using LeaseBook.Modules.Accounting.Domain;
 using LeaseBook.SharedKernel;
 using LeaseBook.SharedKernel.Tenancy;
+using LeaseBook.Tests.Common;
 using LeaseBook.Tests.Integration.Fixtures;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
