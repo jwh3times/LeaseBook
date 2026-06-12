@@ -1,5 +1,12 @@
 // Registers jest-dom matchers (e.g. toBeInTheDocument) with Vitest's expect, plus their types.
 import '@testing-library/jest-dom/vitest';
+import { afterAll, afterEach, beforeAll } from 'vitest';
+import { server } from './mocks/server';
+
+// Mock the API for the whole web suite; tests override handlers per scenario via server.use(...).
+beforeAll(() => server.listen({ onUnhandledRequest: 'bypass' }));
+afterEach(() => server.resetHandlers());
+afterAll(() => server.close());
 
 // This jsdom build does not provide localStorage; give tests an in-memory Storage so code that
 // persists preferences (e.g. ThemeProvider) is exercised rather than silently no-op'd.

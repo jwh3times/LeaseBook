@@ -52,6 +52,9 @@ builder.Services.AddScoped<ITenantContext>(sp => sp.GetRequiredService<TenantCon
 builder.Services.AddScoped<DbContext>(sp => sp.GetRequiredService<AppDbContext>());
 builder.Services.AddScoped<OrgScopedExecutor>();
 
+// OpenAPI document (P11) — the SPA's `npm run api:generate` reads /openapi/v1.json.
+builder.Services.AddOpenApi();
+
 // Telemetry baseline: emit the CQRS ActivitySource (+ request spans). The Azure Monitor exporter
 // is added only when a connection string is present, so locally this collects nothing (no-op).
 var telemetry = builder.Services.AddOpenTelemetry()
@@ -70,6 +73,11 @@ if (!string.IsNullOrWhiteSpace(appInsightsConnection))
 var app = builder.Build();
 
 app.UseExceptionHandler();
+
+if (app.Environment.IsDevelopment())
+{
+    app.MapOpenApi().AllowAnonymous(); // GET /openapi/v1.json
+}
 
 app.UseAuthentication();
 // XSRF on unsafe /api requests, before authorization/org-context so a rejected request opens no tx.

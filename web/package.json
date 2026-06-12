@@ -16,7 +16,7 @@
     "typecheck": "tsc -b",
     "test": "vitest run",
     "test:watch": "vitest",
-    "api:generate": "node -e \"console.log('api:generate is wired in WP-08 (openapi-typescript against the running host)')\"",
+    "api:generate": "openapi-typescript http://localhost:5080/openapi/v1.json -o src/api/schema.d.ts",
     "e2e": "playwright test"
   },
   "dependencies": {
@@ -44,6 +44,7 @@
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.6.0",
     "jsdom": "^29.1.1",
+    "msw": "^2.14.6",
     "openapi-fetch": "^0.17.0",
     "openapi-typescript": "^7.13.0",
     "prettier": "^3.8.4",

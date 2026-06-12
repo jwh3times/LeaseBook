@@ -1,11 +1,11 @@
-import { ThemeProvider } from '@/design';
-import { KitchenSink } from '@/dev/KitchenSink';
+import { RouterProvider } from 'react-router-dom';
+import { Providers } from '@/app/providers';
+import { router } from '@/app/router';
 
-// WP-07 shows the design system here; WP-08 replaces this with the routed application shell.
 export function App() {
   return (
-    <ThemeProvider>
-      <KitchenSink />
-    </ThemeProvider>
+    <Providers>
+      <RouterProvider router={router} />
+    </Providers>
   );
 }
