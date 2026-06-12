@@ -17,7 +17,7 @@ using OpenTelemetry.Trace;
 var builder = WebApplication.CreateBuilder(args);
 
 // Module assemblies the host composes. CQRS handlers/validators are discovered from these; endpoint
-// modules are discovered from these plus the host (which owns auth/meta/diagnostics endpoints).
+// modules are discovered from these plus the host (which owns the auth/meta endpoints).
 Assembly[] moduleAssemblies =
 [
     typeof(LeaseBook.Modules.Accounting.ModuleMarker).Assembly,
@@ -34,6 +34,8 @@ builder.Services.AddLeaseBookCqrs(moduleAssemblies);
 // RFC 7807 everywhere (P17): ProblemDetails defaults + the CQRS ValidationException → 400 mapping.
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<ValidationExceptionHandler>();
+// Typed accounting domain errors → §C.5 ProblemDetails (422/409). Wired now so M3's write path inherits it.
+builder.Services.AddExceptionHandler<AccountingExceptionHandler>();
 
 // Data access (runtime = app role, RLS-subject). Migrations use the migrator connection via the
 // design-time factory; the running app never connects as migrator.

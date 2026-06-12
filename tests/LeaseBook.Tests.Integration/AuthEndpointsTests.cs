@@ -2,7 +2,10 @@ using System.Buffers.Binary;
 using System.Net;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
+using LeaseBook.Modules.Accounting.Contracts;
+using LeaseBook.Modules.Accounting.Features.Ledgers;
 using LeaseBook.SharedKernel;
+using LeaseBook.SharedKernel.Tenancy;
 using LeaseBook.Tests.Common;
 using LeaseBook.Tests.Integration.Fixtures;
 using LeaseBook.Web.Auth;
@@ -152,22 +155,35 @@ public sealed class AuthEndpointsTests(PostgresFixture fixture)
         await CreateUserAsync(orgA, emailA, "User A", ct);
         await CreateUserAsync(orgB, emailB, "User B", ct);
 
-        await SeedAuditEventsAsync(orgA, 2, ct);
-        await SeedAuditEventsAsync(orgB, 1, ct);
+        await ProvisionTrustBankAsync(orgA, "Trust A", ct);
+        await ProvisionTrustBankAsync(orgB, "Trust B", ct);
 
-        (await AuditCountFor(emailA, ct)).ShouldBe(2);
-        (await AuditCountFor(emailB, ct)).ShouldBe(1);
+        // Each authenticated user hits the real accounting read surface and sees only its org's bank
+        // (cookie → org claim → org-context middleware → RLS), now against a real endpoint.
+        (await BankNamesFor(emailA, ct)).ShouldBe(["Trust A"]);
+        (await BankNamesFor(emailB, ct)).ShouldBe(["Trust B"]);
     }
 
-    private async Task<int> AuditCountFor(string email, CancellationToken ct)
+    private async Task<IReadOnlyList<string>> BankNamesFor(string email, CancellationToken ct)
     {
         var client = fixture.Api.CreateClient();
         await PrimeCsrfAsync(client, ct);
         await Login(client, email, ct);
 
-        var response = await client.GetAsync("/api/diagnostics/audit-count", ct);
+        var response = await client.GetAsync("/api/accounting/banks/balances", ct);
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
-        return (await response.Content.ReadFromJsonAsync<AuditCountResponse>(ct))!.Count;
+        var payload = await response.Content.ReadFromJsonAsync<BankBalancesResponse>(ct);
+        return payload!.Rows.Select(r => r.Name).ToList();
+    }
+
+    private async Task ProvisionTrustBankAsync(Guid orgId, string bankName, CancellationToken ct)
+    {
+        await using var scope = fixture.Api.Services.CreateAsyncScope();
+        var executor = scope.ServiceProvider.GetRequiredService<OrgScopedExecutor>();
+        var chartOfAccounts = scope.ServiceProvider.GetRequiredService<IChartOfAccounts>();
+        await executor.RunAsync(orgId,
+            () => chartOfAccounts.ProvisionAsync([new BankAccountSpec(UuidV7.NewId(), bankName, BankPurpose.Trust)], ct),
+            ct);
     }
 
     private async Task<LoginResponse> Login(HttpClient client, string email, CancellationToken ct)
@@ -251,19 +267,6 @@ public sealed class AuthEndpointsTests(PostgresFixture fixture)
         }
 
         return [.. output];
-    }
-
-    private async Task SeedAuditEventsAsync(Guid orgId, int count, CancellationToken ct)
-    {
-        await using var conn = await fixture.OpenAppConnectionAsync(ct);
-        await using var tx = await conn.BeginTransactionAsync(ct);
-        await RlsProbe.SetOrgAsync(conn, tx, orgId, ct);
-        for (var i = 0; i < count; i++)
-        {
-            await RlsProbe.InsertEventAsync(conn, tx, orgId, ct);
-        }
-
-        await tx.CommitAsync(ct);
     }
 
     private static async Task PrimeCsrfAsync(HttpClient client, CancellationToken ct)
