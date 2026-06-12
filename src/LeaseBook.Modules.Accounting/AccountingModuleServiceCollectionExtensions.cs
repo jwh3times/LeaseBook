@@ -1,5 +1,6 @@
 using LeaseBook.Modules.Accounting.Contracts;
 using LeaseBook.Modules.Accounting.Periods;
+using LeaseBook.Modules.Accounting.Posting;
 using LeaseBook.Modules.Accounting.Provisioning;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -16,6 +17,9 @@ public static class AccountingModuleServiceCollectionExtensions
     {
         services.AddScoped<IChartOfAccounts, ChartOfAccounts>();
         services.AddScoped<IAccountingPeriods, AccountingPeriods>();
+        services.AddScoped<IPostingService, PostingService>();
+        services.AddScoped<IReversalService, ReversalService>();
+        services.AddScoped<IPostingLock, PostingLock>();
         return services;
     }
 }
