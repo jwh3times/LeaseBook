@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Shouldly" />
+    <PackageReference Include="NetArchTest.Rules" />
+  </ItemGroup>
+
+  <!-- References every assembly whose boundaries it inspects. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\LeaseBook.SharedKernel\LeaseBook.SharedKernel.csproj" />
+    <ProjectReference Include="..\..\src\LeaseBook.Web\LeaseBook.Web.csproj" />
+    <ProjectReference Include="..\..\src\LeaseBook.Migrator\LeaseBook.Migrator.csproj" />
+    <ProjectReference Include="..\..\src\LeaseBook.Modules.Accounting\LeaseBook.Modules.Accounting.csproj" />
+    <ProjectReference Include="..\..\src\LeaseBook.Modules.Directory\LeaseBook.Modules.Directory.csproj" />
+    <ProjectReference Include="..\..\src\LeaseBook.Modules.Banking\LeaseBook.Modules.Banking.csproj" />
+    <ProjectReference Include="..\..\src\LeaseBook.Modules.Reporting\LeaseBook.Modules.Reporting.csproj" />
+    <ProjectReference Include="..\..\src\LeaseBook.Modules.Operations\LeaseBook.Modules.Operations.csproj" />
+    <ProjectReference Include="..\..\src\LeaseBook.Modules.Payments\LeaseBook.Modules.Payments.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>

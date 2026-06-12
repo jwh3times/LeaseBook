@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- AspNetCore framework reference: SharedKernel hosts IEndpointModule (IEndpointRouteBuilder),
+       the CQRS DI extensions (IServiceCollection), and ILogger-based telemetry. -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Scrutor" />
+    <PackageReference Include="FluentValidation" />
+    <!-- For the Money EF value converter and IOrgScoped primitives (registered now, used M1). -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <!-- OrgScopedExecutor opens transactions and runs set_config via the relational facade. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+  </ItemGroup>
+
+</Project>

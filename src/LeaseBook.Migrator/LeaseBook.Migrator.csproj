@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Phase 1-2 AppFolio import toolkit. Empty placeholder for M0.
+       Module reference rule: references SharedKernel only. -->
+  <ItemGroup>
+    <ProjectReference Include="..\LeaseBook.SharedKernel\LeaseBook.SharedKernel.csproj" />
+  </ItemGroup>
+
+</Project>

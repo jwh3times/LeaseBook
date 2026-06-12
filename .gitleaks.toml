@@ -1,0 +1,20 @@
+# Gitleaks config — picked up automatically by gitleaks-action at the repo root.
+# Extends the bundled default ruleset (all real detection stays on) and allowlists a small set
+# of known false positives.
+title = "LeaseBook gitleaks config"
+
+[extend]
+useDefault = true
+
+# Azure built-in role definition IDs are public, fixed GUIDs — not secrets. They are referenced
+# by value in Bicep (subscriptionResourceId(..., roleDefinitionId)) and the generic high-entropy
+# rule mistakes them for API keys. Allowlist the specific known IDs rather than the whole file so
+# a genuinely leaked credential in infra/ still trips the scan.
+# Reference: https://learn.microsoft.com/azure/role-based-access-control/built-in-roles
+[allowlist]
+description = "Azure built-in role definition GUIDs (public constants, not secrets)"
+regexTarget = "line"
+regexes = [
+  '''7f951dda-4ed3-4680-a7ca-43fe172d538d''', # AcrPull
+  '''4633458b-17de-408a-b874-0445c86b69e6''', # Key Vault Secrets User
+]

@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="EFCore.NamingConventions" />
+    <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <!-- Align Relational with the pinned EF Core 10.0.9 (provider floor is lower). -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Telemetry baseline (WP-05) — the ActivitySource lives in SharedKernel; the host exports it. -->
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" />
+    <PackageReference Include="Azure.Monitor.OpenTelemetry.Exporter" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The golden demo dataset (WP-09), embedded so the seeder finds it regardless of CWD. -->
+    <EmbeddedResource Include="..\..\seed\demo-org.json" Link="Seeding\demo-org.json" />
+  </ItemGroup>
+
+  <!-- Composition root: references SharedKernel + every module (host-only rule). -->
+  <ItemGroup>
+    <ProjectReference Include="..\LeaseBook.SharedKernel\LeaseBook.SharedKernel.csproj" />
+    <ProjectReference Include="..\LeaseBook.Modules.Accounting\LeaseBook.Modules.Accounting.csproj" />
+    <ProjectReference Include="..\LeaseBook.Modules.Directory\LeaseBook.Modules.Directory.csproj" />
+    <ProjectReference Include="..\LeaseBook.Modules.Banking\LeaseBook.Modules.Banking.csproj" />
+    <ProjectReference Include="..\LeaseBook.Modules.Reporting\LeaseBook.Modules.Reporting.csproj" />
+    <ProjectReference Include="..\LeaseBook.Modules.Operations\LeaseBook.Modules.Operations.csproj" />
+    <ProjectReference Include="..\LeaseBook.Modules.Payments\LeaseBook.Modules.Payments.csproj" />
+  </ItemGroup>
+
+</Project>

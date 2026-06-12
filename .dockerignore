@@ -1,0 +1,19 @@
+# Keep the build context small and deterministic.
+**/bin
+**/obj
+**/node_modules
+web/dist
+web/.vite
+web/playwright-report
+web/test-results
+**/TestResults
+.git
+.github
+.vs
+.vscode
+private
+docs
+infra
+tests
+*.user
+.env

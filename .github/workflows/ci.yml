@@ -1,0 +1,95 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  backend:
+    name: Backend (build + test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - run: dotnet restore
+      # Generated EF migrations are excluded from the format gate (the ef generator owns their style).
+      - run: dotnet format --verify-no-changes --exclude src/LeaseBook.Web/Migrations
+      - run: dotnet build -c Release --no-restore
+      # Runs unit, architecture, and Testcontainers-backed integration tests (Docker is on the runner).
+      # The schema guard + tenant-isolation pack run here against a fresh Postgres 18 container.
+      - run: dotnet test -c Release --no-build
+
+  web:
+    name: Web (lint + test + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run test
+      - run: npm run build
+
+  migration-check:
+    name: Migrations apply to a blank DB
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: dev_postgres_pw
+          POSTGRES_DB: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Create database + roles (bootstrap.sql)
+        run: psql "host=localhost port=5432 user=postgres dbname=postgres" -v ON_ERROR_STOP=1 -f infra/db/bootstrap.sql
+        env:
+          PGPASSWORD: dev_postgres_pw
+      - run: dotnet tool restore
+      # dotnet ef builds LeaseBook.Web before applying migrations; restore its packages first so
+      # project.assets.json exists (the design-time build does not restore on its own).
+      - run: dotnet restore src/LeaseBook.Web
+      - name: Apply migrations as the migrator role
+        run: dotnet ef database update --project src/LeaseBook.Web
+        env:
+          ConnectionStrings__Migrations: Host=localhost;Port=5432;Database=leasebook;Username=leasebook_migrator;Password=dev_migrator_pw
+
+  secret-scan:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  container:
+    name: Container build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false # PR builds verify the image compiles; pushing happens in deploy-dev.
