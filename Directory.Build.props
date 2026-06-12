@@ -1,0 +1,21 @@
+<Project>
+
+  <!-- Solution-wide build conventions (P1). Package versions live in Directory.Packages.props. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AnalysisLevel>latest</AnalysisLevel>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <Deterministic>true</Deterministic>
+    <!-- Style violations are enforced by `dotnet format` in CI (WP-11), not as build errors,
+         so a stray formatting nit doesn't block a build. Analyzer (CAxxxx) warnings still
+         fail the build via TreatWarningsAsErrors. -->
+    <EnforceCodeStyleInBuild>false</EnforceCodeStyleInBuild>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+</Project>

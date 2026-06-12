@@ -1,5 +1,36 @@
-# Confidential PRD - Not for distribution
-LeaseBook_PRD_v1.0.md
+# Company Private Project Files (confidential, local-only — see CLAUDE.md)
+/private/
 
-# Claude Design Files
-claude_design_files/
+# .NET build output
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+*.user
+*.suo
+.vs/
+
+# Test output
+TestResults/
+[Tt]est[Rr]esults/
+*.coverage
+*.trx
+
+# Node / web
+node_modules/
+dist/
+.vite/
+playwright-report/
+test-results/
+*.tsbuildinfo
+
+# Local environment / secrets
+.env
+.env.*
+!.env.example
+*.local
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp

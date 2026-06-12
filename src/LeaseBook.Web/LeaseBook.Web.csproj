@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!-- Composition root: references SharedKernel + every module (host-only rule). -->
+  <ItemGroup>
+    <ProjectReference Include="..\LeaseBook.SharedKernel\LeaseBook.SharedKernel.csproj" />
+    <ProjectReference Include="..\LeaseBook.Modules.Accounting\LeaseBook.Modules.Accounting.csproj" />
+    <ProjectReference Include="..\LeaseBook.Modules.Directory\LeaseBook.Modules.Directory.csproj" />
+    <ProjectReference Include="..\LeaseBook.Modules.Banking\LeaseBook.Modules.Banking.csproj" />
+    <ProjectReference Include="..\LeaseBook.Modules.Reporting\LeaseBook.Modules.Reporting.csproj" />
+    <ProjectReference Include="..\LeaseBook.Modules.Operations\LeaseBook.Modules.Operations.csproj" />
+    <ProjectReference Include="..\LeaseBook.Modules.Payments\LeaseBook.Modules.Payments.csproj" />
+  </ItemGroup>
+
+</Project>

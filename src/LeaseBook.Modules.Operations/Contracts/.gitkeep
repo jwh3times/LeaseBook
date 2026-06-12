@@ -1,0 +1,2 @@
+# Public cross-module Contracts interfaces live here. Other modules consume them via DI at the
+# host; module assemblies never reference each other directly (architecture boundary test).

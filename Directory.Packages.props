@@ -1,0 +1,27 @@
+<Project>
+
+  <!-- Central Package Management (P2): every PackageReference is versionless; versions are pinned
+       here to the latest stable at time of adoption. Later WPs append (EF Core, Npgsql, Identity,
+       OpenTelemetry, etc.). -->
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Application plumbing -->
+    <PackageVersion Include="Scrutor" Version="7.0.0" />
+    <PackageVersion Include="FluentValidation" Version="12.1.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Test stack (P7): xUnit v3 on Microsoft.Testing.Platform + Shouldly + NetArchTest -->
+    <PackageVersion Include="xunit.v3" Version="3.2.2" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.6.0" />
+    <PackageVersion Include="Shouldly" Version="4.3.0" />
+    <PackageVersion Include="NetArchTest.Rules" Version="1.3.2" />
+    <PackageVersion Include="Testcontainers.PostgreSql" Version="4.12.0" />
+  </ItemGroup>
+
+</Project>
