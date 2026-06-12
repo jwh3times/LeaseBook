@@ -78,8 +78,11 @@ dotnet run --project src/LeaseBook.Web -- seed --org demo
 ```
 
 The dataset is `seed/demo-org.json` (ported from the prototype; the golden-file fixture from M1
-on). In M0 the seeder creates only the org and the admin user — later milestones extend it as
-their schemas land.
+on). The seeder creates the org and the admin user, then **replays the demo journal** (§C.8):
+provision the chart of accounts, post the cutover BalanceForward, and post every Feb–Jun event
+through the real engine. The derived ledgers reconcile to the cent against the dataset (golden
+tests). Re-running is idempotent (the journal step skips if any entry exists). Directory rows
+(owners/properties/tenants) land in M2 reusing the journal's dimension ids.
 
 **Seeded dev admin — DEV ONLY:** `renee.calloway@tarheelpg.test` / `Tarheel-Trust-2026!`. MFA is
 not enrolled (enroll on first login). Real environments provision operators by invite; passwords
