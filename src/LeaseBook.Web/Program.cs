@@ -1,10 +1,12 @@
 using System.Reflection;
 using Azure.Monitor.OpenTelemetry.Exporter;
 using LeaseBook.Modules.Accounting;
+using LeaseBook.Modules.Directory;
 using LeaseBook.SharedKernel.Cqrs;
 using LeaseBook.SharedKernel.Endpoints;
 using LeaseBook.SharedKernel.Observability;
 using LeaseBook.SharedKernel.Tenancy;
+using LeaseBook.Web.Adapters;
 using LeaseBook.Web.Auth;
 using LeaseBook.Web.Cli;
 using LeaseBook.Web.Endpoints;
@@ -59,6 +61,19 @@ builder.Services.AddScoped<OrgScopedExecutor>();
 // Accounting module services (chart-of-accounts provisioning, period lifecycle; the posting engine
 // and event catalog register here in later WPs). They consume the ambient DbContext + ITenantContext.
 builder.Services.AddAccountingModule();
+
+// Directory module services (settings/bank/fee config; CQRS handlers are auto-discovered). The host
+// implements Directory's cross-module ports with thin adapters (ADR-007 / P49): IChartProvisioner
+// delegates bank-account provisioning to the Accounting chart-of-accounts.
+builder.Services.AddDirectoryModule();
+builder.Services.AddScoped<LeaseBook.Modules.Directory.Contracts.IChartProvisioner, ChartProvisionerAdapter>();
+builder.Services.AddScoped<LeaseBook.Modules.Directory.Contracts.ITenantFinancials, TenantFinancialsAdapter>();
+builder.Services.AddScoped<LeaseBook.Modules.Directory.Contracts.IOwnerFinancials, OwnerFinancialsAdapter>();
+
+// Host-composed dashboard (§C.6 / P45): the cross-module composition root, dispatching module read
+// queries via ISender. TimeProvider drives the "current accounting month" (injectable for tests).
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddScoped<LeaseBook.Web.Dashboard.DashboardService>();
 
 // OpenAPI document (P11) — the SPA's `npm run api:generate` reads /openapi/v1.json.
 builder.Services.AddOpenApi();

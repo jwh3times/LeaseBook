@@ -1,0 +1,75 @@
+/* M2 UI additions (directory index/detail, dashboard, settings, palette). Scoped stylesheet layered
+   on the design tokens — uses the existing tokens only, adds no new ones (§A money/status discipline). */
+
+/* small utilities the M2 screens reuse */
+.mb12 { margin-bottom: 12px; }
+.mb16 { margin-bottom: 16px; }
+.mt16 { margin-top: 16px; }
+.pf-pad { padding: 24px; }
+.wrap { flex-wrap: wrap; }
+.grow { flex: 1; }
+.pf-count { color: var(--text-3); font-weight: 500; font-size: 0.62em; }
+
+/* loading skeleton */
+.pf-skeleton { height: 14px; border-radius: 6px; background: var(--surface-2); flex: 1; }
+@media (prefers-reduced-motion: no-preference) {
+  .pf-skeleton { animation: pfPulse 1.4s ease-in-out infinite; }
+}
+@keyframes pfPulse { 0%, 100% { opacity: 0.55; } 50% { opacity: 0.9; } }
+
+/* detail pages */
+.pf-detailhd { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
+.pf-detailhd h2 { margin: 0; font-size: 22px; font-weight: 750; letter-spacing: -0.02em; }
+.pf-detailhd .sub { margin: 4px 0 0; color: var(--text-3); font-size: 13.5px; }
+.pf-detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+.pf-kv { display: flex; flex-direction: column; gap: 3px; }
+.pf-kv .k { font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-3); }
+.pf-kv .v { font-size: 15px; font-weight: 600; }
+.pf-section-title { font-size: 13px; font-weight: 700; color: var(--text-2); margin: 0 0 10px; }
+
+/* record quick-switcher */
+.pf-switcher { display: inline-flex; align-items: center; gap: 4px; }
+
+/* command palette */
+.pf-palette-backdrop { position: fixed; inset: 0; background: rgba(8, 11, 18, 0.55); backdrop-filter: blur(2px); display: flex; align-items: flex-start; justify-content: center; padding-top: 12vh; z-index: 60; }
+.pf-palette { width: min(620px, 92vw); background: var(--surface-1); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 24px 64px rgba(0, 0, 0, 0.4); overflow: hidden; }
+.pf-palette-input { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--border); }
+.pf-palette-input input { flex: 1; background: transparent; border: 0; outline: 0; font-size: 16px; color: var(--text-1); }
+.pf-palette-list { max-height: 52vh; overflow-y: auto; padding: 6px; }
+.pf-palette-group { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-3); padding: 10px 12px 4px; }
+.pf-palette-item { display: flex; align-items: center; gap: 12px; padding: 9px 12px; border-radius: 9px; cursor: pointer; }
+.pf-palette-item.sel { background: var(--surface-2); box-shadow: inset 3px 0 0 var(--accent); }
+.pf-palette-item .label { font-weight: 600; font-size: 14px; }
+.pf-palette-item .sub { color: var(--text-3); font-size: 12.5px; margin-left: auto; }
+.pf-palette-empty { padding: 28px; text-align: center; color: var(--text-3); font-size: 13.5px; }
+
+/* help overlay */
+.pf-help-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 28px; }
+.pf-help-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 4px 0; }
+.pf-help-row kbd, .pf-kbd { font-family: var(--font-mono, ui-monospace, monospace); font-size: 11.5px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 5px; padding: 1px 6px; }
+
+/* modal (create forms) */
+.pf-modal-backdrop { position: fixed; inset: 0; background: rgba(8, 11, 18, 0.55); display: flex; align-items: center; justify-content: center; padding: 24px; z-index: 55; }
+.pf-modal { width: min(520px, 94vw); max-height: 88vh; overflow-y: auto; background: var(--surface-1); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 24px 64px rgba(0, 0, 0, 0.4); }
+.pf-modal-hd { display: flex; align-items: center; justify-content: space-between; padding: 18px 20px; border-bottom: 1px solid var(--border); }
+.pf-modal-hd h3 { margin: 0; font-size: 17px; font-weight: 700; }
+.pf-modal-body { padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+.pf-modal-ft { display: flex; justify-content: flex-end; gap: 10px; padding: 16px 20px; border-top: 1px solid var(--border); }
+.pf-formrow { display: flex; flex-direction: column; gap: 5px; }
+.pf-formrow label { font-size: 12.5px; font-weight: 600; color: var(--text-2); }
+.pf-formrow .err { font-size: 12px; color: var(--danger, #e5484d); }
+
+/* dashboard */
+.pf-statgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; margin-bottom: 18px; }
+.pf-dash-grid { display: grid; grid-template-columns: 1.6fr 1fr; gap: 16px; align-items: start; }
+@media (max-width: 1000px) { .pf-dash-grid { grid-template-columns: 1fr; } }
+.pf-bankrow { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--border); }
+.pf-bankrow:last-child { border-bottom: 0; }
+.pf-action { display: flex; align-items: flex-start; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); cursor: pointer; }
+.pf-action:last-child { border-bottom: 0; }
+.pf-action .dot { width: 9px; height: 9px; border-radius: 50%; margin-top: 5px; flex: none; }
+.pf-action .dot.alert { background: var(--danger, #e5484d); }
+.pf-action .dot.warn { background: var(--warn, #f5a524); }
+.pf-action .dot.info { background: var(--accent); }
+.pf-action .a-title { font-weight: 600; font-size: 14px; }
+.pf-action .a-detail { color: var(--text-3); font-size: 12.5px; margin-top: 2px; }

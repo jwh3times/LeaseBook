@@ -51,6 +51,13 @@ public sealed class SeederTests(PostgresFixture fixture)
         await DemoSeeder.SeedAsync(fixture.Api.Services, ct);
         (await CountAsync("journal_entries", ct)).ShouldBe(journalEntries);
 
+        // The directory (M2) is seeded before the journal and is equally idempotent — counts stay stable.
+        (await CountAsync("owners", ct)).ShouldBe(9);    // 8 listed (o1–o8) + the AggregateOwners roll-up
+        (await CountAsync("tenants", ct)).ShouldBe(18);  // 7 listed (t1–t7) + 11 system (deposit aggregates + statement-only)
+        (await CountAsync("units", ct)).ShouldBe(20);    // 7 occupied + 13 filler vacant (§C.10)
+        (await CountAsync("properties", ct)).ShouldBe(6);
+        (await CountAsync("bank_accounts", ct)).ShouldBe(3);
+
         // The seeded admin authenticates through the real API with the documented dev password.
         var client = fixture.Api.CreateClient();
         await client.PrimeCsrfAsync(ct);

@@ -407,6 +407,7 @@ input, select { font-family: inherit; }
 .pf-table .strong { font-weight: 650; }
 .pf-table .muted { color: var(--text-3); }
 .t-row-click { cursor: pointer; }
+.pf-table tbody tr.t-row-sel { background: var(--surface-2); box-shadow: inset 3px 0 0 var(--accent); }
 
 /* generic helpers */
 .row { display: flex; align-items: center; }

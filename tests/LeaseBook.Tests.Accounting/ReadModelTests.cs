@@ -22,7 +22,8 @@ public sealed class ReadModelTests(PostgresFixture fixture)
     public async Task Read_models_reflect_a_posted_scenario()
     {
         var ct = TestContext.Current.CancellationToken;
-        await using var scope = await ProvisionedScopeAsync(fixture, ct);
+        await using var scope = await ProvisionedScopeAsync(
+            fixture, ct, owners: [Owner], tenants: [Tenant], properties: [Property]);
         await PostScenarioAsync(scope, ct);
 
         // Bank books.

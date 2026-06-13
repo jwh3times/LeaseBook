@@ -48,7 +48,8 @@ public static class DemoSeeder
 
         // Step 3 (org-scoped): runs inside the OrgScopedExecutor unit of work — app.org_id is set,
         // so the write passes RLS WITH CHECK. Records a single provisioning event in the audit log,
-        // then replays the demo journal (§C.8). M2 adds directory (owners/properties/tenants); etc.
+        // materialises the directory (M2), then replays the demo journal (§C.8). The directory step runs
+        // BEFORE the journal so every journal-dimension FK (P38 / ADR-008) has a target when it posts.
         var executor = sp.GetRequiredService<OrgScopedExecutor>();
         var db = sp.GetRequiredService<AppDbContext>();
         await executor.RunAsync(DemoOrgId, async () =>
@@ -69,7 +70,9 @@ public static class DemoSeeder
                 await db.SaveChangesAsync(ct);
             }
 
-            // Chart of accounts + the replayed journal (idempotent; skips if already seeded).
+            // Directory rows first (FK targets for the journal dimensions), then the chart of accounts +
+            // replayed journal. Both idempotent; both skip cleanly on re-seed.
+            await DemoDirectorySeed.SeedAsync(db, ct);
             await DemoJournalSeed.SeedAsync(sp, db, ct);
         }, ct);
     }

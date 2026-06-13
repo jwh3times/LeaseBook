@@ -45,6 +45,10 @@ public sealed class InvariantPropertyTests(PostgresFixture fixture)
         var property = UuidV7.NewId();
         var voidable = new List<Guid>();
 
+        // Seed directory rows for the dimension ids this case posts, so the journal-dimension FKs
+        // resolve when the engine posts (P38 / ADR-008).
+        await EnsureDirectoryAsync(fixture, ct, owners: [owner], tenants: [tenant], properties: [property]);
+
         foreach (var (kind, cents) in ops)
         {
             await scope.RunAsync(async () =>

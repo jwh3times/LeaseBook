@@ -33,7 +33,8 @@ public sealed class MonthSimulationTests(PostgresFixture fixture)
     public async Task A_full_month_keeps_the_invariants_at_every_step_and_reconciles()
     {
         var ct = TestContext.Current.CancellationToken;
-        await using var scope = await ProvisionedScopeAsync(fixture, ct);
+        await using var scope = await ProvisionedScopeAsync(
+            fixture, ct, owners: [O1, O2], tenants: [T1, T2, T3, T4, T5], properties: [P1, P2]);
 
         // Move-in deposits for t1 (p1/o1) and t5 (p2/o2).
         await PostAndCheckAsync(scope, new DepositCollected(T1, P1, O1, new Money(1450m), Feb(1), DepositBankId, "t1 move-in"), ct);

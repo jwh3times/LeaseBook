@@ -291,6 +291,425 @@ namespace LeaseBook.Web.Migrations
                         });
                 });
 
+            modelBuilder.Entity("LeaseBook.Modules.Directory.Domain.BankAccount", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Institution")
+                        .HasColumnType("text")
+                        .HasColumnName("institution");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_active");
+
+                    b.Property<string>("Mask")
+                        .HasColumnType("text")
+                        .HasColumnName("mask");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.Property<Guid>("OrgId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("org_id");
+
+                    b.Property<string>("Purpose")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("purpose");
+
+                    b.HasKey("Id")
+                        .HasName("pk_bank_accounts");
+
+                    b.HasIndex("OrgId", "Name")
+                        .HasDatabaseName("ix_bank_accounts_org_id_name");
+
+                    b.ToTable("bank_accounts", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_bank_accounts_purpose", "purpose IN ('trust','deposit','operating')");
+                        });
+                });
+
+            modelBuilder.Entity("LeaseBook.Modules.Directory.Domain.LeaseLite", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<decimal>("DepositRequired")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(14, 2)
+                        .HasColumnType("numeric(14,2)")
+                        .HasColumnName("deposit_required")
+                        .HasDefaultValueSql("0");
+
+                    b.Property<DateOnly?>("EndDate")
+                        .HasColumnType("date")
+                        .HasColumnName("end_date");
+
+                    b.Property<Guid>("OrgId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("org_id");
+
+                    b.Property<decimal>("Rent")
+                        .HasPrecision(14, 2)
+                        .HasColumnType("numeric(14,2)")
+                        .HasColumnName("rent");
+
+                    b.Property<DateOnly?>("StartDate")
+                        .HasColumnType("date")
+                        .HasColumnName("start_date");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<Guid>("UnitId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("unit_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_lease_lite");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_lease_lite_tenant_id");
+
+                    b.HasIndex("UnitId")
+                        .HasDatabaseName("ix_lease_lite_unit_id");
+
+                    b.HasIndex("OrgId", "TenantId")
+                        .HasDatabaseName("ix_lease_lite_org_id_tenant_id");
+
+                    b.HasIndex("OrgId", "UnitId")
+                        .HasDatabaseName("ix_lease_lite_org_id_unit_id");
+
+                    b.ToTable("lease_lite", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_lease_lite_status", "status IN ('active','ended','pending')");
+                        });
+                });
+
+            modelBuilder.Entity("LeaseBook.Modules.Directory.Domain.OrgSettings", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("AccountingBasis")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("cash")
+                        .HasColumnName("accounting_basis");
+
+                    b.Property<string>("Address")
+                        .HasColumnType("text")
+                        .HasColumnName("address");
+
+                    b.Property<string>("City")
+                        .HasColumnType("text")
+                        .HasColumnName("city");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("LegalName")
+                        .HasColumnType("text")
+                        .HasColumnName("legal_name");
+
+                    b.Property<string>("LogoBlobRef")
+                        .HasColumnType("text")
+                        .HasColumnName("logo_blob_ref");
+
+                    b.Property<string>("MoneyNegativeDisplay")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("minus")
+                        .HasColumnName("money_negative_display");
+
+                    b.Property<Guid>("OrgId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("org_id");
+
+                    b.Property<string>("Phone")
+                        .HasColumnType("text")
+                        .HasColumnName("phone");
+
+                    b.Property<string>("State")
+                        .HasColumnType("text")
+                        .HasColumnName("state");
+
+                    b.Property<string>("Zip")
+                        .HasColumnType("text")
+                        .HasColumnName("zip");
+
+                    b.HasKey("Id")
+                        .HasName("pk_org_settings");
+
+                    b.HasIndex("OrgId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_org_settings_org_id");
+
+                    b.ToTable("org_settings", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_org_settings_accounting_basis", "accounting_basis IN ('cash','accrual')");
+
+                            t.HasCheckConstraint("ck_org_settings_money_negative_display", "money_negative_display IN ('minus','parens')");
+                        });
+                });
+
+            modelBuilder.Entity("LeaseBook.Modules.Directory.Domain.Owner", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ContactEmail")
+                        .HasColumnType("text")
+                        .HasColumnName("contact_email");
+
+                    b.Property<string>("ContactPhone")
+                        .HasColumnType("text")
+                        .HasColumnName("contact_phone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<int?>("DefaultMgmtFeeBps")
+                        .HasColumnType("integer")
+                        .HasColumnName("default_mgmt_fee_bps");
+
+                    b.Property<string>("Initials")
+                        .HasColumnType("text")
+                        .HasColumnName("initials");
+
+                    b.Property<bool>("IsSystem")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_system");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.Property<Guid>("OrgId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("org_id");
+
+                    b.Property<decimal>("ReserveAmount")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(14, 2)
+                        .HasColumnType("numeric(14,2)")
+                        .HasColumnName("reserve_amount")
+                        .HasDefaultValueSql("0");
+
+                    b.HasKey("Id")
+                        .HasName("pk_owners");
+
+                    b.HasIndex("OrgId", "Name")
+                        .HasDatabaseName("ix_owners_org_id_name");
+
+                    b.ToTable("owners", (string)null);
+                });
+
+            modelBuilder.Entity("LeaseBook.Modules.Directory.Domain.Property", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Address")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("address");
+
+                    b.Property<string>("City")
+                        .HasColumnType("text")
+                        .HasColumnName("city");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<bool>("IsSystem")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_system");
+
+                    b.Property<int?>("MgmtFeeBps")
+                        .HasColumnType("integer")
+                        .HasColumnName("mgmt_fee_bps");
+
+                    b.Property<Guid>("OrgId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("org_id");
+
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_id");
+
+                    b.Property<string>("State")
+                        .HasColumnType("text")
+                        .HasColumnName("state");
+
+                    b.Property<string>("Zip")
+                        .HasColumnType("text")
+                        .HasColumnName("zip");
+
+                    b.HasKey("Id")
+                        .HasName("pk_properties");
+
+                    b.HasIndex("OwnerId")
+                        .HasDatabaseName("ix_properties_owner_id");
+
+                    b.HasIndex("OrgId", "Address")
+                        .HasDatabaseName("ix_properties_org_id_address");
+
+                    b.HasIndex("OrgId", "OwnerId")
+                        .HasDatabaseName("ix_properties_org_id_owner_id");
+
+                    b.ToTable("properties", (string)null);
+                });
+
+            modelBuilder.Entity("LeaseBook.Modules.Directory.Domain.Tenant", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ContactEmail")
+                        .HasColumnType("text")
+                        .HasColumnName("contact_email");
+
+                    b.Property<string>("ContactPhone")
+                        .HasColumnType("text")
+                        .HasColumnName("contact_phone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("display_name");
+
+                    b.Property<bool>("IsSystem")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_system");
+
+                    b.Property<Guid>("OrgId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("org_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("status");
+
+                    b.HasKey("Id")
+                        .HasName("pk_tenants");
+
+                    b.HasIndex("OrgId", "DisplayName")
+                        .HasDatabaseName("ix_tenants_org_id_display_name");
+
+                    b.ToTable("tenants", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_tenants_status", "status IN ('current','late','prepaid','evicting','past')");
+                        });
+                });
+
+            modelBuilder.Entity("LeaseBook.Modules.Directory.Domain.Unit", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<bool>("IsSystem")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_system");
+
+                    b.Property<string>("Label")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("label");
+
+                    b.Property<Guid>("OrgId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("org_id");
+
+                    b.Property<Guid>("PropertyId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("property_id");
+
+                    b.Property<decimal>("Rent")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(14, 2)
+                        .HasColumnType("numeric(14,2)")
+                        .HasColumnName("rent")
+                        .HasDefaultValueSql("0");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("status");
+
+                    b.HasKey("Id")
+                        .HasName("pk_units");
+
+                    b.HasIndex("PropertyId")
+                        .HasDatabaseName("ix_units_property_id");
+
+                    b.HasIndex("OrgId", "PropertyId")
+                        .HasDatabaseName("ix_units_org_id_property_id");
+
+                    b.ToTable("units", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_units_status", "status IN ('occupied','vacant','unavailable')");
+                        });
+                });
+
             modelBuilder.Entity("LeaseBook.Web.Auth.AppUser", b =>
                 {
                     b.Property<Guid>("Id")
@@ -644,6 +1063,43 @@ namespace LeaseBook.Web.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_journal_lines_journal_entries_entry_id");
+                });
+
+            modelBuilder.Entity("LeaseBook.Modules.Directory.Domain.LeaseLite", b =>
+                {
+                    b.HasOne("LeaseBook.Modules.Directory.Domain.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_lease_lite_tenant_tenant_id");
+
+                    b.HasOne("LeaseBook.Modules.Directory.Domain.Unit", null)
+                        .WithMany()
+                        .HasForeignKey("UnitId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_lease_lite_unit_unit_id");
+                });
+
+            modelBuilder.Entity("LeaseBook.Modules.Directory.Domain.Property", b =>
+                {
+                    b.HasOne("LeaseBook.Modules.Directory.Domain.Owner", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_properties_owners_owner_id");
+                });
+
+            modelBuilder.Entity("LeaseBook.Modules.Directory.Domain.Unit", b =>
+                {
+                    b.HasOne("LeaseBook.Modules.Directory.Domain.Property", null)
+                        .WithMany()
+                        .HasForeignKey("PropertyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_units_properties_property_id");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<System.Guid>", b =>

@@ -29,7 +29,8 @@ public sealed class PostingTemplatesTests(PostgresFixture fixture)
     public async Task RentCharged_accrues_receivable_and_owner_income()
     {
         var ct = TestContext.Current.CancellationToken;
-        await using var scope = await ProvisionedScopeAsync(fixture, ct);
+        await using var scope = await ProvisionedScopeAsync(
+            fixture, ct, owners: [Owner], tenants: [Tenant], properties: [Property], units: [Unit]);
 
         var id = await PostAsync(scope, new RentCharged(
             Tenant, Property, Owner, Unit, new Money(1450m), Feb(1), "Feb rent"), ct);
@@ -51,7 +52,8 @@ public sealed class PostingTemplatesTests(PostgresFixture fixture)
     public async Task PaymentReceived_exactly_clearing_the_receivable_has_no_prepayment_line()
     {
         var ct = TestContext.Current.CancellationToken;
-        await using var scope = await ProvisionedScopeAsync(fixture, ct);
+        await using var scope = await ProvisionedScopeAsync(
+            fixture, ct, owners: [Owner], tenants: [Tenant], properties: [Property], units: [Unit]);
 
         await PostAsync(scope, new RentCharged(Tenant, Property, Owner, Unit, new Money(1450m), Feb(1), "rent"), ct);
         var id = await PostAsync(scope, new PaymentReceived(
@@ -76,7 +78,8 @@ public sealed class PostingTemplatesTests(PostgresFixture fixture)
     public async Task PaymentReceived_overpaying_auto_splits_the_excess_to_prepayments()
     {
         var ct = TestContext.Current.CancellationToken;
-        await using var scope = await ProvisionedScopeAsync(fixture, ct);
+        await using var scope = await ProvisionedScopeAsync(
+            fixture, ct, owners: [Owner], tenants: [Tenant], properties: [Property], units: [Unit]);
 
         await PostAsync(scope, new RentCharged(Tenant, Property, Owner, Unit, new Money(2150m), May(1), "rent"), ct);
         var id = await PostAsync(scope, new PaymentReceived(
@@ -98,7 +101,8 @@ public sealed class PostingTemplatesTests(PostgresFixture fixture)
     public async Task DepositCollected_records_a_liability_and_never_income()
     {
         var ct = TestContext.Current.CancellationToken;
-        await using var scope = await ProvisionedScopeAsync(fixture, ct);
+        await using var scope = await ProvisionedScopeAsync(
+            fixture, ct, owners: [Owner], tenants: [Tenant], properties: [Property], units: [Unit]);
 
         var id = await PostAsync(scope, new DepositCollected(
             Tenant, Property, Owner, new Money(1450m), Feb(1), DepositBankId, "move-in deposit"), ct);
@@ -120,7 +124,8 @@ public sealed class PostingTemplatesTests(PostgresFixture fixture)
     public async Task DepositApplied_to_owner_income_moves_funds_and_recognizes_equity()
     {
         var ct = TestContext.Current.CancellationToken;
-        await using var scope = await ProvisionedScopeAsync(fixture, ct);
+        await using var scope = await ProvisionedScopeAsync(
+            fixture, ct, owners: [Owner], tenants: [Tenant], properties: [Property], units: [Unit]);
 
         await PostAsync(scope, new DepositCollected(Tenant, Property, Owner, new Money(1450m), Feb(1), DepositBankId, "deposit"), ct);
         var id = await PostAsync(scope, new DepositApplied(
@@ -142,7 +147,8 @@ public sealed class PostingTemplatesTests(PostgresFixture fixture)
     public async Task DepositApplied_against_charges_splits_into_receivable_and_cash_income()
     {
         var ct = TestContext.Current.CancellationToken;
-        await using var scope = await ProvisionedScopeAsync(fixture, ct);
+        await using var scope = await ProvisionedScopeAsync(
+            fixture, ct, owners: [Owner], tenants: [Tenant], properties: [Property], units: [Unit]);
 
         await PostAsync(scope, new DepositCollected(Tenant, Property, Owner, new Money(1450m), Feb(1), DepositBankId, "deposit"), ct);
         var id = await PostAsync(scope, new DepositApplied(
@@ -164,7 +170,8 @@ public sealed class PostingTemplatesTests(PostgresFixture fixture)
     public async Task ManagementFeeAssessed_credits_pm_income_with_no_owner_dimension()
     {
         var ct = TestContext.Current.CancellationToken;
-        await using var scope = await ProvisionedScopeAsync(fixture, ct);
+        await using var scope = await ProvisionedScopeAsync(
+            fixture, ct, owners: [Owner], tenants: [Tenant], properties: [Property], units: [Unit]);
 
         var id = await PostAsync(scope, new ManagementFeeAssessed(
             Owner, Property, new Money(290m), May(27), TrustBankId, "May management fee"), ct);
@@ -183,7 +190,8 @@ public sealed class PostingTemplatesTests(PostgresFixture fixture)
     public async Task PMFeesSwept_moves_cash_and_income_attribution_in_four_lines()
     {
         var ct = TestContext.Current.CancellationToken;
-        await using var scope = await ProvisionedScopeAsync(fixture, ct);
+        await using var scope = await ProvisionedScopeAsync(
+            fixture, ct, owners: [Owner], tenants: [Tenant], properties: [Property], units: [Unit]);
 
         await PostAsync(scope, new ManagementFeeAssessed(Owner, Property, new Money(290m), May(27), TrustBankId, "fee"), ct);
         var id = await PostAsync(scope, new PMFeesSwept(new Money(290m), May(27), TrustBankId, OperatingBankId, "sweep"), ct);
@@ -205,7 +213,8 @@ public sealed class PostingTemplatesTests(PostgresFixture fixture)
     public async Task OwnerDisbursed_reduces_owner_equity_and_the_trust_bank()
     {
         var ct = TestContext.Current.CancellationToken;
-        await using var scope = await ProvisionedScopeAsync(fixture, ct);
+        await using var scope = await ProvisionedScopeAsync(
+            fixture, ct, owners: [Owner], tenants: [Tenant], properties: [Property], units: [Unit]);
 
         await PostAsync(scope, new OwnerContribution(Owner, Property, new Money(10000m), Feb(1), TrustBankId, "seed"), ct);
         var id = await PostAsync(scope, new OwnerDisbursed(Owner, new Money(8200m), Jun(2), TrustBankId, "owner draw"), ct);
@@ -221,7 +230,8 @@ public sealed class PostingTemplatesTests(PostgresFixture fixture)
     public async Task CreditIssued_posts_only_accrual_lines()
     {
         var ct = TestContext.Current.CancellationToken;
-        await using var scope = await ProvisionedScopeAsync(fixture, ct);
+        await using var scope = await ProvisionedScopeAsync(
+            fixture, ct, owners: [Owner], tenants: [Tenant], properties: [Property], units: [Unit]);
 
         var id = await PostAsync(scope, new CreditIssued(Tenant, Property, Owner, new Money(85m), Feb(17), "goodwill"), ct);
         var lines = await ReadLinesAsync(scope, id, ct);
@@ -237,7 +247,8 @@ public sealed class PostingTemplatesTests(PostgresFixture fixture)
     public async Task BalanceForward_posts_an_arbitrary_balanced_set_all_both_basis()
     {
         var ct = TestContext.Current.CancellationToken;
-        await using var scope = await ProvisionedScopeAsync(fixture, ct);
+        await using var scope = await ProvisionedScopeAsync(
+            fixture, ct, owners: [Owner], tenants: [Tenant], properties: [Property], units: [Unit]);
 
         Guid id = default;
         await scope.RunAsync(async () =>
@@ -261,7 +272,8 @@ public sealed class PostingTemplatesTests(PostgresFixture fixture)
     public async Task OwnerDisbursed_below_the_reserve_floor_is_rejected()
     {
         var ct = TestContext.Current.CancellationToken;
-        await using var scope = await ProvisionedScopeAsync(fixture, ct);
+        await using var scope = await ProvisionedScopeAsync(
+            fixture, ct, owners: [Owner], tenants: [Tenant], properties: [Property], units: [Unit]);
 
         await PostAsync(scope, new OwnerContribution(Owner, Property, new Money(1000m), Feb(1), TrustBankId, "seed"), ct);
 
@@ -275,7 +287,8 @@ public sealed class PostingTemplatesTests(PostgresFixture fixture)
     public async Task DepositApplied_over_the_held_amount_is_rejected()
     {
         var ct = TestContext.Current.CancellationToken;
-        await using var scope = await ProvisionedScopeAsync(fixture, ct);
+        await using var scope = await ProvisionedScopeAsync(
+            fixture, ct, owners: [Owner], tenants: [Tenant], properties: [Property], units: [Unit]);
 
         await PostAsync(scope, new DepositCollected(Tenant, Property, Owner, new Money(1000m), Feb(1), DepositBankId, "deposit"), ct);
 
@@ -290,7 +303,8 @@ public sealed class PostingTemplatesTests(PostgresFixture fixture)
     public async Task Posting_an_event_into_a_closed_period_is_rejected()
     {
         var ct = TestContext.Current.CancellationToken;
-        await using var scope = await ProvisionedScopeAsync(fixture, ct);
+        await using var scope = await ProvisionedScopeAsync(
+            fixture, ct, owners: [Owner], tenants: [Tenant], properties: [Property], units: [Unit]);
 
         await scope.RunAsync(() => Periods(scope).CloseAsync(2026, 2, ct), ct);
 

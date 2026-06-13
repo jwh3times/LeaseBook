@@ -1,8 +1,13 @@
 import { useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { api, primeCsrf } from '@/api';
-import { AppLayout, Avatar, Button, IconButton, Sidebar, Topbar } from '@/design';
+import { AppLayout, Avatar, Button, IconButton, MoneyDisplayProvider, type NegativeStyle, Sidebar, Topbar } from '@/design';
 import { sessionQueryKey, useSession } from '@/features/auth/useSession';
+import { CommandPalette } from '@/features/palette/CommandPalette';
+import { HelpOverlay } from '@/features/palette/HelpOverlay';
+import { useOrgSettings } from '@/lib/settings';
+import { useGlobalShortcuts } from '@/lib/useGlobalShortcuts';
 import { NAV_ROUTES, SETTINGS_ROUTE } from './navigation';
 
 function initialsOf(name: string): string {
@@ -20,6 +25,16 @@ export function AppShell() {
   const location = useLocation();
   const queryClient = useQueryClient();
   const { data: session } = useSession();
+  const { data: orgSettings } = useOrgSettings();
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const negativeStyle = (orgSettings?.moneyNegativeDisplay ?? 'minus') as NegativeStyle;
+
+  useGlobalShortcuts({
+    onPalette: () => setPaletteOpen(true),
+    onHelp: () => setHelpOpen(true),
+    onNavigate: navigate,
+  });
 
   const active = NAV_ROUTES.find((route) => location.pathname.startsWith(route.path)) ?? NAV_ROUTES[0]!;
   const displayName = session?.name ?? session?.email ?? 'User';
@@ -32,6 +47,7 @@ export function AppShell() {
   }
 
   return (
+    <MoneyDisplayProvider negativeStyle={negativeStyle}>
     <AppLayout
       sidebar={
         <Sidebar
@@ -49,6 +65,7 @@ export function AppShell() {
       topbar={
         <Topbar
           title={active.title}
+          onSearchClick={() => setPaletteOpen(true)}
           actions={
             <>
               <Button variant="primary" size="sm" icon="plus">
@@ -66,5 +83,8 @@ export function AppShell() {
     >
       <Outlet />
     </AppLayout>
+    {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} />}
+    {helpOpen && <HelpOverlay onClose={() => setHelpOpen(false)} />}
+    </MoneyDisplayProvider>
   );
 }

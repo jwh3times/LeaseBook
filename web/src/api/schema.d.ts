@@ -4,6 +4,79 @@
  */
 
 export interface paths {
+    "/api/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    q?: string;
+                    limit?: number | string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SearchResult"][];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/dashboard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DashboardResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -33,6 +106,43 @@ export interface paths {
         };
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/telemetry/budget": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["BudgetTelemetryRequest"];
+                };
+            };
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -248,6 +358,800 @@ export interface paths {
             };
         };
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/directory/owners": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    page?: number | string;
+                    pageSize?: number | string;
+                    q?: string;
+                    sort?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PagedResponseOfOwnerListRow"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CreateOwner"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["CreatedId"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/directory/owners/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["OwnerDetail"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["UpdateOwner"];
+                };
+            };
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/directory/properties": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    page?: number | string;
+                    pageSize?: number | string;
+                    q?: string;
+                    sort?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PagedResponseOfPropertyListRow"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CreateProperty"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["CreatedId"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/directory/properties/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PropertyDetail"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["UpdateProperty"];
+                };
+            };
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/directory/units": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query: {
+                    propertyId: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["UnitRow"][];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CreateUnit"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["CreatedId"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/directory/units/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["UpdateUnit"];
+                };
+            };
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/directory/tenants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    page?: number | string;
+                    pageSize?: number | string;
+                    q?: string;
+                    sort?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PagedResponseOfTenantListRow"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CreateTenant"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["CreatedId"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/directory/tenants/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TenantDetail"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["UpdateTenant"];
+                };
+            };
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/directory/leases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CreateLease"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["CreatedId"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/directory/leases/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["UpdateLease"];
+                };
+            };
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/org": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["OrgSettingsResponse"];
+                    };
+                };
+            };
+        };
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["UpdateOrgSettings"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["OrgSettingsResponse"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/banks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BankAccountResponse"][];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CreateBankAccount"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BankAccountResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/banks/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BankAccountResponse"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["UpdateBankAccountRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BankAccountResponse"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
         post?: never;
         delete?: never;
         options?: never;
@@ -510,6 +1414,22 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        ActionItem: {
+            id: string;
+            kind: string;
+            title: string;
+            detail: string;
+            route: string;
+        };
+        BankAccountResponse: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            institution: null | string;
+            mask: null | string;
+            purpose: string;
+            isActive: boolean;
+        };
         BankBalanceRow: {
             /** Format: uuid */
             bankAccountId: string;
@@ -520,8 +1440,105 @@ export interface components {
         BankBalancesResponse: {
             rows: components["schemas"]["BankBalanceRow"][];
         };
+        BanksPanel: {
+            rows: components["schemas"]["DashboardBankRow"][];
+        };
+        BudgetTelemetryRequest: {
+            task: string;
+            /** Format: int32 */
+            interactions: number | string;
+            met: null | boolean;
+        };
         ConfirmMfaRequest: {
             code: string;
+        };
+        CreateBankAccount: {
+            name: string;
+            institution: null | string;
+            mask: null | string;
+            purpose: string;
+        };
+        CreateLease: {
+            /** Format: uuid */
+            tenantId: string;
+            /** Format: uuid */
+            unitId: string;
+            /** Format: date */
+            startDate: null | string;
+            /** Format: date */
+            endDate: null | string;
+            /** Format: double */
+            rent: number | string;
+            /** Format: double */
+            depositRequired: number | string;
+            status: string;
+        };
+        CreateOwner: {
+            name: string;
+            initials: null | string;
+            contactEmail: null | string;
+            contactPhone: null | string;
+            /** Format: int32 */
+            defaultMgmtFeeBps: null | number | string;
+            /** Format: double */
+            reserveAmount: number | string;
+        };
+        CreateProperty: {
+            /** Format: uuid */
+            ownerId: string;
+            address: string;
+            city: null | string;
+            state: null | string;
+            zip: null | string;
+            /** Format: int32 */
+            mgmtFeeBps: null | number | string;
+        };
+        CreateTenant: {
+            displayName: string;
+            contactEmail: null | string;
+            contactPhone: null | string;
+            status: string;
+        };
+        CreateUnit: {
+            /** Format: uuid */
+            propertyId: string;
+            label: string;
+            /** Format: double */
+            rent: number | string;
+            status: string;
+        };
+        CreatedId: {
+            /** Format: uuid */
+            id: string;
+        };
+        DashboardBankRow: {
+            /** Format: uuid */
+            bankAccountId: string;
+            name: string;
+            /** Format: double */
+            book: number | string;
+        };
+        DashboardKpis: {
+            /** Format: double */
+            trustTotal: number | string;
+            /** Format: double */
+            ownersPayable: number | string;
+            /** Format: double */
+            uncleared: number | string;
+            /** Format: int32 */
+            unclearedCount: number | string;
+            /** Format: double */
+            collectedMtd: number | string;
+            /** Format: double */
+            collectedTarget: number | string;
+            /** Format: int32 */
+            vacancy: number | string;
+        };
+        DashboardResponse: {
+            kpis: components["schemas"]["DashboardKpis"];
+            ownerBalances: components["schemas"]["OwnerBalancesPanel"];
+            banks: components["schemas"]["BanksPanel"];
+            actionItems: components["schemas"]["ActionItem"][];
         };
         DepositRegisterResponse: {
             rows: components["schemas"]["DepositRegisterRow"][];
@@ -563,6 +1580,29 @@ export interface components {
             mfaToken: string;
             code: string;
         };
+        OrgSettingsResponse: {
+            accountingBasis: string;
+            moneyNegativeDisplay: string;
+            legalName: null | string;
+            address: null | string;
+            city: null | string;
+            state: null | string;
+            zip: null | string;
+            phone: null | string;
+            logoBlobRef: null | string;
+        };
+        OwnerBalanceHeroRow: {
+            /** Format: uuid */
+            ownerId: string;
+            name: string;
+            /** Format: double */
+            operating: number | string;
+            /** Format: double */
+            deposits: number | string;
+            /** Format: double */
+            total: number | string;
+            isRollup: boolean;
+        };
         OwnerBalanceRow: {
             /** Format: uuid */
             ownerId: string;
@@ -573,11 +1613,44 @@ export interface components {
             /** Format: double */
             total: number | string;
         };
+        OwnerBalancesHeroTotals: {
+            /** Format: double */
+            operating: number | string;
+            /** Format: double */
+            deposits: number | string;
+            /** Format: double */
+            total: number | string;
+        };
+        OwnerBalancesPanel: {
+            rows: components["schemas"]["OwnerBalanceHeroRow"][];
+            totals: components["schemas"]["OwnerBalancesHeroTotals"];
+        };
         OwnerBalancesResponse: {
             rows: components["schemas"]["OwnerBalanceRow"][];
             totals: components["schemas"]["OwnerBalancesTotals"];
         };
         OwnerBalancesTotals: {
+            /** Format: double */
+            operating: number | string;
+            /** Format: double */
+            deposits: number | string;
+            /** Format: double */
+            total: number | string;
+        };
+        OwnerContact: {
+            email: null | string;
+            phone: null | string;
+        };
+        OwnerDetail: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            contact: components["schemas"]["OwnerContact"];
+            /** Format: int32 */
+            defaultMgmtFeeBps: null | number | string;
+            /** Format: double */
+            reserveAmount: number | string;
+            properties: components["schemas"]["PropertyListRow"][];
             /** Format: double */
             operating: number | string;
             /** Format: double */
@@ -610,6 +1683,118 @@ export interface components {
             /** Format: uuid */
             reversesEntryId: null | string;
         };
+        OwnerListRow: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            initials: null | string;
+            /** Format: int32 */
+            units: number | string;
+            /** Format: int32 */
+            properties: number | string;
+            /** Format: double */
+            operating: number | string;
+            /** Format: double */
+            deposits: number | string;
+            /** Format: double */
+            total: number | string;
+        };
+        PagedResponseOfOwnerListRow: {
+            items: components["schemas"]["OwnerListRow"][];
+            /** Format: int32 */
+            total: number | string;
+            /** Format: int32 */
+            page: number | string;
+            /** Format: int32 */
+            pageSize: number | string;
+        };
+        PagedResponseOfPropertyListRow: {
+            items: components["schemas"]["PropertyListRow"][];
+            /** Format: int32 */
+            total: number | string;
+            /** Format: int32 */
+            page: number | string;
+            /** Format: int32 */
+            pageSize: number | string;
+        };
+        PagedResponseOfTenantListRow: {
+            items: components["schemas"]["TenantListRow"][];
+            /** Format: int32 */
+            total: number | string;
+            /** Format: int32 */
+            page: number | string;
+            /** Format: int32 */
+            pageSize: number | string;
+        };
+        PropertyDetail: {
+            /** Format: uuid */
+            id: string;
+            address: string;
+            city: null | string;
+            state: null | string;
+            zip: null | string;
+            /** Format: uuid */
+            ownerId: string;
+            ownerName: string;
+            /** Format: int32 */
+            mgmtFeeBps: null | number | string;
+            units: components["schemas"]["UnitRow"][];
+            tenants: components["schemas"]["TenantListRow"][];
+        };
+        PropertyListRow: {
+            /** Format: uuid */
+            id: string;
+            address: string;
+            city: null | string;
+            /** Format: uuid */
+            ownerId: string;
+            ownerName: string;
+            /** Format: int32 */
+            units: number | string;
+            /** Format: int32 */
+            occupied: number | string;
+        };
+        SearchResult: {
+            type: string;
+            /** Format: uuid */
+            id: string;
+            label: string;
+            sublabel: null | string;
+            /** Format: double */
+            score: number | string;
+        };
+        TenantContact: {
+            email: null | string;
+            phone: null | string;
+        };
+        TenantDetail: {
+            /** Format: uuid */
+            id: string;
+            displayName: string;
+            contact: components["schemas"]["TenantContact"];
+            status: string;
+            lease: null | components["schemas"]["TenantLeaseInfo"];
+            unitLabel: null | string;
+            propertyAddress: null | string;
+            /** Format: uuid */
+            ownerId: null | string;
+            ownerName: null | string;
+            /** Format: double */
+            balance: number | string;
+            /** Format: double */
+            depositHeld: number | string;
+        };
+        TenantLeaseInfo: {
+            /** Format: date */
+            startDate: null | string;
+            /** Format: date */
+            endDate: null | string;
+            /** Format: double */
+            rent: number | string;
+            /** Format: double */
+            depositRequired: number | string;
+            status: string;
+        };
         TenantLedgerEntry: {
             /** Format: uuid */
             entryId: string;
@@ -636,6 +1821,17 @@ export interface components {
             balance: number | string;
             rows: components["schemas"]["TenantLedgerEntry"][];
         };
+        TenantListRow: {
+            /** Format: uuid */
+            id: string;
+            displayName: string;
+            unitLabel: null | string;
+            /** Format: double */
+            rent: number | string;
+            /** Format: double */
+            balance: number | string;
+            status: string;
+        };
         TrustEquationResponse: {
             rows: components["schemas"]["TrustEquationRow"][];
         };
@@ -654,6 +1850,89 @@ export interface components {
             heldPmFees: number | string;
             /** Format: double */
             variance: number | string;
+        };
+        UnitRow: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            propertyId: string;
+            label: string;
+            /** Format: double */
+            rent: number | string;
+            status: string;
+        };
+        UpdateBankAccountRequest: {
+            name: string;
+            institution: null | string;
+            mask: null | string;
+        };
+        UpdateLease: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            tenantId: string;
+            /** Format: uuid */
+            unitId: string;
+            /** Format: date */
+            startDate: null | string;
+            /** Format: date */
+            endDate: null | string;
+            /** Format: double */
+            rent: number | string;
+            /** Format: double */
+            depositRequired: number | string;
+            status: string;
+        };
+        UpdateOrgSettings: {
+            accountingBasis: string;
+            moneyNegativeDisplay: string;
+            legalName: null | string;
+            address: null | string;
+            city: null | string;
+            state: null | string;
+            zip: null | string;
+            phone: null | string;
+            logoBlobRef: null | string;
+        };
+        UpdateOwner: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            initials: null | string;
+            contactEmail: null | string;
+            contactPhone: null | string;
+            /** Format: int32 */
+            defaultMgmtFeeBps: null | number | string;
+            /** Format: double */
+            reserveAmount: number | string;
+        };
+        UpdateProperty: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            ownerId: string;
+            address: string;
+            city: null | string;
+            state: null | string;
+            zip: null | string;
+            /** Format: int32 */
+            mgmtFeeBps: null | number | string;
+        };
+        UpdateTenant: {
+            /** Format: uuid */
+            id: string;
+            displayName: string;
+            contactEmail: null | string;
+            contactPhone: null | string;
+            status: string;
+        };
+        UpdateUnit: {
+            /** Format: uuid */
+            id: string;
+            label: string;
+            /** Format: double */
+            rent: number | string;
+            status: string;
         };
     };
     responses: never;
