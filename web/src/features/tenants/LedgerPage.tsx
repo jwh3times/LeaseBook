@@ -89,17 +89,10 @@ export function LedgerPage() {
     void downloadLedgerCsv(id);
   };
 
-  // The row-action menu (fills WP-04's seam): apply on deposit/prepayment rows, void on posted
-  // not-yet-reversed rows, history on every row.
+  // The row-action menu (fills WP-04's seam): void on posted not-yet-reversed rows, history on every
+  // row. Applying held funds is a tenant-level action (deposits aren't ledger rows) → the header button.
   const rowActions = (entry: TenantLedgerEntry) => (
     <div className="row gap2">
-      {(entry.category === 'Security Deposit' || entry.category === 'Prepayment') && (
-        <IconButton
-          name="arrowUpRight"
-          label="Apply held funds"
-          onClick={() => setApplyKind(entry.category === 'Security Deposit' ? 'deposit' : 'prepayment')}
-        />
-      )}
       {!entry.isVoided && !entry.reversesEntryId && (
         <IconButton name="x" label="Void entry" onClick={() => setVoidEntryId(entry.entryId)} />
       )}
@@ -162,6 +155,9 @@ export function LedgerPage() {
                 <span className="fs12" style={{ color: 'var(--accent-strong)' }}>
                   Liability · not income
                 </span>
+                <Button variant="ghost" size="sm" icon="arrowUpRight" onClick={() => setApplyKind('deposit')}>
+                  Apply…
+                </Button>
               </div>
             </div>
           </div>
