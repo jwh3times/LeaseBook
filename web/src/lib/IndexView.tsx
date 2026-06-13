@@ -2,6 +2,7 @@ import type { UseQueryResult } from '@tanstack/react-query';
 import { useEffect, useMemo, useState, type KeyboardEvent } from 'react';
 import { Button, Card, EmptyState, type IconName, SearchBox, Table, type TableColumn } from '@/design';
 import { useSetRecordOrder, type EntityKind } from './recordNav';
+import { trackInteraction } from './telemetry';
 
 interface IndexViewProps<T> {
   kind: EntityKind;
@@ -42,6 +43,12 @@ export function IndexView<T>({
   useEffect(() => setSelected(0), [q, items]);
   useEffect(() => setOrder(filtered.map(rowKey)), [filtered, rowKey, setOrder]);
 
+  // Reaching any entity from a list row is within the ≤ 2-interaction budget (§C.8 / P47).
+  function open(row: T) {
+    trackInteraction('entity-jump', 2, true);
+    onOpen(row);
+  }
+
   function onSearchKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (event.key === 'ArrowDown') {
       event.preventDefault();
@@ -53,7 +60,7 @@ export function IndexView<T>({
       const row = filtered[selected];
       if (row) {
         event.preventDefault();
-        onOpen(row);
+        open(row);
       }
     }
   }
@@ -103,7 +110,7 @@ export function IndexView<T>({
             columns={columns}
             rows={filtered}
             rowKey={rowKey}
-            onRowClick={onOpen}
+            onRowClick={open}
             selectedKey={filtered[selected] ? rowKey(filtered[selected]!) : undefined}
           />
         )}
