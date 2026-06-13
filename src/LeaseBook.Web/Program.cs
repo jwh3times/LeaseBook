@@ -70,6 +70,10 @@ builder.Services.AddScoped<LeaseBook.Modules.Directory.Contracts.IChartProvision
 builder.Services.AddScoped<LeaseBook.Modules.Directory.Contracts.ITenantFinancials, TenantFinancialsAdapter>();
 builder.Services.AddScoped<LeaseBook.Modules.Directory.Contracts.IOwnerFinancials, OwnerFinancialsAdapter>();
 
+// The reverse seam (M3 / P58): the Accounting ledger composer resolves a tenant's owner/property/unit
+// from the active lease through Directory. Accounting owns the port; the host adapter delegates via ISender.
+builder.Services.AddScoped<LeaseBook.Modules.Accounting.Contracts.ITenantPostingDimensions, TenantPostingDimensionsAdapter>();
+
 // Host-composed dashboard (§C.6 / P45): the cross-module composition root, dispatching module read
 // queries via ISender. TimeProvider drives the "current accounting month" (injectable for tests).
 builder.Services.AddSingleton(TimeProvider.System);

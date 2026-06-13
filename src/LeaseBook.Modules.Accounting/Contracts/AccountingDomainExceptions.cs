@@ -43,6 +43,16 @@ public sealed class PeriodClosedException(int year, int month)
 public sealed class InsufficientLiabilityException(string message)
     : AccountingDomainException("insufficient_liability", message);
 
+/// <summary>
+/// A deposit-applied-against-charges or a prepayment application would exceed the tenant's open
+/// receivable (409, ADR-011 / P51). Unlike <c>PaymentReceived</c> (which auto-splits the excess to a
+/// prepayment), an application has no excess path, so over-applying would silently drive the receivable
+/// negative — the engine rejects instead and the composer asks the user to lower the amount. A deposit
+/// applied <c>ToOwnerIncome</c> (damages) is deliberately <b>not</b> guarded.
+/// </summary>
+public sealed class InsufficientReceivableException(string message)
+    : AccountingDomainException("insufficient_receivable", message);
+
 /// <summary>A disbursement would take owner equity below its reserve floor (409).</summary>
 public sealed class ReserveFloorException(string message)
     : AccountingDomainException("reserve_floor", message);

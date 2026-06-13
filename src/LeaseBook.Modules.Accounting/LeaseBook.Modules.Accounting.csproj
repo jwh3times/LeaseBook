@@ -8,6 +8,11 @@
     <ProjectReference Include="..\LeaseBook.SharedKernel\LeaseBook.SharedKernel.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Ledger CSV export (P55). The general report/CSV catalog is M5. -->
+    <PackageReference Include="CsvHelper" />
+  </ItemGroup>
+
   <!-- Journal rows are constructed only through internal factories (the posting service is the sole
        write path). The test suites construct fixtures through those same factories. -->
   <ItemGroup>

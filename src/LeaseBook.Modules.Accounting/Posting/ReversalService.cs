@@ -14,7 +14,11 @@ namespace LeaseBook.Modules.Accounting.Posting;
 /// </summary>
 internal sealed class ReversalService(DbContext db, ITenantContext tenant, IPostingService posting) : IReversalService
 {
-    public async Task<Guid> ReverseAsync(Guid entryId, string reason, DateOnly asOfDate, CancellationToken ct)
+    public Task<Guid> ReverseAsync(Guid entryId, string reason, DateOnly asOfDate, CancellationToken ct) =>
+        ReverseAsync(entryId, reason, asOfDate, sourceRef: null, ct);
+
+    public async Task<Guid> ReverseAsync(
+        Guid entryId, string reason, DateOnly asOfDate, string? sourceRef, CancellationToken ct)
     {
         if (tenant.OrgId is null)
         {
@@ -63,7 +67,7 @@ internal sealed class ReversalService(DbContext db, ITenantContext tenant, IPost
             EventTypes.EntryVoided,
             EventSubtype: null,
             Description: $"VOID: {reason}",
-            SourceRef: null,
+            SourceRef: sourceRef,
             Lines: mirrored,
             ReversesEntryId: entryId);
 
