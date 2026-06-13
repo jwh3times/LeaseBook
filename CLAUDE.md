@@ -28,7 +28,10 @@ reconstructing it from this summary.
 ## Commands
 
 Solution is `LeaseBook.slnx`; the SPA lives in `web/`. .NET 10 SDK + Node 24, Docker for local
-Postgres and integration tests.
+Postgres and integration tests. Every port the project binds — inner-loop dev (`5173`/`5080`/`5432`),
+the full Docker stack and prod (`8080`), and the `LEASEBOOK_APP_PORT`/`LEASEBOOK_DB_PORT` overrides —
+is mapped in the **Port map** section of the root `README.md`; keep that table and the configs it cites
+(launchSettings, vite, compose, Dockerfile, bicep) in sync when a port changes.
 
 **Backend (.NET, run from repo root):**
 - Build: `dotnet build LeaseBook.slnx -c Debug` (nullable + warnings-as-errors)
