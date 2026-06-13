@@ -1,7 +1,7 @@
-namespace LeaseBook.Tests.Integration.Fixtures;
+namespace LeaseBook.Tests.Common;
 
 /// <summary>Cookie-to-header XSRF helpers for the test client (mirrors what the SPA does).</summary>
-internal static class ApiClientExtensions
+public static class ApiClientExtensions
 {
     /// <summary>GETs /api/auth/csrf and echoes the resulting XSRF-TOKEN as the X-XSRF-TOKEN header.</summary>
     public static async Task PrimeCsrfAsync(this HttpClient client, CancellationToken ct)

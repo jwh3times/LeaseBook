@@ -1,10 +1,12 @@
 using System.Reflection;
 using Azure.Monitor.OpenTelemetry.Exporter;
+using LeaseBook.Modules.Accounting;
 using LeaseBook.SharedKernel.Cqrs;
 using LeaseBook.SharedKernel.Endpoints;
 using LeaseBook.SharedKernel.Observability;
 using LeaseBook.SharedKernel.Tenancy;
 using LeaseBook.Web.Auth;
+using LeaseBook.Web.Cli;
 using LeaseBook.Web.Endpoints;
 using LeaseBook.Web.Persistence;
 using LeaseBook.Web.Seeding;
@@ -16,7 +18,7 @@ using OpenTelemetry.Trace;
 var builder = WebApplication.CreateBuilder(args);
 
 // Module assemblies the host composes. CQRS handlers/validators are discovered from these; endpoint
-// modules are discovered from these plus the host (which owns auth/meta/diagnostics endpoints).
+// modules are discovered from these plus the host (which owns the auth/meta endpoints).
 Assembly[] moduleAssemblies =
 [
     typeof(LeaseBook.Modules.Accounting.ModuleMarker).Assembly,
@@ -33,6 +35,8 @@ builder.Services.AddLeaseBookCqrs(moduleAssemblies);
 // RFC 7807 everywhere (P17): ProblemDetails defaults + the CQRS ValidationException → 400 mapping.
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<ValidationExceptionHandler>();
+// Typed accounting domain errors → §C.5 ProblemDetails (422/409). Wired now so M3's write path inherits it.
+builder.Services.AddExceptionHandler<AccountingExceptionHandler>();
 
 // Data access (runtime = app role, RLS-subject). Migrations use the migrator connection via the
 // design-time factory; the running app never connects as migrator.
@@ -51,6 +55,10 @@ builder.Services.AddScoped<TenantContext>();
 builder.Services.AddScoped<ITenantContext>(sp => sp.GetRequiredService<TenantContext>());
 builder.Services.AddScoped<DbContext>(sp => sp.GetRequiredService<AppDbContext>());
 builder.Services.AddScoped<OrgScopedExecutor>();
+
+// Accounting module services (chart-of-accounts provisioning, period lifecycle; the posting engine
+// and event catalog register here in later WPs). They consume the ambient DbContext + ITenantContext.
+builder.Services.AddAccountingModule();
 
 // OpenAPI document (P11) — the SPA's `npm run api:generate` reads /openapi/v1.json.
 builder.Services.AddOpenApi();
@@ -103,6 +111,14 @@ await RoleSeeder.EnsureRolesAsync(app.Services);
 if (args is ["seed", ..])
 {
     await DemoSeeder.SeedAsync(app.Services);
+    return;
+}
+
+// CLI: `dotnet run --project src/LeaseBook.Web -- check-invariants [--org <id|demo>|--all]` sweeps the
+// core correctness invariants and exits non-zero on any violation (P33).
+if (args is ["check-invariants", ..])
+{
+    Environment.ExitCode = await InvariantSweep.RunAsync(app.Services, args);
     return;
 }
 

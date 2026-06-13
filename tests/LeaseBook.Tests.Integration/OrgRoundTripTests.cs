@@ -1,4 +1,5 @@
 using LeaseBook.SharedKernel;
+using LeaseBook.Tests.Common;
 using LeaseBook.Tests.Integration.Fixtures;
 using LeaseBook.Web.Persistence;
 using Microsoft.EntityFrameworkCore;

@@ -47,8 +47,8 @@ public static class DemoSeeder
         await EnsureAdminAsync(sp.GetRequiredService<UserManager<AppUser>>(), data.Pm.User.Name, ct);
 
         // Step 3 (org-scoped): runs inside the OrgScopedExecutor unit of work — app.org_id is set,
-        // so the write passes RLS WITH CHECK. Records a single provisioning event in the audit log.
-        // M1 adds journal seed steps here; M2 adds directory (owners/properties/tenants); etc.
+        // so the write passes RLS WITH CHECK. Records a single provisioning event in the audit log,
+        // then replays the demo journal (§C.8). M2 adds directory (owners/properties/tenants); etc.
         var executor = sp.GetRequiredService<OrgScopedExecutor>();
         var db = sp.GetRequiredService<AppDbContext>();
         await executor.RunAsync(DemoOrgId, async () =>
@@ -68,6 +68,9 @@ public static class DemoSeeder
                 });
                 await db.SaveChangesAsync(ct);
             }
+
+            // Chart of accounts + the replayed journal (idempotent; skips if already seeded).
+            await DemoJournalSeed.SeedAsync(sp, db, ct);
         }, ct);
     }
 

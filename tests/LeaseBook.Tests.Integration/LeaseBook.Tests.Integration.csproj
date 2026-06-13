@@ -19,14 +19,11 @@
     <PackageReference Include="EFCore.NamingConventions" />
   </ItemGroup>
 
-  <!-- The bootstrap SQL is the single source of truth; copy it into the test output so the
-       Testcontainers fixture mounts the exact same roles/grants as local compose (WP-03). -->
-  <ItemGroup>
-    <None Include="..\..\infra\db\bootstrap.sql" Link="bootstrap.sql" CopyToOutputDirectory="PreserveNewest" />
-  </ItemGroup>
-
   <ItemGroup>
     <ProjectReference Include="..\..\src\LeaseBook.Web\LeaseBook.Web.csproj" />
+    <!-- Shared fixtures (PostgresFixture, ApiFactory, OrgScope, RlsProbe) + the bootstrap.sql copy,
+         which flows transitively to this project's output (WP-02). -->
+    <ProjectReference Include="..\LeaseBook.Tests.Common\LeaseBook.Tests.Common.csproj" />
   </ItemGroup>
 
   <ItemGroup>

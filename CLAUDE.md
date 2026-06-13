@@ -44,6 +44,7 @@ Postgres and integration tests.
 - Add migration: `dotnet ef migrations add <Name> --project src/LeaseBook.Web`
 - Apply migrations (migrator role): `dotnet ef database update --project src/LeaseBook.Web`
 - Seed demo org: `$env:ASPNETCORE_ENVIRONMENT='Development'; dotnet run --project src/LeaseBook.Web -- seed --org demo`
+- Check invariants: `$env:ASPNETCORE_ENVIRONMENT='Development'; dotnet run --project src/LeaseBook.Web -- check-invariants --org demo` (or `--all`)
 
 **Web (run from `web/`):**
 - Dev server (:5173, proxies `/api` → :5080): `npm run dev`

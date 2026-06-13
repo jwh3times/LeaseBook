@@ -4,41 +4,6 @@
  */
 
 export interface paths {
-    "/api/diagnostics/audit-count": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["AuditCountResponse"];
-                    };
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -74,7 +39,44 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/": {
+    "/api/accounting/tenants/{tenantId}/ledger": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    tenantId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TenantLedgerResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/accounting/owners/balances": {
         parameters: {
             query?: never;
             header?: never;
@@ -96,7 +98,151 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        "text/plain": string;
+                        "application/json": components["schemas"]["OwnerBalancesResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/accounting/owners/{ownerId}/ledger": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    basis?: string;
+                };
+                header?: never;
+                path: {
+                    ownerId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["OwnerLedgerResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/accounting/banks/balances": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BankBalancesResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/accounting/deposits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DepositRegisterResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/accounting/trust-equation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TrustEquationResponse"];
                     };
                 };
             };
@@ -364,12 +510,28 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        AuditCountResponse: {
-            /** Format: int32 */
-            count: number | string;
+        BankBalanceRow: {
+            /** Format: uuid */
+            bankAccountId: string;
+            name: string;
+            /** Format: double */
+            book: number | string;
+        };
+        BankBalancesResponse: {
+            rows: components["schemas"]["BankBalanceRow"][];
         };
         ConfirmMfaRequest: {
             code: string;
+        };
+        DepositRegisterResponse: {
+            rows: components["schemas"]["DepositRegisterRow"][];
+        };
+        DepositRegisterRow: {
+            /** Format: uuid */
+            tenantId: string;
+            kind: string;
+            /** Format: double */
+            held: number | string;
         };
         EnrollResponse: {
             otpauthUri: string;
@@ -400,6 +562,98 @@ export interface components {
         MfaRequest: {
             mfaToken: string;
             code: string;
+        };
+        OwnerBalanceRow: {
+            /** Format: uuid */
+            ownerId: string;
+            /** Format: double */
+            operating: number | string;
+            /** Format: double */
+            deposits: number | string;
+            /** Format: double */
+            total: number | string;
+        };
+        OwnerBalancesResponse: {
+            rows: components["schemas"]["OwnerBalanceRow"][];
+            totals: components["schemas"]["OwnerBalancesTotals"];
+        };
+        OwnerBalancesTotals: {
+            /** Format: double */
+            operating: number | string;
+            /** Format: double */
+            deposits: number | string;
+            /** Format: double */
+            total: number | string;
+        };
+        OwnerLedgerResponse: {
+            /** Format: uuid */
+            ownerId: string;
+            basis: string;
+            /** Format: double */
+            balance: number | string;
+            rows: components["schemas"]["OwnerLedgerRow"][];
+        };
+        OwnerLedgerRow: {
+            /** Format: uuid */
+            entryId: string;
+            /** Format: date */
+            date: string;
+            eventType: string;
+            eventSubtype: null | string;
+            /** Format: uuid */
+            propertyId: null | string;
+            /** Format: double */
+            amount: number | string;
+            /** Format: double */
+            balance: number | string;
+            isVoided: boolean;
+            /** Format: uuid */
+            reversesEntryId: null | string;
+        };
+        TenantLedgerEntry: {
+            /** Format: uuid */
+            entryId: string;
+            /** Format: date */
+            date: string;
+            eventType: string;
+            eventSubtype: null | string;
+            category: string;
+            description: null | string;
+            /** Format: double */
+            charge: number | string;
+            /** Format: double */
+            payment: number | string;
+            /** Format: double */
+            balance: number | string;
+            isVoided: boolean;
+            /** Format: uuid */
+            reversesEntryId: null | string;
+        };
+        TenantLedgerResponse: {
+            /** Format: uuid */
+            tenantId: string;
+            /** Format: double */
+            balance: number | string;
+            rows: components["schemas"]["TenantLedgerEntry"][];
+        };
+        TrustEquationResponse: {
+            rows: components["schemas"]["TrustEquationRow"][];
+        };
+        TrustEquationRow: {
+            /** Format: uuid */
+            bankAccountId: string;
+            /** Format: double */
+            book: number | string;
+            /** Format: double */
+            ownerEquity: number | string;
+            /** Format: double */
+            depositLiabilities: number | string;
+            /** Format: double */
+            prepayments: number | string;
+            /** Format: double */
+            heldPmFees: number | string;
+            /** Format: double */
+            variance: number | string;
         };
     };
     responses: never;

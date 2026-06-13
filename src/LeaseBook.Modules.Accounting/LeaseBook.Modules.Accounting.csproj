@@ -8,4 +8,11 @@
     <ProjectReference Include="..\LeaseBook.SharedKernel\LeaseBook.SharedKernel.csproj" />
   </ItemGroup>
 
+  <!-- Journal rows are constructed only through internal factories (the posting service is the sole
+       write path). The test suites construct fixtures through those same factories. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="LeaseBook.Tests.Accounting" />
+    <InternalsVisibleTo Include="LeaseBook.Tests.Integration" />
+  </ItemGroup>
+
 </Project>

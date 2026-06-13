@@ -78,9 +78,32 @@ dotnet run --project src/LeaseBook.Web -- seed --org demo
 ```
 
 The dataset is `seed/demo-org.json` (ported from the prototype; the golden-file fixture from M1
-on). In M0 the seeder creates only the org and the admin user — later milestones extend it as
-their schemas land.
+on). The seeder creates the org and the admin user, then **replays the demo journal** (§C.8):
+provision the chart of accounts, post the cutover BalanceForward, and post every Feb–Jun event
+through the real engine. The derived ledgers reconcile to the cent against the dataset (golden
+tests). Re-running is idempotent (the journal step skips if any entry exists). Directory rows
+(owners/properties/tenants) land in M2 reusing the journal's dimension ids.
 
 **Seeded dev admin — DEV ONLY:** `renee.calloway@tarheelpg.test` / `Tarheel-Trust-2026!`. MFA is
 not enrolled (enroll on first login). Real environments provision operators by invite; passwords
 never live in the repo.
+
+## Checking the accounting invariants
+
+The `check-invariants` verb sweeps the core correctness invariants (I1 entries balance per basis,
+I2 the trust equation per trust bank, I3 PM-income isolation, I4 deposit liabilities ≥ 0) and exits
+non-zero on any violation. It is the body of the future nightly sweep (P33 / ADR-006).
+
+```
+$env:ASPNETCORE_ENVIRONMENT = "Development"
+dotnet run --project src/LeaseBook.Web -- check-invariants --all          # every org
+dotnet run --project src/LeaseBook.Web -- check-invariants --org demo     # one org (or a GUID)
+```
+
+The accounting property suite (`LeaseBook.Tests.Accounting`) runs random valid event sequences
+through the real engine. Its iteration count is the `LEASEBOOK_PROPERTY_ITER` environment variable
+(default 20); CI and pre-merge runs raise it (e.g. `100`) for deeper coverage:
+
+```
+$env:LEASEBOOK_PROPERTY_ITER = "100"; dotnet test tests/LeaseBook.Tests.Accounting/LeaseBook.Tests.Accounting.csproj
+```

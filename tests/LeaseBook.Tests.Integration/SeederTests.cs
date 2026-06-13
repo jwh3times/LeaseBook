@@ -1,11 +1,13 @@
 using System.Net;
 using System.Net.Http.Json;
+using LeaseBook.Tests.Common;
 using LeaseBook.Tests.Integration.Fixtures;
 using LeaseBook.Web.Auth;
 using LeaseBook.Web.Seeding;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
 using Shouldly;
 
 namespace LeaseBook.Tests.Integration;
@@ -40,8 +42,14 @@ public sealed class SeederTests(PostgresFixture fixture)
             (await userManager.IsInRoleAsync(admin, Roles.PMAdmin)).ShouldBeTrue();
         }
 
-        // Exactly one provisioning audit row exists under the demo org (read as app role + context).
-        (await DemoOrgAuditCountAsync(ct)).ShouldBe(1);
+        // The single provisioning audit row is not duplicated on re-seed (read as app role + context).
+        (await CountAsync("audit_events WHERE entity_type = 'org-provisioned'", ct)).ShouldBe(1);
+
+        // The replayed journal (§C.8) exists, and a third seed does not duplicate it (idempotent).
+        var journalEntries = await CountAsync("journal_entries", ct);
+        journalEntries.ShouldBeGreaterThan(0);
+        await DemoSeeder.SeedAsync(fixture.Api.Services, ct);
+        (await CountAsync("journal_entries", ct)).ShouldBe(journalEntries);
 
         // The seeded admin authenticates through the real API with the documented dev password.
         var client = fixture.Api.CreateClient();
@@ -53,12 +61,13 @@ public sealed class SeederTests(PostgresFixture fixture)
         (await login.Content.ReadFromJsonAsync<LoginResponse>(ct))!.Status.ShouldBe(LoginStatus.Ok);
     }
 
-    private async Task<long> DemoOrgAuditCountAsync(CancellationToken ct)
+    private async Task<long> CountAsync(string fromClause, CancellationToken ct)
     {
         await using var conn = await fixture.OpenAppConnectionAsync(ct);
         await using var tx = await conn.BeginTransactionAsync(ct);
         await RlsProbe.SetOrgAsync(conn, tx, DemoSeeder.DemoOrgId, ct);
-        var count = await RlsProbe.CountEventsAsync(conn, tx, ct);
+        await using var cmd = new NpgsqlCommand($"SELECT count(*) FROM {fromClause}", conn, tx);
+        var count = (long)(await cmd.ExecuteScalarAsync(ct))!;
         await tx.CommitAsync(ct);
         return count;
     }

@@ -22,6 +22,275 @@ namespace LeaseBook.Web.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("LeaseBook.Modules.Accounting.Domain.Account", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("BankAccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("bank_account_id");
+
+                    b.Property<string>("Class")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("class");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("code");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.Property<Guid>("OrgId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("org_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_accounts");
+
+                    b.HasIndex("OrgId", "Code")
+                        .IsUnique()
+                        .HasDatabaseName("ix_accounts_org_id_code");
+
+                    b.ToTable("accounts", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_accounts_bank_account_id_matches_class", "(bank_account_id IS NOT NULL) = (class IN ('trust_bank','pm_operating_bank'))");
+
+                            t.HasCheckConstraint("ck_accounts_class", "class IN ('trust_bank','owner_equity','tenant_receivable','deposit_liability','pm_income','pm_operating_bank')");
+                        });
+                });
+
+            modelBuilder.Entity("LeaseBook.Modules.Accounting.Domain.AccountingPeriod", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime?>("ClosedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("closed_at");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<int>("Month")
+                        .HasColumnType("integer")
+                        .HasColumnName("month");
+
+                    b.Property<Guid>("OrgId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("org_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("status");
+
+                    b.Property<int>("Year")
+                        .HasColumnType("integer")
+                        .HasColumnName("year");
+
+                    b.HasKey("Id")
+                        .HasName("pk_accounting_periods");
+
+                    b.HasIndex("OrgId", "Year", "Month")
+                        .IsUnique()
+                        .HasDatabaseName("ix_accounting_periods_org_id_year_month");
+
+                    b.ToTable("accounting_periods", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_accounting_periods_month", "month BETWEEN 1 AND 12");
+
+                            t.HasCheckConstraint("ck_accounting_periods_status", "status IN ('open','closed')");
+                        });
+                });
+
+            modelBuilder.Entity("LeaseBook.Modules.Accounting.Domain.JournalEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text")
+                        .HasColumnName("description");
+
+                    b.Property<DateOnly>("EntryDate")
+                        .HasColumnType("date")
+                        .HasColumnName("entry_date");
+
+                    b.Property<string>("EventSubtype")
+                        .HasColumnType("text")
+                        .HasColumnName("event_subtype");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("event_type");
+
+                    b.Property<Guid>("OrgId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("org_id");
+
+                    b.Property<DateTime>("PostedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("posted_at");
+
+                    b.Property<Guid?>("ReversesEntryId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reverses_entry_id");
+
+                    b.Property<string>("SourceRef")
+                        .HasColumnType("text")
+                        .HasColumnName("source_ref");
+
+                    b.HasKey("Id")
+                        .HasName("pk_journal_entries");
+
+                    b.HasIndex("ReversesEntryId")
+                        .HasDatabaseName("ix_journal_entries_reverses_entry_id");
+
+                    b.HasIndex("OrgId", "EntryDate")
+                        .HasDatabaseName("ix_journal_entries_org_id_entry_date");
+
+                    b.HasIndex("OrgId", "ReversesEntryId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_journal_entries_org_id_reverses_entry_id")
+                        .HasFilter("reverses_entry_id IS NOT NULL");
+
+                    b.HasIndex("OrgId", "SourceRef")
+                        .IsUnique()
+                        .HasDatabaseName("ix_journal_entries_org_id_source_ref")
+                        .HasFilter("source_ref IS NOT NULL");
+
+                    b.ToTable("journal_entries", (string)null);
+                });
+
+            modelBuilder.Entity("LeaseBook.Modules.Accounting.Domain.JournalLine", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("AccountClass")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("account_class");
+
+                    b.Property<Guid>("AccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("account_id");
+
+                    b.Property<Guid?>("BankAccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("bank_account_id");
+
+                    b.Property<string>("Basis")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("basis");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<decimal?>("Credit")
+                        .HasPrecision(14, 2)
+                        .HasColumnType("numeric(14,2)")
+                        .HasColumnName("credit");
+
+                    b.Property<decimal?>("Debit")
+                        .HasPrecision(14, 2)
+                        .HasColumnType("numeric(14,2)")
+                        .HasColumnName("debit");
+
+                    b.Property<Guid>("EntryId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("entry_id");
+
+                    b.Property<string>("Memo")
+                        .HasColumnType("text")
+                        .HasColumnName("memo");
+
+                    b.Property<Guid>("OrgId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("org_id");
+
+                    b.Property<Guid?>("OwnerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_id");
+
+                    b.Property<Guid?>("PropertyId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("property_id");
+
+                    b.Property<Guid?>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<Guid?>("UnitId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("unit_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_journal_lines");
+
+                    b.HasIndex("AccountId")
+                        .HasDatabaseName("ix_journal_lines_account_id");
+
+                    b.HasIndex("EntryId")
+                        .HasDatabaseName("ix_journal_lines_entry_id");
+
+                    b.HasIndex("OrgId", "AccountId")
+                        .HasDatabaseName("ix_journal_lines_org_id_account_id");
+
+                    b.HasIndex("OrgId", "BankAccountId")
+                        .HasDatabaseName("ix_journal_lines_org_id_bank_account_id");
+
+                    b.HasIndex("OrgId", "EntryId")
+                        .HasDatabaseName("ix_journal_lines_org_id_entry_id");
+
+                    b.HasIndex("OrgId", "OwnerId")
+                        .HasDatabaseName("ix_journal_lines_org_id_owner_id");
+
+                    b.HasIndex("OrgId", "TenantId")
+                        .HasDatabaseName("ix_journal_lines_org_id_tenant_id");
+
+                    b.ToTable("journal_lines", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_journal_lines_account_class", "account_class IN ('trust_bank','owner_equity','tenant_receivable','deposit_liability','pm_income','pm_operating_bank')");
+
+                            t.HasCheckConstraint("ck_journal_lines_basis", "basis IN ('cash','accrual','both')");
+
+                            t.HasCheckConstraint("ck_journal_lines_debit_xor_credit", "(debit IS NULL) <> (credit IS NULL) AND COALESCE(debit, credit) > 0");
+
+                            t.HasCheckConstraint("ck_journal_lines_pm_income_no_owner", "account_class <> 'pm_income' OR owner_id IS NULL");
+                        });
+                });
+
             modelBuilder.Entity("LeaseBook.Web.Auth.AppUser", b =>
                 {
                     b.Property<Guid>("Id")
@@ -351,6 +620,32 @@ namespace LeaseBook.Web.Migrations
                     b.ToTable("asp_net_user_tokens", (string)null);
                 });
 
+            modelBuilder.Entity("LeaseBook.Modules.Accounting.Domain.JournalEntry", b =>
+                {
+                    b.HasOne("LeaseBook.Modules.Accounting.Domain.JournalEntry", null)
+                        .WithMany()
+                        .HasForeignKey("ReversesEntryId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_journal_entries_journal_entries_reverses_entry_id");
+                });
+
+            modelBuilder.Entity("LeaseBook.Modules.Accounting.Domain.JournalLine", b =>
+                {
+                    b.HasOne("LeaseBook.Modules.Accounting.Domain.Account", null)
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_journal_lines_accounts_account_id");
+
+                    b.HasOne("LeaseBook.Modules.Accounting.Domain.JournalEntry", null)
+                        .WithMany("Lines")
+                        .HasForeignKey("EntryId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_journal_lines_journal_entries_entry_id");
+                });
+
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<System.Guid>", b =>
                 {
                     b.HasOne("Microsoft.AspNetCore.Identity.IdentityRole<System.Guid>", null)
@@ -406,6 +701,11 @@ namespace LeaseBook.Web.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_asp_net_user_tokens_asp_net_users_user_id");
+                });
+
+            modelBuilder.Entity("LeaseBook.Modules.Accounting.Domain.JournalEntry", b =>
+                {
+                    b.Navigation("Lines");
                 });
 #pragma warning restore 612, 618
         }
