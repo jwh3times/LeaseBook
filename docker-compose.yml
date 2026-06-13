@@ -30,9 +30,11 @@ services:
       POSTGRES_PASSWORD: dev_postgres_pw
       POSTGRES_DB: postgres
     ports:
-      # Host port defaults to 5432 (P20); override with LEASEBOOK_DB_PORT if 5432 is taken
-      # locally (e.g. another project's Postgres). The container always listens on 5432.
-      - "${LEASEBOOK_DB_PORT:-5432}:5432"
+      # Host port defaults to 5632 — LeaseBook's fleet lane, so its Postgres coexists
+      # with other local projects (ApexRacers owns the canonical 5432). Override with
+      # LEASEBOOK_DB_PORT. The container always listens on 5432, and the inner-loop
+      # connection string in appsettings.Development.json points at this same host port.
+      - "${LEASEBOOK_DB_PORT:-5632}:5432"
     volumes:
       # postgres:18+ images put PGDATA at /var/lib/postgresql/<major>/docker and declare the
       # volume one level up (enables pg_upgrade --link across majors). Mounting the pre-18
@@ -91,8 +93,27 @@ services:
     environment:
       ConnectionStrings__Default: *app-conn
     ports:
-      # Browse http://localhost:8080 once healthy. Override with LEASEBOOK_APP_PORT if 8080 is taken.
-      - "${LEASEBOOK_APP_PORT:-8080}:8080"
+      # Browse http://localhost:8082 once healthy (LeaseBook's fleet lane; the
+      # container always listens on 8080 and the Azure image is unchanged).
+      # Override with LEASEBOOK_APP_PORT.
+      - "${LEASEBOOK_APP_PORT:-8082}:8080"
+    restart: unless-stopped
+
+  # pgAdmin for browsing the local db (inner-loop or full stack). Connects to the
+  # `db` service internally on 5432; the host port (5250) is LeaseBook's fleet lane.
+  # No profile, so it comes up with a plain `docker compose up` alongside `db`.
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: leasebook-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${LEASEBOOK_PGADMIN_EMAIL:-admin@leasebook.local}
+      PGADMIN_DEFAULT_PASSWORD: ${LEASEBOOK_PGADMIN_PASSWORD:-admin}
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    ports:
+      - "${LEASEBOOK_PGADMIN_PORT:-5250}:80"
+    depends_on:
+      db:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:

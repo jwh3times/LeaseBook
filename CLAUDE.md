@@ -28,10 +28,12 @@ reconstructing it from this summary.
 ## Commands
 
 Solution is `LeaseBook.slnx`; the SPA lives in `web/`. .NET 10 SDK + Node 24, Docker for local
-Postgres and integration tests. Every port the project binds — inner-loop dev (`5173`/`5080`/`5432`),
-the full Docker stack and prod (`8080`), and the `LEASEBOOK_APP_PORT`/`LEASEBOOK_DB_PORT` overrides —
-is mapped in the **Port map** section of the root `README.md`; keep that table and the configs it cites
-(launchSettings, vite, compose, Dockerfile, bicep) in sync when a port changes.
+Postgres and integration tests. Every port the project binds — inner-loop dev (`5373`/`5080`/`5632`),
+the full Docker stack host port (`8082`; container + prod ingress stay `8080`), and the
+`LEASEBOOK_APP_PORT`/`LEASEBOOK_DB_PORT`/`LEASEBOOK_PGADMIN_PORT` overrides — is mapped in the
+**Port map** section of the root `README.md`; keep that table and the configs it cites
+(launchSettings, vite, compose, Dockerfile, bicep) in sync when a port changes. Host ports are
+LeaseBook's fleet lane so the stack runs alongside ApexRacers/GuardianTracker locally.
 
 **Backend (.NET, run from repo root):**
 - Build: `dotnet build LeaseBook.slnx -c Debug` (nullable + warnings-as-errors)
@@ -50,15 +52,16 @@ is mapped in the **Port map** section of the root `README.md`; keep that table a
 - Check invariants: `$env:ASPNETCORE_ENVIRONMENT='Development'; dotnet run --project src/LeaseBook.Web -- check-invariants --org demo` (or `--all`)
 
 **Web (run from `web/`):**
-- Dev server (:5173, proxies `/api` → :5080): `npm run dev`
+- Dev server (:5373, proxies `/api` → :5080): `npm run dev`
 - Lint / typecheck / test / build: `npm run lint` · `npm run typecheck` · `npm run test` · `npm run build`
 - Single test: `npm run test -- src/design/formatMoney.test.ts`
 - Regenerate API client (host must be running on :5080): `npm run api:generate`
 - e2e (Playwright, specs land later): `npm run e2e`
 
 **Container:** `docker build -t leasebook .` then run with `ConnectionStrings__Default` set — serves the
-SPA and `/api` on port 8080. To run the **whole product** locally (db + migrate + seed + app):
-`./scripts/dev.ps1 app-up` (Compose `full` profile → http://localhost:8080; see docs/runbooks/local-dev.md).
+SPA and `/api` on port 8080 (the container's internal port). To run the **whole product** locally
+(db + migrate + seed + app): `./scripts/dev.ps1 app-up` (Compose `full` profile →
+http://localhost:8082; see docs/runbooks/local-dev.md).
 Migrations run as the migrator role via a one-shot `migrator`-target image (EF bundle), never at app startup.
 
 ## Planned architecture (private/TODO.md §1 is the full blueprint)

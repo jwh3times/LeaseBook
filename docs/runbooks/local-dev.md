@@ -48,11 +48,11 @@ Cross-platform helpers in `scripts/` (`dev.ps1` for Windows/pwsh, `dev.sh` for P
 There are two distinct local modes, selected by Docker Compose **profile**:
 
 1. **Inner-loop dev (default).** `dev.ps1 up` starts **only Postgres**. You run the API on the host
-   (`dotnet run --project src/LeaseBook.Web`, :5080) and the SPA via Vite (`npm run dev`, :5173,
+   (`dotnet run --project src/LeaseBook.Web`, :5080) and the SPA via Vite (`npm run dev`, :5373,
    proxying `/api` → :5080). Fast edit/reload; this is the day-to-day developer loop.
 
 2. **Full product in containers.** `dev.ps1 app-up` builds and runs the entire product — Postgres,
-   schema migration, demo seed, and the app (SPA + API) — at **http://localhost:8080**. This is for
+   schema migration, demo seed, and the app (SPA + API) — at **http://localhost:8082**. This is for
    demoing or sanity-checking the shipped artifact, not for fast iteration (each change needs a
    rebuild). Sign in with the seeded dev admin (below).
 
@@ -64,7 +64,7 @@ runs everything.
 
 ```
 ./scripts/dev.ps1 app-up      # build images, start db→migrate→seed→app, wait for /api/health
-# → browse http://localhost:8080, sign in as the seeded admin (see "Migrations and seed")
+# → browse http://localhost:8082, sign in as the seeded admin (see "Migrations and seed")
 ./scripts/dev.ps1 app-logs    # tail the app
 ./scripts/dev.ps1 app-down    # stop (keeps data; `reset-db` wipes it)
 ```
