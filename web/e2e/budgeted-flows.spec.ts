@@ -31,10 +31,9 @@ test('⌘K jumps to any tenant in ≤ 2 interactions', async ({ page }) => {
 
 test('list row-click opens the detail in ≤ 2 interactions', async ({ page }) => {
   await login(page);
-  await page.keyboard.press('g'); // (1) go to tenants
-  await page.keyboard.press('t');
+  await page.getByRole('button', { name: 'Tenants' }).click(); // (1) open the Tenants index
   await expect(page).toHaveURL(/\/tenants$/);
-  await page.getByText('Jasmine Carter').click(); // (2) open
+  await page.getByText('Jasmine Carter').click(); // (2) open the record
   await expect(page).toHaveURL(/\/tenants\//);
   await expect(page.getByRole('heading', { name: 'Jasmine Carter' })).toBeVisible();
 });
