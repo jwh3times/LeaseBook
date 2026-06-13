@@ -8,7 +8,7 @@ import { OwnersPage } from '@/features/owners/OwnersPage';
 import { PropertiesPage } from '@/features/properties/PropertiesPage';
 import { PropertyDetailPage } from '@/features/properties/PropertyDetailPage';
 import { SettingsPage } from '@/features/settings/SettingsPage';
-import { TenantDetailPage } from '@/features/tenants/TenantDetailPage';
+import { LedgerPage } from '@/features/tenants/LedgerPage';
 import { TenantsPage } from '@/features/tenants/TenantsPage';
 import { AppShell } from './AppShell';
 import { NAV_ROUTES, SETTINGS_ROUTE } from './navigation';
@@ -31,7 +31,7 @@ const pageRoutes = [...NAV_ROUTES, SETTINGS_ROUTE].map((route) => ({
 }));
 
 const detailRoutes = [
-  { path: '/tenants/:id', element: <TenantDetailPage /> },
+  { path: '/tenants/:id', element: <LedgerPage /> },
   { path: '/owners/:id', element: <OwnerDetailPage /> },
   { path: '/properties/:id', element: <PropertyDetailPage /> },
 ];

@@ -1,0 +1,152 @@
+/* Ledger hub (M3, ported from screen-ledger.jsx). The utility + component classes (pf-card, pf-badge,
+   num, strong, muted, t3, pf-eyebrow, pf-money, …) come from tokens.css; this file adds only the
+   ledger-specific surfaces: the tenant header stats, the filter bar, and the virtualized grid table. */
+
+.pf-tenant-hd {
+  margin-bottom: var(--gap);
+}
+
+.pf-ledger-card {
+  margin-top: var(--gap);
+  overflow: hidden;
+}
+
+.pf-tenant-stats {
+  display: flex;
+  align-items: stretch;
+  gap: 22px;
+}
+
+.pf-tstat {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  justify-content: center;
+}
+
+.pf-tstat-div {
+  width: 1px;
+  background: var(--border);
+}
+
+.pf-ledger-filters {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* The sticky header and the virtualized body share one column template so the columns line up. */
+.pf-ledger {
+  --ledger-cols: 116px 132px minmax(160px, 1fr) 116px 116px 128px 116px;
+}
+
+.pf-ledger.has-actions {
+  --ledger-cols: 116px 132px minmax(150px, 1fr) 112px 112px 124px 112px 92px;
+}
+
+.pf-ledger-head,
+.pf-ledger-row {
+  display: grid;
+  grid-template-columns: var(--ledger-cols);
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px;
+}
+
+.pf-ledger-head {
+  height: 40px;
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  scrollbar-gutter: stable;
+}
+
+.pf-ledger-head .num,
+.pf-ledger-row .num {
+  text-align: right;
+  justify-self: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.pf-ledger-head .acts,
+.pf-ledger-row .acts {
+  justify-self: end;
+}
+
+.pf-ledger-body {
+  max-height: 60vh;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  outline: none;
+}
+
+.pf-ledger-body:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.pf-ledger-row {
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+}
+
+.pf-ledger-row .desc {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.pf-ledger-row .desc > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pf-ledger-row .nowrap {
+  white-space: nowrap;
+}
+
+.pf-ledger-row.sel {
+  background: var(--surface-2);
+}
+
+.pf-ledger-row.voided {
+  opacity: 0.6;
+}
+
+.pf-ledger-row.voided .desc > span {
+  text-decoration: line-through;
+}
+
+@keyframes pfFlash {
+  0% {
+    background: var(--accent-soft);
+  }
+  100% {
+    background: transparent;
+  }
+}
+
+.pf-ledger-row.flash {
+  animation: pfFlash 1.6s ease-out;
+}
+
+.pf-ledger-row.flash::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--accent);
+}
+
+@media (max-width: 900px) {
+  .pf-tenant-stats {
+    width: 100%;
+  }
+}

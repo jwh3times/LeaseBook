@@ -6,7 +6,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { RecordNavProvider } from '@/lib/recordNav';
 import { server } from '@/test/mocks/server';
-import { TenantDetailPage } from './TenantDetailPage';
+import { LedgerPage } from './LedgerPage';
 import { TenantsPage } from './TenantsPage';
 
 const TENANTS = [
@@ -22,11 +22,18 @@ function listHandler(items = TENANTS) {
 }
 
 function renderTenants() {
+  // The detail route is the M3 LedgerPage, which loads the tenant's ledger; a benign empty ledger keeps
+  // these navigation tests focused on routing.
+  server.use(
+    http.get('/api/accounting/tenants/:tenantId/ledger', ({ params }) =>
+      HttpResponse.json({ tenantId: params.tenantId, balance: 0, rows: [] }),
+    ),
+  );
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const router = createMemoryRouter(
     [
       { path: '/tenants', element: <TenantsPage /> },
-      { path: '/tenants/:id', element: <TenantDetailPage /> },
+      { path: '/tenants/:id', element: <LedgerPage /> },
     ],
     { initialEntries: ['/tenants'] },
   );
@@ -70,7 +77,8 @@ describe('TenantsPage', () => {
     );
     renderTenants();
     await userEvent.click(await screen.findByText('Jasmine Carter'));
-    expect(await screen.findByText('412 Oakmont Ave')).toBeInTheDocument();
+    // The list unmounts on navigation; the LedgerPage header renders the tenant name as a heading.
+    expect(await screen.findByRole('heading', { name: 'Jasmine Carter' })).toBeInTheDocument();
   });
 
   it('selects with the keyboard and opens on Enter', async () => {
@@ -88,7 +96,7 @@ describe('TenantsPage', () => {
     const search = await screen.findByLabelText('Filter tenants…');
     search.focus();
     await userEvent.keyboard('{ArrowDown}{Enter}'); // first ↓ selects index 1 (Devon Pryor)
-    expect(await screen.findByText('#1A')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Devon Pryor' })).toBeInTheDocument();
   });
 
   it('creates a tenant and redirects to the new record', async () => {
