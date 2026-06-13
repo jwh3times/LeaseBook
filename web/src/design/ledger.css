@@ -36,6 +36,99 @@
   flex-wrap: wrap;
 }
 
+/* Inline composer (WP-05). Distinct class names so they don't collide with the design system's
+   form-control `.pf-field`; the controls themselves are the design <Input>/<Select> components. */
+.pf-ledger-actionbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: var(--gap);
+}
+
+.pf-composer {
+  position: relative;
+  margin-top: var(--gap);
+  border: 1px solid var(--border-strong, var(--border));
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.pf-composer::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--accent);
+}
+
+.pf-composer.pay::before {
+  background: var(--pos);
+}
+
+.pf-composer-tag {
+  padding: 13px 18px 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent-strong);
+}
+
+.pf-composer.pay .pf-composer-tag {
+  color: var(--pos);
+}
+
+.pf-composer-grid {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 14px;
+  padding: 10px 18px 16px;
+}
+
+.pf-composer-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pf-composer-field > span {
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.03em;
+  color: var(--text-3);
+}
+
+.pf-composer-field.amount {
+  width: 150px;
+}
+
+.pf-composer-field.grow {
+  flex: 1;
+  min-width: 160px;
+}
+
+.pf-composer-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 18px;
+  border-top: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.pf-composer-error {
+  font-size: 13px;
+  color: var(--neg);
+}
+
 /* The sticky header and the virtualized body share one column template so the columns line up. */
 .pf-ledger {
   --ledger-cols: 116px 132px minmax(160px, 1fr) 116px 116px 128px 116px;
