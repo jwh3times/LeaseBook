@@ -7,6 +7,7 @@ import { OwnerDetailPage } from '@/features/owners/OwnerDetailPage';
 import { OwnersPage } from '@/features/owners/OwnersPage';
 import { PropertiesPage } from '@/features/properties/PropertiesPage';
 import { PropertyDetailPage } from '@/features/properties/PropertyDetailPage';
+import { SettingsPage } from '@/features/settings/SettingsPage';
 import { TenantDetailPage } from '@/features/tenants/TenantDetailPage';
 import { TenantsPage } from '@/features/tenants/TenantsPage';
 import { AppShell } from './AppShell';
@@ -21,6 +22,7 @@ const FEATURE_PAGES: Record<string, ReactElement> = {
   '/tenants': <TenantsPage />,
   '/owners': <OwnersPage />,
   '/properties': <PropertiesPage />,
+  '/settings': <SettingsPage />,
 };
 
 const pageRoutes = [...NAV_ROUTES, SETTINGS_ROUTE].map((route) => ({

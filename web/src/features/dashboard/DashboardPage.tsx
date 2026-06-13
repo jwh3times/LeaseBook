@@ -1,11 +1,18 @@
+import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Badge, Button, Card, CardHeader, EmptyState, Icon, Money, ProgressBar, StatCard } from '@/design';
 import { num } from '@/lib/directory';
 import { useDashboard, type DashboardResponse } from '@/lib/dashboard';
+import { trackInteraction } from '@/lib/telemetry';
 
 export function DashboardPage() {
   const navigate = useNavigate();
   const query = useDashboard();
+
+  // Owner ending balances are visible with zero clicks (the PRD acceptance) — record the budget met.
+  useEffect(() => {
+    if (query.isSuccess) trackInteraction('owner-balances-visible', 0, true);
+  }, [query.isSuccess]);
 
   if (query.isPending) return <DashboardSkeleton />;
   if (query.isError || !query.data) {
