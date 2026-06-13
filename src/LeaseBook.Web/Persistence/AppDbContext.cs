@@ -23,10 +23,17 @@ namespace LeaseBook.Web.Persistence;
 /// loudly in-process before a bug reaches the database.
 /// </para>
 /// </summary>
-public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenantContext? tenantContext = null)
+public sealed class AppDbContext(
+    DbContextOptions<AppDbContext> options,
+    ITenantContext? tenantContext = null,
+    IActorContext? actorContext = null)
     : IdentityDbContext<AppUser, IdentityRole<Guid>, Guid>(options)
 {
     private readonly ITenantContext _tenant = tenantContext ?? NullTenantContext.Instance;
+
+    // The acting user for audit stamping (P52). Null for the seeder/jobs and any context built without
+    // one (tests, design-time) — a system write, stamped null without throwing.
+    private readonly IActorContext? _actor = actorContext;
 
     public DbSet<Org> Orgs => Set<Org>();
 
@@ -142,7 +149,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             // ...but never audit the audit log itself (no recursion; audit_events is append-only).
             if (entry.Entity is not AuditEvent)
             {
-                audits.Add(BuildAuditEvent(entry, orgId));
+                audits.Add(BuildAuditEvent(entry, orgId, _actor?.UserId));
             }
         }
 
@@ -153,7 +160,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
         new($"Cross-org write blocked: {entry.Entity.GetType().Name} carries org {entityOrg} but the " +
             $"current tenant context is {contextOrg}.");
 
-    private static AuditEvent BuildAuditEvent(EntityEntry entry, Guid orgId)
+    private static AuditEvent BuildAuditEvent(EntityEntry entry, Guid orgId, Guid? actorUserId)
     {
         var action = entry.State switch
         {
@@ -167,7 +174,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
         {
             Id = UuidV7.NewId(),
             OrgId = orgId,
-            ActorUserId = null, // WP-06 supplies the acting user from the auth claim.
+            ActorUserId = actorUserId, // The acting user from the auth claim (P52); null for system writes.
             EntityType = entry.Metadata.GetTableName() ?? entry.Metadata.ClrType.Name,
             EntityId = entry.Property("Id").CurrentValue is Guid id ? id : Guid.Empty,
             Action = action,
