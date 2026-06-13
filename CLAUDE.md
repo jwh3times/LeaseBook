@@ -60,9 +60,22 @@ SPA and `/api` on port 8080.
 
 - **Modular monolith**: ASP.NET Core host + one project per module
   (`Accounting`, `Directory`, `Banking`, `Reporting`, `Operations`, `Payments`, `SharedKernel`,
-  `Migrator`). Modules reference `SharedKernel` only; cross-module calls go through public
-  `Contracts` interfaces so modules stay extractable. SPA lives in `web/`, infra in `infra/`
-  (Bicep), ADRs in `docs/adr/`.
+  `Migrator`). Modules reference `SharedKernel` only (enforced absolutely by `ModuleBoundaryTests`);
+  cross-module calls go through `Contracts` ports per the boundary rule below, so modules stay
+  extractable. SPA lives in `web/`, infra in `infra/` (Bicep), ADRs in `docs/adr/`.
+- **Cross-module boundary (ADR-007 — applies to every milestone, not just M2)**: a feature module
+  **never reads another module's tables or data directly** — no cross-module SQL, no cross-module
+  LINQ, no referencing another module's entity types. A cross-module read goes through a
+  **consumer-owned port**: an interface declared in the *consuming* module's `Contracts`, implemented
+  by a thin **host adapter** that delegates to the producing module via `ISender`. Ports expose
+  **batch** reads (return a map), never per-id reads, and adapters run on the ambient RLS transaction
+  (no new connection). `SharedKernel` stays pure cross-cutting primitives — module contracts do not
+  live there. *Within* a module, `db.Database.SqlQuery<T>` for that module's **own** analytical reads
+  is fine (prefer EF LINQ for simple reads; reserve raw SQL for window-function / `FILTER` / trigram
+  queries LINQ can't express — this crosses no boundary). **The sole exception is a dedicated
+  reporting/read layer** (the M5 statement engine and any future read-model schema), which may read
+  across the schema on purpose and records its own ADR. The assembly half of this rule is
+  test-enforced; the no-cross-module-SQL half is a code-review rule (NetArchTest can't see SQL strings).
 - **Application pattern**: CQRS with vertical slices inside each module. Endpoints are minimal
   APIs only (no MVC controllers) — per-module `IEndpointModule` registration, route groups,
   `TypedResults` — and stay thin: bind → dispatch → map result. Commands/queries go through a
@@ -70,7 +83,8 @@ SPA and `/api` on port 8080.
   (one per command/query, colocated with the slice) run in that pipeline as the single
   validation home. **No MediatR, no AutoMapper** (both commercially licensed from
   v13/v15 onward) — don't add them out of habit. Commands mutate only through domain services;
-  queries read projections/SQL directly.
+  queries read projections/SQL directly within their own module (cross-module figures come through a
+  `Contracts` port, never a cross-module join — see the boundary rule above).
 - **Accounting is the core module** and gets the highest test rigor: a double-entry journal
   (`journal_entries` + `journal_lines`) written only through posting templates keyed to
   business events (`RentCharged`, `DepositApplied`, `OwnerDisbursed`, …). Dual-basis posting:
