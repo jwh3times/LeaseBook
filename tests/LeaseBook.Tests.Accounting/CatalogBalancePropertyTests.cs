@@ -55,15 +55,18 @@ public sealed class CatalogBalancePropertyTests(PostgresFixture fixture)
         await AssertBalancesAsync(scope, new PaymentReceived(
             tenant, property, owner, new Money(amount.Amount * 2m), D(3), PaymentMethod.Ach, TrustBankId, "pay"), ct);
 
-        // Deposit applications (both variants) — a fresh tenant keeps the held balance clean.
+        // Deposit applications (both variants) — a fresh tenant keeps the held balance clean. The
+        // against-charges branch needs an open receivable to apply into (ADR-011 / P51).
         await PostAsync(scope, new DepositCollected(depTenant, property, owner, big, D(1), DepositBankId, "dep"), ct);
+        await PostAsync(scope, new RentCharged(depTenant, property, owner, null, amount, D(1), "dep rent"), ct);
         await AssertBalancesAsync(scope, new DepositApplied(
             depTenant, property, owner, amount, D(28), DepositBankId, TrustBankId, DepositApplication.ToOwnerIncome, "da1"), ct);
         await AssertBalancesAsync(scope, new DepositApplied(
             depTenant, property, owner, amount, D(28), DepositBankId, TrustBankId, DepositApplication.AgainstCharges, "da2"), ct);
 
-        // Prepayment application.
+        // Prepayment application (a receivable must exist for it to apply into too).
         await PostAsync(scope, new PrepaymentReceived(preTenant, property, owner, big, D(1), TrustBankId, "pp"), ct);
+        await PostAsync(scope, new RentCharged(preTenant, property, owner, null, amount, D(1), "pre rent"), ct);
         await AssertBalancesAsync(scope, new PrepaymentApplied(preTenant, property, owner, amount, D(28), TrustBankId, "pa"), ct);
 
         // Fee then sweep (a fresh owner so this owner's equity is untouched by the draws above).

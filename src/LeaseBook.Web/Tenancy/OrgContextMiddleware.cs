@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using LeaseBook.SharedKernel.Tenancy;
 using LeaseBook.Web.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -18,7 +19,8 @@ public sealed class OrgContextMiddleware(RequestDelegate next)
     /// <summary>Claim carrying the caller's org id; added at sign-in by WP-06.</summary>
     public const string OrgIdClaim = "org_id";
 
-    public async Task InvokeAsync(HttpContext context, TenantContext tenantContext, AppDbContext db)
+    public async Task InvokeAsync(
+        HttpContext context, TenantContext tenantContext, ActorContext actorContext, AppDbContext db)
     {
         var orgClaim = context.User.FindFirst(OrgIdClaim)?.Value;
         if (context.User.Identity?.IsAuthenticated != true || !Guid.TryParse(orgClaim, out var orgId))
@@ -35,6 +37,12 @@ public sealed class OrgContextMiddleware(RequestDelegate next)
             await db.Database.ExecuteSqlAsync(
                 $"SELECT set_config('app.org_id', {orgId.ToString()}, true)", ct);
             tenantContext.OrgId = orgId;
+
+            // The acting user (P52) — stamps journal_entries.created_by and audit_events.actor_user_id.
+            if (Guid.TryParse(context.User.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var userId))
+            {
+                actorContext.UserId = userId;
+            }
 
             await next(context);
 

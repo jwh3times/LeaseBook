@@ -13,7 +13,8 @@ namespace LeaseBook.Modules.Accounting.Posting;
 /// transaction (the request middleware or <c>OrgScopedExecutor</c>), which provides atomicity and the
 /// SaveChanges savepoint the idempotency backstop relies on.
 /// </summary>
-internal sealed class PostingService(DbContext db, ITenantContext tenant, IAccountingPeriods periods) : IPostingService
+internal sealed class PostingService(
+    DbContext db, ITenantContext tenant, IAccountingPeriods periods, IActorContext? actor = null) : IPostingService
 {
     private static readonly EntryBasis[] BalancedBases = [EntryBasis.Cash, EntryBasis.Accrual];
 
@@ -121,7 +122,7 @@ internal sealed class PostingService(DbContext db, ITenantContext tenant, IAccou
 
         var entry = JournalEntry.Create(
             request.EntryDate, request.EventType, request.EventSubtype, request.Description,
-            request.SourceRef, request.ReversesEntryId, createdBy: null, postedAt: DateTime.UtcNow);
+            request.SourceRef, request.ReversesEntryId, createdBy: actor?.UserId, postedAt: DateTime.UtcNow);
         foreach (var line in lines)
         {
             entry.AddLine(line);

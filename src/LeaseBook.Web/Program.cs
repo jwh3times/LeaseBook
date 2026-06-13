@@ -55,6 +55,10 @@ builder.Services.AddLeaseBookIdentity();
 // scheduler-agnostic OrgScopedExecutor can open the unit-of-work transaction.
 builder.Services.AddScoped<TenantContext>();
 builder.Services.AddScoped<ITenantContext>(sp => sp.GetRequiredService<TenantContext>());
+// Actor context (P52): the auth middleware populates it from the user-id claim; PostingService and the
+// AppDbContext audit pass read it to stamp created_by / actor_user_id. Null for seeder/job writes.
+builder.Services.AddScoped<ActorContext>();
+builder.Services.AddScoped<IActorContext>(sp => sp.GetRequiredService<ActorContext>());
 builder.Services.AddScoped<DbContext>(sp => sp.GetRequiredService<AppDbContext>());
 builder.Services.AddScoped<OrgScopedExecutor>();
 
@@ -70,10 +74,18 @@ builder.Services.AddScoped<LeaseBook.Modules.Directory.Contracts.IChartProvision
 builder.Services.AddScoped<LeaseBook.Modules.Directory.Contracts.ITenantFinancials, TenantFinancialsAdapter>();
 builder.Services.AddScoped<LeaseBook.Modules.Directory.Contracts.IOwnerFinancials, OwnerFinancialsAdapter>();
 
+// The reverse seam (M3 / P58): the Accounting ledger composer resolves a tenant's owner/property/unit
+// from the active lease through Directory. Accounting owns the port; the host adapter delegates via ISender.
+builder.Services.AddScoped<LeaseBook.Modules.Accounting.Contracts.ITenantPostingDimensions, TenantPostingDimensionsAdapter>();
+
 // Host-composed dashboard (§C.6 / P45): the cross-module composition root, dispatching module read
 // queries via ISender. TimeProvider drives the "current accounting month" (injectable for tests).
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<LeaseBook.Web.Dashboard.DashboardService>();
+
+// Host-composed per-entry audit trail (P56): joins host audit/identity tables with the Accounting
+// reversal link, resolving actors via an org-filtered identity lookup (the soft-spot has no RLS).
+builder.Services.AddScoped<LeaseBook.Web.Audit.EntryAuditReader>();
 
 // OpenAPI document (P11) — the SPA's `npm run api:generate` reads /openapi/v1.json.
 builder.Services.AddOpenApi();

@@ -42,6 +42,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/accounting/entries/{entryId}/audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    entryId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["EntryAuditResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/dashboard": {
         parameters: {
             query?: never;
@@ -354,6 +391,369 @@ export interface paths {
                     content: {
                         "application/json": components["schemas"]["TrustEquationResponse"];
                     };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/accounting/tenants/{tenantId}/payments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    tenantId: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["RecordPayment"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PostResult"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/accounting/tenants/{tenantId}/charges": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    tenantId: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["AddCharge"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PostResult"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/accounting/tenants/{tenantId}/credits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    tenantId: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["IssueCredit"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PostResult"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/accounting/tenants/{tenantId}/deposits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    tenantId: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CollectDeposit"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PostResult"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/accounting/tenants/{tenantId}/prepayments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    tenantId: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CollectPrepayment"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PostResult"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/accounting/tenants/{tenantId}/deposit-applications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    tenantId: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ApplyDeposit"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PostResult"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/accounting/tenants/{tenantId}/prepayment-applications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    tenantId: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ApplyPrepayment"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PostResult"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/accounting/entries/{entryId}/void": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    entryId: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["VoidEntry"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PostResult"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/accounting/tenants/{tenantId}/ledger.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    tenantId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
                 };
             };
         };
@@ -1421,6 +1821,51 @@ export interface components {
             detail: string;
             route: string;
         };
+        AddCharge: {
+            /** Format: uuid */
+            tenantId: string;
+            /** Format: double */
+            amount: number | string;
+            /** Format: date */
+            date: string;
+            kind: string;
+            memo: null | string;
+            sourceRef: string;
+        };
+        ApplyDeposit: {
+            /** Format: uuid */
+            tenantId: string;
+            /** Format: double */
+            amount: number | string;
+            /** Format: date */
+            date: string;
+            /** Format: uuid */
+            depositBankId: string;
+            /** Format: uuid */
+            operatingBankId: string;
+            target: string;
+            reason: string;
+            sourceRef: string;
+        };
+        ApplyPrepayment: {
+            /** Format: uuid */
+            tenantId: string;
+            /** Format: double */
+            amount: number | string;
+            /** Format: date */
+            date: string;
+            /** Format: uuid */
+            bankAccountId: string;
+            memo: null | string;
+            sourceRef: string;
+        };
+        AuditRow: {
+            /** Format: date-time */
+            occurredAt: string;
+            action: string;
+            actorName: string;
+            actorEmail: null | string;
+        };
         BankAccountResponse: {
             /** Format: uuid */
             id: string;
@@ -1448,6 +1893,30 @@ export interface components {
             /** Format: int32 */
             interactions: number | string;
             met: null | boolean;
+        };
+        CollectDeposit: {
+            /** Format: uuid */
+            tenantId: string;
+            /** Format: double */
+            amount: number | string;
+            /** Format: date */
+            date: string;
+            /** Format: uuid */
+            depositBankId: string;
+            memo: null | string;
+            sourceRef: string;
+        };
+        CollectPrepayment: {
+            /** Format: uuid */
+            tenantId: string;
+            /** Format: double */
+            amount: number | string;
+            /** Format: date */
+            date: string;
+            /** Format: uuid */
+            bankAccountId: string;
+            memo: null | string;
+            sourceRef: string;
         };
         ConfirmMfaRequest: {
             code: string;
@@ -1554,9 +2023,22 @@ export interface components {
             otpauthUri: string;
             secret: string;
         };
+        EntryAuditResponse: {
+            rows: components["schemas"]["AuditRow"][];
+        };
         HealthResponse: {
             status: string;
             version: string;
+        };
+        IssueCredit: {
+            /** Format: uuid */
+            tenantId: string;
+            /** Format: double */
+            amount: number | string;
+            /** Format: date */
+            date: string;
+            reason: string;
+            sourceRef: string;
         };
         LoginRequest: {
             email: string;
@@ -1726,6 +2208,10 @@ export interface components {
             /** Format: int32 */
             pageSize: number | string;
         };
+        PostResult: {
+            /** Format: uuid */
+            entryId: string;
+        };
         PropertyDetail: {
             /** Format: uuid */
             id: string;
@@ -1753,6 +2239,19 @@ export interface components {
             units: number | string;
             /** Format: int32 */
             occupied: number | string;
+        };
+        RecordPayment: {
+            /** Format: uuid */
+            tenantId: string;
+            /** Format: double */
+            amount: number | string;
+            /** Format: date */
+            date: string;
+            method: string;
+            /** Format: uuid */
+            bankAccountId: string;
+            memo: null | string;
+            sourceRef: string;
         };
         SearchResult: {
             type: string;
@@ -1933,6 +2432,14 @@ export interface components {
             /** Format: double */
             rent: number | string;
             status: string;
+        };
+        VoidEntry: {
+            /** Format: uuid */
+            entryId: string;
+            reason: string;
+            /** Format: date */
+            asOfDate: null | string;
+            sourceRef: string;
         };
     };
     responses: never;

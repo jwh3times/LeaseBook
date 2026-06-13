@@ -47,8 +47,8 @@ export function groupLabel(type: SearchResult['type']): string {
   return { owner: 'Owners', property: 'Properties', unit: 'Units', tenant: 'Tenants', bank: 'Banks' }[type] ?? type;
 }
 
-// M2 navigation actions (§C.7). "Record payment → tenant" wires the seam but routes to the tenant detail
-// — the inline ledger composer is M3. Registered once at module load.
+// Navigation actions (§C.7). "Record payment → tenant" routes into the ledger page with the M3 compose
+// flag, which auto-opens the inline composer in payment mode. Registered once at module load.
 registerActionProvider((result) => {
   switch (result.type) {
     case 'owner':
@@ -61,7 +61,7 @@ registerActionProvider((result) => {
     case 'tenant':
       return [
         { id: 'open-ledger', label: `Open ledger · ${result.label}`, route: `/tenants/${result.id}` },
-        { id: 'record-payment', label: `Record payment → ${result.label}`, route: `/tenants/${result.id}` },
+        { id: 'record-payment', label: `Record payment → ${result.label}`, route: `/tenants/${result.id}?compose=payment` },
       ];
     case 'unit':
       return [{ id: 'open-unit', label: `Open ${result.label}`, route: '/properties' }];

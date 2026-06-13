@@ -12,6 +12,8 @@
     <!-- Application plumbing -->
     <PackageVersion Include="Scrutor" Version="7.0.0" />
     <PackageVersion Include="FluentValidation" Version="12.1.1" />
+    <!-- CSV export (P55 / stack default): the M3 ledger CSV. The general report/CSV catalog is M5. -->
+    <PackageVersion Include="CsvHelper" Version="33.1.0" />
   </ItemGroup>
 
   <ItemGroup>

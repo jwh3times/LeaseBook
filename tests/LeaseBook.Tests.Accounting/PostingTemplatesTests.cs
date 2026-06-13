@@ -151,6 +151,8 @@ public sealed class PostingTemplatesTests(PostgresFixture fixture)
             fixture, ct, owners: [Owner], tenants: [Tenant], properties: [Property], units: [Unit]);
 
         await PostAsync(scope, new DepositCollected(Tenant, Property, Owner, new Money(1450m), Feb(1), DepositBankId, "deposit"), ct);
+        // A receivable must exist before applying a deposit against charges (ADR-011 / P51).
+        await PostAsync(scope, new RentCharged(Tenant, Property, Owner, Unit, new Money(1450m), Feb(1), "rent"), ct);
         var id = await PostAsync(scope, new DepositApplied(
             Tenant, Property, Owner, new Money(1450m), May(31), DepositBankId, TrustBankId,
             DepositApplication.AgainstCharges, "applied to balance"), ct);

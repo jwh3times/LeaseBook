@@ -153,6 +153,19 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
                 $"Deposit application {e.Amount} exceeds the {held:0.00} held for tenant {e.TenantId}.");
         }
 
+        // Applied against charges has no excess path (unlike PaymentReceived's auto-split), so it may
+        // not exceed the open receivable or it would silently drive it negative (ADR-011 / P51). Damages
+        // (ToOwnerIncome) legitimately exceed any receivable and stay unguarded. Read under the held lock.
+        if (e.Target == DepositApplication.AgainstCharges)
+        {
+            var owed = Math.Max(await _balances.TenantReceivableAsync(e.TenantId, ct), 0m);
+            if (e.Amount.Amount > owed)
+            {
+                throw new InsufficientReceivableException(
+                    $"Deposit application {e.Amount} exceeds the {owed:0.00} owed by tenant {e.TenantId}.");
+            }
+        }
+
         // Liability ↓ and deposit-bank ↓; operating-bank ↑. Income is recognized on application,
         // identically in both bases (the four/five lines net the physical dep→oper transfer).
         var lines = new List<PostLineRequest>
@@ -192,6 +205,15 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
         {
             throw new InsufficientLiabilityException(
                 $"Prepayment application {e.Amount} exceeds the {held:0.00} held for tenant {e.TenantId}.");
+        }
+
+        // A prepayment clears charges and likewise has no excess path — it may not exceed the open
+        // receivable (ADR-011 / P51). Read under the held lock.
+        var owed = Math.Max(await _balances.TenantReceivableAsync(e.TenantId, ct), 0m);
+        if (e.Amount.Amount > owed)
+        {
+            throw new InsufficientReceivableException(
+                $"Prepayment application {e.Amount} exceeds the {owed:0.00} owed by tenant {e.TenantId}.");
         }
 
         // No bank movement — both positions sit in the same operating trust.
