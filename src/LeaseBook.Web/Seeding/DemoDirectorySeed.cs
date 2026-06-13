@@ -16,9 +16,10 @@ namespace LeaseBook.Web.Seeding;
 /// journal row changing. Every list/search/CRUD surface filters <c>WHERE NOT is_system</c>.
 /// </para>
 /// <para>
-/// Units and leases are <b>not</b> seeded here — the journal never references a unit (its <c>unit_id</c>
-/// is always null), so they are not FK targets. They are added in WP-06 alongside the golden-join tests
-/// that validate the whole directory against the M1 figures and the regenerated TS client.
+/// Units and leases are seeded too (§C.10) — one unit per distinct tenant unit string plus filler vacant
+/// units up to each property's count, and an active lease per tenant. The journal never references a unit
+/// (its <c>unit_id</c> is always null), so they are not FK targets; they exist for the directory screens
+/// and the dashboard vacancy / collected-target KPIs.
 /// </para>
 /// </summary>
 internal static class DemoDirectorySeed
@@ -38,6 +39,7 @@ internal static class DemoDirectorySeed
         SeedTenants(db);
         SeedBankAccounts(db);
         SeedOrgSettings(db);
+        SeedUnitsAndLeases(db);
 
         // One SaveChanges flushes all directory rows into the ambient org transaction. They become
         // visible to the journal replay that runs next in the same transaction, so its FKs resolve.
@@ -163,5 +165,71 @@ internal static class DemoDirectorySeed
             City = "Asheville",
             State = "NC",
         });
+    }
+
+    private static void SeedUnitsAndLeases(DbContext db)
+    {
+        // One unit per distinct tenant unit string (occupied), plus filler vacant units up to each
+        // property's count (data.jsx: p1=4, p2=1, p3=6, p4=3, p5=4, p6=2 → 20 units, 7 occupied; §C.10).
+        (Guid Property, string Label, decimal Rent, UnitStatus Status, Guid? Tenant)[] specs =
+        [
+            (DemoIds.P1, "#2B", 1450m, UnitStatus.Occupied, DemoIds.T1), // Jasmine Carter
+            (DemoIds.P1, "#1A", 1380m, UnitStatus.Occupied, DemoIds.T2), // Devon Pryor
+            (DemoIds.P1, "#3C", 1400m, UnitStatus.Vacant, null),
+            (DemoIds.P1, "#4D", 1400m, UnitStatus.Vacant, null),
+            (DemoIds.P2, "88 Riverside Dr", 2150m, UnitStatus.Occupied, DemoIds.T5), // The Mercer Family (whole home)
+            (DemoIds.P3, "#3", 1620m, UnitStatus.Occupied, DemoIds.T3), // Aisha Bello
+            (DemoIds.P3, "#5", 1550m, UnitStatus.Occupied, DemoIds.T7), // Brandon Tate
+            (DemoIds.P3, "#1", 1500m, UnitStatus.Vacant, null),
+            (DemoIds.P3, "#2", 1500m, UnitStatus.Vacant, null),
+            (DemoIds.P3, "#4", 1500m, UnitStatus.Vacant, null),
+            (DemoIds.P3, "#6", 1500m, UnitStatus.Vacant, null),
+            (DemoIds.P4, "#2", 1410m, UnitStatus.Occupied, DemoIds.T6), // Lena Vasquez
+            (DemoIds.P4, "#1", 1400m, UnitStatus.Vacant, null),
+            (DemoIds.P4, "#3", 1400m, UnitStatus.Vacant, null),
+            (DemoIds.P5, "#B", 1295m, UnitStatus.Occupied, DemoIds.T4), // Cole Ramsey
+            (DemoIds.P5, "#A", 1300m, UnitStatus.Vacant, null),
+            (DemoIds.P5, "#C", 1300m, UnitStatus.Vacant, null),
+            (DemoIds.P5, "#D", 1300m, UnitStatus.Vacant, null),
+            (DemoIds.P6, "#1", 1200m, UnitStatus.Vacant, null),
+            (DemoIds.P6, "#2", 1200m, UnitStatus.Vacant, null),
+        ];
+
+        var unitByTenant = new Dictionary<Guid, (Guid UnitId, decimal Rent)>();
+        foreach (var (property, label, rent, status, tenant) in specs)
+        {
+            var unit = new Unit
+            {
+                Id = UuidV7.NewId(),
+                PropertyId = property,
+                Label = label,
+                Rent = new Money(rent),
+                Status = status,
+            };
+            db.Set<Unit>().Add(unit);
+            if (tenant is { } tenantId)
+            {
+                unitByTenant[tenantId] = (unit.Id, rent);
+            }
+        }
+
+        // An active lease per current tenant. t1's term is the focal tenant's (data.jsx); others get a
+        // standard one-year term. Deposit held = one month's rent (t1 matches the prototype's 1,450).
+        foreach (var tenantId in new[] { DemoIds.T1, DemoIds.T2, DemoIds.T3, DemoIds.T4, DemoIds.T5, DemoIds.T6, DemoIds.T7 })
+        {
+            var (unitId, rent) = unitByTenant[tenantId];
+            var start = tenantId == DemoIds.T1 ? new DateOnly(2024, 6, 1) : new DateOnly(2025, 6, 1);
+            db.Set<LeaseLite>().Add(new LeaseLite
+            {
+                Id = UuidV7.NewId(),
+                TenantId = tenantId,
+                UnitId = unitId,
+                StartDate = start,
+                EndDate = new DateOnly(2026, 5, 31),
+                Rent = new Money(rent),
+                DepositRequired = new Money(rent),
+                Status = LeaseStatus.Active,
+            });
+        }
     }
 }
