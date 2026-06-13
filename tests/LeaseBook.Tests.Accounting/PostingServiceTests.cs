@@ -23,7 +23,8 @@ public sealed class PostingServiceTests(PostgresFixture fixture)
     public async Task Posting_a_balanced_entry_persists_lines_with_denormalized_class_and_audits_them()
     {
         var ct = TestContext.Current.CancellationToken;
-        await using var scope = await AccountingTestHarness.ProvisionedScopeAsync(fixture, ct);
+        await using var scope = await AccountingTestHarness.ProvisionedScopeAsync(
+            fixture, ct, owners: [_ownerId], tenants: [_tenantId], properties: [_propertyId]);
 
         Guid entryId = default;
         await scope.RunAsync(async () =>
@@ -57,7 +58,8 @@ public sealed class PostingServiceTests(PostgresFixture fixture)
     public async Task Entry_balanced_in_cash_but_off_in_accrual_is_rejected()
     {
         var ct = TestContext.Current.CancellationToken;
-        await using var scope = await AccountingTestHarness.ProvisionedScopeAsync(fixture, ct);
+        await using var scope = await AccountingTestHarness.ProvisionedScopeAsync(
+            fixture, ct, owners: [_ownerId], tenants: [_tenantId], properties: [_propertyId]);
 
         var ex = await Should.ThrowAsync<UnbalancedEntryException>(() => scope.RunAsync(() =>
             AccountingTestHarness.Posting(scope).PostAsync(new PostEntryRequest(
@@ -74,7 +76,8 @@ public sealed class PostingServiceTests(PostgresFixture fixture)
     public async Task Posting_into_a_closed_period_is_rejected()
     {
         var ct = TestContext.Current.CancellationToken;
-        await using var scope = await AccountingTestHarness.ProvisionedScopeAsync(fixture, ct);
+        await using var scope = await AccountingTestHarness.ProvisionedScopeAsync(
+            fixture, ct, owners: [_ownerId], tenants: [_tenantId], properties: [_propertyId]);
 
         await scope.RunAsync(() => AccountingTestHarness.Periods(scope).CloseAsync(2026, 2, ct), ct);
 
@@ -89,7 +92,8 @@ public sealed class PostingServiceTests(PostgresFixture fixture)
     public async Task Duplicate_source_ref_is_rejected_with_the_existing_entry_id()
     {
         var ct = TestContext.Current.CancellationToken;
-        await using var scope = await AccountingTestHarness.ProvisionedScopeAsync(fixture, ct);
+        await using var scope = await AccountingTestHarness.ProvisionedScopeAsync(
+            fixture, ct, owners: [_ownerId], tenants: [_tenantId], properties: [_propertyId]);
 
         Guid firstId = default;
         await scope.RunAsync(async () =>
@@ -106,7 +110,8 @@ public sealed class PostingServiceTests(PostgresFixture fixture)
     public async Task Unknown_account_code_is_rejected()
     {
         var ct = TestContext.Current.CancellationToken;
-        await using var scope = await AccountingTestHarness.ProvisionedScopeAsync(fixture, ct);
+        await using var scope = await AccountingTestHarness.ProvisionedScopeAsync(
+            fixture, ct, owners: [_ownerId], tenants: [_tenantId], properties: [_propertyId]);
 
         var ex = await Should.ThrowAsync<UnknownAccountException>(() => scope.RunAsync(() =>
             AccountingTestHarness.Posting(scope).PostAsync(new PostEntryRequest(
@@ -123,7 +128,8 @@ public sealed class PostingServiceTests(PostgresFixture fixture)
     public async Task Pm_income_line_carrying_an_owner_dim_is_rejected()
     {
         var ct = TestContext.Current.CancellationToken;
-        await using var scope = await AccountingTestHarness.ProvisionedScopeAsync(fixture, ct);
+        await using var scope = await AccountingTestHarness.ProvisionedScopeAsync(
+            fixture, ct, owners: [_ownerId], tenants: [_tenantId], properties: [_propertyId]);
 
         var ex = await Should.ThrowAsync<PmIncomeOwnerDimException>(() => scope.RunAsync(() =>
             AccountingTestHarness.Posting(scope).PostAsync(new PostEntryRequest(
@@ -140,7 +146,8 @@ public sealed class PostingServiceTests(PostgresFixture fixture)
     public async Task A_line_with_neither_debit_nor_credit_is_rejected()
     {
         var ct = TestContext.Current.CancellationToken;
-        await using var scope = await AccountingTestHarness.ProvisionedScopeAsync(fixture, ct);
+        await using var scope = await AccountingTestHarness.ProvisionedScopeAsync(
+            fixture, ct, owners: [_ownerId], tenants: [_tenantId], properties: [_propertyId]);
 
         await Should.ThrowAsync<InvalidLineException>(() => scope.RunAsync(() =>
             AccountingTestHarness.Posting(scope).PostAsync(new PostEntryRequest(
@@ -154,7 +161,8 @@ public sealed class PostingServiceTests(PostgresFixture fixture)
     public async Task App_role_cannot_mutate_a_posted_entry()
     {
         var ct = TestContext.Current.CancellationToken;
-        await using var scope = await AccountingTestHarness.ProvisionedScopeAsync(fixture, ct);
+        await using var scope = await AccountingTestHarness.ProvisionedScopeAsync(
+            fixture, ct, owners: [_ownerId], tenants: [_tenantId], properties: [_propertyId]);
         await scope.RunAsync(() => AccountingTestHarness.Posting(scope).PostAsync(Rent("ap-1"), ct), ct);
 
         await using var conn = await fixture.OpenAppConnectionAsync(ct);

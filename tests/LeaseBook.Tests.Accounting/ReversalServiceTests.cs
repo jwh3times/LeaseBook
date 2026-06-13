@@ -23,7 +23,8 @@ public sealed class ReversalServiceTests(PostgresFixture fixture)
     public async Task Reversing_creates_a_linked_dated_mirror_entry()
     {
         var ct = TestContext.Current.CancellationToken;
-        await using var scope = await AccountingTestHarness.ProvisionedScopeAsync(fixture, ct);
+        await using var scope = await AccountingTestHarness.ProvisionedScopeAsync(
+            fixture, ct, owners: [_ownerId], tenants: [_tenantId], properties: [_propertyId]);
 
         Guid originalId = default;
         Guid reversalId = default;
@@ -53,7 +54,8 @@ public sealed class ReversalServiceTests(PostgresFixture fixture)
     public async Task Reversing_the_same_entry_twice_is_rejected()
     {
         var ct = TestContext.Current.CancellationToken;
-        await using var scope = await AccountingTestHarness.ProvisionedScopeAsync(fixture, ct);
+        await using var scope = await AccountingTestHarness.ProvisionedScopeAsync(
+            fixture, ct, owners: [_ownerId], tenants: [_tenantId], properties: [_propertyId]);
 
         await scope.RunAsync(async () =>
         {
@@ -70,7 +72,8 @@ public sealed class ReversalServiceTests(PostgresFixture fixture)
     public async Task A_reversal_cannot_itself_be_reversed()
     {
         var ct = TestContext.Current.CancellationToken;
-        await using var scope = await AccountingTestHarness.ProvisionedScopeAsync(fixture, ct);
+        await using var scope = await AccountingTestHarness.ProvisionedScopeAsync(
+            fixture, ct, owners: [_ownerId], tenants: [_tenantId], properties: [_propertyId]);
 
         await scope.RunAsync(async () =>
         {
@@ -86,7 +89,8 @@ public sealed class ReversalServiceTests(PostgresFixture fixture)
     public async Task A_reversal_dated_into_a_closed_period_is_rejected()
     {
         var ct = TestContext.Current.CancellationToken;
-        await using var scope = await AccountingTestHarness.ProvisionedScopeAsync(fixture, ct);
+        await using var scope = await AccountingTestHarness.ProvisionedScopeAsync(
+            fixture, ct, owners: [_ownerId], tenants: [_tenantId], properties: [_propertyId]);
 
         await scope.RunAsync(async () =>
         {

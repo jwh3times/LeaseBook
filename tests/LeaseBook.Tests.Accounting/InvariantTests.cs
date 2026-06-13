@@ -27,7 +27,8 @@ public sealed class InvariantTests(PostgresFixture fixture)
     public async Task Core_invariants_are_clean_after_a_full_round_of_activity()
     {
         var ct = TestContext.Current.CancellationToken;
-        await using var scope = await ProvisionedScopeAsync(fixture, ct);
+        await using var scope = await ProvisionedScopeAsync(
+            fixture, ct, owners: [Owner], tenants: [Tenant], properties: [Property]);
 
         await scope.RunAsync(async () =>
         {
@@ -48,7 +49,8 @@ public sealed class InvariantTests(PostgresFixture fixture)
     public async Task Engine_rejects_an_entry_that_would_violate_I1()
     {
         var ct = TestContext.Current.CancellationToken;
-        await using var scope = await ProvisionedScopeAsync(fixture, ct);
+        await using var scope = await ProvisionedScopeAsync(
+            fixture, ct, owners: [Owner], tenants: [Tenant], properties: [Property]);
 
         await Should.ThrowAsync<UnbalancedEntryException>(() => scope.RunAsync(() =>
             Posting(scope).PostAsync(new PostEntryRequest(
@@ -63,7 +65,8 @@ public sealed class InvariantTests(PostgresFixture fixture)
     public async Task Engine_rejects_an_over_application_that_would_violate_I4()
     {
         var ct = TestContext.Current.CancellationToken;
-        await using var scope = await ProvisionedScopeAsync(fixture, ct);
+        await using var scope = await ProvisionedScopeAsync(
+            fixture, ct, owners: [Owner], tenants: [Tenant], properties: [Property]);
         await scope.RunAsync(() => Events(scope).PostAsync(
             new DepositCollected(Tenant, Property, Owner, new Money(500m), D(1), DepositBankId, "dep"), ct), ct);
 
@@ -77,7 +80,8 @@ public sealed class InvariantTests(PostgresFixture fixture)
     public async Task The_I1_checker_catches_an_injected_unbalanced_entry()
     {
         var ct = TestContext.Current.CancellationToken;
-        await using var scope = await ProvisionedScopeAsync(fixture, ct);
+        await using var scope = await ProvisionedScopeAsync(
+            fixture, ct, owners: [Owner], tenants: [Tenant], properties: [Property]);
 
         // Resolve a real account, then plant an unbalanced entry as the migrator (bypassing the engine,
         // which would never let this exist) — proving the checker is not vacuous (§A money-path note).
@@ -94,7 +98,8 @@ public sealed class InvariantTests(PostgresFixture fixture)
     public async Task A_void_and_its_reversal_net_to_zero_in_the_ledgers_I6()
     {
         var ct = TestContext.Current.CancellationToken;
-        await using var scope = await ProvisionedScopeAsync(fixture, ct);
+        await using var scope = await ProvisionedScopeAsync(
+            fixture, ct, owners: [Owner], tenants: [Tenant], properties: [Property]);
 
         Guid entryId = default;
         await scope.RunAsync(async () =>
@@ -116,7 +121,8 @@ public sealed class InvariantTests(PostgresFixture fixture)
     public async Task Cash_and_accrual_owner_totals_converge_after_settlement_I5()
     {
         var ct = TestContext.Current.CancellationToken;
-        await using var scope = await ProvisionedScopeAsync(fixture, ct);
+        await using var scope = await ProvisionedScopeAsync(
+            fixture, ct, owners: [Owner], tenants: [Tenant], properties: [Property]);
 
         await scope.RunAsync(async () =>
         {
