@@ -65,6 +65,21 @@ the golden fixture with invented PRD data — explicitly forbidden by P40).
 - **One uniform `is_system` flag** on `owners`/`tenants` (and present on `properties`/`units` for
   symmetry, though unused today) cleanly separates real entities from aggregate placeholders, with a
   single review rule — `WHERE NOT is_system` — enforced at every read surface (M2-E2).
+  - **Known limitation — the `WHERE NOT is_system` rule is a code-review convention, not test-enforced
+    globally.** `DirectoryGoldenTests` asserts that the *current* list/search/detail reads hide system
+    rows, but nothing fails CI if a *future* directory read forgets the filter and leaks "All other
+    owners" / the synthetic deposit-aggregate tenants into a roster. Hardening path: route every roster
+    read through a shared `NotSystem()` query helper, or add a convention/NetArchTest-style guard that
+    every `Set<Owner>()`/`Set<Tenant>()` list query carries the predicate. Until then, treat the filter
+    as a standing invariant to check in review on any new directory read.
+- **Known limitation — these FKs guarantee *referential existence*, not *org-correctness*.** Postgres
+  referential-integrity checks **always bypass RLS** (this is exactly what lets the accounting test
+  harness satisfy them from one global row in a hidden org). A single-column FK therefore only proves the
+  dimension id exists in *some* org's row, not that it belongs to the *same* org as the journal line. At
+  runtime this gap is closed by other means — directory ids are globally unique (the PK) and generated
+  in-org, and RLS scopes every read — so a cross-org dimension reference cannot arise naturally today.
+  But the FK is **not** itself a cross-org isolation boundary; do not lean on it as one. The belt-and-
+  suspenders fix is a **composite `(org_id, id)` FK** (see Revisit trigger).
 - **DB-level-only FKs are invisible to the EF model snapshot** (like the RLS policies and GIN indexes).
   This is intentional: the constraint is a database guarantee, not an object-graph relationship. A
   future migration touching these columns must re-state the FK by hand.
@@ -78,3 +93,15 @@ If the synthetic aggregates ever need to become real entities — e.g. M7's migr
 relevant `is_system` rows to real rows in that milestone, re-attributing the journal lines through
 *linked reversal entries* (never an in-place update, per the append-only invariant) and updating the
 golden fixture deliberately. At that point the `is_system` placeholder for that id is retired.
+
+**Planned hardening — promote the five FKs to composite `(org_id, id)`.** To make the FK enforce
+org-correctness (not just existence), add `UNIQUE (org_id, id)` to each directory table and re-state the
+five `journal_lines` FKs as composite `(org_id, <dim>_id) → (org_id, id)` (`journal_lines` already carries
+`org_id`). This is **deferred deliberately**, not forgotten: it is not a lone migration — it forces a
+rework of `AccountingTestHarness`, which today seeds FK targets in **one hidden global org** and relies on
+RI bypassing RLS. Under a composite FK that global row no longer satisfies a *different* test org's lines,
+so the harness must seed FK-target dimensions **into each test org**, and the full golden/invariant/
+integration gate must be re-run. Schedule it into the next milestone that already touches `journal_lines`
+(M3 money movement or M4's bank register), where the harness is in scope anyway — not as a standalone
+change against a green milestone branch. See `private/planning/m2_retro.md` → "Known limitations &
+follow-up hardening".
