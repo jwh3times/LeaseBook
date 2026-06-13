@@ -67,6 +67,8 @@ builder.Services.AddAccountingModule();
 // delegates bank-account provisioning to the Accounting chart-of-accounts.
 builder.Services.AddDirectoryModule();
 builder.Services.AddScoped<LeaseBook.Modules.Directory.Contracts.IChartProvisioner, ChartProvisionerAdapter>();
+builder.Services.AddScoped<LeaseBook.Modules.Directory.Contracts.ITenantFinancials, TenantFinancialsAdapter>();
+builder.Services.AddScoped<LeaseBook.Modules.Directory.Contracts.IOwnerFinancials, OwnerFinancialsAdapter>();
 
 // OpenAPI document (P11) — the SPA's `npm run api:generate` reads /openapi/v1.json.
 builder.Services.AddOpenApi();
