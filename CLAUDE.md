@@ -54,7 +54,9 @@ Postgres and integration tests.
 - e2e (Playwright, specs land later): `npm run e2e`
 
 **Container:** `docker build -t leasebook .` then run with `ConnectionStrings__Default` set — serves the
-SPA and `/api` on port 8080.
+SPA and `/api` on port 8080. To run the **whole product** locally (db + migrate + seed + app):
+`./scripts/dev.ps1 app-up` (Compose `full` profile → http://localhost:8080; see docs/runbooks/local-dev.md).
+Migrations run as the migrator role via a one-shot `migrator`-target image (EF bundle), never at app startup.
 
 ## Planned architecture (private/TODO.md §1 is the full blueprint)
 

@@ -35,10 +35,67 @@ Cross-platform helpers in `scripts/` (`dev.ps1` for Windows/pwsh, `dev.sh` for P
 
 | Command | Effect |
 | --- | --- |
-| `./scripts/dev.ps1 up` | Start Postgres and wait until the container reports healthy |
-| `./scripts/dev.ps1 down` | Stop the container, keep the data volume |
+| `./scripts/dev.ps1 up` | Start **Postgres only** (inner-loop dev — see "Two ways to run" below) and wait until healthy |
+| `./scripts/dev.ps1 down` | Stop the containers, keep the data volume |
 | `./scripts/dev.ps1 reset-db` | Wipe the data volume (`down -v`) and re-bootstrap from scratch |
 | `./scripts/dev.ps1 psql` | Open `psql` inside the container as the migrator role |
+| `./scripts/dev.ps1 app-up` | Build + run the **whole product** in Docker (db → migrate → seed → app on :8080) |
+| `./scripts/dev.ps1 app-down` | Stop the full stack, keep the data volume |
+| `./scripts/dev.ps1 app-logs` | Follow the app container's logs |
+
+## Two ways to run
+
+There are two distinct local modes, selected by Docker Compose **profile**:
+
+1. **Inner-loop dev (default).** `dev.ps1 up` starts **only Postgres**. You run the API on the host
+   (`dotnet run --project src/LeaseBook.Web`, :5080) and the SPA via Vite (`npm run dev`, :5173,
+   proxying `/api` → :5080). Fast edit/reload; this is the day-to-day developer loop.
+
+2. **Full product in containers.** `dev.ps1 app-up` builds and runs the entire product — Postgres,
+   schema migration, demo seed, and the app (SPA + API) — at **http://localhost:8080**. This is for
+   demoing or sanity-checking the shipped artifact, not for fast iteration (each change needs a
+   rebuild). Sign in with the seeded dev admin (below).
+
+Both modes share the same `docker-compose.yml` and the same data volume; the difference is the
+`full` profile. `docker compose up -d` runs db-only; `docker compose --profile full up -d --build`
+runs everything.
+
+## Running the full product in Docker
+
+```
+./scripts/dev.ps1 app-up      # build images, start db→migrate→seed→app, wait for /api/health
+# → browse http://localhost:8080, sign in as the seeded admin (see "Migrations and seed")
+./scripts/dev.ps1 app-logs    # tail the app
+./scripts/dev.ps1 app-down    # stop (keeps data; `reset-db` wipes it)
+```
+
+The stack is four services wired by `depends_on` conditions so they start in the only safe order:
+
+| Service | Image / role | What it does |
+| --- | --- | --- |
+| `db` | `postgres:18` | The database (always on, both profiles). |
+| `migrate` | `leasebook-migrator`, **migrator role** | One-shot. Runs an **EF migrations bundle** (built in the Dockerfile `migrator` stage) to bring the schema to the latest migration, then exits 0. |
+| `seed` | `leasebook`, **app role** | One-shot. `dotnet LeaseBook.Web.dll seed --org demo` — provisions the demo org + admin + directory + journal. Idempotent, so it runs every `up` and skips when already seeded. Exits 0. |
+| `app` | `leasebook`, **app role** | Serves the SPA + `/api` on :8080. |
+
+`migrate` and `seed` are **one-shot** containers: in Docker Desktop they show as **`Exited (0)`** once
+the schema is current and the org is seeded — that is success, not a crash. The chain is
+`db healthy → migrate done → seed done → app serving`.
+
+Why a separate migrator image rather than migrating at app startup: schema changes must run as
+`leasebook_migrator`, never the runtime `leasebook_app` role (that separation is what makes RLS a real
+boundary — see Multi-tenancy in `CLAUDE.md`). The chiseled runtime image carries no SDK/`dotnet ef`, so
+the `migrator` stage compiles a self-applying migrations bundle that connects as the migrator role.
+
+Notes:
+- **Port already in use?** Override with `LEASEBOOK_APP_PORT` (app) or `LEASEBOOK_DB_PORT` (db), e.g.
+  `$env:LEASEBOOK_APP_PORT='8090'; ./scripts/dev.ps1 app-up`.
+- **Rebuild after code changes:** `app-up` always passes `--build`, so re-running it picks up changes.
+- **Auth across restarts:** DataProtection keys are ephemeral in the container, so the auth/antiforgery
+  cookies reset when the app container is recreated — just sign in again. (Real environments persist
+  keys; not worth the volume-permission friction for a local demo.)
+- The full stack is **dev-only** and uses the placeholder passwords from `infra/db/bootstrap.sql`. Real
+  environments use Azure Flexible Server + Key Vault + managed identity (WP-10 / `infra/`).
 
 ## Connecting as each role
 

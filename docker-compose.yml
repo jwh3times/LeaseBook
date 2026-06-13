@@ -1,5 +1,26 @@
 # Local development infrastructure. DEV ONLY — real environments use Azure Database for
 # PostgreSQL Flexible Server with managed identity / Key Vault (see infra/, WP-10).
+#
+# Two ways to run, by profile:
+#   docker compose up -d                     → just Postgres (inner-loop dev: `dotnet run` + Vite on
+#                                              the host hit this db). This is `./scripts/dev.ps1 up`.
+#   docker compose --profile full up -d --build
+#                                            → the whole product in containers (db → migrate → seed →
+#                                              app on :8080). This is `./scripts/dev.ps1 app-up`.
+#
+# `migrate` and `seed` are one-shot containers: they run to completion and exit 0 (you'll see them as
+# "Exited (0)" in Docker Desktop — that's success, not a crash). The chain is enforced by depends_on:
+#   db healthy → migrate (migrator role, applies the schema) → seed (app role, demo org) → app serves.
+
+# Connection strings are assembled here, not baked into images, so credentials stay in this dev file.
+x-app-conn: &app-conn "Host=db;Port=5432;Database=leasebook;Username=leasebook_app;Password=dev_app_pw"
+x-migrator-conn: &migrator-conn "Host=db;Port=5432;Database=leasebook;Username=leasebook_migrator;Password=dev_migrator_pw"
+
+# Both the seed one-shot and the long-running app are the same image, built once from the runtime target.
+x-app-build: &app-build
+  context: .
+  target: runtime
+
 services:
   db:
     image: postgres:18
@@ -25,6 +46,54 @@ services:
       interval: 5s
       timeout: 5s
       retries: 12
+
+  # One-shot: brings the schema to the latest migration as the migrator role, then exits.
+  migrate:
+    profiles: ["full"]
+    build:
+      context: .
+      target: migrator
+    image: leasebook-migrator
+    container_name: leasebook-migrate
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # The EF bundle's design-time factory reads this (ConnectionStrings:Migrations).
+      ConnectionStrings__Migrations: *migrator-conn
+    restart: "no"
+
+  # One-shot: provisions the demo org (Tarheel Property Group) + admin as the app role. Idempotent —
+  # safe to re-run, so it executes on every `up` and simply skips when the org already exists.
+  seed:
+    profiles: ["full"]
+    build: *app-build
+    image: leasebook
+    container_name: leasebook-seed
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      ConnectionStrings__Default: *app-conn
+    # ENTRYPOINT is `dotnet LeaseBook.Web.dll`; this runs the `seed` verb and exits instead of serving.
+    command: ["seed", "--org", "demo"]
+    restart: "no"
+
+  # The application: SPA + API on :8080, connecting as the RLS-subject app role.
+  app:
+    profiles: ["full"]
+    build: *app-build
+    image: leasebook
+    container_name: leasebook-app
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    environment:
+      ConnectionStrings__Default: *app-conn
+    ports:
+      # Browse http://localhost:8080 once healthy. Override with LEASEBOOK_APP_PORT if 8080 is taken.
+      - "${LEASEBOOK_APP_PORT:-8080}:8080"
+    restart: unless-stopped
 
 volumes:
   leasebook-pgdata:
