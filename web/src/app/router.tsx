@@ -2,6 +2,7 @@ import type { ReactElement } from 'react';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { KitchenSink } from '@/dev/KitchenSink';
 import { LoginPage } from '@/features/auth/LoginPage';
+import { DashboardPage } from '@/features/dashboard/DashboardPage';
 import { OwnerDetailPage } from '@/features/owners/OwnerDetailPage';
 import { OwnersPage } from '@/features/owners/OwnersPage';
 import { PropertiesPage } from '@/features/properties/PropertiesPage';
@@ -16,6 +17,7 @@ import { RouteGuard } from './RouteGuard';
 
 // Routes whose feature screens have landed (others stay titled placeholders until their milestone).
 const FEATURE_PAGES: Record<string, ReactElement> = {
+  '/dashboard': <DashboardPage />,
   '/tenants': <TenantsPage />,
   '/owners': <OwnersPage />,
   '/properties': <PropertiesPage />,
