@@ -70,6 +70,11 @@ builder.Services.AddScoped<LeaseBook.Modules.Directory.Contracts.IChartProvision
 builder.Services.AddScoped<LeaseBook.Modules.Directory.Contracts.ITenantFinancials, TenantFinancialsAdapter>();
 builder.Services.AddScoped<LeaseBook.Modules.Directory.Contracts.IOwnerFinancials, OwnerFinancialsAdapter>();
 
+// Host-composed dashboard (§C.6 / P45): the cross-module composition root, dispatching module read
+// queries via ISender. TimeProvider drives the "current accounting month" (injectable for tests).
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddScoped<LeaseBook.Web.Dashboard.DashboardService>();
+
 // OpenAPI document (P11) — the SPA's `npm run api:generate` reads /openapi/v1.json.
 builder.Services.AddOpenApi();
 
