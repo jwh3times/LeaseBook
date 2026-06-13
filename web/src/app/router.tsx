@@ -1,16 +1,36 @@
+import type { ReactElement } from 'react';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { KitchenSink } from '@/dev/KitchenSink';
 import { LoginPage } from '@/features/auth/LoginPage';
+import { OwnerDetailPage } from '@/features/owners/OwnerDetailPage';
+import { OwnersPage } from '@/features/owners/OwnersPage';
+import { PropertiesPage } from '@/features/properties/PropertiesPage';
+import { PropertyDetailPage } from '@/features/properties/PropertyDetailPage';
+import { TenantDetailPage } from '@/features/tenants/TenantDetailPage';
+import { TenantsPage } from '@/features/tenants/TenantsPage';
 import { AppShell } from './AppShell';
 import { NAV_ROUTES, SETTINGS_ROUTE } from './navigation';
 import { NotFound } from './NotFound';
 import { PlaceholderPage } from './PlaceholderPage';
 import { RouteGuard } from './RouteGuard';
 
+// Routes whose feature screens have landed (others stay titled placeholders until their milestone).
+const FEATURE_PAGES: Record<string, ReactElement> = {
+  '/tenants': <TenantsPage />,
+  '/owners': <OwnersPage />,
+  '/properties': <PropertiesPage />,
+};
+
 const pageRoutes = [...NAV_ROUTES, SETTINGS_ROUTE].map((route) => ({
   path: route.path,
-  element: <PlaceholderPage title={route.title} />,
+  element: FEATURE_PAGES[route.path] ?? <PlaceholderPage title={route.title} />,
 }));
+
+const detailRoutes = [
+  { path: '/tenants/:id', element: <TenantDetailPage /> },
+  { path: '/owners/:id', element: <OwnerDetailPage /> },
+  { path: '/properties/:id', element: <PropertyDetailPage /> },
+];
 
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
@@ -20,7 +40,7 @@ export const router = createBrowserRouter([
     children: [
       {
         element: <AppShell />,
-        children: [{ index: true, element: <Navigate to="/dashboard" replace /> }, ...pageRoutes],
+        children: [{ index: true, element: <Navigate to="/dashboard" replace /> }, ...pageRoutes, ...detailRoutes],
       },
     ],
   },
