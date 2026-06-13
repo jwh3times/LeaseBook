@@ -92,3 +92,41 @@ most once, and a reversal cannot itself be reversed.
 Each month is an accounting **period**. Once a month is reconciled it is **closed**, and the engine
 refuses to post anything new into it — corrections for a closed month post into the current open month
 instead. This is what makes a reconciled month stay reconciled.
+
+## Writing entries through the ledger composer
+
+Money first moves through the UI in M3. The tenant-ledger composer never builds journal lines itself —
+it sends a small **command** that the server wraps around the existing posting engine, so there is still
+exactly one write path to the journal. The command carries only a tenant id plus the amount/date/method/
+memo; the owner, property and unit are resolved server-side from the tenant's **active lease** (a post
+for a tenant with no active lease is rejected, never guessed). Each command maps to one business event:
+
+| Command (endpoint) | Business event |
+| --- | --- |
+| `POST /tenants/{id}/payments` | `PaymentReceived` (ACH/Card/Check/Cash) |
+| `POST /tenants/{id}/charges` | `RentCharged` (rent) or `FeeCharged` (late / maintenance-recharge / other) |
+| `POST /tenants/{id}/credits` | `CreditIssued` |
+| `POST /tenants/{id}/deposits` | `DepositCollected` |
+| `POST /tenants/{id}/prepayments` | `PrepaymentReceived` |
+| `POST /tenants/{id}/deposit-applications` | `DepositApplied` (to owner income, or against charges) |
+| `POST /tenants/{id}/prepayment-applications` | `PrepaymentApplied` |
+| `POST /entries/{id}/void` | a linked reversal (see "Fixing mistakes") |
+
+Every submit carries a client-minted **idempotency key** (`sourceRef`), so a double-click or retry maps
+to "already posted" rather than posting twice. `GET /tenants/{id}/ledger.csv` exports the on-screen
+ledger.
+
+**The over-application rule (ADR-011).** A payment that exceeds what the tenant owes auto-splits the
+excess into a prepayment. An *application* has no such overflow, so applying a deposit **against charges**
+— or applying a prepayment — that would exceed the tenant's open receivable is **rejected**
+(`insufficient_receivable`); the composer asks the user to lower the amount. Applying a deposit **to owner
+income** (damages) is deliberately *not* capped — damages legitimately exceed any rent owed. This sits
+alongside the existing rule that an application can never exceed the deposit/prepayment actually held.
+
+## Who did it
+
+Every posted entry now records the acting user. The authenticated user's id is stamped onto the journal
+entry (`created_by`) and onto each `audit_events` row (`actor_user_id`); a reversal carries the user who
+voided. The seeder and background jobs write as the system (a null actor, by design). The per-entry audit
+trail (`GET /entries/{id}/audit`) returns the entry's and its reversal's rows newest-first, resolving each
+actor to a name/email — an org-scoped identity lookup, so one company can never see another's users.
