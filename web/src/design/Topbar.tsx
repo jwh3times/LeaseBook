@@ -5,11 +5,13 @@ import { SearchBox } from './SearchBox';
 export interface TopbarProps {
   title: string;
   onToggleSidebar?: () => void;
+  /** Opens the ⌘K command palette — when set, the search affordance becomes a live trigger (M2). */
+  onSearchClick?: () => void;
   /** Right-side actions (e.g. a "New" button, notifications, avatar). */
   actions?: ReactNode;
 }
 
-export function Topbar({ title, onToggleSidebar, actions }: TopbarProps) {
+export function Topbar({ title, onToggleSidebar, onSearchClick, actions }: TopbarProps) {
   return (
     <header className="pf-topbar">
       <div className="pf-top-left">
@@ -17,8 +19,16 @@ export function Topbar({ title, onToggleSidebar, actions }: TopbarProps) {
         <h1 className="pf-top-title">{title}</h1>
       </div>
 
-      {/* Search affordance with a ⌘K hint — non-functional placeholder; the command palette is M2. */}
-      <SearchBox placeholder="Search owners, tenants, units, transactions…" kbd="⌘K" disabled />
+      {/* The search affordance opens the command palette (⌘K). Read-only — typing happens in the palette. */}
+      <SearchBox
+        placeholder="Search owners, tenants, units, banks…"
+        kbd="⌘K"
+        readOnly
+        disabled={!onSearchClick}
+        aria-label="Open command palette"
+        onClick={onSearchClick}
+        onFocus={onSearchClick}
+      />
 
       <div className="pf-top-right">{actions}</div>
     </header>
