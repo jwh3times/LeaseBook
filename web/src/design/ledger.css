@@ -129,6 +129,39 @@
   color: var(--neg);
 }
 
+/* WP-06 modals (apply/void) + audit drawer body. */
+.pf-modal-body {
+  padding: 16px 20px;
+}
+
+.pf-audit {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.pf-audit-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  font-size: 14px;
+}
+
+.pf-audit-dot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
 /* The sticky header and the virtualized body share one column template so the columns line up. */
 .pf-ledger {
   --ledger-cols: 116px 132px minmax(160px, 1fr) 116px 116px 128px 116px;

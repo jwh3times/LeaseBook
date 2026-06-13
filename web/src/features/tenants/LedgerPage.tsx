@@ -1,13 +1,16 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
-import { Avatar, Button, Card, EmptyState, Icon, Input, Money, Select } from '@/design';
+import { Avatar, Button, Card, EmptyState, Icon, IconButton, Input, Money, Select } from '@/design';
 import { num, useTenantDetail } from '@/lib/directory';
 import { RecordQuickSwitch } from '@/lib/RecordQuickSwitch';
 import { TenantStatusBadge } from '@/lib/StatusBadge';
+import { ApplyModal } from './ApplyModal';
+import { AuditDrawer } from './AuditDrawer';
 import { LedgerComposer } from './LedgerComposer';
 import { LedgerTable } from './LedgerTable';
-import { downloadLedgerCsv, tenantLedgerKey, useTenantLedger } from './ledger';
+import { VoidDialog } from './VoidDialog';
+import { downloadLedgerCsv, type TenantLedgerEntry, tenantLedgerKey, useTenantLedger } from './ledger';
 
 function initialsOf(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -39,6 +42,11 @@ export function LedgerPage() {
   const [typeFilter, setTypeFilter] = useState('all');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
+
+  // WP-06 row-action targets: which entry to void / show history for, and which held funds to apply.
+  const [voidEntryId, setVoidEntryId] = useState<string | null>(null);
+  const [auditEntryId, setAuditEntryId] = useState<string | null>(null);
+  const [applyKind, setApplyKind] = useState<'deposit' | 'prepayment' | null>(null);
 
   // A successful post refetches the ledger (and the header balance/deposit) and flashes the new row —
   // the "appears without navigation" contract (P59).
@@ -80,6 +88,24 @@ export function LedgerPage() {
   const onExport = () => {
     void downloadLedgerCsv(id);
   };
+
+  // The row-action menu (fills WP-04's seam): apply on deposit/prepayment rows, void on posted
+  // not-yet-reversed rows, history on every row.
+  const rowActions = (entry: TenantLedgerEntry) => (
+    <div className="row gap2">
+      {(entry.category === 'Security Deposit' || entry.category === 'Prepayment') && (
+        <IconButton
+          name="arrowUpRight"
+          label="Apply held funds"
+          onClick={() => setApplyKind(entry.category === 'Security Deposit' ? 'deposit' : 'prepayment')}
+        />
+      )}
+      {!entry.isVoided && !entry.reversesEntryId && (
+        <IconButton name="x" label="Void entry" onClick={() => setVoidEntryId(entry.entryId)} />
+      )}
+      <IconButton name="clock" label="History" onClick={() => setAuditEntryId(entry.entryId)} />
+    </div>
+  );
 
   return (
     <div className="pf-fade">
@@ -192,9 +218,32 @@ export function LedgerPage() {
             <EmptyState icon="search" title="No entries match the filter" description="Adjust the type or date range." />
           </div>
         ) : (
-          <LedgerTable rows={display} flashId={flashId} />
+          <LedgerTable rows={display} flashId={flashId} rowActions={rowActions} />
         )}
       </Card>
+
+      {voidEntryId && (
+        <VoidDialog
+          entryId={voidEntryId}
+          onClose={() => setVoidEntryId(null)}
+          onVoided={(reversalId) => {
+            setVoidEntryId(null);
+            handlePosted(reversalId);
+          }}
+        />
+      )}
+      {applyKind && (
+        <ApplyModal
+          tenantId={id}
+          initialKind={applyKind}
+          onClose={() => setApplyKind(null)}
+          onApplied={(entryId) => {
+            setApplyKind(null);
+            handlePosted(entryId);
+          }}
+        />
+      )}
+      {auditEntryId && <AuditDrawer entryId={auditEntryId} onClose={() => setAuditEntryId(null)} />}
     </div>
   );
 }

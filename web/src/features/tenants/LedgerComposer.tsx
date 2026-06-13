@@ -8,6 +8,7 @@ import {
   categoryNeedsBank,
   COMPOSER_CHARGE_CATEGORIES,
   type LedgerPostError,
+  newSourceRef,
   PAYMENT_METHODS,
   type PostResult,
   submitLedgerEntry,
@@ -25,10 +26,6 @@ type Mode = 'payment' | 'charge';
 
 const LAST_METHOD_KEY = 'lb.lastPaymentMethod';
 const todayIso = () => new Date().toISOString().slice(0, 10);
-
-function newSourceRef(): string {
-  return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
 
 /**
  * The signature M3 interaction (§C.4 / P59): record a payment / add a charge in place, posting through

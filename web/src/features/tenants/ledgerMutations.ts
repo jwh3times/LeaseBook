@@ -2,6 +2,11 @@ import { api, primeCsrf, type components } from '@/api';
 
 export type PostResult = components['schemas']['PostResult'];
 
+/** A client-side idempotency key (P54): minted once per composer/modal open. */
+export function newSourceRef(): string {
+  return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
 /** A normalized failure from a ledger post: the domain `code` (422/409), or a validation message (400). */
 export interface LedgerPostError {
   code?: string;
@@ -126,4 +131,70 @@ export async function submitLedgerEntry(tenantId: string, input: LedgerEntryInpu
         }),
       );
   }
+}
+
+/** Voids a posted entry → a linked reversal (P54 idempotency key; default as-of today server-side). */
+export async function voidEntry(entryId: string, reason: string, sourceRef: string): Promise<PostResult> {
+  await primeCsrf();
+  return unwrap(
+    api.POST('/api/accounting/entries/{entryId}/void', {
+      params: { path: { entryId } },
+      body: { entryId, reason, asOfDate: null, sourceRef },
+    }),
+  );
+}
+
+export interface ApplyDepositInput {
+  amount: number;
+  date: string;
+  depositBankId: string;
+  operatingBankId: string;
+  target: string; // to-owner-income | against-charges
+  reason: string;
+  sourceRef: string;
+}
+
+export async function applyDeposit(tenantId: string, input: ApplyDepositInput): Promise<PostResult> {
+  await primeCsrf();
+  return unwrap(
+    api.POST('/api/accounting/tenants/{tenantId}/deposit-applications', {
+      params: { path: { tenantId } },
+      body: {
+        tenantId,
+        amount: input.amount,
+        date: input.date,
+        depositBankId: input.depositBankId,
+        operatingBankId: input.operatingBankId,
+        target: input.target,
+        reason: input.reason,
+        sourceRef: input.sourceRef,
+      },
+    }),
+  );
+}
+
+export interface ApplyPrepaymentInput {
+  amount: number;
+  date: string;
+  bankAccountId: string;
+  memo: string;
+  sourceRef: string;
+}
+
+export async function applyPrepayment(tenantId: string, input: ApplyPrepaymentInput): Promise<PostResult> {
+  await primeCsrf();
+  const memo = input.memo.trim();
+  return unwrap(
+    api.POST('/api/accounting/tenants/{tenantId}/prepayment-applications', {
+      params: { path: { tenantId } },
+      body: {
+        tenantId,
+        amount: input.amount,
+        date: input.date,
+        bankAccountId: input.bankAccountId,
+        memo: memo === '' ? null : memo,
+        sourceRef: input.sourceRef,
+      },
+    }),
+  );
 }
