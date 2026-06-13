@@ -35,7 +35,16 @@ public sealed class CatalogBalancePropertyTests(PostgresFixture fixture)
         var tenant = UuidV7.NewId();
         var owner = UuidV7.NewId();
         var property = UuidV7.NewId();
+        var depTenant = UuidV7.NewId();
+        var preTenant = UuidV7.NewId();
+        var feeOwner = UuidV7.NewId();
+        var drawOwner = UuidV7.NewId();
         var big = new Money(50_000_000m); // dwarfs any generated amount so guards always pass
+
+        // Seed directory rows for every dimension id these events carry, so the journal-dimension FKs
+        // resolve when the engine posts (P38 / ADR-008).
+        await EnsureDirectoryAsync(fixture, ct,
+            owners: [owner, feeOwner, drawOwner], tenants: [tenant, depTenant, preTenant], properties: [property]);
 
         // Accrual-only charges.
         await AssertBalancesAsync(scope, new RentCharged(tenant, property, owner, null, amount, D(1), "rent"), ct);
@@ -47,7 +56,6 @@ public sealed class CatalogBalancePropertyTests(PostgresFixture fixture)
             tenant, property, owner, new Money(amount.Amount * 2m), D(3), PaymentMethod.Ach, TrustBankId, "pay"), ct);
 
         // Deposit applications (both variants) — a fresh tenant keeps the held balance clean.
-        var depTenant = UuidV7.NewId();
         await PostAsync(scope, new DepositCollected(depTenant, property, owner, big, D(1), DepositBankId, "dep"), ct);
         await AssertBalancesAsync(scope, new DepositApplied(
             depTenant, property, owner, amount, D(28), DepositBankId, TrustBankId, DepositApplication.ToOwnerIncome, "da1"), ct);
@@ -55,17 +63,14 @@ public sealed class CatalogBalancePropertyTests(PostgresFixture fixture)
             depTenant, property, owner, amount, D(28), DepositBankId, TrustBankId, DepositApplication.AgainstCharges, "da2"), ct);
 
         // Prepayment application.
-        var preTenant = UuidV7.NewId();
         await PostAsync(scope, new PrepaymentReceived(preTenant, property, owner, big, D(1), TrustBankId, "pp"), ct);
         await AssertBalancesAsync(scope, new PrepaymentApplied(preTenant, property, owner, amount, D(28), TrustBankId, "pa"), ct);
 
         // Fee then sweep (a fresh owner so this owner's equity is untouched by the draws above).
-        var feeOwner = UuidV7.NewId();
         await PostAsync(scope, new ManagementFeeAssessed(feeOwner, property, big, D(27), TrustBankId, "fee"), ct);
         await AssertBalancesAsync(scope, new PMFeesSwept(amount, D(27), TrustBankId, OperatingBankId, "sweep"), ct);
 
         // Contribution then disbursement.
-        var drawOwner = UuidV7.NewId();
         await PostAsync(scope, new OwnerContribution(drawOwner, property, big, D(1), TrustBankId, "contrib"), ct);
         await AssertBalancesAsync(scope, new OwnerDisbursed(drawOwner, amount, D(2), TrustBankId, "draw"), ct);
     }
