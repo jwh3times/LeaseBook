@@ -33,7 +33,7 @@ the full Docker stack host port (`8082`; container + prod ingress stay `8080`), 
 `LEASEBOOK_APP_PORT`/`LEASEBOOK_DB_PORT`/`LEASEBOOK_PGADMIN_PORT` overrides — is mapped in the
 **Port map** section of the root `README.md`; keep that table and the configs it cites
 (launchSettings, vite, compose, Dockerfile, bicep) in sync when a port changes. Host ports are
-LeaseBook's fleet lane so the stack runs alongside ApexRacers/GuardianTracker locally.
+offset from the defaults so the stack runs alongside other local projects.
 
 **Backend (.NET, run from repo root):**
 - Build: `dotnet build LeaseBook.slnx -c Debug` (nullable + warnings-as-errors)

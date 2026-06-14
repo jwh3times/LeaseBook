@@ -173,10 +173,9 @@ See [`docs/runbooks/local-dev.md`](docs/runbooks/local-dev.md) for the full loca
 ### Port map
 
 Every port the project binds, and where each is configured. The inner-loop API and the containerized
-app deliberately use **different** ports (`5080` vs `8082`) so both can run side by side. Host ports are
-LeaseBook's **fleet lane** (`5373`/`8082`/`5632`/`5250`) so the stack coexists with other local projects —
-ApexRacers owns the canonical `5432`/`5050`/`8080`; GuardianTracker uses the `5532`/`8081`/`5273` lane.
-Only host-side ports move; container ports (and the Azure image) never change.
+app deliberately use **different** ports (`5080` vs `8082`) so both can run side by side. Host ports
+(`5373`/`8082`/`5632`/`5250`) are offset from the defaults so the stack coexists with other local
+projects. Only host-side ports move; container ports (and the Azure image) never change.
 
 **Inner-loop development** — backend and frontend on the host, Postgres in Docker (`./scripts/dev.ps1 up`):
 
