@@ -142,7 +142,7 @@ Key design decisions (each recorded as an ADR in [`docs/adr/`](docs/adr)):
 The fastest path to a running product is the full Docker flow (database → migrate → seed demo data → app):
 
 ```bash
-./scripts/dev.ps1 app-up      # builds and runs everything → http://localhost:8080
+./scripts/dev.ps1 app-up      # builds and runs everything → http://localhost:8082
 ```
 
 Sign in to the seeded demo organization with the development credentials printed by the script. When
@@ -164,7 +164,7 @@ ASPNETCORE_ENVIRONMENT=Development dotnet run --project src/LeaseBook.Web -- see
 # 3. Run the API (http://localhost:5080)
 ASPNETCORE_ENVIRONMENT=Development dotnet run --project src/LeaseBook.Web
 
-# 4. Run the SPA (http://localhost:5173, proxies /api → :5080)
+# 4. Run the SPA (http://localhost:5373, proxies /api → :5080)
 cd web && npm install && npm run dev
 ```
 
@@ -173,22 +173,27 @@ See [`docs/runbooks/local-dev.md`](docs/runbooks/local-dev.md) for the full loca
 ### Port map
 
 Every port the project binds, and where each is configured. The inner-loop API and the containerized
-app deliberately use **different** ports (`5080` vs `8080`) so both can run side by side.
+app deliberately use **different** ports (`5080` vs `8082`) so both can run side by side. Host ports are
+LeaseBook's **fleet lane** (`5373`/`8082`/`5632`/`5250`) so the stack coexists with other local projects —
+ApexRacers owns the canonical `5432`/`5050`/`8080`; GuardianTracker uses the `5532`/`8081`/`5273` lane.
+Only host-side ports move; container ports (and the Azure image) never change.
 
 **Inner-loop development** — backend and frontend on the host, Postgres in Docker (`./scripts/dev.ps1 up`):
 
 | Port | Service | Configured in |
 | --- | --- | --- |
-| `5173` | Vite dev server (SPA); proxies `/api` → `:5080` | `web/vite.config.ts` |
+| `5373` | Vite dev server (SPA); proxies `/api` → `:5080` | `web/vite.config.ts` · `web/playwright.config.ts` |
 | `5080` | .NET API / host (`dotnet run`) | `src/LeaseBook.Web/Properties/launchSettings.json` (`http` profile) · `src/LeaseBook.Web/appsettings.Development.json` · proxied from `web/vite.config.ts` · `web/playwright.config.ts` |
-| `5432` | PostgreSQL (Docker, published to the host) | `docker-compose.yml` (`db`) · connection strings in `appsettings.Development.json` |
+| `5632` | PostgreSQL (Docker, published to the host) | `docker-compose.yml` (`db`) · connection strings in `appsettings.Development.json` |
+| `5250` | pgAdmin (Docker) | `docker-compose.yml` (`pgadmin`) |
 
 **Full Docker stack** — the whole product in containers (`./scripts/dev.ps1 app-up`, Compose `full` profile):
 
 | Port | Service | Configured in |
 | --- | --- | --- |
-| `8080` | App container — SPA + `/api` → `http://localhost:8080` | `Dockerfile` (`ASPNETCORE_HTTP_PORTS` / `EXPOSE`) · `docker-compose.yml` (`app`) |
-| `5432` | PostgreSQL container (internal `db:5432`, also published) | `docker-compose.yml` (`db`) |
+| `8082` | App container (host port) — SPA + `/api` → `http://localhost:8082`; container listens on `8080` | `Dockerfile` (`ASPNETCORE_HTTP_PORTS` / `EXPOSE` `8080`) · `docker-compose.yml` (`app`) |
+| `5632` | PostgreSQL container (internal `db:5432`, published to the host) | `docker-compose.yml` (`db`) |
+| `5250` | pgAdmin (Docker) | `docker-compose.yml` (`pgadmin`) |
 
 **Production** — Azure Container Apps (`infra/`):
 
@@ -200,8 +205,9 @@ app deliberately use **different** ports (`5080` vs `8080`) so both can run side
 
 | Variable | Default | Remaps |
 | --- | --- | --- |
-| `LEASEBOOK_APP_PORT` | `8080` | host port for the full-stack app container |
-| `LEASEBOOK_DB_PORT` | `5432` | host port for the Postgres container |
+| `LEASEBOOK_APP_PORT` | `8082` | host port for the full-stack app container (container stays `8080`) |
+| `LEASEBOOK_DB_PORT` | `5632` | host port for the Postgres container (container stays `5432`) |
+| `LEASEBOOK_PGADMIN_PORT` | `5250` | host port for pgAdmin |
 
 ---
 

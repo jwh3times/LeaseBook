@@ -2,7 +2,8 @@ import { fileURLToPath, URL } from 'node:url';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vitest/config';
 
-// https://vite.dev — dev server on 5173, /api proxied to the .NET host on 5080 (P16/P20).
+// https://vite.dev — dev server on 5373 (LeaseBook's fleet lane), /api proxied to the
+// .NET host on 5080. The 5373 lane lets the SPA coexist with other local projects' Vite servers.
 export default defineConfig({
   plugins: [react()],
   resolve: {
@@ -11,7 +12,7 @@ export default defineConfig({
     },
   },
   server: {
-    port: 5173,
+    port: 5373,
     proxy: {
       '/api': {
         target: 'http://localhost:5080',
