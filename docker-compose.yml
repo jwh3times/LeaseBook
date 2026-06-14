@@ -106,7 +106,9 @@ services:
     image: dpage/pgadmin4:latest
     container_name: leasebook-pgadmin
     environment:
-      PGADMIN_DEFAULT_EMAIL: ${LEASEBOOK_PGADMIN_EMAIL:-admin@leasebook.local}
+      # Use a real TLD: pgAdmin's email validator rejects reserved/special-use domains
+      # like .local (GLOBALLY_DELIVERABLE), which crash-loops the container on startup.
+      PGADMIN_DEFAULT_EMAIL: ${LEASEBOOK_PGADMIN_EMAIL:-admin@leasebook.com}
       PGADMIN_DEFAULT_PASSWORD: ${LEASEBOOK_PGADMIN_PASSWORD:-admin}
       PGADMIN_CONFIG_SERVER_MODE: "False"
     ports:

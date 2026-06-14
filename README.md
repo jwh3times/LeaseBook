@@ -63,7 +63,7 @@ LeaseBook is a **modular monolith**: one ASP.NET Core host composes a set of ind
 projects. Modules reference only a shared kernel; cross-module reads go through consumer-owned ports
 implemented by thin host adapters, so each module stays extractable.
 
-```
+```text
 ASP.NET Core host (LeaseBook.Web)
 ├─ Modules.Accounting    journal, accounts, posting templates, periods  — the core
 ├─ Modules.Directory     orgs, owners, properties, units, tenants, leases-lite
@@ -110,7 +110,7 @@ Key design decisions (each recorded as an ADR in [`docs/adr/`](docs/adr)):
 
 ## Repository layout
 
-```
+```text
 .
 ├─ src/                     backend: host + module projects + shared kernel
 ├─ web/                     React + TypeScript SPA (Vite); e2e specs in web/e2e
