@@ -5,6 +5,12 @@ on:
   push:
     branches: [main]
 
+# Least-privilege default for every job's GITHUB_TOKEN: these jobs only read the repo
+# (build/test/lint, apply migrations to a throwaway DB, scan for secrets, build the image —
+# none push or write any GitHub resource). Grant more per-job only if a job starts needing it.
+permissions:
+  contents: read
+
 jobs:
   backend:
     name: Backend (build + test)
