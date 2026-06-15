@@ -49,6 +49,15 @@ updates:
         update-types:
           - "minor"
           - "patch"
+    # TypeScript majors are held until the SPA toolchain can accept them. TS 6 (was PR #9) is
+    # blocked by openapi-typescript's `typescript: "^5.x"` peer — no published release admits
+    # TS 6, and forcing it would mean an unsafe `--legacy-peer-deps` resolve. This ignore is
+    # open-ended, so the ts6-unblock-watch workflow opens a tracking issue when openapi-typescript
+    # relaxes that peer; remove this entry then and let Dependabot re-propose the major.
+    ignore:
+      - dependency-name: "typescript"
+        update-types:
+          - "version-update:semver-major"
 
   # Base images in the production Dockerfile (FROM lines).
   - package-ecosystem: "docker"

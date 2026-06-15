@@ -89,7 +89,8 @@ Key design decisions (each recorded as an ADR in [`docs/adr/`](docs/adr)):
   with a validation/telemetry decorator pipeline (no MediatR/AutoMapper). Endpoints are minimal APIs
   only — bind → dispatch → `TypedResults`.
 - **Generated, type-safe API client.** The SPA's TypeScript client is generated from the host's OpenAPI
-  document, so the frontend and backend contracts cannot silently drift.
+  document, so the frontend and backend contracts cannot silently drift — a CI gate regenerates the
+  client from a build-time copy of the contract and fails if the committed client is stale (ADR-012).
 
 ---
 

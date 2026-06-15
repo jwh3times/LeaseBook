@@ -67,6 +67,9 @@ minimum bar, not the goal.
 - Status is never conveyed by color alone (pair an icon or label with the color).
 - The API client (`web/src/api/schema.d.ts`) is **generated** from the host's OpenAPI document
   (`npm run api:generate`) — don't hand-edit it; regenerate and commit it when the contract changes.
+  CI's `schema-drift` job enforces this (ADR-012): it regenerates the client from a build-time copy
+  of the contract and fails if the committed file is stale. It's excluded from Prettier/ESLint, so
+  leave it exactly as the generator emits it.
 
 ### Architecture decisions
 
@@ -121,7 +124,7 @@ Before requesting review, confirm:
 - [ ] Web `npm run lint`, `npm run typecheck`, `npm run test`, and `npm run build` are green (if the SPA changed).
 - [ ] Accounting-adjacent changes keep the invariant/property/golden suites green.
 - [ ] New org-scoped tables have their RLS policy; the schema guard passes.
-- [ ] A regenerated, committed `schema.d.ts` accompanies any API-contract change.
+- [ ] A regenerated, committed `schema.d.ts` accompanies any API-contract change (CI's `schema-drift` job enforces it).
 - [ ] An ADR accompanies any significant design decision.
 - [ ] No secrets, credentials, or confidential planning material are committed (the secrets scan runs in CI).
 

@@ -47,6 +47,41 @@ jobs:
       - run: npm run test
       - run: npm run build
 
+  schema-drift:
+    name: API client matches OpenAPI contract
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '26'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      # Emit the OpenAPI v1 document at build time — no running host, no database (ADR-012). The
+      # LEASEBOOK_OPENAPI_BUILD flag skips the startup role-seeding DB call the GetDocument tool
+      # would otherwise run; generation is off in every other build, so only this job emits the doc.
+      - name: Generate the OpenAPI document from the backend
+        run: dotnet build src/LeaseBook.Web/LeaseBook.Web.csproj -c Debug -p:OpenApiGenerateDocumentsOnBuild=true
+        env:
+          LEASEBOOK_OPENAPI_BUILD: '1'
+      - name: Install web dependencies
+        working-directory: web
+        run: npm ci
+      # Regenerate the typed client from the freshly built contract and fail if it differs from the
+      # committed copy — i.e. the API surface changed without `npm run api:generate` being re-run.
+      # --alphabetize makes the output canonical so endpoint ordering never causes false drift.
+      - name: Verify committed API client is up to date
+        working-directory: web
+        run: |
+          npx openapi-typescript ../src/LeaseBook.Web/obj/openapi/LeaseBook.Web.json --alphabetize -o src/api/schema.d.ts
+          if ! git diff --exit-code -- src/api/schema.d.ts; then
+            echo "::error file=web/src/api/schema.d.ts::API client is stale. Run 'npm run api:generate' against the host and commit web/src/api/schema.d.ts."
+            exit 1
+          fi
+
   migration-check:
     name: Migrations apply to a blank DB
     runs-on: ubuntu-latest

@@ -131,8 +131,14 @@ app.MapModuleEndpoints(endpointAssemblies);
 // SPA fallback: client-side routes resolve to index.html (served from wwwroot in the container).
 app.MapFallbackToFile("index.html").AllowAnonymous();
 
-// The four fixed roles must exist before sign-in/seeding (idempotent).
-await RoleSeeder.EnsureRolesAsync(app.Services);
+// The four fixed roles must exist before sign-in/seeding (idempotent). Skipped during build-time
+// OpenAPI generation (ADR-012): the GetDocument tool runs this program up to app.Run() solely to
+// capture the API surface, with no database available — and this is the only pre-Run database call.
+// The flag is set only by the CI schema-drift job; it is unset in every real run (dev, prod, tests).
+if (Environment.GetEnvironmentVariable("LEASEBOOK_OPENAPI_BUILD") != "1")
+{
+    await RoleSeeder.EnsureRolesAsync(app.Services);
+}
 
 // CLI: `dotnet run --project src/LeaseBook.Web -- seed --org demo` provisions the demo org and exits.
 if (args is ["seed", ..])

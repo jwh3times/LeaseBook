@@ -11,7 +11,20 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+    <!-- Emits the OpenAPI v1 document to disk at build time for the CI schema-drift gate (ADR-012).
+         Build-only tool (no runtime assets). Generation is OFF by default so the inner loop and the
+         normal CI build stay fast and DB-free; the drift job opts in with
+         -p:OpenApiGenerateDocumentsOnBuild=true. Output lands under obj/ (gitignored). -->
+    <PackageReference Include="Microsoft.Extensions.ApiDescription.Server">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>build; buildTransitive</IncludeAssets>
+    </PackageReference>
   </ItemGroup>
+
+  <PropertyGroup>
+    <OpenApiGenerateDocumentsOnBuild Condition="'$(OpenApiGenerateDocumentsOnBuild)' == ''">false</OpenApiGenerateDocumentsOnBuild>
+    <OpenApiDocumentsDirectory>$(BaseIntermediateOutputPath)openapi</OpenApiDocumentsDirectory>
+  </PropertyGroup>
 
   <ItemGroup>
     <!-- Telemetry baseline (WP-05) — the ActivitySource lives in SharedKernel; the host exports it. -->

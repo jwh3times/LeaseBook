@@ -1,0 +1,77 @@
+# Watches for the upstream condition that unblocks the held TypeScript major upgrade.
+#
+# TypeScript 6 is pinned out in .github/dependabot.yml because openapi-typescript@7.13.0 peer-caps
+# at `typescript: "^5.x"` and no newer release admits TS 6. That ignore is open-ended, so without
+# a signal it would silently mute TS 7, 8, ... forever. This workflow checks weekly whether the
+# published openapi-typescript still caps below TS 6 and, once it doesn't, opens a tracking issue
+# telling us to drop the ignore and let Dependabot re-propose the major.
+name: openapi-typescript TS6 unblock watch
+
+on:
+  schedule:
+    # Mondays 11:17 UTC — after the weekly Dependabot sweep (06:00 America/New_York).
+    - cron: "17 11 * * 1"
+  workflow_dispatch: {}
+
+# Only needs to file an issue; no checkout, no repo writes.
+permissions:
+  issues: write
+
+jobs:
+  check:
+    name: Check openapi-typescript TS peer range
+    runs-on: ubuntu-latest
+    steps:
+      - name: Open a tracking issue if openapi-typescript admits TypeScript 6
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          # `latest` dist-tag is the version we would actually adopt; its peer range is the gate.
+          latest=$(npm view openapi-typescript version 2>/dev/null || true)
+          peer=$(npm view openapi-typescript peerDependencies.typescript 2>/dev/null || true)
+
+          if [ -z "$latest" ]; then
+            echo "Could not resolve openapi-typescript from npm (transient?); skipping this run."
+            exit 0
+          fi
+          echo "openapi-typescript@${latest} peer typescript: '${peer:-<none>}'"
+
+          # Admitted if the peer was dropped entirely, or a representative TS 6 release satisfies it.
+          admits=false
+          if [ -z "$peer" ]; then
+            admits=true
+          elif npx --yes semver 6.0.0 --range "$peer" >/dev/null 2>&1; then
+            admits=true
+          fi
+
+          if [ "$admits" != "true" ]; then
+            echo "Still capped below TS 6 — nothing to do."
+            exit 0
+          fi
+
+          title="openapi-typescript now supports TypeScript 6 — drop the Dependabot ignore"
+
+          # De-dupe: only one open tracking issue at a time.
+          open_count=$(gh issue list --state open --search "in:title \"${title}\"" --json number --jq 'length')
+          if [ "${open_count}" != "0" ]; then
+            echo "Tracking issue already open — not duplicating."
+            exit 0
+          fi
+
+          # Build the body with printf so every line in this file stays indented (no column-0 lines
+          # that would terminate the YAML block scalar). Backticks are escaped to stay literal.
+          body=$(printf '%s\n' \
+            "openapi-typescript@\`${latest}\` now declares \`typescript: '${peer:-<none>}'\`, which admits TypeScript 6." \
+            "" \
+            "The TypeScript major upgrade (originally Dependabot PR #9) was held because openapi-typescript@7.13.0 peer-capped at \`^5.x\`; that cap is now lifted." \
+            "" \
+            "**To unblock:**" \
+            "1. Remove the \`typescript\` \`version-update:semver-major\` ignore entry from the npm \`/web\` block in \`.github/dependabot.yml\`." \
+            "2. Let Dependabot re-open the TypeScript major PR (or bump \`web/package.json\` manually)." \
+            "3. Verify \`npm ci\`, \`npm run lint\`, \`npm run typecheck\`, \`npm run test\`, \`npm run build\`, and \`npm run api:generate\` all pass under the new TypeScript." \
+            "" \
+            "_Filed automatically by .github/workflows/ts6-unblock-watch.yml._")
+
+          gh issue create --title "${title}" --body "${body}"

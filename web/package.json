@@ -16,7 +16,7 @@
     "typecheck": "tsc -b",
     "test": "vitest run",
     "test:watch": "vitest",
-    "api:generate": "openapi-typescript http://localhost:5080/openapi/v1.json -o src/api/schema.d.ts",
+    "api:generate": "openapi-typescript http://localhost:5080/openapi/v1.json --alphabetize -o src/api/schema.d.ts",
     "e2e": "playwright test"
   },
   "dependencies": {
