@@ -3,7 +3,7 @@
 ## Prerequisites
 
 - **Docker Desktop** running (Postgres runs in a container).
-- **.NET 10 SDK** and **Node 24 LTS** (`.nvmrc` pins 24; the repo also builds on Node 22.14+).
+- **.NET 10 SDK** and **Node 26** (`.nvmrc` pins 26; the repo also builds on Node 22.14+).
 - **OneDrive hazard:** this repo lives under OneDrive. OneDrive file locks intermittently break
   builds and Docker bind-mounts. Either move the repo outside OneDrive, or exclude `bin/`, `obj/`,
   `node_modules/`, `.vite/`, and `TestResults/` from OneDrive sync. If you see `EBUSY`/locked-file

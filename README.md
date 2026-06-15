@@ -134,7 +134,7 @@ Key design decisions (each recorded as an ADR in [`docs/adr/`](docs/adr)):
 ### Prerequisites
 
 - **.NET 10 SDK** (`global.json` pins `10.0.100`)
-- **Node.js 24** (see `web/.nvmrc`)
+- **Node.js 26** (see `web/.nvmrc`)
 - **Docker** — for local PostgreSQL and the Testcontainers-based integration tests
 
 ### Run it locally

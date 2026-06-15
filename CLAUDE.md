@@ -27,7 +27,7 @@ reconstructing it from this summary.
 
 ## Commands
 
-Solution is `LeaseBook.slnx`; the SPA lives in `web/`. .NET 10 SDK + Node 24, Docker for local
+Solution is `LeaseBook.slnx`; the SPA lives in `web/`. .NET 10 SDK + Node 26, Docker for local
 Postgres and integration tests. Every port the project binds — inner-loop dev (`5373`/`5080`/`5632`),
 the full Docker stack host port (`8082`; container + prod ingress stay `8080`), and the
 `LEASEBOOK_APP_PORT`/`LEASEBOOK_DB_PORT`/`LEASEBOOK_PGADMIN_PORT` overrides — is mapped in the
