@@ -4,7 +4,11 @@ export type PostResult = components['schemas']['PostResult'];
 
 /** A client-side idempotency key (P54): minted once per composer/modal open. */
 export function newSourceRef(): string {
-  return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  // Fallback for contexts without randomUUID — getRandomValues is more broadly supported.
+  const bytes = new Uint8Array(16);
+  globalThis.crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 /** A normalized failure from a ledger post: the domain `code` (422/409), or a validation message (400). */
