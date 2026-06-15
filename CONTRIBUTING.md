@@ -10,7 +10,7 @@ By participating you agree to keep interactions respectful and constructive.
 
 ## Getting set up
 
-You'll need the **.NET 10 SDK**, **Node.js 24**, and **Docker** (for local PostgreSQL and the
+You'll need the **.NET 10 SDK**, **Node.js 26**, and **Docker** (for local PostgreSQL and the
 Testcontainers-based test suites). The fastest way to a running app and the split inner-loop setup are
 both documented in the [README](README.md#getting-started) and
 [`docs/runbooks/local-dev.md`](docs/runbooks/local-dev.md).
