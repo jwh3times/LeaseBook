@@ -103,7 +103,9 @@ services:
   # `db` service internally on 5432; the host port (5250) is offset from the default.
   # No profile, so it comes up with a plain `docker compose up` alongside `db`.
   pgadmin:
-    image: dpage/pgadmin4:latest
+    # Pinned (not :latest) so the dev stack is reproducible and Dependabot can bump it;
+    # a floating tag has no version for Dependabot to track. See .github/dependabot.yml.
+    image: dpage/pgadmin4:9.15
     container_name: leasebook-pgadmin
     environment:
       # Use a real TLD: pgAdmin's email validator rejects reserved/special-use domains
