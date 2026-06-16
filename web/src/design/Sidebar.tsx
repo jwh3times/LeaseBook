@@ -24,7 +24,15 @@ export interface SidebarProps {
   onSettings?: () => void;
 }
 
-export function Sidebar({ brand, items, activeId, onNavigate, user, collapsed = false, onSettings }: SidebarProps) {
+export function Sidebar({
+  brand,
+  items,
+  activeId,
+  onNavigate,
+  user,
+  collapsed = false,
+  onSettings,
+}: SidebarProps) {
   return (
     <aside className={`pf-sidebar${collapsed ? ' collapsed' : ''}`}>
       <div className="pf-brand">

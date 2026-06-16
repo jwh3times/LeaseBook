@@ -35,9 +35,17 @@ export function AuditDrawer({ entryId, onClose }: AuditDrawerProps) {
             ))}
           </div>
         ) : audit.isError ? (
-          <EmptyState icon="alert" title="Couldn't load the history" description="Please retry in a moment." />
+          <EmptyState
+            icon="alert"
+            title="Couldn't load the history"
+            description="Please retry in a moment."
+          />
         ) : audit.data.rows.length === 0 ? (
-          <EmptyState icon="doc" title="No history yet" description="Activity on this entry will appear here." />
+          <EmptyState
+            icon="doc"
+            title="No history yet"
+            description="Activity on this entry will appear here."
+          />
         ) : (
           <ul className="pf-audit">
             {audit.data.rows.map((row, index) => (

@@ -42,6 +42,9 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: npm ci
+      # Formatting gate: fails if anything under web/ wasn't run through Prettier (mirrors the
+      # backend's `dotnet format` check). Run `npm run format` to fix locally.
+      - run: npm run format:check
       - run: npm run lint
       - run: npm run typecheck
       - run: npm run test

@@ -14,7 +14,13 @@ const DETAIL = {
   displayName: 'Jasmine Carter',
   contact: { email: null, phone: '828-555-0100' },
   status: 'current',
-  lease: { startDate: '2025-06-01', endDate: '2026-05-31', rent: 1450, depositRequired: 1450, status: 'active' },
+  lease: {
+    startDate: '2025-06-01',
+    endDate: '2026-05-31',
+    rent: 1450,
+    depositRequired: 1450,
+    status: 'active',
+  },
   unitLabel: '#2B',
   propertyAddress: '412 Oakmont Ave',
   ownerId: 'o1',
@@ -25,9 +31,45 @@ const DETAIL = {
 
 // Ledger rows in server (ascending) order; the page reverses for newest-first display.
 const ROWS: TenantLedgerEntry[] = [
-  { entryId: 'e1', date: '2026-02-01', eventType: 'RentCharged', eventSubtype: null, category: 'Rent', description: 'Feb rent', charge: 1450, payment: 0, balance: 1450, isVoided: false, reversesEntryId: null },
-  { entryId: 'e2', date: '2026-02-10', eventType: 'FeeCharged', eventSubtype: 'late', category: 'Late Fee', description: 'Late fee', charge: 50, payment: 0, balance: 1500, isVoided: false, reversesEntryId: null },
-  { entryId: 'e3', date: '2026-02-15', eventType: 'PaymentReceived', eventSubtype: 'ACH', category: 'Payment', description: 'Rent payment', charge: 0, payment: 1500, balance: 0, isVoided: false, reversesEntryId: null },
+  {
+    entryId: 'e1',
+    date: '2026-02-01',
+    eventType: 'RentCharged',
+    eventSubtype: null,
+    category: 'Rent',
+    description: 'Feb rent',
+    charge: 1450,
+    payment: 0,
+    balance: 1450,
+    isVoided: false,
+    reversesEntryId: null,
+  },
+  {
+    entryId: 'e2',
+    date: '2026-02-10',
+    eventType: 'FeeCharged',
+    eventSubtype: 'late',
+    category: 'Late Fee',
+    description: 'Late fee',
+    charge: 50,
+    payment: 0,
+    balance: 1500,
+    isVoided: false,
+    reversesEntryId: null,
+  },
+  {
+    entryId: 'e3',
+    date: '2026-02-15',
+    eventType: 'PaymentReceived',
+    eventSubtype: 'ACH',
+    category: 'Payment',
+    description: 'Rent payment',
+    charge: 0,
+    payment: 1500,
+    balance: 0,
+    isVoided: false,
+    reversesEntryId: null,
+  },
 ];
 
 function detailHandler(detail = DETAIL) {
@@ -64,13 +106,24 @@ beforeAll(() => {
       this.cb = cb;
     }
     observe() {
-      this.cb([{ borderBoxSize: [{ inlineSize: 800, blockSize: 600 }] }] as unknown as ResizeObserverEntry[], this);
+      this.cb(
+        [
+          { borderBoxSize: [{ inlineSize: 800, blockSize: 600 }] },
+        ] as unknown as ResizeObserverEntry[],
+        this,
+      );
     }
     unobserve() {}
     disconnect() {}
   };
-  Object.defineProperty(HTMLElement.prototype, 'offsetWidth', { configurable: true, get: () => 800 });
-  Object.defineProperty(HTMLElement.prototype, 'offsetHeight', { configurable: true, get: () => 600 });
+  Object.defineProperty(HTMLElement.prototype, 'offsetWidth', {
+    configurable: true,
+    get: () => 800,
+  });
+  Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
+    configurable: true,
+    get: () => 600,
+  });
 });
 
 beforeEach(() => {
@@ -96,8 +149,32 @@ describe('LedgerPage', () => {
 
   it('renders voided rows struck and reversal rows linked', async () => {
     const rows = [
-      { entryId: 'v1', date: '2026-02-01', eventType: 'RentCharged', eventSubtype: null, category: 'Rent', description: 'Feb rent', charge: 1450, payment: 0, balance: 1450, isVoided: true, reversesEntryId: null },
-      { entryId: 'v2', date: '2026-02-02', eventType: 'EntryVoided', eventSubtype: null, category: 'EntryVoided', description: 'VOID: typo', charge: 0, payment: 1450, balance: 0, isVoided: false, reversesEntryId: 'v1' },
+      {
+        entryId: 'v1',
+        date: '2026-02-01',
+        eventType: 'RentCharged',
+        eventSubtype: null,
+        category: 'Rent',
+        description: 'Feb rent',
+        charge: 1450,
+        payment: 0,
+        balance: 1450,
+        isVoided: true,
+        reversesEntryId: null,
+      },
+      {
+        entryId: 'v2',
+        date: '2026-02-02',
+        eventType: 'EntryVoided',
+        eventSubtype: null,
+        category: 'EntryVoided',
+        description: 'VOID: typo',
+        charge: 0,
+        payment: 1450,
+        balance: 0,
+        isVoided: false,
+        reversesEntryId: 'v1',
+      },
     ];
     server.use(detailHandler(), ledgerHandler(rows));
     const { container } = renderLedger();
@@ -152,7 +229,13 @@ describe('LedgerPage', () => {
   });
 
   it('shows an error state when the ledger fails', async () => {
-    server.use(detailHandler(), http.get('/api/accounting/tenants/:tenantId/ledger', () => new HttpResponse(null, { status: 500 })));
+    server.use(
+      detailHandler(),
+      http.get(
+        '/api/accounting/tenants/:tenantId/ledger',
+        () => new HttpResponse(null, { status: 500 }),
+      ),
+    );
     renderLedger();
     expect(await screen.findByText("Couldn't load the ledger")).toBeInTheDocument();
   });
@@ -167,6 +250,9 @@ describe('LedgerPage', () => {
     await userEvent.keyboard('{ArrowDown}');
 
     // Display is newest-first [e3, e2, e1]; ArrowDown moves selection to index 1 (e2).
-    expect(container.querySelector('[data-entry-id="e2"]')).toHaveAttribute('aria-selected', 'true');
+    expect(container.querySelector('[data-entry-id="e2"]')).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
   });
 });

@@ -31,7 +31,11 @@ function renderPalette(onClose = vi.fn()) {
 
 describe('CommandPalette', () => {
   it('queries on type, groups results, and jumps on Enter', async () => {
-    server.use(searchHandler([{ type: 'tenant', id: 't1', label: 'Jasmine Carter', sublabel: '#2B', score: 0.9 }]));
+    server.use(
+      searchHandler([
+        { type: 'tenant', id: 't1', label: 'Jasmine Carter', sublabel: '#2B', score: 0.9 },
+      ]),
+    );
     renderPalette();
     await userEvent.type(screen.getByLabelText('Search'), 'carter');
     expect(await screen.findByText('Jasmine Carter')).toBeInTheDocument();
@@ -55,7 +59,11 @@ describe('CommandPalette', () => {
   });
 });
 
-function ShortcutHarness(props: { onPalette: () => void; onHelp: () => void; onNavigate: (p: string) => void }) {
+function ShortcutHarness(props: {
+  onPalette: () => void;
+  onHelp: () => void;
+  onNavigate: (p: string) => void;
+}) {
   useGlobalShortcuts(props);
   return <input aria-label="field" />;
 }

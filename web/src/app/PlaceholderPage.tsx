@@ -18,7 +18,9 @@ export function PlaceholderPage({ title, description }: PlaceholderPageProps) {
       <EmptyState
         icon="doc"
         title={`${title} — coming soon`}
-        description={description ?? 'The screens for this area are built in a later milestone of the plan.'}
+        description={
+          description ?? 'The screens for this area are built in a later milestone of the plan.'
+        }
       />
     </div>
   );

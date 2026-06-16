@@ -38,7 +38,9 @@ describe('LoginPage', () => {
 
   it('shows the MFA step when the server requires a second factor', async () => {
     server.use(
-      http.post('/api/auth/login', () => HttpResponse.json({ status: 'mfa-required', mfaToken: 'tok-123' })),
+      http.post('/api/auth/login', () =>
+        HttpResponse.json({ status: 'mfa-required', mfaToken: 'tok-123' }),
+      ),
     );
     await fillCredentials();
     expect(await screen.findByLabelText('Authentication code')).toBeInTheDocument();

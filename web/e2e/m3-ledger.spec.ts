@@ -63,15 +63,23 @@ test('records a payment in ≤ 3 interactions, then voids it with a linked rever
 
   // This run's reversal (scoped by the unique amount, since prior runs may have left reversal rows).
   await expect(
-    page.getByRole('row').filter({ hasText: `$${UNIQUE_AMOUNT}` }).filter({ hasText: 'Reversal' }),
+    page
+      .getByRole('row')
+      .filter({ hasText: `$${UNIQUE_AMOUNT}` })
+      .filter({ hasText: 'Reversal' }),
   ).toBeVisible();
   // The original payment row (category "Payment", to exclude the "EntryVoided" reversal) now reads Voided.
   await expect(
-    page.getByRole('row').filter({ hasText: `$${UNIQUE_AMOUNT}` }).filter({ hasText: 'Payment' }),
+    page
+      .getByRole('row')
+      .filter({ hasText: `$${UNIQUE_AMOUNT}` })
+      .filter({ hasText: 'Payment' }),
   ).toContainText('Voided');
 });
 
-test('an over-application of held funds is blocked with a warning and the modal stays open', async ({ page }) => {
+test('an over-application of held funds is blocked with a warning and the modal stays open', async ({
+  page,
+}) => {
   await login(page);
   await openTenantLedger(page);
 

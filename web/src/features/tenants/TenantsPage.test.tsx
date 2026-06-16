@@ -10,9 +10,30 @@ import { LedgerPage } from './LedgerPage';
 import { TenantsPage } from './TenantsPage';
 
 const TENANTS = [
-  { id: 't1', displayName: 'Jasmine Carter', unitLabel: '#2B', rent: 1450, balance: 1450, status: 'current' },
-  { id: 't2', displayName: 'Devon Pryor', unitLabel: '#1A', rent: 1380, balance: 0, status: 'current' },
-  { id: 't3', displayName: 'Aisha Bello', unitLabel: '#3', rent: 1620, balance: 1620, status: 'late' },
+  {
+    id: 't1',
+    displayName: 'Jasmine Carter',
+    unitLabel: '#2B',
+    rent: 1450,
+    balance: 1450,
+    status: 'current',
+  },
+  {
+    id: 't2',
+    displayName: 'Devon Pryor',
+    unitLabel: '#1A',
+    rent: 1380,
+    balance: 0,
+    status: 'current',
+  },
+  {
+    id: 't3',
+    displayName: 'Aisha Bello',
+    unitLabel: '#3',
+    rent: 1620,
+    balance: 1620,
+    status: 'late',
+  },
 ];
 
 function listHandler(items = TENANTS) {
@@ -69,9 +90,17 @@ describe('TenantsPage', () => {
       listHandler(),
       http.get('/api/directory/tenants/t1', () =>
         HttpResponse.json({
-          id: 't1', displayName: 'Jasmine Carter', contact: { email: null, phone: null }, status: 'current',
-          lease: null, unitLabel: '#2B', propertyAddress: '412 Oakmont Ave', ownerId: 'o1', ownerName: 'Hargrove',
-          balance: 1450, depositHeld: 1450,
+          id: 't1',
+          displayName: 'Jasmine Carter',
+          contact: { email: null, phone: null },
+          status: 'current',
+          lease: null,
+          unitLabel: '#2B',
+          propertyAddress: '412 Oakmont Ave',
+          ownerId: 'o1',
+          ownerName: 'Hargrove',
+          balance: 1450,
+          depositHeld: 1450,
         }),
       ),
     );
@@ -86,9 +115,17 @@ describe('TenantsPage', () => {
       listHandler(),
       http.get('/api/directory/tenants/t2', () =>
         HttpResponse.json({
-          id: 't2', displayName: 'Devon Pryor', contact: { email: null, phone: null }, status: 'current',
-          lease: null, unitLabel: '#1A', propertyAddress: '412 Oakmont Ave', ownerId: 'o1', ownerName: 'Hargrove',
-          balance: 0, depositHeld: 0,
+          id: 't2',
+          displayName: 'Devon Pryor',
+          contact: { email: null, phone: null },
+          status: 'current',
+          lease: null,
+          unitLabel: '#1A',
+          propertyAddress: '412 Oakmont Ave',
+          ownerId: 'o1',
+          ownerName: 'Hargrove',
+          balance: 0,
+          depositHeld: 0,
         }),
       ),
     );
@@ -106,8 +143,17 @@ describe('TenantsPage', () => {
       http.post('/api/directory/tenants', () => HttpResponse.json({ id: 'tNew' })),
       http.get('/api/directory/tenants/tNew', () =>
         HttpResponse.json({
-          id: 'tNew', displayName: 'New Renter', contact: { email: null, phone: null }, status: 'current',
-          lease: null, unitLabel: null, propertyAddress: null, ownerId: null, ownerName: null, balance: 0, depositHeld: 0,
+          id: 'tNew',
+          displayName: 'New Renter',
+          contact: { email: null, phone: null },
+          status: 'current',
+          lease: null,
+          unitLabel: null,
+          propertyAddress: null,
+          ownerId: null,
+          ownerName: null,
+          balance: 0,
+          depositHeld: 0,
         }),
       ),
     );

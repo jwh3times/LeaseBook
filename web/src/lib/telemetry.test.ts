@@ -7,7 +7,9 @@ describe('trackInteraction', () => {
   });
 
   it('posts a tags-only budget sample and swallows failures', async () => {
-    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 204 }));
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response(null, { status: 204 }));
 
     trackInteraction('entity-jump', 2, true);
 
@@ -15,7 +17,11 @@ describe('trackInteraction', () => {
     const [url, init] = fetchMock.mock.calls[0]!;
     expect(String(url)).toContain('/api/telemetry/budget');
     expect(init?.method).toBe('POST');
-    expect(JSON.parse(String(init?.body))).toEqual({ task: 'entity-jump', interactions: 2, met: true });
+    expect(JSON.parse(String(init?.body))).toEqual({
+      task: 'entity-jump',
+      interactions: 2,
+      met: true,
+    });
   });
 
   it('does not throw when the endpoint is unavailable', () => {

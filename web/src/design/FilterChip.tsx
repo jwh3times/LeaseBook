@@ -10,7 +10,12 @@ export interface FilterChipProps {
 
 export function FilterChip({ children, active = false, icon, onClick }: FilterChipProps) {
   return (
-    <button type="button" className={`pf-chip${active ? ' active' : ''}`} aria-pressed={active} onClick={onClick}>
+    <button
+      type="button"
+      className={`pf-chip${active ? ' active' : ''}`}
+      aria-pressed={active}
+      onClick={onClick}
+    >
       {icon && <Icon name={icon} size={14} />}
       {children}
     </button>

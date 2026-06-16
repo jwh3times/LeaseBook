@@ -30,12 +30,19 @@ export function OwnerDetailPage() {
       backLabel="Owners"
       toPath={(ownerId) => `/owners/${ownerId}`}
       title={(o) => o.name}
-      sub={(o) => (o.defaultMgmtFeeBps != null ? `Default management fee · ${(num(o.defaultMgmtFeeBps) / 100).toFixed(2)}%` : 'No default management fee')}
+      sub={(o) =>
+        o.defaultMgmtFeeBps != null
+          ? `Default management fee · ${(num(o.defaultMgmtFeeBps) / 100).toFixed(2)}%`
+          : 'No default management fee'
+      }
     >
       {(o) => (
         <div className="col gap16">
           <div className="pf-statgrid">
-            <StatCard label="Operating (distributable)" value={<Money value={num(o.operating)} big colorize />} />
+            <StatCard
+              label="Operating (distributable)"
+              value={<Money value={num(o.operating)} big colorize />}
+            />
             <StatCard label="Deposits held" value={<Money value={num(o.deposits)} big />} />
             <StatCard label="Total" value={<Money value={num(o.total)} big />} />
             <StatCard label="Reserve floor" value={<Money value={num(o.reserveAmount)} big />} />
@@ -43,14 +50,28 @@ export function OwnerDetailPage() {
 
           <Card pad>
             <div className="pf-detail-grid">
-              <div className="pf-kv"><span className="k">Email</span><span className="v">{o.contact.email ?? '—'}</span></div>
-              <div className="pf-kv"><span className="k">Phone</span><span className="v">{o.contact.phone ?? '—'}</span></div>
+              <div className="pf-kv">
+                <span className="k">Email</span>
+                <span className="v">{o.contact.email ?? '—'}</span>
+              </div>
+              <div className="pf-kv">
+                <span className="k">Phone</span>
+                <span className="v">{o.contact.phone ?? '—'}</span>
+              </div>
             </div>
           </Card>
 
           <Card>
-            <CardHeader title="Properties" sub={`${o.properties.length} on file. The owner statement arrives in M5.`} />
-            <Table columns={columns} rows={o.properties} rowKey={(r) => r.id} onRowClick={(r) => navigate(`/properties/${r.id}`)} />
+            <CardHeader
+              title="Properties"
+              sub={`${o.properties.length} on file. The owner statement arrives in M5.`}
+            />
+            <Table
+              columns={columns}
+              rows={o.properties}
+              rowKey={(r) => r.id}
+              onRowClick={(r) => navigate(`/properties/${r.id}`)}
+            />
           </Card>
         </div>
       )}

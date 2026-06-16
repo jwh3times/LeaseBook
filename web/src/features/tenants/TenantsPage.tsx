@@ -9,14 +9,21 @@ import { num, useCreateTenant, useTenants, type TenantListRow } from '@/lib/dire
 const TENANT_STATUSES = ['current', 'late', 'prepaid', 'evicting', 'past'] as const;
 
 function tenantMatches(row: TenantListRow, q: string): boolean {
-  return row.displayName.toLowerCase().includes(q) || (row.unitLabel?.toLowerCase().includes(q) ?? false);
+  return (
+    row.displayName.toLowerCase().includes(q) || (row.unitLabel?.toLowerCase().includes(q) ?? false)
+  );
 }
 
 const columns: TableColumn<TenantListRow>[] = [
   { key: 'name', header: 'Tenant', render: (r) => <span className="strong">{r.displayName}</span> },
   { key: 'unit', header: 'Unit', render: (r) => r.unitLabel ?? <span className="muted">—</span> },
   { key: 'rent', header: 'Rent', num: true, render: (r) => <Money value={num(r.rent)} /> },
-  { key: 'balance', header: 'Balance', num: true, render: (r) => <Money value={num(r.balance)} colorize /> },
+  {
+    key: 'balance',
+    header: 'Balance',
+    num: true,
+    render: (r) => <Money value={num(r.balance)} colorize />,
+  },
   { key: 'status', header: 'Status', render: (r) => <TenantStatusBadge status={r.status} /> },
 ];
 
@@ -42,12 +49,23 @@ export function TenantsPage() {
         emptyTitle="No tenants yet"
         emptyIcon="tenants"
       />
-      {showNew && <NewTenantModal onClose={() => setShowNew(false)} onCreated={(id) => navigate(`/tenants/${id}`)} />}
+      {showNew && (
+        <NewTenantModal
+          onClose={() => setShowNew(false)}
+          onCreated={(id) => navigate(`/tenants/${id}`)}
+        />
+      )}
     </>
   );
 }
 
-function NewTenantModal({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {
+function NewTenantModal({
+  onClose,
+  onCreated,
+}: {
+  onClose: () => void;
+  onCreated: (id: string) => void;
+}) {
   const create = useCreateTenant();
   const [displayName, setDisplayName] = useState('');
   const [contactEmail, setContactEmail] = useState('');
@@ -77,8 +95,16 @@ function NewTenantModal({ onClose, onCreated }: { onClose: () => void; onCreated
       onClose={onClose}
       footer={
         <>
-          <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
-          <Button variant="primary" size="sm" form="new-tenant" onClick={submit} disabled={create.isPending || !displayName}>
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            form="new-tenant"
+            onClick={submit}
+            disabled={create.isPending || !displayName}
+          >
             {create.isPending ? 'Creating…' : 'Create tenant'}
           </Button>
         </>
@@ -87,25 +113,45 @@ function NewTenantModal({ onClose, onCreated }: { onClose: () => void; onCreated
       <form id="new-tenant" className="pf-modal-body" onSubmit={submit}>
         <div className="pf-formrow">
           <label htmlFor="t-name">Display name</label>
-          <Input id="t-name" value={displayName} onChange={(e) => setDisplayName(e.target.value)} required />
+          <Input
+            id="t-name"
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+            required
+          />
         </div>
         <div className="pf-formrow">
           <label htmlFor="t-email">Email</label>
-          <Input id="t-email" type="email" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} />
+          <Input
+            id="t-email"
+            type="email"
+            value={contactEmail}
+            onChange={(e) => setContactEmail(e.target.value)}
+          />
         </div>
         <div className="pf-formrow">
           <label htmlFor="t-phone">Phone</label>
-          <Input id="t-phone" value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} />
+          <Input
+            id="t-phone"
+            value={contactPhone}
+            onChange={(e) => setContactPhone(e.target.value)}
+          />
         </div>
         <div className="pf-formrow">
           <label htmlFor="t-status">Status</label>
           <Select id="t-status" value={status} onChange={(e) => setStatus(e.target.value)}>
             {TENANT_STATUSES.map((s) => (
-              <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
+              <option key={s} value={s}>
+                {s.charAt(0).toUpperCase() + s.slice(1)}
+              </option>
             ))}
           </Select>
         </div>
-        {error && <div className="err" role="alert">{error}</div>}
+        {error && (
+          <div className="err" role="alert">
+            {error}
+          </div>
+        )}
       </form>
     </Modal>
   );

@@ -91,7 +91,10 @@ export function bankPurposeFor(category: string): 'trust' | 'deposit' {
 }
 
 /** Posts the right WP-01 command for the chosen category. Throws a {@link LedgerPostError} on rejection. */
-export async function submitLedgerEntry(tenantId: string, input: LedgerEntryInput): Promise<PostResult> {
+export async function submitLedgerEntry(
+  tenantId: string,
+  input: LedgerEntryInput,
+): Promise<PostResult> {
   await primeCsrf();
   const { category, amount, date, memo, method, bankAccountId, sourceRef } = input;
   const trimmed = memo.trim();
@@ -110,7 +113,14 @@ export async function submitLedgerEntry(tenantId: string, input: LedgerEntryInpu
       return unwrap(
         api.POST('/api/accounting/tenants/{tenantId}/deposits', {
           params: path,
-          body: { tenantId, amount, date, depositBankId: bankAccountId, memo: memoOrNull, sourceRef },
+          body: {
+            tenantId,
+            amount,
+            date,
+            depositBankId: bankAccountId,
+            memo: memoOrNull,
+            sourceRef,
+          },
         }),
       );
     case 'Prepayment':
@@ -131,14 +141,25 @@ export async function submitLedgerEntry(tenantId: string, input: LedgerEntryInpu
       return unwrap(
         api.POST('/api/accounting/tenants/{tenantId}/charges', {
           params: path,
-          body: { tenantId, amount, date, kind: CHARGE_KIND[category] ?? 'other', memo: memoOrNull, sourceRef },
+          body: {
+            tenantId,
+            amount,
+            date,
+            kind: CHARGE_KIND[category] ?? 'other',
+            memo: memoOrNull,
+            sourceRef,
+          },
         }),
       );
   }
 }
 
 /** Voids a posted entry → a linked reversal (P54 idempotency key; default as-of today server-side). */
-export async function voidEntry(entryId: string, reason: string, sourceRef: string): Promise<PostResult> {
+export async function voidEntry(
+  entryId: string,
+  reason: string,
+  sourceRef: string,
+): Promise<PostResult> {
   await primeCsrf();
   return unwrap(
     api.POST('/api/accounting/entries/{entryId}/void', {
@@ -158,7 +179,10 @@ export interface ApplyDepositInput {
   sourceRef: string;
 }
 
-export async function applyDeposit(tenantId: string, input: ApplyDepositInput): Promise<PostResult> {
+export async function applyDeposit(
+  tenantId: string,
+  input: ApplyDepositInput,
+): Promise<PostResult> {
   await primeCsrf();
   return unwrap(
     api.POST('/api/accounting/tenants/{tenantId}/deposit-applications', {
@@ -185,7 +209,10 @@ export interface ApplyPrepaymentInput {
   sourceRef: string;
 }
 
-export async function applyPrepayment(tenantId: string, input: ApplyPrepaymentInput): Promise<PostResult> {
+export async function applyPrepayment(
+  tenantId: string,
+  input: ApplyPrepaymentInput,
+): Promise<PostResult> {
   await primeCsrf();
   const memo = input.memo.trim();
   return unwrap(

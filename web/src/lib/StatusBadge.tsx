@@ -26,13 +26,25 @@ function titleCase(value: string): string {
 }
 
 export function TenantStatusBadge({ status }: { status: string }) {
-  return <Badge tone={TENANT_TONE[status] ?? 'neutral'} dot>{titleCase(status)}</Badge>;
+  return (
+    <Badge tone={TENANT_TONE[status] ?? 'neutral'} dot>
+      {titleCase(status)}
+    </Badge>
+  );
 }
 
 export function UnitStatusBadge({ status }: { status: string }) {
-  return <Badge tone={UNIT_TONE[status] ?? 'neutral'} dot>{titleCase(status)}</Badge>;
+  return (
+    <Badge tone={UNIT_TONE[status] ?? 'neutral'} dot>
+      {titleCase(status)}
+    </Badge>
+  );
 }
 
 export function LeaseStatusBadge({ status }: { status: string }) {
-  return <Badge tone={LEASE_TONE[status] ?? 'neutral'} dot>{titleCase(status)}</Badge>;
+  return (
+    <Badge tone={LEASE_TONE[status] ?? 'neutral'} dot>
+      {titleCase(status)}
+    </Badge>
+  );
 }

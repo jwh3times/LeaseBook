@@ -127,11 +127,13 @@ export function LedgerComposer({ tenantId, onPosted, initialMode }: LedgerCompos
     }
   };
 
-  const choose = <T,>(setter: (value: T) => void) => (value: T) => {
-    interactions.current += 1; // a discrete committing choice (P59)
-    setBankId('');
-    setter(value);
-  };
+  const choose =
+    <T,>(setter: (value: T) => void) =>
+    (value: T) => {
+      interactions.current += 1; // a discrete committing choice (P59)
+      setBankId('');
+      setter(value);
+    };
 
   const toggle = (next: Mode) => setMode((current) => (current === next ? null : next));
 
@@ -154,7 +156,9 @@ export function LedgerComposer({ tenantId, onPosted, initialMode }: LedgerCompos
 
       {open && (
         <div className={`pf-composer${mode === 'payment' ? ' pay' : ''} pf-fade`}>
-          <div className="pf-composer-tag">{mode === 'payment' ? 'Record payment' : 'Add charge'}</div>
+          <div className="pf-composer-tag">
+            {mode === 'payment' ? 'Record payment' : 'Add charge'}
+          </div>
           <div className="pf-composer-grid">
             <label className="pf-composer-field">
               <span>Date</span>
@@ -164,7 +168,11 @@ export function LedgerComposer({ tenantId, onPosted, initialMode }: LedgerCompos
             {mode === 'payment' ? (
               <label className="pf-composer-field">
                 <span>Method</span>
-                <Select value={method} onChange={(e) => choose(setMethod)(e.target.value)} aria-label="Payment method">
+                <Select
+                  value={method}
+                  onChange={(e) => choose(setMethod)(e.target.value)}
+                  aria-label="Payment method"
+                >
                   {PAYMENT_METHODS.map((m) => (
                     <option key={m.value} value={m.value}>
                       {m.label}
@@ -175,7 +183,11 @@ export function LedgerComposer({ tenantId, onPosted, initialMode }: LedgerCompos
             ) : (
               <label className="pf-composer-field">
                 <span>Charge type</span>
-                <Select value={category} onChange={(e) => choose(setCategory)(e.target.value)} aria-label="Charge type">
+                <Select
+                  value={category}
+                  onChange={(e) => choose(setCategory)(e.target.value)}
+                  aria-label="Charge type"
+                >
                   {COMPOSER_CHARGE_CATEGORIES.map((c) => (
                     <option key={c} value={c}>
                       {c}
@@ -232,7 +244,9 @@ export function LedgerComposer({ tenantId, onPosted, initialMode }: LedgerCompos
                 {error}
               </span>
             ) : (
-              <span className="t3 fs12">Posts to the ledger and trust bank instantly — no page change.</span>
+              <span className="t3 fs12">
+                Posts to the ledger and trust bank instantly — no page change.
+              </span>
             )}
             <div className="row gap8">
               <Button variant="ghost" size="sm" onClick={() => setMode(null)}>

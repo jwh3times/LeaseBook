@@ -81,11 +81,21 @@ export function LedgerTable({ rows, flashId, rowActions }: LedgerTableProps) {
         <span role="columnheader">Date</span>
         <span role="columnheader">Type</span>
         <span role="columnheader">Description</span>
-        <span role="columnheader" className="num">Charge</span>
-        <span role="columnheader" className="num">Payment</span>
-        <span role="columnheader" className="num">Balance</span>
+        <span role="columnheader" className="num">
+          Charge
+        </span>
+        <span role="columnheader" className="num">
+          Payment
+        </span>
+        <span role="columnheader" className="num">
+          Balance
+        </span>
         <span role="columnheader">Status</span>
-        {hasActions && <span role="columnheader" className="acts">Actions</span>}
+        {hasActions && (
+          <span role="columnheader" className="acts">
+            Actions
+          </span>
+        )}
       </div>
       <div
         ref={scrollRef}
@@ -144,7 +154,11 @@ export function LedgerTable({ rows, flashId, rowActions }: LedgerTableProps) {
                   {charge > 0 ? <Money value={charge} plain /> : <span className="t3">—</span>}
                 </span>
                 <span role="gridcell" className="num">
-                  {payment > 0 ? <Money value={payment} plain colorize /> : <span className="t3">—</span>}
+                  {payment > 0 ? (
+                    <Money value={payment} plain colorize />
+                  ) : (
+                    <span className="t3">—</span>
+                  )}
                 </span>
                 <span role="gridcell" className="num strong">
                   <Money value={num(entry.balance)} />

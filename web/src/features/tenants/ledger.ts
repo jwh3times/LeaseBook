@@ -23,7 +23,10 @@ export function useTenantLedger(id: string): UseQueryResult<TenantLedgerResponse
 }
 
 /** The per-entry audit trail (P56): who/when/what for an entry and its reversal, fetched when opened. */
-export function useEntryAudit(entryId: string, enabled: boolean): UseQueryResult<EntryAuditResponse> {
+export function useEntryAudit(
+  entryId: string,
+  enabled: boolean,
+): UseQueryResult<EntryAuditResponse> {
   return useQuery({
     queryKey: ['entry-audit', entryId],
     enabled,
@@ -43,7 +46,9 @@ export function useEntryAudit(entryId: string, enabled: boolean): UseQueryResult
  * projection the table renders.
  */
 export async function downloadLedgerCsv(tenantId: string): Promise<void> {
-  const response = await fetch(`/api/accounting/tenants/${tenantId}/ledger.csv`, { credentials: 'include' });
+  const response = await fetch(`/api/accounting/tenants/${tenantId}/ledger.csv`, {
+    credentials: 'include',
+  });
   if (!response.ok) {
     throw new Error('Failed to export the ledger');
   }

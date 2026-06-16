@@ -26,45 +26,67 @@ function unwrap<T>(result: { data?: T; error?: unknown }, what: string): T {
   return result.data;
 }
 
-export function useTenants(): UseQueryResult<components['schemas']['PagedResponseOfTenantListRow']> {
+export function useTenants(): UseQueryResult<
+  components['schemas']['PagedResponseOfTenantListRow']
+> {
   return useQuery({
     queryKey: ['tenants'],
-    queryFn: async () => unwrap(await api.GET('/api/directory/tenants', { params: { query: { pageSize: PAGE } } }), 'tenants'),
+    queryFn: async () =>
+      unwrap(
+        await api.GET('/api/directory/tenants', { params: { query: { pageSize: PAGE } } }),
+        'tenants',
+      ),
   });
 }
 
 export function useOwners(): UseQueryResult<components['schemas']['PagedResponseOfOwnerListRow']> {
   return useQuery({
     queryKey: ['owners'],
-    queryFn: async () => unwrap(await api.GET('/api/directory/owners', { params: { query: { pageSize: PAGE } } }), 'owners'),
+    queryFn: async () =>
+      unwrap(
+        await api.GET('/api/directory/owners', { params: { query: { pageSize: PAGE } } }),
+        'owners',
+      ),
   });
 }
 
-export function useProperties(): UseQueryResult<components['schemas']['PagedResponseOfPropertyListRow']> {
+export function useProperties(): UseQueryResult<
+  components['schemas']['PagedResponseOfPropertyListRow']
+> {
   return useQuery({
     queryKey: ['properties'],
-    queryFn: async () => unwrap(await api.GET('/api/directory/properties', { params: { query: { pageSize: PAGE } } }), 'properties'),
+    queryFn: async () =>
+      unwrap(
+        await api.GET('/api/directory/properties', { params: { query: { pageSize: PAGE } } }),
+        'properties',
+      ),
   });
 }
 
 export function useTenantDetail(id: string): UseQueryResult<TenantDetail> {
   return useQuery({
     queryKey: ['tenant', id],
-    queryFn: async () => unwrap(await api.GET('/api/directory/tenants/{id}', { params: { path: { id } } }), 'tenant'),
+    queryFn: async () =>
+      unwrap(await api.GET('/api/directory/tenants/{id}', { params: { path: { id } } }), 'tenant'),
   });
 }
 
 export function useOwnerDetail(id: string): UseQueryResult<OwnerDetail> {
   return useQuery({
     queryKey: ['owner', id],
-    queryFn: async () => unwrap(await api.GET('/api/directory/owners/{id}', { params: { path: { id } } }), 'owner'),
+    queryFn: async () =>
+      unwrap(await api.GET('/api/directory/owners/{id}', { params: { path: { id } } }), 'owner'),
   });
 }
 
 export function usePropertyDetail(id: string): UseQueryResult<PropertyDetail> {
   return useQuery({
     queryKey: ['property', id],
-    queryFn: async () => unwrap(await api.GET('/api/directory/properties/{id}', { params: { path: { id } } }), 'property'),
+    queryFn: async () =>
+      unwrap(
+        await api.GET('/api/directory/properties/{id}', { params: { path: { id } } }),
+        'property',
+      ),
   });
 }
 

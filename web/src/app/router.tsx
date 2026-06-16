@@ -44,7 +44,11 @@ export const router = createBrowserRouter([
     children: [
       {
         element: <AppShell />,
-        children: [{ index: true, element: <Navigate to="/dashboard" replace /> }, ...pageRoutes, ...detailRoutes],
+        children: [
+          { index: true, element: <Navigate to="/dashboard" replace /> },
+          ...pageRoutes,
+          ...detailRoutes,
+        ],
       },
     ],
   },

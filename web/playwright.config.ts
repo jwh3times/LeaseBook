@@ -15,7 +15,8 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: 'dotnet run --project ../src/LeaseBook.Web --no-launch-profile --urls http://localhost:5080',
+      command:
+        'dotnet run --project ../src/LeaseBook.Web --no-launch-profile --urls http://localhost:5080',
       url: 'http://localhost:5080/api/health',
       env: { ASPNETCORE_ENVIRONMENT: 'Development' },
       reuseExistingServer: true,

@@ -67,8 +67,8 @@ export function VoidDialog({ entryId, onClose, onVoided }: VoidDialogProps) {
     >
       <div className="pf-modal-body col gap12">
         <p className="t3 fs13">
-          Voiding posts a linked reversal — the original stays in the ledger, struck through, with this
-          reason recorded in its history.
+          Voiding posts a linked reversal — the original stays in the ledger, struck through, with
+          this reason recorded in its history.
         </p>
         <label className="col gap6">
           <span className="pf-eyebrow">Reason</span>

@@ -37,9 +37,27 @@ interface DemoRow {
 }
 
 const ROWS: DemoRow[] = [
-  { id: 't1', tenant: 'Jasmine Carter', unit: '412 Oakmont Ave · #2B', status: 'Current', balance: 1450 },
-  { id: 't3', tenant: 'Aisha Bello', unit: '1029 Charlotte St · #3', status: 'Late', balance: 1620 },
-  { id: 't5', tenant: 'The Mercer Family', unit: '88 Riverside Dr', status: 'Prepaid', balance: -75 },
+  {
+    id: 't1',
+    tenant: 'Jasmine Carter',
+    unit: '412 Oakmont Ave · #2B',
+    status: 'Current',
+    balance: 1450,
+  },
+  {
+    id: 't3',
+    tenant: 'Aisha Bello',
+    unit: '1029 Charlotte St · #3',
+    status: 'Late',
+    balance: 1620,
+  },
+  {
+    id: 't5',
+    tenant: 'The Mercer Family',
+    unit: '88 Riverside Dr',
+    status: 'Prepaid',
+    balance: -75,
+  },
 ];
 
 const STATUS_TONE = { Current: 'pos', Late: 'neg', Prepaid: 'accent' } as const;
@@ -63,7 +81,9 @@ export function KitchenSink() {
       <div className="pf-pagehd">
         <div>
           <h2>Design system</h2>
-          <p>Every primitive in {theme} · {accent} · {density}. Toggle below to spot-check themes.</p>
+          <p>
+            Every primitive in {theme} · {accent} · {density}. Toggle below to spot-check themes.
+          </p>
         </div>
       </div>
 
@@ -92,21 +112,37 @@ export function KitchenSink() {
       </Section>
 
       <Section title="Buttons">
-        <Button variant="primary" icon="plus">New</Button>
+        <Button variant="primary" icon="plus">
+          New
+        </Button>
         <Button variant="default">Default</Button>
-        <Button variant="soft" icon="download">Export</Button>
+        <Button variant="soft" icon="download">
+          Export
+        </Button>
         <Button variant="ghost">Ghost</Button>
-        <Button variant="default" size="sm">Small</Button>
-        <Button variant="primary" disabled>Disabled</Button>
+        <Button variant="default" size="sm">
+          Small
+        </Button>
+        <Button variant="primary" disabled>
+          Disabled
+        </Button>
         <IconButton name="bell" label="Notifications" />
         <IconButton name="settings" label="Settings" active />
       </Section>
 
       <Section title="Badges (status is never color-alone)">
-        <Badge tone="pos" dot>Current</Badge>
-        <Badge tone="neg" dot>Late</Badge>
-        <Badge tone="warn" icon="alert">Review</Badge>
-        <Badge tone="accent" dot>Prepaid</Badge>
+        <Badge tone="pos" dot>
+          Current
+        </Badge>
+        <Badge tone="neg" dot>
+          Late
+        </Badge>
+        <Badge tone="warn" icon="alert">
+          Review
+        </Badge>
+        <Badge tone="accent" dot>
+          Prepaid
+        </Badge>
         <Badge tone="neutral">Draft</Badge>
       </Section>
 
@@ -124,7 +160,9 @@ export function KitchenSink() {
           <option value="oper">Operating Trust</option>
           <option value="dep">Security Deposit Trust</option>
         </Select>
-        <FilterChip icon="filter" active>All</FilterChip>
+        <FilterChip icon="filter" active>
+          All
+        </FilterChip>
         <FilterChip>Late only</FilterChip>
       </Section>
 
@@ -138,30 +176,73 @@ export function KitchenSink() {
 
       <div className="row gap16" style={{ flexWrap: 'wrap' }}>
         <div style={{ minWidth: 240, flex: 1 }}>
-          <StatCard label="Trust total" value={<Money value={483620.69} big />} sub="3 accounts" spark={[42, 58, 71, 88, 96, 100]} />
+          <StatCard
+            label="Trust total"
+            value={<Money value={483620.69} big />}
+            sub="3 accounts"
+            spark={[42, 58, 71, 88, 96, 100]}
+          />
         </div>
         <div style={{ minWidth: 240, flex: 1 }}>
-          <StatCard label="Owners payable" value={<Money value={132447} big />} sub="8 owners this cycle" />
+          <StatCard
+            label="Owners payable"
+            value={<Money value={132447} big />}
+            sub="8 owners this cycle"
+          />
         </div>
       </div>
 
       <Card>
-        <CardHeader title="Tenants" sub="Density-aware table" actions={<Button size="sm" variant="soft">Add</Button>} />
+        <CardHeader
+          title="Tenants"
+          sub="Density-aware table"
+          actions={
+            <Button size="sm" variant="soft">
+              Add
+            </Button>
+          }
+        />
         <Table
           rows={ROWS}
           rowKey={(r) => r.id}
           columns={[
-            { key: 'tenant', header: 'Tenant', render: (r) => <span className="strong">{r.tenant}</span> },
+            {
+              key: 'tenant',
+              header: 'Tenant',
+              render: (r) => <span className="strong">{r.tenant}</span>,
+            },
             { key: 'unit', header: 'Unit', render: (r) => <span className="muted">{r.unit}</span> },
-            { key: 'status', header: 'Status', render: (r) => <Badge tone={STATUS_TONE[r.status]} dot>{r.status}</Badge> },
-            { key: 'balance', header: 'Balance', num: true, render: (r) => <Money value={r.balance} colorize /> },
+            {
+              key: 'status',
+              header: 'Status',
+              render: (r) => (
+                <Badge tone={STATUS_TONE[r.status]} dot>
+                  {r.status}
+                </Badge>
+              ),
+            },
+            {
+              key: 'balance',
+              header: 'Balance',
+              num: true,
+              render: (r) => <Money value={r.balance} colorize />,
+            },
           ]}
         />
       </Card>
 
       <Section title="Empty state">
         <div style={{ width: '100%' }}>
-          <EmptyState icon="search" title="No transactions found" description="Try widening the date range or clearing filters." action={<Button variant="soft" size="sm">Clear filters</Button>} />
+          <EmptyState
+            icon="search"
+            title="No transactions found"
+            description="Try widening the date range or clearing filters."
+            action={
+              <Button variant="soft" size="sm">
+                Clear filters
+              </Button>
+            }
+          />
         </div>
       </Section>
 

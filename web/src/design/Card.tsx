@@ -8,7 +8,11 @@ export interface CardProps {
 }
 
 export function Card({ children, pad = false, className }: CardProps) {
-  return <div className={`pf-card${pad ? ' pf-card-pad' : ''}${className ? ` ${className}` : ''}`}>{children}</div>;
+  return (
+    <div className={`pf-card${pad ? ' pf-card-pad' : ''}${className ? ` ${className}` : ''}`}>
+      {children}
+    </div>
+  );
 }
 
 export interface CardHeaderProps {
