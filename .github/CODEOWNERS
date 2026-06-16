@@ -1,0 +1,7 @@
+# Code owners for LeaseBook.
+# These owners are requested for review automatically on any pull request that
+# touches matching paths. Later, more specific rules override earlier ones.
+# See https://docs.github.com/articles/about-code-owners
+
+# Default owner for everything in the repo.
+*       @jwh3times
