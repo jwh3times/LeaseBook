@@ -4,7 +4,8 @@ Thanks for your interest in improving LeaseBook. This is trust-accounting softwa
 correctness is high — but the contribution process itself is ordinary. This guide covers how to get set
 up, the conventions the codebase holds to, and what a change needs before it can merge.
 
-By participating you agree to keep interactions respectful and constructive.
+By participating you agree to abide by our [Code of Conduct](CODE_OF_CONDUCT.md) — keep interactions
+respectful and constructive.
 
 ---
 

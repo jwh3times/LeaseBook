@@ -1,0 +1,12 @@
+# Only the two structured templates above; no blank/freeform issues.
+blank_issues_enabled: false
+contact_links:
+  - name: 🔒 Report a security vulnerability
+    url: https://github.com/jwh3times/LeaseBook/security/advisories/new
+    about: Report vulnerabilities privately through GitHub Security Advisories — never as a public issue. See SECURITY.md.
+  - name: 💬 Questions & support
+    url: https://github.com/jwh3times/LeaseBook/discussions
+    about: Ask usage and setup questions in GitHub Discussions, not as an issue. See SUPPORT.md.
+  - name: 🤝 Code of Conduct concern
+    url: https://github.com/jwh3times/LeaseBook/blob/main/CODE_OF_CONDUCT.md
+    about: Conduct reports go privately to conduct@holland.vip, not to public issues.
