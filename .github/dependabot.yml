@@ -12,9 +12,8 @@ updates:
   - package-ecosystem: "nuget"
     directory: "/"
     schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "06:00"
+      interval: "daily"
+      time: "07:00"
       timezone: "America/New_York"
     open-pull-requests-limit: 10
     labels:
@@ -33,9 +32,8 @@ updates:
   - package-ecosystem: "npm"
     directory: "/web"
     schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "06:00"
+      interval: "daily"
+      time: "07:00"
       timezone: "America/New_York"
     open-pull-requests-limit: 10
     labels:
@@ -65,7 +63,7 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
-      time: "06:00"
+      time: "07:00"
       timezone: "America/New_York"
     open-pull-requests-limit: 5
     labels:
@@ -87,7 +85,7 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
-      time: "06:00"
+      time: "07:00"
       timezone: "America/New_York"
     open-pull-requests-limit: 5
     labels:
@@ -108,7 +106,7 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
-      time: "06:00"
+      time: "07:00"
       timezone: "America/New_York"
     open-pull-requests-limit: 5
     labels:
