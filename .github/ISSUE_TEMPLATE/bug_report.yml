@@ -1,0 +1,88 @@
+name: Bug report
+description: Report a reproducible defect in LeaseBook
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug. Please **do not** report security vulnerabilities
+        here — follow the private process in [SECURITY.md](../SECURITY.md). For setup or usage
+        questions, see [SUPPORT.md](../SUPPORT.md).
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Preflight checklist
+      options:
+        - label: I searched existing issues and this is not a duplicate
+          required: true
+        - label: This is not a security vulnerability (those go through SECURITY.md)
+          required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug and its impact — what's wrong, and why it matters.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Minimal, numbered steps. A reproduction on the seeded demo org is ideal.
+      placeholder: |
+        1. Go to '...'
+        2. Do '...'
+        3. See the error
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What you expected to happen instead.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of the system does this affect? Pick the closest.
+      options:
+        - Accounting / trust engine
+        - Directory (owners, properties, units, tenants)
+        - Tenant ledger
+        - Auth / tenancy
+        - Web / UI
+        - Infra / CI / build
+        - Other / not sure
+    validations:
+      required: false
+  - type: input
+    id: version
+    attributes:
+      label: Version / commit
+      description: The release tag or git commit SHA you're running.
+      placeholder: e.g. v0.1.0 or 2b17b5a
+    validations:
+      required: false
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, .NET SDK and Node versions, whether you're on the full Docker stack or the inner-loop, and browser if the SPA is involved.
+      placeholder: |
+        - OS: Windows 11 / macOS 15 / Ubuntu 24.04
+        - .NET: 10.0.100, Node: 26.x
+        - Running via: ./scripts/dev.ps1 app-up | inner-loop
+        - Browser: Chrome 140 (if relevant)
+    validations:
+      required: false
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / screenshots
+      description: Relevant output, stack traces, or screenshots — with secrets and personal data redacted.
+      render: shell
+    validations:
+      required: false
