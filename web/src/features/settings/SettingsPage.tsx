@@ -17,9 +17,15 @@ export function SettingsPage() {
 
   return (
     <div className="pf-fade">
-      <div className="pf-pagehd"><div><h2>Settings</h2></div></div>
+      <div className="pf-pagehd">
+        <div>
+          <h2>Settings</h2>
+        </div>
+      </div>
       {settings.isPending ? (
-        <Card pad><div className="pf-skeleton" style={{ maxWidth: 280, height: 22 }} /></Card>
+        <Card pad>
+          <div className="pf-skeleton" style={{ maxWidth: 280, height: 22 }} />
+        </Card>
       ) : settings.isError || !settings.data ? (
         <Card pad>Couldn’t load settings.</Card>
       ) : (
@@ -29,8 +35,9 @@ export function SettingsPage() {
           <Card pad>
             <p className="pf-section-title">Management fees</p>
             <p className="t3 fs13">
-              Default fee rates are set per owner (Owners → owner → edit), with an optional per-property
-              override on the property. Stored as basis points; fee computation arrives in a later milestone.
+              Default fee rates are set per owner (Owners → owner → edit), with an optional
+              per-property override on the property. Stored as basis points; fee computation arrives
+              in a later milestone.
             </p>
           </Card>
         </div>
@@ -73,20 +80,37 @@ function OrgProfileForm({ initial }: { initial: OrgSettings }) {
       <form className="pf-pad col gap14" onSubmit={save}>
         <div className="pf-formrow">
           <label htmlFor="s-legal">Legal name</label>
-          <Input id="s-legal" value={form.legalName ?? ''} onChange={(e) => set('legalName', e.target.value)} />
+          <Input
+            id="s-legal"
+            value={form.legalName ?? ''}
+            onChange={(e) => set('legalName', e.target.value)}
+          />
         </div>
         <div className="pf-formrow">
           <label htmlFor="s-addr">Address</label>
-          <Input id="s-addr" value={form.address ?? ''} onChange={(e) => set('address', e.target.value)} />
+          <Input
+            id="s-addr"
+            value={form.address ?? ''}
+            onChange={(e) => set('address', e.target.value)}
+          />
         </div>
         <div className="row gap12 wrap">
           <div className="pf-formrow grow">
             <label htmlFor="s-city">City</label>
-            <Input id="s-city" value={form.city ?? ''} onChange={(e) => set('city', e.target.value)} />
+            <Input
+              id="s-city"
+              value={form.city ?? ''}
+              onChange={(e) => set('city', e.target.value)}
+            />
           </div>
           <div className="pf-formrow" style={{ width: 90 }}>
             <label htmlFor="s-state">State</label>
-            <Input id="s-state" value={form.state ?? ''} maxLength={2} onChange={(e) => set('state', e.target.value.toUpperCase())} />
+            <Input
+              id="s-state"
+              value={form.state ?? ''}
+              maxLength={2}
+              onChange={(e) => set('state', e.target.value.toUpperCase())}
+            />
           </div>
           <div className="pf-formrow" style={{ width: 120 }}>
             <label htmlFor="s-zip">ZIP</label>
@@ -95,20 +119,32 @@ function OrgProfileForm({ initial }: { initial: OrgSettings }) {
         </div>
         <div className="pf-formrow">
           <label htmlFor="s-phone">Phone</label>
-          <Input id="s-phone" value={form.phone ?? ''} onChange={(e) => set('phone', e.target.value)} />
+          <Input
+            id="s-phone"
+            value={form.phone ?? ''}
+            onChange={(e) => set('phone', e.target.value)}
+          />
         </div>
 
         <div className="row gap12 wrap">
           <div className="pf-formrow grow">
             <label htmlFor="s-basis">Accounting basis</label>
-            <Select id="s-basis" value={form.accountingBasis} onChange={(e) => set('accountingBasis', e.target.value)}>
+            <Select
+              id="s-basis"
+              value={form.accountingBasis}
+              onChange={(e) => set('accountingBasis', e.target.value)}
+            >
               <option value="cash">Cash</option>
               <option value="accrual">Accrual</option>
             </Select>
           </div>
           <div className="pf-formrow grow">
             <label htmlFor="s-neg">Negative amounts</label>
-            <Select id="s-neg" value={form.moneyNegativeDisplay} onChange={(e) => set('moneyNegativeDisplay', e.target.value)}>
+            <Select
+              id="s-neg"
+              value={form.moneyNegativeDisplay}
+              onChange={(e) => set('moneyNegativeDisplay', e.target.value)}
+            >
               <option value="minus">Minus sign (-1,250.00)</option>
               <option value="parens">Parentheses (1,250.00)</option>
             </Select>
@@ -119,7 +155,11 @@ function OrgProfileForm({ initial }: { initial: OrgSettings }) {
           <Button variant="primary" size="sm" onClick={save} disabled={update.isPending}>
             {update.isPending ? 'Saving…' : 'Save changes'}
           </Button>
-          {saved && <Badge tone="pos" dot>Saved</Badge>}
+          {saved && (
+            <Badge tone="pos" dot>
+              Saved
+            </Badge>
+          )}
           {update.isError && <span className="err">Couldn’t save. You may need admin rights.</span>}
         </div>
       </form>
@@ -131,7 +171,15 @@ const bankColumns: TableColumn<BankAccount>[] = [
   { key: 'name', header: 'Account', render: (b) => <span className="strong">{b.name}</span> },
   { key: 'institution', header: 'Institution', render: (b) => b.institution ?? '—' },
   { key: 'mask', header: 'Mask', render: (b) => (b.mask ? `••${b.mask}` : '—') },
-  { key: 'purpose', header: 'Purpose', render: (b) => <Badge tone={b.purpose === 'operating' ? 'neutral' : 'accent'} dot>{b.purpose}</Badge> },
+  {
+    key: 'purpose',
+    header: 'Purpose',
+    render: (b) => (
+      <Badge tone={b.purpose === 'operating' ? 'neutral' : 'accent'} dot>
+        {b.purpose}
+      </Badge>
+    ),
+  },
 ];
 
 function BankAccountsSection() {
@@ -143,10 +191,16 @@ function BankAccountsSection() {
       <CardHeader
         title="Trust bank accounts"
         sub="Creating an account provisions its ledger account."
-        actions={<Button variant="primary" size="sm" icon="plus" onClick={() => setShowNew(true)}>New account</Button>}
+        actions={
+          <Button variant="primary" size="sm" icon="plus" onClick={() => setShowNew(true)}>
+            New account
+          </Button>
+        }
       />
       {banks.isPending ? (
-        <div className="pf-pad"><div className="pf-skeleton" /></div>
+        <div className="pf-pad">
+          <div className="pf-skeleton" />
+        </div>
       ) : (banks.data?.length ?? 0) === 0 ? (
         <div className="pf-pad t3 fs13">No bank accounts yet.</div>
       ) : (
@@ -169,7 +223,12 @@ function NewBankModal({ onClose }: { onClose: () => void }) {
     event.preventDefault();
     setError(null);
     try {
-      await create.mutateAsync({ name, institution: institution || null, mask: mask || null, purpose });
+      await create.mutateAsync({
+        name,
+        institution: institution || null,
+        mask: mask || null,
+        purpose,
+      });
       onClose();
     } catch {
       setError('Could not create the account. Check the fields and try again.');
@@ -182,7 +241,9 @@ function NewBankModal({ onClose }: { onClose: () => void }) {
       onClose={onClose}
       footer={
         <>
-          <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            Cancel
+          </Button>
           <Button variant="primary" size="sm" onClick={submit} disabled={create.isPending || !name}>
             {create.isPending ? 'Creating…' : 'Create account'}
           </Button>
@@ -201,18 +262,29 @@ function NewBankModal({ onClose }: { onClose: () => void }) {
         <div className="row gap12">
           <div className="pf-formrow grow">
             <label htmlFor="b-mask">Mask (last 4)</label>
-            <Input id="b-mask" value={mask} maxLength={4} onChange={(e) => setMask(e.target.value)} />
+            <Input
+              id="b-mask"
+              value={mask}
+              maxLength={4}
+              onChange={(e) => setMask(e.target.value)}
+            />
           </div>
           <div className="pf-formrow grow">
             <label htmlFor="b-purpose">Purpose</label>
             <Select id="b-purpose" value={purpose} onChange={(e) => setPurpose(e.target.value)}>
               {BANK_PURPOSES.map((p) => (
-                <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>
+                <option key={p} value={p}>
+                  {p.charAt(0).toUpperCase() + p.slice(1)}
+                </option>
               ))}
             </Select>
           </div>
         </div>
-        {error && <div className="err" role="alert">{error}</div>}
+        {error && (
+          <div className="err" role="alert">
+            {error}
+          </div>
+        )}
       </form>
     </Modal>
   );

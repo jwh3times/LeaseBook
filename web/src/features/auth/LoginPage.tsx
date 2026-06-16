@@ -29,7 +29,9 @@ export function LoginPage() {
     event.preventDefault();
     setError(null);
     setBusy(true);
-    const { data, error: requestError } = await api.POST('/api/auth/login', { body: { email, password } });
+    const { data, error: requestError } = await api.POST('/api/auth/login', {
+      body: { email, password },
+    });
     setBusy(false);
 
     if (requestError || !data) {
@@ -48,7 +50,9 @@ export function LoginPage() {
     if (!mfaToken) return;
     setError(null);
     setBusy(true);
-    const { data, error: requestError } = await api.POST('/api/auth/mfa', { body: { mfaToken, code } });
+    const { data, error: requestError } = await api.POST('/api/auth/mfa', {
+      body: { mfaToken, code },
+    });
     setBusy(false);
 
     if (requestError || !data) {
@@ -61,8 +65,11 @@ export function LoginPage() {
   const onMfaStep = mfaToken !== null;
 
   return (
-    <div className="row" style={{ minHeight: '100vh', justifyContent: 'center', background: 'var(--bg)' }}>
-      <Card pad className="pf-fade" >
+    <div
+      className="row"
+      style={{ minHeight: '100vh', justifyContent: 'center', background: 'var(--bg)' }}
+    >
+      <Card pad className="pf-fade">
         <div style={{ width: 320 }} className="col gap16">
           <div className="row gap10">
             <div className="pf-logo">
@@ -87,7 +94,11 @@ export function LoginPage() {
                   autoFocus
                 />
               </label>
-              {error && <span className="fs13" style={{ color: 'var(--neg)' }}>{error}</span>}
+              {error && (
+                <span className="fs13" style={{ color: 'var(--neg)' }}>
+                  {error}
+                </span>
+              )}
               <Button type="submit" variant="primary" disabled={busy}>
                 {busy ? 'Verifying…' : 'Verify'}
               </Button>
@@ -115,7 +126,11 @@ export function LoginPage() {
                   placeholder="••••••••••••"
                 />
               </label>
-              {error && <span className="fs13" style={{ color: 'var(--neg)' }}>{error}</span>}
+              {error && (
+                <span className="fs13" style={{ color: 'var(--neg)' }}>
+                  {error}
+                </span>
+              )}
               <Button type="submit" variant="primary" disabled={busy}>
                 {busy ? 'Signing in…' : 'Sign in'}
               </Button>

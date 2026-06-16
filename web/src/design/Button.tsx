@@ -20,7 +20,11 @@ export function Button({
   ...rest
 }: ButtonProps) {
   return (
-    <button type={type} className={`pf-btn v-${variant} s-${size}${className ? ` ${className}` : ''}`} {...rest}>
+    <button
+      type={type}
+      className={`pf-btn v-${variant} s-${size}${className ? ` ${className}` : ''}`}
+      {...rest}
+    >
       {icon && <Icon name={icon} size={size === 'sm' ? 15 : 16} />}
       {children}
     </button>

@@ -44,7 +44,11 @@ export function iconForType(type: SearchResult['type']): IconName {
 }
 
 export function groupLabel(type: SearchResult['type']): string {
-  return { owner: 'Owners', property: 'Properties', unit: 'Units', tenant: 'Tenants', bank: 'Banks' }[type] ?? type;
+  return (
+    { owner: 'Owners', property: 'Properties', unit: 'Units', tenant: 'Tenants', bank: 'Banks' }[
+      type
+    ] ?? type
+  );
 }
 
 // Navigation actions (§C.7). "Record payment → tenant" routes into the ledger page with the M3 compose
@@ -54,14 +58,28 @@ registerActionProvider((result) => {
     case 'owner':
       return [
         { id: 'open-owner', label: `Open ${result.label}`, route: `/owners/${result.id}` },
-        { id: 'owner-statement', label: `Owner statement · ${result.label}`, route: `/owners/${result.id}` },
+        {
+          id: 'owner-statement',
+          label: `Owner statement · ${result.label}`,
+          route: `/owners/${result.id}`,
+        },
       ];
     case 'property':
-      return [{ id: 'open-property', label: `Open ${result.label}`, route: `/properties/${result.id}` }];
+      return [
+        { id: 'open-property', label: `Open ${result.label}`, route: `/properties/${result.id}` },
+      ];
     case 'tenant':
       return [
-        { id: 'open-ledger', label: `Open ledger · ${result.label}`, route: `/tenants/${result.id}` },
-        { id: 'record-payment', label: `Record payment → ${result.label}`, route: `/tenants/${result.id}?compose=payment` },
+        {
+          id: 'open-ledger',
+          label: `Open ledger · ${result.label}`,
+          route: `/tenants/${result.id}`,
+        },
+        {
+          id: 'record-payment',
+          label: `Record payment → ${result.label}`,
+          route: `/tenants/${result.id}?compose=payment`,
+        },
       ];
     case 'unit':
       return [{ id: 'open-unit', label: `Open ${result.label}`, route: '/properties' }];

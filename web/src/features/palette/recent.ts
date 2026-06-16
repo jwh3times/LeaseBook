@@ -15,7 +15,10 @@ export function getRecent(): SearchResult[] {
 
 export function pushRecent(result: SearchResult): void {
   try {
-    const next = [result, ...getRecent().filter((r) => !(r.type === result.type && r.id === result.id))].slice(0, MAX);
+    const next = [
+      result,
+      ...getRecent().filter((r) => !(r.type === result.type && r.id === result.id)),
+    ].slice(0, MAX);
     localStorage.setItem(KEY, JSON.stringify(next));
   } catch {
     /* storage may be unavailable — recents are a nicety, not load-bearing */

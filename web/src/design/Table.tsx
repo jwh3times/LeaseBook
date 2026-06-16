@@ -37,7 +37,11 @@ export function Table<T>({ columns, rows, rowKey, onRowClick, selectedKey }: Tab
           return (
             <tr
               key={key}
-              className={[onRowClick ? 't-row-click' : '', selected ? 't-row-sel' : ''].filter(Boolean).join(' ') || undefined}
+              className={
+                [onRowClick ? 't-row-click' : '', selected ? 't-row-sel' : '']
+                  .filter(Boolean)
+                  .join(' ') || undefined
+              }
               aria-selected={selected || undefined}
               onClick={onRowClick ? () => onRowClick(row) : undefined}
             >

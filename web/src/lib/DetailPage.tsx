@@ -20,7 +20,16 @@ interface DetailPageProps<T> {
 
 /** Detail scaffold: back link, title/sub, the record quick-switcher, and loading/not-found states. */
 export function DetailPage<T>({
-  kind, id, query, backTo, backLabel, toPath, title, sub, actions, children,
+  kind,
+  id,
+  query,
+  backTo,
+  backLabel,
+  toPath,
+  title,
+  sub,
+  actions,
+  children,
 }: DetailPageProps<T>) {
   const navigate = useNavigate();
   const data = query.data;
@@ -28,14 +37,24 @@ export function DetailPage<T>({
   return (
     <div className="pf-fade">
       <div className="row gap8 mb16">
-        <Button variant="ghost" size="sm" icon="chevronLeft" onClick={() => navigate(backTo)}>{backLabel}</Button>
+        <Button variant="ghost" size="sm" icon="chevronLeft" onClick={() => navigate(backTo)}>
+          {backLabel}
+        </Button>
         <RecordQuickSwitch kind={kind} currentId={id} toPath={toPath} />
       </div>
 
       {query.isPending ? (
-        <Card pad><div className="pf-skeleton" style={{ maxWidth: 260, height: 22 }} /></Card>
+        <Card pad>
+          <div className="pf-skeleton" style={{ maxWidth: 260, height: 22 }} />
+        </Card>
       ) : query.isError || !data ? (
-        <Card pad><EmptyState icon="alert" title="Record not found" description="It may have been removed, or the link is wrong." /></Card>
+        <Card pad>
+          <EmptyState
+            icon="alert"
+            title="Record not found"
+            description="It may have been removed, or the link is wrong."
+          />
+        </Card>
       ) : (
         <>
           <div className="pf-detailhd">

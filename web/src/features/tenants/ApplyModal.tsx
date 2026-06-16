@@ -113,7 +113,11 @@ export function ApplyModal({ tenantId, initialKind, onClose, onApplied }: ApplyM
       <div className="pf-modal-body col gap12">
         <label className="col gap6">
           <span className="pf-eyebrow">Source</span>
-          <Select value={kind} onChange={(e) => setKind(e.target.value as Kind)} aria-label="Source">
+          <Select
+            value={kind}
+            onChange={(e) => setKind(e.target.value as Kind)}
+            aria-label="Source"
+          >
             <option value="deposit">Security deposit</option>
             <option value="prepayment">Prepayment</option>
           </Select>
@@ -121,7 +125,9 @@ export function ApplyModal({ tenantId, initialKind, onClose, onApplied }: ApplyM
 
         {depositBank && operatingBank && (
           <p className="t3 fs12">
-            {kind === 'deposit' ? `From ${depositBank.name} → ${operatingBank.name}` : `From ${operatingBank.name}`}
+            {kind === 'deposit'
+              ? `From ${depositBank.name} → ${operatingBank.name}`
+              : `From ${operatingBank.name}`}
           </p>
         )}
 
@@ -140,7 +146,11 @@ export function ApplyModal({ tenantId, initialKind, onClose, onApplied }: ApplyM
         {kind === 'deposit' && (
           <label className="col gap6">
             <span className="pf-eyebrow">Apply to</span>
-            <Select value={target} onChange={(e) => setTarget(e.target.value)} aria-label="Apply to">
+            <Select
+              value={target}
+              onChange={(e) => setTarget(e.target.value)}
+              aria-label="Apply to"
+            >
               <option value="against-charges">The tenant's open charges</option>
               <option value="to-owner-income">Owner income (damages)</option>
             </Select>

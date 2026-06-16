@@ -10,7 +10,12 @@ import { AuditDrawer } from './AuditDrawer';
 import { LedgerComposer } from './LedgerComposer';
 import { LedgerTable } from './LedgerTable';
 import { VoidDialog } from './VoidDialog';
-import { downloadLedgerCsv, type TenantLedgerEntry, tenantLedgerKey, useTenantLedger } from './ledger';
+import {
+  downloadLedgerCsv,
+  type TenantLedgerEntry,
+  tenantLedgerKey,
+  useTenantLedger,
+} from './ledger';
 
 function initialsOf(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -32,7 +37,8 @@ export function LedgerPage() {
   const { id = '' } = useParams();
   const [searchParams] = useSearchParams();
   const composeParam = searchParams.get('compose');
-  const initialMode = composeParam === 'payment' || composeParam === 'charge' ? composeParam : undefined;
+  const initialMode =
+    composeParam === 'payment' || composeParam === 'charge' ? composeParam : undefined;
 
   const queryClient = useQueryClient();
   const detail = useTenantDetail(id);
@@ -55,7 +61,10 @@ export function LedgerPage() {
       void queryClient.invalidateQueries({ queryKey: tenantLedgerKey(id) });
       void queryClient.invalidateQueries({ queryKey: ['tenant', id] });
       setFlashId(entryId);
-      window.setTimeout(() => setFlashId((current) => (current === entryId ? null : current)), 1600);
+      window.setTimeout(
+        () => setFlashId((current) => (current === entryId ? null : current)),
+        1600,
+      );
     },
     [id, queryClient],
   );
@@ -103,7 +112,11 @@ export function LedgerPage() {
   return (
     <div className="pf-fade">
       <div className="row gap8 mb16">
-        <RecordQuickSwitch kind="tenants" currentId={id} toPath={(tenantId) => `/tenants/${tenantId}`} />
+        <RecordQuickSwitch
+          kind="tenants"
+          currentId={id}
+          toPath={(tenantId) => `/tenants/${tenantId}`}
+        />
       </div>
 
       {/* Header */}
@@ -113,7 +126,11 @@ export function LedgerPage() {
         </Card>
       ) : detail.isError || !detail.data ? (
         <Card pad>
-          <EmptyState icon="alert" title="Tenant not found" description="It may have been removed, or the link is wrong." />
+          <EmptyState
+            icon="alert"
+            title="Tenant not found"
+            description="It may have been removed, or the link is wrong."
+          />
         </Card>
       ) : (
         <Card className="pf-tenant-hd">
@@ -155,7 +172,12 @@ export function LedgerPage() {
                 <span className="fs12" style={{ color: 'var(--accent-strong)' }}>
                   Liability · not income
                 </span>
-                <Button variant="ghost" size="sm" icon="arrowUpRight" onClick={() => setApplyKind('deposit')}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  icon="arrowUpRight"
+                  onClick={() => setApplyKind('deposit')}
+                >
                   Apply…
                 </Button>
               </div>
@@ -175,15 +197,29 @@ export function LedgerPage() {
             <div className="sub">{display.length} entries · running balance</div>
           </div>
           <div className="pf-ledger-filters">
-            <Select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} aria-label="Filter by type">
+            <Select
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value)}
+              aria-label="Filter by type"
+            >
               {categories.map((category) => (
                 <option key={category} value={category}>
                   {category === 'all' ? 'All types' : category}
                 </option>
               ))}
             </Select>
-            <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} aria-label="From date" />
-            <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} aria-label="To date" />
+            <Input
+              type="date"
+              value={fromDate}
+              onChange={(e) => setFromDate(e.target.value)}
+              aria-label="From date"
+            />
+            <Input
+              type="date"
+              value={toDate}
+              onChange={(e) => setToDate(e.target.value)}
+              aria-label="To date"
+            />
             {filtersActive && (
               <Button variant="ghost" size="sm" onClick={clearFilters}>
                 Clear
@@ -203,15 +239,27 @@ export function LedgerPage() {
           </div>
         ) : ledger.isError ? (
           <div className="pf-pad">
-            <EmptyState icon="alert" title="Couldn't load the ledger" description="Please retry in a moment." />
+            <EmptyState
+              icon="alert"
+              title="Couldn't load the ledger"
+              description="Please retry in a moment."
+            />
           </div>
         ) : allRows.length === 0 ? (
           <div className="pf-pad">
-            <EmptyState icon="doc" title="No ledger activity yet" description="Charges and payments will appear here." />
+            <EmptyState
+              icon="doc"
+              title="No ledger activity yet"
+              description="Charges and payments will appear here."
+            />
           </div>
         ) : display.length === 0 ? (
           <div className="pf-pad">
-            <EmptyState icon="search" title="No entries match the filter" description="Adjust the type or date range." />
+            <EmptyState
+              icon="search"
+              title="No entries match the filter"
+              description="Adjust the type or date range."
+            />
           </div>
         ) : (
           <LedgerTable rows={display} flashId={flashId} rowActions={rowActions} />

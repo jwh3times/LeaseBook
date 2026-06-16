@@ -21,4 +21,10 @@ export const NAV_ROUTES: NavRoute[] = [
   route('operations', 'Operations', 'refresh', '/operations', 'Operations'),
 ];
 
-export const SETTINGS_ROUTE: NavRoute = route('settings', 'Settings', 'settings', '/settings', 'Settings');
+export const SETTINGS_ROUTE: NavRoute = route(
+  'settings',
+  'Settings',
+  'settings',
+  '/settings',
+  'Settings',
+);

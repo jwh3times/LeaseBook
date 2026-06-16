@@ -2,7 +2,16 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { api, primeCsrf } from '@/api';
-import { AppLayout, Avatar, Button, IconButton, MoneyDisplayProvider, type NegativeStyle, Sidebar, Topbar } from '@/design';
+import {
+  AppLayout,
+  Avatar,
+  Button,
+  IconButton,
+  MoneyDisplayProvider,
+  type NegativeStyle,
+  Sidebar,
+  Topbar,
+} from '@/design';
 import { sessionQueryKey, useSession } from '@/features/auth/useSession';
 import { CommandPalette } from '@/features/palette/CommandPalette';
 import { HelpOverlay } from '@/features/palette/HelpOverlay';
@@ -36,7 +45,8 @@ export function AppShell() {
     onNavigate: navigate,
   });
 
-  const active = NAV_ROUTES.find((route) => location.pathname.startsWith(route.path)) ?? NAV_ROUTES[0]!;
+  const active =
+    NAV_ROUTES.find((route) => location.pathname.startsWith(route.path)) ?? NAV_ROUTES[0]!;
   const displayName = session?.name ?? session?.email ?? 'User';
 
   async function signOut() {
@@ -48,43 +58,47 @@ export function AppShell() {
 
   return (
     <MoneyDisplayProvider negativeStyle={negativeStyle}>
-    <AppLayout
-      sidebar={
-        <Sidebar
-          brand={session?.orgName ?? 'LeaseBook'}
-          items={NAV_ROUTES.map((route) => route.item)}
-          activeId={active.item.id}
-          onNavigate={(id) => {
-            const target = NAV_ROUTES.find((route) => route.item.id === id);
-            if (target) navigate(target.path);
-          }}
-          onSettings={() => navigate(SETTINGS_ROUTE.path)}
-          user={{ name: displayName, role: session?.role ?? '', initials: initialsOf(displayName) }}
-        />
-      }
-      topbar={
-        <Topbar
-          title={active.title}
-          onSearchClick={() => setPaletteOpen(true)}
-          actions={
-            <>
-              <Button variant="primary" size="sm" icon="plus">
-                New
-              </Button>
-              <IconButton name="bell" label="Notifications" />
-              <Avatar initials={initialsOf(displayName)} size={32} tone="var(--accent)" />
-              <Button variant="ghost" size="sm" onClick={signOut}>
-                Sign out
-              </Button>
-            </>
-          }
-        />
-      }
-    >
-      <Outlet />
-    </AppLayout>
-    {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} />}
-    {helpOpen && <HelpOverlay onClose={() => setHelpOpen(false)} />}
+      <AppLayout
+        sidebar={
+          <Sidebar
+            brand={session?.orgName ?? 'LeaseBook'}
+            items={NAV_ROUTES.map((route) => route.item)}
+            activeId={active.item.id}
+            onNavigate={(id) => {
+              const target = NAV_ROUTES.find((route) => route.item.id === id);
+              if (target) navigate(target.path);
+            }}
+            onSettings={() => navigate(SETTINGS_ROUTE.path)}
+            user={{
+              name: displayName,
+              role: session?.role ?? '',
+              initials: initialsOf(displayName),
+            }}
+          />
+        }
+        topbar={
+          <Topbar
+            title={active.title}
+            onSearchClick={() => setPaletteOpen(true)}
+            actions={
+              <>
+                <Button variant="primary" size="sm" icon="plus">
+                  New
+                </Button>
+                <IconButton name="bell" label="Notifications" />
+                <Avatar initials={initialsOf(displayName)} size={32} tone="var(--accent)" />
+                <Button variant="ghost" size="sm" onClick={signOut}>
+                  Sign out
+                </Button>
+              </>
+            }
+          />
+        }
+      >
+        <Outlet />
+      </AppLayout>
+      {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} />}
+      {helpOpen && <HelpOverlay onClose={() => setHelpOpen(false)} />}
     </MoneyDisplayProvider>
   );
 }

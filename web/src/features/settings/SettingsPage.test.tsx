@@ -48,14 +48,25 @@ describe('SettingsPage', () => {
     await userEvent.click(screen.getByRole('button', { name: /save changes/i }));
 
     expect(await screen.findByText('Saved')).toBeInTheDocument();
-    expect(saved).toEqual(expect.objectContaining({ accountingBasis: 'accrual', moneyNegativeDisplay: 'parens' }));
+    expect(saved).toEqual(
+      expect.objectContaining({ accountingBasis: 'accrual', moneyNegativeDisplay: 'parens' }),
+    );
   });
 
   it('lists trust bank accounts', async () => {
     server.use(
       http.get('/api/settings/org', () => HttpResponse.json(ORG)),
       http.get('/api/settings/banks', () =>
-        HttpResponse.json([{ id: 'b1', name: 'Operating Trust', institution: 'First Citizens', mask: '4021', purpose: 'trust', isActive: true }]),
+        HttpResponse.json([
+          {
+            id: 'b1',
+            name: 'Operating Trust',
+            institution: 'First Citizens',
+            mask: '4021',
+            purpose: 'trust',
+            isActive: true,
+          },
+        ]),
       ),
     );
     renderSettings();

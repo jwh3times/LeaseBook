@@ -10,8 +10,22 @@ import { LedgerComposer } from './LedgerComposer';
 vi.mock('@/lib/telemetry', () => ({ trackInteraction: vi.fn() }));
 
 const BANKS = [
-  { id: 'trust1', name: 'Operating Trust', institution: null, mask: null, purpose: 'trust', isActive: true },
-  { id: 'dep1', name: 'Deposit Trust', institution: null, mask: null, purpose: 'deposit', isActive: true },
+  {
+    id: 'trust1',
+    name: 'Operating Trust',
+    institution: null,
+    mask: null,
+    purpose: 'trust',
+    isActive: true,
+  },
+  {
+    id: 'dep1',
+    name: 'Deposit Trust',
+    institution: null,
+    mask: null,
+    purpose: 'deposit',
+    isActive: true,
+  },
 ];
 
 function baseHandlers() {
@@ -57,7 +71,12 @@ describe('LedgerComposer', () => {
     await userEvent.keyboard('{Enter}');
 
     await vi.waitFor(() => expect(onPosted).toHaveBeenCalledWith('pay1'));
-    expect(body).toMatchObject({ tenantId: 't1', amount: 1450, method: 'ach', bankAccountId: 'trust1' });
+    expect(body).toMatchObject({
+      tenantId: 't1',
+      amount: 1450,
+      method: 'ach',
+      bankAccountId: 'trust1',
+    });
     expect(body?.sourceRef).toEqual(expect.any(String));
     // open (1) + submit (1), no extra choices → met at ≤ 3.
     expect(trackInteraction).toHaveBeenCalledWith('record-payment', 2, true);
@@ -118,7 +137,10 @@ describe('LedgerComposer', () => {
     server.use(
       ...baseHandlers(),
       http.post('/api/accounting/tenants/:tenantId/payments', () =>
-        HttpResponse.json({ code: 'insufficient_liability', detail: 'exceeds held' }, { status: 409 }),
+        HttpResponse.json(
+          { code: 'insufficient_liability', detail: 'exceeds held' },
+          { status: 409 },
+        ),
       ),
     );
     const { onPosted } = renderComposer();
@@ -136,6 +158,8 @@ describe('LedgerComposer', () => {
   it('auto-opens in payment mode from the palette flag', async () => {
     server.use(...baseHandlers());
     renderComposer({ initialMode: 'payment' });
-    expect(await screen.findByText('Record payment', { selector: '.pf-composer-tag' })).toBeInTheDocument();
+    expect(
+      await screen.findByText('Record payment', { selector: '.pf-composer-tag' }),
+    ).toBeInTheDocument();
   });
 });

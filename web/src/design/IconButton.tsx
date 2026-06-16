@@ -9,7 +9,15 @@ export interface IconButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonEle
   size?: number;
 }
 
-export function IconButton({ name, label, active = false, size = 18, className, type = 'button', ...rest }: IconButtonProps) {
+export function IconButton({
+  name,
+  label,
+  active = false,
+  size = 18,
+  className,
+  type = 'button',
+  ...rest
+}: IconButtonProps) {
   return (
     <button
       type={type}

@@ -8,11 +8,33 @@ import { server } from '@/test/mocks/server';
 import { DashboardPage } from './DashboardPage';
 
 const DASH = {
-  kpis: { trustTotal: 483620.69, ownersPayable: 111967.4, uncleared: 0, unclearedCount: 0, collectedMtd: 1380, collectedTarget: 28000, vacancy: 13 },
+  kpis: {
+    trustTotal: 483620.69,
+    ownersPayable: 111967.4,
+    uncleared: 0,
+    unclearedCount: 0,
+    collectedMtd: 1380,
+    collectedTarget: 28000,
+    vacancy: 13,
+  },
   ownerBalances: {
     rows: [
-      { ownerId: 'o1', name: 'Hargrove Family Trust', operating: 14820.5, deposits: 8400, total: 23220.5, isRollup: false },
-      { ownerId: 'agg', name: 'All other owners', operating: 140147.74, deposits: 0, total: 140147.74, isRollup: true },
+      {
+        ownerId: 'o1',
+        name: 'Hargrove Family Trust',
+        operating: 14820.5,
+        deposits: 8400,
+        total: 23220.5,
+        isRollup: false,
+      },
+      {
+        ownerId: 'agg',
+        name: 'All other owners',
+        operating: 140147.74,
+        deposits: 0,
+        total: 140147.74,
+        isRollup: true,
+      },
     ],
     totals: { operating: 154968.24, deposits: 8400, total: 163368.24 },
   },
@@ -23,7 +45,15 @@ const DASH = {
       { bankAccountId: 'b3', name: 'PM Operating', book: 38240.55 },
     ],
   },
-  actionItems: [{ id: 'a1', kind: 'info', title: 'Deposits awaiting application', detail: '10 held deposits', route: '/banking' }],
+  actionItems: [
+    {
+      id: 'a1',
+      kind: 'info',
+      title: 'Deposits awaiting application',
+      detail: '10 held deposits',
+      route: '/banking',
+    },
+  ],
 };
 
 function renderDashboard() {

@@ -35,7 +35,10 @@ export function useSetRecordOrder(kind: EntityKind): (ids: string[]) => void {
 }
 
 /** Prev/next ids around <code>currentId</code> in the list the user came from (called by the detail page). */
-export function useRecordNav(kind: EntityKind, currentId: string): { prev?: string; next?: string } {
+export function useRecordNav(
+  kind: EntityKind,
+  currentId: string,
+): { prev?: string; next?: string } {
   const ctx = useContext(RecordNavContext);
   const ids = ctx?.order[kind] ?? [];
   const index = ids.indexOf(currentId);

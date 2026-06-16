@@ -1,6 +1,14 @@
 import type { UseQueryResult } from '@tanstack/react-query';
 import { useEffect, useMemo, useState, type KeyboardEvent } from 'react';
-import { Button, Card, EmptyState, type IconName, SearchBox, Table, type TableColumn } from '@/design';
+import {
+  Button,
+  Card,
+  EmptyState,
+  type IconName,
+  SearchBox,
+  Table,
+  type TableColumn,
+} from '@/design';
 import { useSetRecordOrder, type EntityKind } from './recordNav';
 import { trackInteraction } from './telemetry';
 
@@ -27,8 +35,19 @@ interface IndexViewProps<T> {
  * states. Publishes the current filtered order to the record-nav store for the quick-switcher.
  */
 export function IndexView<T>({
-  kind, title, count, query, columns, rowKey, matches, onOpen, onNew, newLabel,
-  searchPlaceholder, emptyTitle, emptyIcon = 'doc',
+  kind,
+  title,
+  count,
+  query,
+  columns,
+  rowKey,
+  matches,
+  onOpen,
+  onNew,
+  newLabel,
+  searchPlaceholder,
+  emptyTitle,
+  emptyIcon = 'doc',
 }: IndexViewProps<T>) {
   const [q, setQ] = useState('');
   const [selected, setSelected] = useState(0);
@@ -94,7 +113,11 @@ export function IndexView<T>({
           <ListSkeleton columns={columns.length} />
         ) : query.isError ? (
           <div className="pf-pad">
-            <EmptyState icon="alert" title="Couldn’t load this list" description="Try again in a moment." />
+            <EmptyState
+              icon="alert"
+              title="Couldn’t load this list"
+              description="Try again in a moment."
+            />
           </div>
         ) : filtered.length === 0 ? (
           <div className="pf-pad">
@@ -102,7 +125,13 @@ export function IndexView<T>({
               icon={emptyIcon}
               title={items.length === 0 ? emptyTitle : 'No matches'}
               description={items.length === 0 ? undefined : `Nothing matches “${q}”.`}
-              action={items.length === 0 ? <Button variant="primary" size="sm" icon="plus" onClick={onNew}>{newLabel}</Button> : undefined}
+              action={
+                items.length === 0 ? (
+                  <Button variant="primary" size="sm" icon="plus" onClick={onNew}>
+                    {newLabel}
+                  </Button>
+                ) : undefined
+              }
             />
           </div>
         ) : (

@@ -2,7 +2,13 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Card, CardHeader, Money, Table, type TableColumn } from '@/design';
 import { DetailPage } from '@/lib/DetailPage';
 import { TenantStatusBadge, UnitStatusBadge } from '@/lib/StatusBadge';
-import { num, usePropertyDetail, type PropertyDetail, type TenantListRow, type UnitRow } from '@/lib/directory';
+import {
+  num,
+  usePropertyDetail,
+  type PropertyDetail,
+  type TenantListRow,
+  type UnitRow,
+} from '@/lib/directory';
 
 const unitColumns: TableColumn<UnitRow>[] = [
   { key: 'label', header: 'Unit', render: (r) => <span className="strong">{r.label}</span> },
@@ -16,9 +22,18 @@ export function PropertyDetailPage() {
   const query = usePropertyDetail(id);
 
   const tenantColumns: TableColumn<TenantListRow>[] = [
-    { key: 'name', header: 'Tenant', render: (r) => <span className="strong">{r.displayName}</span> },
+    {
+      key: 'name',
+      header: 'Tenant',
+      render: (r) => <span className="strong">{r.displayName}</span>,
+    },
     { key: 'unit', header: 'Unit', render: (r) => r.unitLabel ?? '—' },
-    { key: 'balance', header: 'Balance', num: true, render: (r) => <Money value={num(r.balance)} colorize /> },
+    {
+      key: 'balance',
+      header: 'Balance',
+      num: true,
+      render: (r) => <Money value={num(r.balance)} colorize />,
+    },
     { key: 'status', header: 'Status', render: (r) => <TenantStatusBadge status={r.status} /> },
   ];
 
@@ -47,7 +62,12 @@ export function PropertyDetailPage() {
           <Card>
             <CardHeader title="Tenants" sub={`${p.tenants.length} current tenant(s)`} />
             {p.tenants.length > 0 ? (
-              <Table columns={tenantColumns} rows={p.tenants} rowKey={(r) => r.id} onRowClick={(r) => navigate(`/tenants/${r.id}`)} />
+              <Table
+                columns={tenantColumns}
+                rows={p.tenants}
+                rowKey={(r) => r.id}
+                onRowClick={(r) => navigate(`/tenants/${r.id}`)}
+              />
             ) : (
               <div className="pf-pad t3 fs13">No current tenants.</div>
             )}

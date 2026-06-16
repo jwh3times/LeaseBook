@@ -12,7 +12,9 @@ export function MoneyDisplayProvider({
   negativeStyle: NegativeStyle;
   children: ReactNode;
 }) {
-  return <NegativeStyleContext.Provider value={negativeStyle}>{children}</NegativeStyleContext.Provider>;
+  return (
+    <NegativeStyleContext.Provider value={negativeStyle}>{children}</NegativeStyleContext.Provider>
+  );
 }
 
 export interface MoneyProps {
@@ -27,7 +29,14 @@ export interface MoneyProps {
   negativeStyle?: NegativeStyle;
 }
 
-export function Money({ value, big = false, colorize = false, plain = false, sign = false, negativeStyle }: MoneyProps) {
+export function Money({
+  value,
+  big = false,
+  colorize = false,
+  plain = false,
+  sign = false,
+  negativeStyle,
+}: MoneyProps) {
   const contextStyle = useContext(NegativeStyleContext);
   const classes = ['pf-money'];
   if (big) classes.push('big');

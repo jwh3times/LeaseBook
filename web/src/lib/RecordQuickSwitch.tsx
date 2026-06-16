@@ -37,8 +37,18 @@ export function RecordQuickSwitch({
 
   return (
     <div className="pf-switcher" role="group" aria-label="Record navigation">
-      <IconButton name="chevronLeft" label="Previous record ([)" disabled={!prev} onClick={() => prev && navigate(toPath(prev))} />
-      <IconButton name="chevronRight" label="Next record (])" disabled={!next} onClick={() => next && navigate(toPath(next))} />
+      <IconButton
+        name="chevronLeft"
+        label="Previous record ([)"
+        disabled={!prev}
+        onClick={() => prev && navigate(toPath(prev))}
+      />
+      <IconButton
+        name="chevronRight"
+        label="Next record (])"
+        disabled={!next}
+        onClick={() => next && navigate(toPath(next))}
+      />
     </div>
   );
 }

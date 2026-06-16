@@ -10,8 +10,22 @@ import { AuditDrawer } from './AuditDrawer';
 import { VoidDialog } from './VoidDialog';
 
 const BANKS = [
-  { id: 'trust1', name: 'Operating Trust', institution: null, mask: null, purpose: 'trust', isActive: true },
-  { id: 'dep1', name: 'Deposit Trust', institution: null, mask: null, purpose: 'deposit', isActive: true },
+  {
+    id: 'trust1',
+    name: 'Operating Trust',
+    institution: null,
+    mask: null,
+    purpose: 'trust',
+    isActive: true,
+  },
+  {
+    id: 'dep1',
+    name: 'Deposit Trust',
+    institution: null,
+    mask: null,
+    purpose: 'deposit',
+    isActive: true,
+  },
 ];
 
 const csrf = () => http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 }));
@@ -95,7 +109,9 @@ describe('ApplyModal', () => {
       }),
     );
     const onApplied = vi.fn();
-    renderWith(<ApplyModal tenantId="t1" initialKind="deposit" onClose={vi.fn()} onApplied={onApplied} />);
+    renderWith(
+      <ApplyModal tenantId="t1" initialKind="deposit" onClose={vi.fn()} onApplied={onApplied} />,
+    );
 
     await screen.findByText(/From Deposit Trust/); // banks loaded
     await userEvent.type(screen.getByLabelText('Amount'), '1000');
@@ -117,13 +133,18 @@ describe('ApplyModal', () => {
       banksHandler(),
       http.post('/api/accounting/tenants/:tenantId/deposit-applications', () =>
         HttpResponse.json(
-          { code: 'insufficient_receivable', detail: 'Deposit application 1200.00 exceeds the 1000.00 owed.' },
+          {
+            code: 'insufficient_receivable',
+            detail: 'Deposit application 1200.00 exceeds the 1000.00 owed.',
+          },
           { status: 409 },
         ),
       ),
     );
     const onApplied = vi.fn();
-    renderWith(<ApplyModal tenantId="t1" initialKind="deposit" onClose={vi.fn()} onApplied={onApplied} />);
+    renderWith(
+      <ApplyModal tenantId="t1" initialKind="deposit" onClose={vi.fn()} onApplied={onApplied} />,
+    );
 
     await screen.findByText(/From Deposit Trust/);
     await userEvent.type(screen.getByLabelText('Amount'), '1200');
@@ -145,7 +166,9 @@ describe('ApplyModal', () => {
       }),
     );
     const onApplied = vi.fn();
-    renderWith(<ApplyModal tenantId="t1" initialKind="prepayment" onClose={vi.fn()} onApplied={onApplied} />);
+    renderWith(
+      <ApplyModal tenantId="t1" initialKind="prepayment" onClose={vi.fn()} onApplied={onApplied} />,
+    );
 
     await screen.findByText(/From Operating Trust/);
     await userEvent.type(screen.getByLabelText('Amount'), '300');
@@ -162,8 +185,18 @@ describe('AuditDrawer', () => {
       http.get('/api/accounting/entries/:entryId/audit', () =>
         HttpResponse.json({
           rows: [
-            { occurredAt: '2026-02-02T10:00:00Z', action: 'insert', actorName: 'Renée Calloway', actorEmail: 'renee@x.example' },
-            { occurredAt: '2026-02-01T10:00:00Z', action: 'insert', actorName: 'System', actorEmail: null },
+            {
+              occurredAt: '2026-02-02T10:00:00Z',
+              action: 'insert',
+              actorName: 'Renée Calloway',
+              actorEmail: 'renee@x.example',
+            },
+            {
+              occurredAt: '2026-02-01T10:00:00Z',
+              action: 'insert',
+              actorName: 'System',
+              actorEmail: null,
+            },
           ],
         }),
       ),
@@ -175,7 +208,9 @@ describe('AuditDrawer', () => {
   });
 
   it('shows an empty state with no history', async () => {
-    server.use(http.get('/api/accounting/entries/:entryId/audit', () => HttpResponse.json({ rows: [] })));
+    server.use(
+      http.get('/api/accounting/entries/:entryId/audit', () => HttpResponse.json({ rows: [] })),
+    );
     renderWith(<AuditDrawer entryId="e1" onClose={vi.fn()} />);
     expect(await screen.findByText('No history yet')).toBeInTheDocument();
   });

@@ -3,7 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { Badge, Button, Input, Select, type TableColumn } from '@/design';
 import { IndexView } from '@/lib/IndexView';
 import { Modal } from '@/lib/Modal';
-import { num, useCreateProperty, useOwners, useProperties, type PropertyListRow } from '@/lib/directory';
+import {
+  num,
+  useCreateProperty,
+  useOwners,
+  useProperties,
+  type PropertyListRow,
+} from '@/lib/directory';
 
 function propertyMatches(row: PropertyListRow, q: string): boolean {
   return row.address.toLowerCase().includes(q) || row.ownerName.toLowerCase().includes(q);
@@ -47,12 +53,23 @@ export function PropertiesPage() {
         emptyTitle="No properties yet"
         emptyIcon="building"
       />
-      {showNew && <NewPropertyModal onClose={() => setShowNew(false)} onCreated={(id) => navigate(`/properties/${id}`)} />}
+      {showNew && (
+        <NewPropertyModal
+          onClose={() => setShowNew(false)}
+          onCreated={(id) => navigate(`/properties/${id}`)}
+        />
+      )}
     </>
   );
 }
 
-function NewPropertyModal({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {
+function NewPropertyModal({
+  onClose,
+  onCreated,
+}: {
+  onClose: () => void;
+  onCreated: (id: string) => void;
+}) {
   const create = useCreateProperty();
   const owners = useOwners();
   const [ownerId, setOwnerId] = useState('');
@@ -69,7 +86,14 @@ function NewPropertyModal({ onClose, onCreated }: { onClose: () => void; onCreat
       return;
     }
     try {
-      const result = await create.mutateAsync({ ownerId, address, city: city || null, state: state || null, zip: null, mgmtFeeBps: null });
+      const result = await create.mutateAsync({
+        ownerId,
+        address,
+        city: city || null,
+        state: state || null,
+        zip: null,
+        mgmtFeeBps: null,
+      });
       onCreated(result.id);
     } catch {
       setError('Could not create the property. Check the fields and try again.');
@@ -82,8 +106,15 @@ function NewPropertyModal({ onClose, onCreated }: { onClose: () => void; onCreat
       onClose={onClose}
       footer={
         <>
-          <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
-          <Button variant="primary" size="sm" onClick={submit} disabled={create.isPending || !address || !ownerId}>
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={submit}
+            disabled={create.isPending || !address || !ownerId}
+          >
             {create.isPending ? 'Creating…' : 'Create property'}
           </Button>
         </>
@@ -92,16 +123,28 @@ function NewPropertyModal({ onClose, onCreated }: { onClose: () => void; onCreat
       <form className="pf-modal-body" onSubmit={submit}>
         <div className="pf-formrow">
           <label htmlFor="p-owner">Owner</label>
-          <Select id="p-owner" value={ownerId} onChange={(e) => setOwnerId(e.target.value)} required>
+          <Select
+            id="p-owner"
+            value={ownerId}
+            onChange={(e) => setOwnerId(e.target.value)}
+            required
+          >
             <option value="">Select an owner…</option>
             {(owners.data?.items ?? []).map((o) => (
-              <option key={o.id} value={o.id}>{o.name}</option>
+              <option key={o.id} value={o.id}>
+                {o.name}
+              </option>
             ))}
           </Select>
         </div>
         <div className="pf-formrow">
           <label htmlFor="p-address">Address</label>
-          <Input id="p-address" value={address} onChange={(e) => setAddress(e.target.value)} required />
+          <Input
+            id="p-address"
+            value={address}
+            onChange={(e) => setAddress(e.target.value)}
+            required
+          />
         </div>
         <div className="row gap12">
           <div className="pf-formrow grow">
@@ -110,10 +153,19 @@ function NewPropertyModal({ onClose, onCreated }: { onClose: () => void; onCreat
           </div>
           <div className="pf-formrow" style={{ width: 90 }}>
             <label htmlFor="p-state">State</label>
-            <Input id="p-state" value={state} maxLength={2} onChange={(e) => setState(e.target.value.toUpperCase())} />
+            <Input
+              id="p-state"
+              value={state}
+              maxLength={2}
+              onChange={(e) => setState(e.target.value.toUpperCase())}
+            />
           </div>
         </div>
-        {error && <div className="err" role="alert">{error}</div>}
+        {error && (
+          <div className="err" role="alert">
+            {error}
+          </div>
+        )}
       </form>
     </Modal>
   );

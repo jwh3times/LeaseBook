@@ -94,14 +94,19 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
 
         <div className="pf-palette-list" id="palette-list" role="listbox">
           {showRecent && recent.length > 0 && <div className="pf-palette-group">Recent</div>}
-          {showRecent && recent.length === 0 && <div className="pf-palette-empty">Type to search across the directory.</div>}
-          {!showRecent && search.isFetching && items.length === 0 && <div className="pf-palette-empty">Searching…</div>}
+          {showRecent && recent.length === 0 && (
+            <div className="pf-palette-empty">Type to search across the directory.</div>
+          )}
+          {!showRecent && search.isFetching && items.length === 0 && (
+            <div className="pf-palette-empty">Searching…</div>
+          )}
           {!showRecent && !search.isFetching && items.length === 0 && (
             <div className="pf-palette-empty">No matches for “{debounced}”.</div>
           )}
 
           {items.map((result, index) => {
-            const showHeader = !showRecent && (index === 0 || items[index - 1]!.type !== result.type);
+            const showHeader =
+              !showRecent && (index === 0 || items[index - 1]!.type !== result.type);
             return (
               <Fragment key={`${result.type}-${result.id}`}>
                 {showHeader && <div className="pf-palette-group">{groupLabel(result.type)}</div>}

@@ -22,8 +22,18 @@ const columns: TableColumn<OwnerListRow>[] = [
   },
   { key: 'units', header: 'Units', num: true, render: (r) => r.units },
   { key: 'properties', header: 'Properties', num: true, render: (r) => r.properties },
-  { key: 'operating', header: 'Operating', num: true, render: (r) => <Money value={num(r.operating)} colorize /> },
-  { key: 'deposits', header: 'Deposits', num: true, render: (r) => <Money value={num(r.deposits)} /> },
+  {
+    key: 'operating',
+    header: 'Operating',
+    num: true,
+    render: (r) => <Money value={num(r.operating)} colorize />,
+  },
+  {
+    key: 'deposits',
+    header: 'Deposits',
+    num: true,
+    render: (r) => <Money value={num(r.deposits)} />,
+  },
   { key: 'total', header: 'Total', num: true, render: (r) => <Money value={num(r.total)} /> },
 ];
 
@@ -49,12 +59,23 @@ export function OwnersPage() {
         emptyTitle="No owners yet"
         emptyIcon="owners"
       />
-      {showNew && <NewOwnerModal onClose={() => setShowNew(false)} onCreated={(id) => navigate(`/owners/${id}`)} />}
+      {showNew && (
+        <NewOwnerModal
+          onClose={() => setShowNew(false)}
+          onCreated={(id) => navigate(`/owners/${id}`)}
+        />
+      )}
     </>
   );
 }
 
-function NewOwnerModal({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {
+function NewOwnerModal({
+  onClose,
+  onCreated,
+}: {
+  onClose: () => void;
+  onCreated: (id: string) => void;
+}) {
   const create = useCreateOwner();
   const [name, setName] = useState('');
   const [initials, setInitials] = useState('');
@@ -87,7 +108,9 @@ function NewOwnerModal({ onClose, onCreated }: { onClose: () => void; onCreated:
       onClose={onClose}
       footer={
         <>
-          <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            Cancel
+          </Button>
           <Button variant="primary" size="sm" onClick={submit} disabled={create.isPending || !name}>
             {create.isPending ? 'Creating…' : 'Create owner'}
           </Button>
@@ -102,18 +125,40 @@ function NewOwnerModal({ onClose, onCreated }: { onClose: () => void; onCreated:
         <div className="row gap12">
           <div className="pf-formrow grow">
             <label htmlFor="o-initials">Initials</label>
-            <Input id="o-initials" value={initials} maxLength={4} onChange={(e) => setInitials(e.target.value.toUpperCase())} />
+            <Input
+              id="o-initials"
+              value={initials}
+              maxLength={4}
+              onChange={(e) => setInitials(e.target.value.toUpperCase())}
+            />
           </div>
           <div className="pf-formrow grow">
             <label htmlFor="o-fee">Mgmt fee %</label>
-            <Input id="o-fee" type="number" step="0.1" min="0" max="100" value={feePct} onChange={(e) => setFeePct(e.target.value)} />
+            <Input
+              id="o-fee"
+              type="number"
+              step="0.1"
+              min="0"
+              max="100"
+              value={feePct}
+              onChange={(e) => setFeePct(e.target.value)}
+            />
           </div>
         </div>
         <div className="pf-formrow">
           <label htmlFor="o-email">Email</label>
-          <Input id="o-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+          <Input
+            id="o-email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
         </div>
-        {error && <div className="err" role="alert">{error}</div>}
+        {error && (
+          <div className="err" role="alert">
+            {error}
+          </div>
+        )}
       </form>
     </Modal>
   );

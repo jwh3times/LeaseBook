@@ -17,7 +17,10 @@ const MINUS = '−';
 const EM_DASH = '—';
 
 function abs2(value: number): string {
-  return Math.abs(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return Math.abs(value).toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 }
 
 export function formatMoney(value: number, options: FormatMoneyOptions = {}): string {
