@@ -17,13 +17,15 @@ server is untouched, so restore is non-destructive until you cut over.
 
 1. Identify the target timestamp (UTC) — just before the incident.
 2. Restore to a new server:
-   ```
+
+   ```bash
    az postgres flexible-server restore \
      --resource-group lb-<env>-rg \
      --name lb-<env>-pg-restored \
      --source-server lb-<env>-pg \
      --restore-time "<YYYY-MM-DDTHH:MM:SSZ>"
    ```
+
 3. Verify the restored data (connect as `leasebook_ops`, spot-check the trust equation and recent
    journal entries on the affected org).
 4. Cut over: repoint `ConnectionStrings__Default` / `__Migrations` (Key Vault) at the restored
