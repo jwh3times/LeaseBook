@@ -1,8 +1,8 @@
-# ADR-NNN: <short title of decision>
+# ADR-NNN: _short title of decision_
 
 - **Status:** Proposed | Accepted | Superseded by ADR-XXX
 - **Date:** YYYY-MM-DD
-- **Deciders:** <who>
+- **Deciders:** _who_
 
 ## Context
 

@@ -36,6 +36,7 @@ the full Docker stack host port (`8082`; container + prod ingress stay `8080`), 
 offset from the defaults so the stack runs alongside other local projects.
 
 **Backend (.NET, run from repo root):**
+
 - Build: `dotnet build LeaseBook.slnx -c Debug` (nullable + warnings-as-errors)
 - All tests: `dotnet test LeaseBook.slnx`
 - One project: `dotnet test tests/LeaseBook.Tests.Integration/LeaseBook.Tests.Integration.csproj`
@@ -45,6 +46,7 @@ offset from the defaults so the stack runs alongside other local projects.
 - Integration tests use Testcontainers — Docker must be running; they don't need local compose.
 
 **Database (run from repo root; `dotnet tool restore` once for `dotnet-ef`):**
+
 - Local Postgres: `./scripts/dev.ps1 up` | `down` | `reset-db` | `psql` (see docs/runbooks/local-dev.md)
 - Add migration: `dotnet ef migrations add <Name> --project src/LeaseBook.Web`
 - Apply migrations (migrator role): `dotnet ef database update --project src/LeaseBook.Web`
@@ -52,6 +54,7 @@ offset from the defaults so the stack runs alongside other local projects.
 - Check invariants: `$env:ASPNETCORE_ENVIRONMENT='Development'; dotnet run --project src/LeaseBook.Web -- check-invariants --org demo` (or `--all`)
 
 **Web (run from `web/`):**
+
 - Dev server (:5373, proxies `/api` → :5080): `npm run dev`
 - Lint / typecheck / test / build: `npm run lint` · `npm run typecheck` · `npm run test` · `npm run build`
 - Single test: `npm run test -- src/design/formatMoney.test.ts`
@@ -61,7 +64,7 @@ offset from the defaults so the stack runs alongside other local projects.
 **Container:** `docker build -t leasebook .` then run with `ConnectionStrings__Default` set — serves the
 SPA and `/api` on port 8080 (the container's internal port). To run the **whole product** locally
 (db + migrate + seed + app): `./scripts/dev.ps1 app-up` (Compose `full` profile →
-http://localhost:8082; see docs/runbooks/local-dev.md).
+<http://localhost:8082>; see docs/runbooks/local-dev.md).
 Migrations run as the migrator role via a one-shot `migrator`-target image (EF bundle), never at app startup.
 
 ## Planned architecture (private/TODO.md §1 is the full blueprint)

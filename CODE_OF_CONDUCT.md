@@ -64,7 +64,7 @@ every conflict represents a code of conduct violation, and this Code of Conduct 
 behaviors and norms that can help avoid conflicts and minimize harm.
 
 When an incident does occur, it is important to report it promptly. To report a possible violation,
-email the maintainers at **conduct@holland.vip**. Reports are handled privately and confidentially.
+email the maintainers at **<conduct@holland.vip>**. Reports are handled privately and confidentially.
 
 > Please do **not** report security vulnerabilities through this channel — see
 > [SECURITY.md](SECURITY.md) for the private security-reporting process.
@@ -137,7 +137,7 @@ Contributor Covenant is stewarded by the Organization for Ethical Source and lic
 [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
 
 For answers to common questions about Contributor Covenant, see the
-[FAQ](https://www.contributor-covenant.org/faq). Translations are provided
-[here](https://www.contributor-covenant.org/translations). Additional enforcement and community
-guideline resources can be found [here](https://www.contributor-covenant.org/resources). The
-enforcement ladder was inspired by the work of Mozilla's code of conduct team.
+[FAQ](https://www.contributor-covenant.org/faq).
+[Translations](https://www.contributor-covenant.org/translations) are also available, along with
+additional [enforcement and community guideline resources](https://www.contributor-covenant.org/resources).
+The enforcement ladder was inspired by the work of Mozilla's code of conduct team.

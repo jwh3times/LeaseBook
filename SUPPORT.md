@@ -44,4 +44,4 @@ move it to an issue.
 ## Code of conduct
 
 All participation is governed by our [Code of Conduct](CODE_OF_CONDUCT.md). Conduct concerns go to
-**conduct@holland.vip**, not to public issues.
+**<conduct@holland.vip>**, not to public issues.

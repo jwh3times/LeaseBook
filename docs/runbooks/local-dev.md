@@ -52,7 +52,7 @@ There are two distinct local modes, selected by Docker Compose **profile**:
    proxying `/api` → :5080). Fast edit/reload; this is the day-to-day developer loop.
 
 2. **Full product in containers.** `dev.ps1 app-up` builds and runs the entire product — Postgres,
-   schema migration, demo seed, and the app (SPA + API) — at **http://localhost:8082**. This is for
+   schema migration, demo seed, and the app (SPA + API) — at **<http://localhost:8082>**. This is for
    demoing or sanity-checking the shipped artifact, not for fast iteration (each change needs a
    rebuild). Sign in with the seeded dev admin (below).
 
@@ -62,7 +62,7 @@ runs everything.
 
 ## Running the full product in Docker
 
-```
+```bash
 ./scripts/dev.ps1 app-up      # build images, start db→migrate→seed→app, wait for /api/health
 # → browse http://localhost:8082, sign in as the seeded admin (see "Migrations and seed")
 ./scripts/dev.ps1 app-logs    # tail the app
@@ -88,6 +88,7 @@ boundary — see Multi-tenancy in `CLAUDE.md`). The chiseled runtime image carri
 the `migrator` stage compiles a self-applying migrations bundle that connects as the migrator role.
 
 Notes:
+
 - **Port already in use?** Override with `LEASEBOOK_APP_PORT` (app) or `LEASEBOOK_DB_PORT` (db), e.g.
   `$env:LEASEBOOK_APP_PORT='8090'; ./scripts/dev.ps1 app-up`.
 - **Rebuild after code changes:** `app-up` always passes `--build`, so re-running it picks up changes.
@@ -102,7 +103,7 @@ Notes:
 From the host (TCP, password auth — these connection strings land in `appsettings.Development.json`
 in WP-04):
 
-```
+```bash
 # app role (runtime)
 psql "host=localhost port=5432 dbname=leasebook user=leasebook_app password=dev_app_pw"
 
@@ -114,7 +115,7 @@ Or inside the container (local socket, no password): `./scripts/dev.ps1 psql`.
 
 Verify the app role can connect:
 
-```
+```bash
 docker compose exec db psql -U leasebook_app -d leasebook -c "SELECT current_user;"
 ```
 
@@ -123,13 +124,13 @@ docker compose exec db psql -U leasebook_app -d leasebook -c "SELECT current_use
 Restore the local tool manifest once (`dotnet tool restore`), then apply migrations as the
 **migrator** role (the design-time factory uses `ConnectionStrings:Migrations`):
 
-```
+```bash
 dotnet ef database update --project src/LeaseBook.Web
 ```
 
 Seed the demo org (`Tarheel Property Group`) and its admin — idempotent, safe to re-run:
 
-```
+```powershell
 $env:ASPNETCORE_ENVIRONMENT = "Development"   # loads the dev connection strings
 dotnet run --project src/LeaseBook.Web -- seed --org demo
 ```
@@ -153,7 +154,7 @@ The `check-invariants` verb sweeps the core correctness invariants (I1 entries b
 I2 the trust equation per trust bank, I3 PM-income isolation, I4 deposit liabilities ≥ 0) and exits
 non-zero on any violation. It is the body of the future nightly sweep (P33 / ADR-006).
 
-```
+```powershell
 $env:ASPNETCORE_ENVIRONMENT = "Development"
 dotnet run --project src/LeaseBook.Web -- check-invariants --all          # every org
 dotnet run --project src/LeaseBook.Web -- check-invariants --org demo     # one org (or a GUID)
@@ -163,6 +164,6 @@ The accounting property suite (`LeaseBook.Tests.Accounting`) runs random valid e
 through the real engine. Its iteration count is the `LEASEBOOK_PROPERTY_ITER` environment variable
 (default 20); CI and pre-merge runs raise it (e.g. `100`) for deeper coverage:
 
-```
+```powershell
 $env:LEASEBOOK_PROPERTY_ITER = "100"; dotnet test tests/LeaseBook.Tests.Accounting/LeaseBook.Tests.Accounting.csproj
 ```

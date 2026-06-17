@@ -20,7 +20,7 @@ hyphen-averse names compress to `lb<env>acr` (ACR) and `lb<env>storage<hash>` (s
 
 ## Validate / deploy
 
-```
+```bash
 az bicep build --file infra/main.bicep
 LEASEBOOK_PG_ADMIN_PASSWORD=... az deployment sub what-if \
   --location eastus2 --template-file infra/main.bicep --parameters infra/env/dev.bicepparam
