@@ -47,7 +47,7 @@ public sealed class InvariantPropertyTests(PostgresFixture fixture)
 
         // Seed directory rows for the dimension ids this case posts, so the journal-dimension FKs
         // resolve when the engine posts (P38 / ADR-008).
-        await EnsureDirectoryAsync(fixture, ct, owners: [owner], tenants: [tenant], properties: [property]);
+        await EnsureDirectoryAsync(fixture, scope, ct, owners: [owner], tenants: [tenant], properties: [property]);
 
         foreach (var (kind, cents) in ops)
         {
@@ -68,7 +68,7 @@ public sealed class InvariantPropertyTests(PostgresFixture fixture)
             if (receivable > 0m)
             {
                 await Events(scope).PostAsync(new PaymentReceived(
-                    tenant, property, owner, new Money(receivable), new DateOnly(2026, 2, 5), PaymentMethod.Ach, TrustBankId, "settle"), ct);
+                    tenant, property, owner, new Money(receivable), new DateOnly(2026, 2, 5), PaymentMethod.Ach, scope.TrustBankId, "settle"), ct);
             }
         }, ct);
 
@@ -94,29 +94,29 @@ public sealed class InvariantPropertyTests(PostgresFixture fixture)
                 voidable.Add(await events.PostAsync(new RentCharged(tenant, property, owner, null, new Money(amount), new DateOnly(2026, 2, 1), "rc"), ct));
                 break;
             case Op.Pay:
-                voidable.Add(await events.PostAsync(new PaymentReceived(tenant, property, owner, new Money(amount), new DateOnly(2026, 2, 3), PaymentMethod.Ach, TrustBankId, "pay"), ct));
+                voidable.Add(await events.PostAsync(new PaymentReceived(tenant, property, owner, new Money(amount), new DateOnly(2026, 2, 3), PaymentMethod.Ach, scope.TrustBankId, "pay"), ct));
                 break;
             case Op.DepositCollect:
-                voidable.Add(await events.PostAsync(new DepositCollected(tenant, property, owner, new Money(amount), new DateOnly(2026, 2, 1), DepositBankId, "dep"), ct));
+                voidable.Add(await events.PostAsync(new DepositCollected(tenant, property, owner, new Money(amount), new DateOnly(2026, 2, 1), scope.DepositBankId, "dep"), ct));
                 break;
             case Op.DepositApply:
                 var held = await balances.DepositsHeldAsync(tenant, ct);
                 var apply = Math.Min(amount, held);
                 if (apply > 0m)
                 {
-                    voidable.Add(await events.PostAsync(new DepositApplied(tenant, property, owner, new Money(apply), new DateOnly(2026, 2, 28), DepositBankId, TrustBankId, DepositApplication.ToOwnerIncome, "da"), ct));
+                    voidable.Add(await events.PostAsync(new DepositApplied(tenant, property, owner, new Money(apply), new DateOnly(2026, 2, 28), scope.DepositBankId, scope.TrustBankId, DepositApplication.ToOwnerIncome, "da"), ct));
                 }
 
                 break;
             case Op.Fee:
-                voidable.Add(await events.PostAsync(new ManagementFeeAssessed(owner, property, new Money(amount), new DateOnly(2026, 2, 27), TrustBankId, "fee"), ct));
+                voidable.Add(await events.PostAsync(new ManagementFeeAssessed(owner, property, new Money(amount), new DateOnly(2026, 2, 27), scope.TrustBankId, "fee"), ct));
                 break;
             case Op.Sweep:
-                var fees = await balances.HeldFeesAsync(TrustBankId, ct);
+                var fees = await balances.HeldFeesAsync(scope.TrustBankId, ct);
                 var sweep = Math.Min(amount, fees);
                 if (sweep > 0m)
                 {
-                    voidable.Add(await events.PostAsync(new PMFeesSwept(new Money(sweep), new DateOnly(2026, 2, 27), TrustBankId, OperatingBankId, "sw"), ct));
+                    voidable.Add(await events.PostAsync(new PMFeesSwept(new Money(sweep), new DateOnly(2026, 2, 27), scope.TrustBankId, scope.OperatingBankId, "sw"), ct));
                 }
 
                 break;
@@ -125,7 +125,7 @@ public sealed class InvariantPropertyTests(PostgresFixture fixture)
                 var draw = Math.Min(amount, Math.Max(equity, 0m));
                 if (draw > 0m)
                 {
-                    voidable.Add(await events.PostAsync(new OwnerDisbursed(owner, new Money(draw), new DateOnly(2026, 2, 28), TrustBankId, "draw"), ct));
+                    voidable.Add(await events.PostAsync(new OwnerDisbursed(owner, new Money(draw), new DateOnly(2026, 2, 28), scope.TrustBankId, "draw"), ct));
                 }
 
                 break;

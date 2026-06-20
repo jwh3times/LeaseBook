@@ -16,14 +16,17 @@ namespace LeaseBook.Tests.Accounting;
 [Collection(nameof(DatabaseCollection))]
 public sealed class PostingTemplatesTests(PostgresFixture fixture)
 {
-    private static readonly Guid Owner = Guid.Parse("00000000-0000-0000-0000-0000000000e1");
-    private static readonly Guid Property = Guid.Parse("00000000-0000-0000-0000-0000000000d1");
-    private static readonly Guid Unit = Guid.Parse("00000000-0000-0000-0000-0000000000c1");
-    private static readonly Guid Tenant = Guid.Parse("00000000-0000-0000-0000-0000000000f1");
+    // Fresh per test instance: the composite (org_id, dim_id) FK (ADR-013) forbids reusing a fixed id
+    // across orgs (global PK), and these were shared across test classes — so each test mints its own.
+    private readonly Guid Owner = UuidV7.NewId();
+    private readonly Guid Property = UuidV7.NewId();
+    private readonly Guid Unit = UuidV7.NewId();
+    private readonly Guid Tenant = UuidV7.NewId();
 
-    private static string TrustBank => AccountCodes.TrustBank(TrustBankId);
-    private static string DepositBank => AccountCodes.TrustBank(DepositBankId);
-    private static string PmBank => AccountCodes.PmOperatingBank(OperatingBankId);
+    // Bank account codes embed the per-org bank id (ADR-013), so they are resolved from the scope.
+    private static string TrustBank(OrgScope scope) => AccountCodes.TrustBank(scope.TrustBankId);
+    private static string DepositBank(OrgScope scope) => AccountCodes.TrustBank(scope.DepositBankId);
+    private static string PmBank(OrgScope scope) => AccountCodes.PmOperatingBank(scope.OperatingBankId);
 
     [Fact]
     public async Task RentCharged_accrues_receivable_and_owner_income()
@@ -57,19 +60,19 @@ public sealed class PostingTemplatesTests(PostgresFixture fixture)
 
         await PostAsync(scope, new RentCharged(Tenant, Property, Owner, Unit, new Money(1450m), Feb(1), "rent"), ct);
         var id = await PostAsync(scope, new PaymentReceived(
-            Tenant, Property, Owner, new Money(1450m), Feb(3), PaymentMethod.Ach, TrustBankId, "Feb payment"), ct);
+            Tenant, Property, Owner, new Money(1450m), Feb(3), PaymentMethod.Ach, scope.TrustBankId, "Feb payment"), ct);
         var lines = await ReadLinesAsync(scope, id, ct);
 
         lines.Count.ShouldBe(3);
-        Debit(lines, TrustBank).Debit.ShouldBe(1450m);
-        Debit(lines, TrustBank).Basis.ShouldBe(EntryBasis.Both);
-        Debit(lines, TrustBank).BankAccountId.ShouldBe(TrustBankId);
+        Debit(lines, TrustBank(scope)).Debit.ShouldBe(1450m);
+        Debit(lines, TrustBank(scope)).Basis.ShouldBe(EntryBasis.Both);
+        Debit(lines, TrustBank(scope)).BankAccountId.ShouldBe(scope.TrustBankId);
         Credit(lines, AccountCodes.TenantReceivable).Credit.ShouldBe(1450m);
         Credit(lines, AccountCodes.TenantReceivable).Basis.ShouldBe(EntryBasis.Accrual);
         var equity = Credit(lines, AccountCodes.OwnerEquity);
         equity.Credit.ShouldBe(1450m);
         equity.Basis.ShouldBe(EntryBasis.Cash);
-        equity.BankAccountId.ShouldBe(TrustBankId);
+        equity.BankAccountId.ShouldBe(scope.TrustBankId);
         lines.ShouldNotContain(l => l.Code == AccountCodes.TenantPrepayments);
         AssertBalancesPerBasis(lines);
     }
@@ -83,11 +86,11 @@ public sealed class PostingTemplatesTests(PostgresFixture fixture)
 
         await PostAsync(scope, new RentCharged(Tenant, Property, Owner, Unit, new Money(2150m), May(1), "rent"), ct);
         var id = await PostAsync(scope, new PaymentReceived(
-            Tenant, Property, Owner, new Money(2225m), May(22), PaymentMethod.Ach, TrustBankId, "overpay"), ct);
+            Tenant, Property, Owner, new Money(2225m), May(22), PaymentMethod.Ach, scope.TrustBankId, "overpay"), ct);
         var lines = await ReadLinesAsync(scope, id, ct);
 
         lines.Count.ShouldBe(4);
-        Debit(lines, TrustBank).Debit.ShouldBe(2225m);
+        Debit(lines, TrustBank(scope)).Debit.ShouldBe(2225m);
         Credit(lines, AccountCodes.TenantReceivable).Credit.ShouldBe(2150m); // up to the open receivable
         Credit(lines, AccountCodes.OwnerEquity).Credit.ShouldBe(2150m);
         var prepay = Credit(lines, AccountCodes.TenantPrepayments);
@@ -105,15 +108,15 @@ public sealed class PostingTemplatesTests(PostgresFixture fixture)
             fixture, ct, owners: [Owner], tenants: [Tenant], properties: [Property], units: [Unit]);
 
         var id = await PostAsync(scope, new DepositCollected(
-            Tenant, Property, Owner, new Money(1450m), Feb(1), DepositBankId, "move-in deposit"), ct);
+            Tenant, Property, Owner, new Money(1450m), Feb(1), scope.DepositBankId, "move-in deposit"), ct);
         var lines = await ReadLinesAsync(scope, id, ct);
 
         lines.Count.ShouldBe(2);
-        Debit(lines, DepositBank).Debit.ShouldBe(1450m);
+        Debit(lines, DepositBank(scope)).Debit.ShouldBe(1450m);
         var held = Credit(lines, AccountCodes.SecurityDepositsHeld);
         held.Credit.ShouldBe(1450m);
         held.Basis.ShouldBe(EntryBasis.Both);
-        held.BankAccountId.ShouldBe(DepositBankId);
+        held.BankAccountId.ShouldBe(scope.DepositBankId);
 
         // No income-class line in any basis, ever.
         lines.ShouldNotContain(l => l.Code == AccountCodes.PmIncome || l.Code == AccountCodes.OwnerEquity);
@@ -127,16 +130,16 @@ public sealed class PostingTemplatesTests(PostgresFixture fixture)
         await using var scope = await ProvisionedScopeAsync(
             fixture, ct, owners: [Owner], tenants: [Tenant], properties: [Property], units: [Unit]);
 
-        await PostAsync(scope, new DepositCollected(Tenant, Property, Owner, new Money(1450m), Feb(1), DepositBankId, "deposit"), ct);
+        await PostAsync(scope, new DepositCollected(Tenant, Property, Owner, new Money(1450m), Feb(1), scope.DepositBankId, "deposit"), ct);
         var id = await PostAsync(scope, new DepositApplied(
-            Tenant, Property, Owner, new Money(1450m), May(31), DepositBankId, TrustBankId,
+            Tenant, Property, Owner, new Money(1450m), May(31), scope.DepositBankId, scope.TrustBankId,
             DepositApplication.ToOwnerIncome, "damages"), ct);
         var lines = await ReadLinesAsync(scope, id, ct);
 
         lines.Count.ShouldBe(4);
         Debit(lines, AccountCodes.SecurityDepositsHeld).Debit.ShouldBe(1450m); // liability ↓
-        Credit(lines, DepositBank).Credit.ShouldBe(1450m);                     // deposit bank ↓
-        Debit(lines, TrustBank).Debit.ShouldBe(1450m);                         // operating bank ↑
+        Credit(lines, DepositBank(scope)).Credit.ShouldBe(1450m);              // deposit bank ↓
+        Debit(lines, TrustBank(scope)).Debit.ShouldBe(1450m);                  // operating bank ↑
         var equity = Credit(lines, AccountCodes.OwnerEquity);
         equity.Credit.ShouldBe(1450m);
         equity.Basis.ShouldBe(EntryBasis.Both); // income recognized identically in both bases
@@ -150,11 +153,11 @@ public sealed class PostingTemplatesTests(PostgresFixture fixture)
         await using var scope = await ProvisionedScopeAsync(
             fixture, ct, owners: [Owner], tenants: [Tenant], properties: [Property], units: [Unit]);
 
-        await PostAsync(scope, new DepositCollected(Tenant, Property, Owner, new Money(1450m), Feb(1), DepositBankId, "deposit"), ct);
+        await PostAsync(scope, new DepositCollected(Tenant, Property, Owner, new Money(1450m), Feb(1), scope.DepositBankId, "deposit"), ct);
         // A receivable must exist before applying a deposit against charges (ADR-011 / P51).
         await PostAsync(scope, new RentCharged(Tenant, Property, Owner, Unit, new Money(1450m), Feb(1), "rent"), ct);
         var id = await PostAsync(scope, new DepositApplied(
-            Tenant, Property, Owner, new Money(1450m), May(31), DepositBankId, TrustBankId,
+            Tenant, Property, Owner, new Money(1450m), May(31), scope.DepositBankId, scope.TrustBankId,
             DepositApplication.AgainstCharges, "applied to balance"), ct);
         var lines = await ReadLinesAsync(scope, id, ct);
 
@@ -176,7 +179,7 @@ public sealed class PostingTemplatesTests(PostgresFixture fixture)
             fixture, ct, owners: [Owner], tenants: [Tenant], properties: [Property], units: [Unit]);
 
         var id = await PostAsync(scope, new ManagementFeeAssessed(
-            Owner, Property, new Money(290m), May(27), TrustBankId, "May management fee"), ct);
+            Owner, Property, new Money(290m), May(27), scope.TrustBankId, "May management fee"), ct);
         var lines = await ReadLinesAsync(scope, id, ct);
 
         lines.Count.ShouldBe(2);
@@ -184,7 +187,7 @@ public sealed class PostingTemplatesTests(PostgresFixture fixture)
         var pmIncome = Credit(lines, AccountCodes.PmIncome);
         pmIncome.Credit.ShouldBe(290m);
         pmIncome.OwnerId.ShouldBeNull(); // structural PM/owner isolation (P25)
-        pmIncome.BankAccountId.ShouldBe(TrustBankId);
+        pmIncome.BankAccountId.ShouldBe(scope.TrustBankId);
         AssertBalancesPerBasis(lines);
     }
 
@@ -195,18 +198,18 @@ public sealed class PostingTemplatesTests(PostgresFixture fixture)
         await using var scope = await ProvisionedScopeAsync(
             fixture, ct, owners: [Owner], tenants: [Tenant], properties: [Property], units: [Unit]);
 
-        await PostAsync(scope, new ManagementFeeAssessed(Owner, Property, new Money(290m), May(27), TrustBankId, "fee"), ct);
-        var id = await PostAsync(scope, new PMFeesSwept(new Money(290m), May(27), TrustBankId, OperatingBankId, "sweep"), ct);
+        await PostAsync(scope, new ManagementFeeAssessed(Owner, Property, new Money(290m), May(27), scope.TrustBankId, "fee"), ct);
+        var id = await PostAsync(scope, new PMFeesSwept(new Money(290m), May(27), scope.TrustBankId, scope.OperatingBankId, "sweep"), ct);
         var lines = await ReadLinesAsync(scope, id, ct);
 
         lines.Count.ShouldBe(4);
-        Credit(lines, TrustBank).Credit.ShouldBe(290m);   // trust bank ↓
-        Debit(lines, PmBank).Debit.ShouldBe(290m);        // PM operating ↑
+        Credit(lines, TrustBank(scope)).Credit.ShouldBe(290m);   // trust bank ↓
+        Debit(lines, PmBank(scope)).Debit.ShouldBe(290m);        // PM operating ↑
         // pm_income moves from the trust-bank dim to the PM-bank dim; net income unchanged.
         var pmDebit = lines.Single(l => l.Code == AccountCodes.PmIncome && l.Debit is not null);
-        pmDebit.BankAccountId.ShouldBe(TrustBankId);
+        pmDebit.BankAccountId.ShouldBe(scope.TrustBankId);
         var pmCredit = lines.Single(l => l.Code == AccountCodes.PmIncome && l.Credit is not null);
-        pmCredit.BankAccountId.ShouldBe(OperatingBankId);
+        pmCredit.BankAccountId.ShouldBe(scope.OperatingBankId);
         lines.ShouldAllBe(l => l.OwnerId == null); // pm_income never carries an owner
         AssertBalancesPerBasis(lines);
     }
@@ -218,13 +221,13 @@ public sealed class PostingTemplatesTests(PostgresFixture fixture)
         await using var scope = await ProvisionedScopeAsync(
             fixture, ct, owners: [Owner], tenants: [Tenant], properties: [Property], units: [Unit]);
 
-        await PostAsync(scope, new OwnerContribution(Owner, Property, new Money(10000m), Feb(1), TrustBankId, "seed"), ct);
-        var id = await PostAsync(scope, new OwnerDisbursed(Owner, new Money(8200m), Jun(2), TrustBankId, "owner draw"), ct);
+        await PostAsync(scope, new OwnerContribution(Owner, Property, new Money(10000m), Feb(1), scope.TrustBankId, "seed"), ct);
+        var id = await PostAsync(scope, new OwnerDisbursed(Owner, new Money(8200m), Jun(2), scope.TrustBankId, "owner draw"), ct);
         var lines = await ReadLinesAsync(scope, id, ct);
 
         lines.Count.ShouldBe(2);
         Debit(lines, AccountCodes.OwnerEquity).Debit.ShouldBe(8200m);
-        Credit(lines, TrustBank).Credit.ShouldBe(8200m);
+        Credit(lines, TrustBank(scope)).Credit.ShouldBe(8200m);
         AssertBalancesPerBasis(lines);
     }
 
@@ -258,8 +261,8 @@ public sealed class PostingTemplatesTests(PostgresFixture fixture)
             id = await Events(scope).PostAsync(new BalanceForwardRequest(
                 Feb(1),
                 [
-                    new BalanceForwardLine(TrustBank, new Money(5000m), null, BankAccountId: TrustBankId),
-                    new BalanceForwardLine(AccountCodes.OwnerEquity, null, new Money(5000m), OwnerId: Owner, BankAccountId: TrustBankId),
+                    new BalanceForwardLine(TrustBank(scope), new Money(5000m), null, BankAccountId: scope.TrustBankId),
+                    new BalanceForwardLine(AccountCodes.OwnerEquity, null, new Money(5000m), OwnerId: Owner, BankAccountId: scope.TrustBankId),
                 ],
                 "cutover"), ct);
         }, ct);
@@ -277,11 +280,11 @@ public sealed class PostingTemplatesTests(PostgresFixture fixture)
         await using var scope = await ProvisionedScopeAsync(
             fixture, ct, owners: [Owner], tenants: [Tenant], properties: [Property], units: [Unit]);
 
-        await PostAsync(scope, new OwnerContribution(Owner, Property, new Money(1000m), Feb(1), TrustBankId, "seed"), ct);
+        await PostAsync(scope, new OwnerContribution(Owner, Property, new Money(1000m), Feb(1), scope.TrustBankId, "seed"), ct);
 
         var ex = await Should.ThrowAsync<ReserveFloorException>(() => scope.RunAsync(() =>
             Events(scope).PostAsync(new OwnerDisbursed(
-                Owner, new Money(900m), Feb(15), TrustBankId, "draw", Reserve: new Money(500m)), ct), ct));
+                Owner, new Money(900m), Feb(15), scope.TrustBankId, "draw", Reserve: new Money(500m)), ct), ct));
         ex.Code.ShouldBe("reserve_floor"); // 1000 - 900 = 100 < 500
     }
 
@@ -292,11 +295,11 @@ public sealed class PostingTemplatesTests(PostgresFixture fixture)
         await using var scope = await ProvisionedScopeAsync(
             fixture, ct, owners: [Owner], tenants: [Tenant], properties: [Property], units: [Unit]);
 
-        await PostAsync(scope, new DepositCollected(Tenant, Property, Owner, new Money(1000m), Feb(1), DepositBankId, "deposit"), ct);
+        await PostAsync(scope, new DepositCollected(Tenant, Property, Owner, new Money(1000m), Feb(1), scope.DepositBankId, "deposit"), ct);
 
         var ex = await Should.ThrowAsync<InsufficientLiabilityException>(() => scope.RunAsync(() =>
             Events(scope).PostAsync(new DepositApplied(
-                Tenant, Property, Owner, new Money(1500m), May(31), DepositBankId, TrustBankId,
+                Tenant, Property, Owner, new Money(1500m), May(31), scope.DepositBankId, scope.TrustBankId,
                 DepositApplication.ToOwnerIncome, "too much"), ct), ct));
         ex.Code.ShouldBe("insufficient_liability");
     }

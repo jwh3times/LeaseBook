@@ -4,6 +4,7 @@ using LeaseBook.Modules.Accounting.Features.Posting;
 using LeaseBook.Modules.Accounting.Periods;
 using LeaseBook.Modules.Accounting.Posting;
 using LeaseBook.Modules.Accounting.Provisioning;
+using LeaseBook.SharedKernel;
 using LeaseBook.Tests.Common;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -16,29 +17,18 @@ namespace LeaseBook.Tests.Accounting.Support;
 /// context. Construction goes through the real services — never raw SQL — so the engine is always the
 /// thing under test (§A money-path discipline).
 /// <para>
-/// Since M2 (ADR-008) the journal's dimension columns FK to the directory tables, so any synthetic
-/// entry the engine posts needs a directory row for each owner/tenant/property/unit/bank id it carries.
-/// Those rows are <b>FK targets only</b> — never queried by the tests — so the harness materialises them
-/// once in a hidden "harness directory" org via the migrator with <c>ON CONFLICT DO NOTHING</c>. Postgres
-/// FK checks bypass row security, so a single global row per id satisfies every test org's FK even though
-/// RLS hides it from them. This keeps the fixed dimension ids the suites reuse across orgs collision-free
-/// (the PK is global) without per-org seeding. <see cref="ProvisionedScopeAsync"/> seeds the three banks
+/// Since M2 (ADR-008) the journal's dimension columns FK to the directory tables, and since M4 (ADR-013)
+/// those FKs are <b>composite</b> <c>(org_id, &lt;dim&gt;_id) → (org_id, id)</c>, so any synthetic entry the
+/// engine posts needs a directory row <b>in the same org</b> for each owner/tenant/property/unit/bank id it
+/// carries. Those rows are <b>FK targets only</b> — never queried by the tests — so the harness materialises
+/// them per scope via the migrator with <c>ON CONFLICT DO NOTHING</c>, under that org's RLS context. Bank
+/// ids are generated <b>per org</b> (a global-unique <c>bank_accounts.id</c> cannot be shared across orgs)
+/// and recorded on the <see cref="OrgScope"/>. <see cref="ProvisionedScopeAsync"/> seeds the three banks
 /// plus any dims passed in; <see cref="EnsureDirectoryAsync"/> seeds dims generated after the scope exists.
 /// </para>
 /// </summary>
 internal static class AccountingTestHarness
 {
-    public static readonly Guid TrustBankId = Guid.Parse("00000000-0000-0000-0000-0000000000b1");
-    public static readonly Guid DepositBankId = Guid.Parse("00000000-0000-0000-0000-0000000000b2");
-    public static readonly Guid OperatingBankId = Guid.Parse("00000000-0000-0000-0000-0000000000b3");
-
-    // The hidden org the FK-target directory rows hang off (invisible to test orgs via RLS; FK checks
-    // bypass RLS). Sentinels give seeded properties an owner and seeded units a property (intra-directory
-    // FKs) without the harness needing to know a dimension's real parent.
-    private static readonly Guid HarnessDirectoryOrgId = Guid.Parse("00000000-0000-0000-0000-0000000d1100");
-    private static readonly Guid SentinelOwnerId = Guid.Parse("00000000-0000-0000-0000-0000000000fe");
-    private static readonly Guid SentinelPropertyId = Guid.Parse("00000000-0000-0000-0000-0000000000fd");
-
     /// <summary>
     /// A fresh org with the chart of accounts provisioned, the three directory bank rows present, and
     /// minimal directory rows for any dimension ids passed in (so the journal-dimension FKs resolve, P38).
@@ -48,14 +38,19 @@ internal static class AccountingTestHarness
         Guid[]? owners = null, Guid[]? tenants = null, Guid[]? properties = null, Guid[]? units = null)
     {
         var scope = await OrgScope.CreateAsync(fixture, ct);
+
+        // Bank ids are per-org now (ADR-013): the composite (org_id, bank_account_id) FK is org-scoped and
+        // bank_accounts.id is globally unique, so a fixed id cannot be seeded into more than one org.
+        scope.SetBankIds(UuidV7.NewId(), UuidV7.NewId(), UuidV7.NewId());
+
         await scope.RunAsync(() => new ChartOfAccounts(scope.Db).ProvisionAsync(
             [
-                new BankAccountSpec(TrustBankId, "Operating Trust", BankPurpose.Trust),
-                new BankAccountSpec(DepositBankId, "Deposit Trust", BankPurpose.Deposit),
-                new BankAccountSpec(OperatingBankId, "Management Operating", BankPurpose.Operating),
+                new BankAccountSpec(scope.TrustBankId, "Operating Trust", BankPurpose.Trust),
+                new BankAccountSpec(scope.DepositBankId, "Deposit Trust", BankPurpose.Deposit),
+                new BankAccountSpec(scope.OperatingBankId, "Management Operating", BankPurpose.Operating),
             ], ct), ct);
 
-        await EnsureDirectoryAsync(fixture, ct, owners, tenants, properties, units);
+        await EnsureDirectoryAsync(fixture, scope, ct, owners, tenants, properties, units);
         return scope;
     }
 
@@ -64,72 +59,82 @@ internal static class AccountingTestHarness
     /// (idempotent, RLS-bypassing). Call with ids generated after the scope exists (property suites).
     /// </summary>
     public static async Task EnsureDirectoryAsync(
-        PostgresFixture fixture, CancellationToken ct,
+        PostgresFixture fixture, OrgScope scope, CancellationToken ct,
         Guid[]? owners = null, Guid[]? tenants = null, Guid[]? properties = null, Guid[]? units = null)
     {
+        var orgId = scope.OrgId;
+
+        // Per-org sentinels give seeded properties an owner and seeded units a property (intra-directory
+        // FKs) without the harness needing a dimension's real parent. Generated per call so they never
+        // collide across orgs on the global PK.
+        var sentinelOwnerId = UuidV7.NewId();
+        var sentinelPropertyId = UuidV7.NewId();
+
         await using var conn = new NpgsqlConnection(fixture.MigratorConnectionString);
         await conn.OpenAsync(ct);
 
-        // orgs is global-class (no RLS) — the harness org these FK-target rows hang off.
-        await using (var org = new NpgsqlCommand(
-            "INSERT INTO orgs (id, name, created_at) VALUES (@org, 'Harness Directory', now()) ON CONFLICT (id) DO NOTHING", conn))
+        // The directory tables FORCE row security even for the migrator (table owner), so the WITH CHECK
+        // policy needs an org context — set it transaction-locally to this scope's org. The org row itself
+        // already exists (OrgScope.CreateAsync inserted it).
+        await using var tx = await conn.BeginTransactionAsync(ct);
+        await RlsProbe.SetOrgAsync(conn, tx, orgId, ct);
+
+        await UpsertAsync(conn, tx, orgId, ct, "bank_accounts", "name, purpose",
+            (scope.TrustBankId, "'Operating Trust', 'trust'"),
+            (scope.DepositBankId, "'Deposit Trust', 'deposit'"),
+            (scope.OperatingBankId, "'Management Operating', 'operating'"));
+
+        // Sentinels first — properties/units reference them (intra-directory FKs). Only seed them when a
+        // parent is actually needed, so an org that seeds no properties/units stays free of placeholder
+        // rows (e.g. the isolation test's "empty" second org).
+        if (properties is { Length: > 0 } || units is { Length: > 0 })
         {
-            org.Parameters.AddWithValue("org", HarnessDirectoryOrgId);
-            await org.ExecuteNonQueryAsync(ct);
+            await UpsertAsync(conn, tx, orgId, ct, "owners", "name", (sentinelOwnerId, "'Harness sentinel owner'"));
         }
 
-        // The directory tables FORCE row security even for the migrator (table owner), so the WITH CHECK
-        // policy needs an org context — set it transaction-locally to the harness org.
-        await using var tx = await conn.BeginTransactionAsync(ct);
-        await RlsProbe.SetOrgAsync(conn, tx, HarnessDirectoryOrgId, ct);
-
-        await UpsertAsync(conn, tx, ct, "bank_accounts", "name, purpose",
-            (TrustBankId, "'Operating Trust', 'trust'"),
-            (DepositBankId, "'Deposit Trust', 'deposit'"),
-            (OperatingBankId, "'Management Operating', 'operating'"));
-
-        // Sentinels first — properties/units reference them (intra-directory FKs).
-        await UpsertAsync(conn, tx, ct, "owners", "name", (SentinelOwnerId, "'Harness sentinel owner'"));
-        await UpsertAsync(conn, tx, ct, "properties", "owner_id, address",
-            (SentinelPropertyId, $"'{SentinelOwnerId}', 'Harness sentinel property'"));
+        if (units is { Length: > 0 })
+        {
+            await UpsertAsync(conn, tx, orgId, ct, "properties", "owner_id, address",
+                (sentinelPropertyId, $"'{sentinelOwnerId}', 'Harness sentinel property'"));
+        }
 
         if (owners is { Length: > 0 })
         {
-            await UpsertAsync(conn, tx, ct, "owners", "name",
+            await UpsertAsync(conn, tx, orgId, ct, "owners", "name",
                 [.. owners.Distinct().Select(id => (id, $"'Test owner {id:N}'"))]);
         }
 
         if (properties is { Length: > 0 })
         {
-            await UpsertAsync(conn, tx, ct, "properties", "owner_id, address",
-                [.. properties.Distinct().Select(id => (id, $"'{SentinelOwnerId}', 'Test property {id:N}'"))]);
+            await UpsertAsync(conn, tx, orgId, ct, "properties", "owner_id, address",
+                [.. properties.Distinct().Select(id => (id, $"'{sentinelOwnerId}', 'Test property {id:N}'"))]);
         }
 
         if (units is { Length: > 0 })
         {
-            await UpsertAsync(conn, tx, ct, "units", "property_id, label, status",
-                [.. units.Distinct().Select(id => (id, $"'{SentinelPropertyId}', 'Test unit {id:N}', 'occupied'"))]);
+            await UpsertAsync(conn, tx, orgId, ct, "units", "property_id, label, status",
+                [.. units.Distinct().Select(id => (id, $"'{sentinelPropertyId}', 'Test unit {id:N}', 'occupied'"))]);
         }
 
         if (tenants is { Length: > 0 })
         {
-            await UpsertAsync(conn, tx, ct, "tenants", "display_name, status",
+            await UpsertAsync(conn, tx, orgId, ct, "tenants", "display_name, status",
                 [.. tenants.Distinct().Select(id => (id, $"'Test tenant {id:N}', 'current'"))]);
         }
 
         await tx.CommitAsync(ct);
     }
 
-    /// <summary>Inserts each row into the harness org with the given extra columns, skipping existing PKs.</summary>
+    /// <summary>Inserts each row into <paramref name="orgId"/> with the given extra columns, skipping existing PKs.</summary>
     private static async Task UpsertAsync(
-        NpgsqlConnection conn, NpgsqlTransaction tx, CancellationToken ct, string table, string columns,
+        NpgsqlConnection conn, NpgsqlTransaction tx, Guid orgId, CancellationToken ct, string table, string columns,
         params (Guid Id, string Values)[] rows)
     {
         foreach (var (id, values) in rows)
         {
             await using var cmd = new NpgsqlCommand(
                 $"INSERT INTO {table} (id, org_id, {columns}, created_at) " +
-                $"VALUES ('{id}', '{HarnessDirectoryOrgId}', {values}, now()) ON CONFLICT (id) DO NOTHING", conn, tx);
+                $"VALUES ('{id}', '{orgId}', {values}, now()) ON CONFLICT (id) DO NOTHING", conn, tx);
             await cmd.ExecuteNonQueryAsync(ct);
         }
     }

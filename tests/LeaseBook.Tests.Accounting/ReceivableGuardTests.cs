@@ -18,10 +18,11 @@ namespace LeaseBook.Tests.Accounting;
 [Collection(nameof(DatabaseCollection))]
 public sealed class ReceivableGuardTests(PostgresFixture fixture)
 {
-    private static readonly Guid Owner = Guid.Parse("00000000-0000-0000-0000-0000000000e1");
-    private static readonly Guid Property = Guid.Parse("00000000-0000-0000-0000-0000000000d1");
-    private static readonly Guid Unit = Guid.Parse("00000000-0000-0000-0000-0000000000c1");
-    private static readonly Guid Tenant = Guid.Parse("00000000-0000-0000-0000-0000000000f1");
+    // Fresh per test instance (ADR-013: composite dim FK forbids reusing a fixed id across orgs).
+    private readonly Guid Owner = UuidV7.NewId();
+    private readonly Guid Property = UuidV7.NewId();
+    private readonly Guid Unit = UuidV7.NewId();
+    private readonly Guid Tenant = UuidV7.NewId();
 
     [Fact]
     public async Task Deposit_against_charges_exceeding_the_open_receivable_is_rejected()
@@ -30,12 +31,12 @@ public sealed class ReceivableGuardTests(PostgresFixture fixture)
         await using var scope = await ScopeAsync(ct);
 
         await PostAsync(scope, new RentCharged(Tenant, Property, Owner, Unit, new Money(1000m), D(1), "rent"), ct);
-        await PostAsync(scope, new DepositCollected(Tenant, Property, Owner, new Money(1500m), D(1), DepositBankId, "dep"), ct);
+        await PostAsync(scope, new DepositCollected(Tenant, Property, Owner, new Money(1500m), D(1), scope.DepositBankId, "dep"), ct);
 
         // 1200 ≤ 1500 held (liability guard passes) but > 1000 owed → the receivable guard fires.
         await Should.ThrowAsync<InsufficientReceivableException>(() => scope.RunAsync(() =>
             Events(scope).PostAsync(new DepositApplied(
-                Tenant, Property, Owner, new Money(1200m), D(28), DepositBankId, TrustBankId,
+                Tenant, Property, Owner, new Money(1200m), D(28), scope.DepositBankId, scope.TrustBankId,
                 DepositApplication.AgainstCharges, "over-apply"), ct), ct));
     }
 
@@ -46,9 +47,9 @@ public sealed class ReceivableGuardTests(PostgresFixture fixture)
         await using var scope = await ScopeAsync(ct);
 
         await PostAsync(scope, new RentCharged(Tenant, Property, Owner, Unit, new Money(1000m), D(1), "rent"), ct);
-        await PostAsync(scope, new DepositCollected(Tenant, Property, Owner, new Money(1500m), D(1), DepositBankId, "dep"), ct);
+        await PostAsync(scope, new DepositCollected(Tenant, Property, Owner, new Money(1500m), D(1), scope.DepositBankId, "dep"), ct);
         await PostAsync(scope, new DepositApplied(
-            Tenant, Property, Owner, new Money(1000m), D(28), DepositBankId, TrustBankId,
+            Tenant, Property, Owner, new Money(1000m), D(28), scope.DepositBankId, scope.TrustBankId,
             DepositApplication.AgainstCharges, "apply exactly the receivable"), ct);
 
         (await CheckCoreAsync(scope, ct)).ShouldBeEmpty();
@@ -61,9 +62,9 @@ public sealed class ReceivableGuardTests(PostgresFixture fixture)
         await using var scope = await ScopeAsync(ct);
 
         // No charge → receivable is 0, yet damages legitimately exceed it. ToOwnerIncome stays unguarded.
-        await PostAsync(scope, new DepositCollected(Tenant, Property, Owner, new Money(1500m), D(1), DepositBankId, "dep"), ct);
+        await PostAsync(scope, new DepositCollected(Tenant, Property, Owner, new Money(1500m), D(1), scope.DepositBankId, "dep"), ct);
         await PostAsync(scope, new DepositApplied(
-            Tenant, Property, Owner, new Money(1500m), D(28), DepositBankId, TrustBankId,
+            Tenant, Property, Owner, new Money(1500m), D(28), scope.DepositBankId, scope.TrustBankId,
             DepositApplication.ToOwnerIncome, "damages"), ct);
 
         (await CheckCoreAsync(scope, ct)).ShouldBeEmpty();
@@ -76,12 +77,12 @@ public sealed class ReceivableGuardTests(PostgresFixture fixture)
         await using var scope = await ScopeAsync(ct);
 
         await PostAsync(scope, new RentCharged(Tenant, Property, Owner, Unit, new Money(500m), D(1), "rent"), ct);
-        await PostAsync(scope, new PrepaymentReceived(Tenant, Property, Owner, new Money(800m), D(1), TrustBankId, "pp"), ct);
+        await PostAsync(scope, new PrepaymentReceived(Tenant, Property, Owner, new Money(800m), D(1), scope.TrustBankId, "pp"), ct);
 
         // 600 ≤ 800 held but > 500 owed → the receivable guard fires.
         await Should.ThrowAsync<InsufficientReceivableException>(() => scope.RunAsync(() =>
             Events(scope).PostAsync(new PrepaymentApplied(
-                Tenant, Property, Owner, new Money(600m), D(28), TrustBankId, "over-apply"), ct), ct));
+                Tenant, Property, Owner, new Money(600m), D(28), scope.TrustBankId, "over-apply"), ct), ct));
     }
 
     [Fact]
@@ -91,8 +92,8 @@ public sealed class ReceivableGuardTests(PostgresFixture fixture)
         await using var scope = await ScopeAsync(ct);
 
         await PostAsync(scope, new RentCharged(Tenant, Property, Owner, Unit, new Money(500m), D(1), "rent"), ct);
-        await PostAsync(scope, new PrepaymentReceived(Tenant, Property, Owner, new Money(800m), D(1), TrustBankId, "pp"), ct);
-        await PostAsync(scope, new PrepaymentApplied(Tenant, Property, Owner, new Money(500m), D(28), TrustBankId, "apply"), ct);
+        await PostAsync(scope, new PrepaymentReceived(Tenant, Property, Owner, new Money(800m), D(1), scope.TrustBankId, "pp"), ct);
+        await PostAsync(scope, new PrepaymentApplied(Tenant, Property, Owner, new Money(500m), D(28), scope.TrustBankId, "apply"), ct);
 
         (await CheckCoreAsync(scope, ct)).ShouldBeEmpty();
     }

@@ -19,9 +19,10 @@ namespace LeaseBook.Tests.Accounting;
 [Collection(nameof(DatabaseCollection))]
 public sealed class InvariantTests(PostgresFixture fixture)
 {
-    private static readonly Guid Tenant = Guid.Parse("00000000-0000-0000-0000-0000000000f1");
-    private static readonly Guid Owner = Guid.Parse("00000000-0000-0000-0000-0000000000e1");
-    private static readonly Guid Property = Guid.Parse("00000000-0000-0000-0000-0000000000d1");
+    // Fresh per test instance (ADR-013: composite dim FK forbids reusing a fixed id across orgs).
+    private readonly Guid Tenant = UuidV7.NewId();
+    private readonly Guid Owner = UuidV7.NewId();
+    private readonly Guid Property = UuidV7.NewId();
 
     [Fact]
     public async Task Core_invariants_are_clean_after_a_full_round_of_activity()
@@ -34,11 +35,11 @@ public sealed class InvariantTests(PostgresFixture fixture)
         {
             var events = Events(scope);
             await events.PostAsync(new RentCharged(Tenant, Property, Owner, null, new Money(1450m), D(1), "rent"), ct);
-            await events.PostAsync(new PaymentReceived(Tenant, Property, Owner, new Money(1450m), D(3), PaymentMethod.Ach, TrustBankId, "pay"), ct);
-            await events.PostAsync(new DepositCollected(Tenant, Property, Owner, new Money(1000m), D(1), DepositBankId, "dep"), ct);
-            await events.PostAsync(new ManagementFeeAssessed(Owner, Property, new Money(200m), D(27), TrustBankId, "fee"), ct);
-            await events.PostAsync(new PMFeesSwept(new Money(200m), D(27), TrustBankId, OperatingBankId, "sweep"), ct);
-            await events.PostAsync(new OwnerDisbursed(Owner, new Money(800m), D(28), TrustBankId, "draw"), ct);
+            await events.PostAsync(new PaymentReceived(Tenant, Property, Owner, new Money(1450m), D(3), PaymentMethod.Ach, scope.TrustBankId, "pay"), ct);
+            await events.PostAsync(new DepositCollected(Tenant, Property, Owner, new Money(1000m), D(1), scope.DepositBankId, "dep"), ct);
+            await events.PostAsync(new ManagementFeeAssessed(Owner, Property, new Money(200m), D(27), scope.TrustBankId, "fee"), ct);
+            await events.PostAsync(new PMFeesSwept(new Money(200m), D(27), scope.TrustBankId, scope.OperatingBankId, "sweep"), ct);
+            await events.PostAsync(new OwnerDisbursed(Owner, new Money(800m), D(28), scope.TrustBankId, "draw"), ct);
         }, ct);
 
         var violations = await CheckCoreAsync(scope, ct);
@@ -68,11 +69,11 @@ public sealed class InvariantTests(PostgresFixture fixture)
         await using var scope = await ProvisionedScopeAsync(
             fixture, ct, owners: [Owner], tenants: [Tenant], properties: [Property]);
         await scope.RunAsync(() => Events(scope).PostAsync(
-            new DepositCollected(Tenant, Property, Owner, new Money(500m), D(1), DepositBankId, "dep"), ct), ct);
+            new DepositCollected(Tenant, Property, Owner, new Money(500m), D(1), scope.DepositBankId, "dep"), ct), ct);
 
         await Should.ThrowAsync<InsufficientLiabilityException>(() => scope.RunAsync(() =>
             Events(scope).PostAsync(new DepositApplied(
-                Tenant, Property, Owner, new Money(900m), D(28), DepositBankId, TrustBankId,
+                Tenant, Property, Owner, new Money(900m), D(28), scope.DepositBankId, scope.TrustBankId,
                 DepositApplication.ToOwnerIncome, "over"), ct), ct));
     }
 
@@ -128,7 +129,7 @@ public sealed class InvariantTests(PostgresFixture fixture)
         {
             var events = Events(scope);
             await events.PostAsync(new RentCharged(Tenant, Property, Owner, null, new Money(1000m), D(1), "rent"), ct);
-            await events.PostAsync(new PaymentReceived(Tenant, Property, Owner, new Money(1000m), D(3), PaymentMethod.Ach, TrustBankId, "pay"), ct);
+            await events.PostAsync(new PaymentReceived(Tenant, Property, Owner, new Money(1000m), D(3), PaymentMethod.Ach, scope.TrustBankId, "pay"), ct);
         }, ct);
 
         decimal cash = 0;
@@ -154,7 +155,7 @@ public sealed class InvariantTests(PostgresFixture fixture)
         return result;
     }
 
-    private static async Task<decimal> TenantBalance(OrgScope scope, CancellationToken ct)
+    private async Task<decimal> TenantBalance(OrgScope scope, CancellationToken ct)
     {
         decimal balance = 0;
         await scope.RunAsync(async () =>
