@@ -23,8 +23,10 @@ public sealed class AccountingExceptionHandler : IExceptionHandler
         {
             "unbalanced_entry" or "invalid_line" or "unknown_account" or "pm_income_owner_dim"
                 => StatusCodes.Status422UnprocessableEntity,
+            "reconciliation_not_found" => StatusCodes.Status404NotFound,
             _ => StatusCodes.Status409Conflict, // period_closed, insufficient_liability, reserve_floor,
-                                                // already_reversed, duplicate_source_ref
+                                                // already_reversed, duplicate_source_ref, account_period_locked,
+                                                // reconciliation_unbalanced, reconciliation_state
         };
 
         var extensions = new Dictionary<string, object?> { ["code"] = domain.Code };

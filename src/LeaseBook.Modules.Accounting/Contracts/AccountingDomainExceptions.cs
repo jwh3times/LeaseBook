@@ -61,6 +61,34 @@ public sealed class ReserveFloorException(string message)
 public sealed class AlreadyReversedException(string message)
     : AccountingDomainException("already_reversed", message);
 
+/// <summary>A bank-account line targets a finalized/locked reconciliation month (409, M4 / ADR-014).</summary>
+public sealed class AccountPeriodLockedException(Guid bankAccountId, int year, int month)
+    : AccountingDomainException(
+        "account_period_locked",
+        $"Bank account {bankAccountId} is reconciled and locked for {year}-{month:D2}; post into the open month.")
+{
+    public Guid BankAccountId { get; } = bankAccountId;
+
+    public int Year { get; } = year;
+
+    public int Month { get; } = month;
+}
+
+/// <summary>Finalize was attempted with a non-zero reconciliation difference (409, M4).</summary>
+public sealed class ReconciliationUnbalancedException(string message)
+    : AccountingDomainException("reconciliation_unbalanced", message);
+
+/// <summary>The reconciliation is not in the state the operation requires — e.g. finalizing a finalized one (409).</summary>
+public sealed class ReconciliationStateException(string message)
+    : AccountingDomainException("reconciliation_state", message);
+
+/// <summary>No reconciliation with the given id exists in this org (404).</summary>
+public sealed class ReconciliationNotFoundException(Guid reconciliationId)
+    : AccountingDomainException("reconciliation_not_found", $"No reconciliation with id {reconciliationId} exists.")
+{
+    public Guid ReconciliationId { get; } = reconciliationId;
+}
+
 /// <summary>An entry with this source_ref already exists in the org (409); the existing id is carried.</summary>
 public sealed class DuplicateSourceRefException(string sourceRef, Guid existingEntryId)
     : AccountingDomainException(

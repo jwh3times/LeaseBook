@@ -139,7 +139,8 @@ internal static class AccountingTestHarness
         }
     }
 
-    public static PostingService Posting(OrgScope scope) => new(scope.Db, scope.Tenant, new AccountingPeriods(scope.Db));
+    public static PostingService Posting(OrgScope scope) =>
+        new(scope.Db, scope.Tenant, new AccountingPeriods(scope.Db), reconciliationLock: new ReconciliationLock(scope.Db));
 
     public static ReversalService Reversal(OrgScope scope) => new(scope.Db, scope.Tenant, Posting(scope));
 

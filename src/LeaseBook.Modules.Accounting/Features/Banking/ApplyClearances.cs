@@ -12,9 +12,10 @@ namespace LeaseBook.Modules.Accounting.Features.Banking;
 /// <c>reconciled</c> lines are never downgraded. Status lives in <c>bank_line_status</c>, not the journal,
 /// so this touches no posted row.
 /// </summary>
-public sealed record ApplyClearances(IReadOnlyCollection<Guid> JournalLineIds) : ICommand<ClearancesResult>;
+public sealed record ApplyClearances(IReadOnlyCollection<Guid> JournalLineIds, bool Cleared = true)
+    : ICommand<ClearancesResult>;
 
-public sealed record ClearancesResult(int Cleared);
+public sealed record ClearancesResult(int Affected);
 
 internal sealed class ApplyClearancesHandler(DbContext db, ITenantContext tenant)
     : ICommandHandler<ApplyClearances, ClearancesResult>
@@ -40,18 +41,33 @@ internal sealed class ApplyClearancesHandler(DbContext db, ITenantContext tenant
             throw new ValidationException("Every id to clear must be a bank-account journal line in this org.");
         }
 
-        // Upsert each to 'cleared': insert a state row where none exists, or flip an 'uncleared' one.
-        // A 'reconciled' row is left untouched (the ON CONFLICT WHERE guard) — clearing never un-reconciles.
-        var affected = await db.Database.ExecuteSqlAsync(
-            $"""
-            INSERT INTO bank_line_status (journal_line_id, org_id, status, cleared_at, created_at, updated_at)
-            SELECT id, {orgId}, 'cleared', now(), now(), now()
-            FROM journal_lines
-            WHERE id = ANY({ids})
-            ON CONFLICT (journal_line_id) DO UPDATE
-              SET status = 'cleared', cleared_at = now(), updated_at = now()
-              WHERE bank_line_status.status = 'uncleared'
-            """, ct);
+        int affected;
+        if (command.Cleared)
+        {
+            // Clear (tick): insert a state row where none exists, or flip an 'uncleared' one. A
+            // 'reconciled' row is left untouched (the ON CONFLICT WHERE guard) — clearing never un-reconciles.
+            affected = await db.Database.ExecuteSqlAsync(
+                $"""
+                INSERT INTO bank_line_status (journal_line_id, org_id, status, cleared_at, created_at, updated_at)
+                SELECT id, {orgId}, 'cleared', now(), now(), now()
+                FROM journal_lines
+                WHERE id = ANY({ids})
+                ON CONFLICT (journal_line_id) DO UPDATE
+                  SET status = 'cleared', cleared_at = now(), updated_at = now()
+                  WHERE bank_line_status.status = 'uncleared'
+                """, ct);
+        }
+        else
+        {
+            // Unclear (untick): flip 'cleared' back to 'uncleared'. Absent rows are already uncleared;
+            // 'reconciled' rows are never downgraded here (unlock is the only path out of reconciled).
+            affected = await db.Database.ExecuteSqlAsync(
+                $"""
+                UPDATE bank_line_status
+                SET status = 'uncleared', cleared_at = NULL, updated_at = now()
+                WHERE journal_line_id = ANY({ids}) AND status = 'cleared'
+                """, ct);
+        }
 
         return new ClearancesResult(affected);
     }

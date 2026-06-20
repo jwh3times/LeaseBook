@@ -101,3 +101,24 @@ public sealed class BankLineStatusConverter() : ValueConverter<BankLineStatus, s
 
     public static readonly string[] DbValues = ["uncleared", "cleared", "reconciled"];
 }
+
+public sealed class ReconciliationStatusConverter() : ValueConverter<ReconciliationStatus, string>(v => ToDb(v), v => FromDb(v))
+{
+    public static string ToDb(ReconciliationStatus value) => value switch
+    {
+        ReconciliationStatus.InProgress => "in_progress",
+        ReconciliationStatus.Finalized => "finalized",
+        ReconciliationStatus.Reopened => "reopened",
+        _ => throw new ArgumentOutOfRangeException(nameof(value), value, "Unknown reconciliation status."),
+    };
+
+    public static ReconciliationStatus FromDb(string value) => value switch
+    {
+        "in_progress" => ReconciliationStatus.InProgress,
+        "finalized" => ReconciliationStatus.Finalized,
+        "reopened" => ReconciliationStatus.Reopened,
+        _ => throw new ArgumentOutOfRangeException(nameof(value), value, "Unknown reconciliation status text."),
+    };
+
+    public static readonly string[] DbValues = ["in_progress", "finalized", "reopened"];
+}

@@ -29,6 +29,13 @@ public sealed class BankLineStatusConfiguration : IEntityTypeConfiguration<BankL
             .HasForeignKey(e => e.JournalLineId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        // The reconciliation that locked this line, once reconciled (M4 / WP-04). Same-module single-column
+        // FK (both rows carry org_id under RLS); no navigation, RESTRICT.
+        builder.HasOne<BankReconciliation>()
+            .WithMany()
+            .HasForeignKey(e => e.ReconciliationId)
+            .OnDelete(DeleteBehavior.Restrict);
+
         builder.HasIndex(e => new { e.OrgId, e.Status });
         builder.HasIndex(e => e.ReconciliationId);
     }
