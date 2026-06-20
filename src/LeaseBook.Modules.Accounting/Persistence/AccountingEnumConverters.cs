@@ -80,3 +80,24 @@ public sealed class PeriodStatusConverter() : ValueConverter<PeriodStatus, strin
 
     public static readonly string[] DbValues = ["open", "closed"];
 }
+
+public sealed class BankLineStatusConverter() : ValueConverter<BankLineStatus, string>(v => ToDb(v), v => FromDb(v))
+{
+    public static string ToDb(BankLineStatus value) => value switch
+    {
+        BankLineStatus.Uncleared => "uncleared",
+        BankLineStatus.Cleared => "cleared",
+        BankLineStatus.Reconciled => "reconciled",
+        _ => throw new ArgumentOutOfRangeException(nameof(value), value, "Unknown bank line status."),
+    };
+
+    public static BankLineStatus FromDb(string value) => value switch
+    {
+        "uncleared" => BankLineStatus.Uncleared,
+        "cleared" => BankLineStatus.Cleared,
+        "reconciled" => BankLineStatus.Reconciled,
+        _ => throw new ArgumentOutOfRangeException(nameof(value), value, "Unknown bank line status text."),
+    };
+
+    public static readonly string[] DbValues = ["uncleared", "cleared", "reconciled"];
+}
