@@ -1,6 +1,7 @@
 using System.Reflection;
 using Azure.Monitor.OpenTelemetry.Exporter;
 using LeaseBook.Modules.Accounting;
+using LeaseBook.Modules.Banking;
 using LeaseBook.Modules.Directory;
 using LeaseBook.SharedKernel.Cqrs;
 using LeaseBook.SharedKernel.Endpoints;
@@ -77,6 +78,13 @@ builder.Services.AddScoped<LeaseBook.Modules.Directory.Contracts.IOwnerFinancial
 // The reverse seam (M3 / P58): the Accounting ledger composer resolves a tenant's owner/property/unit
 // from the active lease through Directory. Accounting owns the port; the host adapter delegates via ISender.
 builder.Services.AddScoped<LeaseBook.Modules.Accounting.Contracts.ITenantPostingDimensions, TenantPostingDimensionsAdapter>();
+
+// Banking module services (CSV import/match; CQRS handlers are auto-discovered). The host implements
+// Banking's cross-module ports with thin adapters (ADR-007 / P68): IBankRegister reads uncleared register
+// lines and IBankClearing applies clearances, both delegating to Accounting via ISender.
+builder.Services.AddBankingModule();
+builder.Services.AddScoped<LeaseBook.Modules.Banking.Contracts.IBankRegister, BankRegisterAdapter>();
+builder.Services.AddScoped<LeaseBook.Modules.Banking.Contracts.IBankClearing, BankClearingAdapter>();
 
 // Host-composed dashboard (§C.6 / P45): the cross-module composition root, dispatching module read
 // queries via ISender. TimeProvider drives the "current accounting month" (injectable for tests).

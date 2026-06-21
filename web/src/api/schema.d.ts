@@ -4,6 +4,92 @@
  */
 
 export interface paths {
+    "/api/accounting/banks/{bankAccountId}/adjustments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    bankAccountId: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["RecordBankAdjustment"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PostResult"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/accounting/banks/{bankAccountId}/register": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    from?: string;
+                    page?: number | string;
+                    pageSize?: number | string;
+                    property?: string;
+                    search?: string;
+                    to?: string;
+                    type?: string;
+                };
+                header?: never;
+                path: {
+                    bankAccountId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["RegisterResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/accounting/banks/balances": {
         parameters: {
             query?: never;
@@ -33,6 +119,45 @@ export interface paths {
         };
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/accounting/banks/clearances": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ApplyClearances"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ClearancesResult"];
+                    };
+                };
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -220,6 +345,188 @@ export interface paths {
         };
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/accounting/reconciliations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    bankAccountId?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ReconciliationHistoryResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["StartReconciliation"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ReconciliationView"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/accounting/reconciliations/{id}/finalize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ReconciliationView"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/accounting/reconciliations/{id}/report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ReconciliationReportResponse"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/accounting/reconciliations/{id}/unlock": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["UnlockReconciliation"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ReconciliationView"];
+                    };
+                };
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -865,6 +1172,194 @@ export interface paths {
                 };
             };
         };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/banking/banks/{bankAccountId}/imports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    bankAccountId: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ImportStatement"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ImportResult"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/banking/banks/{bankAccountId}/mappings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    bankAccountId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ColumnMappingsResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    bankAccountId: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["SaveColumnMapping"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SaveColumnMappingResult"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/banking/imports/{importId}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    importId: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ConfirmMatches"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ConfirmMatchesResult"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/banking/imports/{importId}/matches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    importId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MatchPreviewResponse"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1832,6 +2327,11 @@ export interface components {
             /** Format: uuid */
             tenantId: string;
         };
+        ApplyClearances: {
+            /** @default true */
+            cleared: boolean;
+            journalLineIds: string[];
+        };
         ApplyDeposit: {
             /** Format: double */
             amount: number | string;
@@ -1880,11 +2380,16 @@ export interface components {
             bankAccountId: string;
             /** Format: double */
             book: number | string;
+            /** Format: double */
+            cleared: number | string;
             name: string;
+            /** Format: double */
+            uncleared: number | string;
         };
         BankBalancesResponse: {
             rows: components["schemas"]["BankBalanceRow"][];
         };
+        BankLineStatus: number;
         BanksPanel: {
             rows: components["schemas"]["DashboardBankRow"][];
         };
@@ -1893,6 +2398,10 @@ export interface components {
             interactions: number | string;
             met: null | boolean;
             task: string;
+        };
+        ClearancesResult: {
+            /** Format: int32 */
+            affected: number | string;
         };
         CollectDeposit: {
             /** Format: double */
@@ -1917,6 +2426,35 @@ export interface components {
             sourceRef: string;
             /** Format: uuid */
             tenantId: string;
+        };
+        ColumnMap: {
+            amount?: null | string;
+            credit?: null | string;
+            date: string;
+            dateFormat?: null | string;
+            debit?: null | string;
+            description: string;
+        };
+        ColumnMappingsResponse: {
+            mappings: components["schemas"]["ColumnMappingView"][];
+        };
+        ColumnMappingView: {
+            columnMap: components["schemas"]["ColumnMap"];
+            /** Format: uuid */
+            id: string;
+            name: string;
+        };
+        ConfirmMatches: {
+            decisions: components["schemas"]["MatchDecision"][];
+            /** Format: uuid */
+            importId: string;
+        };
+        ConfirmMatchesResult: {
+            /** Format: int32 */
+            cleared: number | string;
+            /** Format: int32 */
+            recorded: number | string;
+            unmatchedLineIds: string[];
         };
         ConfirmMfaRequest: {
             code: string;
@@ -2030,6 +2568,22 @@ export interface components {
             status: string;
             version: string;
         };
+        ImportResult: {
+            errors: components["schemas"]["RowError"][];
+            /** Format: int32 */
+            imported: number | string;
+            /** Format: uuid */
+            importId: string;
+            /** Format: int32 */
+            skippedDuplicates: number | string;
+        };
+        ImportStatement: {
+            /** Format: uuid */
+            bankAccountId: string;
+            columnMap: components["schemas"]["ColumnMap"];
+            csvContent: string;
+            filename: string;
+        };
         IssueCredit: {
             /** Format: double */
             amount: number | string;
@@ -2047,6 +2601,42 @@ export interface components {
         LoginResponse: {
             mfaToken: null | string;
             status: string;
+        };
+        MatchDecision: {
+            /** Format: uuid */
+            journalLineId: null | string;
+            kind: string;
+            /** Format: uuid */
+            statementLineId: string;
+        };
+        MatchPreviewResponse: {
+            rows: components["schemas"]["MatchPreviewRow"][];
+            summary: components["schemas"]["MatchPreviewSummary"];
+        };
+        MatchPreviewRow: {
+            /** Format: double */
+            amount: number | string;
+            /** Format: double */
+            candidateAmount: null | number | string;
+            /** Format: date */
+            candidateDate: null | string;
+            candidateDescription: null | string;
+            /** Format: date */
+            date: string;
+            description: string;
+            /** Format: uuid */
+            journalLineId: null | string;
+            kind: string;
+            /** Format: uuid */
+            statementLineId: string;
+        };
+        MatchPreviewSummary: {
+            /** Format: int32 */
+            matched: number | string;
+            /** Format: int32 */
+            suggested: number | string;
+            /** Format: int32 */
+            unmatched: number | string;
         };
         MeResponse: {
             email: null | string;
@@ -2240,6 +2830,63 @@ export interface components {
             /** Format: int32 */
             units: number | string;
         };
+        ReconciliationHistoryResponse: {
+            rows: components["schemas"]["ReconciliationSummary"][];
+        };
+        ReconciliationReportResponse: {
+            /** Format: uuid */
+            id: string;
+            reportJson: null | string;
+            status: string;
+        };
+        ReconciliationSummary: {
+            /** Format: uuid */
+            bankAccountId: string;
+            /** Format: date-time */
+            finalizedAt: null | string;
+            hasReport: boolean;
+            /** Format: uuid */
+            id: string;
+            /** Format: int32 */
+            month: number | string;
+            /** Format: double */
+            statementEndingBalance: number | string;
+            status: string;
+            /** Format: int32 */
+            year: number | string;
+        };
+        ReconciliationView: {
+            /** Format: uuid */
+            bankAccountId: string;
+            /** Format: double */
+            clearedBalance: number | string;
+            /** Format: double */
+            difference: number | string;
+            /** Format: date-time */
+            finalizedAt: null | string;
+            /** Format: uuid */
+            id: string;
+            /** Format: int32 */
+            month: number | string;
+            /** Format: double */
+            statementEndingBalance: number | string;
+            status: string;
+            /** Format: int32 */
+            year: number | string;
+        };
+        RecordBankAdjustment: {
+            /** Format: double */
+            amount: number | string;
+            /** Format: uuid */
+            bankAccountId: string;
+            /** Format: date */
+            date: string;
+            kind: string;
+            memo: null | string;
+            sourceRef: string;
+            /** Format: uuid */
+            toBankAccountId: null | string;
+        };
         RecordPayment: {
             /** Format: double */
             amount: number | string;
@@ -2253,6 +2900,55 @@ export interface components {
             /** Format: uuid */
             tenantId: string;
         };
+        RegisterResponse: {
+            rows: components["schemas"]["RegisterRow"][];
+            /** Format: int32 */
+            total: number | string;
+            totals: components["schemas"]["RegisterTotals"];
+        };
+        RegisterRow: {
+            /** Format: date */
+            date: string;
+            /** Format: double */
+            deposit: null | number | string;
+            description: null | string;
+            /** Format: uuid */
+            journalLineId: string;
+            /** Format: uuid */
+            propertyId: null | string;
+            status: components["schemas"]["BankLineStatus"];
+            /** Format: double */
+            withdrawal: null | number | string;
+        };
+        RegisterTotals: {
+            /** Format: double */
+            book: number | string;
+            /** Format: double */
+            cleared: number | string;
+            /** Format: double */
+            depositsInView: number | string;
+            /** Format: double */
+            uncleared: number | string;
+            /** Format: int32 */
+            unclearedCount: number | string;
+            /** Format: double */
+            withdrawalsInView: number | string;
+        };
+        RowError: {
+            message: string;
+            /** Format: int32 */
+            rowNumber: number | string;
+        };
+        SaveColumnMapping: {
+            /** Format: uuid */
+            bankAccountId: string;
+            columnMap: components["schemas"]["ColumnMap"];
+            name: string;
+        };
+        SaveColumnMappingResult: {
+            /** Format: uuid */
+            id: string;
+        };
         SearchResult: {
             /** Format: uuid */
             id: string;
@@ -2261,6 +2957,16 @@ export interface components {
             score: number | string;
             sublabel: null | string;
             type: string;
+        };
+        StartReconciliation: {
+            /** Format: uuid */
+            bankAccountId: string;
+            /** Format: int32 */
+            month: number | string;
+            /** Format: double */
+            statementEndingBalance: number | string;
+            /** Format: int32 */
+            year: number | string;
         };
         TenantContact: {
             email: null | string;
@@ -2359,6 +3065,11 @@ export interface components {
             /** Format: double */
             rent: number | string;
             status: string;
+        };
+        UnlockReconciliation: {
+            reason: string;
+            /** Format: uuid */
+            reconciliationId: string;
         };
         UpdateBankAccountRequest: {
             institution: null | string;
