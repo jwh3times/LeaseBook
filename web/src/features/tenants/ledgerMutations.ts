@@ -11,6 +11,14 @@ export function newSourceRef(): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+/**
+ * Friendly copy for the M4 per-account reconciliation lock (`account_period_locked`, 409): a bank line
+ * dated into a finalized account-month is rejected. Surfaced inline in the composer/apply/void the same
+ * way `insufficient_receivable` is, so the user moves the date into the open month.
+ */
+export const LOCKED_PERIOD_MESSAGE =
+  "This account's month is reconciled and locked — post into the open month, or unlock the reconciliation first.";
+
 /** A normalized failure from a ledger post: the domain `code` (422/409), or a validation message (400). */
 export interface LedgerPostError {
   code?: string;

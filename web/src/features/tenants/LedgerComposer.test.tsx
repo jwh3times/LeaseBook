@@ -155,6 +155,28 @@ describe('LedgerComposer', () => {
     expect(screen.getByLabelText('Amount')).toBeInTheDocument();
   });
 
+  it('surfaces the M4 account-lock (409) inline and keeps the composer open', async () => {
+    server.use(
+      ...baseHandlers(),
+      http.post('/api/accounting/tenants/:tenantId/payments', () =>
+        HttpResponse.json(
+          { code: 'account_period_locked', detail: 'account_period_locked' },
+          { status: 409 },
+        ),
+      ),
+    );
+    const { onPosted } = renderComposer();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Record payment' }));
+    await screen.findByText('Operating Trust');
+    await userEvent.type(screen.getByLabelText('Amount'), '1450');
+    await userEvent.keyboard('{Enter}');
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/reconciled and locked/i);
+    expect(onPosted).not.toHaveBeenCalled();
+    expect(screen.getByLabelText('Amount')).toBeInTheDocument();
+  });
+
   it('auto-opens in payment mode from the palette flag', async () => {
     server.use(...baseHandlers());
     renderComposer({ initialMode: 'payment' });
