@@ -89,9 +89,11 @@ most once, and a reversal cannot itself be reversed.
 
 ## Closing a period
 
-Each month is an accounting **period**. Once a month is reconciled it is **closed**, and the engine
-refuses to post anything new into it — corrections for a closed month post into the current open month
-instead. This is what makes a reconciled month stay reconciled.
+Two independent locks keep settled history settled. Each month is an accounting **period** that can be
+**closed** for the whole organization; the engine then refuses to post into it, and corrections for a
+closed month post into the current open month instead. Separately, **reconciling one bank account** for a
+month locks *that account's* month (see "Banking" below) — a finer-grained lock that is what month-end
+reconciliation actually uses. A post is rejected if either lock covers it.
 
 ## Writing entries through the ledger composer
 
@@ -130,3 +132,34 @@ entry (`created_by`) and onto each `audit_events` row (`actor_user_id`); a rever
 voided. The seeder and background jobs write as the system (a null actor, by design). The per-entry audit
 trail (`GET /entries/{id}/audit`) returns the entry's and its reversal's rows newest-first, resolving each
 actor to a name/email — an org-scoped identity lookup, so one company can never see another's users.
+
+## Banking: the register, clearing & reconciliation (M4)
+
+A **bank register** is the journal seen from one bank account: every line posted to that account, shown
+statement-style (deposits = debits, withdrawals = credits), newest first. Like every other ledger it is a
+*projection* of the journal — nothing is independently maintained.
+
+**Clearing.** A bank line is `uncleared`, `cleared`, or `reconciled`. That status is operational metadata,
+not part of the immutable journal, so it lives in a side table (`bank_line_status`) the runtime may update —
+the journal itself stays byte-stable. The register's **book** balance is every line; **cleared** is the
+lines marked cleared or reconciled; **uncleared** is the difference. Absence of a status row means uncleared.
+
+**Reconciling.** Reconcile-in-place takes the statement's ending balance and ticks uncleared lines until the
+**difference reaches $0.00**, then **finalizes**. Finalize is rejected unless the difference is zero; on
+success it marks the ticked lines `reconciled`, stores an **immutable report snapshot**, and **locks that
+account for that month**. A later post carrying that bank account dated into a locked month is rejected
+(`account_period_locked`) and surfaced in the composer the way an over-application is. A `PMAdmin` can
+**unlock** a finalized month with a reason (written to the audit log); items stay reconciled until the month
+is finalized again. There is no bulk un-reconcile.
+
+**Bank-only adjustments.** Three posting templates cover the statement lines reconciliation needs that are
+not tenant/owner activity: `BankFeeCharged` (a service charge — a PM operating cost), `InterestEarned`
+(interest credited to the trust), and `TrustTransfer` (moving funds between two of the org's own bank
+accounts). Each balances per basis and posts through the single journal write path; none implies an
+owner/vendor/fee-sweep workflow (those are M6).
+
+**Statement import.** A bank CSV can be imported (column-mapped, with saved per-bank mappings) and
+auto-matched against uncleared register lines: an exact amount on a nearby date is a confident match that
+clears the line on confirm; an exact amount on a far date is a suggestion; no amount match offers to create a
+transaction. Re-importing the same statement is de-duplicated, never double-counted. Matching and clearing
+always run through the accounting engine — the importer never writes the journal directly.

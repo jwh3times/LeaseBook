@@ -10,7 +10,9 @@ import { BankingPage } from './BankingPage';
 vi.mock('@/lib/telemetry', () => ({ trackInteraction: vi.fn() }));
 
 const BALANCES = {
-  rows: [{ bankAccountId: 'acct1', name: 'Operating Trust', book: 1300, cleared: 1500, uncleared: -200 }],
+  rows: [
+    { bankAccountId: 'acct1', name: 'Operating Trust', book: 1300, cleared: 1500, uncleared: -200 },
+  ],
 };
 
 const REGISTER = {
@@ -106,7 +108,14 @@ describe('BankingPage register view', () => {
       registerHandler({
         rows: [],
         total: 0,
-        totals: { book: 0, cleared: 0, uncleared: 0, unclearedCount: 0, depositsInView: 0, withdrawalsInView: 0 },
+        totals: {
+          book: 0,
+          cleared: 0,
+          uncleared: 0,
+          unclearedCount: 0,
+          depositsInView: 0,
+          withdrawalsInView: 0,
+        },
       }),
     );
     renderPage();
@@ -176,5 +185,21 @@ describe('BankingPage reconcile mode', () => {
 
     // Back out of reconcile mode (balance strip returns).
     expect(await screen.findByText('Book balance')).toBeInTheDocument();
+  });
+
+  it('ticks an uncleared item through its row checkbox (keyboard-operable, not readonly)', async () => {
+    server.use(...baseHandlers(), registerHandler(REGISTER));
+    renderPage();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Reconcile account' }));
+
+    // The per-row checkbox is a real interactive control: clicking it (Space, for a keyboard user) ticks
+    // the line and drives the difference to $0.00 → Finalize appears. A readonly box could not be toggled.
+    const rowCheckbox = screen.getByRole('checkbox', { name: 'Clear Owner draw' });
+    expect(rowCheckbox).not.toHaveAttribute('readonly');
+    await userEvent.click(rowCheckbox);
+
+    expect(rowCheckbox).toBeChecked();
+    expect(await screen.findByRole('button', { name: 'Finalize' })).toBeInTheDocument();
   });
 });

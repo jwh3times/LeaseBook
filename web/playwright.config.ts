@@ -6,6 +6,11 @@ import { defineConfig, devices } from '@playwright/test';
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: false,
+  // Serial, single worker: the specs share one seeded demo org, and the M4 reconcile spec finalizes a
+  // per-account-month lock — persistent state that would race other specs posting into that month if files
+  // ran on parallel workers. One worker runs files in discovery order (budgeted → m3 → m4 → smoke), so the
+  // M3 June payment posts+voids before the M4 spec locks June.
+  workers: 1,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   reporter: 'html',

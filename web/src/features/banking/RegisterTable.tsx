@@ -73,12 +73,15 @@ export function RegisterTable({
                 {reconciling && (
                   <td>
                     {isUncleared ? (
+                      // Interactive (not readOnly) so the box is keyboard-operable (Space toggles); the row
+                      // onClick stays for mouse convenience, and stopPropagation here prevents a double-toggle.
                       <input
                         type="checkbox"
                         className="pf-check"
                         aria-label={`Clear ${row.description ?? 'transaction'}`}
                         checked={ticked}
-                        readOnly
+                        onChange={() => onToggle(row)}
+                        onClick={(e) => e.stopPropagation()}
                       />
                     ) : (
                       <Icon name="check" size={15} style={{ color: 'var(--text-3)' }} />

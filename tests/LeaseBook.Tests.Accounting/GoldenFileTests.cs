@@ -118,6 +118,19 @@ public sealed class GoldenFileTests(PostgresFixture fixture)
         banks.Rows.Single(r => r.BankAccountId == DemoIds.DepositBank).Book.ShouldBe(196_450.00m);
         banks.Rows.Single(r => r.BankAccountId == DemoIds.MgmtBank).Book.ShouldBe(38_240.55m);
         banks.Rows.Sum(r => r.Book).ShouldBe(483_620.69m); // kpis.trustTotal
+
+        // P72: the seed's clearance mix reproduces the prototype register — Operating Trust has 3 uncleared
+        // items (the −8,200 owner disbursement + a 1,380 + a 1,450 deposit, net −5,370), so cleared > book;
+        // the deposit trust is fully cleared (uncleared 0). These figures are sacred (CLAUDE.md §C.8 / P72).
+        var oper = banks.Rows.Single(r => r.BankAccountId == DemoIds.OperBank);
+        oper.Cleared.ShouldBe(254_300.14m);
+        oper.Uncleared.ShouldBe(-5_370.00m); // book − cleared (net of the 3 uncleared items)
+        banks.Rows.Single(r => r.BankAccountId == DemoIds.DepositBank).Cleared.ShouldBe(196_450.00m);
+
+        var register = await QueryAsync(
+            db => new GetBankRegisterHandler(db).Handle(new GetBankRegister(DemoIds.OperBank, PageSize: 200), ct), ct);
+        register.Totals.Cleared.ShouldBe(254_300.14m);
+        register.Totals.UnclearedCount.ShouldBe(3);
     }
 
     [Fact]
