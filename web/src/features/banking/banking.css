@@ -29,7 +29,9 @@
 }
 .pf-acct-tab.active {
   border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent), var(--shadow-sm);
+  box-shadow:
+    0 0 0 1px var(--accent),
+    var(--shadow-sm);
   background: var(--accent-soft);
 }
 .pf-bankic {

@@ -14,20 +14,7 @@ const STATUS_LABEL: Record<string, string> = {
   reopened: 'Reopened',
 };
 
-const MONTHS = [
-  'Jan',
-  'Feb',
-  'Mar',
-  'Apr',
-  'May',
-  'Jun',
-  'Jul',
-  'Aug',
-  'Sep',
-  'Oct',
-  'Nov',
-  'Dec',
-];
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 /** Past reconciliations for the account, newest first; finalized ones expose their stored report (P64). */
 export function ReconciliationHistory({ bankAccountId }: { bankAccountId: string }) {
@@ -50,7 +37,11 @@ export function ReconciliationHistory({ bankAccountId }: { bankAccountId: string
         </div>
       ) : history.isError ? (
         <div className="pf-pad">
-          <EmptyState icon="alert" title="Couldn't load history" description="Please retry in a moment." />
+          <EmptyState
+            icon="alert"
+            title="Couldn't load history"
+            description="Please retry in a moment."
+          />
         </div>
       ) : (history.data?.length ?? 0) === 0 ? (
         <div className="pf-pad">

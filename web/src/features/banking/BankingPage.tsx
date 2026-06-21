@@ -54,7 +54,9 @@ export function BankingPage() {
     id ? (properties.data?.items.find((p) => p.id === id)?.address ?? '—') : '—';
 
   const propertyOptions = useMemo(() => {
-    const ids = Array.from(new Set(rows.map((r) => r.propertyId).filter((id): id is string => !!id)));
+    const ids = Array.from(
+      new Set(rows.map((r) => r.propertyId).filter((id): id is string => !!id)),
+    );
     return ids.map((id) => ({ id, label: propertyLabel(id) }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows, properties.data]);
@@ -168,7 +170,10 @@ export function BankingPage() {
       <div className="pf-pagehd">
         <div>
           <h2>Banking</h2>
-          <p>One screen mirrors the bank statement — deposits, withdrawals, clear &amp; reconcile, in place.</p>
+          <p>
+            One screen mirrors the bank statement — deposits, withdrawals, clear &amp; reconcile, in
+            place.
+          </p>
         </div>
         <div className="row gap10">
           <Button icon="download" variant="default" onClick={() => setImporting(true)}>
@@ -324,7 +329,11 @@ export function BankingPage() {
           </div>
         ) : register.isError ? (
           <div className="pf-pad">
-            <EmptyState icon="alert" title="Couldn't load the register" description="Please retry in a moment." />
+            <EmptyState
+              icon="alert"
+              title="Couldn't load the register"
+              description="Please retry in a moment."
+            />
           </div>
         ) : rows.length === 0 ? (
           <div className="pf-pad">
@@ -336,7 +345,11 @@ export function BankingPage() {
           </div>
         ) : display.length === 0 ? (
           <div className="pf-pad">
-            <EmptyState icon="search" title="No transactions match the filter" description="Adjust the filters above." />
+            <EmptyState
+              icon="search"
+              title="No transactions match the filter"
+              description="Adjust the filters above."
+            />
           </div>
         ) : (
           <RegisterTable

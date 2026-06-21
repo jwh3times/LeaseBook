@@ -63,7 +63,11 @@ export function ReconcileBar({
         <span
           className="pf-money"
           aria-label="Difference"
-          style={{ fontSize: '1.5em', fontWeight: 750, color: reconciled ? 'var(--pos)' : 'var(--neg)' }}
+          style={{
+            fontSize: '1.5em',
+            fontWeight: 750,
+            color: reconciled ? 'var(--pos)' : 'var(--neg)',
+          }}
         >
           {reconciled ? '$0.00' : <Money value={difference} sign />}
         </span>

@@ -52,7 +52,12 @@ describe('ImportWizard', () => {
       http.get('/api/banking/banks/:id/mappings', () => HttpResponse.json({ mappings: [] })),
       http.post('/api/banking/banks/:id/imports', async ({ request }) => {
         importBody = (await request.json()) as { columnMap?: Record<string, unknown> };
-        return HttpResponse.json({ importId: 'imp1', imported: 1, skippedDuplicates: 0, errors: [] });
+        return HttpResponse.json({
+          importId: 'imp1',
+          imported: 1,
+          skippedDuplicates: 0,
+          errors: [],
+        });
       }),
       http.get('/api/banking/imports/:importId/matches', () => HttpResponse.json(PREVIEW)),
       http.post('/api/banking/imports/:importId/confirm', async ({ request }) => {
@@ -77,7 +82,11 @@ describe('ImportWizard', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Confirm & clear' }));
 
     await vi.waitFor(() => expect(onConfirmed).toHaveBeenCalled());
-    expect(importBody?.columnMap).toMatchObject({ date: 'Date', description: 'Description', amount: 'Amount' });
+    expect(importBody?.columnMap).toMatchObject({
+      date: 'Date',
+      description: 'Description',
+      amount: 'Amount',
+    });
     expect(confirmBody?.decisions).toEqual([
       { statementLineId: 's1', journalLineId: 'jl1', kind: 'matched' },
     ]);

@@ -109,7 +109,10 @@ export function ImportWizard({ bankAccountId, onClose, onConfirmed }: ImportWiza
     onError: (err) => setError(err.message),
   });
 
-  const canMap = dateCol !== NONE && descCol !== NONE && (useDebitCredit ? debitCol !== NONE || creditCol !== NONE : amountCol !== NONE);
+  const canMap =
+    dateCol !== NONE &&
+    descCol !== NONE &&
+    (useDebitCredit ? debitCol !== NONE || creditCol !== NONE : amountCol !== NONE);
 
   return (
     <Modal
@@ -155,7 +158,9 @@ export function ImportWizard({ bankAccountId, onClose, onConfirmed }: ImportWiza
           <Icon name="chevronRight" size={12} />
           <span className={`step${step === 'map' ? ' active' : ''}`}>2 · Map columns</span>
           <Icon name="chevronRight" size={12} />
-          <span className={`step${step === 'preview' ? ' active' : ''}`}>3 · Review &amp; confirm</span>
+          <span className={`step${step === 'preview' ? ' active' : ''}`}>
+            3 · Review &amp; confirm
+          </span>
         </div>
 
         {step === 'upload' && (
@@ -167,7 +172,9 @@ export function ImportWizard({ bankAccountId, onClose, onConfirmed }: ImportWiza
               aria-label="Statement CSV"
               onChange={(e) => void onFile(e.target.files?.[0])}
             />
-            <span className="t3 fs12">The file is read in your browser; columns are mapped next.</span>
+            <span className="t3 fs12">
+              The file is read in your browser; columns are mapped next.
+            </span>
           </label>
         )}
 
@@ -195,7 +202,12 @@ export function ImportWizard({ bankAccountId, onClose, onConfirmed }: ImportWiza
             )}
             <p className="t3 fs12">{filename}</p>
             <div className="pf-map-grid">
-              <ColumnSelect label="Date column" value={dateCol} onChange={setDateCol} headers={headers} />
+              <ColumnSelect
+                label="Date column"
+                value={dateCol}
+                onChange={setDateCol}
+                headers={headers}
+              />
               <ColumnSelect
                 label="Description column"
                 value={descCol}
@@ -204,8 +216,18 @@ export function ImportWizard({ bankAccountId, onClose, onConfirmed }: ImportWiza
               />
               {useDebitCredit ? (
                 <>
-                  <ColumnSelect label="Debit column" value={debitCol} onChange={setDebitCol} headers={headers} />
-                  <ColumnSelect label="Credit column" value={creditCol} onChange={setCreditCol} headers={headers} />
+                  <ColumnSelect
+                    label="Debit column"
+                    value={debitCol}
+                    onChange={setDebitCol}
+                    headers={headers}
+                  />
+                  <ColumnSelect
+                    label="Credit column"
+                    value={creditCol}
+                    onChange={setCreditCol}
+                    headers={headers}
+                  />
                 </>
               ) : (
                 <ColumnSelect

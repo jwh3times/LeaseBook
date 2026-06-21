@@ -7,8 +7,22 @@ import { server } from '@/test/mocks/server';
 import { ApplyModal } from './ApplyModal';
 
 const BANKS = [
-  { id: 'trust1', name: 'Operating Trust', institution: null, mask: null, purpose: 'trust', isActive: true },
-  { id: 'dep1', name: 'Deposit Trust', institution: null, mask: null, purpose: 'deposit', isActive: true },
+  {
+    id: 'trust1',
+    name: 'Operating Trust',
+    institution: null,
+    mask: null,
+    purpose: 'trust',
+    isActive: true,
+  },
+  {
+    id: 'dep1',
+    name: 'Deposit Trust',
+    institution: null,
+    mask: null,
+    purpose: 'deposit',
+    isActive: true,
+  },
 ];
 
 function renderModal() {
