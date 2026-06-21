@@ -71,9 +71,11 @@ public static class DemoSeeder
             }
 
             // Directory rows first (FK targets for the journal dimensions), then the chart of accounts +
-            // replayed journal. Both idempotent; both skip cleanly on re-seed.
+            // replayed journal, then the bank clearance state over it (P72). All idempotent; each skips
+            // cleanly on re-seed.
             await DemoDirectorySeed.SeedAsync(db, ct);
             await DemoJournalSeed.SeedAsync(sp, db, ct);
+            await DemoBankClearingSeed.SeedAsync(db, ct);
         }, ct);
     }
 

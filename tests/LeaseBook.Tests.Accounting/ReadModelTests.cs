@@ -14,9 +14,10 @@ namespace LeaseBook.Tests.Accounting;
 [Collection(nameof(DatabaseCollection))]
 public sealed class ReadModelTests(PostgresFixture fixture)
 {
-    private static readonly Guid Tenant = Guid.Parse("00000000-0000-0000-0000-0000000000f1");
-    private static readonly Guid Owner = Guid.Parse("00000000-0000-0000-0000-0000000000e1");
-    private static readonly Guid Property = Guid.Parse("00000000-0000-0000-0000-0000000000d1");
+    // Fresh per test instance (ADR-013: composite dim FK forbids reusing a fixed id across orgs).
+    private readonly Guid Tenant = UuidV7.NewId();
+    private readonly Guid Owner = UuidV7.NewId();
+    private readonly Guid Property = UuidV7.NewId();
 
     [Fact]
     public async Task Read_models_reflect_a_posted_scenario()
@@ -28,9 +29,9 @@ public sealed class ReadModelTests(PostgresFixture fixture)
 
         // Bank books.
         var banks = await Query(scope, new GetBankBalancesHandler(scope.Db), new GetBankBalances(), ct);
-        banks.Rows.Single(r => r.BankAccountId == TrustBankId).Book.ShouldBe(450m);   // +1450 -200 -800
-        banks.Rows.Single(r => r.BankAccountId == DepositBankId).Book.ShouldBe(1000m);
-        banks.Rows.Single(r => r.BankAccountId == OperatingBankId).Book.ShouldBe(200m); // swept fees
+        banks.Rows.Single(r => r.BankAccountId == scope.TrustBankId).Book.ShouldBe(450m);   // +1450 -200 -800
+        banks.Rows.Single(r => r.BankAccountId == scope.DepositBankId).Book.ShouldBe(1000m);
+        banks.Rows.Single(r => r.BankAccountId == scope.OperatingBankId).Book.ShouldBe(200m); // swept fees
 
         // Owner balances.
         var owners = await Query(scope, new GetOwnerBalancesHandler(scope.Db), new GetOwnerBalances(), ct);
@@ -57,7 +58,7 @@ public sealed class ReadModelTests(PostgresFixture fixture)
 
         // Trust equation: variance 0.00 on both trust banks; the PM operating bank is not listed.
         var equation = await Query(scope, new GetTrustEquationHandler(scope.Db), new GetTrustEquation(), ct);
-        equation.Rows.Select(r => r.BankAccountId).ShouldBe([TrustBankId, DepositBankId], ignoreOrder: true);
+        equation.Rows.Select(r => r.BankAccountId).ShouldBe([scope.TrustBankId, scope.DepositBankId], ignoreOrder: true);
         equation.Rows.ShouldAllBe(r => r.Variance == 0m);
     }
 
@@ -65,7 +66,8 @@ public sealed class ReadModelTests(PostgresFixture fixture)
     public async Task A_second_orgs_data_is_invisible()
     {
         var ct = TestContext.Current.CancellationToken;
-        await using var orgA = await ProvisionedScopeAsync(fixture, ct);
+        await using var orgA = await ProvisionedScopeAsync(
+            fixture, ct, owners: [Owner], tenants: [Tenant], properties: [Property]);
         await using var orgB = await ProvisionedScopeAsync(fixture, ct);
 
         await PostScenarioAsync(orgA, ct);
@@ -77,17 +79,17 @@ public sealed class ReadModelTests(PostgresFixture fixture)
         bOwners.Rows.ShouldBeEmpty(); // none of A's owner rows leak into B
     }
 
-    private static async Task PostScenarioAsync(OrgScope scope, CancellationToken ct)
+    private async Task PostScenarioAsync(OrgScope scope, CancellationToken ct)
     {
         await scope.RunAsync(async () =>
         {
             var events = Events(scope);
             await events.PostAsync(new RentCharged(Tenant, Property, Owner, null, new Money(1450m), Feb(1), "rent"), ct);
-            await events.PostAsync(new PaymentReceived(Tenant, Property, Owner, new Money(1450m), Feb(3), PaymentMethod.Ach, TrustBankId, "pay"), ct);
-            await events.PostAsync(new DepositCollected(Tenant, Property, Owner, new Money(1000m), Feb(1), DepositBankId, "deposit"), ct);
-            await events.PostAsync(new ManagementFeeAssessed(Owner, Property, new Money(200m), Feb(27), TrustBankId, "fee"), ct);
-            await events.PostAsync(new PMFeesSwept(new Money(200m), Feb(27), TrustBankId, OperatingBankId, "sweep"), ct);
-            await events.PostAsync(new OwnerDisbursed(Owner, new Money(800m), Feb(28), TrustBankId, "draw"), ct);
+            await events.PostAsync(new PaymentReceived(Tenant, Property, Owner, new Money(1450m), Feb(3), PaymentMethod.Ach, scope.TrustBankId, "pay"), ct);
+            await events.PostAsync(new DepositCollected(Tenant, Property, Owner, new Money(1000m), Feb(1), scope.DepositBankId, "deposit"), ct);
+            await events.PostAsync(new ManagementFeeAssessed(Owner, Property, new Money(200m), Feb(27), scope.TrustBankId, "fee"), ct);
+            await events.PostAsync(new PMFeesSwept(new Money(200m), Feb(27), scope.TrustBankId, scope.OperatingBankId, "sweep"), ct);
+            await events.PostAsync(new OwnerDisbursed(Owner, new Money(800m), Feb(28), scope.TrustBankId, "draw"), ct);
         }, ct);
     }
 

@@ -8,4 +8,10 @@
     <ProjectReference Include="..\LeaseBook.SharedKernel\LeaseBook.SharedKernel.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- CSV statement parsing (P66 / ADR-015). Already in the stack (the M3 ledger CSV export) —
+         versionless reference, version pinned centrally; no new dependency add. -->
+    <PackageReference Include="CsvHelper" />
+  </ItemGroup>
+
 </Project>

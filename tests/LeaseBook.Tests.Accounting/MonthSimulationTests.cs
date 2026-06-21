@@ -19,15 +19,16 @@ namespace LeaseBook.Tests.Accounting;
 public sealed class MonthSimulationTests(PostgresFixture fixture)
 {
     // Two owners; p1 → o1 (t1, t2), p2 → o2 (t3, t4, t5).
-    private static readonly Guid O1 = Guid.Parse("00000000-0000-0000-0000-0000000000a1");
-    private static readonly Guid O2 = Guid.Parse("00000000-0000-0000-0000-0000000000a2");
-    private static readonly Guid P1 = Guid.Parse("00000000-0000-0000-0000-0000000000b1");
-    private static readonly Guid P2 = Guid.Parse("00000000-0000-0000-0000-0000000000b2");
-    private static readonly Guid T1 = Guid.Parse("00000000-0000-0000-0000-0000000000c1");
-    private static readonly Guid T2 = Guid.Parse("00000000-0000-0000-0000-0000000000c2");
-    private static readonly Guid T3 = Guid.Parse("00000000-0000-0000-0000-0000000000c3");
-    private static readonly Guid T4 = Guid.Parse("00000000-0000-0000-0000-0000000000c4");
-    private static readonly Guid T5 = Guid.Parse("00000000-0000-0000-0000-0000000000c5");
+    // Fresh per test instance (ADR-013: composite dim FK forbids reusing a fixed id across orgs).
+    private readonly Guid O1 = UuidV7.NewId();
+    private readonly Guid O2 = UuidV7.NewId();
+    private readonly Guid P1 = UuidV7.NewId();
+    private readonly Guid P2 = UuidV7.NewId();
+    private readonly Guid T1 = UuidV7.NewId();
+    private readonly Guid T2 = UuidV7.NewId();
+    private readonly Guid T3 = UuidV7.NewId();
+    private readonly Guid T4 = UuidV7.NewId();
+    private readonly Guid T5 = UuidV7.NewId();
 
     [Fact]
     public async Task A_full_month_keeps_the_invariants_at_every_step_and_reconciles()
@@ -37,8 +38,8 @@ public sealed class MonthSimulationTests(PostgresFixture fixture)
             fixture, ct, owners: [O1, O2], tenants: [T1, T2, T3, T4, T5], properties: [P1, P2]);
 
         // Move-in deposits for t1 (p1/o1) and t5 (p2/o2).
-        await PostAndCheckAsync(scope, new DepositCollected(T1, P1, O1, new Money(1450m), Feb(1), DepositBankId, "t1 move-in"), ct);
-        await PostAndCheckAsync(scope, new DepositCollected(T5, P2, O2, new Money(2150m), Feb(1), DepositBankId, "t5 move-in"), ct);
+        await PostAndCheckAsync(scope, new DepositCollected(T1, P1, O1, new Money(1450m), Feb(1), scope.DepositBankId, "t1 move-in"), ct);
+        await PostAndCheckAsync(scope, new DepositCollected(T5, P2, O2, new Money(2150m), Feb(1), scope.DepositBankId, "t5 move-in"), ct);
 
         // Rent run.
         await PostAndCheckAsync(scope, new RentCharged(T1, P1, O1, null, new Money(1450m), Feb(1), "rent t1"), ct);
@@ -48,33 +49,33 @@ public sealed class MonthSimulationTests(PostgresFixture fixture)
         await PostAndCheckAsync(scope, new RentCharged(T5, P2, O2, null, new Money(2150m), Feb(1), "rent t5"), ct);
 
         // Collections (t5 stays unpaid this month).
-        await PostAndCheckAsync(scope, new PaymentReceived(T1, P1, O1, new Money(1450m), Feb(3), PaymentMethod.Ach, TrustBankId, "pay t1"), ct);
+        await PostAndCheckAsync(scope, new PaymentReceived(T1, P1, O1, new Money(1450m), Feb(3), PaymentMethod.Ach, scope.TrustBankId, "pay t1"), ct);
 
         // A correction: t2's payment is entered, found wrong, voided, then re-posted.
-        var wrong = await PostAndCheckAsync(scope, new PaymentReceived(T2, P1, O1, new Money(1830m), Feb(4), PaymentMethod.Card, TrustBankId, "pay t2 (typo)"), ct);
+        var wrong = await PostAndCheckAsync(scope, new PaymentReceived(T2, P1, O1, new Money(1830m), Feb(4), PaymentMethod.Card, scope.TrustBankId, "pay t2 (typo)"), ct);
         await scope.RunAsync(() => Reversal(scope).ReverseAsync(wrong, "wrong amount", Feb(4), ct), ct);
         await AssertCoreCleanAsync(scope, ct); // I6: the void leaves the invariants intact
-        await PostAndCheckAsync(scope, new PaymentReceived(T2, P1, O1, new Money(1380m), Feb(4), PaymentMethod.Card, TrustBankId, "pay t2"), ct);
+        await PostAndCheckAsync(scope, new PaymentReceived(T2, P1, O1, new Money(1380m), Feb(4), PaymentMethod.Card, scope.TrustBankId, "pay t2"), ct);
 
         // A late fee on t3, then it pays rent + fee.
         await PostAndCheckAsync(scope, new FeeCharged(T3, P2, O2, null, new Money(25m), Feb(10), FeeKind.Late, "late t3"), ct);
-        await PostAndCheckAsync(scope, new PaymentReceived(T3, P2, O2, new Money(1645m), Feb(12), PaymentMethod.Ach, TrustBankId, "pay t3"), ct);
-        await PostAndCheckAsync(scope, new PaymentReceived(T4, P2, O2, new Money(1295m), Feb(14), PaymentMethod.Check, TrustBankId, "pay t4"), ct);
+        await PostAndCheckAsync(scope, new PaymentReceived(T3, P2, O2, new Money(1645m), Feb(12), PaymentMethod.Ach, scope.TrustBankId, "pay t3"), ct);
+        await PostAndCheckAsync(scope, new PaymentReceived(T4, P2, O2, new Money(1295m), Feb(14), PaymentMethod.Check, scope.TrustBankId, "pay t4"), ct);
 
         // Move-out: t1's deposit applied to owner income.
-        await PostAndCheckAsync(scope, new DepositApplied(T1, P1, O1, new Money(1450m), Feb(26), DepositBankId, TrustBankId, DepositApplication.ToOwnerIncome, "t1 move-out"), ct);
+        await PostAndCheckAsync(scope, new DepositApplied(T1, P1, O1, new Money(1450m), Feb(26), scope.DepositBankId, scope.TrustBankId, DepositApplication.ToOwnerIncome, "t1 move-out"), ct);
 
         // Fees assessed and swept.
-        await PostAndCheckAsync(scope, new ManagementFeeAssessed(O1, P1, new Money(290m), Feb(27), TrustBankId, "fee o1"), ct);
-        await PostAndCheckAsync(scope, new ManagementFeeAssessed(O2, P2, new Money(310m), Feb(27), TrustBankId, "fee o2"), ct);
-        await PostAndCheckAsync(scope, new PMFeesSwept(new Money(600m), Feb(27), TrustBankId, OperatingBankId, "sweep"), ct);
+        await PostAndCheckAsync(scope, new ManagementFeeAssessed(O1, P1, new Money(290m), Feb(27), scope.TrustBankId, "fee o1"), ct);
+        await PostAndCheckAsync(scope, new ManagementFeeAssessed(O2, P2, new Money(310m), Feb(27), scope.TrustBankId, "fee o2"), ct);
+        await PostAndCheckAsync(scope, new PMFeesSwept(new Money(600m), Feb(27), scope.TrustBankId, scope.OperatingBankId, "sweep"), ct);
 
         // Owner disbursements (within each owner's cash equity).
-        await PostAndCheckAsync(scope, new OwnerDisbursed(O1, new Money(3000m), Feb(28), TrustBankId, "draw o1"), ct);
-        await PostAndCheckAsync(scope, new OwnerDisbursed(O2, new Money(2000m), Feb(28), TrustBankId, "draw o2"), ct);
+        await PostAndCheckAsync(scope, new OwnerDisbursed(O1, new Money(3000m), Feb(28), scope.TrustBankId, "draw o1"), ct);
+        await PostAndCheckAsync(scope, new OwnerDisbursed(O2, new Money(2000m), Feb(28), scope.TrustBankId, "draw o2"), ct);
 
         // Settlement epilogue: t5 finally pays, so every receivable is cleared and the bases converge.
-        await PostAndCheckAsync(scope, new PaymentReceived(T5, P2, O2, new Money(2150m), Feb(28), PaymentMethod.Ach, TrustBankId, "settle t5"), ct);
+        await PostAndCheckAsync(scope, new PaymentReceived(T5, P2, O2, new Money(2150m), Feb(28), PaymentMethod.Ach, scope.TrustBankId, "settle t5"), ct);
 
         await AssertBasesConvergeAsync(scope, O1, ct);
         await AssertBasesConvergeAsync(scope, O2, ct);

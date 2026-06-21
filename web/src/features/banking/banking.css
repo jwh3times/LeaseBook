@@ -1,0 +1,198 @@
+/* Banking screen (M4 WP-06) — ported from the prototype's BANK_CSS (private/claude_design_files/
+   screen-bank.jsx), against live endpoints, plus the import wizard, reconciliation history, and the
+   locked-month badge the prototype didn't have. Tokens come from design/tokens.css. */
+
+.pf-acct-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--gap);
+  margin-bottom: var(--gap);
+}
+.pf-acct-tab {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  transition: 0.15s;
+  box-shadow: var(--shadow-sm);
+}
+.pf-acct-tab .pf-money {
+  margin-left: auto;
+  font-weight: 700;
+}
+.pf-acct-tab:hover {
+  border-color: var(--accent-line);
+}
+.pf-acct-tab.active {
+  border-color: var(--accent);
+  box-shadow:
+    0 0 0 1px var(--accent),
+    var(--shadow-sm);
+  background: var(--accent-soft);
+}
+.pf-bankic {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: var(--surface-2, var(--border));
+  color: var(--text-2);
+}
+.pf-acct-tab.active .pf-bankic {
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+
+.pf-bank-bal {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  padding: var(--card-pad);
+  margin-bottom: var(--gap);
+}
+.pf-balcell {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 0 18px;
+  border-left: 1px solid var(--border);
+}
+.pf-balcell:first-child {
+  border-left: 0;
+  padding-left: 0;
+}
+
+.pf-recon-bar {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 16px var(--card-pad);
+  margin-bottom: var(--gap);
+  border-color: var(--accent-line);
+  background: linear-gradient(100deg, var(--accent-soft), var(--surface) 60%);
+}
+.pf-recon-bar.done {
+  border-color: var(--pos);
+  background: linear-gradient(100deg, var(--pos-soft), var(--surface) 60%);
+}
+.pf-recon-bar .pf-balcell {
+  border-left: 0;
+  padding: 0;
+}
+.pf-recon-eq {
+  font-size: 22px;
+  font-weight: 300;
+  color: var(--text-3);
+}
+.pf-recon-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--pos);
+  font-size: 13px;
+}
+
+.pf-bank-filters {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: var(--gap);
+}
+
+.pf-check {
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border: 1.5px solid var(--border-strong);
+  border-radius: 5px;
+  background: var(--surface);
+  cursor: pointer;
+  position: relative;
+  transition: 0.12s;
+  vertical-align: middle;
+}
+.pf-check:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.pf-check:checked::after {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 1.5px;
+  width: 5px;
+  height: 9px;
+  border: solid var(--accent-fg);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+/* Import wizard */
+.pf-wizard-steps {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.pf-wizard-steps .step.active {
+  color: var(--accent-strong);
+  font-weight: 700;
+}
+.pf-map-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.pf-match-group {
+  margin-top: 14px;
+}
+.pf-match-group h4 {
+  margin: 0 0 6px;
+  font-size: 13px;
+}
+
+/* Reconciliation history */
+.pf-recon-hist {
+  display: flex;
+  flex-direction: column;
+}
+.pf-recon-histrow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px var(--card-pad);
+  border-top: 1px solid var(--border);
+}
+.pf-recon-histrow:first-child {
+  border-top: 0;
+}
+.pf-recon-histrow .grow {
+  flex: 1;
+}
+
+@media (max-width: 1080px) {
+  .pf-acct-tabs {
+    grid-template-columns: 1fr;
+  }
+  .pf-bank-bal {
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+  }
+  .pf-balcell {
+    border-left: 0;
+    padding: 0;
+  }
+  .pf-recon-bar {
+    flex-wrap: wrap;
+  }
+  .pf-map-grid {
+    grid-template-columns: 1fr;
+  }
+}

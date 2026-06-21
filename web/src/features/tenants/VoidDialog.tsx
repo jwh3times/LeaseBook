@@ -2,7 +2,13 @@ import { useMutation } from '@tanstack/react-query';
 import { useRef, useState, type KeyboardEvent } from 'react';
 import { Button, Input } from '@/design';
 import { Modal } from '@/lib/Modal';
-import { type LedgerPostError, newSourceRef, type PostResult, voidEntry } from './ledgerMutations';
+import {
+  type LedgerPostError,
+  LOCKED_PERIOD_MESSAGE,
+  newSourceRef,
+  type PostResult,
+  voidEntry,
+} from './ledgerMutations';
 
 interface VoidDialogProps {
   entryId: string;
@@ -28,6 +34,9 @@ export function VoidDialog({ entryId, onClose, onVoided }: VoidDialogProps) {
         setError('This entry has already been voided.');
       } else if (err.code === 'duplicate_source_ref' && err.existingEntryId) {
         onVoided(err.existingEntryId);
+      } else if (err.code === 'account_period_locked') {
+        // Reversal lands a bank line in the original's month; if it's reconciled, the lock blocks it.
+        setError(LOCKED_PERIOD_MESSAGE);
       } else {
         setError(err.message);
       }

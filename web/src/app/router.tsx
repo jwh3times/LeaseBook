@@ -2,6 +2,7 @@ import type { ReactElement } from 'react';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { KitchenSink } from '@/dev/KitchenSink';
 import { LoginPage } from '@/features/auth/LoginPage';
+import { BankingPage } from '@/features/banking/BankingPage';
 import { DashboardPage } from '@/features/dashboard/DashboardPage';
 import { OwnerDetailPage } from '@/features/owners/OwnerDetailPage';
 import { OwnersPage } from '@/features/owners/OwnersPage';
@@ -22,6 +23,7 @@ const FEATURE_PAGES: Record<string, ReactElement> = {
   '/tenants': <TenantsPage />,
   '/owners': <OwnersPage />,
   '/properties': <PropertiesPage />,
+  '/banking': <BankingPage />,
   '/settings': <SettingsPage />,
 };
 

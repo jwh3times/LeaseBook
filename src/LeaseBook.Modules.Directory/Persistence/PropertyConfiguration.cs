@@ -11,6 +11,9 @@ public sealed class PropertyConfiguration : IEntityTypeConfiguration<Property>
         builder.ToTable("properties");
         builder.HasKey(e => e.Id);
 
+        // (org_id, id) alternate key — target of journal_lines' composite dimension FK (ADR-013, P60).
+        builder.HasAlternateKey(e => new { e.OrgId, e.Id });
+
         builder.Property(e => e.OrgId).IsRequired();
         builder.Property(e => e.OwnerId).IsRequired();
         builder.Property(e => e.Address).IsRequired();

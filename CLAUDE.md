@@ -5,10 +5,26 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Repository state
 
 LeaseBook is a property-management SaaS for small residential PMs, differentiated on **correct
-trust accounting** (NC fiduciary standard), low click-depth UX, and flat pricing. The repo is
-currently **planning-stage — no application code exists yet**. All work is governed by
-`private/TODO.md`, the master build plan: milestones M0–M8 implement PRD Phase 1 and are sequenced
-top-to-bottom; each milestone ends in a demonstrable state.
+trust accounting** (NC fiduciary standard), low click-depth UX, and flat pricing. All work is
+governed by `private/TODO.md`, the master build plan: milestones M0–M8 implement PRD Phase 1 and
+are sequenced top-to-bottom; each milestone ends in a demonstrable state. Per-milestone plans and
+retrospectives live in `private/planning/` (`m{N}_plan.md` / `m{N}_retro.md`).
+
+**Progress (the `private/TODO.md` checkboxes and `private/planning/*_retro.md` are the live source of
+truth — consult them, don't trust a summary):**
+
+- **M0–M3 are complete and merged to `main`** — built and tested: foundations (solution, RLS, auth,
+  CI, design-system port), the trust-accounting engine (double-entry journal, posting-template
+  catalog, dual-basis ledgers, invariant/property/golden-file harness), the Directory module
+  (owners/properties/units/tenants/leases-lite, index views, ⌘K palette, dashboard v1), and the
+  tenant ledger action hub (inline composer, deposit apply, void/reverse, audit drawer).
+- **M4 (Banking & Reconciliation) is the current frontier** — not yet planned (no `m4_plan.md` yet).
+  Its first task is the carried-forward org-aware composite `(org_id, id)` FK rework on the journal
+  dimensions (ADR-008 revisit; M4 is the first milestone to reopen the journal schema since M2).
+- **Operator-gated remainder of M0** (deferred — not engineering work): Azure OIDC/ACR/Container App
+  deploy wiring, live Key Vault + managed identity, and the first PITR drill (M8 schedules it).
+- Modules `Banking`, `Reporting`, `Operations`, and `Payments` are scaffolded shells awaiting their
+  milestones (M4–M8 / Phase 2); `Migrator` is a placeholder (M7).
 
 The `private/` directory is **gitignored (confidential, local-only)** and will be absent in a
 public clone. It holds everything not meant for the public repo:
@@ -59,7 +75,7 @@ offset from the defaults so the stack runs alongside other local projects.
 - Lint / typecheck / test / build: `npm run lint` · `npm run typecheck` · `npm run test` · `npm run build`
 - Single test: `npm run test -- src/design/formatMoney.test.ts`
 - Regenerate API client (host must be running on :5080): `npm run api:generate`
-- e2e (Playwright, specs land later): `npm run e2e`
+- e2e (Playwright; specs in `web/e2e/`, run against a seeded host): `npm run e2e`
 
 **Container:** `docker build -t leasebook .` then run with `ConnectionStrings__Default` set — serves the
 SPA and `/api` on port 8080 (the container's internal port). To run the **whole product** locally
@@ -67,7 +83,10 @@ SPA and `/api` on port 8080 (the container's internal port). To run the **whole 
 <http://localhost:8082>; see docs/runbooks/local-dev.md).
 Migrations run as the migrator role via a one-shot `migrator`-target image (EF bundle), never at app startup.
 
-## Planned architecture (private/TODO.md §1 is the full blueprint)
+## Architecture (private/TODO.md §1 is the full blueprint)
+
+The patterns below are established and test-enforced in the built modules (Accounting, Directory,
+SharedKernel, Web host); they bind the unbuilt modules (M4+) equally.
 
 - **Modular monolith**: ASP.NET Core host + one project per module
   (`Accounting`, `Directory`, `Banking`, `Reporting`, `Operations`, `Payments`, `SharedKernel`,

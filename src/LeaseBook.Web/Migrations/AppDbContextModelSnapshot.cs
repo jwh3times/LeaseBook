@@ -118,6 +118,118 @@ namespace LeaseBook.Web.Migrations
                         });
                 });
 
+            modelBuilder.Entity("LeaseBook.Modules.Accounting.Domain.BankLineState", b =>
+                {
+                    b.Property<Guid>("JournalLineId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("journal_line_id");
+
+                    b.Property<DateTime?>("ClearedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("cleared_at");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("OrgId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("org_id");
+
+                    b.Property<Guid?>("ReconciliationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reconciliation_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("status");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("JournalLineId")
+                        .HasName("pk_bank_line_status");
+
+                    b.HasIndex("ReconciliationId")
+                        .HasDatabaseName("ix_bank_line_status_reconciliation_id");
+
+                    b.HasIndex("OrgId", "Status")
+                        .HasDatabaseName("ix_bank_line_status_org_id_status");
+
+                    b.ToTable("bank_line_status", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_bank_line_status_status", "status IN ('uncleared','cleared','reconciled')");
+                        });
+                });
+
+            modelBuilder.Entity("LeaseBook.Modules.Accounting.Domain.BankReconciliation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("BankAccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("bank_account_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime?>("FinalizedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("finalized_at");
+
+                    b.Property<Guid?>("FinalizedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("finalized_by");
+
+                    b.Property<Guid>("OrgId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("org_id");
+
+                    b.Property<int>("PeriodMonth")
+                        .HasColumnType("integer")
+                        .HasColumnName("period_month");
+
+                    b.Property<int>("PeriodYear")
+                        .HasColumnType("integer")
+                        .HasColumnName("period_year");
+
+                    b.Property<string>("ReopenReason")
+                        .HasColumnType("text")
+                        .HasColumnName("reopen_reason");
+
+                    b.Property<string>("ReportSnapshot")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("report_snapshot");
+
+                    b.Property<decimal>("StatementEndingBalance")
+                        .HasPrecision(14, 2)
+                        .HasColumnType("numeric(14,2)")
+                        .HasColumnName("statement_ending_balance");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("status");
+
+                    b.HasKey("Id")
+                        .HasName("pk_bank_reconciliations");
+
+                    b.HasIndex("OrgId", "BankAccountId", "PeriodYear", "PeriodMonth")
+                        .IsUnique()
+                        .HasDatabaseName("ix_bank_reconciliations_org_id_bank_account_id_period_year_per");
+
+                    b.ToTable("bank_reconciliations", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_bank_reconciliations_status", "status IN ('in_progress','finalized','reopened')");
+                        });
+                });
+
             modelBuilder.Entity("LeaseBook.Modules.Accounting.Domain.JournalEntry", b =>
                 {
                     b.Property<Guid>("Id")
@@ -291,6 +403,190 @@ namespace LeaseBook.Web.Migrations
                         });
                 });
 
+            modelBuilder.Entity("LeaseBook.Modules.Banking.Domain.BankCsvMapping", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("BankAccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("bank_account_id");
+
+                    b.Property<string>("ColumnMapJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("column_map_json");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.Property<Guid>("OrgId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("org_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_bank_csv_mappings");
+
+                    b.HasIndex("OrgId", "BankAccountId", "Name")
+                        .IsUnique()
+                        .HasDatabaseName("ix_bank_csv_mappings_org_id_bank_account_id_name");
+
+                    b.ToTable("bank_csv_mappings", (string)null);
+                });
+
+            modelBuilder.Entity("LeaseBook.Modules.Banking.Domain.StatementImport", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("BankAccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("bank_account_id");
+
+                    b.Property<string>("Filename")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("filename");
+
+                    b.Property<DateTime>("ImportedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("imported_at");
+
+                    b.Property<Guid?>("ImportedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("imported_by");
+
+                    b.Property<Guid>("OrgId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("org_id");
+
+                    b.Property<int>("RowCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("row_count");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("status");
+
+                    b.HasKey("Id")
+                        .HasName("pk_statement_imports");
+
+                    b.HasIndex("OrgId", "BankAccountId")
+                        .HasDatabaseName("ix_statement_imports_org_id_bank_account_id");
+
+                    b.ToTable("statement_imports", (string)null);
+                });
+
+            modelBuilder.Entity("LeaseBook.Modules.Banking.Domain.StatementLine", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(14, 2)
+                        .HasColumnType("numeric(14,2)")
+                        .HasColumnName("amount");
+
+                    b.Property<Guid>("BankAccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("bank_account_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("DedupHash")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("dedup_hash");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("description");
+
+                    b.Property<Guid>("ImportId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("import_id");
+
+                    b.Property<Guid>("OrgId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("org_id");
+
+                    b.Property<DateOnly>("StatementDate")
+                        .HasColumnType("date")
+                        .HasColumnName("statement_date");
+
+                    b.HasKey("Id")
+                        .HasName("pk_statement_lines");
+
+                    b.HasIndex("ImportId")
+                        .HasDatabaseName("ix_statement_lines_import_id");
+
+                    b.HasIndex("OrgId", "BankAccountId", "DedupHash")
+                        .IsUnique()
+                        .HasDatabaseName("ix_statement_lines_org_id_bank_account_id_dedup_hash");
+
+                    b.ToTable("statement_lines", (string)null);
+                });
+
+            modelBuilder.Entity("LeaseBook.Modules.Banking.Domain.StatementMatch", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("DecidedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("decided_at");
+
+                    b.Property<Guid?>("DecidedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("decided_by");
+
+                    b.Property<Guid?>("JournalLineId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("journal_line_id");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("kind");
+
+                    b.Property<Guid>("OrgId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("org_id");
+
+                    b.Property<Guid>("StatementLineId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("statement_line_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_statement_matches");
+
+                    b.HasIndex("StatementLineId")
+                        .HasDatabaseName("ix_statement_matches_statement_line_id");
+
+                    b.ToTable("statement_matches", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_statement_matches_kind", "kind IN ('matched','suggested','unmatched','created')");
+                        });
+                });
+
             modelBuilder.Entity("LeaseBook.Modules.Directory.Domain.BankAccount", b =>
                 {
                     b.Property<Guid>("Id")
@@ -332,6 +628,9 @@ namespace LeaseBook.Web.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_bank_accounts");
+
+                    b.HasAlternateKey("OrgId", "Id")
+                        .HasName("ak_bank_accounts_org_id_id");
 
                     b.HasIndex("OrgId", "Name")
                         .HasDatabaseName("ix_bank_accounts_org_id_name");
@@ -535,6 +834,9 @@ namespace LeaseBook.Web.Migrations
                     b.HasKey("Id")
                         .HasName("pk_owners");
 
+                    b.HasAlternateKey("OrgId", "Id")
+                        .HasName("ak_owners_org_id_id");
+
                     b.HasIndex("OrgId", "Name")
                         .HasDatabaseName("ix_owners_org_id_name");
 
@@ -590,6 +892,9 @@ namespace LeaseBook.Web.Migrations
                     b.HasKey("Id")
                         .HasName("pk_properties");
 
+                    b.HasAlternateKey("OrgId", "Id")
+                        .HasName("ak_properties_org_id_id");
+
                     b.HasIndex("OwnerId")
                         .HasDatabaseName("ix_properties_owner_id");
 
@@ -644,6 +949,9 @@ namespace LeaseBook.Web.Migrations
                     b.HasKey("Id")
                         .HasName("pk_tenants");
 
+                    b.HasAlternateKey("OrgId", "Id")
+                        .HasName("ak_tenants_org_id_id");
+
                     b.HasIndex("OrgId", "DisplayName")
                         .HasDatabaseName("ix_tenants_org_id_display_name");
 
@@ -697,6 +1005,9 @@ namespace LeaseBook.Web.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_units");
+
+                    b.HasAlternateKey("OrgId", "Id")
+                        .HasName("ak_units_org_id_id");
 
                     b.HasIndex("PropertyId")
                         .HasDatabaseName("ix_units_property_id");
@@ -1039,6 +1350,22 @@ namespace LeaseBook.Web.Migrations
                     b.ToTable("asp_net_user_tokens", (string)null);
                 });
 
+            modelBuilder.Entity("LeaseBook.Modules.Accounting.Domain.BankLineState", b =>
+                {
+                    b.HasOne("LeaseBook.Modules.Accounting.Domain.JournalLine", null)
+                        .WithMany()
+                        .HasForeignKey("JournalLineId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_bank_line_status_journal_line_journal_line_id");
+
+                    b.HasOne("LeaseBook.Modules.Accounting.Domain.BankReconciliation", null)
+                        .WithMany()
+                        .HasForeignKey("ReconciliationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_bank_line_status_bank_reconciliation_reconciliation_id");
+                });
+
             modelBuilder.Entity("LeaseBook.Modules.Accounting.Domain.JournalEntry", b =>
                 {
                     b.HasOne("LeaseBook.Modules.Accounting.Domain.JournalEntry", null)
@@ -1063,6 +1390,26 @@ namespace LeaseBook.Web.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_journal_lines_journal_entries_entry_id");
+                });
+
+            modelBuilder.Entity("LeaseBook.Modules.Banking.Domain.StatementLine", b =>
+                {
+                    b.HasOne("LeaseBook.Modules.Banking.Domain.StatementImport", null)
+                        .WithMany()
+                        .HasForeignKey("ImportId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_statement_lines_statement_imports_import_id");
+                });
+
+            modelBuilder.Entity("LeaseBook.Modules.Banking.Domain.StatementMatch", b =>
+                {
+                    b.HasOne("LeaseBook.Modules.Banking.Domain.StatementLine", null)
+                        .WithMany()
+                        .HasForeignKey("StatementLineId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_statement_matches_statement_lines_statement_line_id");
                 });
 
             modelBuilder.Entity("LeaseBook.Modules.Directory.Domain.LeaseLite", b =>

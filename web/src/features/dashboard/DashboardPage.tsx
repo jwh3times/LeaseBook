@@ -95,7 +95,7 @@ export function DashboardPage() {
       <div className="pf-dash-grid">
         <OwnerBalancesHero data={d} onOpenOwner={(id) => navigate(`/owners/${id}`)} />
         <div className="col gap16">
-          <BankSummary data={d} />
+          <BankSummary data={d} onReconcile={() => navigate('/banking')} />
           <ActionItems data={d} onGo={(route) => navigate(route)} />
         </div>
       </div>
@@ -161,12 +161,26 @@ function OwnerBalancesHero({
   );
 }
 
-function BankSummary({ data }: { data: DashboardResponse }) {
+function BankSummary({ data, onReconcile }: { data: DashboardResponse; onReconcile: () => void }) {
   return (
     <Card pad>
-      <p className="pf-section-title">Trust accounts</p>
+      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'baseline' }}>
+        <p className="pf-section-title">Trust accounts</p>
+        <Button variant="ghost" size="sm" icon="arrowUpRight" onClick={onReconcile}>
+          Reconcile
+        </Button>
+      </div>
       {data.banks.rows.map((bank) => (
-        <div key={bank.bankAccountId} className="pf-bankrow">
+        <div
+          key={bank.bankAccountId}
+          className="pf-bankrow t-row-click"
+          role="button"
+          tabIndex={0}
+          onClick={onReconcile}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') onReconcile();
+          }}
+        >
           <div className="col">
             <span className="fw6">{bank.name}</span>
             <Badge tone="pos" soft dot>

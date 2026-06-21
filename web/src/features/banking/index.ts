@@ -1,2 +1,2 @@
-// Barrel for features/banking. Populated by later work packages.
-export {};
+// Barrel for features/banking (M4 WP-06).
+export { BankingPage } from './BankingPage';

@@ -38,6 +38,9 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
             OwnerDisbursed e => PostOwnerDisbursedAsync(e, ct),
             VendorPaid e => PostVendorPaidAsync(e, ct),
             RefundIssued e => PostRefundIssuedAsync(e, ct),
+            BankFeeCharged e => PostBankFeeChargedAsync(e, ct),
+            InterestEarned e => PostInterestEarnedAsync(e, ct),
+            TrustTransfer e => PostTrustTransferAsync(e, ct),
             _ => throw new ArgumentOutOfRangeException(
                 nameof(businessEvent), businessEvent.GetType().Name, "No posting template for this event."),
         };
@@ -323,6 +326,59 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
                 new(AccountCodes.TrustBank(e.BankAccountId), null, e.Amount, EntryBasis.Both,
                     BankAccountId: e.BankAccountId),
             ]), ct);
+    }
+
+    // ----- Bank adjustments (M4 / ADR-014) --------------------------------------------------------
+
+    private async Task<Guid> PostBankFeeChargedAsync(BankFeeCharged e, CancellationToken ct)
+    {
+        // The PM covers the fee from its own held funds in that bank: held PM fees ↓ and the bank ↓, so
+        // owners/tenants are untouched and the trust equation stays balanced.
+        var bank = await BankCodeAsync(e.BankAccountId, ct);
+        return await posting.PostAsync(new PostEntryRequest(e.Date, "BankFeeCharged", null, e.Description, e.SourceRef,
+            [
+                new(AccountCodes.PmIncome, e.Amount, null, EntryBasis.Both, BankAccountId: e.BankAccountId),
+                new(bank, null, e.Amount, EntryBasis.Both, BankAccountId: e.BankAccountId),
+            ]), ct);
+    }
+
+    private async Task<Guid> PostInterestEarnedAsync(InterestEarned e, CancellationToken ct)
+    {
+        // Interest accrues to the PM's held position in the account (the bank ↑, held PM fees ↑); the
+        // entitlement policy (PM vs owner vs housing fund) is deferred (ADR-014).
+        var bank = await BankCodeAsync(e.BankAccountId, ct);
+        return await posting.PostAsync(new PostEntryRequest(e.Date, "InterestEarned", null, e.Description, e.SourceRef,
+            [
+                new(bank, e.Amount, null, EntryBasis.Both, BankAccountId: e.BankAccountId),
+                new(AccountCodes.PmIncome, null, e.Amount, EntryBasis.Both, BankAccountId: e.BankAccountId),
+            ]), ct);
+    }
+
+    private async Task<Guid> PostTrustTransferAsync(TrustTransfer e, CancellationToken ct)
+    {
+        // Moves the PM's own held funds between accounts: cash from→to, and the held-PM-fee attribution
+        // moves with it, so each account's trust equation stays balanced. Owner/deposit funds are never
+        // moved by this template (ADR-014).
+        var fromBank = await BankCodeAsync(e.FromBankId, ct);
+        var toBank = await BankCodeAsync(e.ToBankId, ct);
+        return await posting.PostAsync(new PostEntryRequest(e.Date, "TrustTransfer", null, e.Description, e.SourceRef,
+            [
+                new(toBank, e.Amount, null, EntryBasis.Both, BankAccountId: e.ToBankId),
+                new(fromBank, null, e.Amount, EntryBasis.Both, BankAccountId: e.FromBankId),
+                new(AccountCodes.PmIncome, e.Amount, null, EntryBasis.Both, BankAccountId: e.FromBankId),
+                new(AccountCodes.PmIncome, null, e.Amount, EntryBasis.Both, BankAccountId: e.ToBankId),
+            ]), ct);
+    }
+
+    /// <summary>The chart code of the bank account representing <paramref name="bankId"/> (trust or PM operating).</summary>
+    private async Task<string> BankCodeAsync(Guid bankId, CancellationToken ct)
+    {
+        var code = await db.Set<Account>()
+            .Where(a => a.BankAccountId == bankId
+                && (a.Class == AccountClass.TrustBank || a.Class == AccountClass.PmOperatingBank))
+            .Select(a => a.Code)
+            .SingleOrDefaultAsync(ct);
+        return code ?? throw new UnknownAccountException(AccountCodes.TrustBank(bankId));
     }
 
     private async Task GuardReserveFloorAsync(Guid ownerId, Money amount, Money reserve, CancellationToken ct)

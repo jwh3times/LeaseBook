@@ -13,6 +13,9 @@ public sealed class TenantConfiguration : IEntityTypeConfiguration<Tenant>
 
         builder.HasKey(e => e.Id);
 
+        // (org_id, id) alternate key — target of journal_lines' composite dimension FK (ADR-013, P60).
+        builder.HasAlternateKey(e => new { e.OrgId, e.Id });
+
         builder.Property(e => e.OrgId).IsRequired();
         builder.Property(e => e.DisplayName).IsRequired();
         builder.Property(e => e.ContactEmail);

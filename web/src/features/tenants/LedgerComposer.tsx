@@ -8,6 +8,7 @@ import {
   categoryNeedsBank,
   COMPOSER_CHARGE_CATEGORIES,
   type LedgerPostError,
+  LOCKED_PERIOD_MESSAGE,
   newSourceRef,
   PAYMENT_METHODS,
   type PostResult,
@@ -88,7 +89,8 @@ export function LedgerComposer({ tenantId, onPosted, initialMode }: LedgerCompos
         finishPost(post.existingEntryId);
         return;
       }
-      setError(post.message);
+      // The bank's month is reconciled (M4 lock): keep the composer open with the move-the-date hint.
+      setError(post.code === 'account_period_locked' ? LOCKED_PERIOD_MESSAGE : post.message);
     },
   });
 

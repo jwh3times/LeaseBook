@@ -14,7 +14,8 @@ namespace LeaseBook.Modules.Accounting.Posting;
 /// SaveChanges savepoint the idempotency backstop relies on.
 /// </summary>
 internal sealed class PostingService(
-    DbContext db, ITenantContext tenant, IAccountingPeriods periods, IActorContext? actor = null) : IPostingService
+    DbContext db, ITenantContext tenant, IAccountingPeriods periods,
+    IActorContext? actor = null, IReconciliationLock? reconciliationLock = null) : IPostingService
 {
     private static readonly EntryBasis[] BalancedBases = [EntryBasis.Cash, EntryBasis.Accrual];
 
@@ -106,6 +107,21 @@ internal sealed class PostingService(
         if (period.Status == PeriodStatus.Closed)
         {
             throw new PeriodClosedException(period.Year, period.Month);
+        }
+
+        // (g2) reconciliation lock (M4 / P63): a bank-account line into a finalized (account, month) is
+        // rejected. Only lines whose account IS a bank (not attribution lines that merely carry the
+        // bank dimension) move the bank book, so only those are gated.
+        if (reconciliationLock is not null)
+        {
+            foreach (var bankId in lines
+                .Where(l => l.BankAccountId is not null
+                    && (l.AccountClass == AccountClass.TrustBank || l.AccountClass == AccountClass.PmOperatingBank))
+                .Select(l => l.BankAccountId!.Value)
+                .Distinct())
+            {
+                await reconciliationLock.EnsureOpenAsync(bankId, request.EntryDate, ct);
+            }
         }
 
         // (h) idempotency: a present source_ref must be unique per org. Pre-check the common case; the

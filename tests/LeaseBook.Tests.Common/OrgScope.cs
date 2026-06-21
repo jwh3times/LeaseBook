@@ -34,6 +34,26 @@ public sealed class OrgScope : IAsyncDisposable
 
     public OrgScopedExecutor Executor { get; }
 
+    /// <summary>
+    /// The bank-account ids the accounting harness provisioned for <b>this org</b>. Since the composite
+    /// <c>(org_id, bank_account_id)</c> dimension FK is org-scoped (ADR-013) and <c>bank_accounts.id</c> is
+    /// globally unique, bank ids can no longer be fixed constants shared across test orgs — each scope
+    /// gets its own, recorded here by <see cref="Tests.Common"/> consumers via <see cref="SetBankIds"/>.
+    /// </summary>
+    public Guid TrustBankId { get; private set; }
+
+    public Guid DepositBankId { get; private set; }
+
+    public Guid OperatingBankId { get; private set; }
+
+    /// <summary>Records the per-org bank ids the harness provisioned (called once, during provisioning).</summary>
+    public void SetBankIds(Guid trust, Guid deposit, Guid operating)
+    {
+        TrustBankId = trust;
+        DepositBankId = deposit;
+        OperatingBankId = operating;
+    }
+
     public static async Task<OrgScope> CreateAsync(PostgresFixture fixture, CancellationToken ct, string? name = null)
     {
         ArgumentNullException.ThrowIfNull(fixture);

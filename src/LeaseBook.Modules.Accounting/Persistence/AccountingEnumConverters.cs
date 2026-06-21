@@ -80,3 +80,45 @@ public sealed class PeriodStatusConverter() : ValueConverter<PeriodStatus, strin
 
     public static readonly string[] DbValues = ["open", "closed"];
 }
+
+public sealed class BankLineStatusConverter() : ValueConverter<BankLineStatus, string>(v => ToDb(v), v => FromDb(v))
+{
+    public static string ToDb(BankLineStatus value) => value switch
+    {
+        BankLineStatus.Uncleared => "uncleared",
+        BankLineStatus.Cleared => "cleared",
+        BankLineStatus.Reconciled => "reconciled",
+        _ => throw new ArgumentOutOfRangeException(nameof(value), value, "Unknown bank line status."),
+    };
+
+    public static BankLineStatus FromDb(string value) => value switch
+    {
+        "uncleared" => BankLineStatus.Uncleared,
+        "cleared" => BankLineStatus.Cleared,
+        "reconciled" => BankLineStatus.Reconciled,
+        _ => throw new ArgumentOutOfRangeException(nameof(value), value, "Unknown bank line status text."),
+    };
+
+    public static readonly string[] DbValues = ["uncleared", "cleared", "reconciled"];
+}
+
+public sealed class ReconciliationStatusConverter() : ValueConverter<ReconciliationStatus, string>(v => ToDb(v), v => FromDb(v))
+{
+    public static string ToDb(ReconciliationStatus value) => value switch
+    {
+        ReconciliationStatus.InProgress => "in_progress",
+        ReconciliationStatus.Finalized => "finalized",
+        ReconciliationStatus.Reopened => "reopened",
+        _ => throw new ArgumentOutOfRangeException(nameof(value), value, "Unknown reconciliation status."),
+    };
+
+    public static ReconciliationStatus FromDb(string value) => value switch
+    {
+        "in_progress" => ReconciliationStatus.InProgress,
+        "finalized" => ReconciliationStatus.Finalized,
+        "reopened" => ReconciliationStatus.Reopened,
+        _ => throw new ArgumentOutOfRangeException(nameof(value), value, "Unknown reconciliation status text."),
+    };
+
+    public static readonly string[] DbValues = ["in_progress", "finalized", "reopened"];
+}

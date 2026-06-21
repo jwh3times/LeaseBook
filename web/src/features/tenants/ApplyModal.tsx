@@ -7,6 +7,7 @@ import {
   applyDeposit,
   applyPrepayment,
   type LedgerPostError,
+  LOCKED_PERIOD_MESSAGE,
   newSourceRef,
   type PostResult,
 } from './ledgerMutations';
@@ -67,6 +68,9 @@ export function ApplyModal({ tenantId, initialKind, onClose, onApplied }: ApplyM
     onError: (err) => {
       if (err.code === 'duplicate_source_ref' && err.existingEntryId) {
         onApplied(err.existingEntryId);
+      } else if (err.code === 'account_period_locked') {
+        // The trust bank's month is reconciled (M4 lock): keep the modal open with the move-the-date hint.
+        setError(LOCKED_PERIOD_MESSAGE);
       } else {
         // insufficient_receivable / insufficient_liability messages already name the limit hit.
         setError(err.message);
