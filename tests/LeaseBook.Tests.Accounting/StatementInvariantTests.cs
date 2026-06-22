@@ -110,11 +110,21 @@ public sealed class StatementInvariantTests(PostgresFixture fixture)
                     $"{basis}: beginning + section sums must equal ending");
 
                 // Fact 2: PM-income exclusion — the pm_income account class carries no owner_id, so it
-                // cannot appear in any owner-scoped statement section. Assert no section line maps to
-                // ManagementFeeAssessed with a positive amount (the fee is a debit = negative to owner).
+                // cannot appear in any owner-scoped statement section.
+                // (a) No ManagementFeeAssessed line appears with a positive amount (the PM fee is a
+                //     debit to owner equity, so it must always be negative in the owner view).
                 s.Sections.SelectMany(sec => sec.Lines)
                     .ShouldNotContain(l => l.EventType == "ManagementFeeAssessed" && l.Amount > 0,
                         $"{basis}: ManagementFeeAssessed must appear as an expense (negative), not income");
+                // (b) ManagementFeeAssessed lines may only appear in the OperatingExpenses section,
+                //     never in Income, AppliedDepositsCredits, Contributions, or Disbursement.
+                var feeLines = s.Sections
+                    .Where(sec => sec.Key != StatementSectionKey.OperatingExpenses)
+                    .SelectMany(sec => sec.Lines)
+                    .Where(l => l.EventType == "ManagementFeeAssessed")
+                    .ToList();
+                feeLines.ShouldBeEmpty(
+                    $"{basis}: ManagementFeeAssessed must only appear in OperatingExpenses, not in any other section");
             }
         }, ct);
     }

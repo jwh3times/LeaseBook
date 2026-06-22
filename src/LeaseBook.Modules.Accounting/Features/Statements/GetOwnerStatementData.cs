@@ -34,6 +34,7 @@ internal sealed class GetOwnerStatementDataHandler(DbContext db)
     private sealed record Row(Guid OwnerId, Guid EntryId, DateOnly Date, string EventType, string? EventSubtype,
         string Description, Guid? PropertyId, decimal Amount);
     private sealed record Begin(Guid OwnerId, decimal Amount);
+    private sealed record EndBalance(Guid OwnerId, decimal Amount);
 
     public async Task<OwnerStatementDataResponse> Handle(GetOwnerStatementData q, CancellationToken ct)
     {
@@ -70,6 +71,22 @@ internal sealed class GetOwnerStatementDataHandler(DbContext db)
             """).ToListAsync(ct);
         var beginning = begins.ToDictionary(b => b.OwnerId, b => b.Amount);
 
+        // Independent period-end cumulative balance re-queried directly from the journal.
+        // Same filter shape as the beginning-balance query but with boundary e.entry_date < {end}.
+        // This makes the tie-out structural: a categorization or sign slip in the C# section
+        // pipeline produces a non-zero variance rather than silently computing x - x = 0.
+        var endBalancesFromJournal = await db.Database.SqlQuery<EndBalance>(
+            $"""
+            SELECT jl.owner_id, COALESCE(SUM(COALESCE(jl.credit,0) - COALESCE(jl.debit,0)), 0) AS amount
+            FROM journal_lines jl JOIN journal_entries e ON e.id = jl.entry_id
+            WHERE jl.owner_id = ANY({owners}) AND jl.account_class = 'owner_equity'
+              AND jl.basis IN ({q.Basis}, 'both')
+              AND ({q.PropertyId}::uuid IS NULL OR jl.property_id = {q.PropertyId})
+              AND e.entry_date < {end}
+            GROUP BY jl.owner_id
+            """).ToListAsync(ct);
+        var endBalanceMap = endBalancesFromJournal.ToDictionary(b => b.OwnerId, b => b.Amount);
+
         var byOwner = new Dictionary<Guid, OwnerStatement>();
         foreach (var ownerId in owners)
         {
@@ -85,12 +102,13 @@ internal sealed class GetOwnerStatementDataHandler(DbContext db)
                     g.Sum(r => r.Amount)))
                 .ToList();
 
+            // ending: the statement's own arithmetic (begin + categorized section subtotals).
             var ending = begin + sections.Sum(s => s.Subtotal);
 
-            // Independent end-of-period balance for the tie-out (same source, computed separately so a
-            // categorization/sign slip surfaces as a non-zero variance).
-            var endBalance = begin + mine.Sum(r => r.Amount);
-            var variance = ending - endBalance;
+            // Tie-out: compare statement arithmetic against an independent journal re-query.
+            // A categorization or sign error in the C# pipeline produces a non-zero variance.
+            var endBalanceFromJournal = endBalanceMap.GetValueOrDefault(ownerId, 0m);
+            var variance = ending - endBalanceFromJournal;
             var applied = sections.Any(s => s.Key == StatementSectionKey.AppliedDepositsCredits);
 
             byOwner[ownerId] = new OwnerStatement(ownerId, q.PropertyId, q.Basis, q.Year, q.Month,

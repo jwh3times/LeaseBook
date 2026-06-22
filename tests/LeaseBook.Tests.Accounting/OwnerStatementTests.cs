@@ -58,6 +58,10 @@ public sealed class OwnerStatementGoldenTests(PostgresFixture fixture)
         var s = stmt.ByOwner[Owner];
 
         // Structural — figure-independent — assertions:
+        // TieOut.Variance and TieOut.Balanced are now meaningful: they compare the statement's own
+        // categorical arithmetic (begin + Σ section subtotals) against an independent DB re-query
+        // of the cumulative owner-equity balance as of period end.  A categorization or sign slip
+        // in the C# pipeline produces a non-zero variance — the tie-out is not tautological.
         s.TieOut.Balanced.ShouldBeTrue();
         s.TieOut.Variance.ShouldBe(0.00m);
         s.TieOut.PmIncomeExcluded.ShouldBeTrue();
