@@ -37,7 +37,7 @@ export function ApplyModal({ tenantId, initialKind, onClose, onApplied }: ApplyM
   const [error, setError] = useState<string | null>(null);
   const sourceRef = useRef(newSourceRef());
 
-  const banks = useBankAccounts();
+  const banks = useBankAccounts(true);
   const depositBank = banks.data?.find((bank) => bank.purpose === 'deposit') ?? banks.data?.[0];
   const operatingBank = banks.data?.find((bank) => bank.purpose === 'trust') ?? banks.data?.[0];
 

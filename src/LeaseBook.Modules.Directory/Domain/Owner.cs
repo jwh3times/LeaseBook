@@ -9,7 +9,7 @@ namespace LeaseBook.Modules.Directory.Domain;
 /// setters, no internal-ctor lock-down. <see cref="IsSystem"/> rows (the "All other owners" roll-up,
 /// P40) are excluded from every list/search/CRUD surface and rendered only by the dashboard hero.
 /// </summary>
-public sealed class Owner : IOrgScoped
+public sealed class Owner : IOrgScoped, ISystemFlagged
 {
     public Guid Id { get; set; }
 

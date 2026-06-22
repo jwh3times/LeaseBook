@@ -7,7 +7,7 @@ namespace LeaseBook.Modules.Directory.Domain;
 /// management-fee override (<see cref="MgmtFeeBps"/>, P44) that beats the owner default. The journal's
 /// <c>property_id</c> dimension FKs here (P38).
 /// </summary>
-public sealed class Property : IOrgScoped
+public sealed class Property : IOrgScoped, ISystemFlagged
 {
     public Guid Id { get; set; }
 

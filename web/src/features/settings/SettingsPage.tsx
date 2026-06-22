@@ -5,6 +5,7 @@ import {
   useBankAccounts,
   useCreateBankAccount,
   useOrgSettings,
+  useSetBankAccountActive,
   useUpdateOrgSettings,
   type BankAccount,
   type OrgSettings,
@@ -167,24 +168,55 @@ function OrgProfileForm({ initial }: { initial: OrgSettings }) {
   );
 }
 
-const bankColumns: TableColumn<BankAccount>[] = [
-  { key: 'name', header: 'Account', render: (b) => <span className="strong">{b.name}</span> },
-  { key: 'institution', header: 'Institution', render: (b) => b.institution ?? '—' },
-  { key: 'mask', header: 'Mask', render: (b) => (b.mask ? `••${b.mask}` : '—') },
-  {
-    key: 'purpose',
-    header: 'Purpose',
-    render: (b) => (
-      <Badge tone={b.purpose === 'operating' ? 'neutral' : 'accent'} dot>
-        {b.purpose}
-      </Badge>
-    ),
-  },
-];
-
 function BankAccountsSection() {
   const banks = useBankAccounts();
+  const setActive = useSetBankAccountActive();
   const [showNew, setShowNew] = useState(false);
+  const [rowError, setRowError] = useState<string | null>(null);
+
+  const bankColumns: TableColumn<BankAccount>[] = [
+    { key: 'name', header: 'Account', render: (b) => <span className="strong">{b.name}</span> },
+    { key: 'institution', header: 'Institution', render: (b) => b.institution ?? '—' },
+    { key: 'mask', header: 'Mask', render: (b) => (b.mask ? `••${b.mask}` : '—') },
+    {
+      key: 'purpose',
+      header: 'Purpose',
+      render: (b) => (
+        <Badge tone={b.purpose === 'operating' ? 'neutral' : 'accent'} dot>
+          {b.purpose}
+        </Badge>
+      ),
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      render: (b) => (
+        <Badge tone={b.isActive ? 'pos' : 'neutral'} dot>
+          {b.isActive ? 'Active' : 'Inactive'}
+        </Badge>
+      ),
+    },
+    {
+      key: 'actions',
+      header: '',
+      render: (b) => (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={async () => {
+            setRowError(null);
+            try {
+              await setActive.mutateAsync({ id: b.id, isActive: !b.isActive });
+            } catch {
+              setRowError('Clear or reconcile outstanding items before deactivating this account.');
+            }
+          }}
+        >
+          {b.isActive ? 'Deactivate' : 'Reactivate'}
+        </Button>
+      ),
+    },
+  ];
 
   return (
     <Card>
@@ -205,6 +237,11 @@ function BankAccountsSection() {
         <div className="pf-pad t3 fs13">No bank accounts yet.</div>
       ) : (
         <Table columns={bankColumns} rows={banks.data ?? []} rowKey={(b) => b.id} />
+      )}
+      {rowError && (
+        <div className="pf-pad err" role="alert">
+          {rowError}
+        </div>
       )}
       {showNew && <NewBankModal onClose={() => setShowNew(false)} />}
     </Card>

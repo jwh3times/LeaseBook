@@ -1,4 +1,5 @@
 using LeaseBook.Modules.Directory.Domain;
+using LeaseBook.Modules.Directory.Features.Shared;
 using LeaseBook.SharedKernel;
 using LeaseBook.SharedKernel.Cqrs;
 using Microsoft.EntityFrameworkCore;
@@ -19,7 +20,7 @@ internal sealed class GetDirectoryKpisHandler(DbContext db) : IQueryHandler<GetD
     public async Task<DirectoryKpis> Handle(GetDirectoryKpis query, CancellationToken ct)
     {
         var vacancy = await db.Set<Unit>().AsNoTracking()
-            .CountAsync(u => !u.IsSystem && u.Status == UnitStatus.Vacant, ct);
+            .NotSystem().CountAsync(u => u.Status == UnitStatus.Vacant, ct);
 
         // collectedTarget = Σ active-lease rent — the scheduled monthly billing. Money sums in decimal.
         var activeRents = await db.Set<LeaseLite>().AsNoTracking()

@@ -2085,7 +2085,9 @@ export interface paths {
         };
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    activeOnly?: boolean;
+                };
                 header?: never;
                 path?: never;
                 cookie?: never;
@@ -2200,6 +2202,63 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content?: never;
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/banks/{id}/active": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["SetBankActiveRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BankAccountResponse"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
                 };
             };
         };
@@ -2385,6 +2444,8 @@ export interface components {
             name: string;
             /** Format: double */
             uncleared: number | string;
+            /** Format: int32 */
+            unclearedCount: number | string;
         };
         BankBalancesResponse: {
             rows: components["schemas"]["BankBalanceRow"][];
@@ -2524,6 +2585,8 @@ export interface components {
             /** Format: double */
             book: number | string;
             name: string;
+            /** Format: int32 */
+            unclearedCount: number | string;
         };
         DashboardKpis: {
             /** Format: double */
@@ -2802,6 +2865,14 @@ export interface components {
             /** Format: uuid */
             entryId: string;
         };
+        ProblemDetails: {
+            detail?: null | string;
+            instance?: null | string;
+            /** Format: int32 */
+            status?: null | number | string;
+            title?: null | string;
+            type?: null | string;
+        };
         PropertyDetail: {
             address: string;
             city: null | string;
@@ -2957,6 +3028,9 @@ export interface components {
             score: number | string;
             sublabel: null | string;
             type: string;
+        };
+        SetBankActiveRequest: {
+            isActive: boolean;
         };
         StartReconciliation: {
             /** Format: uuid */

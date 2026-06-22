@@ -8,7 +8,7 @@ public sealed record GetBankBalances : IQuery<BankBalancesResponse>;
 
 public sealed record BankBalancesResponse(IReadOnlyList<BankBalanceRow> Rows);
 
-public sealed record BankBalanceRow(Guid BankAccountId, string Name, decimal Book, decimal Cleared, decimal Uncleared);
+public sealed record BankBalanceRow(Guid BankAccountId, string Name, decimal Book, decimal Cleared, decimal Uncleared, int UnclearedCount);
 
 internal sealed class GetBankBalancesHandler(DbContext db) : IQueryHandler<GetBankBalances, BankBalancesResponse>
 {
@@ -27,7 +27,9 @@ internal sealed class GetBankBalancesHandler(DbContext db) : IQueryHandler<GetBa
                             FILTER (WHERE jl.basis IN ('cash', 'both')), 0) AS book,
                    COALESCE(SUM(COALESCE(jl.debit, 0) - COALESCE(jl.credit, 0))
                             FILTER (WHERE jl.basis IN ('cash', 'both')
-                                    AND COALESCE(s.status, 'uncleared') IN ('cleared', 'reconciled')), 0) AS cleared
+                                    AND COALESCE(s.status, 'uncleared') IN ('cleared', 'reconciled')), 0) AS cleared,
+                   COUNT(jl.id) FILTER (WHERE jl.basis IN ('cash', 'both')
+                                        AND COALESCE(s.status, 'uncleared') = 'uncleared')::int AS uncleared_count
             FROM accounts a
             LEFT JOIN journal_lines jl ON jl.account_id = a.id
             LEFT JOIN bank_line_status s ON s.journal_line_id = jl.id
@@ -37,11 +39,11 @@ internal sealed class GetBankBalancesHandler(DbContext db) : IQueryHandler<GetBa
             """).ToListAsync(ct);
 
         var mapped = rows
-            .Select(r => new BankBalanceRow(r.BankAccountId, r.Name, r.Book, r.Cleared, r.Book - r.Cleared))
+            .Select(r => new BankBalanceRow(r.BankAccountId, r.Name, r.Book, r.Cleared, r.Book - r.Cleared, r.UnclearedCount))
             .ToList();
 
         return new BankBalancesResponse(mapped);
     }
 
-    private sealed record BankBalanceSqlRow(Guid BankAccountId, string Name, decimal Book, decimal Cleared);
+    private sealed record BankBalanceSqlRow(Guid BankAccountId, string Name, decimal Book, decimal Cleared, int UnclearedCount);
 }

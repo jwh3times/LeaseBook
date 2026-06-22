@@ -7,7 +7,7 @@ namespace LeaseBook.Modules.Directory.Domain;
 /// (the lease may set a different figure on <see cref="LeaseLite.Rent"/>). The journal's <c>unit_id</c>
 /// dimension FKs here (P38).
 /// </summary>
-public sealed class Unit : IOrgScoped
+public sealed class Unit : IOrgScoped, ISystemFlagged
 {
     public Guid Id { get; set; }
 
