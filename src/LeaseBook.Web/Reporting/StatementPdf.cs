@@ -18,22 +18,6 @@ namespace LeaseBook.Web.Reporting;
 /// </summary>
 public static class StatementPdf
 {
-    /// <summary>
-    /// Ensures the QuestPDF Community license is set before the first render.
-    /// <c>Program.cs</c> sets it at host startup; this guard also covers test callers
-    /// that invoke <see cref="Render"/> directly without going through the host pipeline.
-    /// LeaseBook qualifies for the free Community tier (under $1M annual revenue).
-    /// </summary>
-    static StatementPdf()
-    {
-        if (QuestPDF.Settings.License == LicenseType.Community)
-        {
-            return; // Already set (e.g. by Program.cs at host startup)
-        }
-
-        QuestPDF.Settings.License = LicenseType.Community;
-    }
-
     private static readonly TextStyle BrandStyle = TextStyle.Default.FontSize(18).Bold().FontColor(Colors.Grey.Darken3);
     private static readonly TextStyle SubStyle = TextStyle.Default.FontSize(10).FontColor(Colors.Grey.Medium);
     private static readonly TextStyle LabelStyle = TextStyle.Default.FontSize(10).FontColor(Colors.Grey.Darken2);
@@ -45,11 +29,29 @@ public static class StatementPdf
     private static readonly TextStyle FidBoldStyle = TextStyle.Default.FontSize(9).Bold().FontColor(Colors.Black);
 
     /// <summary>
+    /// Ensures the QuestPDF Community license is set before the first render.
+    /// Idempotent — safe to call multiple times. <c>Program.cs</c> also sets it at host startup
+    /// (belt-and-suspenders); this method covers direct/test callers that bypass the host pipeline.
+    /// Static-field initializers run before any static constructor body, so calling this as the
+    /// first statement in <see cref="Render"/> guarantees the license is set before QuestPDF
+    /// accesses it, regardless of field-initializer ordering.
+    /// LeaseBook qualifies for the free Community tier (under $1M annual revenue).
+    /// </summary>
+    private static void EnsureLicense()
+    {
+        if (QuestPDF.Settings.License != LicenseType.Community)
+        {
+            QuestPDF.Settings.License = LicenseType.Community;
+        }
+    }
+
+    /// <summary>
     /// Renders <paramref name="view"/> to PDF bytes. Thread-safe (stateless).
     /// The <c>%PDF</c> header at bytes 0–3 can be used for a fast integrity check.
     /// </summary>
     public static byte[] Render(StatementView view)
     {
+        EnsureLicense();
         ArgumentNullException.ThrowIfNull(view);
 
         return Document.Create(container =>
@@ -133,16 +135,29 @@ public static class StatementPdf
 
             col.Item().PaddingVertical(2).LineHorizontal(0.5f).LineColor(Colors.Grey.Lighten2);
 
-            // Statement sections
-            foreach (var section in v.Sections)
+            // Statement sections — disbursement is rendered separately below, not via the loop
+            foreach (var section in v.Sections.Where(
+                s => !s.Key.Equals("Disbursement", StringComparison.OrdinalIgnoreCase)))
             {
                 ComposeSection(col, section, v.Branding.ParenthesizedNegatives);
             }
 
-            // Disbursement (the total across all disbursement lines, or zero)
+            // Disbursement: dim row between sections and ending balance (prototype: "Owner disbursement …")
+            // Sourced from the "Disbursement" section (StatementSectionKey.Disbursement → "Disbursement").
             var disbursement = v.Sections
-                .Where(s => s.Key.Equals("disbursements", StringComparison.OrdinalIgnoreCase))
+                .Where(s => s.Key.Equals("Disbursement", StringComparison.OrdinalIgnoreCase))
                 .Sum(s => s.Subtotal);
+
+            if (disbursement != 0m)
+            {
+                col.Item().PaddingVertical(1).Row(row =>
+                {
+                    row.RelativeItem().Text("Owner disbursement").Style(SubStyle);
+                    row.ConstantItem(120).AlignRight()
+                        .Text(FormatMoney(disbursement, v.Branding.ParenthesizedNegatives))
+                        .Style(SubStyle);
+                });
+            }
 
             col.Item().PaddingVertical(2).LineHorizontal(0.5f).LineColor(Colors.Grey.Lighten2);
 

@@ -246,6 +246,70 @@ public sealed class StatementOutputTests(PostgresFixture fixture)
         response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
 
+    /// <summary>
+    /// Finding 1 fix: a mixed-case id (e.g. "Owner-Bal") must NOT produce a 500.
+    /// The CSV endpoint uses <c>ReportCatalog.Find</c> (OrdinalIgnoreCase) so it should return
+    /// the same 200 response as the canonical lower-case id "owner-bal".
+    /// </summary>
+    [Fact]
+    public async Task Report_csv_endpoint_mixed_case_id_returns_200_not_500()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await DemoSeeder.SeedAsync(fixture.Api.Services, ct);
+        var client = await DemoClientAsync(ct);
+
+        // "Owner-Bal" is a mixed-case form of the canonical "owner-bal" report id.
+        var response = await client.GetAsync("/api/reports/Owner-Bal/csv", ct);
+
+        // After the Finding-1 fix, Find() is used (OrdinalIgnoreCase) so this is the same report.
+        // It must be 200 (with CSV) or a clean 404 — never an unhandled 500.
+        ((int)response.StatusCode).ShouldNotBe(500,
+            "mixed-case report id must not cause an unhandled InvalidOperationException");
+
+        // The catalog has "owner-bal" so the mixed-case lookup must succeed with 200.
+        response.StatusCode.ShouldBe(HttpStatusCode.OK,
+            "mixed-case 'Owner-Bal' should resolve via OrdinalIgnoreCase to the owner-bal report");
+        response.Content.Headers.ContentType?.MediaType.ShouldBe("text/csv");
+    }
+
+    // ─── Disbursement render tests (Finding 2) ────────────────────────────────
+
+    /// <summary>
+    /// Finding 2 fix: the disbursement row must appear exactly once in the PDF text
+    /// (rendered as its own dim line, NOT inside the generic sections loop).
+    /// </summary>
+    [Fact]
+    public void StatementPdf_disbursement_row_appears_exactly_once_when_disbursement_section_present()
+    {
+        var view = BuildTestViewWithDisbursement();
+        var bytes = StatementPdf.Render(view);
+        var allText = ExtractPdfText(bytes);
+
+        // "Owner disbursement" must appear in the PDF text (the dim row label)
+        // PdfPig may split words; check lowercase text for presence
+        allText.ToLowerInvariant().ShouldContain("disbursement");
+
+        // Count occurrences of the disbursement amount — must appear exactly once
+        // (amount is "2,500.00" for the test view)
+        var occurrences = CountOccurrences(allText, "2,500.00");
+        occurrences.ShouldBe(1, "disbursement amount must appear exactly once — not zero (missing) and not two (double-rendered)");
+    }
+
+    [Fact]
+    public void StatementPdf_disbursement_section_not_double_rendered()
+    {
+        // The disbursement section must be excluded from the generic sections loop and rendered
+        // exactly once as the dim row. Verify by asserting the subtotal amount appears only once.
+        // (If the generic loop also rendered it, the amount would appear twice.)
+        var view = BuildTestViewWithDisbursement();
+        var bytes = StatementPdf.Render(view);
+        var allText = ExtractPdfText(bytes);
+
+        // The disbursement subtotal "2,500.00" must appear exactly once in the rendered output.
+        var occurrences = CountOccurrences(allText, "2,500.00");
+        occurrences.ShouldBe(1, "disbursement amount must appear exactly once — double-render would give 2");
+    }
+
     [Fact]
     public async Task Statement_pdf_endpoint_requires_auth()
     {
@@ -320,6 +384,58 @@ public sealed class StatementOutputTests(PostgresFixture fixture)
     }
 
     /// <summary>
+    /// Builds a <see cref="StatementView"/> that includes a Disbursement section (2,500.00)
+    /// alongside an Income section, so disbursement-render tests can verify exactly-once rendering.
+    /// Arithmetic: 20,345.30 + 2,900.00 − 2,500.00 = 20,745.30.
+    /// </summary>
+    private static StatementView BuildTestViewWithDisbursement()
+    {
+        var branding = new LeaseBook.Modules.Reporting.Contracts.PmBrandingRow(
+            CompanyName: "Harbour Front PM",
+            LogoBlobRef: null,
+            ParenthesizedNegatives: false);
+
+        var incomeLines = new List<StatementLineView>
+        {
+            new(Guid.NewGuid(), new DateOnly(2026, 5, 1), "RentCharged", null,
+                "May rent — 204 Elm St", "204 Elm St", 2_900.00m),
+        };
+
+        var disbursementLines = new List<StatementLineView>
+        {
+            new(Guid.NewGuid(), new DateOnly(2026, 5, 20), "OwnerDisbursed", null,
+                "Owner disbursement — wire", null, -2_500.00m),
+        };
+
+        var sections = new List<StatementSectionView>
+        {
+            new("income", "Income — rent collected", incomeLines, 2_900.00m),
+            // Key must match StatementSectionKey.Disbursement.ToString() = "Disbursement"
+            new("Disbursement", "Owner disbursement", disbursementLines, -2_500.00m),
+        };
+
+        var fiduciary = new FiduciaryPanel(
+            Balanced: true,
+            Variance: 0m,
+            PmIncomeExcluded: true,
+            DepositsRecognizedOnApplication: true,
+            LatestReconciledBank: null);
+
+        return new StatementView(
+            OwnerId: DemoIds.O5,
+            OwnerName: "Ridgeline Investments",
+            PropertyAddress: "204 Elm St, Chapel Hill, NC",
+            Basis: "cash",
+            Year: 2026,
+            Month: 5,
+            Beginning: 20_345.30m,
+            Sections: sections,
+            Ending: 20_745.30m,
+            Fiduciary: fiduciary,
+            Branding: branding);
+    }
+
+    /// <summary>
     /// Extracts and concatenates all text from all pages of a PDF using PdfPig (MIT).
     /// Returns a single string suitable for substring assertions.
     /// </summary>
@@ -337,6 +453,20 @@ public sealed class StatementOutputTests(PostgresFixture fixture)
         }
 
         return sb.ToString();
+    }
+
+    /// <summary>Counts non-overlapping occurrences of <paramref name="needle"/> in <paramref name="haystack"/>.</summary>
+    private static int CountOccurrences(string haystack, string needle)
+    {
+        if (string.IsNullOrEmpty(needle)) return 0;
+        int count = 0, idx = 0;
+        while ((idx = haystack.IndexOf(needle, idx, StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            idx += needle.Length;
+        }
+
+        return count;
     }
 
     private async Task<HttpClient> DemoClientAsync(CancellationToken ct)

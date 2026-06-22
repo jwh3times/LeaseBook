@@ -66,7 +66,7 @@ public sealed class ReportingEndpoints : IEndpointModule
                     // The preview rows are generic objects; project them to string rows for the CSV
                     // renderer (which is column-agnostic). We collect distinct key names as columns
                     // then format each row's values in that order (empty string when key absent).
-                    var descriptor = ReportCatalog.All.First(r => r.Id == id);
+                    var descriptor = ReportCatalog.Find(id)!; // non-null: not-found returned 404 above
                     var (columns, stringRows) = ProjectToStringTable(result.Rows);
                     var bytes = ReportCsv.Write(descriptor, columns, stringRows);
 
