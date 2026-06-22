@@ -19,6 +19,11 @@ using LeaseBook.Web.Tenancy;
 using Microsoft.EntityFrameworkCore;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
+using QuestPDF.Infrastructure;
+
+// QuestPDF Community license (M5 WP-04). Free for organizations under the $1M annual revenue
+// threshold; LeaseBook qualifies at launch. Must be set before the first document is rendered.
+QuestPDF.Settings.License = LicenseType.Community;
 
 var builder = WebApplication.CreateBuilder(args);
 

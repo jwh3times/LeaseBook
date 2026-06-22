@@ -27,6 +27,14 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- PDF generation (M5 WP-04): QuestPDF Community — statement renderer lives in the host because
+         StatementView is host-owned (composition root, ADR-016). -->
+    <PackageReference Include="QuestPDF" />
+    <!-- CSV: statement + generic report exports (M5 WP-04). -->
+    <PackageReference Include="CsvHelper" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Telemetry baseline (WP-05) — the ActivitySource lives in SharedKernel; the host exports it. -->
     <PackageReference Include="OpenTelemetry.Extensions.Hosting" />
     <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" />

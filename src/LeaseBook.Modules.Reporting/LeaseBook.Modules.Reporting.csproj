@@ -8,4 +8,9 @@
     <ProjectReference Include="..\LeaseBook.SharedKernel\LeaseBook.SharedKernel.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Generic report CSV export (M5 WP-04). Already centrally pinned (used in Accounting/Banking). -->
+    <PackageReference Include="CsvHelper" />
+  </ItemGroup>
+
 </Project>

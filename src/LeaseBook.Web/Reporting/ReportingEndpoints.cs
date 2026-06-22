@@ -1,4 +1,6 @@
+using System.Globalization;
 using LeaseBook.Modules.Reporting.Catalog;
+using LeaseBook.Modules.Reporting.Rendering;
 using LeaseBook.SharedKernel.Endpoints;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -14,7 +16,10 @@ namespace LeaseBook.Web.Reporting;
 /// <list type="bullet">
 /// <item><c>GET /api/reports</c> — full catalog.</item>
 /// <item><c>GET /api/reports/{id}/preview</c> — run/preview → generic rows.</item>
+/// <item><c>GET /api/reports/{id}/csv</c> — generic report as CSV download.</item>
 /// <item><c>GET /api/statements/{ownerId}</c> — assembled <see cref="StatementView"/> JSON.</item>
+/// <item><c>GET /api/statements/{ownerId}/pdf</c> — statement as PDF download.</item>
+/// <item><c>GET /api/statements/{ownerId}/csv</c> — statement as CSV download.</item>
 /// </list>
 /// </summary>
 public sealed class ReportingEndpoints : IEndpointModule
@@ -43,6 +48,32 @@ public sealed class ReportingEndpoints : IEndpointModule
                         : Results.Ok(result);
                 });
 
+        // GET /api/reports/{id}/csv?year=&month=&ownerId=&propertyId=&bankAccountId=&asOf=
+        // Returns the preview rows rendered to CSV. Delegates to ReportPreviewService (same data
+        // path as /preview) then serialises the row objects to a flat string table via ReportCsv.
+        group.MapGet("/reports/{id}/csv",
+                async (string id, int? year, int? month, Guid? ownerId, Guid? propertyId,
+                    Guid? bankAccountId, DateOnly? asOf,
+                    ReportPreviewService previewService, CancellationToken ct) =>
+                {
+                    var filters = new ReportFilters(year, month, ownerId, propertyId, bankAccountId, asOf);
+                    var result = await previewService.PreviewAsync(id, filters, ct);
+                    if (result is null)
+                    {
+                        return Results.NotFound(new { error = $"Report '{id}' not found in catalog." });
+                    }
+
+                    // The preview rows are generic objects; project them to string rows for the CSV
+                    // renderer (which is column-agnostic). We collect distinct key names as columns
+                    // then format each row's values in that order (empty string when key absent).
+                    var descriptor = ReportCatalog.All.First(r => r.Id == id);
+                    var (columns, stringRows) = ProjectToStringTable(result.Rows);
+                    var bytes = ReportCsv.Write(descriptor, columns, stringRows);
+
+                    var fileName = $"{id}-{(year ?? DateTime.UtcNow.Year)}-{(month ?? DateTime.UtcNow.Month):D2}.csv";
+                    return Results.File(bytes, "text/csv", fileName);
+                });
+
         // GET /api/statements/{ownerId}?propertyId=&year=&month=&basis=
         // Always returns 200 with zero figures for an owner with no journal activity in the period
         // (the owner is valid, just quiet). The fiduciary panel's Balanced flag confirms correctness.
@@ -62,5 +93,98 @@ public sealed class ReportingEndpoints : IEndpointModule
                     // produces a zeroed statement — never an empty list for a single ownerId.
                     return TypedResults.Ok(views[0]);
                 });
+
+        // GET /api/statements/{ownerId}/pdf?propertyId=&year=&month=&basis=
+        group.MapGet("/statements/{ownerId:guid}/pdf",
+                async (Guid ownerId, Guid? propertyId, int? year, int? month, string? basis,
+                    StatementAssembler assembler, CancellationToken ct) =>
+                {
+                    var now = DateTime.UtcNow;
+                    var resolvedYear = year ?? now.Year;
+                    var resolvedMonth = month ?? now.Month;
+                    var resolvedBasis = basis?.ToLowerInvariant() is "accrual" ? "accrual" : "cash";
+
+                    var views = await assembler.BuildAsync(
+                        [ownerId], propertyId, resolvedYear, resolvedMonth, resolvedBasis, ct);
+
+                    var bytes = StatementPdf.Render(views[0]);
+                    var fileName = $"statement-{ownerId:N}-{resolvedYear}-{resolvedMonth:D2}-{resolvedBasis}.pdf";
+                    return Results.File(bytes, "application/pdf", fileName);
+                });
+
+        // GET /api/statements/{ownerId}/csv?propertyId=&year=&month=&basis=
+        group.MapGet("/statements/{ownerId:guid}/csv",
+                async (Guid ownerId, Guid? propertyId, int? year, int? month, string? basis,
+                    StatementAssembler assembler, CancellationToken ct) =>
+                {
+                    var now = DateTime.UtcNow;
+                    var resolvedYear = year ?? now.Year;
+                    var resolvedMonth = month ?? now.Month;
+                    var resolvedBasis = basis?.ToLowerInvariant() is "accrual" ? "accrual" : "cash";
+
+                    var views = await assembler.BuildAsync(
+                        [ownerId], propertyId, resolvedYear, resolvedMonth, resolvedBasis, ct);
+
+                    var bytes = StatementCsv.Write(views[0]);
+                    var fileName = $"statement-{ownerId:N}-{resolvedYear}-{resolvedMonth:D2}-{resolvedBasis}.csv";
+                    return Results.File(bytes, "text/csv", fileName);
+                });
+    }
+
+    // ─── helper: project preview rows (generic objects) to a string table ─────
+
+    /// <summary>
+    /// Projects the preview rows (generic <c>object</c> elements, which arrive as
+    /// <c>JsonElement</c> dictionaries after JSON round-trip) to a (columns, rows) pair suitable
+    /// for <see cref="ReportCsv.Write"/>. Each unique key across all rows becomes a column; values
+    /// are coerced to invariant strings. Empty string when a row lacks a key.
+    /// </summary>
+    private static (IReadOnlyList<string> Columns, IReadOnlyList<IReadOnlyList<string>> Rows)
+        ProjectToStringTable(IReadOnlyList<object> rows)
+    {
+        var jsonRows = rows.OfType<System.Text.Json.JsonElement>().ToList();
+        if (jsonRows.Count == 0)
+        {
+            return ([], []);
+        }
+
+        // Collect all unique keys preserving first-seen order
+        var columns = new List<string>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var row in jsonRows)
+        {
+            foreach (var prop in row.EnumerateObject())
+            {
+                if (seen.Add(prop.Name))
+                {
+                    columns.Add(prop.Name);
+                }
+            }
+        }
+
+        var stringRows = jsonRows.Select(row =>
+        {
+            return (IReadOnlyList<string>)columns.Select(col =>
+            {
+                if (row.TryGetProperty(col, out var el))
+                {
+                    return el.ValueKind switch
+                    {
+                        System.Text.Json.JsonValueKind.Number =>
+                            el.TryGetDecimal(out var d)
+                                ? d.ToString("0.00########", CultureInfo.InvariantCulture)
+                                : el.GetRawText(),
+                        System.Text.Json.JsonValueKind.True => "true",
+                        System.Text.Json.JsonValueKind.False => "false",
+                        System.Text.Json.JsonValueKind.Null => string.Empty,
+                        _ => el.GetString() ?? string.Empty,
+                    };
+                }
+
+                return string.Empty;
+            }).ToList();
+        }).ToList();
+
+        return (columns, stringRows);
     }
 }
