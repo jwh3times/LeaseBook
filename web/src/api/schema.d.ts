@@ -2038,6 +2038,125 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ReportDescriptor"][];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reports/{id}/csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    asOf?: string;
+                    bankAccountId?: string;
+                    month?: number | string;
+                    ownerId?: string;
+                    propertyId?: string;
+                    year?: number | string;
+                };
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reports/{id}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    asOf?: string;
+                    bankAccountId?: string;
+                    month?: number | string;
+                    ownerId?: string;
+                    propertyId?: string;
+                    year?: number | string;
+                };
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/search": {
         parameters: {
             query?: never;
@@ -2320,6 +2439,169 @@ export interface paths {
                 };
             };
         };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/statements/{ownerId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    basis?: string;
+                    month?: number | string;
+                    propertyId?: string;
+                    year?: number | string;
+                };
+                header?: never;
+                path: {
+                    ownerId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StatementView"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/statements/{ownerId}/csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    basis?: string;
+                    month?: number | string;
+                    propertyId?: string;
+                    year?: number | string;
+                };
+                header?: never;
+                path: {
+                    ownerId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/statements/{ownerId}/deliver": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: {
+                    basis?: string;
+                    month?: number | string;
+                    propertyId?: string;
+                    toEmail?: string;
+                    year?: number | string;
+                };
+                header?: never;
+                path: {
+                    ownerId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/statements/{ownerId}/pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    basis?: string;
+                    month?: number | string;
+                    propertyId?: string;
+                    year?: number | string;
+                };
+                header?: never;
+                path: {
+                    ownerId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -2627,6 +2909,14 @@ export interface components {
         EntryAuditResponse: {
             rows: components["schemas"]["AuditRow"][];
         };
+        FiduciaryPanel: {
+            balanced: boolean;
+            depositsRecognizedOnApplication: boolean;
+            latestReconciledBank: null | components["schemas"]["ReconciliationSnapshotRow"];
+            pmIncomeExcluded: boolean;
+            /** Format: double */
+            variance: number | string;
+        };
         HealthResponse: {
             status: string;
             version: string;
@@ -2861,6 +3151,11 @@ export interface components {
             /** Format: int32 */
             total: number | string;
         };
+        PmBrandingRow: {
+            companyName: null | string;
+            logoBlobRef: null | string;
+            parenthesizedNegatives: boolean;
+        };
         PostResult: {
             /** Format: uuid */
             entryId: string;
@@ -2909,6 +3204,18 @@ export interface components {
             id: string;
             reportJson: null | string;
             status: string;
+        };
+        ReconciliationSnapshotRow: {
+            /** Format: uuid */
+            bankAccountId: string;
+            /** Format: date-time */
+            finalizedAt: string;
+            /** Format: int32 */
+            month: number | string;
+            /** Format: double */
+            statementEndingBalance: number | string;
+            /** Format: int32 */
+            year: number | string;
         };
         ReconciliationSummary: {
             /** Format: uuid */
@@ -3005,6 +3312,16 @@ export interface components {
             /** Format: double */
             withdrawalsInView: number | string;
         };
+        ReportDescriptor: {
+            acceptedFilters: string[];
+            category: string;
+            description: string;
+            /** @default false */
+            favorite: boolean;
+            icon: string;
+            id: string;
+            name: string;
+        };
         RowError: {
             message: string;
             /** Format: int32 */
@@ -3039,6 +3356,43 @@ export interface components {
             month: number | string;
             /** Format: double */
             statementEndingBalance: number | string;
+            /** Format: int32 */
+            year: number | string;
+        };
+        StatementLineView: {
+            /** Format: double */
+            amount: number | string;
+            /** Format: date */
+            date: string;
+            description: string;
+            /** Format: uuid */
+            entryId: string;
+            eventSubtype: null | string;
+            eventType: string;
+            propertyAddress: null | string;
+        };
+        StatementSectionView: {
+            key: string;
+            lines: components["schemas"]["StatementLineView"][];
+            /** Format: double */
+            subtotal: number | string;
+            title: string;
+        };
+        StatementView: {
+            basis: string;
+            /** Format: double */
+            beginning: number | string;
+            branding: components["schemas"]["PmBrandingRow"];
+            /** Format: double */
+            ending: number | string;
+            fiduciary: components["schemas"]["FiduciaryPanel"];
+            /** Format: int32 */
+            month: number | string;
+            /** Format: uuid */
+            ownerId: string;
+            ownerName: string;
+            propertyAddress: null | string;
+            sections: components["schemas"]["StatementSectionView"][];
             /** Format: int32 */
             year: number | string;
         };
