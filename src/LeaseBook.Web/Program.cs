@@ -80,6 +80,9 @@ builder.Services.AddScoped<LeaseBook.Modules.Directory.Contracts.IBankClearanceS
 // from the active lease through Directory. Accounting owns the port; the host adapter delegates via ISender.
 builder.Services.AddScoped<LeaseBook.Modules.Accounting.Contracts.ITenantPostingDimensions, TenantPostingDimensionsAdapter>();
 
+// M5 WP-01 (ADR-016): Accounting owns the statement engine; the Reporting module consumes it via this port.
+builder.Services.AddScoped<LeaseBook.Modules.Accounting.Contracts.IOwnerStatementData, OwnerStatementDataAdapter>();
+
 // Banking module services (CSV import/match; CQRS handlers are auto-discovered). The host implements
 // Banking's cross-module ports with thin adapters (ADR-007 / P68): IBankRegister reads uncleared register
 // lines and IBankClearing applies clearances, both delegating to Accounting via ISender.
