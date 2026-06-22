@@ -35,7 +35,65 @@ const CATALOG = [
     icon: 'bank',
     acceptedFilters: ['year', 'month', 'bankAccountId'],
   },
+  {
+    id: 'owner-stmt',
+    name: 'Owner statement',
+    category: 'Owner',
+    description: 'Monthly statement for a specific owner',
+    favorite: false,
+    icon: 'owners',
+    acceptedFilters: ['year', 'month', 'ownerId'],
+  },
 ];
+
+const OWNERS_RESPONSE = {
+  items: [
+    {
+      id: 'owner-1',
+      name: 'Helen Ford',
+      initials: 'HF',
+      properties: 2,
+      units: 4,
+      operating: 1200,
+      deposits: 950,
+      total: 2150,
+    },
+    {
+      id: 'owner-2',
+      name: 'Bob Smith',
+      initials: 'BS',
+      properties: 1,
+      units: 1,
+      operating: 800,
+      deposits: 0,
+      total: 800,
+    },
+  ],
+  page: 1,
+  pageSize: 200,
+  total: 2,
+};
+
+const BANKS_RESPONSE = {
+  rows: [
+    {
+      bankAccountId: 'bank-1',
+      name: 'Main Trust',
+      book: 5000,
+      cleared: 4800,
+      uncleared: 200,
+      unclearedCount: 2,
+    },
+    {
+      bankAccountId: 'bank-2',
+      name: 'Security Deposit',
+      book: 2000,
+      cleared: 2000,
+      uncleared: 0,
+      unclearedCount: 0,
+    },
+  ],
+};
 
 const PREVIEW_RESPONSE = {
   columns: ['Owner', 'Operating', 'Deposit', 'Ending'],
@@ -50,6 +108,11 @@ function baseHandlers() {
   return [
     http.get('/api/reports', () => HttpResponse.json(CATALOG)),
     http.get('/api/reports/:id/preview', () => HttpResponse.json(PREVIEW_RESPONSE)),
+    http.get('/api/directory/owners', () => HttpResponse.json(OWNERS_RESPONSE)),
+    http.get('/api/directory/properties', () =>
+      HttpResponse.json({ items: [], page: 1, pageSize: 200, total: 0 }),
+    ),
+    http.get('/api/accounting/banks/balances', () => HttpResponse.json(BANKS_RESPONSE)),
   ];
 }
 
@@ -206,5 +269,139 @@ describe('ReportCatalog', () => {
 
     // owner-bal is auto-selected — it is BASIS_SENSITIVE so the toggle should appear.
     expect(screen.getByLabelText('Accounting basis')).toBeInTheDocument();
+  });
+
+  it('re-queries preview with new period params after changing the month', async () => {
+    const previewRequests: URLSearchParams[] = [];
+    server.use(
+      http.get('/api/reports', () => HttpResponse.json(CATALOG)),
+      http.get('/api/reports/:id/preview', ({ request }) => {
+        previewRequests.push(new URL(request.url).searchParams);
+        return HttpResponse.json(PREVIEW_RESPONSE);
+      }),
+      http.get('/api/directory/owners', () => HttpResponse.json(OWNERS_RESPONSE)),
+      http.get('/api/directory/properties', () =>
+        HttpResponse.json({ items: [], page: 1, pageSize: 200, total: 0 }),
+      ),
+      http.get('/api/accounting/banks/balances', () => HttpResponse.json(BANKS_RESPONSE)),
+    );
+    renderCatalog();
+
+    // Wait for catalog + first preview.
+    await screen.findAllByText('All owner ending balances');
+    await screen.findByRole('table', { name: 'Report preview' });
+
+    // Open the period filter chip and click a different month (Jan is index 0 = month 1).
+    const filtersGroup = screen.getByRole('group', { name: 'Report filters' });
+    // Click the Period chip to open the popover.
+    const periodChip = within(filtersGroup).getByText('Period').closest('button')!;
+    await userEvent.click(periodChip);
+
+    // Pick January (first month in the grid).
+    const popover = screen.getByRole('dialog', { name: 'Select period' });
+    await userEvent.click(within(popover).getByRole('button', { name: 'Jan' }));
+
+    // The dialog closes and a new preview request fires with month=1.
+    await vi.waitFor(() => {
+      const lastReq = previewRequests.at(-1);
+      expect(lastReq?.get('month')).toBe('1');
+    });
+  });
+
+  it('re-queries preview with basis param when toggling Cash/Accrual', async () => {
+    const previewRequests: URLSearchParams[] = [];
+    server.use(
+      http.get('/api/reports', () => HttpResponse.json(CATALOG)),
+      http.get('/api/reports/:id/preview', ({ request }) => {
+        previewRequests.push(new URL(request.url).searchParams);
+        return HttpResponse.json(PREVIEW_RESPONSE);
+      }),
+      http.get('/api/directory/owners', () => HttpResponse.json(OWNERS_RESPONSE)),
+      http.get('/api/directory/properties', () =>
+        HttpResponse.json({ items: [], page: 1, pageSize: 200, total: 0 }),
+      ),
+      http.get('/api/accounting/banks/balances', () => HttpResponse.json(BANKS_RESPONSE)),
+    );
+    renderCatalog();
+
+    await screen.findAllByText('All owner ending balances');
+    await screen.findByRole('table', { name: 'Report preview' });
+
+    // owner-bal is BASIS_SENSITIVE; click Accrual.
+    const basisGroup = screen.getByLabelText('Accounting basis');
+    await userEvent.click(within(basisGroup).getByRole('button', { name: 'Accrual' }));
+
+    await vi.waitFor(() => {
+      const accrualReq = previewRequests.find((p) => p.get('basis') === 'accrual');
+      expect(accrualReq).toBeDefined();
+    });
+  });
+
+  it('renders bank filter chip on reports with bankAccountId in acceptedFilters', async () => {
+    server.use(...baseHandlers());
+    renderCatalog();
+
+    await screen.findAllByText('All owner ending balances');
+
+    // Select trust-ledger which has bankAccountId in acceptedFilters.
+    const list = screen.getByRole('list', { name: 'Available reports' });
+    await userEvent.click(within(list).getByRole('button', { name: /Trust account ledger/ }));
+
+    // The Bank chip should appear.
+    const filtersGroup = screen.getByRole('group', { name: 'Report filters' });
+    expect(within(filtersGroup).getByText('Bank')).toBeInTheDocument();
+  });
+
+  it('re-queries preview with bankAccountId when a bank is selected', async () => {
+    const previewRequests: URLSearchParams[] = [];
+    server.use(
+      http.get('/api/reports', () => HttpResponse.json(CATALOG)),
+      http.get('/api/reports/:id/preview', ({ request }) => {
+        previewRequests.push(new URL(request.url).searchParams);
+        return HttpResponse.json(PREVIEW_RESPONSE);
+      }),
+      http.get('/api/directory/owners', () => HttpResponse.json(OWNERS_RESPONSE)),
+      http.get('/api/directory/properties', () =>
+        HttpResponse.json({ items: [], page: 1, pageSize: 200, total: 0 }),
+      ),
+      http.get('/api/accounting/banks/balances', () => HttpResponse.json(BANKS_RESPONSE)),
+    );
+    renderCatalog();
+
+    await screen.findAllByText('All owner ending balances');
+
+    // Switch to trust-ledger (has bankAccountId filter).
+    const list = screen.getByRole('list', { name: 'Available reports' });
+    await userEvent.click(within(list).getByRole('button', { name: /Trust account ledger/ }));
+    await screen.findByRole('table', { name: 'Report preview' });
+
+    // Open the Bank chip.
+    const filtersGroup = screen.getByRole('group', { name: 'Report filters' });
+    const bankChip = within(filtersGroup).getByText('Bank').closest('button')!;
+    await userEvent.click(bankChip);
+
+    // Select 'Main Trust'.
+    const dialog = screen.getByRole('dialog', { name: 'Select Bank' });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Main Trust' }));
+
+    // A preview request should fire with bankAccountId=bank-1.
+    await vi.waitFor(() => {
+      const req = previewRequests.find((p) => p.get('bankAccountId') === 'bank-1');
+      expect(req).toBeDefined();
+    });
+  });
+
+  it('renders owner filter chip on reports with ownerId in acceptedFilters', async () => {
+    server.use(...baseHandlers());
+    renderCatalog();
+
+    await screen.findAllByText('All owner ending balances');
+
+    // Select owner-stmt which has ownerId in acceptedFilters.
+    const list = screen.getByRole('list', { name: 'Available reports' });
+    await userEvent.click(within(list).getByRole('button', { name: /Owner statement/ }));
+
+    const filtersGroup = screen.getByRole('group', { name: 'Report filters' });
+    expect(within(filtersGroup).getByText('Owner')).toBeInTheDocument();
   });
 });

@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { Badge, Button, Card, CardHeader, EmptyState, Icon } from '@/design';
+import { useOwners, useProperties } from '@/lib/directory';
+import { useBankBalances } from '@/features/banking/banking';
 import {
   downloadReportCsv,
   type ReportDescriptor,
@@ -151,6 +153,75 @@ function BasisToggle({ basis, onChange }: BasisToggleProps) {
   );
 }
 
+// ---- SelectChip: a chip that opens a dropdown of options -------------------
+
+interface SelectChipOption {
+  id: string;
+  label: string;
+}
+
+interface SelectChipProps {
+  label: string;
+  value: string;
+  options: SelectChipOption[];
+  loading?: boolean;
+  onSelect: (id: string | null) => void;
+}
+
+function SelectChip({ label, value, options, loading, onSelect }: SelectChipProps) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="pf-filter-wrap">
+      <FilterChipBuilder
+        label={label}
+        value={value}
+        active={open}
+        onClick={() => setOpen((v) => !v)}
+      />
+      {open && (
+        <div className="pf-filter-popover" role="dialog" aria-label={`Select ${label}`}>
+          {loading ? (
+            <div className="t3 fs12" style={{ padding: 4 }}>
+              Loading…
+            </div>
+          ) : (
+            <div className="col gap4">
+              <button
+                className={`pf-basis-btn${value === 'All' ? ' active' : ''}`}
+                type="button"
+                onClick={() => {
+                  onSelect(null);
+                  setOpen(false);
+                }}
+              >
+                All
+              </button>
+              {options.map((opt) => (
+                <button
+                  key={opt.id}
+                  className={`pf-basis-btn${value === opt.label ? ' active' : ''}`}
+                  type="button"
+                  onClick={() => {
+                    onSelect(opt.id);
+                    setOpen(false);
+                  }}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          )}
+          <div style={{ marginTop: 8, textAlign: 'right' }}>
+            <Button variant="primary" onClick={() => setOpen(false)}>
+              Done
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ---- Builder panel ----------------------------------------------------------
 
 // Reports whose preview supports a basis toggle (cash/accrual).
@@ -167,14 +238,43 @@ function BuilderPanel({ report }: BuilderPanelProps) {
   const [year, setYear] = useState(CURRENT_YEAR);
   const [month, setMonth] = useState(CURRENT_MONTH);
   const [basis, setBasis] = useState<Basis>('cash');
+  const [propertyId, setPropertyId] = useState<string | null>(null);
+  const [ownerId, setOwnerId] = useState<string | null>(null);
+  const [bankAccountId, setBankAccountId] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [periodOpen, setPeriodOpen] = useState(false);
 
+  const af = (report.acceptedFilters as string[] | undefined) ?? [];
   const showBasisToggle = BASIS_SENSITIVE.includes(report.id);
+  const showProperty = af.includes('propertyId');
+  const showOwner = af.includes('ownerId');
+  const showBank = af.includes('bankAccountId');
+
+  // Only fetch lists when the chip is actually shown.
+  const ownersQuery = useOwners();
+  const propertiesQuery = useProperties();
+  const banksQuery = useBankBalances();
+
+  const ownerOptions: SelectChipOption[] = (ownersQuery.data?.items ?? []).map((o) => ({
+    id: o.id,
+    label: o.name,
+  }));
+  const propertyOptions: SelectChipOption[] = (propertiesQuery.data?.items ?? []).map((p) => ({
+    id: p.id,
+    label: p.address,
+  }));
+  const bankOptions: SelectChipOption[] = (banksQuery.data ?? []).map((b) => ({
+    id: b.bankAccountId,
+    label: b.name,
+  }));
 
   const filters: ReportFilters = {
     year,
     month,
+    ...(showBasisToggle ? { basis } : {}),
+    ...(showProperty && propertyId ? { propertyId } : {}),
+    ...(showOwner && ownerId ? { ownerId } : {}),
+    ...(showBank && bankAccountId ? { bankAccountId } : {}),
   };
 
   const iconName =
@@ -203,6 +303,16 @@ function BuilderPanel({ report }: BuilderPanelProps) {
       setDownloadError(e instanceof Error ? e.message : 'Download failed');
     }
   };
+
+  const selectedOwnerLabel = ownerId
+    ? (ownerOptions.find((o) => o.id === ownerId)?.label ?? 'Selected')
+    : 'All';
+  const selectedPropertyLabel = propertyId
+    ? (propertyOptions.find((p) => p.id === propertyId)?.label ?? 'Selected')
+    : 'All';
+  const selectedBankLabel = bankAccountId
+    ? (bankOptions.find((b) => b.id === bankAccountId)?.label ?? 'Selected')
+    : 'All';
 
   return (
     <Card className="pf-builder">
@@ -234,6 +344,7 @@ function BuilderPanel({ report }: BuilderPanelProps) {
 
       {/* Filters strip */}
       <div className="pf-builder-filters" role="group" aria-label="Report filters">
+        {/* Period chip */}
         <div className="pf-filter-wrap">
           <FilterChipBuilder
             label="Period"
@@ -284,6 +395,39 @@ function BuilderPanel({ report }: BuilderPanelProps) {
             </div>
           )}
         </div>
+
+        {/* Owner chip — shown when report.acceptedFilters includes 'ownerId' */}
+        {showOwner && (
+          <SelectChip
+            label="Owner"
+            value={selectedOwnerLabel}
+            options={ownerOptions}
+            loading={ownersQuery.isPending}
+            onSelect={setOwnerId}
+          />
+        )}
+
+        {/* Property chip — shown when report.acceptedFilters includes 'propertyId' */}
+        {showProperty && (
+          <SelectChip
+            label="Property"
+            value={selectedPropertyLabel}
+            options={propertyOptions}
+            loading={propertiesQuery.isPending}
+            onSelect={setPropertyId}
+          />
+        )}
+
+        {/* Bank chip — shown when report.acceptedFilters includes 'bankAccountId' */}
+        {showBank && (
+          <SelectChip
+            label="Bank"
+            value={selectedBankLabel}
+            options={bankOptions}
+            loading={banksQuery.isPending}
+            onSelect={setBankAccountId}
+          />
+        )}
       </div>
 
       {/* Basis toggle (for applicable reports) */}

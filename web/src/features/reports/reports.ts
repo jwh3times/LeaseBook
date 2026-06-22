@@ -33,6 +33,7 @@ export interface ReportFilters {
   year?: number;
   month?: number;
   asOf?: string;
+  basis?: 'cash' | 'accrual';
   propertyId?: string;
   ownerId?: string;
   bankAccountId?: string;
@@ -110,6 +111,7 @@ export function useReportPreview(
       if (filters.year != null) params.set('year', String(filters.year));
       if (filters.month != null) params.set('month', String(filters.month));
       if (filters.asOf) params.set('asOf', filters.asOf);
+      if (filters.basis) params.set('basis', filters.basis);
       if (filters.propertyId) params.set('propertyId', filters.propertyId);
       if (filters.ownerId) params.set('ownerId', filters.ownerId);
       if (filters.bankAccountId) params.set('bankAccountId', filters.bankAccountId);
@@ -130,6 +132,7 @@ function buildFilterParams(filters: ReportFilters): string {
   if (filters.year != null) params.set('year', String(filters.year));
   if (filters.month != null) params.set('month', String(filters.month));
   if (filters.asOf) params.set('asOf', filters.asOf);
+  if (filters.basis) params.set('basis', filters.basis);
   if (filters.propertyId) params.set('propertyId', filters.propertyId);
   if (filters.ownerId) params.set('ownerId', filters.ownerId);
   if (filters.bankAccountId) params.set('bankAccountId', filters.bankAccountId);

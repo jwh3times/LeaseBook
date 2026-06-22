@@ -388,11 +388,6 @@
   padding: 12px 14px;
   text-align: left;
   transition: 0.13s;
-  cursor: pointer;
-}
-
-.pf-bankrow:hover {
-  border-color: var(--accent-line);
 }
 
 .pf-recon-check {

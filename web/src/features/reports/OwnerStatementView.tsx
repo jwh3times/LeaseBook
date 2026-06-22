@@ -45,8 +45,12 @@ interface FiduciaryChecksProps {
   panel: FiduciaryPanel;
 }
 
+type FidCheck =
+  | { pass: boolean; label: string; detail: string }
+  | { pass: boolean; label: string; detail: string; varianceAmt: number };
+
 function FiduciaryChecks({ panel }: FiduciaryChecksProps) {
-  const checks = [
+  const checks: FidCheck[] = [
     {
       pass: panel.pmIncomeExcluded,
       label: 'PM income excluded',
@@ -61,10 +65,11 @@ function FiduciaryChecks({ panel }: FiduciaryChecksProps) {
     },
     {
       pass: panel.balanced,
-      label: `${Math.abs(num(panel.variance)) < 0.005 ? '$0.00' : '$' + Math.abs(num(panel.variance)).toFixed(2)} variance`,
+      varianceAmt: Math.abs(num(panel.variance)),
+      label: 'variance',
       detail: panel.balanced
         ? 'Ledger and statement match — no unexplained difference.'
-        : `There is a $${Math.abs(num(panel.variance)).toFixed(2)} unexplained variance. Review journal entries.`,
+        : `Unexplained variance detected. Review journal entries.`,
     },
   ];
 
@@ -84,7 +89,18 @@ function FiduciaryChecks({ panel }: FiduciaryChecksProps) {
               <Icon name={c.pass ? 'check' : 'alert'} size={10} />
             </div>
             <div>
-              <b>{c.label}.</b> {c.detail}
+              {'varianceAmt' in c ? (
+                <>
+                  <b>
+                    <Money value={c.varianceAmt} plain /> {c.label}.
+                  </b>{' '}
+                  {c.detail}
+                </>
+              ) : (
+                <>
+                  <b>{c.label}.</b> {c.detail}
+                </>
+              )}
             </div>
           </div>
         ))}
@@ -350,7 +366,9 @@ export function OwnerStatementView({
                   <Icon name="check" size={15} aria-hidden="true" />
                   <span>
                     Ledger and statement match —{' '}
-                    <b>${Math.abs(num(statement.fiduciary.variance)).toFixed(2)} variance</b>
+                    <b>
+                      <Money value={Math.abs(num(statement.fiduciary.variance))} plain /> variance
+                    </b>
                   </span>
                 </div>
               ) : (
@@ -358,7 +376,9 @@ export function OwnerStatementView({
                   <Icon name="alert" size={15} aria-hidden="true" />
                   <span>
                     Unexplained variance:{' '}
-                    <b>${Math.abs(num(statement.fiduciary.variance)).toFixed(2)}</b>
+                    <b>
+                      <Money value={Math.abs(num(statement.fiduciary.variance))} plain />
+                    </b>
                   </span>
                 </div>
               )}
