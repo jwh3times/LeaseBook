@@ -27,8 +27,6 @@ namespace LeaseBook.Tests.Integration;
 [Collection(nameof(DatabaseCollection))]
 public sealed class ReportingEndpointsTests(PostgresFixture fixture)
 {
-    private const string Password = "Tarheel-Trust-2026!";
-
     // ─── catalog ───────────────────────────────────────────────────────────────
 
     [Fact]
@@ -150,6 +148,93 @@ public sealed class ReportingEndpointsTests(PostgresFixture fixture)
         result.ReportId.ShouldBe("rent-roll");
         // 20 non-system units seeded (data.jsx: p1=4, p2=1, p3=6, p4=3, p5=4, p6=2).
         result.Rows.Count.ShouldBe(20);
+    }
+
+    [Fact]
+    public async Task Preview_deposit_liab_returns_non_empty_rows_with_t1_deposit()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await DemoSeeder.SeedAsync(fixture.Api.Services, ct);
+        var client = await DemoClientAsync(ct);
+
+        var result = await GetAsync<ReportPreviewResult>(client, "/api/reports/deposit-liab/preview", ct);
+
+        result.ReportId.ShouldBe("deposit-liab");
+        result.Category.ShouldBe("Trust accounting");
+        result.Rows.ShouldNotBeEmpty();
+        result.Message.ShouldBeNull();
+
+        // T1 (Jasmine Carter) has a 1,450.00 security deposit from the balance forward seed.
+        // Rows are dictionaries — deserialize to check the T1 entry.
+        var rows = result.Rows
+            .OfType<System.Text.Json.JsonElement>()
+            .ToList();
+
+        var t1Row = rows.FirstOrDefault(r =>
+            r.TryGetProperty("tenantId", out var tid) &&
+            tid.GetGuid() == DemoIds.T1);
+        t1Row.ValueKind.ShouldBe(System.Text.Json.JsonValueKind.Object,
+            "T1 should have a held deposit row");
+        t1Row.GetProperty("held").GetDecimal().ShouldBe(1_450.00m);
+        t1Row.GetProperty("kind").GetString().ShouldBe("deposit");
+    }
+
+    [Fact]
+    public async Task Preview_trust_ledger_returns_non_empty_rows_for_operating_trust()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await DemoSeeder.SeedAsync(fixture.Api.Services, ct);
+        var client = await DemoClientAsync(ct);
+
+        var result = await GetAsync<ReportPreviewResult>(client, "/api/reports/trust-ledger/preview", ct);
+
+        result.ReportId.ShouldBe("trust-ledger");
+        result.Category.ShouldBe("Trust accounting");
+        result.Rows.ShouldNotBeEmpty("Operating Trust has journal activity from the seed");
+        result.Message.ShouldBeNull();
+
+        // Every row must have the expected shape keys.
+        var rows = result.Rows.OfType<System.Text.Json.JsonElement>().ToList();
+        foreach (var row in rows)
+        {
+            row.TryGetProperty("journalLineId", out _).ShouldBeTrue("row missing journalLineId");
+            row.TryGetProperty("date", out _).ShouldBeTrue("row missing date");
+            row.TryGetProperty("status", out _).ShouldBeTrue("row missing status");
+        }
+    }
+
+    [Fact]
+    public async Task Preview_bank_rec_returns_message_when_no_finalized_reconciliation()
+    {
+        // The demo seed does not finalize a reconciliation (clearances are set up, but no
+        // BankReconciliation row is in the database), so the endpoint must return an empty
+        // row list with a non-null message rather than throw.
+        var ct = TestContext.Current.CancellationToken;
+        await DemoSeeder.SeedAsync(fixture.Api.Services, ct);
+        var client = await DemoClientAsync(ct);
+
+        var result = await GetAsync<ReportPreviewResult>(client, "/api/reports/bank-rec/preview", ct);
+
+        result.ReportId.ShouldBe("bank-rec");
+        result.Category.ShouldBe("Banking");
+        result.Rows.ShouldBeEmpty();
+        result.Message.ShouldNotBeNullOrWhiteSpace(
+            "should surface a human-readable explanation when no finalized reconciliation exists");
+    }
+
+    [Fact]
+    public async Task Preview_owner_stmt_returns_redirect_message()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await DemoSeeder.SeedAsync(fixture.Api.Services, ct);
+        var client = await DemoClientAsync(ct);
+
+        var result = await GetAsync<ReportPreviewResult>(client, "/api/reports/owner-stmt/preview", ct);
+
+        result.ReportId.ShouldBe("owner-stmt");
+        result.Rows.ShouldBeEmpty();
+        result.Message.ShouldNotBeNull();
+        result.Message.ShouldContain("/api/statements/");
     }
 
     [Fact]

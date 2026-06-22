@@ -19,8 +19,8 @@ public sealed class StatementAssembler(
 {
     /// <summary>
     /// Builds a statement view for each owner in <paramref name="ownerIds"/>.
-    /// Owners with no journal activity for the period return no view (the list may be shorter
-    /// than <paramref name="ownerIds"/>).
+    /// Always returns one view per owner — zeroed (beginning = 0, no sections, ending = 0) when
+    /// there is no journal activity for the period, never absent.
     /// </summary>
     public async Task<IReadOnlyList<StatementView>> BuildAsync(
         IReadOnlyList<Guid> ownerIds,
@@ -48,10 +48,9 @@ public sealed class StatementAssembler(
 
         foreach (var ownerId in ownerIds)
         {
-            if (!byOwner.TryGetValue(ownerId, out var stmt))
-            {
-                continue; // No activity — skip (caller decides whether to show zero-activity statements).
-            }
+            // GetOwnerStatementDataHandler always inserts an entry for every requested owner
+            // (zeroed when there is no journal activity), so TryGetValue never misses.
+            var stmt = byOwner[ownerId];
 
             var ownerName = ownerNames.GetValueOrDefault(ownerId, "Unknown");
             var propertyAddress = propertyId.HasValue
