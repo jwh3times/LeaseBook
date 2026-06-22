@@ -104,6 +104,13 @@ builder.Services.AddReportingModule();
 builder.Services.AddScoped<StatementAssembler>();
 builder.Services.AddScoped<ReportPreviewService>();
 
+// M5 WP-05: statement delivery seam + artifact store. IArtifactStore is the byte-only store
+// (local = file system; M8 = Azure Blob). IStatementDelivery is host-owned (references StatementPdf
+// / StatementView). Both are scoped — DeliveryRecord insert needs the ambient tenant context.
+builder.Services.AddScoped<LeaseBook.Modules.Reporting.Delivery.IArtifactStore,
+    LeaseBook.Modules.Reporting.Delivery.LocalArtifactStore>();
+builder.Services.AddScoped<IStatementDelivery, LocalStatementDelivery>();
+
 // Banking module services (CSV import/match; CQRS handlers are auto-discovered). The host implements
 // Banking's cross-module ports with thin adapters (ADR-007 / P68): IBankRegister reads uncleared register
 // lines and IBankClearing applies clearances, both delegating to Accounting via ISender.

@@ -20,6 +20,7 @@ namespace LeaseBook.Web.Reporting;
 /// <item><c>GET /api/statements/{ownerId}</c> — assembled <see cref="StatementView"/> JSON.</item>
 /// <item><c>GET /api/statements/{ownerId}/pdf</c> — statement as PDF download.</item>
 /// <item><c>GET /api/statements/{ownerId}/csv</c> — statement as CSV download.</item>
+/// <item><c>POST /api/statements/{ownerId}/deliver</c> — render PDF, store artifact, queue delivery.</item>
 /// </list>
 /// </summary>
 public sealed class ReportingEndpoints : IEndpointModule
@@ -128,6 +129,53 @@ public sealed class ReportingEndpoints : IEndpointModule
                     var bytes = StatementCsv.Write(views[0]);
                     var fileName = $"statement-{ownerId:N}-{resolvedYear}-{resolvedMonth:D2}-{resolvedBasis}.csv";
                     return Results.File(bytes, "text/csv", fileName);
+                });
+
+        // POST /api/statements/{ownerId}/deliver?propertyId=&year=&month=&basis=&toEmail=
+        // Renders the statement PDF, stores an immutable artifact, and records a DeliveryRecord
+        // with state Queued. The actual ACS email send is deferred to M8. Returns 409 when the
+        // statement's fiduciary tie-out is not balanced (StatementNotBalancedException).
+        group.MapPost("/statements/{ownerId:guid}/deliver",
+                async (Guid ownerId, Guid? propertyId, int? year, int? month, string? basis,
+                    string? toEmail,
+                    StatementAssembler assembler, IStatementDelivery delivery,
+                    CancellationToken ct) =>
+                {
+                    if (string.IsNullOrWhiteSpace(toEmail))
+                    {
+                        return Results.Problem(
+                            detail: "toEmail is required.",
+                            statusCode: StatusCodes.Status400BadRequest,
+                            title: "missing_to_email");
+                    }
+
+                    var now = DateTime.UtcNow;
+                    var resolvedYear = year ?? now.Year;
+                    var resolvedMonth = month ?? now.Month;
+                    var resolvedBasis = basis?.ToLowerInvariant() is "accrual" ? "accrual" : "cash";
+
+                    var views = await assembler.BuildAsync(
+                        [ownerId], propertyId, resolvedYear, resolvedMonth, resolvedBasis, ct);
+
+                    try
+                    {
+                        var result = await delivery.DeliverAsync(views[0], toEmail, ct);
+                        return TypedResults.Ok(result);
+                    }
+                    catch (StatementNotBalancedException ex)
+                    {
+                        return Results.Problem(
+                            detail: ex.Message,
+                            statusCode: StatusCodes.Status409Conflict,
+                            title: "statement_not_balanced",
+                            extensions: new Dictionary<string, object?>
+                            {
+                                ["ownerId"] = ex.OwnerId,
+                                ["year"] = ex.Year,
+                                ["month"] = ex.Month,
+                                ["variance"] = ex.Variance,
+                            });
+                    }
                 });
     }
 
