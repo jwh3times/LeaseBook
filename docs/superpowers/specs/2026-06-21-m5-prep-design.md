@@ -36,9 +36,16 @@ appear once the bank register lands (M4)", line 65). M4 shipped the register; th
   "N uncleared item(s) to reconcile" → `/banking` (or a "reconciled / nothing uncleared" state when 0).
 - Add per-account `UnclearedCount` to `DashboardBankRow` so the M2.4 "Trust accounts summary card
   with uncleared counts" (also currently 0) is honest.
-- Update `DashboardTests` to the seed figures: **Operating Trust = 3 uncleared**; deposit trust = 0;
-  **PM-Operating = 0** (clearance deliberately unseeded — M4 known-limitation). Regenerate
-  `web/src/api/schema.d.ts` (KPI/bank-row shape changed) and update the web dashboard render + its test.
+- Update `DashboardTests`: the KPI is now the honest sum across `GetBankBalances`, so assert
+  **structurally** — `Kpis.UnclearedCount == Σ Banks.Rows.UnclearedCount` and
+  `Kpis.Uncleared == Σ Banks.Rows.Uncleared` (proves it is computed, not hardcoded) — plus the
+  golden-locked per-account figure **Operating Trust = 3 uncleared**. Note: PM-Operating clearance is
+  *unseeded*, and absence of a `bank_line_status` row ≡ uncleared, so PM-Operating lines read as
+  **uncleared, not 0** (correcting an earlier draft of this spec); the exact total is derived from the
+  seed during implementation by reading `GoldenFileTests`/`DemoBankClearingSeed`, not guessed here.
+  Regenerate `web/src/api/schema.d.ts` (KPI/bank-row shape changed) and update the web dashboard render
+  (the `BankSummary` per-account count; the KPI StatCard already binds `kpis.uncleared`/`unclearedCount`)
+  and its test.
 
 **Tests.** `DashboardTests` (real figures), `GetBankBalances` count assertion, web `DashboardPage`
 test for the rendered count, schema drift gate (ADR-012) green.
