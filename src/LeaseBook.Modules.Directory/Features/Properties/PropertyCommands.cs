@@ -64,7 +64,7 @@ internal sealed class UpdatePropertyHandler(DbContext db) : ICommandHandler<Upda
 {
     public async Task<bool> Handle(UpdateProperty command, CancellationToken ct)
     {
-        var property = await db.Set<Property>().FirstOrDefaultAsync(p => p.Id == command.Id && !p.IsSystem, ct);
+        var property = await db.Set<Property>().NotSystem().FirstOrDefaultAsync(p => p.Id == command.Id, ct);
         if (property is null)
         {
             return false;

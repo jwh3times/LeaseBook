@@ -1,5 +1,6 @@
 using FluentValidation;
 using LeaseBook.Modules.Directory.Domain;
+using LeaseBook.Modules.Directory.Features.Shared;
 using LeaseBook.SharedKernel.Cqrs;
 using Microsoft.EntityFrameworkCore;
 
@@ -26,12 +27,12 @@ internal sealed class GetTenantPostingDimensionsHandler(DbContext db)
 {
     public Task<TenantPostingDimensionsView?> Handle(GetTenantPostingDimensions query, CancellationToken ct) =>
         (
-            from t in db.Set<Tenant>().AsNoTracking()
+            from t in db.Set<Tenant>().AsNoTracking().NotSystem()
             join l in db.Set<LeaseLite>().AsNoTracking() on t.Id equals l.TenantId
             join u in db.Set<Unit>().AsNoTracking() on l.UnitId equals u.Id
             join p in db.Set<Property>().AsNoTracking() on u.PropertyId equals p.Id
             join o in db.Set<Owner>().AsNoTracking() on p.OwnerId equals o.Id
-            where t.Id == query.TenantId && !t.IsSystem && l.Status == LeaseStatus.Active
+            where t.Id == query.TenantId && l.Status == LeaseStatus.Active
             select new TenantPostingDimensionsView(o.Id, p.Id, u.Id))
         .FirstOrDefaultAsync(ct);
 }

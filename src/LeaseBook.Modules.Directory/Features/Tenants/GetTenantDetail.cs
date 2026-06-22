@@ -1,5 +1,6 @@
 using LeaseBook.Modules.Directory.Contracts;
 using LeaseBook.Modules.Directory.Domain;
+using LeaseBook.Modules.Directory.Features.Shared;
 using LeaseBook.Modules.Directory.Persistence;
 using LeaseBook.SharedKernel.Cqrs;
 using Microsoft.EntityFrameworkCore;
@@ -29,7 +30,7 @@ internal sealed class GetTenantDetailHandler(DbContext db, ITenantFinancials ten
     public async Task<TenantDetail?> Handle(GetTenantDetail query, CancellationToken ct)
     {
         var tenant = await db.Set<Tenant>().AsNoTracking()
-            .FirstOrDefaultAsync(t => t.Id == query.Id && !t.IsSystem, ct);
+            .NotSystem().FirstOrDefaultAsync(t => t.Id == query.Id, ct);
         if (tenant is null)
         {
             return null;

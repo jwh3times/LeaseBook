@@ -1,5 +1,6 @@
 using LeaseBook.Modules.Directory.Contracts;
 using LeaseBook.Modules.Directory.Domain;
+using LeaseBook.Modules.Directory.Features.Shared;
 using LeaseBook.Modules.Directory.Features.Tenants;
 using LeaseBook.Modules.Directory.Features.Units;
 using LeaseBook.Modules.Directory.Persistence;
@@ -22,7 +23,7 @@ internal sealed class GetPropertyDetailHandler(DbContext db, ITenantFinancials t
     public async Task<PropertyDetail?> Handle(GetPropertyDetail query, CancellationToken ct)
     {
         var property = await db.Set<Property>().AsNoTracking()
-            .FirstOrDefaultAsync(p => p.Id == query.Id && !p.IsSystem, ct);
+            .NotSystem().FirstOrDefaultAsync(p => p.Id == query.Id, ct);
         if (property is null)
         {
             return null;
@@ -39,9 +40,9 @@ internal sealed class GetPropertyDetailHandler(DbContext db, ITenantFinancials t
         var unitIds = units.Select(u => u.Id).ToList();
         var tenantRows = await (
             from l in db.Set<LeaseLite>().AsNoTracking()
-            join t in db.Set<Tenant>().AsNoTracking() on l.TenantId equals t.Id
+            join t in db.Set<Tenant>().AsNoTracking().NotSystem() on l.TenantId equals t.Id
             join u in db.Set<Unit>().AsNoTracking() on l.UnitId equals u.Id
-            where unitIds.Contains(l.UnitId) && l.Status == LeaseStatus.Active && !t.IsSystem
+            where unitIds.Contains(l.UnitId) && l.Status == LeaseStatus.Active
             select new { t.Id, t.DisplayName, t.Status, u.Label, l.Rent })
             .ToListAsync(ct);
 
