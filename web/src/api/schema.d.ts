@@ -2385,6 +2385,8 @@ export interface components {
             name: string;
             /** Format: double */
             uncleared: number | string;
+            /** Format: int32 */
+            unclearedCount: number | string;
         };
         BankBalancesResponse: {
             rows: components["schemas"]["BankBalanceRow"][];
@@ -2524,6 +2526,8 @@ export interface components {
             /** Format: double */
             book: number | string;
             name: string;
+            /** Format: int32 */
+            unclearedCount: number | string;
         };
         DashboardKpis: {
             /** Format: double */

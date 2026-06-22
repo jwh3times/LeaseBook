@@ -11,7 +11,7 @@ namespace LeaseBook.Web.Dashboard;
 /// merging in memory crosses no boundary (Reporting stays dormant; no cross-module SQL). The SPA does no
 /// client-side financial math (TODO M2.4). Owner names are merged from the Directory lookup, the
 /// <c>AggregateOwners</c> roll-up relabeled "All other owners" (P40) and excluded from
-/// <c>ownersPayable</c> (P41). <c>uncleared</c> stays 0 until the M4 register exists.
+/// <c>ownersPayable</c> (P41). Uncleared KPIs are sourced live from the M4 bank register.
 /// </summary>
 public sealed class DashboardService(ISender sender, TimeProvider clock)
 {
@@ -29,6 +29,10 @@ public sealed class DashboardService(ISender sender, TimeProvider clock)
 
         // trustTotal = Σ bank books (the M1 golden total, 483,620.69 on the demo); the banks list sums to it.
         var trustTotal = bankBalances.Rows.Sum(b => b.Book);
+
+        // Uncleared KPIs — live from the M4 bank register (book − cleared sum; count of uncleared lines).
+        var uncleared = bankBalances.Rows.Sum(b => b.Uncleared);
+        var unclearedCount = bankBalances.Rows.Sum(b => b.UnclearedCount);
 
         // ownersPayable (P41) = Σ max(0, owner operating) over non-system owners — the disbursable amount,
         // negative-balance owners contribute 0. The prototype's 132,447.00 is authoring noise, not used.
@@ -51,7 +55,7 @@ public sealed class DashboardService(ISender sender, TimeProvider clock)
             heroRows.Sum(r => r.Operating), heroRows.Sum(r => r.Deposits), heroRows.Sum(r => r.Total));
 
         var bankRows = bankBalances.Rows
-            .Select(b => new DashboardBankRow(b.BankAccountId, b.Name, b.Book)).ToList();
+            .Select(b => new DashboardBankRow(b.BankAccountId, b.Name, b.Book, b.UnclearedCount)).ToList();
 
         var depositsAwaiting = deposits.Rows.Count(r => r.Kind == "deposit");
         var disbursementReady = ownerBalances.Rows.Count(r => !IsSystem(r.OwnerId) && r.Operating > 0m);
@@ -61,8 +65,10 @@ public sealed class DashboardService(ISender sender, TimeProvider clock)
         {
             new("deposits-awaiting", "info", "Deposits awaiting application",
                 $"{depositsAwaiting} held deposit(s) — a liability until applied on move-out", "/banking"),
-            new("reconciliation-due", "warn", "Bank reconciliation due",
-                "Uncleared items appear once the bank register lands (M4)", "/banking"),
+            new("reconciliation-due", unclearedCount == 0 ? "info" : "warn", "Bank reconciliation",
+                unclearedCount == 0
+                    ? "All bank items cleared — nothing to reconcile"
+                    : $"{unclearedCount} uncleared item(s) across trust accounts", "/banking"),
             new("disbursement-ready", "alert", "Owner disbursement run ready",
                 $"{disbursementReady} owner(s) with a positive operating balance this cycle", "/operations"),
         };
@@ -71,8 +77,8 @@ public sealed class DashboardService(ISender sender, TimeProvider clock)
             new DashboardKpis(
                 TrustTotal: trustTotal,
                 OwnersPayable: ownersPayable,
-                Uncleared: 0m,
-                UnclearedCount: 0,
+                Uncleared: uncleared,
+                UnclearedCount: unclearedCount,
                 CollectedMtd: collectedMtd,
                 CollectedTarget: directoryKpis.CollectedTarget,
                 Vacancy: directoryKpis.Vacancy),
@@ -98,6 +104,6 @@ public sealed record OwnerBalancesHeroTotals(decimal Operating, decimal Deposits
 
 public sealed record BanksPanel(IReadOnlyList<DashboardBankRow> Rows);
 
-public sealed record DashboardBankRow(Guid BankAccountId, string Name, decimal Book);
+public sealed record DashboardBankRow(Guid BankAccountId, string Name, decimal Book, int UnclearedCount);
 
 public sealed record ActionItem(string Id, string Kind, string Title, string Detail, string Route);

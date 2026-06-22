@@ -183,8 +183,8 @@ function BankSummary({ data, onReconcile }: { data: DashboardResponse; onReconci
         >
           <div className="col">
             <span className="fw6">{bank.name}</span>
-            <Badge tone="pos" soft dot>
-              Reconciled
+            <Badge tone={bank.unclearedCount === 0 ? 'pos' : 'warn'} dot>
+              {bank.unclearedCount === 0 ? 'Reconciled' : `${bank.unclearedCount} uncleared`}
             </Badge>
           </div>
           <Money value={num(bank.book)} />
