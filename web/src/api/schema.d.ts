@@ -2085,7 +2085,9 @@ export interface paths {
         };
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    activeOnly?: boolean;
+                };
                 header?: never;
                 path?: never;
                 cookie?: never;
@@ -2182,6 +2184,54 @@ export interface paths {
             requestBody: {
                 content: {
                     "application/json": components["schemas"]["UpdateBankAccountRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BankAccountResponse"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/banks/{id}/active": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["SetBankActiveRequest"];
                 };
             };
             responses: {
@@ -2961,6 +3011,9 @@ export interface components {
             score: number | string;
             sublabel: null | string;
             type: string;
+        };
+        SetBankActiveRequest: {
+            isActive: boolean;
         };
         StartReconciliation: {
             /** Format: uuid */

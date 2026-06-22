@@ -34,8 +34,8 @@ public sealed class SettingsEndpoints : IEndpointModule
             .Produces<OrgSettingsResponse>();
 
         group.MapGet("/banks",
-                async (ISender sender, CancellationToken ct) =>
-                    TypedResults.Ok(await sender.Query(new ListBankAccounts(), ct)))
+                async (bool? activeOnly, ISender sender, CancellationToken ct) =>
+                    TypedResults.Ok(await sender.Query(new ListBankAccounts(activeOnly ?? false), ct)))
             .RequireAuthorization("RequirePMStaff")
             .Produces<IReadOnlyList<BankAccountResponse>>();
 
@@ -59,8 +59,29 @@ public sealed class SettingsEndpoints : IEndpointModule
                         ? TypedResults.Ok(bank)
                         : TypedResults.NotFound())
             .RequireAuthorization("RequirePMAdmin");
+
+        group.MapPut("/banks/{id:guid}/active",
+                async Task<Results<Ok<BankAccountResponse>, NotFound, ProblemHttpResult>> (
+                    Guid id, SetBankActiveRequest body, ISender sender, CancellationToken ct) =>
+                {
+                    var result = await sender.Send(new SetBankAccountActive(id, body.IsActive), ct);
+                    return result.Outcome switch
+                    {
+                        SetActiveOutcome.Updated => TypedResults.Ok(result.Bank!),
+                        SetActiveOutcome.NotFound => TypedResults.NotFound(),
+                        _ => TypedResults.Problem(
+                            title: "Bank account has uncleared items",
+                            detail: "Clear or reconcile outstanding items before deactivating.",
+                            statusCode: StatusCodes.Status409Conflict,
+                            extensions: new Dictionary<string, object?> { ["code"] = "bank_account_has_uncleared" }),
+                    };
+                })
+            .RequireAuthorization("RequirePMAdmin");
     }
 }
 
 /// <summary>Body for <c>PUT /banks/{id}</c> — the id comes from the route.</summary>
 public sealed record UpdateBankAccountRequest(string Name, string? Institution, string? Mask);
+
+/// <summary>Body for <c>PUT /banks/{id}/active</c> — the id comes from the route.</summary>
+public sealed record SetBankActiveRequest(bool IsActive);
