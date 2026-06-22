@@ -105,7 +105,7 @@ services:
   pgadmin:
     # Pinned (not :latest) so the dev stack is reproducible and Dependabot can bump it;
     # a floating tag has no version for Dependabot to track. See .github/dependabot.yml.
-    image: dpage/pgadmin4:9.15
+    image: dpage/pgadmin4:9.16
     container_name: leasebook-pgadmin
     environment:
       # Use a real TLD: pgAdmin's email validator rejects reserved/special-use domains
