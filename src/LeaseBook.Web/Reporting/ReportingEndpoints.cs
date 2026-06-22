@@ -37,6 +37,8 @@ public sealed class ReportingEndpoints : IEndpointModule
             .Produces<IReadOnlyList<ReportDescriptor>>();
 
         // GET /api/reports/{id}/preview?year=&month=&ownerId=&propertyId=&bankAccountId=&asOf=
+        // Returns { columns, rows, totalRows } — the shape the SPA's useReportPreview hook expects.
+        // Columns are derived from the first row's key names (all preview rows share the same keys).
         group.MapGet("/reports/{id}/preview",
                 async (string id, int? year, int? month, Guid? ownerId, Guid? propertyId,
                     Guid? bankAccountId, DateOnly? asOf,
@@ -44,9 +46,16 @@ public sealed class ReportingEndpoints : IEndpointModule
                 {
                     var filters = new ReportFilters(year, month, ownerId, propertyId, bankAccountId, asOf);
                     var result = await previewService.PreviewAsync(id, filters, ct);
-                    return result is null
-                        ? Results.NotFound(new { error = $"Report '{id}' not found in catalog." })
-                        : Results.Ok(result);
+                    if (result is null)
+                    {
+                        return Results.NotFound(new { error = $"Report '{id}' not found in catalog." });
+                    }
+
+                    // Extract column names from the dictionary keys (all preview rows share the same schema).
+                    var columns = result.Rows is [Dictionary<string, object?> first, ..]
+                        ? (IReadOnlyList<string>)first.Keys.ToList()
+                        : [];
+                    return Results.Ok(new PreviewSpaResponse(columns, result.Rows, result.Rows.Count, result.Message));
                 });
 
         // GET /api/reports/{id}/csv?year=&month=&ownerId=&propertyId=&bankAccountId=&asOf=

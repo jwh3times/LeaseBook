@@ -121,6 +121,8 @@ public sealed class ReportingEndpointsTests(PostgresFixture fixture)
     }
 
     // ─── preview ───────────────────────────────────────────────────────────────
+    // All preview tests now deserialize to PreviewSpaResponse — the { columns, rows, totalRows, message }
+    // shape the SPA's useReportPreview hook and ReportPreviewTable expect.
 
     [Fact]
     public async Task Preview_owner_bal_returns_rows_with_decimal_amounts()
@@ -129,11 +131,11 @@ public sealed class ReportingEndpointsTests(PostgresFixture fixture)
         await DemoSeeder.SeedAsync(fixture.Api.Services, ct);
         var client = await DemoClientAsync(ct);
 
-        var result = await GetAsync<ReportPreviewResult>(client, "/api/reports/owner-bal/preview", ct);
+        var result = await GetAsync<PreviewSpaResponse>(client, "/api/reports/owner-bal/preview", ct);
 
-        result.ReportId.ShouldBe("owner-bal");
-        result.Category.ShouldBe("Owner");
         result.Rows.ShouldNotBeEmpty();
+        result.TotalRows.ShouldBe(result.Rows.Count);
+        result.Columns.ShouldNotBeEmpty("columns must be populated from the first row's keys");
     }
 
     [Fact]
@@ -143,11 +145,12 @@ public sealed class ReportingEndpointsTests(PostgresFixture fixture)
         await DemoSeeder.SeedAsync(fixture.Api.Services, ct);
         var client = await DemoClientAsync(ct);
 
-        var result = await GetAsync<ReportPreviewResult>(client, "/api/reports/rent-roll/preview", ct);
+        var result = await GetAsync<PreviewSpaResponse>(client, "/api/reports/rent-roll/preview", ct);
 
-        result.ReportId.ShouldBe("rent-roll");
         // 20 non-system units seeded (data.jsx: p1=4, p2=1, p3=6, p4=3, p5=4, p6=2).
+        result.TotalRows.ShouldBe(20);
         result.Rows.Count.ShouldBe(20);
+        result.Columns.ShouldNotBeEmpty();
     }
 
     [Fact]
@@ -157,12 +160,12 @@ public sealed class ReportingEndpointsTests(PostgresFixture fixture)
         await DemoSeeder.SeedAsync(fixture.Api.Services, ct);
         var client = await DemoClientAsync(ct);
 
-        var result = await GetAsync<ReportPreviewResult>(client, "/api/reports/deposit-liab/preview", ct);
+        var result = await GetAsync<PreviewSpaResponse>(client, "/api/reports/deposit-liab/preview", ct);
 
-        result.ReportId.ShouldBe("deposit-liab");
-        result.Category.ShouldBe("Trust accounting");
         result.Rows.ShouldNotBeEmpty();
         result.Message.ShouldBeNull();
+        result.Columns.ShouldContain("tenantId");
+        result.Columns.ShouldContain("held");
 
         // T1 (Jasmine Carter) has a 1,450.00 security deposit from the balance forward seed.
         // Rows are dictionaries — deserialize to check the T1 entry.
@@ -186,12 +189,13 @@ public sealed class ReportingEndpointsTests(PostgresFixture fixture)
         await DemoSeeder.SeedAsync(fixture.Api.Services, ct);
         var client = await DemoClientAsync(ct);
 
-        var result = await GetAsync<ReportPreviewResult>(client, "/api/reports/trust-ledger/preview", ct);
+        var result = await GetAsync<PreviewSpaResponse>(client, "/api/reports/trust-ledger/preview", ct);
 
-        result.ReportId.ShouldBe("trust-ledger");
-        result.Category.ShouldBe("Trust accounting");
         result.Rows.ShouldNotBeEmpty("Operating Trust has journal activity from the seed");
         result.Message.ShouldBeNull();
+        result.Columns.ShouldContain("journalLineId");
+        result.Columns.ShouldContain("date");
+        result.Columns.ShouldContain("status");
 
         // Every row must have the expected shape keys.
         var rows = result.Rows.OfType<System.Text.Json.JsonElement>().ToList();
@@ -213,10 +217,8 @@ public sealed class ReportingEndpointsTests(PostgresFixture fixture)
         await DemoSeeder.SeedAsync(fixture.Api.Services, ct);
         var client = await DemoClientAsync(ct);
 
-        var result = await GetAsync<ReportPreviewResult>(client, "/api/reports/bank-rec/preview", ct);
+        var result = await GetAsync<PreviewSpaResponse>(client, "/api/reports/bank-rec/preview", ct);
 
-        result.ReportId.ShouldBe("bank-rec");
-        result.Category.ShouldBe("Banking");
         result.Rows.ShouldBeEmpty();
         result.Message.ShouldNotBeNullOrWhiteSpace(
             "should surface a human-readable explanation when no finalized reconciliation exists");
@@ -229,9 +231,8 @@ public sealed class ReportingEndpointsTests(PostgresFixture fixture)
         await DemoSeeder.SeedAsync(fixture.Api.Services, ct);
         var client = await DemoClientAsync(ct);
 
-        var result = await GetAsync<ReportPreviewResult>(client, "/api/reports/owner-stmt/preview", ct);
+        var result = await GetAsync<PreviewSpaResponse>(client, "/api/reports/owner-stmt/preview", ct);
 
-        result.ReportId.ShouldBe("owner-stmt");
         result.Rows.ShouldBeEmpty();
         result.Message.ShouldNotBeNull();
         result.Message.ShouldContain("/api/statements/");
