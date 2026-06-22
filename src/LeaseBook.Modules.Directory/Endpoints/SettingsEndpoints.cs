@@ -76,7 +76,8 @@ public sealed class SettingsEndpoints : IEndpointModule
                             extensions: new Dictionary<string, object?> { ["code"] = "bank_account_has_uncleared" }),
                     };
                 })
-            .RequireAuthorization("RequirePMAdmin");
+            .RequireAuthorization("RequirePMAdmin")
+            .ProducesProblem(StatusCodes.Status409Conflict);
     }
 }
 
