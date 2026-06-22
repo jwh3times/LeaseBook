@@ -72,7 +72,9 @@ export function DashboardPage() {
           value={<Money value={num(d.kpis.uncleared)} big />}
           sub={
             <Badge tone="pos" dot>
-              {d.kpis.unclearedCount === 0 ? 'Reconciled' : `${d.kpis.unclearedCount} items`}
+              {num(d.kpis.unclearedCount) === 0
+                ? 'Reconciled'
+                : `${num(d.kpis.unclearedCount)} items`}
             </Badge>
           }
         />
@@ -183,8 +185,10 @@ function BankSummary({ data, onReconcile }: { data: DashboardResponse; onReconci
         >
           <div className="col">
             <span className="fw6">{bank.name}</span>
-            <Badge tone={bank.unclearedCount === 0 ? 'pos' : 'warn'} dot>
-              {bank.unclearedCount === 0 ? 'Reconciled' : `${bank.unclearedCount} uncleared`}
+            <Badge tone={num(bank.unclearedCount) === 0 ? 'pos' : 'warn'} dot>
+              {num(bank.unclearedCount) === 0
+                ? 'Reconciled'
+                : `${num(bank.unclearedCount)} uncleared`}
             </Badge>
           </div>
           <Money value={num(bank.book)} />
