@@ -404,4 +404,29 @@ describe('ReportCatalog', () => {
     const filtersGroup = screen.getByRole('group', { name: 'Report filters' });
     expect(within(filtersGroup).getByText('Owner')).toBeInTheDocument();
   });
+
+  // Finding 3: backend preview message is rendered in the empty state.
+  it('renders backend message text in the empty-rows empty state (Finding 3)', async () => {
+    const BACKEND_MESSAGE = 'No finalized reconciliation found for this bank account.';
+    server.use(
+      http.get('/api/reports', () => HttpResponse.json(CATALOG)),
+      // Override preview to return empty rows WITH a backend message.
+      http.get('/api/reports/:id/preview', () =>
+        HttpResponse.json({
+          columns: [],
+          rows: [],
+          totalRows: 0,
+          message: BACKEND_MESSAGE,
+        }),
+      ),
+    );
+    renderCatalog();
+
+    await screen.findAllByText('All owner ending balances');
+
+    // The empty preview state must show the backend message, not the hardcoded fallback.
+    expect(await screen.findByText(BACKEND_MESSAGE)).toBeInTheDocument();
+    // The generic fallback must NOT appear.
+    expect(screen.queryByText('No data for this period')).not.toBeInTheDocument();
+  });
 });

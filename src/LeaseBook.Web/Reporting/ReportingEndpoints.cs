@@ -191,57 +191,112 @@ public sealed class ReportingEndpoints : IEndpointModule
     // ─── helper: project preview rows (generic objects) to a string table ─────
 
     /// <summary>
-    /// Projects the preview rows (generic <c>object</c> elements, which arrive as
-    /// <c>JsonElement</c> dictionaries after JSON round-trip) to a (columns, rows) pair suitable
-    /// for <see cref="ReportCsv.Write"/>. Each unique key across all rows becomes a column; values
-    /// are coerced to invariant strings. Empty string when a row lacks a key.
+    /// Projects the preview rows to a (columns, rows) pair suitable for <see cref="ReportCsv.Write"/>.
+    /// Handles both in-process <c>Dictionary&lt;string, object?&gt;</c> rows (CSV path, where
+    /// <see cref="ReportPreviewService"/> returns boxed dictionaries directly) and
+    /// <c>JsonElement</c> rows (if the rows ever reach this method after a JSON round-trip).
+    /// Each unique key across all rows becomes a column (first-seen order); values are coerced
+    /// to invariant-culture strings — <c>decimal</c> exact, <c>DateOnly</c>/<c>DateTime</c> ISO,
+    /// <c>bool</c> lowercase, <c>null</c> empty.
     /// </summary>
     private static (IReadOnlyList<string> Columns, IReadOnlyList<IReadOnlyList<string>> Rows)
         ProjectToStringTable(IReadOnlyList<object> rows)
     {
+        if (rows.Count == 0)
+        {
+            return ([], []);
+        }
+
+        // ── In-process path: ReportPreviewService returns Dictionary<string, object?> rows ──
+        var dictRows = rows.OfType<Dictionary<string, object?>>().ToList();
+        if (dictRows.Count == rows.Count)
+        {
+            // Collect all unique keys preserving first-seen order across all rows.
+            var columns = new List<string>();
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var row in dictRows)
+            {
+                foreach (var key in row.Keys)
+                {
+                    if (seen.Add(key))
+                    {
+                        columns.Add(key);
+                    }
+                }
+            }
+
+            var stringRows = dictRows.Select(row =>
+                (IReadOnlyList<string>)columns.Select(col =>
+                {
+                    row.TryGetValue(col, out var val);
+                    return CoerceObjectToString(val);
+                }).ToList()
+            ).ToList();
+
+            return (columns, stringRows);
+        }
+
+        // ── JSON round-trip path: rows are JsonElement dictionaries ──
         var jsonRows = rows.OfType<System.Text.Json.JsonElement>().ToList();
         if (jsonRows.Count == 0)
         {
             return ([], []);
         }
 
-        // Collect all unique keys preserving first-seen order
-        var columns = new List<string>();
-        var seen = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var row in jsonRows)
         {
-            foreach (var prop in row.EnumerateObject())
+            var columns = new List<string>();
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var row in jsonRows)
             {
-                if (seen.Add(prop.Name))
+                foreach (var prop in row.EnumerateObject())
                 {
-                    columns.Add(prop.Name);
+                    if (seen.Add(prop.Name))
+                    {
+                        columns.Add(prop.Name);
+                    }
                 }
             }
-        }
 
-        var stringRows = jsonRows.Select(row =>
-        {
-            return (IReadOnlyList<string>)columns.Select(col =>
+            var stringRows = jsonRows.Select(row =>
             {
-                if (row.TryGetProperty(col, out var el))
+                return (IReadOnlyList<string>)columns.Select(col =>
                 {
-                    return el.ValueKind switch
+                    if (row.TryGetProperty(col, out var el))
                     {
-                        System.Text.Json.JsonValueKind.Number =>
-                            el.TryGetDecimal(out var d)
-                                ? d.ToString("0.00########", CultureInfo.InvariantCulture)
-                                : el.GetRawText(),
-                        System.Text.Json.JsonValueKind.True => "true",
-                        System.Text.Json.JsonValueKind.False => "false",
-                        System.Text.Json.JsonValueKind.Null => string.Empty,
-                        _ => el.GetString() ?? string.Empty,
-                    };
-                }
+                        return el.ValueKind switch
+                        {
+                            System.Text.Json.JsonValueKind.Number =>
+                                el.TryGetDecimal(out var d)
+                                    ? d.ToString("0.00########", CultureInfo.InvariantCulture)
+                                    : el.GetRawText(),
+                            System.Text.Json.JsonValueKind.True => "true",
+                            System.Text.Json.JsonValueKind.False => "false",
+                            System.Text.Json.JsonValueKind.Null => string.Empty,
+                            _ => el.GetString() ?? string.Empty,
+                        };
+                    }
 
-                return string.Empty;
+                    return string.Empty;
+                }).ToList();
             }).ToList();
-        }).ToList();
 
-        return (columns, stringRows);
+            return (columns, stringRows);
+        }
     }
+
+    /// <summary>
+    /// Coerces a boxed <c>object?</c> value from an in-process preview row to an invariant-culture
+    /// string. Keeps <c>decimal</c> exact (never float), formats dates as ISO, booleans lowercase.
+    /// </summary>
+    private static string CoerceObjectToString(object? value) => value switch
+    {
+        null => string.Empty,
+        string s => s,
+        decimal d => d.ToString("0.00########", CultureInfo.InvariantCulture),
+        DateOnly dt => dt.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+        DateTime dtm => dtm.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture),
+        bool b => b ? "true" : "false",
+        Guid g => g.ToString(),
+        _ => Convert.ToString(value, CultureInfo.InvariantCulture) ?? string.Empty,
+    };
 }

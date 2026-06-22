@@ -27,11 +27,11 @@ internal sealed class GetRentRollHandler(DbContext db) : IQueryHandler<GetRentRo
 {
     public async Task<RentRollResponse> Handle(GetRentRoll query, CancellationToken ct)
     {
-        // Left-join unit → active lease → tenant. Non-system units only (NotSystem() on Unit;
-        // Tenant join uses the is-system flag guard via .NotSystem() on the tenant queryable).
+        // Left-join unit → active lease → tenant. Non-system units/properties only:
+        // NotSystem() applied to Unit, Property, and Tenant queryables.
         var rows = await (
             from u in db.Set<Unit>().AsNoTracking().NotSystem()
-            join p in db.Set<Property>().AsNoTracking() on u.PropertyId equals p.Id
+            join p in db.Set<Property>().AsNoTracking().NotSystem() on u.PropertyId equals p.Id
             join l in db.Set<LeaseLite>().AsNoTracking()
                             .Where(l => l.Status == LeaseStatus.Active)
                         on u.Id equals l.UnitId into leases

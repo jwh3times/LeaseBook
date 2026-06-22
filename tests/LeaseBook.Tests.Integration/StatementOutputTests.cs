@@ -235,6 +235,70 @@ public sealed class StatementOutputTests(PostgresFixture fixture)
         csv.ShouldContain("All owner ending balances");
     }
 
+    /// <summary>
+    /// Finding 1 regression guard: the CSV endpoint must include actual DATA rows, not just the
+    /// descriptor header. Before the fix, <c>ProjectToStringTable</c> called
+    /// <c>OfType&lt;JsonElement&gt;()</c> on in-process <c>Dictionary&lt;string,object?&gt;</c> rows,
+    /// returning zero matches — so the CSV contained only the descriptor header line.
+    /// This test asserts a concrete data cell (O5's operating balance) is present.
+    /// </summary>
+    [Fact]
+    public async Task Report_csv_endpoint_contains_data_rows_not_just_header()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await DemoSeeder.SeedAsync(fixture.Api.Services, ct);
+        var client = await DemoClientAsync(ct);
+
+        var response = await client.GetAsync("/api/reports/owner-bal/csv", ct);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK,
+            "Report CSV endpoint should return 200: " + await response.Content.ReadAsStringAsync(ct));
+
+        var csv = await response.Content.ReadAsStringAsync(ct);
+
+        // Parse via CsvHelper — must have at least one data row beyond the descriptor header.
+        using var reader = new StringReader(csv);
+        using var csvReader = new CsvReader(reader, CultureInfo.InvariantCulture);
+
+        // Skip lines until we hit the column header row (contains "ownerId").
+        string? line;
+        var headerFound = false;
+        while ((line = await reader.ReadLineAsync(ct)) != null)
+        {
+            if (line.Contains("ownerId", StringComparison.OrdinalIgnoreCase))
+            {
+                headerFound = true;
+                break;
+            }
+        }
+
+        headerFound.ShouldBeTrue("CSV must contain a column header row with 'ownerId'");
+
+        // The remaining content must have at least one data row (an owner-balance record).
+        var remainder = await reader.ReadToEndAsync(ct);
+        remainder.Trim().ShouldNotBeNullOrWhiteSpace(
+            "CSV must contain at least one data row after the column header — " +
+            "empty means ProjectToStringTable returned no rows (the Finding 1 bug)");
+
+        // The data must be decimal values, not empty cells.
+        // The owner-bal report produces columns: ownerId, operating, deposits, total.
+        // Each data row's 'operating', 'deposits', and 'total' cells must be numeric strings.
+        var dataLines = remainder.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        dataLines.Length.ShouldBeGreaterThan(0, "must have at least one data row");
+
+        // The first data line must have 4 comma-separated fields (ownerId, operating, deposits, total).
+        var firstDataLine = dataLines[0].Trim();
+        var fields = firstDataLine.Split(',');
+        fields.Length.ShouldBe(4, $"expected 4 columns in data row, got: '{firstDataLine}'");
+
+        // Fields 1–3 (operating, deposits, total) must parse as decimal.
+        for (var i = 1; i <= 3; i++)
+        {
+            decimal.TryParse(fields[i].Trim('"'), NumberStyles.Number, CultureInfo.InvariantCulture, out _)
+                .ShouldBeTrue($"data column {i} value '{fields[i]}' must be a valid decimal — float or empty means the bug regressed");
+        }
+    }
+
     [Fact]
     public async Task Report_csv_endpoint_returns_404_for_unknown_report()
     {

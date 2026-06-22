@@ -93,6 +93,8 @@ export interface PreviewResponse {
   columns: string[];
   rows: Record<string, unknown>[];
   totalRows: number;
+  /** Backend-supplied contextual message (e.g. redirect hint, no-data explanation). */
+  message?: string;
 }
 
 export function useReportPreview(

@@ -44,8 +44,8 @@ export function ReportPreviewTable({ preview }: ReportPreviewProps) {
       <div className="pf-pad">
         <EmptyState
           icon="doc"
-          title="No data for this period"
-          description="Try adjusting the filters above."
+          title={preview.message ?? 'No data for this period'}
+          description={preview.message ? undefined : 'Try adjusting the filters above.'}
         />
       </div>
     );
