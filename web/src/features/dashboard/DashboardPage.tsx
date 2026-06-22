@@ -71,7 +71,7 @@ export function DashboardPage() {
           label="Uncleared"
           value={<Money value={num(d.kpis.uncleared)} big />}
           sub={
-            <Badge tone="pos" dot>
+            <Badge tone={num(d.kpis.unclearedCount) === 0 ? 'pos' : 'warn'} dot>
               {num(d.kpis.unclearedCount) === 0
                 ? 'Reconciled'
                 : `${num(d.kpis.unclearedCount)} items`}

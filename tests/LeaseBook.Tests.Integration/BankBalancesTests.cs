@@ -33,7 +33,7 @@ public sealed class BankBalancesTests(PostgresFixture fixture)
         // Golden-locked (M4 GoldenFileTests): Operating Trust has exactly 3 uncleared items.
         var operatingTrust = balances.Rows.Single(r => r.Name == "Operating Trust");
         operatingTrust.UnclearedCount.ShouldBe(3);
-        // book = cleared + uncleared net holds row-by-row.
-        operatingTrust.Uncleared.ShouldBe(operatingTrust.Book - operatingTrust.Cleared);
+        // Golden-locked book (M1/M4 = 248,930.14): exercises the SQL book sum, not just the C# subtraction.
+        operatingTrust.Book.ShouldBe(248_930.14m);
     }
 }
