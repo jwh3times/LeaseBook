@@ -7,6 +7,7 @@ using LeaseBook.Web.Auth;
 using LeaseBook.Web.Reporting;
 using LeaseBook.Web.Seeding;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Npgsql;
 using Shouldly;
 
@@ -61,6 +62,11 @@ public sealed class StatementDeliveryTests(PostgresFixture fixture)
     /// TDD tie-out gate test (spec §4.1 — "non-zero variance blocks issuance").
     /// An unbalanced view must throw <see cref="StatementNotBalancedException"/> before any
     /// artifact is written or any delivery record is created.
+    /// <para>
+    /// Empirical no-write probe: after the throw, a raw SQL COUNT on <c>statement_deliveries</c>
+    /// (app role, SET LOCAL app.org_id) must return 0 for the unique owner id used in this test.
+    /// This test will FAIL if a future edit adds a speculative DB write before the gate.
+    /// </para>
     /// </summary>
     [Fact]
     public async Task Delivery_unbalanced_view_throws_and_writes_no_record_or_artifact()
@@ -71,7 +77,8 @@ public sealed class StatementDeliveryTests(PostgresFixture fixture)
         using var scope = fixture.Api.Services.CreateScope();
         var delivery = scope.ServiceProvider.GetRequiredService<IStatementDelivery>();
 
-        // Use a unique owner id so any accidental insert would be detectable by query if needed.
+        // Use a unique owner id so the COUNT probe is unambiguous — no other test can produce a
+        // row for this id (even if the gate regresses in a concurrent test run, uniqueness isolates).
         var uniqueOwnerId = Guid.NewGuid();
         var unbalancedView = BuildUnbalancedViewWithOwner(uniqueOwnerId);
 
@@ -82,9 +89,36 @@ public sealed class StatementDeliveryTests(PostgresFixture fixture)
         ex.OwnerId.ShouldBe(uniqueOwnerId);
         ex.Variance.ShouldBe(100.00m);
 
-        // Primary assertion: StatementNotBalancedException was thrown — this is the gate.
-        // The absence of a DB row is proved structurally: LocalStatementDelivery throws BEFORE
-        // any db.Set<StatementDeliveryRecord>().Add(...) or db.SaveChangesAsync() call.
+        // ── Empirical no-write probe ──────────────────────────────────────────────
+        // Resolve the demo org id (needed to satisfy the RLS policy on statement_deliveries —
+        // FORCE ROW LEVEL SECURITY applies even to the migrator/owner role, so the app role
+        // connection must set app.org_id via SET LOCAL before any SELECT will return rows).
+        await using var migratorDb = fixture.CreateContext(fixture.MigratorConnectionString);
+        var adminUser = migratorDb.Users.FirstOrDefault(u => u.Email == DemoSeeder.AdminEmail);
+        adminUser.ShouldNotBeNull("demo org must be seeded before the probe");
+        var orgId = adminUser!.OrgId;
+
+        // Open an app-role connection (subject to RLS) and set the org context, exactly as the
+        // happy-path test does — same probe pattern.
+        await using var probeConn = new NpgsqlConnection(fixture.AppConnectionString);
+        await probeConn.OpenAsync(ct);
+        await using var tx = await probeConn.BeginTransactionAsync(ct);
+        await using var setOrgCmd = new NpgsqlCommand(
+            "SELECT set_config('app.org_id', @org, true)", probeConn, tx);
+        setOrgCmd.Parameters.AddWithValue("org", orgId.ToString());
+        await setOrgCmd.ExecuteNonQueryAsync(ct);
+
+        // COUNT(*) for the unique owner id — must be 0: the gate threw before any DB write.
+        await using var countCmd = new NpgsqlCommand(
+            "SELECT COUNT(*) FROM statement_deliveries WHERE owner_id = @ownerId",
+            probeConn, tx);
+        countCmd.Parameters.AddWithValue("ownerId", uniqueOwnerId);
+        var count = (long)(await countCmd.ExecuteScalarAsync(ct))!;
+        await tx.RollbackAsync(ct);
+
+        count.ShouldBe(0L,
+            "tie-out gate must not write any delivery record before throwing; " +
+            $"found {count} row(s) for uniqueOwnerId={uniqueOwnerId}");
     }
 
     /// <summary>
@@ -224,6 +258,56 @@ public sealed class StatementDeliveryTests(PostgresFixture fixture)
         response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
     }
 
+    /// <summary>
+    /// Exercises the endpoint's <c>catch (StatementNotBalancedException) → 409</c> mapping.
+    /// <para>
+    /// With real seed data the assembler always produces a balanced view (all golden figures
+    /// reconcile), so 409 is unreachable through a real data path. A WebApplicationFactory
+    /// <c>WithWebHostBuilder</c> override replaces <see cref="IStatementDelivery"/> with a fake
+    /// that unconditionally throws <see cref="StatementNotBalancedException"/>, driving the
+    /// endpoint's catch block empirically through the full HTTP stack.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task Deliver_endpoint_unbalanced_statement_returns_409()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await DemoSeeder.SeedAsync(fixture.Api.Services, ct);
+
+        // Override IStatementDelivery for this test only: throw the exception the endpoint maps
+        // to 409. WithWebHostBuilder creates an isolated factory that does not affect other tests.
+        var throwingFactory = fixture.Api.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<IStatementDelivery>();
+                services.AddScoped<IStatementDelivery>(_ =>
+                    new ThrowingStatementDelivery(DemoIds.O5, 2026, 5, 42.50m));
+            });
+        });
+
+        var client = throwingFactory.CreateClient();
+        await client.PrimeCsrfAsync(ct);
+        var login = await client.PostAsJsonAsync("/api/auth/login",
+            new LoginRequest(DemoSeeder.AdminEmail, DemoSeeder.AdminPassword), ct);
+        login.StatusCode.ShouldBe(HttpStatusCode.OK, "login must succeed to reach the deliver endpoint");
+        await client.PrimeCsrfAsync(ct);
+
+        var url = $"/api/statements/{DemoIds.O5}/deliver" +
+                  "?year=2026&month=5&basis=cash&toEmail=owner%40example.com";
+        var response = await client.PostAsync(url, null, ct);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Conflict,
+            "deliver endpoint must return 409 when IStatementDelivery throws StatementNotBalancedException: " +
+            await response.Content.ReadAsStringAsync(ct));
+
+        // Verify the problem body carries the expected discriminator code so callers can
+        // distinguish this 409 from other conflict responses.
+        var body = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>(ct);
+        body.GetProperty("title").GetString().ShouldBe("statement_not_balanced",
+            "409 problem title must be 'statement_not_balanced'");
+    }
+
     // ─── helpers ──────────────────────────────────────────────────────────────
 
     private async Task<HttpClient> DemoClientAsync(CancellationToken ct)
@@ -315,5 +399,19 @@ public sealed class StatementDeliveryTests(PostgresFixture fixture)
             Ending: 22_640.30m,
             Fiduciary: fiduciary,
             Branding: branding);
+    }
+
+    /// <summary>
+    /// Test double for <see cref="IStatementDelivery"/> used by
+    /// <see cref="Deliver_endpoint_unbalanced_statement_returns_409"/>.
+    /// Unconditionally throws <see cref="StatementNotBalancedException"/> so the endpoint's
+    /// exception→409 mapping is exercised through the full HTTP stack without requiring seed data
+    /// that happens to be unbalanced (the assembler always produces a balanced view for valid owners).
+    /// </summary>
+    private sealed class ThrowingStatementDelivery(
+        Guid ownerId, int year, int month, decimal variance) : IStatementDelivery
+    {
+        public Task<DeliveryResult> DeliverAsync(StatementView view, string toEmail, CancellationToken ct)
+            => throw new StatementNotBalancedException(ownerId, year, month, variance);
     }
 }
