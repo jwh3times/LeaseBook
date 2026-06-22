@@ -74,6 +74,7 @@ builder.Services.AddDirectoryModule();
 builder.Services.AddScoped<LeaseBook.Modules.Directory.Contracts.IChartProvisioner, ChartProvisionerAdapter>();
 builder.Services.AddScoped<LeaseBook.Modules.Directory.Contracts.ITenantFinancials, TenantFinancialsAdapter>();
 builder.Services.AddScoped<LeaseBook.Modules.Directory.Contracts.IOwnerFinancials, OwnerFinancialsAdapter>();
+builder.Services.AddScoped<LeaseBook.Modules.Directory.Contracts.IBankClearanceStatus, BankClearanceStatusAdapter>();
 
 // The reverse seam (M3 / P58): the Accounting ledger composer resolves a tenant's owner/property/unit
 // from the active lease through Directory. Accounting owns the port; the host adapter delegates via ISender.

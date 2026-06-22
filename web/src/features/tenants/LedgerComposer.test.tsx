@@ -184,4 +184,45 @@ describe('LedgerComposer', () => {
       await screen.findByText('Record payment', { selector: '.pf-composer-tag' }),
     ).toBeInTheDocument();
   });
+
+  it('excludes inactive bank accounts from the bank picker', async () => {
+    // The composer calls useBankAccounts(true) → activeOnly=true is sent.
+    // MSW returns only the active bank (simulating the server filter).
+    server.use(
+      http.get('/api/settings/banks', ({ request }) => {
+        const url = new URL(request.url);
+        const activeOnly = url.searchParams.get('activeOnly');
+        const activeBanks = BANKS.filter((b) => (activeOnly === 'true' ? b.isActive : true));
+        return HttpResponse.json(activeBanks);
+      }),
+      http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 })),
+    );
+
+    // Render with an inactive bank that should not appear
+    const inactiveBank = {
+      id: 'inactive1',
+      name: 'Inactive Trust',
+      institution: null,
+      mask: null,
+      purpose: 'trust',
+      isActive: false,
+    };
+
+    // Override BANKS to include the inactive one for this test
+    server.use(
+      http.get('/api/settings/banks', ({ request }) => {
+        const url = new URL(request.url);
+        const activeOnly = url.searchParams.get('activeOnly');
+        const allBanks = [...BANKS, inactiveBank];
+        return HttpResponse.json(activeOnly === 'true' ? BANKS : allBanks);
+      }),
+    );
+
+    renderComposer({ initialMode: 'payment' });
+    await screen.findByText('Record payment', { selector: '.pf-composer-tag' });
+    // Wait for bank options to load
+    expect(await screen.findByText('Operating Trust')).toBeInTheDocument();
+    // The inactive bank must not appear in the picker
+    expect(screen.queryByText('Inactive Trust')).not.toBeInTheDocument();
+  });
 });

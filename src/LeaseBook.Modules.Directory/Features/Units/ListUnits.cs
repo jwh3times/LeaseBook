@@ -1,4 +1,5 @@
 using LeaseBook.Modules.Directory.Domain;
+using LeaseBook.Modules.Directory.Features.Shared;
 using LeaseBook.Modules.Directory.Persistence;
 using LeaseBook.SharedKernel.Cqrs;
 using Microsoft.EntityFrameworkCore;
@@ -19,7 +20,7 @@ internal sealed class ListUnitsHandler(DbContext db) : IQueryHandler<ListUnits, 
     public async Task<IReadOnlyList<UnitRow>> Handle(ListUnits query, CancellationToken ct)
     {
         var units = await db.Set<Unit>().AsNoTracking()
-            .Where(u => u.PropertyId == query.PropertyId && !u.IsSystem)
+            .Where(u => u.PropertyId == query.PropertyId).NotSystem()
             .OrderBy(u => u.Label)
             .ToListAsync(ct);
         return [.. units.Select(UnitRow.From)];

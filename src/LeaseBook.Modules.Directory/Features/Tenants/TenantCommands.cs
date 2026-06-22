@@ -1,5 +1,6 @@
 using FluentValidation;
 using LeaseBook.Modules.Directory.Domain;
+using LeaseBook.Modules.Directory.Features.Shared;
 using LeaseBook.Modules.Directory.Persistence;
 using LeaseBook.SharedKernel;
 using LeaseBook.SharedKernel.Cqrs;
@@ -58,7 +59,7 @@ internal sealed class UpdateTenantHandler(DbContext db) : ICommandHandler<Update
 {
     public async Task<bool> Handle(UpdateTenant command, CancellationToken ct)
     {
-        var tenant = await db.Set<Tenant>().FirstOrDefaultAsync(t => t.Id == command.Id && !t.IsSystem, ct);
+        var tenant = await db.Set<Tenant>().NotSystem().FirstOrDefaultAsync(t => t.Id == command.Id, ct);
         if (tenant is null)
         {
             return false;

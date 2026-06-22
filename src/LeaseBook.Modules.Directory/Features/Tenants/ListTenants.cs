@@ -21,7 +21,7 @@ internal sealed class ListTenantsHandler(DbContext db, ITenantFinancials tenantF
     {
         var page = PageParams.Normalize(query.Page, query.PageSize, query.Q, query.Sort);
 
-        var tenants = db.Set<Tenant>().AsNoTracking().Where(t => !t.IsSystem);
+        var tenants = db.Set<Tenant>().AsNoTracking().NotSystem();
         if (page.Q is { } q)
         {
             var like = q.ToLower();

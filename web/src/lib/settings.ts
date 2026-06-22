@@ -33,14 +33,32 @@ export function useUpdateOrgSettings() {
   });
 }
 
-export function useBankAccounts(): UseQueryResult<BankAccount[]> {
+export function useBankAccounts(activeOnly = false): UseQueryResult<BankAccount[]> {
   return useQuery({
-    queryKey: ['bank-accounts'],
+    queryKey: ['bank-accounts', { activeOnly }],
     queryFn: async () => {
-      const { data, error } = await api.GET('/api/settings/banks');
+      const { data, error } = await api.GET('/api/settings/banks', {
+        params: { query: activeOnly ? { activeOnly: true } : {} },
+      });
       if (error || !data) throw new Error('Failed to load bank accounts');
       return data;
     },
+  });
+}
+
+export function useSetBankAccountActive() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) => {
+      await primeCsrf();
+      const { data, error } = await api.PUT('/api/settings/banks/{id}/active', {
+        params: { path: { id } },
+        body: { isActive },
+      });
+      if (error || !data) throw error ?? new Error('Failed to update the bank account');
+      return data;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['bank-accounts'] }),
   });
 }
 

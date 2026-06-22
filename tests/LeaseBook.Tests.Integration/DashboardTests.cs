@@ -1,3 +1,4 @@
+using LeaseBook.Modules.Accounting.Features.Ledgers;
 using LeaseBook.SharedKernel;
 using LeaseBook.SharedKernel.Cqrs;
 using LeaseBook.SharedKernel.Tenancy;
@@ -31,13 +32,29 @@ public sealed class DashboardTests(PostgresFixture fixture)
         var ct = TestContext.Current.CancellationToken;
         await DemoSeeder.SeedAsync(fixture.Api.Services, ct);
 
-        var dash = await ComposeAsync(DemoSeeder.DemoOrgId, ct);
+        // Inline composition so we can reuse scope's sender/executor for the structural uncleared assertion.
+        await using var scope = fixture.Api.Services.CreateAsyncScope();
+        var executor = scope.ServiceProvider.GetRequiredService<OrgScopedExecutor>();
+        var sender = scope.ServiceProvider.GetRequiredService<ISender>();
+        var service = new DashboardService(sender, new FixedClock(new DateTimeOffset(2026, 6, 15, 0, 0, 0, TimeSpan.Zero)));
+
+        DashboardResponse dash = null!;
+        await executor.RunAsync(DemoSeeder.DemoOrgId, async () => dash = await service.ComposeAsync(ct), ct);
 
         dash.Kpis.TrustTotal.ShouldBe(483_620.69m);
         dash.Kpis.OwnersPayable.ShouldBe(OwnersPayable);
-        dash.Kpis.Uncleared.ShouldBe(0m);          // no register until M4 (P45)
-        dash.Kpis.UnclearedCount.ShouldBe(0);
         dash.Kpis.CollectedMtd.ShouldBe(1_380m);   // June 2026: only the Pryor payment is cash-collected
+
+        // The KPI is the honest sum across bank accounts (not hardcoded) — proven structurally via a
+        // sibling GetBankBalances query (DashboardBankRow carries UnclearedCount, not Uncleared dollar net).
+        BankBalancesResponse bal = null!;
+        await executor.RunAsync(DemoSeeder.DemoOrgId,
+            async () => bal = await sender.Query(new GetBankBalances(), ct), ct);
+        dash.Kpis.Uncleared.ShouldBe(bal.Rows.Sum(r => r.Uncleared));
+        dash.Kpis.UnclearedCount.ShouldBe(bal.Rows.Sum(r => r.UnclearedCount));
+        // Golden-locked: Operating Trust has 3 uncleared items; the dashboard surfaces a non-zero total now.
+        dash.Banks.Rows.Single(b => b.Name == "Operating Trust").UnclearedCount.ShouldBe(3);
+        dash.Kpis.UnclearedCount.ShouldBeGreaterThan(0);
 
         // The banks shown sum to the trustTotal KPI (the hero ties to trustTotal).
         dash.Banks.Rows.Sum(b => b.Book).ShouldBe(dash.Kpis.TrustTotal);
