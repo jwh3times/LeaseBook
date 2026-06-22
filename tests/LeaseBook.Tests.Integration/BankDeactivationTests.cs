@@ -1,4 +1,6 @@
+using LeaseBook.Modules.Accounting.Contracts;
 using LeaseBook.Modules.Directory.Features.BankAccounts;
+using LeaseBook.SharedKernel;
 using LeaseBook.SharedKernel.Cqrs;
 using LeaseBook.SharedKernel.Tenancy;
 using LeaseBook.Tests.Common;
@@ -6,6 +8,8 @@ using LeaseBook.Tests.Integration.Fixtures;
 using LeaseBook.Web.Seeding;
 using Microsoft.Extensions.DependencyInjection;
 using Shouldly;
+
+using OrgEntity = LeaseBook.Web.Persistence.Org;
 
 namespace LeaseBook.Tests.Integration;
 
@@ -37,13 +41,18 @@ public sealed class BankDeactivationTests(PostgresFixture fixture)
     public async Task A_fully_cleared_bank_can_be_deactivated_and_reactivated_and_is_hidden_from_active_only()
     {
         var ct = TestContext.Current.CancellationToken;
-        await DemoSeeder.SeedAsync(fixture.Api.Services, ct);
+        // Use a fresh org (not the shared demo org) so the created bank never inflates the demo
+        // bank-account count SeederTests asserts — the fixture DB persists across tests in the collection.
+        var orgId = await NewOrgAsync(ct);
         await using var scope = fixture.Api.Services.CreateAsyncScope();
         var executor = scope.ServiceProvider.GetRequiredService<OrgScopedExecutor>();
         var sender = scope.ServiceProvider.GetRequiredService<ISender>();
 
-        await executor.RunAsync(DemoSeeder.DemoOrgId, async () =>
+        await executor.RunAsync(orgId, async () =>
         {
+            // Provision the chart so CreateBankAccount can add its ledger account.
+            await scope.ServiceProvider.GetRequiredService<IChartOfAccounts>().ProvisionAsync([], ct);
+
             // Create a fresh bank with no journal lines → zero uncleared → deactivatable.
             var created = await sender.Send(new CreateBankAccount("Old Reserve", null, null, "operating"), ct);
 
@@ -76,5 +85,14 @@ public sealed class BankDeactivationTests(PostgresFixture fixture)
             var result = await sender.Send(new SetBankAccountActive(Guid.NewGuid(), false), ct);
             result.Outcome.ShouldBe(SetActiveOutcome.NotFound);
         }, ct);
+    }
+
+    private async Task<Guid> NewOrgAsync(CancellationToken ct)
+    {
+        var orgId = UuidV7.NewId();
+        await using var migratorDb = fixture.CreateContext(fixture.MigratorConnectionString);
+        migratorDb.Orgs.Add(new OrgEntity { Id = orgId, Name = $"Deactivation Org {orgId:N}" });
+        await migratorDb.SaveChangesAsync(ct);
+        return orgId;
     }
 }
