@@ -21,7 +21,7 @@ internal sealed class ListOwnersHandler(DbContext db, IOwnerFinancials ownerFina
         var page = PageParams.Normalize(query.Page, query.PageSize, query.Q, query.Sort);
 
         // Directory data via EF LINQ — the org filter applies for free; system rows excluded (P40/M2-E2).
-        var owners = db.Set<Owner>().AsNoTracking().Where(o => !o.IsSystem);
+        var owners = db.Set<Owner>().AsNoTracking().NotSystem();
         if (page.Q is { } q)
         {
             var like = q.ToLower();

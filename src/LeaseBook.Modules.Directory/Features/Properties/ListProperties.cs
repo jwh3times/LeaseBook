@@ -18,7 +18,7 @@ internal sealed class ListPropertiesHandler(DbContext db) : IQueryHandler<ListPr
     {
         var page = PageParams.Normalize(query.Page, query.PageSize, query.Q, query.Sort);
 
-        var properties = db.Set<Property>().AsNoTracking().Where(p => !p.IsSystem);
+        var properties = db.Set<Property>().AsNoTracking().NotSystem();
         if (page.Q is { } q)
         {
             var like = q.ToLower();

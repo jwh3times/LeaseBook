@@ -8,7 +8,7 @@ namespace LeaseBook.Modules.Directory.Domain;
 /// and the statement-only ids (<c>TOkonkwo</c>, <c>TLiu</c>) are materialized as <see cref="IsSystem"/>
 /// tenant rows purely to satisfy those FKs (§C.2) — they never appear in lists/search/CRUD.
 /// </summary>
-public sealed class Tenant : IOrgScoped
+public sealed class Tenant : IOrgScoped, ISystemFlagged
 {
     public Guid Id { get; set; }
 

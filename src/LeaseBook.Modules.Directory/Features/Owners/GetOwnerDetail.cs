@@ -1,6 +1,7 @@
 using LeaseBook.Modules.Directory.Contracts;
 using LeaseBook.Modules.Directory.Domain;
 using LeaseBook.Modules.Directory.Features.Properties;
+using LeaseBook.Modules.Directory.Features.Shared;
 using LeaseBook.SharedKernel.Cqrs;
 using Microsoft.EntityFrameworkCore;
 
@@ -21,7 +22,7 @@ internal sealed class GetOwnerDetailHandler(DbContext db, IOwnerFinancials owner
     public async Task<OwnerDetail?> Handle(GetOwnerDetail query, CancellationToken ct)
     {
         var owner = await db.Set<Owner>().AsNoTracking()
-            .FirstOrDefaultAsync(o => o.Id == query.Id && !o.IsSystem, ct);
+            .NotSystem().FirstOrDefaultAsync(o => o.Id == query.Id, ct);
         if (owner is null)
         {
             return null;
