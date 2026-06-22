@@ -10,8 +10,8 @@ namespace LeaseBook.Modules.Directory.Features.BankAccounts;
 
 /// <summary>
 /// Creates a bank account and provisions the matching chart-of-accounts account through the
-/// cross-module port (§C.8 / P49). No delete in M2 — a bank with journal history cannot be removed
-/// (deactivation is M4).
+/// cross-module port (§C.8 / P49). No hard delete — a bank with journal history cannot be removed;
+/// deactivation: see SetBankAccountActive.
 /// </summary>
 public sealed record CreateBankAccount(string Name, string? Institution, string? Mask, string Purpose)
     : ICommand<BankAccountResponse>;

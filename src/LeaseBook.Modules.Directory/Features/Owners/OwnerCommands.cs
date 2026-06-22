@@ -66,7 +66,7 @@ internal sealed class UpdateOwnerHandler(DbContext db) : ICommandHandler<UpdateO
 {
     public async Task<bool> Handle(UpdateOwner command, CancellationToken ct)
     {
-        var owner = await db.Set<Owner>().FirstOrDefaultAsync(o => o.Id == command.Id && !o.IsSystem, ct);
+        var owner = await db.Set<Owner>().NotSystem().FirstOrDefaultAsync(o => o.Id == command.Id, ct);
         if (owner is null)
         {
             return false;

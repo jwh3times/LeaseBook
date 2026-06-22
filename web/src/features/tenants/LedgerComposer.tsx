@@ -48,7 +48,7 @@ export function LedgerComposer({ tenantId, onPosted, initialMode }: LedgerCompos
   const sourceRef = useRef('');
   const interactions = useRef(1);
 
-  const banks = useBankAccounts();
+  const banks = useBankAccounts(true);
   const open = mode !== null;
   const activeCategory = mode === 'payment' ? 'Payment' : category;
   const needsBank = categoryNeedsBank(activeCategory);

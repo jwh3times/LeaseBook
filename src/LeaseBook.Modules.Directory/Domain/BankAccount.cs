@@ -5,8 +5,9 @@ namespace LeaseBook.Modules.Directory.Domain;
 /// <summary>
 /// A real-world bank account the PM holds (trust, deposit or operating; §C.1). Creating one provisions
 /// the matching chart-of-accounts account in Accounting through the WP-02 cross-module port (P49). The
-/// journal's <c>bank_account_id</c> dimension FKs here (P38). No delete in M2 — an account with journal
-/// history cannot be removed; <see cref="IsActive"/> deactivation lands in M4.
+/// journal's <c>bank_account_id</c> dimension FKs here (P38). No hard delete — an account with journal
+/// history is retired via <see cref="IsActive"/> deactivation (SetBankAccountActive), which is blocked
+/// while uncleared items remain.
 /// </summary>
 public sealed class BankAccount : IOrgScoped
 {
@@ -23,7 +24,7 @@ public sealed class BankAccount : IOrgScoped
 
     public BankPurpose Purpose { get; set; }
 
-    /// <summary>M4 deactivation flag. M2 only ever creates active accounts.</summary>
+    /// <summary>Active flag. New accounts are always active; deactivation: see SetBankAccountActive.</summary>
     public bool IsActive { get; set; } = true;
 
     public DateTime CreatedAt { get; set; }

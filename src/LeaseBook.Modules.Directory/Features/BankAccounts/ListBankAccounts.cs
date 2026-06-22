@@ -5,8 +5,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace LeaseBook.Modules.Directory.Features.BankAccounts;
 
-/// <summary>All bank accounts for the org (§C.4), newest first.</summary>
-public sealed record ListBankAccounts : IQuery<IReadOnlyList<BankAccountResponse>>;
+/// <summary>All bank accounts for the org (§C.4), newest first. Pass <c>ActiveOnly: true</c> to restrict
+/// to active accounts only (e.g. for posting pickers).</summary>
+public sealed record ListBankAccounts(bool ActiveOnly = false) : IQuery<IReadOnlyList<BankAccountResponse>>;
 
 /// <summary>One bank account by id (§C.4); null → 404 at the endpoint.</summary>
 public sealed record GetBankAccount(Guid Id) : IQuery<BankAccountResponse?>;
@@ -23,9 +24,13 @@ internal sealed class ListBankAccountsHandler(DbContext db)
 {
     public async Task<IReadOnlyList<BankAccountResponse>> Handle(ListBankAccounts query, CancellationToken ct)
     {
-        var rows = await db.Set<BankAccount>().AsNoTracking()
-            .OrderByDescending(b => b.CreatedAt)
-            .ToListAsync(ct);
+        var banks = db.Set<BankAccount>().AsNoTracking();
+        if (query.ActiveOnly)
+        {
+            banks = banks.Where(b => b.IsActive);
+        }
+
+        var rows = await banks.OrderByDescending(b => b.CreatedAt).ToListAsync(ct);
         return [.. rows.Select(BankAccountResponse.From)];
     }
 }

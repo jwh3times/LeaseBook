@@ -11,8 +11,8 @@ const DASH = {
   kpis: {
     trustTotal: 483620.69,
     ownersPayable: 111967.4,
-    uncleared: 0,
-    unclearedCount: 0,
+    uncleared: 250.0,
+    unclearedCount: 3,
     collectedMtd: 1380,
     collectedTarget: 28000,
     vacancy: 13,
@@ -40,9 +40,9 @@ const DASH = {
   },
   banks: {
     rows: [
-      { bankAccountId: 'b1', name: 'Operating Trust', book: 248930.14 },
-      { bankAccountId: 'b2', name: 'Security Deposit Trust', book: 196450 },
-      { bankAccountId: 'b3', name: 'PM Operating', book: 38240.55 },
+      { bankAccountId: 'b1', name: 'Operating Trust', book: 248930.14, unclearedCount: 3 },
+      { bankAccountId: 'b2', name: 'Security Deposit Trust', book: 196450, unclearedCount: 0 },
+      { bankAccountId: 'b3', name: 'PM Operating', book: 38240.55, unclearedCount: 0 },
     ],
   },
   actionItems: [
@@ -89,6 +89,13 @@ describe('DashboardPage', () => {
     // Trust accounts and needs-attention items render.
     expect(screen.getByText('Operating Trust')).toBeInTheDocument();
     expect(screen.getByText('Deposits awaiting application')).toBeInTheDocument();
+
+    // Per-account uncleared count renders on the bank summary card.
+    expect(screen.getByText('3 uncleared')).toBeInTheDocument();
+    expect(screen.getAllByText('Reconciled')).toHaveLength(2);
+
+    // The "Uncleared" StatCard shows the non-zero count badge.
+    expect(screen.getByText('3 items')).toBeInTheDocument();
   });
 
   it('navigates to an owner from the hero', async () => {

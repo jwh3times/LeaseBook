@@ -13,18 +13,23 @@ retrospectives live in `private/planning/` (`m{N}_plan.md` / `m{N}_retro.md`).
 **Progress (the `private/TODO.md` checkboxes and `private/planning/*_retro.md` are the live source of
 truth — consult them, don't trust a summary):**
 
-- **M0–M3 are complete and merged to `main`** — built and tested: foundations (solution, RLS, auth,
+- **M0–M4 are complete and merged to `main`** — built and tested: foundations (solution, RLS, auth,
   CI, design-system port), the trust-accounting engine (double-entry journal, posting-template
   catalog, dual-basis ledgers, invariant/property/golden-file harness), the Directory module
-  (owners/properties/units/tenants/leases-lite, index views, ⌘K palette, dashboard v1), and the
-  tenant ledger action hub (inline composer, deposit apply, void/reverse, audit drawer).
-- **M4 (Banking & Reconciliation) is the current frontier** — not yet planned (no `m4_plan.md` yet).
-  Its first task is the carried-forward org-aware composite `(org_id, id)` FK rework on the journal
-  dimensions (ADR-008 revisit; M4 is the first milestone to reopen the journal schema since M2).
+  (owners/properties/units/tenants/leases-lite, index views, ⌘K palette, dashboard v1), the tenant
+  ledger action hub (inline composer, deposit apply, void/reverse, audit drawer), and **Banking &
+  Reconciliation** (bank register + clearance over the immutable journal, reconcile-in-place → $0 →
+  finalize → per-account lock + immutable report, CSV statement import + auto-match + dedup, and the
+  composite `(org_id, id)` journal-dimension FKs from the ADR-008 revisit).
+- **M5 (Owner Statements & Reporting) is the current frontier.** An **M5-prep close-out pass** first
+  cleared five carried M0–M4 loose ends — the dashboard uncleared KPI wired to the live register, the
+  `is_system` exclusion behind a `NotSystem()` funnel + behavioral test, guarded bank-account
+  deactivation, the project subagents in `.claude/agents/`, and the Node pin — leaving the M5 statement
+  engine + report catalog as the next build (see `private/TODO.md` §M5).
 - **Operator-gated remainder of M0** (deferred — not engineering work): Azure OIDC/ACR/Container App
   deploy wiring, live Key Vault + managed identity, and the first PITR drill (M8 schedules it).
-- Modules `Banking`, `Reporting`, `Operations`, and `Payments` are scaffolded shells awaiting their
-  milestones (M4–M8 / Phase 2); `Migrator` is a placeholder (M7).
+- The `Banking` module is built (M4); `Reporting`, `Operations`, and `Payments` are scaffolded shells
+  awaiting their milestones (M5–M8 / Phase 2); `Migrator` is a placeholder (M7).
 
 The `private/` directory is **gitignored (confidential, local-only)** and will be absent in a
 public clone. It holds everything not meant for the public repo:
@@ -40,6 +45,29 @@ goes in `private/`, never in committed files. This file is committed, so it carr
 engineering constraints, not the business specifics behind them. If `private/` is absent in
 your environment, ask the user for the build plan before starting milestone work rather than
 reconstructing it from this summary.
+
+## Ground Rules — verify, don't assume
+
+- **Don't build on unverified assumptions — check or ask first.** When a task depends on a fact you
+  can't confirm from the code, the docs, or a quick check — especially **trust-accounting / domain
+  facts** (an NCREC 58A .0116 recordkeeping rule, how a basis treats an event, a posting template's
+  per-basis lines, the prototype's golden figures, the demo seed's *actual* numbers, EF/RLS/posting
+  runtime behavior) — stop and verify before designing against a guess. Ground truth here is almost
+  always *obtainable locally*, so get it **before** writing the implementation, not as a check deferred
+  to the end:
+  - scope/intent → `private/LeaseBook_PRD_v1.0.md` (scope authority) and `private/claude_design_files/`
+    (design-system + screen source of truth);
+  - what's actually built or decided → the `private/TODO.md` checkboxes and `private/planning/*_retro.md`
+    are the **live source of truth — consult them, never a prose summary** (including the "Repository
+    state" summary in this very file, which lags reality between milestones);
+  - real figures/behavior → run `check-invariants` and the golden / invariant / property suites, or
+    query the seeded demo org; read the migration / RLS-helper / posting-template code for actual
+    behavior.
+  Designing a structure to "discover" an unknown at runtime is still building on an assumption — verify
+  the discovery against real data (a real journal replay, the golden dataset).
+- A sensible default for a genuinely low-stakes choice is fine — state it and proceed. The bar: would
+  being wrong force a rework, move a golden figure, or ship something fiduciarily incorrect? If yes,
+  it's load-bearing — verify or ask.
 
 ## Commands
 

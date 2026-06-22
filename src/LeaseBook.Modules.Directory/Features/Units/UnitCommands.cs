@@ -58,7 +58,7 @@ internal sealed class UpdateUnitHandler(DbContext db) : ICommandHandler<UpdateUn
 {
     public async Task<bool> Handle(UpdateUnit command, CancellationToken ct)
     {
-        var unit = await db.Set<Unit>().FirstOrDefaultAsync(u => u.Id == command.Id && !u.IsSystem, ct);
+        var unit = await db.Set<Unit>().NotSystem().FirstOrDefaultAsync(u => u.Id == command.Id, ct);
         if (unit is null)
         {
             return false;
