@@ -18,6 +18,15 @@ const ORG = {
   logoBlobRef: null,
 };
 
+const ACTIVE_BANK = {
+  id: 'b1',
+  name: 'Operating Trust',
+  institution: 'First Citizens',
+  mask: '4021',
+  purpose: 'trust',
+  isActive: true,
+};
+
 function renderSettings() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
@@ -53,25 +62,62 @@ describe('SettingsPage', () => {
     );
   });
 
-  it('lists trust bank accounts', async () => {
+  it('lists trust bank accounts with status badge', async () => {
     server.use(
       http.get('/api/settings/org', () => HttpResponse.json(ORG)),
-      http.get('/api/settings/banks', () =>
-        HttpResponse.json([
-          {
-            id: 'b1',
-            name: 'Operating Trust',
-            institution: 'First Citizens',
-            mask: '4021',
-            purpose: 'trust',
-            isActive: true,
-          },
-        ]),
-      ),
+      http.get('/api/settings/banks', () => HttpResponse.json([ACTIVE_BANK])),
     );
     renderSettings();
     expect(await screen.findByText('Operating Trust')).toBeInTheDocument();
     expect(screen.getByText('••4021')).toBeInTheDocument();
+    expect(screen.getByText('Active')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Deactivate' })).toBeInTheDocument();
+  });
+
+  it('deactivates a bank account and flips the badge to Inactive', async () => {
+    server.use(
+      http.get('/api/settings/org', () => HttpResponse.json(ORG)),
+      http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 })),
+      http.get('/api/settings/banks', () => HttpResponse.json([ACTIVE_BANK])),
+      http.put('/api/settings/banks/:id/active', () =>
+        HttpResponse.json({ ...ACTIVE_BANK, isActive: false }),
+      ),
+    );
+
+    renderSettings();
+    await screen.findByText('Operating Trust');
+
+    // After clicking Deactivate the cache is invalidated — return inactive bank on refetch
+    server.use(
+      http.get('/api/settings/banks', () =>
+        HttpResponse.json([{ ...ACTIVE_BANK, isActive: false }]),
+      ),
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: 'Deactivate' }));
+    expect(await screen.findByText('Inactive')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Reactivate' })).toBeInTheDocument();
+  });
+
+  it('shows inline 409 error when deactivation is blocked', async () => {
+    server.use(
+      http.get('/api/settings/org', () => HttpResponse.json(ORG)),
+      http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 })),
+      http.get('/api/settings/banks', () => HttpResponse.json([ACTIVE_BANK])),
+      http.put('/api/settings/banks/:id/active', () =>
+        HttpResponse.json({ detail: 'uncleared items' }, { status: 409 }),
+      ),
+    );
+
+    renderSettings();
+    await screen.findByText('Operating Trust');
+    await userEvent.click(screen.getByRole('button', { name: 'Deactivate' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      /clear or reconcile outstanding items/i,
+    );
+    // Badge stays Active
+    expect(screen.getByText('Active')).toBeInTheDocument();
   });
 
   beforeEach(() => {
