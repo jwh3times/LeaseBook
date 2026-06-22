@@ -1,0 +1,477 @@
+/* Reports module (M5 WP-06) — ported from private/claude_design_files/screen-reports.jsx and
+   screen-owner.jsx, against live endpoints. Tokens come from design/tokens.css. */
+
+/* ---- Report catalog / builder layout --------------------------------------- */
+
+.pf-reports-grid {
+  display: grid;
+  grid-template-columns: 360px 1fr;
+  gap: var(--gap);
+  align-items: start;
+}
+
+.pf-cat-tabs {
+  display: flex;
+  gap: 6px;
+  background: var(--surface-3, var(--surface-2));
+  padding: 4px;
+  border-radius: 11px;
+  margin-bottom: var(--gap);
+}
+
+.pf-cat-tab {
+  flex: 1;
+  border: 0;
+  background: transparent;
+  color: var(--text-2);
+  font-weight: 600;
+  font-size: 12px;
+  padding: 7px 6px;
+  border-radius: 8px;
+  transition: 0.13s;
+  cursor: pointer;
+}
+
+.pf-cat-tab:hover {
+  color: var(--text);
+}
+
+.pf-cat-tab.active {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
+}
+
+.pf-report-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pf-report-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  transition: 0.14s;
+  box-shadow: var(--shadow-sm);
+  width: 100%;
+  cursor: pointer;
+}
+
+.pf-report-card:hover {
+  border-color: var(--accent-line);
+}
+
+.pf-report-card.active {
+  border-color: var(--accent);
+  box-shadow:
+    0 0 0 1px var(--accent),
+    var(--shadow-sm);
+}
+
+.pf-report-ic {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  flex: none;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.pf-report-card.active .pf-report-ic {
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+
+/* ---- Builder panel --------------------------------------------------------- */
+
+.pf-builder {
+  position: sticky;
+  top: 0;
+  overflow: hidden;
+}
+
+.pf-builder-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  padding: 14px var(--card-pad);
+  border-bottom: 1px solid var(--border);
+}
+
+.pf-fchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
+  padding: 7px 12px;
+  font-size: 12.5px;
+  color: var(--text);
+  transition: 0.13s;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.pf-fchip:hover {
+  border-color: var(--accent);
+  background: var(--surface);
+}
+
+.pf-fchip.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.pf-fchip-label {
+  color: var(--text-3);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.pf-fchip-value {
+  font-weight: 600;
+}
+
+/* Basis toggle row in builder */
+.pf-basis-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px var(--card-pad);
+  border-bottom: 1px solid var(--border);
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+
+.pf-basis-btn {
+  padding: 5px 12px;
+  border-radius: 7px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 0.12s;
+}
+
+.pf-basis-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-fg);
+}
+
+/* ---- Preview area ---------------------------------------------------------- */
+
+.pf-builder-preview {
+  padding: 0;
+}
+
+.pf-preview-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px var(--card-pad);
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+
+.pf-preview-scroll {
+  overflow-x: auto;
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+/* ---- Filter dropdown (period picker) --------------------------------------- */
+
+.pf-filter-popover {
+  position: absolute;
+  z-index: 200;
+  top: calc(100% + 6px);
+  left: 0;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 14px 16px;
+  min-width: 220px;
+}
+
+.pf-filter-wrap {
+  position: relative;
+  display: inline-block;
+}
+
+/* ---- Owner statement layout ------------------------------------------------ */
+
+.pf-stmt-layout {
+  display: grid;
+  grid-template-columns: 1.7fr 1fr;
+  gap: var(--gap);
+  align-items: start;
+}
+
+.pf-stmt-doc {
+  padding: 0;
+  overflow: hidden;
+}
+
+.pf-stmt-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 24px var(--card-pad);
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.pf-stmt-net {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.pf-stmt-begin,
+.pf-stmt-end {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px var(--card-pad);
+  font-weight: 650;
+}
+
+.pf-stmt-begin {
+  color: var(--text-2);
+  border-bottom: 1px solid var(--border);
+}
+
+.pf-stmt-end {
+  background: var(--accent-soft);
+  border-top: 1px solid var(--accent-line);
+}
+
+.pf-stmt-end > span {
+  font-weight: 700;
+  font-size: 15px;
+}
+
+/* Statement sections */
+.pf-stmt-section {
+  border-bottom: 1px solid var(--border);
+  padding: 6px 0;
+}
+
+.pf-stmt-sectionhd {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px var(--card-pad) 8px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.pf-stmt-sectionhd .pf-money {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.pf-stmt-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 9px var(--card-pad);
+  font-size: 13.5px;
+}
+
+.pf-stmt-line.dim {
+  color: var(--text-2);
+  border-bottom: 1px solid var(--border);
+}
+
+.pf-stmt-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  color: var(--accent-strong);
+  font-weight: 550;
+}
+
+/* Fiduciary sidebar */
+.pf-fiduciary {
+  padding: var(--card-pad);
+  border-color: var(--accent-line);
+  background: linear-gradient(180deg, var(--accent-soft), var(--surface) 70%);
+}
+
+.pf-fid-hd {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--accent-strong);
+  margin-bottom: 12px;
+  font-size: 14px;
+}
+
+.pf-fid-hd b {
+  font-weight: 700;
+}
+
+.pf-fid-checks {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pf-fid-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
+.pf-fid-check-icon {
+  flex: none;
+  margin-top: 1px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+}
+
+.pf-fid-check-icon.pass {
+  background: var(--pos-soft);
+  color: var(--pos);
+}
+
+.pf-fid-check-icon.fail {
+  background: var(--warn-soft, var(--surface-2));
+  color: var(--warn);
+}
+
+.pf-fid-check b {
+  color: var(--text);
+  font-weight: 650;
+}
+
+/* Reconciles-to card */
+.pf-bankrow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  text-align: left;
+  transition: 0.13s;
+  cursor: pointer;
+}
+
+.pf-bankrow:hover {
+  border-color: var(--accent-line);
+}
+
+.pf-recon-check {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 12.5px;
+  color: var(--pos);
+  background: var(--pos-soft);
+  border-radius: 9px;
+  padding: 11px 13px;
+  font-weight: 550;
+}
+
+.pf-recon-check b {
+  font-weight: 700;
+}
+
+.pf-recon-warn {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 12.5px;
+  color: var(--warn);
+  background: var(--warn-soft, var(--surface-2));
+  border-radius: 9px;
+  padding: 11px 13px;
+  font-weight: 550;
+}
+
+/* Deliver action area */
+.pf-deliver-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.pf-deliver-status {
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.pf-deliver-status.ok {
+  color: var(--pos);
+}
+
+.pf-deliver-status.error {
+  color: var(--neg);
+}
+
+/* Period picker */
+.pf-period-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.pf-period-label {
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-3);
+  margin-bottom: 4px;
+}
+
+/* Responsive */
+@media (max-width: 1080px) {
+  .pf-reports-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .pf-builder {
+    position: static;
+  }
+
+  .pf-stmt-layout {
+    grid-template-columns: 1fr;
+  }
+}
