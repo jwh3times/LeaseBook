@@ -1,0 +1,4 @@
+Unit ID,Property ID,Unit,Market Rent,Status
+U-C1,P-C1,#1A,1600.00,Occupied
+U-C2,P-C1,#1B,1500.00,Occupied
+U-C3,P-C2,#2A,1750.00,Occupied

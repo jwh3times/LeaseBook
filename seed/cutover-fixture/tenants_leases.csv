@@ -1,0 +1,4 @@
+Tenant ID,Unit ID,Tenant Name,Lease Start,Lease End,Rent,Deposit,Status
+T-C1,U-C1,Morgan Ellis,2025-04-01,2026-03-31,1600.00,1500.00,active
+T-C2,U-C2,Sam Kowalski,2025-07-01,2026-06-30,1500.00,1250.00,active
+T-C3,U-C3,Jordan Rivera,2025-09-01,2026-08-31,1750.00,1750.00,active

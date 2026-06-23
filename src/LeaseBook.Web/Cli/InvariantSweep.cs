@@ -47,7 +47,7 @@ public static class InvariantSweep
         return 0;
     }
 
-    // --org demo | --org <guid> | --all (default).
+    // --org demo | --org cutover | --org <guid> | --all (default).
     private static async Task<IReadOnlyList<Guid>> ResolveOrgIdsAsync(IServiceProvider services, string[] args)
     {
         var orgFlag = Array.IndexOf(args, "--org");
@@ -59,9 +59,14 @@ public static class InvariantSweep
                 return [DemoSeeder.DemoOrgId];
             }
 
+            if (string.Equals(value, "cutover", StringComparison.OrdinalIgnoreCase))
+            {
+                return [CutoverSeeder.CutoverOrgId];
+            }
+
             return Guid.TryParse(value, out var id)
                 ? [id]
-                : throw new ArgumentException($"--org expects 'demo' or a GUID, got '{value}'.");
+                : throw new ArgumentException($"--org expects 'demo', 'cutover', or a GUID, got '{value}'.");
         }
 
         await using var scope = services.CreateAsyncScope();
