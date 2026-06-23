@@ -52,5 +52,6 @@ test('operations page tab bar switches screens', async ({ page }) => {
 
   // Switch to history tab.
   await page.getByRole('button', { name: /run history/i }).click();
-  await expect(page.getByText('Run history')).toBeVisible();
+  // Use heading role to avoid strict-mode conflict with the tab button that also says "Run history".
+  await expect(page.getByRole('heading', { name: 'Run history', exact: true })).toBeVisible();
 });

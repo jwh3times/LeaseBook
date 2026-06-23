@@ -178,13 +178,17 @@ Operations never references another module's entity or event types.
 
 **Writes (posting):**
 
-- Accounting exposes a **public** `PostEventBatch` request (internal handler) that loops
-  `AccountingEventService` over a batch of events within the ambient RLS transaction.
-- Operations dispatches it through an `IBatchPosting` port + host adapter. The port speaks Operations
-  primitives (target id, amount, date, period, kind); **the adapter** translates intent into Accounting
-  event records (`RentCharged`, `FeeCharged`, `ManagementFeeAssessed`, `OwnerDisbursed`) — so Operations
-  stays free of Accounting's event types. This is the write-direction analogue of M5's read-direction
-  ADR-016 and is recorded in ADR-019.
+- _Implementation refinement (ground-truth, WP-7):_ NO new `PostEventBatch` command was introduced.
+  The host `BatchPostingAdapter` (implementing `IBatchPosting`) loops the **existing public**
+  `IAccountingEvents.PostAsync` for each intent within the ambient RLS transaction — one call per
+  target, catching per-item exceptions (`DuplicateSourceRefException`, `AccountPeriodLockedException`,
+  `PeriodClosedException`) to record individual item outcomes. This is simpler than a new batch
+  command and preserves the existing per-event exception contract.
+- Operations dispatches writes through the `IBatchPosting` port + `BatchPostingAdapter` host adapter.
+  The port speaks Operations primitives (target id, amount, date, period, kind); **the adapter**
+  translates intent into the correct Accounting event types (`RentCharged`, `FeeCharged`,
+  `ManagementFeeAssessed`, `OwnerDisbursed`) — Operations stays free of Accounting's event types.
+  This is the write-direction analogue of M5's read-direction ADR-016, recorded in ADR-019.
 
 ## 7. Idempotency, atomicity & locked periods
 
@@ -192,9 +196,14 @@ Operations never references another module's entity or event types.
   `bulk_runs`/`bulk_run_items` rows and dispatches `PostEventBatch`; Accounting writes the journal
   entries; all commit together or roll back together. A batch is all-or-nothing.
 - **Idempotency grain:** per `(target, period, run_type)` via a deterministic `source_ref`. The preview
-  marks each target as already-done vs pending; confirm posts only pending targets. A **partial unique
-  index** on the journal's `source_ref` is the backstop guaranteeing no double-post even under
-  concurrent confirms.
+  marks each target as already-done vs pending; confirm posts only pending targets.
+  _Implementation refinement (ground-truth, WP-7):_ M6 does NOT add a new partial unique index. It
+  **reuses the EXISTING `(org_id, source_ref)` partial unique index** on `journal_entries` (introduced
+  in an earlier milestone) and the existing `DuplicateSourceRefException` that fires when the index
+  rejects a duplicate. M6's contribution is the **source_ref key convention** for bulk runs:
+  `{runType}:{year}-{month:00}:{targetKind}={targetId}` (e.g. `rent:2026-05:lease=<leaseId>`,
+  `disbursement:2026-05:owner=<ownerId>`). The index is the backstop guaranteeing no double-post
+  even under concurrent confirms.
 - **Locked periods:** posting into a reconcile-finalized period is rejected by the existing
   `IPostingLock`; the run surfaces it as an exception row, not a crash.
 
