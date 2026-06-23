@@ -118,7 +118,8 @@ public sealed class OperationsEndpoints : IEndpointModule
                     .ToListAsync(ct);
 
                 return TypedResults.Ok(new RunHistoryResponse(runs));
-            });
+            })
+            .Produces<RunHistoryResponse>();
 
         // GET /api/operations/runs/{id} — single run header + its items.
         group.MapGet("/runs/{id:guid}",

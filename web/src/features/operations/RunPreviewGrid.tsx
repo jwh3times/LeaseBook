@@ -22,7 +22,7 @@ export interface RunPreviewGridProps {
   onToggleAll?: () => void;
 }
 
-const EXCLUDED_LABELS: Record<string, string> = {
+export const EXCLUDED_LABELS: Record<string, string> = {
   non_positive_equity: 'Non-positive equity',
   below_reserve_floor: 'Below reserve floor',
   owner_not_found: 'Owner not found',
@@ -30,7 +30,7 @@ const EXCLUDED_LABELS: Record<string, string> = {
   zero_rent: 'Zero rent amount',
 };
 
-function excludedLabel(reason: string): string {
+export function excludedLabel(reason: string): string {
   return EXCLUDED_LABELS[reason] ?? reason.replace(/_/g, ' ');
 }
 

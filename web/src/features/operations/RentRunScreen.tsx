@@ -7,14 +7,10 @@ import { useState } from 'react';
 import { Button, Card, CardHeader, EmptyState } from '@/design';
 import { trackInteraction } from '@/lib/telemetry';
 import { PeriodPicker } from './PeriodPicker';
+import { currentPeriod } from './periodUtils';
 import { RunPreviewGrid, RunResultPanel } from './RunPreviewGrid';
 import { useConfirmRun, useRunPreview } from './useRuns';
 import type { RunResultSpaResponse } from './useRuns';
-
-function currentPeriod() {
-  const now = new Date();
-  return { year: now.getFullYear(), month: now.getMonth() + 1 };
-}
 
 export function RentRunScreen() {
   const [period, setPeriod] = useState(currentPeriod);

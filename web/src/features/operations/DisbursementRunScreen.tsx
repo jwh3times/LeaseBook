@@ -7,14 +7,10 @@ import { useState } from 'react';
 import { Badge, Button, Card, CardHeader, EmptyState, Money } from '@/design';
 import { trackInteraction } from '@/lib/telemetry';
 import { PeriodPicker } from './PeriodPicker';
-import { RunResultPanel } from './RunPreviewGrid';
+import { currentPeriod } from './periodUtils';
+import { RunResultPanel, excludedLabel } from './RunPreviewGrid';
 import { useConfirmRun, useRunPreview } from './useRuns';
 import type { PreviewRowSpa, RunResultSpaResponse } from './useRuns';
-
-function currentPeriod() {
-  const now = new Date();
-  return { year: now.getFullYear(), month: now.getMonth() + 1 };
-}
 
 /** Disburse detail keys from the strategy: equity / fee / netBeforeReserve / reserve. */
 function DisbursementDetail({ row }: { row: PreviewRowSpa }) {
@@ -29,15 +25,6 @@ function DisbursementDetail({ row }: { row: PreviewRowSpa }) {
       </span>
     </div>
   );
-}
-
-const EXCLUDED_LABELS: Record<string, string> = {
-  non_positive_equity: 'Non-positive equity',
-  below_reserve_floor: 'Below reserve',
-};
-
-function excludedLabel(reason: string) {
-  return EXCLUDED_LABELS[reason] ?? reason.replace(/_/g, ' ');
 }
 
 export function DisbursementRunScreen() {
