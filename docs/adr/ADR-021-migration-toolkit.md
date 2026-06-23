@@ -77,6 +77,18 @@ helper (`EnableOrgRls`) and are covered by `SchemaGuardTests`.
 filename, row/error counts, and batch status (`staged` / `posted` / `superseded`). The audit trail
 for what was uploaded and when.
 
+> **Re-import is figure-blind idempotency, not supersede (M7).** The `source_ref`
+> (`opening:{cutover}:{type}={subledgerId}`) identifies the subledger position, not the amount, so a
+> re-import with a **changed figure does NOT overwrite** the already-posted opening entry — the
+> duplicate `source_ref` is caught (`DuplicateSourceRefException` → row recorded as already-posted)
+> and the corrected figure never posts. The `superseded` status is **defined in the schema but not
+> exercised by any M7 supersede path**: correcting an already-posted opening figure before sign-off is
+> done by re-provisioning the cutover org and re-importing. An in-product supersede/correction
+> workflow is **deferred to M8**. Note also that the **held-PM-fees opening position (ADR-020 §5) is
+> not imported in M7** — only owner / deposit / bank / receivable kinds are; held fees would touch
+> `pm_income` (kept out of the import path) and instead surface as a migration-clearing residual the
+> operator reconciles before sign-off.
+
 **`import_rows`** — one row per CSV data line. Stores the original parsed cells (`raw_json`),
 canonical fields (`mapped_json`), row status, and — for balance rows that posted successfully —
 `resulting_journal_entry_id`. The `mapped_json` is also the cross-import id-resolution store: the

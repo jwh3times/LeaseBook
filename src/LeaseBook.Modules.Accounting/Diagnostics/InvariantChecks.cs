@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 namespace LeaseBook.Modules.Accounting.Diagnostics;
 
 /// <summary>
-/// Executable I1–I4 checks (§C.7) over the ambient org's journal via raw SQL on the scoped connection
+/// Executable I1–I5 checks (§C.7) over the ambient org's journal via raw SQL on the scoped connection
 /// (RLS-scoped, M-E11). Shared by the CLI sweep and the test harness; this is the future nightly
 /// sweep body (P33).
 /// </summary>

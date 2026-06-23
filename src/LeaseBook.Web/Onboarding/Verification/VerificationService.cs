@@ -45,19 +45,13 @@ public sealed class VerificationService(
         VerificationRequest request,
         CancellationToken ct)
     {
-        // 1. Read imported subledger totals + clearing residuals via the Accounting ISender query.
-        //    No cross-module SQL — this dispatches to Accounting's own journal_lines read.
-        var data = await sender.Query<MigrationVerificationData>(
-            new GetMigrationVerificationData(), ct);
-
-        // 2. Compute line-by-line variances (operator figure − imported total).
-        var lines = BuildVarianceLines(request, data);
-        var varianceTotal = lines.Sum(l => Math.Abs(l.Variance));
-
-        // 3. IsTied: all variances are zero AND both clearing bases net to zero.
-        var isTied = varianceTotal == 0m
-            && data.ClearingCash == 0m
-            && data.ClearingAccrual == 0m;
+        // 1. Read imported subledger totals + clearing residuals from the *current* journal, then
+        //    compute the line-by-line variance + tie-out against the operator's figures.
+        var tieOut = await ComputeTieOutAsync(request, ct);
+        var data = tieOut.Data;
+        var lines = tieOut.Lines;
+        var varianceTotal = tieOut.VarianceTotal;
+        var isTied = tieOut.IsTied;
 
         // 4. Build the JSON snapshots.
         var expectedJson = JsonSerializer.Serialize(new
@@ -112,10 +106,14 @@ public sealed class VerificationService(
     // ── Sign-off ──────────────────────────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Enforces the hard gate: if the referenced verification row is not tied (IsTied == false),
-    /// throws <see cref="MigrationNotTiedException"/> with NO side effect — no DB write, no audit
-    /// row. If tied, inserts a new signed row (write-once table — no UPDATE) and writes an audit
-    /// event (via the AppDbContext SaveChanges interceptor on the new row insert).
+    /// Enforces the hard gate. <b>Re-derives the tie-out against the *current* journal</b> (not the
+    /// stored <c>IsTied</c> flag, which was frozen at <see cref="VerifyAsync"/> time): the journal can
+    /// drift after verification (e.g. a later balance import makes clearing non-zero), and signing a
+    /// frozen "TIED ✓" snapshot over a now-untied journal would be fiduciarily wrong. If the recomputed
+    /// tie-out fails, throws <see cref="MigrationNotTiedException"/> (→ 409) with NO side effect — no DB
+    /// write, no audit row — BEFORE inserting the signed row. Mirrors the
+    /// <c>StatementNotBalancedException</c> precedent (M5/WP-04). If it still ties, inserts a new signed
+    /// row (write-once table — no UPDATE) and writes a <c>migration-signed-off</c> audit event.
     /// </summary>
     public async Task<SignoffResult> SignOffAsync(Guid verificationId, CancellationToken ct)
     {
@@ -128,14 +126,20 @@ public sealed class VerificationService(
             throw new KeyNotFoundException($"Verification {verificationId} not found.");
         }
 
-        // 2. Gate: if NOT tied, throw before any write. Mirrors the StatementNotBalancedException
-        //    precedent in LocalStatementDelivery — no side effect on the blocked path.
-        if (!verification.IsTied)
+        // 2. Re-derive tie-out FRESH against the current journal + the row's stored operator figures.
+        //    Reading the expected figures from ExpectedJson (not trusting the frozen IsTied flag) closes
+        //    the drift window: if a later import made clearing non-zero, this recompute catches it.
+        var expected = DeserializeExpected(verification.ExpectedJson);
+        var tieOut = await ComputeTieOutAsync(expected, ct);
+
+        // 3. Gate: if it no longer ties, throw before any write. No side effect on the blocked path.
+        if (!tieOut.IsTied)
         {
-            throw new MigrationNotTiedException(verificationId, verification.VarianceTotal);
+            throw new MigrationNotTiedException(
+                verificationId, tieOut.VarianceTotal, tieOut.Data.ClearingCash, tieOut.Data.ClearingAccrual);
         }
 
-        // 3. Tied → insert a new signed row. Cannot UPDATE the original row (RevokeAppendOnly).
+        // 4. Still ties → insert a new signed row. Cannot UPDATE the original row (RevokeAppendOnly).
         //    The new row IS the authoritative signed artifact; the original remains as the unsigned record.
         var signedOffBy = actor.UserId?.ToString() ?? "system";
         var signedOffAt = DateTime.UtcNow;
@@ -169,6 +173,64 @@ public sealed class VerificationService(
         await db.SaveChangesAsync(ct);
 
         return new SignoffResult(signedRow.Id, signedOffAt);
+    }
+
+    // ── Tie-out computation (shared by VerifyAsync + SignOffAsync) ─────────────────────────────────
+
+    /// <summary>
+    /// Reads the *current* imported subledger totals + clearing residuals from the journal (via the
+    /// Accounting <see cref="GetMigrationVerificationData"/> ISender query — no cross-module SQL),
+    /// computes the line-by-line variance against <paramref name="request"/>'s operator figures, and
+    /// derives tie-out. <b>IsTied</b> requires ALL line variances exactly $0.00 AND ClearingCash == 0
+    /// AND ClearingAccrual == 0 (external match AND internal clearing consistency).
+    /// </summary>
+    private async Task<TieOutResult> ComputeTieOutAsync(VerificationRequest request, CancellationToken ct)
+    {
+        var data = await sender.Query<MigrationVerificationData>(
+            new GetMigrationVerificationData(), ct);
+
+        var lines = BuildVarianceLines(request, data);
+        var varianceTotal = lines.Sum(l => Math.Abs(l.Variance));
+
+        var isTied = varianceTotal == 0m
+            && data.ClearingCash == 0m
+            && data.ClearingAccrual == 0m;
+
+        return new TieOutResult(data, lines, varianceTotal, isTied);
+    }
+
+    /// <summary>
+    /// Rebuilds a <see cref="VerificationRequest"/> from a verification row's stored
+    /// <c>ExpectedJson</c> so sign-off can recompute variance against the operator figures captured at
+    /// verification time. Round-trips the same shape <see cref="VerifyAsync"/> serialized.
+    /// </summary>
+    private static VerificationRequest DeserializeExpected(string expectedJson)
+    {
+        using var doc = JsonDocument.Parse(expectedJson);
+        var root = doc.RootElement;
+
+        var cutoverDate = DateOnly.Parse(
+            root.GetProperty("cutoverDate").GetString()!,
+            System.Globalization.CultureInfo.InvariantCulture);
+        var ownerEquity = root.GetProperty("ownerEquityTotal").GetDecimal();
+        var depositLiability = root.GetProperty("depositLiabilityTotal").GetDecimal();
+
+        var banks = new List<OperatorBankBalance>();
+        if (root.TryGetProperty("bankBookBalances", out var banksEl)
+            && banksEl.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var b in banksEl.EnumerateArray())
+            {
+                banks.Add(new OperatorBankBalance(
+                    b.GetProperty("bankAccountId").GetGuid(),
+                    b.GetProperty("expectedBook").GetDecimal(),
+                    b.TryGetProperty("accountCode", out var ac) && ac.ValueKind == JsonValueKind.String
+                        ? ac.GetString()
+                        : null));
+            }
+        }
+
+        return new VerificationRequest(cutoverDate, ownerEquity, depositLiability, banks);
     }
 
     // ── Variance computation ──────────────────────────────────────────────────────────────────────
@@ -249,6 +311,13 @@ public sealed class VerificationService(
 
         return sb.ToString();
     }
+
+    /// <summary>The result of recomputing tie-out against the current journal.</summary>
+    private sealed record TieOutResult(
+        MigrationVerificationData Data,
+        List<VarianceLine> Lines,
+        decimal VarianceTotal,
+        bool IsTied);
 }
 
 // ── Request / result types ─────────────────────────────────────────────────────────────────────────

@@ -173,8 +173,18 @@ and is proven by the property test in §9.
 **Idempotency.** Every opening line carries a deterministic `source_ref`:
 `opening:{cutover}:{type}={subledgerId}` (e.g. `opening:2026-06-30:owner-equity=<ownerId>:<propertyId>`).
 Re-importing the same batch is a no-op via the existing `(org_id, source_ref)` partial unique index +
-`DuplicateSourceRefException` (the M6 mechanism — **no new index**). A corrected re-import supersedes the
-prior `import_batch` (status `superseded`) and posts only changed rows.
+`DuplicateSourceRefException` (the M6 mechanism — **no new index**). The `source_ref` is **figure-blind**
+(it identifies the subledger position, not the amount), so a re-import with a **changed figure does NOT
+overwrite** the already-posted opening entry — the duplicate `source_ref` is caught and the row records
+as already-posted; the corrected figure never posts. Correcting an already-posted opening figure **before
+sign-off** is done by re-provisioning the cutover org and re-importing. An in-product
+supersede/correction workflow (and the `import_batch` `superseded` status) is **deferred to M8** — it is
+defined in the schema but not exercised by an M7 supersede path.
+
+> **Scope (M7):** only owner / deposit / bank / receivable balance kinds are imported. The **held-PM-fees
+> opening position** (ADR-020 §5 table) is **not** imported — held fees would touch `pm_income`, which M7
+> keeps out of the import path; any held-fee opening surfaces as a migration-clearing residual the
+> operator reconciles before sign-off.
 
 **Atomicity.** One import-balances request = one ambient RLS transaction: stage rows + post all valid
 opening entries + write the batch row, commit together or roll back together.

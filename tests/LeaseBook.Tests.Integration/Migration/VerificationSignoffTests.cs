@@ -241,6 +241,86 @@ public sealed class VerificationSignoffTests(PostgresFixture fixture)
     }
 
     // ──────────────────────────────────────────────────────────────────────────────────────────────
+    // Test 4: stale verification — journal drifts AFTER a tied verify, sign-off re-derives and 409s
+    //         (the verification IsTied flag is frozen true, but sign-off must NOT trust it)
+    // ──────────────────────────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Stale_verification_after_journal_drift_signoff_re_derives_and_returns_409()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var setup = await SetupAsync("StaleDrift", ct);
+
+        // --- Import a fully tied set ---
+        await ImportOwnerTenantChainAsync(setup.Client, ct);
+        await PostBalanceAsync(setup.Client, "bank_balances",
+            $"Account ID,Account Name,Book Balance\nB-T,{setup.TrustBankName},500.00\nB-D,{setup.DepositBankName},500.00\n", ct);
+        await PostBalanceAsync(setup.Client, "owner_balances",
+            "Owner ID,Owner Name,Cash Balance,Accrual Balance\nO-1,Tied Owner LLC,500.00,500.00\n", ct);
+        await PostBalanceAsync(setup.Client, "deposit_liabilities",
+            "Tenant ID,Owner ID,Deposit Held\nT-1,O-1,500.00\n", ct);
+
+        var (trustBankId, depositBankId) = await ResolveBankIdsAsync(setup.OrgId, ct);
+
+        // --- Verify: ties at this moment (IsTied=true, persisted) ---
+        var verBody = new
+        {
+            cutoverDate = CutoverStr,
+            ownerEquityTotal = 500.00m,
+            depositLiabilityTotal = 500.00m,
+            bankBookBalances = new[]
+            {
+                new { bankAccountId = trustBankId, expectedBook = 500.00m, accountCode = (string?)null },
+                new { bankAccountId = depositBankId, expectedBook = 500.00m, accountCode = (string?)null },
+            },
+        };
+
+        var verResponse = await setup.Client.PostAsJsonAsync("/api/onboarding/verification", verBody, ct);
+        verResponse.StatusCode.ShouldBe(HttpStatusCode.OK, await verResponse.Content.ReadAsStringAsync(ct));
+        var report = (await verResponse.Content.ReadFromJsonAsync<VerificationReport>(ct))!;
+        report.IsTied.ShouldBeTrue("the set ties at verification time");
+
+        // --- DRIFT: import an ADDITIONAL receivable so the accrual clearing now nets non-zero ---
+        // A receivable with no offsetting accrual delta breaks the accrual clearing tie-out.
+        await PostBalanceAsync(setup.Client, "tenant_receivables",
+            "Tenant ID,Owner ID,Balance Due\nT-1,O-1,250.00\n", ct);
+
+        // --- Sign-off the STALE verification id: must re-derive against the now-drifted journal → 409 ---
+        var signoffResponse = await setup.Client.PostAsJsonAsync(
+            $"/api/onboarding/verification/{report.VerificationId}/signoff", new { }, ct);
+        signoffResponse.StatusCode.ShouldBe(HttpStatusCode.Conflict,
+            "sign-off must re-derive tie-out against the current journal and 409 when it no longer ties");
+
+        var problemBody = await signoffResponse.Content.ReadAsStringAsync(ct);
+        problemBody.ShouldContain("not_tied");
+
+        // --- No signed row, no audit row: the gate fired before any side effect ---
+        var tenant = new TenantContext { OrgId = setup.OrgId };
+        await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
+        var executor = new OrgScopedExecutor(db, tenant);
+
+        await executor.RunAsync(setup.OrgId, async () =>
+        {
+            var auditCount = await db.Set<AuditEvent>()
+                .CountAsync(a => a.EntityType == "migration-signed-off", ct);
+            auditCount.ShouldBe(0,
+                "no migration-signed-off audit row when the re-derived tie-out blocks sign-off");
+
+            var signedRowCount = await db.Set<MigrationVerification>()
+                .CountAsync(v => v.SignedOffAt != null, ct);
+            signedRowCount.ShouldBe(0, "no signed verification row when sign-off was blocked");
+
+            // The original verification row still carries its frozen IsTied=true flag, untouched —
+            // proving the gate did NOT trust the stale flag (it re-derived instead).
+            var originalRow = await db.Set<MigrationVerification>()
+                .FirstOrDefaultAsync(v => v.Id == report.VerificationId, ct);
+            originalRow.ShouldNotBeNull();
+            originalRow!.IsTied.ShouldBeTrue("the frozen flag stays true; the gate re-derives, not trusts it");
+            originalRow.SignedOffAt.ShouldBeNull();
+        }, ct);
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────────────────────────
     // Helpers
     // ──────────────────────────────────────────────────────────────────────────────────────────────
 

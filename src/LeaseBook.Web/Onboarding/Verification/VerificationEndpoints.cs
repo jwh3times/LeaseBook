@@ -79,6 +79,8 @@ public sealed class VerificationEndpoints : IEndpointModule
                             {
                                 ["verificationId"] = ex.VerificationId,
                                 ["varianceTotal"] = ex.VarianceTotal,
+                                ["clearingCash"] = ex.ClearingCash,
+                                ["clearingAccrual"] = ex.ClearingAccrual,
                             });
                     }
                     catch (KeyNotFoundException ex)

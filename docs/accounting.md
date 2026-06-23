@@ -365,8 +365,17 @@ activity, starting from these opening positions. Dates before the cutover are in
 
 Each opening entry carries a deterministic `source_ref`
 (`opening:{cutover}:{type}={subledgerId}`), keyed to the same `(org_id, source_ref)` partial
-unique index that bulk runs use. Re-uploading the same CSV is a no-op. A corrected re-import
-(with changed figures) supersedes the prior batch and posts only the changed rows.
+unique index that bulk runs use. Re-uploading the same CSV is a no-op. The `source_ref` is
+**figure-blind** — it identifies the subledger position, not the amount — so re-importing a balance
+with a **changed figure does NOT overwrite** the already-posted opening entry (the duplicate
+`source_ref` is detected and the row is recorded as already-posted; the corrected figure never
+posts). To correct an already-posted opening figure **before sign-off**, re-provision the cutover
+org and re-import. An in-product supersede/correction workflow is **deferred to M8**.
+
+> **Not imported in M7:** only owner / deposit / bank / receivable balance kinds are imported. The
+> **held-PM-fees opening position** (ADR-020 §5) is **not** imported — it would touch `pm_income`,
+> which M7 deliberately keeps out of the import path. Any held-fee opening position surfaces as a
+> migration-clearing residual the operator reconciles before sign-off.
 
 See also: **ADR-020** (opening-balance posting model and clearing-account design),
 **ADR-021** (migration toolkit architecture, verification gate, and AppFolio parser seam).
