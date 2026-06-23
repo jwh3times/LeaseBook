@@ -79,4 +79,18 @@ public sealed class MigrationVerification : IOrgScoped
         DateTime? signedOffAt,
         string reportSnapshot) =>
         new(cutoverDate, expectedJson, actualJson, varianceTotal, isTied, signedOffBy, signedOffAt, reportSnapshot);
+
+    /// <summary>
+    /// Creates a sign-off row: a new immutable row copied from an existing verification but with
+    /// <see cref="SignedOffBy"/>/<see cref="SignedOffAt"/> set. Required because
+    /// <c>migration_verifications</c> is <c>RevokeAppendOnly</c> — the runtime role has no UPDATE
+    /// grant, so sign-off cannot mutate the original row. The new row is the authoritative
+    /// signed artifact; the original is preserved as the unsigned verification record.
+    /// </summary>
+    internal static MigrationVerification CreateSignedOff(
+        MigrationVerification source,
+        string signedOffBy,
+        DateTime signedOffAt) =>
+        new(source.CutoverDate, source.ExpectedJson, source.ActualJson,
+            source.VarianceTotal, source.IsTied, signedOffBy, signedOffAt, source.ReportSnapshot);
 }
