@@ -88,10 +88,12 @@ public sealed class LocalStatementDelivery(
         // then update record.State to Sent or Failed and save again. The artifact key is
         // already stored so the M8 worker can retrieve the bytes independently of this request.
 
+        // toEmail is caller-supplied free text — sanitize CR/LF/control chars before logging to
+        // prevent log forging (CWE-117). The other values are a Guid/ints/derived key (not forgeable).
         logger.LogInformation(
             "Statement delivery queued: id={DeliveryId} owner={OwnerId} period={Year}-{Month:D2} " +
             "to={ToEmail} artifact={ArtifactKey}",
-            deliveryId, view.OwnerId, view.Year, view.Month, toEmail, artifactKey);
+            deliveryId, view.OwnerId, view.Year, view.Month, LogSanitizer.Clean(toEmail), artifactKey);
 
         return new DeliveryResult(deliveryId, record.State);
     }
