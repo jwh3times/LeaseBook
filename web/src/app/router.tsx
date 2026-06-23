@@ -5,6 +5,7 @@ import { LoginPage } from '@/features/auth/LoginPage';
 import { BankingPage } from '@/features/banking/BankingPage';
 import { DashboardPage } from '@/features/dashboard/DashboardPage';
 import { OnboardingPage } from '@/features/onboarding/OnboardingPage';
+import { ParallelRunReference } from '@/features/onboarding/ParallelRunReference';
 import { OwnerDetailPage } from '@/features/owners/OwnerDetailPage';
 import { OwnersPage } from '@/features/owners/OwnersPage';
 import { PropertiesPage } from '@/features/properties/PropertiesPage';
@@ -43,6 +44,7 @@ const detailRoutes = [
   { path: '/owners/:id/statement', element: <StatementPage /> },
   { path: '/properties/:id', element: <PropertyDetailPage /> },
   { path: '/onboarding', element: <OnboardingPage /> },
+  { path: '/onboarding/parallel-run', element: <ParallelRunReference /> },
 ];
 
 export const router = createBrowserRouter([

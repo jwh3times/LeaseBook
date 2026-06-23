@@ -152,6 +152,13 @@ export function OnboardingPage() {
                 </a>{' '}
                 to reconcile your opening period.
               </p>
+              <p className="fs14 mt8">
+                Running both systems in parallel for an overlap month?{' '}
+                <a href="/onboarding/parallel-run" className="pf-link">
+                  Parallel-run checklist
+                </a>{' '}
+                — what to enter in both systems and how to tie figures at month-end.
+              </p>
             </Card>
           )}
         </main>
