@@ -19,22 +19,22 @@ posting primitives** — it adds preview computation, proration/fee math, a late
 history, and the cross-module batch-posting path. No new posting math lives outside the posting
 templates.
 
-M6 also clears the M5 carried follow-ups (per the scope decision: *core + all M5 follow-ups*).
+M6 also clears the M5 carried follow-ups (per the scope decision: _core + all M5 follow-ups_).
 
 **M6 exit criteria (from `private/TODO.md`):** simulate a full month on the demo org — rent run, late
 fees, mid-month activity, reconciliation, statements, disbursement run — entirely through the UI, no SQL.
 
 ## 2. Decisions locked in brainstorming
 
-| # | Decision | Choice |
-|---|----------|--------|
-| D1 | M6 scope envelope | Core (3 runs + run history + dashboard CTA) **+ all M5 backend follow-ups** |
-| D2 | Management-fee assessment placement | **Folded into the disbursement run** (one run posts `ManagementFeeAssessed` + `OwnerDisbursed` atomically per owner) |
-| D3 | Management-fee basis | **Owner equity available at run time** × effective bps (not fee-on-rent-collected) |
-| D4 | Late-fee policy location | **Org-level default (`OrgSettings`) + nullable per-lease override (`LeaseLite`)**; resolve `override ?? org default`; NC §42-46 cap clamps the result |
-| D5 | Proration | **Computed in M6** — actual-days/month, inclusive of move-in day, half-up to cent (ADR-017) |
-| D6 | Run-engine architecture | **Shared run-engine in `Modules.Operations`, per-run strategies** (Approach 1) |
-| D7 | Work-package granularity | **7 WPs** (one per run + engine + web + follow-ups + DoD) |
+| #   | Decision                            | Choice                                                                                                                                                |
+| --- | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D1  | M6 scope envelope                   | Core (3 runs + run history + dashboard CTA) **+ all M5 backend follow-ups**                                                                           |
+| D2  | Management-fee assessment placement | **Folded into the disbursement run** (one run posts `ManagementFeeAssessed` + `OwnerDisbursed` atomically per owner)                                  |
+| D3  | Management-fee basis                | **Owner equity available at run time** × effective bps (not fee-on-rent-collected)                                                                    |
+| D4  | Late-fee policy location            | **Org-level default (`OrgSettings`) + nullable per-lease override (`LeaseLite`)**; resolve `override ?? org default`; NC §42-46 cap clamps the result |
+| D5  | Proration                           | **Computed in M6** — actual-days/month, inclusive of move-in day, half-up to cent (ADR-017)                                                           |
+| D6  | Run-engine architecture             | **Shared run-engine in `Modules.Operations`, per-run strategies** (Approach 1)                                                                        |
+| D7  | Work-package granularity            | **7 WPs** (one per run + engine + web + follow-ups + DoD)                                                                                             |
 
 ## 3. Architecture & module placement
 
@@ -60,9 +60,10 @@ and (b) the event list to post on confirm. Everything else — endpoints, run-hi
 idempotency check, audit, atomicity — is shared engine code.
 
 **Rejected alternatives:**
-- *Three independent vertical slices* — duplicates idempotency/atomicity/run-history across three
+
+- _Three independent vertical slices_ — duplicates idempotency/atomicity/run-history across three
   money-touching paths; drift risk on exactly the fiduciary code that must not diverge.
-- *Runs inside Accounting* — violates the module map (Operations is M6's module), drags Directory
+- _Runs inside Accounting_ — violates the module map (Operations is M6's module), drags Directory
   lease-reads into the core module, bloats Accounting with workflow/UI.
 
 ## 4. Data model
@@ -73,6 +74,7 @@ Both go through the migrations RLS helper (`EnableOrgRls`: column + `USING`/`WIT
 FORCE) and are covered by `SchemaGuardTests`.
 
 **`bulk_runs`**
+
 - `id` (uuid, pk), `org_id` (uuid, RLS)
 - `run_type` (text/enum: `rent` | `late_fee` | `disbursement`)
 - `period_year` (int), `period_month` (int)
@@ -81,6 +83,7 @@ FORCE) and are covered by `SchemaGuardTests`.
 - `summary_json` (jsonb — counts, totals, exception count for the run summary report)
 
 **`bulk_run_items`**
+
 - `id` (uuid, pk), `org_id` (uuid, RLS), `run_id` (uuid, fk → bulk_runs)
 - `target_kind` (text: `lease` | `owner`), `target_id` (uuid)
 - `snapshot_json` (jsonb — the per-target computed amounts/flags captured at confirm)
@@ -93,19 +96,21 @@ is stored (it is the auditable object — who ran, preview snapshot, postings).
 ### 4.2 Late-fee policy config (Directory)
 
 **`OrgSettings` (new columns — org default policy):**
+
 - `RentDueDay` (int, default 1)
 - `LateFeeGraceDays` (int, default 5)
 - `LateFeeKind` (enum: `Flat` | `Percent`)
 - `LateFeeAmount` (Money — used when `Flat`) / `LateFeeRateBps` (int — used when `Percent`)
 
 **`LeaseLite` (new nullable override columns — set at lease signing):**
+
 - `LateFeeGraceDaysOverride?` (int)
 - `LateFeeKindOverride?` (enum)
 - `LateFeeAmountOverride?` (Money) / `LateFeeRateBpsOverride?` (int)
 
 **Resolution:** effective policy = lease override ?? org default, per field. **NC G.S. §42-46 clamp**
-is applied to the *resolved* fee at compute time: the late fee may not exceed the greater of $15.00 or
-5% of the monthly rent (statutory ceiling — a lease may specify *less*, never more). The clamp is a
+is applied to the _resolved_ fee at compute time: the late fee may not exceed the greater of $15.00 or
+5% of the monthly rent (statutory ceiling — a lease may specify _less_, never more). The clamp is a
 correctness rule (no ADR needed; it is statutory), enforced in the late-fee compute path and covered by
 a behavioral test.
 
@@ -116,7 +121,7 @@ a behavioral test.
 
 - `Owner.ReserveAmount` — disbursement reserve floor (already enforced by `GuardReserveFloorAsync`).
 - `Owner.DefaultMgmtFeeBps` + `Property.MgmtFeeBps` — resolved by Directory's `IManagementFeeConfig`
-  (`property override ?? owner default`); M6 supplies the *fee math + rounding* the resolver
+  (`property override ?? owner default`); M6 supplies the _fee math + rounding_ the resolver
   deliberately omits.
 
 ## 5. The three runs
@@ -163,6 +168,7 @@ All ports are **Operations-owned** (declared in `Modules.Operations.Contracts`),
 Operations never references another module's entity or event types.
 
 **Reads (preview inputs):**
+
 - `ILeaseScheduleData` — active leases (tenant, unit, property, owner, rent, term) ← Directory.
 - `ILateFeePolicyData` — resolved late-fee policy per lease ← Directory.
 - `IManagementFeeConfig` — Operations' **own** port (per P49) wrapping Directory's resolver ← Directory.
@@ -171,6 +177,7 @@ Operations never references another module's entity or event types.
 - Bank-account display (name/mask for the withdrawal record) ← Banking/Accounting.
 
 **Writes (posting):**
+
 - Accounting exposes a **public** `PostEventBatch` request (internal handler) that loops
   `AccountingEventService` over a batch of events within the ambient RLS transaction.
 - Operations dispatches it through an `IBatchPosting` port + host adapter. The port speaks Operations
@@ -245,15 +252,15 @@ Operations never references another module's entity or event types.
 
 ## 12. Work-package sequence (7 WPs)
 
-| WP | Title | Key outputs | ADR |
-|----|-------|-------------|-----|
-| WP-1 | Operations module + run-engine skeleton | `bulk_runs`/`bulk_run_items` (RLS), shared preview/confirm pipeline, run-history persistence, `IBatchPosting` port + Accounting `PostEventBatch` command | ADR-019 |
-| WP-2 | Rent charge run + proration | rent preview/confirm, proration math, idempotency, new golden figures | ADR-017 |
-| WP-3 | Late-fee policy + run | `OrgSettings`/`LeaseLite` policy columns, resolver, NC §42-46 clamp, selective late-fee run | — |
-| WP-4 | Disbursement run + folded mgmt fee | mgmt-fee math, reserve-floor exclusion, `ManagementFeeAssessed` + `OwnerDisbursed` + bank withdrawal record, run summary | ADR-018 |
-| WP-5 | Web: run screens + dashboard CTA + run history | three run screens (preview→confirm), run-history view, wire the "Run owner disbursements" CTA, OpenAPI regen | — |
-| WP-6 | M5 carried follow-ups | demo-seed finalized reconciliation, `ReconciliationSnapshotRow` fields, OpenAPI preview shape + remove raw-fetch, `BuilderPanel` `enabled` flag | — |
-| WP-7 | DoD close-out | full-month e2e, `docs/accounting.md` bulk-ops section, §D integration gate, M6 retro | — |
+| WP   | Title                                          | Key outputs                                                                                                                                              | ADR     |
+| ---- | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| WP-1 | Operations module + run-engine skeleton        | `bulk_runs`/`bulk_run_items` (RLS), shared preview/confirm pipeline, run-history persistence, `IBatchPosting` port + Accounting `PostEventBatch` command | ADR-019 |
+| WP-2 | Rent charge run + proration                    | rent preview/confirm, proration math, idempotency, new golden figures                                                                                    | ADR-017 |
+| WP-3 | Late-fee policy + run                          | `OrgSettings`/`LeaseLite` policy columns, resolver, NC §42-46 clamp, selective late-fee run                                                              | —       |
+| WP-4 | Disbursement run + folded mgmt fee             | mgmt-fee math, reserve-floor exclusion, `ManagementFeeAssessed` + `OwnerDisbursed` + bank withdrawal record, run summary                                 | ADR-018 |
+| WP-5 | Web: run screens + dashboard CTA + run history | three run screens (preview→confirm), run-history view, wire the "Run owner disbursements" CTA, OpenAPI regen                                             | —       |
+| WP-6 | M5 carried follow-ups                          | demo-seed finalized reconciliation, `ReconciliationSnapshotRow` fields, OpenAPI preview shape + remove raw-fetch, `BuilderPanel` `enabled` flag          | —       |
+| WP-7 | DoD close-out                                  | full-month e2e, `docs/accounting.md` bulk-ops section, §D integration gate, M6 retro                                                                     | —       |
 
 ## 13. Out of scope (rejected on sight through Phase 5)
 
