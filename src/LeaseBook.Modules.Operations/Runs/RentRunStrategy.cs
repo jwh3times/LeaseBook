@@ -29,7 +29,8 @@ namespace LeaseBook.Modules.Operations.Runs;
 /// </summary>
 public sealed class RentRunStrategy(
     ILeaseScheduleData schedule,
-    IPostedSourceRefs postedRefs) : IRunStrategy
+    IPostedSourceRefs postedRefs,
+    IPeriodChargeGuard periodGuard) : IRunStrategy
 {
     /// <inheritdoc />
     public RunType RunType => RunType.Rent;
@@ -39,7 +40,7 @@ public sealed class RentRunStrategy(
     {
         var rows = await schedule.GetActiveAsync(period.Year, period.Month, ct);
 
-        // Build candidate source_ref keys for the batch pre-check.
+        // Build candidate source_ref keys for the same-source idempotency pre-check.
         var allKeys = rows
             .Select(r => SourceRef(period, r.LeaseId))
             .ToList();
@@ -47,6 +48,13 @@ public sealed class RentRunStrategy(
         var alreadyPosted = allKeys.Count > 0
             ? await postedRefs.GetExistingAsync(allKeys, ct)
             : (IReadOnlySet<string>)new HashSet<string>();
+
+        // Structural cross-source period guard: detect RentCharged entries posted by any means
+        // (manual composer, seed, import) so we never double-charge a tenant in a period.
+        var allTenantIds = rows.Select(r => r.TenantId).ToList();
+        var alreadyChargedTenants = allTenantIds.Count > 0
+            ? await periodGuard.GetChargedTenantsAsync("RentCharged", null, period.Year, period.Month, allTenantIds, ct)
+            : (IReadOnlySet<Guid>)new HashSet<Guid>();
 
         var previewRows = new List<PreviewRow>(rows.Count);
         var exceptions = new List<string>();
@@ -63,7 +71,7 @@ public sealed class RentRunStrategy(
             var amount = Proration.Charge(row.Rent, period.Year, period.Month, row.StartDate, row.EndDate);
             var prorated = amount != row.Rent;
             var key = SourceRef(period, row.LeaseId);
-            var alreadyDone = alreadyPosted.Contains(key);
+            var alreadyDone = alreadyPosted.Contains(key) || alreadyChargedTenants.Contains(row.TenantId);
 
             var detail = new Dictionary<string, string>
             {
@@ -103,6 +111,17 @@ public sealed class RentRunStrategy(
         var allRows = await schedule.GetActiveAsync(period.Year, period.Month, ct);
         var byLeaseId = allRows.ToDictionary(r => r.LeaseId);
 
+        // Re-run the structural cross-source period guard at confirm time (prevents double-charge
+        // even when a manual charge was posted between preview and confirm).
+        var tenantIdsInScope = selectedTargetIds
+            .Where(id => byLeaseId.ContainsKey(id))
+            .Select(id => byLeaseId[id].TenantId)
+            .Distinct()
+            .ToList();
+        var alreadyChargedTenants = tenantIdsInScope.Count > 0
+            ? await periodGuard.GetChargedTenantsAsync("RentCharged", null, period.Year, period.Month, tenantIdsInScope, ct)
+            : (IReadOnlySet<Guid>)new HashSet<Guid>();
+
         // Build intents for selected, eligible leases.
         var intents = new List<RentChargeIntent>(selectedTargetIds.Count);
         var skippedItems = new List<BulkRunItem>();
@@ -128,6 +147,18 @@ public sealed class RentRunStrategy(
                     run.Id, RunTargetKind.Lease, leaseId,
                     RunItemStatus.Excluded, 0m,
                     JsonSerializer.Serialize(new { reason = "rent_zero" }),
+                    run.CreatedAt));
+                continue;
+            }
+
+            // Structural cross-source guard: skip if any RentCharged already exists for this
+            // tenant in the period, regardless of source_ref (manual, seed, import, or other run).
+            if (alreadyChargedTenants.Contains(row.TenantId))
+            {
+                skippedItems.Add(BulkRunItem.Create(
+                    run.Id, RunTargetKind.Lease, leaseId,
+                    RunItemStatus.Skipped, 0m,
+                    JsonSerializer.Serialize(new { reason = "already_charged_in_period" }),
                     run.CreatedAt));
                 continue;
             }
@@ -173,7 +204,8 @@ public sealed class RentRunStrategy(
                 });
                 item = BulkRunItem.Create(
                     run.Id, RunTargetKind.Lease, intent.LeaseId,
-                    RunItemStatus.Posted, intent.Amount, snapshot, run.CreatedAt);
+                    RunItemStatus.Posted, intent.Amount, snapshot, run.CreatedAt,
+                    resultingJournalEntryId: entryId);
             }
             catch (Exception ex) when (IsDuplicateSourceRef(ex))
             {

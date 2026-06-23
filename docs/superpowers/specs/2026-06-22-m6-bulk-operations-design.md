@@ -51,7 +51,7 @@ preview(runType, period)  ── compute, do NOT persist ──►  preview DTO 
 confirm(runType, period, selection)
         │  one ambient RLS transaction:
         ├─ Operations writes bulk_runs + bulk_run_items (snapshot at confirm)
-        ├─ dispatch IBatchPosting → Accounting PostEventBatch (loops AccountingEventService)
+        ├─ dispatch IBatchPosting → BatchPostingAdapter loops IAccountingEvents.PostAsync per intent
         └─ commit together (atomic) or roll back together
 ```
 
@@ -87,7 +87,8 @@ FORCE) and are covered by `SchemaGuardTests`.
 - `id` (uuid, pk), `org_id` (uuid, RLS), `run_id` (uuid, fk → bulk_runs)
 - `target_kind` (text: `lease` | `owner`), `target_id` (uuid)
 - `snapshot_json` (jsonb — the per-target computed amounts/flags captured at confirm)
-- `resulting_journal_entry_id` (uuid, nullable — null for skipped/excluded)
+- `resulting_journal_entry_id` (uuid, nullable — promoted column alongside `snapshot_json` for
+  direct DB querying; null for skipped/excluded items; set at INSERT only — append-only, never updated)
 - `item_status` (text: `posted` | `skipped` | `excluded`)
 
 The pre-confirm preview is **computed on demand and not persisted**; only the committed run's snapshot
@@ -133,10 +134,18 @@ a behavioral test.
   **prorated** (actual-days/month, inclusive of move-in day, half-up to cent — ADR-017).
 - **Exceptions list (shown, never silently dropped):** lease with no rent set, lease ended before the
   period, target period locked by a finalized reconciliation.
-- **Confirm:** posts `RentCharged` to all chargeable leases atomically.
-- **Idempotency:** per `(lease, period)` via `source_ref` (e.g. `rent:2026-06:lease={id}`). Re-running
-  picks up only newly-eligible leases (e.g. a lease added mid-month) and shows the rest as
+- **Confirm:** posts `RentCharged` to all chargeable, unguarded leases atomically.
+- **Idempotency (same-source):** per `(lease, period)` via `source_ref` (e.g. `rent:2026-06:lease={id}`).
+  Re-running picks up only newly-eligible leases (e.g. a lease added mid-month) and shows the rest as
   already-charged; never double-posts.
+- **Cross-source period guard (Fix A):** the `IPeriodChargeGuard` port (host-adapted via
+  `GetTenantsChargedInPeriod` against `journal_entries` JOIN `journal_lines`) detects any
+  `event_type='RentCharged'` entry in the period for the tenant, regardless of `source_ref` value.
+  This prevents double-charging tenants whose charges were posted by the M3 manual composer, seed
+  data, or CSV import — not just by a prior bulk run. Leases with an existing charge are flagged
+  `AlreadyDone` in preview and `Skipped` in confirm.
+  _Demo behavior:_ May 2026 — 6 of 7 leases have seed `RentCharged` entries (sourceRef=null);
+  only Devon Pryor (T2, $1,380) has no May charge → 1 eligible, 6 AlreadyDone.
 
 ### 5.2 Late-fee run
 
@@ -193,9 +202,12 @@ Operations never references another module's entity or event types.
 ## 7. Idempotency, atomicity & locked periods
 
 - **Atomicity:** one HTTP request = one ambient RLS transaction. Within it, Operations writes its
-  `bulk_runs`/`bulk_run_items` rows and dispatches `PostEventBatch`; Accounting writes the journal
-  entries; all commit together or roll back together. A batch is all-or-nothing.
-- **Idempotency grain:** per `(target, period, run_type)` via a deterministic `source_ref`. The preview
+  `bulk_runs`/`bulk_run_items` rows and the adapter loops `IAccountingEvents.PostAsync` per intent;
+  Accounting writes the journal entries; all commit together or roll back together. A batch is all-or-nothing.
+- **Idempotency grain:** per `(target, period, run_type)` via a deterministic `source_ref`, **plus** the
+  cross-source period guard (Fix A): `IPeriodChargeGuard` detects a `RentCharged`/`FeeCharged(late)` already
+  posted for the tenant in the period **by any means** (manual, import, seed, or a prior run), marking the
+  lease `AlreadyDone` so the bulk run never double-charges across sources. The preview
   marks each target as already-done vs pending; confirm posts only pending targets.
   _Implementation refinement (ground-truth, WP-7):_ M6 does NOT add a new partial unique index. It
   **reuses the EXISTING `(org_id, source_ref)` partial unique index** on `journal_entries` (introduced
@@ -206,6 +218,17 @@ Operations never references another module's entity or event types.
   even under concurrent confirms.
 - **Locked periods:** posting into a reconcile-finalized period is rejected by the existing
   `IPostingLock`; the run surfaces it as an exception row, not a crash.
+- **Cross-source double-charge guard (Fix A — added after M6 WP-7):** the `source_ref`-based
+  idempotency only protects against re-running the SAME bulk-run key. It does not prevent a bulk run
+  from double-charging a tenant whose rent was posted by the M3 composer, seed data, or CSV import
+  (different key, same economic meaning). The `IPeriodChargeGuard` port (Operations-owned, host
+  adapter dispatches Accounting's `GetTenantsChargedInPeriod` via ISender) closes this gap for rent
+  and late-fee runs. The guard is checked at both preview time (→ `AlreadyDone` flag) and confirm
+  time (→ `Skipped` with reason `already_charged_in_period`). Disbursement has no analogous gap
+  (equity is spent by the posting — no double-charge is possible at the DB level).
+- **Month/year validation (Fix E):** preview and confirm endpoints validate `month ∈ 1..12` and
+  `year ∈ 2000..2100`, returning HTTP 400 `invalid_period` before delegating to the strategy. This
+  prevents `DateOnly` from throwing a 500 on out-of-range values.
 
 ## 8. M5 carried follow-ups (folded into M6 per D1)
 
@@ -229,8 +252,8 @@ Operations never references another module's entity or event types.
   half-up rounding to the cent; records the basis (equity-at-run-time, not collected-rent) and the
   rounding rule. (This is the rounding ADR pre-assigned by `IManagementFeeConfig`.)
 - **ADR-019 — Bulk-run engine & cross-module batch posting.** The Operations run pipeline + the
-  `IBatchPosting` port + Accounting `PostEventBatch` command. Documents the write-direction cross-module
-  pattern, complementing M5's read-direction ADR-016.
+  `IBatchPosting` port (host `BatchPostingAdapter` loops the existing `IAccountingEvents.PostAsync`; no new
+  command). Documents the write-direction cross-module pattern, complementing M5's read-direction ADR-016.
 
 ## 10. Testing strategy
 
@@ -263,7 +286,7 @@ Operations never references another module's entity or event types.
 
 | WP   | Title                                          | Key outputs                                                                                                                                              | ADR     |
 | ---- | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
-| WP-1 | Operations module + run-engine skeleton        | `bulk_runs`/`bulk_run_items` (RLS), shared preview/confirm pipeline, run-history persistence, `IBatchPosting` port + Accounting `PostEventBatch` command | ADR-019 |
+| WP-1 | Operations module + run-engine skeleton        | `bulk_runs`/`bulk_run_items` (RLS), shared preview/confirm pipeline, run-history persistence, `IBatchPosting` port + host `BatchPostingAdapter` (loops `IAccountingEvents.PostAsync`) | ADR-019 |
 | WP-2 | Rent charge run + proration                    | rent preview/confirm, proration math, idempotency, new golden figures                                                                                    | ADR-017 |
 | WP-3 | Late-fee policy + run                          | `OrgSettings`/`LeaseLite` policy columns, resolver, NC §42-46 clamp, selective late-fee run                                                              | —       |
 | WP-4 | Disbursement run + folded mgmt fee             | mgmt-fee math, reserve-floor exclusion, `ManagementFeeAssessed` + `OwnerDisbursed` + bank withdrawal record, run summary                                 | ADR-018 |

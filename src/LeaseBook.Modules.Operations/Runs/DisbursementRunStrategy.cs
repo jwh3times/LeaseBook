@@ -245,7 +245,8 @@ public sealed class DisbursementRunStrategy(
 
                 item = BulkRunItem.Create(
                     run.Id, RunTargetKind.Owner, intent.OwnerId,
-                    RunItemStatus.Posted, intent.DisburseAmount, snapshot, run.CreatedAt);
+                    RunItemStatus.Posted, intent.DisburseAmount, snapshot, run.CreatedAt,
+                    resultingJournalEntryId: result.DisbursementEntryId);
             }
             catch (Exception ex) when (IsDuplicateSourceRef(ex))
             {

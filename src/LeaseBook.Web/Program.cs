@@ -125,6 +125,10 @@ builder.Services.AddScoped<LeaseBook.Modules.Operations.Contracts.IPostedSourceR
 builder.Services.AddScoped<LeaseBook.Modules.Operations.Contracts.ILateFeePolicyData, LateFeePolicyDataAdapter>();
 builder.Services.AddScoped<LeaseBook.Modules.Operations.Contracts.IDelinquencyData, DelinquencyDataAdapter>();
 
+// Fix A (M6 final): IPeriodChargeGuard — structural cross-source double-charge guard (ADR-007).
+// Detects charges posted by any means (manual, seed, import) in a period, not just bulk-run keys.
+builder.Services.AddScoped<LeaseBook.Modules.Operations.Contracts.IPeriodChargeGuard, PeriodChargeGuardAdapter>();
+
 // WP-4: Disbursement run ports — owner data, equity balances, bank account info (ADR-018).
 builder.Services.AddScoped<LeaseBook.Modules.Operations.Contracts.IOwnerDisbursementData, OwnerDisbursementDataAdapter>();
 builder.Services.AddScoped<LeaseBook.Modules.Operations.Contracts.IOwnerEquityBalances, OwnerEquityBalancesAdapter>();

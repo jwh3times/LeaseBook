@@ -1,5 +1,7 @@
+using LeaseBook.Modules.Accounting.Contracts;
 using LeaseBook.Modules.Accounting.Features.LedgerPosting;
 using LeaseBook.Modules.Accounting.Features.Ledgers;
+using LeaseBook.Modules.Accounting.Features.Posting.Events;
 using LeaseBook.Modules.Directory.Features.BankAccounts;
 using LeaseBook.Modules.Directory.Features.Leases;
 using LeaseBook.Modules.Directory.Features.Owners;
@@ -169,9 +171,32 @@ public sealed class DisbursementRunTests(PostgresFixture fixture)
         secondResult!.Posted.ShouldBe(0, "second run must not create new postings");
         secondResult.Total.ShouldBe(0m);
 
-        // Verify idempotency at the source_ref level: post a contribution so equity is restored,
-        // then a second confirm with the SAME source_ref must be Skipped (DuplicateSourceRefException).
-        // This proves the source_ref index is the idempotency backstop.
+        // Verify idempotency at the source_ref level: restore owner equity via OwnerContribution
+        // (directly through IAccountingEvents — no command needed), then run a third confirm with
+        // the same targets. The source_ref index catches the repeat → all items must be Skipped
+        // (DuplicateSourceRefException), not re-posted.
+        await DispatchAsync(ctx.OrgId, async (_, sp) =>
+        {
+            var events = sp.GetRequiredService<IAccountingEvents>();
+            await events.PostAsync(
+                new OwnerContribution(
+                    ctx.OwnerId, null,
+                    new Money(GoldenDisburse + GoldenFee),
+                    new DateOnly(Period.Year, Period.Month, 10),
+                    ctx.TrustBankId,
+                    $"test contribution restoring equity for source_ref idempotency check"),
+                ct);
+        }, ct);
+
+        RunResult? thirdResult = null;
+        await RunAsync(ctx.OrgId, async (engine, _) =>
+        {
+            thirdResult = await engine.ConfirmAsync(RunType.Disbursement, Period, targets, ct);
+        }, ct);
+
+        thirdResult.ShouldNotBeNull();
+        thirdResult!.Posted.ShouldBe(0, "third run with same source_ref must not post — DuplicateSourceRef is the backstop");
+        thirdResult.Skipped.ShouldBeGreaterThan(0, "at least one item must be Skipped (DuplicateSourceRefException) not re-posted");
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────

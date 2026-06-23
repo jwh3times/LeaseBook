@@ -22,7 +22,8 @@ public sealed class BulkRunItem : IOrgScoped
         RunItemStatus status,
         decimal amount,
         string? snapshotJson,
-        DateTime createdAt)
+        DateTime createdAt,
+        Guid? resultingJournalEntryId = null)
     {
         Id = UuidV7.NewId();
         RunId = runId;
@@ -32,6 +33,7 @@ public sealed class BulkRunItem : IOrgScoped
         Amount = amount;
         SnapshotJson = snapshotJson ?? "{}";
         CreatedAt = createdAt;
+        ResultingJournalEntryId = resultingJournalEntryId;
     }
 
     public Guid Id { get; private set; }
@@ -61,6 +63,13 @@ public sealed class BulkRunItem : IOrgScoped
     public DateTime CreatedAt { get; private set; }
 
     /// <summary>
+    /// The journal entry id that was created when this item was posted. Null for skipped/excluded
+    /// items. Stored as a promoted column alongside <see cref="SnapshotJson"/> for direct DB
+    /// querying without JSON parsing.
+    /// </summary>
+    public Guid? ResultingJournalEntryId { get; private set; }
+
+    /// <summary>
     /// Internal factory — the <see cref="IRunStrategy"/> implementations are the callers.
     /// <paramref name="snapshotJson"/> may be null; it defaults to <c>{}</c>.
     /// <paramref name="createdAt"/> must be supplied by the caller (from the engine's injected
@@ -74,6 +83,7 @@ public sealed class BulkRunItem : IOrgScoped
         RunItemStatus status,
         decimal amount,
         string? snapshotJson,
-        DateTime createdAt) =>
-        new(runId, targetKind, targetId, status, amount, snapshotJson, createdAt);
+        DateTime createdAt,
+        Guid? resultingJournalEntryId = null) =>
+        new(runId, targetKind, targetId, status, amount, snapshotJson, createdAt, resultingJournalEntryId);
 }

@@ -42,7 +42,8 @@ namespace LeaseBook.Modules.Operations.Runs;
 public sealed class LateFeeRunStrategy(
     IDelinquencyData delinquency,
     ILateFeePolicyData policies,
-    IPostedSourceRefs postedRefs) : IRunStrategy
+    IPostedSourceRefs postedRefs,
+    IPeriodChargeGuard periodGuard) : IRunStrategy
 {
     /// <inheritdoc />
     public RunType RunType => RunType.LateFee;
@@ -75,6 +76,13 @@ public sealed class LateFeeRunStrategy(
             ? await postedRefs.GetExistingAsync(allKeys, ct)
             : (IReadOnlySet<string>)new HashSet<string>();
 
+        // Structural cross-source guard: detect FeeCharged/late entries posted by any means
+        // so we never double-assess a late fee for the same tenant+period.
+        var allTenantIds = delinquentRows.Select(r => r.TenantId).ToList();
+        var alreadyChargedTenants = allTenantIds.Count > 0
+            ? await periodGuard.GetChargedTenantsAsync("FeeCharged", "late", period.Year, period.Month, allTenantIds, ct)
+            : (IReadOnlySet<Guid>)new HashSet<Guid>();
+
         var previewRows = new List<PreviewRow>(delinquentRows.Count);
         var exceptions = new List<string>();
 
@@ -105,7 +113,7 @@ public sealed class LateFeeRunStrategy(
 
             var amount = LateFeeCalculator.Compute(policy, row.Rent);
             var key = SourceRef(period, row.LeaseId);
-            var alreadyDone = alreadyPosted.Contains(key);
+            var alreadyDone = alreadyPosted.Contains(key) || alreadyChargedTenants.Contains(row.TenantId);
 
             var detail = new Dictionary<string, string>
             {
@@ -152,6 +160,16 @@ public sealed class LateFeeRunStrategy(
             ? await policies.GetAsync(selectedInSchedule, ct)
             : (IReadOnlyDictionary<Guid, LateFeePolicy>)new Dictionary<Guid, LateFeePolicy>();
 
+        // Re-run the structural cross-source guard at confirm time.
+        var tenantIdsInScope = selectedTargetIds
+            .Where(id => byLeaseId.ContainsKey(id))
+            .Select(id => byLeaseId[id].TenantId)
+            .Distinct()
+            .ToList();
+        var alreadyChargedTenants = tenantIdsInScope.Count > 0
+            ? await periodGuard.GetChargedTenantsAsync("FeeCharged", "late", period.Year, period.Month, tenantIdsInScope, ct)
+            : (IReadOnlySet<Guid>)new HashSet<Guid>();
+
         var chargeDate = new DateOnly(period.Year, period.Month, 1);
 
         // Build intents for selected, eligible leases.
@@ -176,6 +194,18 @@ public sealed class LateFeeRunStrategy(
                     run.Id, RunTargetKind.Lease, leaseId,
                     RunItemStatus.Excluded, 0m,
                     JsonSerializer.Serialize(new { reason = "no_policy" }),
+                    run.CreatedAt));
+                continue;
+            }
+
+            // Structural cross-source guard: skip if any FeeCharged/late already exists for this
+            // tenant in the period, regardless of source_ref.
+            if (alreadyChargedTenants.Contains(row.TenantId))
+            {
+                skippedItems.Add(BulkRunItem.Create(
+                    run.Id, RunTargetKind.Lease, leaseId,
+                    RunItemStatus.Skipped, 0m,
+                    JsonSerializer.Serialize(new { reason = "already_charged_in_period" }),
                     run.CreatedAt));
                 continue;
             }
@@ -217,7 +247,8 @@ public sealed class LateFeeRunStrategy(
                 });
                 item = BulkRunItem.Create(
                     run.Id, RunTargetKind.Lease, intent.LeaseId,
-                    RunItemStatus.Posted, intent.Amount, snapshot, run.CreatedAt);
+                    RunItemStatus.Posted, intent.Amount, snapshot, run.CreatedAt,
+                    resultingJournalEntryId: entryId);
             }
             catch (Exception ex) when (IsDuplicateSourceRef(ex))
             {

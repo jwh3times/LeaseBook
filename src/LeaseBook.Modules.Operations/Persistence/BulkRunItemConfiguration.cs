@@ -27,6 +27,7 @@ public sealed class BulkRunItemConfiguration : IEntityTypeConfiguration<BulkRunI
             .IsRequired()
             .HasColumnType("jsonb");
         builder.Property(i => i.CreatedAt).IsRequired();
+        builder.Property(i => i.ResultingJournalEntryId);
 
         builder.HasIndex(i => new { i.OrgId, i.RunId });
     }

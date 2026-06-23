@@ -52,7 +52,18 @@ public sealed class OperationsEndpoints : IEndpointModule
                     }
 
                     var now = DateTime.UtcNow;
-                    var period = new RunPeriod(year ?? now.Year, month ?? now.Month);
+                    var actualYear = year ?? now.Year;
+                    var actualMonth = month ?? now.Month;
+
+                    if (actualMonth < 1 || actualMonth > 12 || actualYear < 2000 || actualYear > 2100)
+                    {
+                        return Results.Problem(
+                            detail: $"Invalid period: year={actualYear} month={actualMonth}. Year must be 2000–2100; month must be 1–12.",
+                            statusCode: StatusCodes.Status400BadRequest,
+                            title: "invalid_period");
+                    }
+
+                    var period = new RunPeriod(actualYear, actualMonth);
                     var preview = await engine.PreviewAsync(runType, period, ct);
 
                     var rows = preview.Rows.Select(r => new PreviewRowSpa(
@@ -84,6 +95,14 @@ public sealed class OperationsEndpoints : IEndpointModule
                             detail: $"Unknown run type '{type}'. Valid values: rent, latefee, disbursement.",
                             statusCode: StatusCodes.Status400BadRequest,
                             title: "unknown_run_type");
+                    }
+
+                    if (body.Month < 1 || body.Month > 12 || body.Year < 2000 || body.Year > 2100)
+                    {
+                        return Results.Problem(
+                            detail: $"Invalid period: year={body.Year} month={body.Month}. Year must be 2000–2100; month must be 1–12.",
+                            statusCode: StatusCodes.Status400BadRequest,
+                            title: "invalid_period");
                     }
 
                     var period = new RunPeriod(body.Year, body.Month);
