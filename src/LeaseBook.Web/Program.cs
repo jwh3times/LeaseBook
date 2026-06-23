@@ -113,10 +113,14 @@ builder.Services.AddScoped<LeaseBook.Modules.Reporting.Delivery.IArtifactStore,
 builder.Services.AddScoped<IStatementDelivery, LocalStatementDelivery>();
 
 // Operations module services (run engine; CQRS handlers are auto-discovered). The host implements
-// Operations' cross-module write-direction port (ADR-007 / ADR-019): IBatchPosting translates run
-// intents into IAccountingEvents.PostAsync calls.
+// Operations' cross-module ports (ADR-007 / ADR-019):
+//   IBatchPosting — write-direction: translates run intents into IAccountingEvents.PostAsync calls.
+//   ILeaseScheduleData — read-direction: dispatches Directory's GetActiveLeaseSchedule via ISender.
+//   IPostedSourceRefs — read-direction: dispatches Accounting's GetExistingSourceRefs via ISender.
 builder.Services.AddOperationsModule();
 builder.Services.AddScoped<LeaseBook.Modules.Operations.Contracts.IBatchPosting, BatchPostingAdapter>();
+builder.Services.AddScoped<LeaseBook.Modules.Operations.Contracts.ILeaseScheduleData, LeaseScheduleDataAdapter>();
+builder.Services.AddScoped<LeaseBook.Modules.Operations.Contracts.IPostedSourceRefs, PostedSourceRefsAdapter>();
 
 // Banking module services (CSV import/match; CQRS handlers are auto-discovered). The host implements
 // Banking's cross-module ports with thin adapters (ADR-007 / P68): IBankRegister reads uncleared register

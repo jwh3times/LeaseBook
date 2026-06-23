@@ -16,8 +16,8 @@ public static class OperationsModuleServiceCollectionExtensions
         // Core run engine: resolves strategies keyed by RunType.
         services.AddScoped<RunEngine>();
 
-        // WP-2/3/4 strategies are registered here as each work-package is built.
-        // There are currently none for WP-1 (the engine is proven via a test-only NoOpStrategy).
+        // WP-2: Rent charge run + proration (ADR-017 / ADR-019).
+        services.AddScoped<IRunStrategy, RentRunStrategy>();
 
         return services;
     }

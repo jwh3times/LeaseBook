@@ -15,6 +15,10 @@ public static class Rls
         // NULLIF(..., '') is load-bearing: a custom GUC placeholder that has been SET LOCAL once in
         // a session reverts to '' (empty string), not NULL, after the transaction ends. Casting
         // ''::uuid raises 22P02 instead of failing closed, so we map empty → NULL → no rows match.
+        //
+        // Explicit GRANT is belt-and-suspenders on top of the ALTER DEFAULT PRIVILEGES in bootstrap.sql:
+        // in Testcontainers environments the DEFAULT PRIVILEGES may not apply before the migration
+        // runs. The table owner (leasebook_migrator) can always grant its own tables.
         migrationBuilder.Sql($"""
             ALTER TABLE {table} ENABLE ROW LEVEL SECURITY;
             ALTER TABLE {table} FORCE ROW LEVEL SECURITY;
@@ -22,6 +26,8 @@ public static class Rls
               FOR ALL
               USING (org_id = NULLIF(current_setting('app.org_id', true), '')::uuid)
               WITH CHECK (org_id = NULLIF(current_setting('app.org_id', true), '')::uuid);
+            GRANT SELECT, INSERT, UPDATE, DELETE ON {table} TO leasebook_app;
+            GRANT SELECT ON {table} TO leasebook_ops;
             """);
     }
 

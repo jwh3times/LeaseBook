@@ -63,20 +63,20 @@ public sealed class RunEngine(
 
         var strategy = ResolveStrategy(runType);
 
-        // Create a stub BulkRun header (OrgId stamped by DbContext.SaveChanges; SummaryJson is
-        // filled in below once we have the counts).
+        // Create the run header — NOT yet added to the change tracker. We add it after the strategy
+        // finishes so that any intermediate db.SaveChangesAsync calls inside posting (PostingService
+        // saves journal entries) don't accidentally include the BulkRun in those saves (the same
+        // AppDbContext is used for both, so adding here would enqueue it for the next save).
         var run = BulkRun.Create(runType, period.Year, period.Month, "{}", clock.GetUtcNow().UtcDateTime);
-        db.Set<BulkRun>().Add(run);
 
         // Let the strategy do its work — posting under the ambient transaction.
         var items = await strategy.ConfirmAsync(run, selectedTargetIds, posting, ct);
 
-        // Persist item rows and compute summary.
+        // Compute summary, patch onto run, then add to the change tracker for a single save.
         int posted = 0, skipped = 0, excluded = 0;
         decimal total = 0m;
         foreach (var item in items)
         {
-            db.Set<BulkRunItem>().Add(item);
             switch (item.Status)
             {
                 case RunItemStatus.Posted:
@@ -92,10 +92,16 @@ public sealed class RunEngine(
             }
         }
 
-        // Patch the summary JSON onto the run before saving so the persisted row carries the counts.
-        // BulkRun.SetSummaryJson is internal and only valid before the row's first save (Added state).
+        // Patch the summary JSON before the first save (SetSummaryJson is only valid in Added state).
         var summary = new { posted, skipped, excluded, total };
         run.SetSummaryJson(JsonSerializer.Serialize(summary));
+
+        // Now add everything to the change tracker for a single atomic save.
+        db.Set<BulkRun>().Add(run);
+        foreach (var item in items)
+        {
+            db.Set<BulkRunItem>().Add(item);
+        }
 
         await db.SaveChangesAsync(ct);
 
