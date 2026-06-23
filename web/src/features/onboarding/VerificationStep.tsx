@@ -264,7 +264,7 @@ export function VerificationStep({
           </div>
 
           {!isTied && (
-            <div className="ob-error-banner" role="status">
+            <div className="ob-error-banner" role="alert">
               <Icon name="alert" size={16} />
               <span>
                 Import doesn&apos;t tie — variance is <Money value={num(report.varianceTotal)} />.

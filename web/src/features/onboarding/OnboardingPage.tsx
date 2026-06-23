@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Card, CardHeader, EmptyState } from '@/design';
 import { BalanceImportStep, EntityImportStep } from './ImportStep';
 import { OnboardingChecklist } from './OnboardingChecklist';
@@ -23,6 +24,9 @@ function firstIncompleteStep(status: {
 
 export function OnboardingPage() {
   const statusQuery = useOnboardingStatus();
+  // An operator-selected step (backward navigation to an already-reached step).
+  // null = follow the derived first-incomplete step.
+  const [selectedStep, setSelectedStep] = useState<number | null>(null);
 
   if (statusQuery.isPending) {
     return (
@@ -56,11 +60,15 @@ export function OnboardingPage() {
   }
 
   const status = statusQuery.data;
-  const activeStep = firstIncompleteStep(status);
+  const firstIncomplete = firstIncompleteStep(status);
+  // The selected step only applies if it points at a step the operator has already reached
+  // (index <= firstIncomplete); otherwise fall back to the derived first-incomplete step.
+  const activeStep =
+    selectedStep !== null && selectedStep <= firstIncomplete ? selectedStep : firstIncomplete;
 
   function handleSelectStep(index: number) {
-    // Step navigation handled by panel rendering below
-    void index;
+    // Allow backward navigation only to steps already reached.
+    if (index <= firstIncomplete) setSelectedStep(index);
   }
 
   return (

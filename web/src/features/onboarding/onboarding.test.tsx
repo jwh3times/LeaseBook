@@ -251,13 +251,7 @@ describe('VerificationStep sign-off button', () => {
       http.post('/api/onboarding/verification', () => HttpResponse.json(NOT_TIED_REPORT)),
     );
 
-    render(
-      withRouter(
-        <QueryClientProvider client={makeQc()}>
-          <VerificationStep />
-        </QueryClientProvider>,
-      ),
-    );
+    render(withRouter(<VerificationStep />));
 
     // Fill in minimal form and run verification
     await userEvent.type(screen.getByLabelText('Owner equity total from AppFolio'), '4850');
@@ -276,13 +270,7 @@ describe('VerificationStep sign-off button', () => {
       http.post('/api/onboarding/verification', () => HttpResponse.json(TIED_REPORT)),
     );
 
-    render(
-      withRouter(
-        <QueryClientProvider client={makeQc()}>
-          <VerificationStep />
-        </QueryClientProvider>,
-      ),
-    );
+    render(withRouter(<VerificationStep />));
 
     await userEvent.type(screen.getByLabelText('Owner equity total from AppFolio'), '5000');
     await userEvent.type(screen.getByLabelText('Deposit liability total from AppFolio'), '0');
@@ -313,13 +301,7 @@ describe('VerificationStep sign-off button', () => {
       ),
     );
 
-    render(
-      withRouter(
-        <QueryClientProvider client={makeQc()}>
-          <VerificationStep />
-        </QueryClientProvider>,
-      ),
-    );
+    render(withRouter(<VerificationStep />));
 
     await userEvent.type(screen.getByLabelText('Owner equity total from AppFolio'), '5000');
     await userEvent.type(screen.getByLabelText('Deposit liability total from AppFolio'), '0');
