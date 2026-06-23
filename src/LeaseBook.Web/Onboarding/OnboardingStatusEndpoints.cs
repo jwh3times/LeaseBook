@@ -1,3 +1,4 @@
+using LeaseBook.Modules.Accounting.Features.Ledgers;
 using LeaseBook.Modules.Directory.Features.BankAccounts;
 using LeaseBook.SharedKernel.Cqrs;
 using LeaseBook.SharedKernel.Endpoints;
@@ -12,10 +13,12 @@ namespace LeaseBook.Web.Onboarding;
 /// <summary>
 /// WP-5 Task 5.2: derived onboarding wizard state (M7).
 ///
-/// <c>GET /api/onboarding/status</c> — returns a five-flag snapshot of wizard progress, each
+/// <c>GET /api/onboarding/status</c> — returns a six-flag snapshot of wizard progress, each
 /// flag computed from existing data on the ambient RLS transaction (no dedicated status table).
 /// The SPA checklist drives its step-gating from this response; the OpenAPI client types the
-/// response record after regen.
+/// response record after regen. <c>HasJournalData</c> is the empty-dashboard-takeover gate: the
+/// wizard only hijacks an org with no journal data, so an org with operational activity (e.g. the
+/// seeded demo org) is never redirected into onboarding even when its import flags are all false.
 /// </summary>
 public sealed class OnboardingStatusEndpoints : IEndpointModule
 {
@@ -61,12 +64,17 @@ public sealed class OnboardingStatusEndpoints : IEndpointModule
                     var signedOff = await db.Set<MigrationVerification>()
                         .AnyAsync(v => v.SignedOffAt != null, ct);
 
+                    // hasJournalData: ≥1 journal entry of any kind (the empty-dashboard-takeover gate).
+                    // Dispatched to Accounting via ISender (ADR-007 — no cross-module journal SQL here).
+                    var hasJournalData = await sender.Query(new HasJournalEntries(), ct);
+
                     return TypedResults.Ok(new OnboardingStatusResponse(
                         banksConfigured,
                         entitiesImported,
                         balancesImported,
                         verified,
-                        signedOff));
+                        signedOff,
+                        hasJournalData));
                 })
             .RequireAuthorization("RequirePMStaff")
             .WithTags("Onboarding")
@@ -88,4 +96,6 @@ public sealed record OnboardingStatusResponse(
     /// <summary>True when ≥1 migration verification has been run.</summary>
     bool Verified,
     /// <summary>True when ≥1 migration verification has been signed off.</summary>
-    bool SignedOff);
+    bool SignedOff,
+    /// <summary>True when the org has ≥1 journal entry (any posted financial activity). The empty-dashboard-takeover gate: the wizard only appears for an org with no journal data.</summary>
+    bool HasJournalData);

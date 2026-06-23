@@ -50,6 +50,7 @@ public sealed class OnboardingStatusTests(PostgresFixture fixture)
         status.BalancesImported.ShouldBeFalse();
         status.Verified.ShouldBeFalse();
         status.SignedOff.ShouldBeFalse();
+        status.HasJournalData.ShouldBeFalse("a fresh org has no journal entries");
     }
 
     // ──────────────────────────────────────────────────────────────────────────────────────────────
@@ -69,6 +70,7 @@ public sealed class OnboardingStatusTests(PostgresFixture fixture)
         status.BalancesImported.ShouldBeFalse();
         status.Verified.ShouldBeFalse();
         status.SignedOff.ShouldBeFalse();
+        status.HasJournalData.ShouldBeFalse("creating a bank account posts no journal entry");
     }
 
     // ──────────────────────────────────────────────────────────────────────────────────────────────
@@ -92,6 +94,7 @@ public sealed class OnboardingStatusTests(PostgresFixture fixture)
         status.BalancesImported.ShouldBeFalse();
         status.Verified.ShouldBeFalse();
         status.SignedOff.ShouldBeFalse();
+        status.HasJournalData.ShouldBeFalse("entity imports create Directory rows, not journal entries");
     }
 
     // ──────────────────────────────────────────────────────────────────────────────────────────────
@@ -117,6 +120,7 @@ public sealed class OnboardingStatusTests(PostgresFixture fixture)
         status.BalancesImported.ShouldBeTrue("a posted BankBalances batch must set balancesImported=true");
         status.Verified.ShouldBeFalse();
         status.SignedOff.ShouldBeFalse();
+        status.HasJournalData.ShouldBeTrue("a $500 opening bank balance posts an opening journal entry");
     }
 
     // ──────────────────────────────────────────────────────────────────────────────────────────────
@@ -151,6 +155,7 @@ public sealed class OnboardingStatusTests(PostgresFixture fixture)
         status.BalancesImported.ShouldBeFalse();
         status.Verified.ShouldBeTrue("a MigrationVerification row must set verified=true");
         status.SignedOff.ShouldBeFalse("verified but not signed off yet");
+        status.HasJournalData.ShouldBeFalse("verifying $0 figures posts no journal entry");
     }
 
     // ──────────────────────────────────────────────────────────────────────────────────────────────
@@ -200,6 +205,7 @@ public sealed class OnboardingStatusTests(PostgresFixture fixture)
         status.BalancesImported.ShouldBeTrue();
         status.Verified.ShouldBeTrue();
         status.SignedOff.ShouldBeTrue("a signed-off MigrationVerification row must set signedOff=true");
+        status.HasJournalData.ShouldBeTrue("the tied balance imports posted opening journal entries");
     }
 
     // ──────────────────────────────────────────────────────────────────────────────────────────────
