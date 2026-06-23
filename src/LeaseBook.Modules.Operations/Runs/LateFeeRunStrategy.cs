@@ -18,14 +18,20 @@ namespace LeaseBook.Modules.Operations.Runs;
 /// </para>
 /// <para>
 /// <b>Delinquency signal:</b> the <see cref="IDelinquencyData"/> port provides per-lease
-/// receivable balances (from Accounting via the host adapter). Only leases with <c>Balance &gt; 0</c>
-/// and <c>DaysLate &gt; (RentDueDay - 1 + GraceDays)</c> are eligible for a late fee. The grace
-/// window is resolved per-lease from the effective policy (<see cref="ILateFeePolicyData"/>).
+/// receivable balances (from Accounting via the host adapter). Rent is always charged on the
+/// period's 1st by the rent-charge run (WP-2); <see cref="DelinquentLedgerRow.DaysLate"/> is
+/// the ACTUAL age in days of the oldest past-due charge (sourced from
+/// <c>GetDelinquencyAging.OldestAgeDays</c>). A lease is eligible when
+/// <c>DaysLate &gt; GraceDays</c> (strictly past the grace window; a charge exactly
+/// <c>GraceDays</c> old is still within grace). The effective grace is resolved per-lease
+/// from the effective policy (<see cref="ILateFeePolicyData"/>).
 /// </para>
 /// <para>
 /// <b>Exceptions (surfaces in preview, not as rows):</b>
 /// <list type="bullet">
-///   <item>Lease with <see cref="DelinquentLedgerRow.Balance"/> == 0 or not past grace period.</item>
+///   <item>Lease with <see cref="DelinquentLedgerRow.Balance"/> == 0 or within grace period.</item>
+///   <item>Lease with <see cref="DelinquentLedgerRow.DaysLate"/> == -1 (tenant has multiple active
+///     leases; balance cannot be attributed — excluded as <c>ambiguous_multiple_active_leases</c>).</item>
 ///   <item>Lease with no effective policy resolved.</item>
 /// </list>
 /// A locked bank period (<c>AccountPeriodLockedException</c>) or a closed accounting period
@@ -74,15 +80,23 @@ public sealed class LateFeeRunStrategy(
 
         foreach (var row in delinquentRows)
         {
+            // DaysLate == -1 is the sentinel set by the adapter when the tenant has more than one
+            // active lease and the balance cannot be attributed to a single lease.
+            if (row.DaysLate < 0)
+            {
+                exceptions.Add($"Lease {row.LeaseId} ({row.TenantName}): ambiguous_multiple_active_leases — tenant has multiple active leases; cannot attribute balance. Skipped.");
+                continue;
+            }
+
             if (!policyMap.TryGetValue(row.LeaseId, out var policy))
             {
                 exceptions.Add($"Lease {row.LeaseId} ({row.TenantName}): no late-fee policy found — skipped.");
                 continue;
             }
 
-            // Check whether the lease is past the grace period.
-            // Grace-period end = RentDueDay + GraceDays days into the period month.
-            // For preview purposes: if DaysLate > GraceDays, the fee applies.
+            // Gate: a lease is eligible when its oldest past-due charge is strictly past the grace
+            // window (DaysLate > GraceDays). A charge exactly GraceDays old is still within grace.
+            // DaysLate is the real age in days from GetDelinquencyAging.OldestAgeDays, not a bucket floor.
             if (row.DaysLate <= policy.GraceDays)
             {
                 exceptions.Add($"Lease {row.LeaseId} ({row.TenantName}): within grace period ({row.DaysLate} days late, {policy.GraceDays} grace) — skipped.");

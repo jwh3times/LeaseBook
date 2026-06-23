@@ -223,6 +223,177 @@ public sealed class LateFeeRunTests(PostgresFixture fixture)
     }
 
     [Fact]
+    public async Task Grace_gate_uses_actual_days_late_and_fires_when_past_grace()
+    {
+        // Arrange: charge posted 30 days before asOf (end of period = March 31, charge date = March 1).
+        // GraceDays = 5. Actual days late = 30. 30 > 5 → fee MUST be charged.
+        var ct = TestContext.Current.CancellationToken;
+        var orgId = await NewOrgAsync(ct);
+        Guid trustBankId = default, tenantId = default, leaseId = default, propId = default, ownerId = default;
+
+        await DispatchAsync(orgId, async (s, _) =>
+        {
+            var trust = await s.Send(new CreateBankAccount("Trust Grace5", null, null, "trust"), ct);
+            trustBankId = trust.Id;
+            ownerId = await s.Send(new CreateOwner("Grace5 Owner", null, null, null, 800, 0m), ct);
+            propId = await s.Send(new CreateProperty(ownerId, "10 Grace Ln", "Chapel Hill", "NC", null, null), ct);
+            var unitId = await s.Send(new CreateUnit(propId, "#1", 1000m, "occupied"), ct);
+            tenantId = await s.Send(new CreateTenant("Grace5 Tenant", null, null, "current"), ct);
+            leaseId = await s.Send(new CreateLease(
+                tenantId, unitId,
+                new DateOnly(2025, 1, 1), new DateOnly(2027, 12, 31),
+                1000m, 1000m, "active",
+                LateFeeRentDueDayOverride: 1,
+                LateFeeGraceDaysOverride: 5, // grace = 5 days; charge is 30 days late → eligible
+                LateFeeKindOverride: "flat",
+                LateFeeAmountOverride: 50m,
+                LateFeeRateBpsOverride: null), ct);
+        }, ct);
+
+        // Post rent charge on 2026-03-01; asOf = 2026-03-31 → age = 30 days.
+        await DispatchAsync(orgId, async (s, _) =>
+        {
+            await s.Send(
+                new LeaseBook.Modules.Accounting.Features.LedgerPosting.AddCharge(
+                    tenantId, 1000m,
+                    new DateOnly(Period.Year, Period.Month, 1),
+                    "rent", null,
+                    $"rent:{Period.Key}:lease={leaseId}"),
+                ct);
+        }, ct);
+
+        // Act: preview must include this lease (30 > 5).
+        RunPreview? preview = null;
+        await RunAsync(orgId, async (engine, _) =>
+        {
+            preview = await engine.PreviewAsync(RunType.LateFee, Period, ct);
+        }, ct);
+
+        preview.ShouldNotBeNull();
+        preview!.Rows.ShouldContain(r => r.TargetId == leaseId,
+            "lease with actual 30 days late must be eligible when GraceDays=5");
+        preview.Exceptions.ShouldNotContain(e => e.Contains(leaseId.ToString()),
+            "eligible lease must not appear in exceptions");
+    }
+
+    [Fact]
+    public async Task Grace_gate_uses_actual_days_late_and_skips_when_within_grace()
+    {
+        // Arrange: charge posted 30 days before asOf. GraceDays = 40.
+        // Actual days late = 30. 30 <= 40 → fee must NOT be charged (within grace).
+        var ct = TestContext.Current.CancellationToken;
+        var orgId = await NewOrgAsync(ct);
+        Guid trustBankId = default, tenantId = default, leaseId = default, propId = default, ownerId = default;
+
+        await DispatchAsync(orgId, async (s, _) =>
+        {
+            var trust = await s.Send(new CreateBankAccount("Trust Grace40", null, null, "trust"), ct);
+            trustBankId = trust.Id;
+            ownerId = await s.Send(new CreateOwner("Grace40 Owner", null, null, null, 800, 0m), ct);
+            propId = await s.Send(new CreateProperty(ownerId, "20 Grace Ln", "Durham", "NC", null, null), ct);
+            var unitId = await s.Send(new CreateUnit(propId, "#2", 1000m, "occupied"), ct);
+            tenantId = await s.Send(new CreateTenant("Grace40 Tenant", null, null, "current"), ct);
+            leaseId = await s.Send(new CreateLease(
+                tenantId, unitId,
+                new DateOnly(2025, 1, 1), new DateOnly(2027, 12, 31),
+                1000m, 1000m, "active",
+                LateFeeRentDueDayOverride: 1,
+                LateFeeGraceDaysOverride: 40, // grace = 40 days; charge is only 30 days late → skipped
+                LateFeeKindOverride: "flat",
+                LateFeeAmountOverride: 50m,
+                LateFeeRateBpsOverride: null), ct);
+        }, ct);
+
+        // Post rent charge on 2026-03-01; asOf = 2026-03-31 → age = 30 days.
+        await DispatchAsync(orgId, async (s, _) =>
+        {
+            await s.Send(
+                new LeaseBook.Modules.Accounting.Features.LedgerPosting.AddCharge(
+                    tenantId, 1000m,
+                    new DateOnly(Period.Year, Period.Month, 1),
+                    "rent", null,
+                    $"rent:{Period.Key}:lease={leaseId}"),
+                ct);
+        }, ct);
+
+        // Act: preview must NOT include this lease (30 <= 40 → within grace).
+        RunPreview? preview = null;
+        await RunAsync(orgId, async (engine, _) =>
+        {
+            preview = await engine.PreviewAsync(RunType.LateFee, Period, ct);
+        }, ct);
+
+        preview.ShouldNotBeNull();
+        preview!.Rows.ShouldNotContain(r => r.TargetId == leaseId,
+            "lease with 30 days late must be skipped when GraceDays=40 (within grace)");
+        preview.Exceptions.ShouldContain(e => e.Contains("within grace period"),
+            "skipped lease must appear in exceptions with 'within grace period' message");
+    }
+
+    [Fact]
+    public async Task Multi_active_lease_per_tenant_produces_no_late_fee_and_surfaces_ambiguity()
+    {
+        // Arrange: one tenant with TWO active leases, both delinquent on tenant balance.
+        // The adapter cannot attribute the tenant-level balance to one lease → neither must be charged.
+        var ct = TestContext.Current.CancellationToken;
+        var orgId = await NewOrgAsync(ct);
+        Guid tenantId = default, leaseId1 = default, leaseId2 = default;
+
+        await DispatchAsync(orgId, async (s, _) =>
+        {
+            await s.Send(new CreateBankAccount("Trust MultiLease", null, null, "trust"), ct);
+            var ownerId = await s.Send(new CreateOwner("MultiLease Owner", null, null, null, 800, 0m), ct);
+            var propId = await s.Send(new CreateProperty(ownerId, "30 Multi Ln", "Raleigh", "NC", null, null), ct);
+            var u1 = await s.Send(new CreateUnit(propId, "#A", 1100m, "occupied"), ct);
+            var u2 = await s.Send(new CreateUnit(propId, "#B", 1200m, "occupied"), ct);
+            tenantId = await s.Send(new CreateTenant("Multi Lease Tenant", null, null, "current"), ct);
+
+            // Same tenant, two active leases.
+            leaseId1 = await s.Send(new CreateLease(
+                tenantId, u1,
+                new DateOnly(2025, 1, 1), new DateOnly(2027, 12, 31),
+                1100m, 1100m, "active",
+                LateFeeRentDueDayOverride: 1, LateFeeGraceDaysOverride: 0,
+                LateFeeKindOverride: "flat", LateFeeAmountOverride: 50m, LateFeeRateBpsOverride: null), ct);
+            leaseId2 = await s.Send(new CreateLease(
+                tenantId, u2,
+                new DateOnly(2025, 1, 1), new DateOnly(2027, 12, 31),
+                1200m, 1200m, "active",
+                LateFeeRentDueDayOverride: 1, LateFeeGraceDaysOverride: 0,
+                LateFeeKindOverride: "flat", LateFeeAmountOverride: 50m, LateFeeRateBpsOverride: null), ct);
+        }, ct);
+
+        // Create a delinquent balance on the tenant.
+        await DispatchAsync(orgId, async (s, _) =>
+        {
+            await s.Send(
+                new LeaseBook.Modules.Accounting.Features.LedgerPosting.AddCharge(
+                    tenantId, 1100m,
+                    new DateOnly(Period.Year, Period.Month, 1),
+                    "rent", null,
+                    $"rent:{Period.Key}:lease={leaseId1}"),
+                ct);
+        }, ct);
+
+        // Act: preview must produce zero chargeable rows for this tenant and surface the ambiguity.
+        RunPreview? preview = null;
+        await RunAsync(orgId, async (engine, _) =>
+        {
+            preview = await engine.PreviewAsync(RunType.LateFee, Period, ct);
+        }, ct);
+
+        preview.ShouldNotBeNull();
+        // Neither lease must appear in chargeable rows.
+        preview!.Rows.ShouldNotContain(r => r.TargetId == leaseId1,
+            "lease1 of ambiguous tenant must NOT be in chargeable rows");
+        preview.Rows.ShouldNotContain(r => r.TargetId == leaseId2,
+            "lease2 of ambiguous tenant must NOT be in chargeable rows");
+        // The ambiguity must be visible in exceptions.
+        preview.Exceptions.ShouldContain(e => e.Contains("ambiguous_multiple_active_leases"),
+            "ambiguous multi-lease tenant must surface 'ambiguous_multiple_active_leases' in exceptions");
+    }
+
+    [Fact]
     public async Task Low_rent_floor_applies_minimum_fifteen_dollar_cap()
     {
         // Rent = $200; org flat fee = $200 → clamped to max(15, 5%*200=10) = 15.

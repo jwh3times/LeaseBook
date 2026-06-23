@@ -9,11 +9,16 @@ namespace LeaseBook.Web.Adapters;
 /// Host adapter (ADR-007 / WP-3) for the Operations module's <see cref="IDelinquencyData"/>
 /// port. Dispatches two queries via <see cref="ISender"/>:
 /// <list type="bullet">
-///   <item>Accounting's <see cref="GetDelinquencyAging"/> — per-tenant receivable balance with age buckets.</item>
+///   <item>Accounting's <see cref="GetDelinquencyAging"/> — per-tenant receivable balance with real age.</item>
 ///   <item>Directory's <see cref="GetActiveLeaseSchedule"/> — active leases with dimension ids.</item>
 /// </list>
-/// Joins them on <c>tenant_id</c> to produce per-lease delinquency rows. A tenant with multiple
-/// active leases gets one row per lease (Phase 1 simplification; balance is the tenant total).
+/// Joins them on <c>tenant_id</c> to produce per-lease delinquency rows with rules:
+/// <list type="bullet">
+///   <item>A tenant with exactly one active lease → one chargeable row attributed to that lease.</item>
+///   <item>A tenant with MORE than one active lease → excluded with reason
+///     <c>"ambiguous_multiple_active_leases"</c>; no fee is posted to any of their leases
+///     (Phase 1: can't attribute a tenant-level balance to one lease without per-lease GL).</item>
+/// </list>
 /// </summary>
 internal sealed class DelinquencyDataAdapter(ISender sender) : IDelinquencyData
 {
@@ -31,49 +36,55 @@ internal sealed class DelinquencyDataAdapter(ISender sender) : IDelinquencyData
             .Where(r => r.Total > 0m)
             .ToDictionary(r => r.TenantId);
 
-        // Join lease schedule rows to aging; produce one row per (delinquent tenant, lease).
+        // Group leases by tenant_id so we can detect the multi-lease ambiguity case.
+        var leasesByTenant = schedule.Rows
+            .GroupBy(l => l.TenantId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
         var result = new List<DelinquentLedgerRow>();
-        foreach (var lease in schedule.Rows)
+        foreach (var (tenantId, agingRow) in agingByTenant)
         {
-            if (!agingByTenant.TryGetValue(lease.TenantId, out var agingRow))
+            if (!leasesByTenant.TryGetValue(tenantId, out var tenantLeases))
             {
-                continue; // Tenant not delinquent — skip.
+                continue; // Delinquent tenant has no active lease in this period — skip.
             }
 
-            // Days late: oldest past-due bucket determines the delinquency age.
-            // Use D1_30, D31_60, D61_90, Over90 in priority order. If any bucket > 0, we count
-            // the midpoint of the oldest occupied bucket as "days late" for preview display.
-            // The strategy only cares that days_late > 0 (i.e., past the grace period); the exact
-            // number is informational in the preview.
-            var daysLate = ComputeDaysLate(agingRow);
+            if (tenantLeases.Count > 1)
+            {
+                // Cannot attribute a tenant-level balance to one lease when multiple are active.
+                // Surface one excluded row per lease so the preview can list them with the reason.
+                foreach (var lease in tenantLeases)
+                {
+                    result.Add(new DelinquentLedgerRow(
+                        LeaseId: lease.LeaseId,
+                        TenantId: lease.TenantId,
+                        PropertyId: lease.PropertyId,
+                        OwnerId: lease.OwnerId,
+                        UnitId: lease.UnitId,
+                        TenantName: lease.TenantName,
+                        UnitLabel: lease.UnitLabel,
+                        Rent: lease.Rent,
+                        Balance: agingRow.Total,
+                        DaysLate: -1)); // Sentinel: signals ambiguous_multiple_active_leases to strategy.
+                }
+                continue;
+            }
 
+            // Exactly one active lease — attribute the balance to it.
+            var singleLease = tenantLeases[0];
             result.Add(new DelinquentLedgerRow(
-                LeaseId: lease.LeaseId,
-                TenantId: lease.TenantId,
-                PropertyId: lease.PropertyId,
-                OwnerId: lease.OwnerId,
-                UnitId: lease.UnitId,
-                TenantName: lease.TenantName,
-                UnitLabel: lease.UnitLabel,
-                Rent: lease.Rent,
+                LeaseId: singleLease.LeaseId,
+                TenantId: singleLease.TenantId,
+                PropertyId: singleLease.PropertyId,
+                OwnerId: singleLease.OwnerId,
+                UnitId: singleLease.UnitId,
+                TenantName: singleLease.TenantName,
+                UnitLabel: singleLease.UnitLabel,
+                Rent: singleLease.Rent,
                 Balance: agingRow.Total,
-                DaysLate: daysLate));
+                DaysLate: agingRow.OldestAgeDays)); // Real age from the Accounting query.
         }
 
         return result;
-    }
-
-    /// <summary>
-    /// Approximates "days late" from the aging buckets. Uses the oldest non-zero bucket.
-    /// Returns 0 if only "Current" (due this month, not yet past-due).
-    /// </summary>
-    private static int ComputeDaysLate(
-        LeaseBook.Modules.Accounting.Features.Ledgers.DelinquencyRow row)
-    {
-        if (row.Over90 > 0m) return 91;
-        if (row.D61_90 > 0m) return 61;
-        if (row.D31_60 > 0m) return 31;
-        if (row.D1_30 > 0m) return 1;
-        return 0; // Only "Current" balance — not actually delinquent.
     }
 }

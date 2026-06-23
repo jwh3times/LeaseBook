@@ -4,8 +4,8 @@ namespace LeaseBook.Modules.Operations.Contracts;
 
 /// <summary>
 /// One delinquent lease row returned by <see cref="IDelinquencyData"/>. Carries all dimension
-/// fields needed to construct a <see cref="LateFeeIntent"/> plus the balance and days-late
-/// for preview display.
+/// fields needed to construct a <see cref="LateFeeIntent"/> plus the balance and actual days-late
+/// for the grace-gate check and preview display.
 /// </summary>
 public sealed record DelinquentLedgerRow(
     Guid LeaseId,
@@ -17,6 +17,12 @@ public sealed record DelinquentLedgerRow(
     string UnitLabel,
     decimal Rent,
     decimal Balance,
+    /// <summary>
+    /// The actual age in days of the oldest past-due charge (sourced from
+    /// <c>GetDelinquencyAging.OldestAgeDays</c>, which is MAX(age_days) over entries with
+    /// positive net-owed). Used by <see cref="LateFeeRunStrategy"/> to gate against
+    /// <c>policy.GraceDays</c> directly.
+    /// </summary>
     int DaysLate);
 
 // ── Port ──────────────────────────────────────────────────────────────────────
@@ -38,13 +44,17 @@ public sealed record DelinquentLedgerRow(
 public interface IDelinquencyData
 {
     /// <summary>
-    /// Returns leases with a positive receivable balance whose oldest outstanding charge is
-    /// more than <paramref name="gracePeriodEndDate"/> days past due, joined to their schedule
-    /// dimensions. Only tenants with a positive total balance surface.
+    /// Returns leases with a positive receivable balance, joined to their schedule dimensions.
+    /// Only tenants with a positive total balance surface. The grace-period gate is NOT applied
+    /// here — callers filter on <see cref="DelinquentLedgerRow.DaysLate"/> vs their policy.
     /// </summary>
     /// <param name="year">Period year (used to fetch the active lease schedule).</param>
     /// <param name="month">Period month.</param>
-    /// <param name="asOf">Balance age measured from this date (typically the period's first day).</param>
+    /// <param name="asOf">
+    /// Balance age measured from this date. The late-fee run strategy passes the last day of
+    /// the period month so that rent charges posted on the 1st have a positive age by
+    /// end-of-month (the standard PM assessment workflow).
+    /// </param>
     /// <param name="ct">Cancellation token.</param>
     Task<IReadOnlyList<DelinquentLedgerRow>> GetAsync(
         int year, int month, DateOnly asOf, CancellationToken ct);
