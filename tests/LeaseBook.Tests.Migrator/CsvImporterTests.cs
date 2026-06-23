@@ -41,6 +41,18 @@ public sealed class CsvImporterTests
     }
 
     [Fact]
+    public void Duplicate_normalized_header_does_not_throw_and_still_loads()
+    {
+        ImportResult<OwnerRow> result = null!;
+        Should.NotThrow(() => result = CsvImporter.Read(
+            Csv("Name,NAME,Reserve\nHargrove Family Trust,dup,500.00\n"),
+            OwnerProfile,
+            ctx => new OwnerRow(ctx.Cells["name"], decimal.Parse(ctx.Cells["reserve"]))));
+
+        result.Rows.ShouldHaveSingleItem().Name.ShouldBe("Hargrove Family Trust");
+    }
+
+    [Fact]
     public void One_bad_row_does_not_sink_the_batch()
     {
         var result = CsvImporter.Read(

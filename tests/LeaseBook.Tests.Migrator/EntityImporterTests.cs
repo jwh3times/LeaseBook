@@ -36,4 +36,29 @@ public sealed class EntityImporterTests
         result.Rows.ShouldBeEmpty();
         result.Errors.ShouldContain(e => e.RowNumber == 1 && e.Field == "cash_balance");
     }
+
+    [Fact]
+    public void BankBalances_default_profile_parses_book_balance()
+    {
+        var profile = AppFolioProfiles.For(EntityKind.BankBalances);
+        var result = EntityImporter.ReadBankBalances(
+            Csv("Account ID,Account Name,Book Balance\nB-1,Operating Trust,42500.00\n"), profile);
+
+        result.Errors.ShouldBeEmpty();
+        var row = result.Rows.ShouldHaveSingleItem();
+        row.ExternalBankId.ShouldBe("B-1");
+        row.Name.ShouldBe("Operating Trust");
+        row.BookBalance.ShouldBe(42500.00m);
+    }
+
+    [Fact]
+    public void Non_numeric_book_balance_is_a_row_error()
+    {
+        var profile = AppFolioProfiles.For(EntityKind.BankBalances);
+        var result = EntityImporter.ReadBankBalances(
+            Csv("Account ID,Account Name,Book Balance\nB-1,Operating Trust,oops\n"), profile);
+
+        result.Rows.ShouldBeEmpty();
+        result.Errors.ShouldContain(e => e.RowNumber == 1 && e.Field == "book_balance");
+    }
 }

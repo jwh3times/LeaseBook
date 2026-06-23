@@ -10,7 +10,7 @@ public sealed record ColumnMappingProfile(IReadOnlyList<FieldMapping> Fields)
     public IReadOnlyDictionary<string, string> Resolve(IReadOnlyList<string> headers, out IReadOnlyList<RowError> missing)
     {
         static string Norm(string s) => s.Trim().ToLowerInvariant();
-        var byNorm = headers.ToDictionary(Norm, h => h);
+        var byNorm = headers.GroupBy(Norm).ToDictionary(g => g.Key, g => g.First());
         var resolved = new Dictionary<string, string>(StringComparer.Ordinal);
         var miss = new List<RowError>();
         foreach (var f in Fields)
