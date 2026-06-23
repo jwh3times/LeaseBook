@@ -3469,6 +3469,7 @@ export interface components {
             balancesImported: boolean;
             banksConfigured: boolean;
             entitiesImported: boolean;
+            hasJournalData: boolean;
             signedOff: boolean;
             verified: boolean;
         };
