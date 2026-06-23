@@ -3,6 +3,7 @@ using Azure.Monitor.OpenTelemetry.Exporter;
 using LeaseBook.Modules.Accounting;
 using LeaseBook.Modules.Banking;
 using LeaseBook.Modules.Directory;
+using LeaseBook.Modules.Operations;
 using LeaseBook.Modules.Reporting;
 using LeaseBook.SharedKernel.Cqrs;
 using LeaseBook.SharedKernel.Endpoints;
@@ -110,6 +111,12 @@ builder.Services.AddScoped<ReportPreviewService>();
 builder.Services.AddScoped<LeaseBook.Modules.Reporting.Delivery.IArtifactStore,
     LeaseBook.Modules.Reporting.Delivery.LocalArtifactStore>();
 builder.Services.AddScoped<IStatementDelivery, LocalStatementDelivery>();
+
+// Operations module services (run engine; CQRS handlers are auto-discovered). The host implements
+// Operations' cross-module write-direction port (ADR-007 / ADR-019): IBatchPosting translates run
+// intents into IAccountingEvents.PostAsync calls.
+builder.Services.AddOperationsModule();
+builder.Services.AddScoped<LeaseBook.Modules.Operations.Contracts.IBatchPosting, BatchPostingAdapter>();
 
 // Banking module services (CSV import/match; CQRS handlers are auto-discovered). The host implements
 // Banking's cross-module ports with thin adapters (ADR-007 / P68): IBankRegister reads uncleared register
