@@ -23,7 +23,8 @@ namespace LeaseBook.Modules.Operations.Runs;
 ///   <item>Lease with <see cref="LeaseScheduleRow.Rent"/> == 0 (not chargeable).</item>
 ///   <item>Lease ended before the period (term does not overlap).</item>
 /// </list>
-/// A locked period is surfaced per-item during confirm (caught → <see cref="RunItemStatus.Excluded"/>).
+/// A locked bank period (<c>AccountPeriodLockedException</c>) or a closed accounting period
+/// (<c>PeriodClosedException</c>) is surfaced per-item during confirm (caught → <see cref="RunItemStatus.Excluded"/>).
 /// </para>
 /// </summary>
 public sealed class RentRunStrategy(
@@ -150,7 +151,8 @@ public sealed class RentRunStrategy(
         }
 
         // Post all intents. Catch DuplicateSourceRefException per-item → Skipped.
-        // Catch AccountPeriodLockedException per-item → Excluded (period locked).
+        // Catch AccountPeriodLockedException per-item → Excluded (bank period locked).
+        // Catch PeriodClosedException per-item → Excluded (accounting period closed).
         var items = new List<BulkRunItem>(selectedTargetIds.Count);
         items.AddRange(skippedItems);
 
@@ -195,6 +197,17 @@ public sealed class RentRunStrategy(
                     run.Id, RunTargetKind.Lease, intent.LeaseId,
                     RunItemStatus.Excluded, 0m, snapshot, run.CreatedAt);
             }
+            catch (Exception ex) when (IsPeriodClosed(ex))
+            {
+                var snapshot = JsonSerializer.Serialize(new
+                {
+                    sourceRef = intent.SourceRef,
+                    reason = "period_closed",
+                });
+                item = BulkRunItem.Create(
+                    run.Id, RunTargetKind.Lease, intent.LeaseId,
+                    RunItemStatus.Excluded, 0m, snapshot, run.CreatedAt);
+            }
             items.Add(item);
         }
 
@@ -219,4 +232,11 @@ public sealed class RentRunStrategy(
     /// </summary>
     private static bool IsPeriodLocked(Exception ex) =>
         ex.GetType().Name == "AccountPeriodLockedException";
+
+    /// <summary>
+    /// Checks for PeriodClosedException without referencing Accounting assembly (ADR-007).
+    /// A RentCharged posting into a closed accounting period raises this; the item is Excluded.
+    /// </summary>
+    private static bool IsPeriodClosed(Exception ex) =>
+        ex.GetType().Name == "PeriodClosedException";
 }

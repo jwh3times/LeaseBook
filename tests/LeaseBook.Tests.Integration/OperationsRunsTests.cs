@@ -1,4 +1,5 @@
 using LeaseBook.Modules.Accounting.Features.Ledgers;
+using LeaseBook.Modules.Accounting.Periods;
 using LeaseBook.Modules.Directory.Features.BankAccounts;
 using LeaseBook.Modules.Directory.Features.Leases;
 using LeaseBook.Modules.Directory.Features.Owners;
@@ -199,6 +200,33 @@ public sealed class OperationsRunsTests(PostgresFixture fixture)
         preview!.Rows.Count.ShouldBe(2);
     }
 
+    [Fact]
+    public async Task Confirm_with_closed_period_maps_items_to_Excluded_not_thrown()
+    {
+        // Arrange: fresh org with leases, then close March 2026 so posting will raise PeriodClosedException.
+        var ct = TestContext.Current.CancellationToken;
+        var ctx = await SetupAsync(ct);
+
+        // Close the accounting period for March 2026 before any posting attempt.
+        await ClosePeriodAsync(ctx.OrgId, Year, Month, ct);
+
+        // Act: confirm the rent run — all 3 items must land as Excluded, no exception escapes.
+        RunResult? result = null;
+        await RunAsync(ctx.OrgId, async (engine, _) =>
+        {
+            var preview = await engine.PreviewAsync(RunType.Rent, Period, ct);
+            var targets = preview.Rows.Select(r => r.TargetId).ToList();
+            result = await engine.ConfirmAsync(RunType.Rent, Period, targets, ct);
+        }, ct);
+
+        // Assert: all items Excluded, none thrown, BulkRun still recorded (result non-null).
+        result.ShouldNotBeNull();
+        result!.Posted.ShouldBe(0);
+        result.Skipped.ShouldBe(0);
+        result.Excluded.ShouldBe(3, "closed accounting period must map every item to Excluded, not throw");
+        result.Total.ShouldBe(0m);
+    }
+
     // ── helpers ──────────────────────────────────────────────────────────────
 
     private sealed record Ctx(Guid OrgId, Guid TrustBankId);
@@ -271,5 +299,18 @@ public sealed class OperationsRunsTests(PostgresFixture fixture)
         var executor = scope.ServiceProvider.GetRequiredService<OrgScopedExecutor>();
         var sender = scope.ServiceProvider.GetRequiredService<ISender>();
         await executor.RunAsync(orgId, () => work(sender, scope.ServiceProvider), ct);
+    }
+
+    /// <summary>
+    /// Closes the given accounting period for <paramref name="orgId"/> using the same
+    /// <see cref="AccountingPeriods"/> service the posting engine reads. Mirrors the pattern used
+    /// in <see cref="LeaseBook.Tests.Accounting.AccountingPeriodsTests"/> (CloseAsync_flips_open_to_closed_and_is_idempotent).
+    /// </summary>
+    private async Task ClosePeriodAsync(Guid orgId, int year, int month, CancellationToken ct)
+    {
+        var tenant = new LeaseBook.SharedKernel.Tenancy.TenantContext();
+        await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
+        var executor = new OrgScopedExecutor(db, tenant);
+        await executor.RunAsync(orgId, () => new AccountingPeriods(db).CloseAsync(year, month, ct), ct);
     }
 }
