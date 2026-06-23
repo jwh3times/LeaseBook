@@ -148,6 +148,10 @@ builder.Services.AddScoped<LeaseBook.Web.Onboarding.ExternalIdResolver>();
 builder.Services.AddScoped<LeaseBook.Web.Onboarding.EntityImportService>();
 builder.Services.AddScoped<LeaseBook.Web.Onboarding.BalanceImportService>();
 
+// M7 WP-4: verification + sign-off. VerificationService dispatches the Accounting
+// IMigrationVerificationData query via ISender and enforces the tie-out gate.
+builder.Services.AddScoped<LeaseBook.Web.Onboarding.Verification.VerificationService>();
+
 // Host-composed dashboard (§C.6 / P45): the cross-module composition root, dispatching module read
 // queries via ISender. TimeProvider drives the "current accounting month" (injectable for tests).
 builder.Services.AddSingleton(TimeProvider.System);
