@@ -14,15 +14,36 @@ import {
 import { num } from '@/lib/directory';
 import { useDashboard, type DashboardResponse } from '@/lib/dashboard';
 import { trackInteraction } from '@/lib/telemetry';
+import { useOnboardingStatus } from '@/features/onboarding/onboarding';
 
 export function DashboardPage() {
   const navigate = useNavigate();
   const query = useDashboard();
+  const onboardingQuery = useOnboardingStatus();
 
   // Owner ending balances are visible with zero clicks (the PRD acceptance) — record the budget met.
   useEffect(() => {
     if (query.isSuccess) trackInteraction('owner-balances-visible', 0, true);
   }, [query.isSuccess]);
+
+  // M7 onboarding takeover rules:
+  // - No journal data + not signed off → redirect to /onboarding (empty org, must complete setup).
+  // - Has journal data + not signed off + import activity in progress → show banner.
+  // - Operational org with no import activity (e.g. seeded demo: hasJournalData=true, import flags=false)
+  //   → normal dashboard, no banner, no redirect.
+  const ob = onboardingQuery.data;
+  useEffect(() => {
+    if (!ob) return;
+    if (!ob.hasJournalData && !ob.signedOff) {
+      navigate('/onboarding', { replace: true });
+    }
+  }, [ob, navigate]);
+
+  const showMigrationBanner =
+    ob !== undefined &&
+    ob.hasJournalData &&
+    !ob.signedOff &&
+    (ob.entitiesImported || ob.balancesImported || ob.verified);
 
   if (query.isPending) return <DashboardSkeleton />;
   if (query.isError || !query.data) {
@@ -60,6 +81,20 @@ export function DashboardPage() {
           Run owner disbursements
         </Button>
       </div>
+
+      {showMigrationBanner && (
+        <div className="ob-migration-banner" role="status">
+          <Icon name="alert" size={16} />
+          <span>Migration in progress — </span>
+          <button
+            type="button"
+            className="ob-migration-banner-link"
+            onClick={() => navigate('/onboarding')}
+          >
+            Finish migration verification &amp; sign-off
+          </button>
+        </div>
+      )}
 
       <div className="pf-statgrid">
         <StatCard

@@ -4,6 +4,7 @@ import { KitchenSink } from '@/dev/KitchenSink';
 import { LoginPage } from '@/features/auth/LoginPage';
 import { BankingPage } from '@/features/banking/BankingPage';
 import { DashboardPage } from '@/features/dashboard/DashboardPage';
+import { OnboardingPage } from '@/features/onboarding/OnboardingPage';
 import { OwnerDetailPage } from '@/features/owners/OwnerDetailPage';
 import { OwnersPage } from '@/features/owners/OwnersPage';
 import { PropertiesPage } from '@/features/properties/PropertiesPage';
@@ -41,6 +42,7 @@ const detailRoutes = [
   { path: '/owners/:id', element: <OwnerDetailPage /> },
   { path: '/owners/:id/statement', element: <StatementPage /> },
   { path: '/properties/:id', element: <PropertyDetailPage /> },
+  { path: '/onboarding', element: <OnboardingPage /> },
 ];
 
 export const router = createBrowserRouter([
