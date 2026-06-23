@@ -41,6 +41,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- PDF generation (M5 WP-04): QuestPDF Community license (free under $1M revenue threshold). -->
+    <PackageVersion Include="QuestPDF" Version="2026.6.0" />
+    <!-- PDF text extraction (test-only, M5 WP-04): PdfPig MIT — used to assert PDF content in tests. -->
+    <PackageVersion Include="PdfPig" Version="0.1.14" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Test stack (P7): xUnit v3 on Microsoft.Testing.Platform + Shouldly + NetArchTest -->
     <PackageVersion Include="xunit.v3" Version="3.2.2" />
     <!-- Abstractions-only (IAsyncLifetime, ICollectionFixture) for the shared, non-executable

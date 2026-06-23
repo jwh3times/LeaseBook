@@ -8,6 +8,7 @@ import { OwnerDetailPage } from '@/features/owners/OwnerDetailPage';
 import { OwnersPage } from '@/features/owners/OwnersPage';
 import { PropertiesPage } from '@/features/properties/PropertiesPage';
 import { PropertyDetailPage } from '@/features/properties/PropertyDetailPage';
+import { ReportsPage, StatementPage } from '@/features/reports';
 import { SettingsPage } from '@/features/settings/SettingsPage';
 import { LedgerPage } from '@/features/tenants/LedgerPage';
 import { TenantsPage } from '@/features/tenants/TenantsPage';
@@ -24,6 +25,7 @@ const FEATURE_PAGES: Record<string, ReactElement> = {
   '/owners': <OwnersPage />,
   '/properties': <PropertiesPage />,
   '/banking': <BankingPage />,
+  '/reports': <ReportsPage />,
   '/settings': <SettingsPage />,
 };
 
@@ -35,6 +37,7 @@ const pageRoutes = [...NAV_ROUTES, SETTINGS_ROUTE].map((route) => ({
 const detailRoutes = [
   { path: '/tenants/:id', element: <LedgerPage /> },
   { path: '/owners/:id', element: <OwnerDetailPage /> },
+  { path: '/owners/:id/statement', element: <StatementPage /> },
   { path: '/properties/:id', element: <PropertyDetailPage /> },
 ];
 

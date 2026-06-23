@@ -17,6 +17,8 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
     <PackageReference Include="EFCore.NamingConventions" />
+    <!-- PDF text extraction (test-only, M5 WP-04): PdfPig MIT — genuine content assertion on rendered PDFs. -->
+    <PackageReference Include="PdfPig" />
   </ItemGroup>
 
   <ItemGroup>

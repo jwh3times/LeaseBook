@@ -163,3 +163,88 @@ auto-matched against uncleared register lines: an exact amount on a nearby date 
 clears the line on confirm; an exact amount on a far date is a suggestion; no amount match offers to create a
 transaction. Re-importing the same statement is de-duplicated, never double-counted. Matching and clearing
 always run through the accounting engine — the importer never writes the journal directly.
+
+## Statements & reporting (M5)
+
+An **owner statement** is a period summary that shows a property manager's fiduciary story to an
+owner: beginning balance, income received, operating expenses, any applied deposit or credit events,
+owner contributions, disbursements, and the resulting ending balance. Like every other view in
+LeaseBook, it is a **query over the double-entry journal** — there is no separately maintained
+statement ledger that could drift. The statement is generated on demand and the same journal replay
+that computes it also verifies it independently.
+
+### How the engine categorizes owner-equity lines into sections
+
+The journal holds every financial event as lines tagged with an `event_type`. When a statement is
+generated, only lines carrying `account_class = 'owner_equity'` for the requested owner are
+considered — this is what structurally excludes PM income (`pm_income` lines can never match). Those
+lines are grouped by `event_type` using a single exhaustive map (`StatementSectionMap`):
+
+| Event type(s) | Statement section |
+| --- | --- |
+| `RentCharged`, `FeeCharged`, `PaymentReceived` | Income — rent collected |
+| `ManagementFeeAssessed`, `VendorPaid` | Operating expenses |
+| `DepositApplied`, `PrepaymentApplied`, `CreditIssued` | Applied deposits & credits |
+| `OwnerContribution` | Owner contributions |
+| `OwnerDisbursed` | Owner disbursement |
+| `BalanceForward` | Folded into beginning balance only; never an in-period section |
+
+The map is *exhaustive by construction*: any event that posts to `owner_equity` but has no entry in
+this map throws at runtime rather than silently dropping a line off the statement. Adding a new
+posting template that touches owner equity requires updating the map, and the property-based test
+suite will catch the omission before deployment.
+
+### The structural tie-out ($0.00 variance or issuance is blocked)
+
+The statement engine runs **three independent reads over the journal** per owner per request:
+
+1. **In-period lines** — the `owner_equity` movements that feed the sections.
+2. **Beginning balance** — cumulative owner equity before `entry_date < period_start`.
+3. **Independent period-end balance** — cumulative owner equity before `entry_date < period_end`
+   (the same filter as the beginning balance but extended by one month, re-queried fresh from the
+   journal — it is *not* derived by adding the section totals).
+
+The tie-out then computes `variance = statement_ending − journal_ending_balance`. If variance is
+non-zero, the statement was not issued — the API returns HTTP 409 and the UI surfaces a fiduciary
+warning. A zero variance means the statement's own arithmetic (begin + section totals) agrees with
+an independent replay of the journal to the cent, ruling out any categorization or sign error in the
+C# section pipeline.
+
+This design is deliberate: the three-query structure means a bug in the grouping or sign convention
+produces a *detectable* non-zero variance, not a silently balanced ledger (which would happen if the
+ending balance were derived from the section totals themselves).
+
+### The fiduciary panel
+
+Every rendered owner statement carries a **fiduciary integrity panel** — three computed assertions,
+not static copy:
+
+| Check | What it proves |
+| --- | --- |
+| **PM income excluded ✓** | The query is structurally scoped to `owner_equity` lines; no `pm_income` account-class line can ever enter the owner's section totals. This is a data-model constraint, not a filter applied at reporting time. |
+| **Deposits recognized on application ✓** | A `DepositApplied` or `PrepaymentApplied` entry appears in the *Applied deposits & credits* section if and only if one was posted in the period. Collected-but-unapplied deposits sit in `deposit_liability` and never reach the owner's income. |
+| **$0.00 variance ✓** | The structural tie-out (above) confirmed that the statement's section arithmetic matches an independent journal re-query to the cent for this period. |
+
+If the variance check fails, the statement is still shown (for diagnosis) but marked unbalanced, the
+panel flag is set, and delivery is blocked until the underlying journal discrepancy is resolved.
+
+### The ADR-016 read-layer boundary
+
+The statement engine is the one place in LeaseBook where the read layer is intentionally allowed to
+span module boundaries (the ADR-007 cross-module exception). The rule is documented in ADR-016:
+
+- **Accounting owns all financial math.** The `GetOwnerStatementData` handler runs inside the
+  Accounting module, reading only `journal_lines` and `journal_entries` — no other module's tables.
+  The section categorization, the per-basis filter, the PM-exclusion, and the tie-out all live here.
+- **A batch port (`IOwnerStatementData`) carries results to the host.** The host's
+  `StatementAssembler` calls this port for every requested owner in one batch, then enriches each
+  result with display names (from Directory) and branding/reconciliation metadata (from Banking).
+  None of the enrichment touches financial figures.
+- **Reporting composes and presents; it never re-derives money.** If a report needs a financial
+  figure that Accounting doesn't already expose, the fix is to extend the Accounting port — not to
+  write a cross-module SQL join inside Reporting.
+
+The eight-report catalog (`/reports`) follows the same pattern: each report preview is dispatched
+through `ISender` to the appropriate Accounting or Directory handler; the host's
+`ReportPreviewService` aggregates the generic row payload the SPA renders. CSV and (for statements)
+PDF exports use the same data path — no separate re-query for a different output format.

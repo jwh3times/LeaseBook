@@ -3,6 +3,7 @@ using Azure.Monitor.OpenTelemetry.Exporter;
 using LeaseBook.Modules.Accounting;
 using LeaseBook.Modules.Banking;
 using LeaseBook.Modules.Directory;
+using LeaseBook.Modules.Reporting;
 using LeaseBook.SharedKernel.Cqrs;
 using LeaseBook.SharedKernel.Endpoints;
 using LeaseBook.SharedKernel.Observability;
@@ -12,11 +13,17 @@ using LeaseBook.Web.Auth;
 using LeaseBook.Web.Cli;
 using LeaseBook.Web.Endpoints;
 using LeaseBook.Web.Persistence;
+using LeaseBook.Web.Reporting;
 using LeaseBook.Web.Seeding;
 using LeaseBook.Web.Tenancy;
 using Microsoft.EntityFrameworkCore;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
+using QuestPDF.Infrastructure;
+
+// QuestPDF Community license (M5 WP-04). Free for organizations under the $1M annual revenue
+// threshold; LeaseBook qualifies at launch. Must be set before the first document is rendered.
+QuestPDF.Settings.License = LicenseType.Community;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -79,6 +86,30 @@ builder.Services.AddScoped<LeaseBook.Modules.Directory.Contracts.IBankClearanceS
 // The reverse seam (M3 / P58): the Accounting ledger composer resolves a tenant's owner/property/unit
 // from the active lease through Directory. Accounting owns the port; the host adapter delegates via ISender.
 builder.Services.AddScoped<LeaseBook.Modules.Accounting.Contracts.ITenantPostingDimensions, TenantPostingDimensionsAdapter>();
+
+// M5 WP-01 (ADR-016): Accounting owns the statement engine; the Reporting module consumes it via this port.
+builder.Services.AddScoped<LeaseBook.Modules.Accounting.Contracts.IOwnerStatementData, OwnerStatementDataAdapter>();
+
+// M5 WP-03 (ADR-016): Reporting module ports — owner/property names, PM branding, reconciliation snapshots.
+// All three are host adapters that dispatch to Directory/Accounting queries via ISender.
+builder.Services.AddScoped<LeaseBook.Modules.Reporting.Contracts.IStatementNames, StatementNamesAdapter>();
+builder.Services.AddScoped<LeaseBook.Modules.Reporting.Contracts.IPmBranding, PmBrandingAdapter>();
+builder.Services.AddScoped<LeaseBook.Modules.Reporting.Contracts.IReconciliationSnapshots, ReconciliationSnapshotsAdapter>();
+
+// Reporting module services (CQRS handlers auto-discovered; no module-level services yet).
+builder.Services.AddReportingModule();
+
+// Host-composed reporting services — StatementAssembler and ReportPreviewService cross module
+// boundaries via ISender (composition root pattern, same as DashboardService).
+builder.Services.AddScoped<StatementAssembler>();
+builder.Services.AddScoped<ReportPreviewService>();
+
+// M5 WP-05: statement delivery seam + artifact store. IArtifactStore is the byte-only store
+// (local = file system; M8 = Azure Blob). IStatementDelivery is host-owned (references StatementPdf
+// / StatementView). Both are scoped — DeliveryRecord insert needs the ambient tenant context.
+builder.Services.AddScoped<LeaseBook.Modules.Reporting.Delivery.IArtifactStore,
+    LeaseBook.Modules.Reporting.Delivery.LocalArtifactStore>();
+builder.Services.AddScoped<IStatementDelivery, LocalStatementDelivery>();
 
 // Banking module services (CSV import/match; CQRS handlers are auto-discovered). The host implements
 // Banking's cross-module ports with thin adapters (ADR-007 / P68): IBankRegister reads uncleared register
