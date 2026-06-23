@@ -35,6 +35,7 @@ internal sealed class ChartOfAccounts(DbContext db) : IChartOfAccounts
         AddIfMissing(AccountCodes.SecurityDepositsHeld, AccountClass.DepositLiability, "Security Deposits Held", null);
         AddIfMissing(AccountCodes.TenantPrepayments, AccountClass.DepositLiability, "Tenant Prepayments", null);
         AddIfMissing(AccountCodes.PmIncome, AccountClass.PmIncome, "PM Income", null);
+        AddIfMissing(AccountCodes.MigrationClearing, AccountClass.MigrationClearing, "Migration Clearing", null);
 
         foreach (var bank in banks)
         {

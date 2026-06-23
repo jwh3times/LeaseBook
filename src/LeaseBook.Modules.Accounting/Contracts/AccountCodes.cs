@@ -19,4 +19,8 @@ public static class AccountCodes
 
     /// <summary>Code for the <c>pm_operating_bank</c> account representing a given operating bank.</summary>
     public static string PmOperatingBank(Guid bankAccountId) => $"pm_operating_bank:{bankAccountId}";
+
+    /// <summary>Singleton clearing account used as the contra leg for imported opening positions (M7/ADR-020).
+    /// Nets to $0.00 in both bases once the migration ties; structurally invisible to owner statements.</summary>
+    public const string MigrationClearing = "migration_clearing";
 }

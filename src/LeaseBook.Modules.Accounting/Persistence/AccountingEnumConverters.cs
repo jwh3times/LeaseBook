@@ -20,6 +20,7 @@ public sealed class AccountClassConverter() : ValueConverter<AccountClass, strin
         AccountClass.DepositLiability => "deposit_liability",
         AccountClass.PmIncome => "pm_income",
         AccountClass.PmOperatingBank => "pm_operating_bank",
+        AccountClass.MigrationClearing => "migration_clearing",
         _ => throw new ArgumentOutOfRangeException(nameof(value), value, "Unknown account class."),
     };
 
@@ -31,6 +32,7 @@ public sealed class AccountClassConverter() : ValueConverter<AccountClass, strin
         "deposit_liability" => AccountClass.DepositLiability,
         "pm_income" => AccountClass.PmIncome,
         "pm_operating_bank" => AccountClass.PmOperatingBank,
+        "migration_clearing" => AccountClass.MigrationClearing,
         _ => throw new ArgumentOutOfRangeException(nameof(value), value, "Unknown account class text."),
     };
 
@@ -38,6 +40,7 @@ public sealed class AccountClassConverter() : ValueConverter<AccountClass, strin
     public static readonly string[] DbValues =
     [
         "trust_bank", "owner_equity", "tenant_receivable", "deposit_liability", "pm_income", "pm_operating_bank",
+        "migration_clearing",
     ];
 }
 
