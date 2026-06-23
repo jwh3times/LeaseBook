@@ -349,6 +349,233 @@ public sealed class BalanceImportTests(PostgresFixture fixture)
     }
 
     // -------------------------------------------------------------------------
+    // Fix 2: accrual-basis tie-out to $0 — owner accrual delta offsets receivable
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task Owner_accrual_delta_and_matching_receivable_tie_clearing_to_zero_in_accrual_basis()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var setup = await SetupAsync("AccrualTie", ct);
+
+        // Owner O-1 with one tenant T-1 under it.
+        await ImportOwnerTenantChainAsync(setup.Client, ct);
+
+        // A fully-tied cutover set whose ACCRUAL basis nets to $0 specifically because the owner's
+        // accrual delta offsets the tenant receivable:
+        //   bank (trust) book        500  → clearing CR 500  (Both → both bases)
+        //   owner equity cash        500  → clearing DR 500  (Both → both bases)
+        //   owner equity accrual Δ   200  → clearing DR 200  (Accrual only)
+        //   tenant receivable        200  → clearing CR 200  (Accrual only)
+        // Cash net    = +500 (equity) − 500 (bank)                 = 0
+        // Accrual net = +500 + 200 (equity+Δ) − 500 − 200 (bank+rcv) = 0  ← the delta/receivable identity
+        var bankCsv = $"Account ID,Account Name,Book Balance\n" +
+                      $"B-TRUST,{setup.TrustBankName},500.00\n";
+        var bankResult = await PostBalanceImportAsync<ImportBatchResult>(
+            setup.Client, "bank_balances",
+            new { csvContent = bankCsv, cutoverDate = CutoverStr, filename = "banks.csv" }, ct);
+        bankResult.ErrorCount.ShouldBe(0, $"bank errors: {string.Join("; ", bankResult.Errors.Select(e => e.Reason))}");
+
+        // owner_balances: cash=500, accrual=700 → accrual delta of 200 (CR owner_equity → DR clearing 200, accrual).
+        const string ownerBalCsv =
+            "Owner ID,Owner Name,Cash Balance,Accrual Balance\n" +
+            "O-1,Chain Owner LLC,500.00,700.00\n";
+        var ownerResult = await PostBalanceImportAsync<ImportBatchResult>(
+            setup.Client, "owner_balances",
+            new { csvContent = ownerBalCsv, cutoverDate = CutoverStr, filename = "owner_balances.csv" }, ct);
+        ownerResult.ErrorCount.ShouldBe(0, $"owner errors: {string.Join("; ", ownerResult.Errors.Select(e => e.Reason))}");
+
+        // tenant_receivables: 200 for T-1 (DR tenant_receivable → CR clearing 200, accrual).
+        const string receivableCsv =
+            "Tenant ID,Owner ID,Balance Due\n" +
+            "T-1,O-1,200.00\n";
+        var receivableResult = await PostBalanceImportAsync<ImportBatchResult>(
+            setup.Client, "tenant_receivables",
+            new { csvContent = receivableCsv, cutoverDate = CutoverStr, filename = "receivables.csv" }, ct);
+        receivableResult.ErrorCount.ShouldBe(0, $"receivable errors: {string.Join("; ", receivableResult.Errors.Select(e => e.Reason))}");
+
+        var tenant = new TenantContext { OrgId = setup.OrgId };
+        await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
+        var executor = new OrgScopedExecutor(db, tenant);
+
+        await executor.RunAsync(setup.OrgId, async () =>
+        {
+            // ACCRUAL identity: the owner accrual-delta clearing DR 200 offsets the receivable clearing
+            // CR 200, and the cash legs (equity 500 / bank 500) cancel → accrual ties to exactly $0.00.
+            var accrualNet = await ClearingNetAsync(db, "accrual", ct);
+            accrualNet.ShouldBe(0m,
+                $"accrual clearing must tie to $0 (delta DR 200 offsets receivable CR 200, cash legs cancel); got {accrualNet}");
+
+            // CASH basis sees only the cash legs (equity 500 vs bank 500), which net to $0. The
+            // receivable + accrual-delta lines are Basis=Accrual, so they do not touch the cash basis.
+            var cashNet = await ClearingNetAsync(db, "cash", ct);
+            cashNet.ShouldBe(0m,
+                $"cash clearing should net to $0 from the cash legs alone (equity 500 − bank 500); got {cashNet}");
+        }, ct);
+    }
+
+    // -------------------------------------------------------------------------
+    // Fix 1: a $0.00 figure is a no-op (skipped), not a 500
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task Zero_bank_and_deposit_figures_are_skipped_no_journal_entry_2xx()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var setup = await SetupAsync("ZeroFigures", ct);
+
+        await ImportOwnerTenantChainAsync(setup.Client, ct);
+
+        // A $0.00 bank balance row.
+        var bankCsv = $"Account ID,Account Name,Book Balance\n" +
+                      $"B-TRUST,{setup.TrustBankName},0.00\n";
+        var bankResult = await PostBalanceImportAsync<ImportBatchResult>(
+            setup.Client, "bank_balances",
+            new { csvContent = bankCsv, cutoverDate = CutoverStr, filename = "banks.csv" }, ct);
+        bankResult.ErrorCount.ShouldBe(0, "a $0.00 bank row must not error");
+        bankResult.RowCount.ShouldBe(1);
+
+        // A $0.00 deposit row.
+        const string depositCsv =
+            "Tenant ID,Owner ID,Deposit Held\n" +
+            "T-1,O-1,0.00\n";
+        var depositResult = await PostBalanceImportAsync<ImportBatchResult>(
+            setup.Client, "deposit_liabilities",
+            new { csvContent = depositCsv, cutoverDate = CutoverStr, filename = "deposits.csv" }, ct);
+        depositResult.ErrorCount.ShouldBe(0, "a $0.00 deposit row must not error");
+
+        var tenant = new TenantContext { OrgId = setup.OrgId };
+        await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
+        var executor = new OrgScopedExecutor(db, tenant);
+
+        await executor.RunAsync(setup.OrgId, async () =>
+        {
+            // No journal entry was created at all (both rows were no-ops).
+            var entryCount = await db.Set<JournalEntry>().CountAsync(ct);
+            entryCount.ShouldBe(0, "exactly-zero figures must post no journal entry");
+
+            // Both rows persisted with status 'skipped'.
+            var bankRows = await db.Set<ImportRow>()
+                .Where(r => r.BatchId == bankResult.BatchId)
+                .ToListAsync(ct);
+            bankRows.ShouldHaveSingleItem().RowStatus.ShouldBe("skipped");
+
+            var depositRows = await db.Set<ImportRow>()
+                .Where(r => r.BatchId == depositResult.BatchId)
+                .ToListAsync(ct);
+            depositRows.ShouldHaveSingleItem().RowStatus.ShouldBe("skipped");
+        }, ct);
+    }
+
+    [Fact]
+    public async Task Owner_cash_zero_accrual_nonzero_posts_only_the_accrual_delta()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var setup = await SetupAsync("CashZeroAccrual", ct);
+
+        const string ownersCsv =
+            "Owner ID,Owner Name,Reserve\n" +
+            "O-1,Cash-Zero Owner,0\n";
+        await PostImportAsync<ImportBatchResult>(setup.Client, "owners",
+            new { csvContent = ownersCsv, filename = "owners.csv" }, ct);
+
+        // cash=0, accrual=200 → cash line SKIPPED, accrual-delta of 200 STILL posts.
+        const string ownerBalCsv =
+            "Owner ID,Owner Name,Cash Balance,Accrual Balance\n" +
+            "O-1,Cash-Zero Owner,0.00,200.00\n";
+        var result = await PostBalanceImportAsync<ImportBatchResult>(
+            setup.Client, "owner_balances",
+            new { csvContent = ownerBalCsv, cutoverDate = CutoverStr, filename = "owner_balances.csv" }, ct);
+        result.ErrorCount.ShouldBe(0);
+        result.RowCount.ShouldBe(1);
+
+        var tenant = new TenantContext { OrgId = setup.OrgId };
+        await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
+        var executor = new OrgScopedExecutor(db, tenant);
+
+        await executor.RunAsync(setup.OrgId, async () =>
+        {
+            // Exactly ONE entry — the accrual delta. The cash line was a no-op.
+            var entryCount = await db.Set<JournalEntry>().CountAsync(ct);
+            entryCount.ShouldBe(1, "cash=0 skips the cash line; only the accrual delta posts");
+
+            // Cash clearing unaffected (no cash leg posted).
+            var cashNet = await ClearingNetAsync(db, "cash", ct);
+            cashNet.ShouldBe(0m, $"cash clearing must be untouched when cash=0; got {cashNet}");
+
+            // Accrual clearing reflects the 200 delta (owner equity CR 200 → clearing DR 200).
+            var accrualNet = await ClearingNetAsync(db, "accrual", ct);
+            accrualNet.ShouldBe(200m, $"accrual clearing should be the 200 delta; got {accrualNet}");
+
+            // The single CSV row is recorded as posted (the accrual delta posted), not skipped.
+            var rows = await db.Set<ImportRow>()
+                .Where(r => r.BatchId == result.BatchId)
+                .ToListAsync(ct);
+            rows.ShouldHaveSingleItem().RowStatus.ShouldBe("posted");
+        }, ct);
+    }
+
+    // -------------------------------------------------------------------------
+    // Fix 3: empty CsvContent → HTTP 400 (empty_csv)
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task Empty_csv_content_returns_400()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var setup = await SetupAsync("EmptyCsv", ct);
+
+        var response = await PostBalanceImportRawAsync(setup.Client, "bank_balances",
+            new { csvContent = "", cutoverDate = CutoverStr, filename = "banks.csv" }, ct);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        var detail = await response.Content.ReadAsStringAsync(ct);
+        detail.ShouldContain("empty_csv");
+    }
+
+    // -------------------------------------------------------------------------
+    // Fix 4: ambiguous bank name (two same-named active banks) → row error
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task Ambiguous_bank_name_yields_row_error_not_misroute()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var setup = await SetupAsync("AmbiguousBank", ct);
+
+        // Create a SECOND active bank with the same name as the trust bank.
+        await using (var scope = fixture.Api.Services.CreateAsyncScope())
+        {
+            var executor = scope.ServiceProvider.GetRequiredService<OrgScopedExecutor>();
+            var sender = scope.ServiceProvider.GetRequiredService<ISender>();
+            await executor.RunAsync(setup.OrgId, async () =>
+            {
+                await sender.Send(new CreateBankAccount(setup.TrustBankName, null, null, "trust"), ct);
+            }, ct);
+        }
+
+        var bankCsv = $"Account ID,Account Name,Book Balance\n" +
+                      $"B-TRUST,{setup.TrustBankName},500.00\n";
+        var result = await PostBalanceImportAsync<ImportBatchResult>(
+            setup.Client, "bank_balances",
+            new { csvContent = bankCsv, cutoverDate = CutoverStr, filename = "banks.csv" }, ct);
+
+        result.ErrorCount.ShouldBe(1);
+        var error = result.Errors.ShouldHaveSingleItem();
+        error.Field.ShouldBe("name");
+        error.Reason.ShouldContain("ambiguous_bank_name");
+
+        // No journal entry posted for the ambiguous row.
+        var tenant = new TenantContext { OrgId = setup.OrgId };
+        await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
+        var executor2 = new OrgScopedExecutor(db, tenant);
+        await executor2.RunAsync(setup.OrgId, async () =>
+        {
+            (await db.Set<JournalEntry>().CountAsync(ct)).ShouldBe(0);
+        }, ct);
+    }
+
+    // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
 
@@ -420,6 +647,32 @@ public sealed class BalanceImportTests(PostgresFixture fixture)
         var response = await client.PostAsJsonAsync($"/api/onboarding/import-balances/{kind}", body, ct);
         response.StatusCode.ShouldBe(HttpStatusCode.OK, await response.Content.ReadAsStringAsync(ct));
         return (await response.Content.ReadFromJsonAsync<T>(ct))!;
+    }
+
+    /// <summary>Posts a balance import without asserting 200 — for the 400-path tests.</summary>
+    private static Task<HttpResponseMessage> PostBalanceImportRawAsync(
+        HttpClient client, string kind, object body, CancellationToken ct) =>
+        client.PostAsJsonAsync($"/api/onboarding/import-balances/{kind}", body, ct);
+
+    /// <summary>
+    /// Imports one owner (O-1) → property (P-1) → unit (UNIT-1) → tenant/lease (T-1) chain via the
+    /// entity-import endpoints, so deposit/receivable balance rows can resolve their owner + tenant ids.
+    /// </summary>
+    private static async Task ImportOwnerTenantChainAsync(HttpClient client, CancellationToken ct)
+    {
+        await PostImportAsync<ImportBatchResult>(client, "owners",
+            new { csvContent = "Owner ID,Owner Name,Reserve\nO-1,Chain Owner LLC,0\n", filename = "owners.csv" }, ct);
+        await PostImportAsync<ImportBatchResult>(client, "properties",
+            new { csvContent = "Property ID,Owner ID,Address\nP-1,O-1,1 Chain St\n", filename = "properties.csv" }, ct);
+        await PostImportAsync<ImportBatchResult>(client, "units",
+            new { csvContent = "Unit ID,Property ID,Unit,Rent,Status\nUNIT-1,P-1,Unit A,1000.00,occupied\n", filename = "units.csv" }, ct);
+        await PostImportAsync<ImportBatchResult>(client, "tenants_leases",
+            new
+            {
+                csvContent = "Tenant ID,Unit ID,Tenant Name,Lease Start,Lease End,Rent,Deposit,Status\n" +
+                             "T-1,UNIT-1,Chain Tenant,2025-01-01,,1000.00,500.00,active\n",
+                filename = "tenants.csv",
+            }, ct);
     }
 
     /// <summary>

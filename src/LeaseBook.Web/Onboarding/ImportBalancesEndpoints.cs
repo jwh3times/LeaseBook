@@ -53,7 +53,13 @@ public sealed class ImportBalancesEndpoints : IEndpointModule
                             detail: $"cutover_date '{body.CutoverDate}' is not a valid ISO date (yyyy-MM-dd).",
                             statusCode: StatusCodes.Status400BadRequest);
 
-                    var csvBytes = System.Text.Encoding.UTF8.GetBytes(body.CsvContent ?? string.Empty);
+                    if (string.IsNullOrWhiteSpace(body.CsvContent))
+                        return Results.Problem(
+                            title: "Empty CSV",
+                            detail: "empty_csv: the uploaded CSV content is empty. Provide the cutover balance rows.",
+                            statusCode: StatusCodes.Status400BadRequest);
+
+                    var csvBytes = System.Text.Encoding.UTF8.GetBytes(body.CsvContent);
                     await using var csvStream = new MemoryStream(csvBytes);
 
                     var result = await service.ImportAsync(

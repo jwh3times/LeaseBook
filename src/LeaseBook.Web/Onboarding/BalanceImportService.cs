@@ -90,6 +90,7 @@ public sealed class BalanceImportService(
                 : null;
 
             var rowStatus = outcome.IsError ? "error"
+                : outcome.IsSkipped ? "skipped"
                 : outcome.AlreadyPosted ? "already-posted"
                 : "posted";
 
@@ -135,53 +136,41 @@ public sealed class BalanceImportService(
         {
             var rawJson = SerializeRaw(new { row.ExternalBankId, row.Name, row.BookBalance });
 
-            // Case-insensitive name match
-            var bank = bankAccounts.FirstOrDefault(b =>
-                string.Equals(b.Name, row.Name, StringComparison.OrdinalIgnoreCase));
+            // Case-insensitive name match. A name must match exactly one active account — two same-named
+            // banks would misroute a trust opening balance, so an ambiguous match is a row error, not a guess.
+            var matches = bankAccounts
+                .Where(b => string.Equals(b.Name, row.Name, StringComparison.OrdinalIgnoreCase))
+                .ToList();
 
-            if (bank is null)
+            if (matches.Count == 0)
             {
                 outcomes.Add(BalanceRowOutcome.Error(rowNumber, row.ExternalBankId, rawJson,
                     "name", $"No bank account named '{row.Name}' found in this org"));
                 continue;
             }
 
+            if (matches.Count > 1)
+            {
+                outcomes.Add(BalanceRowOutcome.Error(rowNumber, row.ExternalBankId, rawJson,
+                    "name", $"ambiguous_bank_name: {matches.Count} active bank accounts named '{row.Name}' — cannot route opening balance"));
+                continue;
+            }
+
+            var bank = matches[0];
             var accountCode = bank.Purpose is DirectoryBankPurpose.Trust or DirectoryBankPurpose.Deposit
                 ? AccountCodes.TrustBank(bank.Id)
                 : AccountCodes.PmOperatingBank(bank.Id);
 
-            // bank is debit-normal; negative balance flips to credit side
-            Money? debit, credit;
-            if (row.BookBalance >= 0)
-            {
-                debit = new Money(row.BookBalance);
-                credit = null;
-            }
-            else
-            {
-                debit = null;
-                credit = new Money(-row.BookBalance);
-            }
-
             var sourceRef = $"opening:{cutover:yyyy-MM-dd}:bank={bank.Id}";
 
-            Guid entryId;
-            bool alreadyPosted;
-            try
-            {
-                entryId = await balanceForward.PostOpeningPositionAsync(new OpeningPositionRequest(
-                    accountCode, debit, credit, EntryBasis.Both,
-                    cutover, sourceRef,
-                    BankAccountId: bank.Id), ct);
-                alreadyPosted = false;
-            }
-            catch (DuplicateSourceRefException ex)
-            {
-                entryId = ex.ExistingEntryId;
-                alreadyPosted = true;
-            }
+            // bank is debit-normal; figure of exactly $0.00 → skipped (no-op).
+            var result = await PostLineAsync(
+                row.BookBalance, debitNormal: true, accountCode, EntryBasis.Both,
+                cutover, sourceRef, ownerId: null, tenantId: null, bankAccountId: bank.Id, ct);
 
-            outcomes.Add(BalanceRowOutcome.Success(rowNumber, row.ExternalBankId, rawJson, entryId, alreadyPosted));
+            outcomes.Add(result.Posted
+                ? BalanceRowOutcome.Success(rowNumber, row.ExternalBankId, rawJson, result.EntryId, result.AlreadyPosted)
+                : BalanceRowOutcome.Skipped(rowNumber, row.ExternalBankId, rawJson));
         }
     }
 
@@ -225,70 +214,38 @@ public sealed class BalanceImportService(
                 continue;
             }
 
-            // Cash line (Basis=Both) — owner_equity is credit-normal; negative flips to debit
-            Money? cashDebit, cashCredit;
-            if (row.CashBalance >= 0)
+            // Two independent lines per row (Fix 1): the cash line (Basis=Both) and the accrual-delta
+            // line (Basis=Accrual). Each is evaluated and skipped independently when its figure is $0.00,
+            // so cash=0/accrual=200 still posts the $200 accrual delta. owner_equity is credit-normal.
+            var cashSourceRef = $"opening:{cutover:yyyy-MM-dd}:owner-equity={ownerId}";
+            var cashResult = await PostLineAsync(
+                row.CashBalance, debitNormal: false, AccountCodes.OwnerEquity, EntryBasis.Both,
+                cutover, cashSourceRef, ownerId: ownerId, tenantId: null, bankAccountId: operatingTrustId, ct);
+
+            // Accrual-delta line: posts the (accrual − cash) delta tagged Accrual, distinct source_ref.
+            // A delta of 0 (accrual == cash) is a no-op.
+            var delta = row.AccrualBalance - row.CashBalance;
+            var accrualSourceRef = $"opening:{cutover:yyyy-MM-dd}:owner-equity-accrual={ownerId}";
+            var accrualResult = await PostLineAsync(
+                delta, debitNormal: false, AccountCodes.OwnerEquity, EntryBasis.Accrual,
+                cutover, accrualSourceRef, ownerId: ownerId, tenantId: null, bankAccountId: operatingTrustId, ct);
+
+            // The row's recorded outcome tracks the cash line (the primary opening position). If the cash
+            // line was a no-op but the accrual delta posted, surface the accrual entry id so the row is
+            // recorded as posted, not skipped. Only when NEITHER line posted is the row a no-op skip.
+            if (cashResult.Posted)
             {
-                cashDebit = null;
-                cashCredit = new Money(row.CashBalance);
+                outcomes.Add(BalanceRowOutcome.Success(rowNumber, row.ExternalOwnerId, rawJson,
+                    cashResult.EntryId, cashResult.AlreadyPosted));
+            }
+            else if (accrualResult.Posted)
+            {
+                outcomes.Add(BalanceRowOutcome.Success(rowNumber, row.ExternalOwnerId, rawJson,
+                    accrualResult.EntryId, accrualResult.AlreadyPosted));
             }
             else
             {
-                cashDebit = new Money(-row.CashBalance);
-                cashCredit = null;
-            }
-
-            var cashSourceRef = $"opening:{cutover:yyyy-MM-dd}:owner-equity={ownerId}";
-
-            Guid cashEntryId;
-            bool cashAlreadyPosted;
-            try
-            {
-                cashEntryId = await balanceForward.PostOpeningPositionAsync(new OpeningPositionRequest(
-                    AccountCodes.OwnerEquity, cashDebit, cashCredit, EntryBasis.Both,
-                    cutover, cashSourceRef,
-                    OwnerId: ownerId, BankAccountId: operatingTrustId), ct);
-                cashAlreadyPosted = false;
-            }
-            catch (DuplicateSourceRefException ex)
-            {
-                cashEntryId = ex.ExistingEntryId;
-                cashAlreadyPosted = true;
-            }
-
-            outcomes.Add(BalanceRowOutcome.Success(rowNumber, row.ExternalOwnerId, rawJson, cashEntryId, cashAlreadyPosted));
-
-            // Accrual-delta line (Basis=Accrual): only when accrual ≠ cash. This is a second journal
-            // entry for the same CSV row; we catch DuplicateSourceRefException for idempotency.
-            // The batch RowCount stays equal to CSV rows (no extra outcome added for the delta line).
-            if (row.AccrualBalance != row.CashBalance)
-            {
-                var delta = row.AccrualBalance - row.CashBalance;
-                Money? deltaDebit, deltaCredit;
-                if (delta >= 0)
-                {
-                    deltaDebit = null;
-                    deltaCredit = new Money(delta);
-                }
-                else
-                {
-                    deltaDebit = new Money(-delta);
-                    deltaCredit = null;
-                }
-
-                var accrualSourceRef = $"opening:{cutover:yyyy-MM-dd}:owner-equity-accrual={ownerId}";
-
-                try
-                {
-                    await balanceForward.PostOpeningPositionAsync(new OpeningPositionRequest(
-                        AccountCodes.OwnerEquity, deltaDebit, deltaCredit, EntryBasis.Accrual,
-                        cutover, accrualSourceRef,
-                        OwnerId: ownerId, BankAccountId: operatingTrustId), ct);
-                }
-                catch (DuplicateSourceRefException)
-                {
-                    // Already posted on a prior run — idempotent, do nothing.
-                }
+                outcomes.Add(BalanceRowOutcome.Skipped(rowNumber, row.ExternalOwnerId, rawJson));
             }
         }
     }
@@ -341,38 +298,15 @@ public sealed class BalanceImportService(
                 continue;
             }
 
-            // SecurityDepositsHeld is credit-normal; held amount should always be positive
-            Money? debit, credit;
-            if (row.HeldAmount >= 0)
-            {
-                debit = null;
-                credit = new Money(row.HeldAmount);
-            }
-            else
-            {
-                debit = new Money(-row.HeldAmount);
-                credit = null;
-            }
-
+            // SecurityDepositsHeld is credit-normal; a held amount of exactly $0.00 → skipped (no-op).
             var sourceRef = $"opening:{cutover:yyyy-MM-dd}:deposit={tenantId}";
+            var result = await PostLineAsync(
+                row.HeldAmount, debitNormal: false, AccountCodes.SecurityDepositsHeld, EntryBasis.Both,
+                cutover, sourceRef, ownerId: ownerId, tenantId: tenantId, bankAccountId: depositTrustId, ct);
 
-            Guid entryId;
-            bool alreadyPosted;
-            try
-            {
-                entryId = await balanceForward.PostOpeningPositionAsync(new OpeningPositionRequest(
-                    AccountCodes.SecurityDepositsHeld, debit, credit, EntryBasis.Both,
-                    cutover, sourceRef,
-                    TenantId: tenantId, OwnerId: ownerId, BankAccountId: depositTrustId), ct);
-                alreadyPosted = false;
-            }
-            catch (DuplicateSourceRefException ex)
-            {
-                entryId = ex.ExistingEntryId;
-                alreadyPosted = true;
-            }
-
-            outcomes.Add(BalanceRowOutcome.Success(rowNumber, row.ExternalTenantId, rawJson, entryId, alreadyPosted));
+            outcomes.Add(result.Posted
+                ? BalanceRowOutcome.Success(rowNumber, row.ExternalTenantId, rawJson, result.EntryId, result.AlreadyPosted)
+                : BalanceRowOutcome.Skipped(rowNumber, row.ExternalTenantId, rawJson));
         }
     }
 
@@ -412,38 +346,15 @@ public sealed class BalanceImportService(
                 continue;
             }
 
-            // TenantReceivable is debit-normal; negative balance flips to credit
-            Money? debit, credit;
-            if (row.Balance >= 0)
-            {
-                debit = new Money(row.Balance);
-                credit = null;
-            }
-            else
-            {
-                debit = null;
-                credit = new Money(-row.Balance);
-            }
-
+            // TenantReceivable is debit-normal; a balance of exactly $0.00 → skipped (no-op). No bank dim.
             var sourceRef = $"opening:{cutover:yyyy-MM-dd}:receivable={tenantId}";
+            var result = await PostLineAsync(
+                row.Balance, debitNormal: true, AccountCodes.TenantReceivable, EntryBasis.Accrual,
+                cutover, sourceRef, ownerId: ownerId, tenantId: tenantId, bankAccountId: null, ct);
 
-            Guid entryId;
-            bool alreadyPosted;
-            try
-            {
-                entryId = await balanceForward.PostOpeningPositionAsync(new OpeningPositionRequest(
-                    AccountCodes.TenantReceivable, debit, credit, EntryBasis.Accrual,
-                    cutover, sourceRef,
-                    TenantId: tenantId, OwnerId: ownerId), ct);
-                alreadyPosted = false;
-            }
-            catch (DuplicateSourceRefException ex)
-            {
-                entryId = ex.ExistingEntryId;
-                alreadyPosted = true;
-            }
-
-            outcomes.Add(BalanceRowOutcome.Success(rowNumber, row.ExternalTenantId, rawJson, entryId, alreadyPosted));
+            outcomes.Add(result.Posted
+                ? BalanceRowOutcome.Success(rowNumber, row.ExternalTenantId, rawJson, result.EntryId, result.AlreadyPosted)
+                : BalanceRowOutcome.Skipped(rowNumber, row.ExternalTenantId, rawJson));
         }
     }
 
@@ -551,6 +462,65 @@ public sealed class BalanceImportService(
     private static string SerializeRaw(object obj) =>
         JsonSerializer.Serialize(obj, JsonOpts);
 
+    /// <summary>
+    /// The outcome of attempting to post one opening line: whether it actually posted (a
+    /// strictly-positive figure), the resulting entry id, and whether it was an idempotent re-post.
+    /// A <see cref="Posted"/>=<c>false</c> result means the figure was exactly $0.00 — a no-op,
+    /// never sent to the posting service (which rejects non-positive amounts).
+    /// </summary>
+    private readonly record struct LineResult(bool Posted, Guid EntryId, bool AlreadyPosted);
+
+    /// <summary>
+    /// Posts ONE opening line via <see cref="IBalanceForward.PostOpeningPositionAsync"/>, after
+    /// mapping a signed <paramref name="figure"/> onto the account's normal side.
+    /// A figure of exactly $0.00 is skipped (no-op) — <see cref="PostingService"/> rejects
+    /// non-positive amounts, and a zero opening position carries no information. A
+    /// <see cref="DuplicateSourceRefException"/> is caught and surfaced as an idempotent re-post.
+    /// </summary>
+    /// <param name="debitNormal">
+    /// True when the account is debit-normal (bank, receivable): a positive figure → Debit.
+    /// False when credit-normal (owner equity, deposits): a positive figure → Credit.
+    /// A negative figure flips to the opposite side.
+    /// </param>
+    private async Task<LineResult> PostLineAsync(
+        decimal figure,
+        bool debitNormal,
+        string accountCode,
+        EntryBasis basis,
+        DateOnly cutover,
+        string sourceRef,
+        Guid? ownerId,
+        Guid? tenantId,
+        Guid? bankAccountId,
+        CancellationToken ct)
+    {
+        // Exactly zero → no-op. Never call the posting service (Money(0) would throw InvalidLineException).
+        if (figure == 0m)
+        {
+            return new LineResult(Posted: false, EntryId: default, AlreadyPosted: false);
+        }
+
+        // Map the signed figure onto the account's normal side; a negative figure flips it.
+        var positiveSide = figure > 0m;
+        var onDebit = debitNormal ? positiveSide : !positiveSide;
+        var amount = new Money(Math.Abs(figure));
+        Money? debit = onDebit ? amount : null;
+        Money? credit = onDebit ? null : amount;
+
+        try
+        {
+            var entryId = await balanceForward.PostOpeningPositionAsync(new OpeningPositionRequest(
+                accountCode, debit, credit, basis,
+                cutover, sourceRef,
+                OwnerId: ownerId, TenantId: tenantId, BankAccountId: bankAccountId), ct);
+            return new LineResult(Posted: true, EntryId: entryId, AlreadyPosted: false);
+        }
+        catch (DuplicateSourceRefException ex)
+        {
+            return new LineResult(Posted: true, EntryId: ex.ExistingEntryId, AlreadyPosted: true);
+        }
+    }
+
     // -------------------------------------------------------------------------
     // Private outcome record
     // -------------------------------------------------------------------------
@@ -561,14 +531,19 @@ public sealed class BalanceImportService(
         string RawJson,
         Guid? JournalEntryId,
         bool AlreadyPosted,
+        bool IsSkipped,
         bool IsError,
         string? ErrorField,
         string? ErrorReason)
     {
         public static BalanceRowOutcome Success(int rowNumber, string externalId, string rawJson, Guid entryId, bool alreadyPosted) =>
-            new(rowNumber, externalId, rawJson, entryId, alreadyPosted, false, null, null);
+            new(rowNumber, externalId, rawJson, entryId, alreadyPosted, false, false, null, null);
+
+        /// <summary>A no-op row: every line of the row was an exactly-zero figure, so nothing was posted.</summary>
+        public static BalanceRowOutcome Skipped(int rowNumber, string externalId, string rawJson) =>
+            new(rowNumber, externalId, rawJson, null, false, true, false, null, null);
 
         public static BalanceRowOutcome Error(int rowNumber, string externalId, string rawJson, string field, string reason) =>
-            new(rowNumber, externalId, rawJson, null, false, true, field, reason);
+            new(rowNumber, externalId, rawJson, null, false, false, true, field, reason);
     }
 }
