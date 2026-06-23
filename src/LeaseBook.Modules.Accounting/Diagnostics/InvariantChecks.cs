@@ -17,6 +17,7 @@ internal sealed class InvariantChecks(DbContext db) : IInvariantChecks
         violations.AddRange(await CheckTrustEquationAsync(ct));
         violations.AddRange(await CheckPmIncomeIsolationAsync(ct));
         violations.AddRange(await CheckDepositLiabilitiesNonNegativeAsync(ct));
+        violations.AddRange(await CheckMigrationClearingBalancedAsync(ct));
         return violations;
     }
 
@@ -107,9 +108,37 @@ internal sealed class InvariantChecks(DbContext db) : IInvariantChecks
             .ToList();
     }
 
+    // I5: migration_clearing nets to $0 per basis — non-zero residual is a quantified import discrepancy
+    // (ADR-020 / M7). The invariant is vacuous (no rows) for orgs that haven't imported, so it is safe
+    // to include in the core sweep for all orgs.
+    public async Task<IReadOnlyList<InvariantViolation>> CheckMigrationClearingBalancedAsync(CancellationToken ct)
+    {
+        var rows = await db.Database.SqlQuery<ClearingVariance>(
+            $"""
+            SELECT basis_name, net
+            FROM (
+                SELECT 'cash' AS basis_name,
+                       SUM(COALESCE(debit, 0) - COALESCE(credit, 0)) FILTER (WHERE basis IN ('cash', 'both')) AS net
+                FROM journal_lines WHERE account_class = 'migration_clearing'
+                UNION ALL
+                SELECT 'accrual',
+                       SUM(COALESCE(debit, 0) - COALESCE(credit, 0)) FILTER (WHERE basis IN ('accrual', 'both'))
+                FROM journal_lines WHERE account_class = 'migration_clearing'
+            ) s
+            WHERE net IS NOT NULL AND net <> 0
+            """).ToListAsync(ct);
+
+        return rows
+            .Select(r => new InvariantViolation("I5",
+                $"migration_clearing does not net to $0 in {r.BasisName}: residual {r.Net:0.00}"))
+            .ToList();
+    }
+
     private sealed record UnbalancedEntry(Guid EntryId, string BasisName, decimal SumDebit, decimal SumCredit);
 
     private sealed record EquationVariance(Guid BankAccountId, decimal Variance);
 
     private sealed record NegativeLiability(Guid? TenantId, string Code, decimal Held);
+
+    private sealed record ClearingVariance(string BasisName, decimal Net);
 }

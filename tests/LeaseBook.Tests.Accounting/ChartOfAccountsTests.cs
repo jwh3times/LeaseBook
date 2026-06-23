@@ -34,6 +34,7 @@ public sealed class ChartOfAccountsTests(PostgresFixture fixture)
                 AccountCodes.SecurityDepositsHeld,
                 AccountCodes.TenantPrepayments,
                 AccountCodes.PmIncome,
+                AccountCodes.MigrationClearing,
                 AccountCodes.TrustBank(OperatingTrust.BankAccountId),
                 AccountCodes.TrustBank(DepositTrust.BankAccountId),
                 AccountCodes.PmOperatingBank(ManagementOperating.BankAccountId),
@@ -63,7 +64,7 @@ public sealed class ChartOfAccountsTests(PostgresFixture fixture)
         await ProvisionAsync(scope, [OperatingTrust, ManagementOperating], ct);
 
         var accounts = await ReadAccountsAsync(scope, ct);
-        accounts.Count.ShouldBe(7); // 5 singletons + 2 banks, no duplicates
+        accounts.Count.ShouldBe(8); // 6 singletons (incl. migration_clearing) + 2 banks, no duplicates
     }
 
     [Fact]
