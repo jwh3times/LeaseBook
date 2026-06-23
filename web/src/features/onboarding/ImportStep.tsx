@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { Card, CardHeader, EmptyState, Icon } from '@/design';
+import { Button, Card, CardHeader, EmptyState, Icon } from '@/design';
 import {
   useImportBalances,
   useImportEntities,
@@ -14,13 +14,21 @@ interface EntityImportStepProps {
   title: string;
   description: string;
   kinds: { kind: EntityKind; label: string }[];
+  /**
+   * Advances the wizard to the next step. Rendered as an explicit "Continue →" button so the
+   * operator imports every kind on this step before moving on — the step never auto-advances.
+   */
+  onContinue?: () => void;
 }
 
-export function EntityImportStep({ title, description, kinds }: EntityImportStepProps) {
+export function EntityImportStep({ title, description, kinds, onContinue }: EntityImportStepProps) {
   const [selectedKind, setSelectedKind] = useState<EntityKind>(kinds[0]!.kind);
   const [filename, setFilename] = useState<string | null>(null);
   const [errors, setErrors] = useState<ImportBatchError[]>([]);
   const [result, setResult] = useState<{ rowCount: number; errorCount: number } | null>(null);
+  // Tracks which kinds imported cleanly, so the "Continue" affordance only appears once the
+  // operator has imported at least one kind on this step.
+  const [importedKinds, setImportedKinds] = useState<Set<EntityKind>>(new Set());
   const fileRef = useRef<HTMLInputElement>(null);
   const mutation = useImportEntities(selectedKind);
 
@@ -34,8 +42,12 @@ export function EntityImportStep({ title, description, kinds }: EntityImportStep
       filename: file.name,
       mappingProfile: null,
     });
-    setResult({ rowCount: Number(res.rowCount), errorCount: Number(res.errorCount) });
+    const errorCount = Number(res.errorCount);
+    setResult({ rowCount: Number(res.rowCount), errorCount });
     setErrors(res.errors ?? []);
+    if (errorCount === 0) {
+      setImportedKinds((prev) => new Set(prev).add(selectedKind));
+    }
   }
 
   async function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -51,6 +63,7 @@ export function EntityImportStep({ title, description, kinds }: EntityImportStep
 
   const hasErrors = errors.length > 0;
   const isSuccess = result !== null && !hasErrors;
+  const canContinue = importedKinds.size > 0;
 
   return (
     <Card pad>
@@ -67,9 +80,19 @@ export function EntityImportStep({ title, description, kinds }: EntityImportStep
                   name="entity-kind"
                   value={kind}
                   checked={selectedKind === kind}
-                  onChange={() => setSelectedKind(kind)}
+                  onChange={() => {
+                    setSelectedKind(kind);
+                    // Reset the per-import banner/error state so a prior kind's "Imported N rows"
+                    // banner doesn't carry over to the newly-selected kind.
+                    setFilename(null);
+                    setResult(null);
+                    setErrors([]);
+                  }}
                 />
                 {label}
+                {importedKinds.has(kind) && (
+                  <Icon name="check" size={14} aria-label={`${label} imported`} />
+                )}
               </label>
             ))}
           </div>
@@ -166,6 +189,22 @@ export function EntityImportStep({ title, description, kinds }: EntityImportStep
           </table>
         </div>
       )}
+
+      {onContinue && (
+        <div className="ob-step-actions row gap8 align-center mt16">
+          <Button
+            variant="primary"
+            onClick={onContinue}
+            disabled={!canContinue}
+            aria-disabled={!canContinue}
+          >
+            Continue →
+          </Button>
+          {!canContinue && (
+            <span className="fs12 muted">Import at least one entity type to continue.</span>
+          )}
+        </div>
+      )}
     </Card>
   );
 }
@@ -177,6 +216,11 @@ interface BalanceImportStepProps {
   description: string;
   kinds: { kind: BalanceKind; label: string }[];
   defaultCutoverDate?: string;
+  /**
+   * Advances the wizard to the next step. Rendered as an explicit "Continue →" button so the
+   * operator imports each balance kind before moving on — the step never auto-advances.
+   */
+  onContinue?: () => void;
 }
 
 export function BalanceImportStep({
@@ -184,6 +228,7 @@ export function BalanceImportStep({
   description,
   kinds,
   defaultCutoverDate,
+  onContinue,
 }: BalanceImportStepProps) {
   const today = new Date().toISOString().slice(0, 10);
   const [selectedKind, setSelectedKind] = useState<BalanceKind>(kinds[0]!.kind);
@@ -191,6 +236,9 @@ export function BalanceImportStep({
   const [filename, setFilename] = useState<string | null>(null);
   const [errors, setErrors] = useState<ImportBatchError[]>([]);
   const [result, setResult] = useState<{ rowCount: number; errorCount: number } | null>(null);
+  // Tracks which balance kinds imported cleanly, so the "Continue" affordance only appears once
+  // the operator has imported at least one kind on this step.
+  const [importedKinds, setImportedKinds] = useState<Set<BalanceKind>>(new Set());
   const fileRef = useRef<HTMLInputElement>(null);
   const mutation = useImportBalances(selectedKind);
 
@@ -205,8 +253,12 @@ export function BalanceImportStep({
       cutoverDate,
       mappingProfile: null,
     });
-    setResult({ rowCount: Number(res.rowCount), errorCount: Number(res.errorCount) });
+    const errorCount = Number(res.errorCount);
+    setResult({ rowCount: Number(res.rowCount), errorCount });
     setErrors(res.errors ?? []);
+    if (errorCount === 0) {
+      setImportedKinds((prev) => new Set(prev).add(selectedKind));
+    }
   }
 
   async function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -222,6 +274,7 @@ export function BalanceImportStep({
 
   const hasErrors = errors.length > 0;
   const isSuccess = result !== null && !hasErrors;
+  const canContinue = importedKinds.size > 0;
 
   return (
     <Card pad>
@@ -238,9 +291,19 @@ export function BalanceImportStep({
                   name="balance-kind"
                   value={kind}
                   checked={selectedKind === kind}
-                  onChange={() => setSelectedKind(kind)}
+                  onChange={() => {
+                    setSelectedKind(kind);
+                    // Reset the per-import banner/error state so a prior kind's "Imported N rows"
+                    // banner doesn't carry over to the newly-selected kind.
+                    setFilename(null);
+                    setResult(null);
+                    setErrors([]);
+                  }}
                 />
                 {label}
+                {importedKinds.has(kind) && (
+                  <Icon name="check" size={14} aria-label={`${label} imported`} />
+                )}
               </label>
             ))}
           </div>
@@ -349,6 +412,22 @@ export function BalanceImportStep({
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {onContinue && (
+        <div className="ob-step-actions row gap8 align-center mt16">
+          <Button
+            variant="primary"
+            onClick={onContinue}
+            disabled={!canContinue}
+            aria-disabled={!canContinue}
+          >
+            Continue →
+          </Button>
+          {!canContinue && (
+            <span className="fs12 muted">Import at least one balance type to continue.</span>
+          )}
         </div>
       )}
     </Card>

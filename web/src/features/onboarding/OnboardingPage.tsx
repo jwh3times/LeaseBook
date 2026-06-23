@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Card, CardHeader, EmptyState } from '@/design';
 import { BalanceImportStep, EntityImportStep } from './ImportStep';
 import { OnboardingChecklist } from './OnboardingChecklist';
@@ -22,13 +22,27 @@ function firstIncompleteStep(status: {
   return 4;
 }
 
+const LAST_STEP = 4;
+
 export function OnboardingPage() {
   const statusQuery = useOnboardingStatus();
-  // An operator-selected step (backward navigation to an already-reached step).
-  // null = follow the derived first-incomplete step.
-  const [selectedStep, setSelectedStep] = useState<number | null>(null);
+  // The active wizard step. Pinned once status first loads — step advancement is then
+  // EXPLICIT (the operator clicks "Continue" or a reached checklist item), never reactive.
+  // A reactive jump (re-deriving from status on every query invalidation) would yank the
+  // operator off the entity step the moment one import succeeds, before they finish importing
+  // all four kinds. null = not yet initialised (status still loading).
+  const [activeStep, setActiveStep] = useState<number | null>(null);
 
-  if (statusQuery.isPending) {
+  // Seed the active step once, from the first-incomplete step, when status first becomes known.
+  // This is a one-time landing/resume; later status invalidations (after an import) do NOT move it.
+  const status = statusQuery.data;
+  useEffect(() => {
+    if (status && activeStep === null) {
+      setActiveStep(firstIncompleteStep(status));
+    }
+  }, [status, activeStep]);
+
+  if (statusQuery.isPending || activeStep === null) {
     return (
       <div className="pf-fade">
         <div className="pf-pagehd">
@@ -45,7 +59,7 @@ export function OnboardingPage() {
     );
   }
 
-  if (statusQuery.isError || !statusQuery.data) {
+  if (statusQuery.isError || !status) {
     return (
       <div className="pf-fade">
         <Card pad>
@@ -59,16 +73,21 @@ export function OnboardingPage() {
     );
   }
 
-  const status = statusQuery.data;
+  // The furthest step the operator has reached — derived from status so the checklist still
+  // reflects real completion and backward navigation is gated to already-reached steps.
   const firstIncomplete = firstIncompleteStep(status);
-  // The selected step only applies if it points at a step the operator has already reached
-  // (index <= firstIncomplete); otherwise fall back to the derived first-incomplete step.
-  const activeStep =
-    selectedStep !== null && selectedStep <= firstIncomplete ? selectedStep : firstIncomplete;
+  // The operator may navigate back to any reached step (≤ the furthest reached step) or forward
+  // only via the explicit "Continue" affordance. The ceiling is the larger of the derived
+  // first-incomplete step and the pinned active step (so a forward "Continue" stays reachable).
+  const reachedCeiling = Math.max(firstIncomplete, activeStep);
 
   function handleSelectStep(index: number) {
-    // Allow backward navigation only to steps already reached.
-    if (index <= firstIncomplete) setSelectedStep(index);
+    // Allow navigation only to steps already reached (≤ the furthest reached step).
+    if (index <= reachedCeiling) setActiveStep(index);
+  }
+
+  function goToNextStep() {
+    setActiveStep((prev) => Math.min((prev ?? 0) + 1, LAST_STEP));
   }
 
   return (
@@ -114,26 +133,28 @@ export function OnboardingPage() {
           {activeStep === 1 && (
             <EntityImportStep
               title="Import entities"
-              description="Upload a CSV for each entity type. Owners, properties, and units must be imported before tenants & leases."
+              description="Upload a CSV for each entity type. Owners, properties, and units must be imported before tenants & leases. Import all four, then click Continue."
               kinds={[
                 { kind: 'owners', label: 'Owners' },
                 { kind: 'properties', label: 'Properties' },
                 { kind: 'units', label: 'Units' },
                 { kind: 'tenants_leases', label: 'Tenants & Leases' },
               ]}
+              onContinue={goToNextStep}
             />
           )}
 
           {activeStep === 2 && (
             <BalanceImportStep
               title="Import opening balances"
-              description="Upload opening balance CSVs. The cutover date must match across all balance types."
+              description="Upload opening balance CSVs. The cutover date must match across all balance types. Import each, then click Continue."
               kinds={[
                 { kind: 'owner_balances', label: 'Owner balances' },
                 { kind: 'deposit_liabilities', label: 'Deposit liabilities' },
                 { kind: 'bank_balances', label: 'Bank balances' },
                 { kind: 'tenant_receivables', label: 'Tenant receivables' },
               ]}
+              onContinue={goToNextStep}
             />
           )}
 

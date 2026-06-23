@@ -11,7 +11,7 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { server } from '@/test/mocks/server';
 import { EntityImportStep } from './ImportStep';
 import { OnboardingChecklist } from './OnboardingChecklist';
@@ -209,6 +209,55 @@ describe('EntityImportStep — row-level error list', () => {
 
     expect(await screen.findByText(/imported 4 rows successfully/i)).toBeInTheDocument();
     expect(screen.queryByRole('table', { name: /import errors/i })).not.toBeInTheDocument();
+  });
+});
+
+// ─── (b2) EntityImportStep explicit advancement (Continue gating, no auto-advance) ─────
+
+describe('EntityImportStep — explicit "Continue" advancement', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  it('disables Continue until a kind is imported, keeps the step put after import, then enables it', async () => {
+    server.use(
+      http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 })),
+      http.post('/api/onboarding/import/:kind', () =>
+        HttpResponse.json({ batchId: 'b3', rowCount: 2, errorCount: 0, errors: [] }),
+      ),
+    );
+
+    const onContinue = vi.fn();
+    render(
+      withRouter(
+        <EntityImportStep
+          title="Import entities"
+          description="Upload CSVs"
+          kinds={[
+            { kind: 'owners', label: 'Owners' },
+            { kind: 'properties', label: 'Properties' },
+          ]}
+          onContinue={onContinue}
+        />,
+      ),
+    );
+
+    // Continue is present but disabled before any import.
+    const continueBtn = screen.getByRole('button', { name: /continue/i });
+    expect(continueBtn).toBeDisabled();
+
+    // Import owners → success banner shows; the step does NOT auto-advance (onContinue not called).
+    const csv = 'Owner ID,Owner Name\nO1,Acme\n';
+    const file = new File([csv], 'owners.csv', { type: 'text/csv' });
+    await userEvent.upload(screen.getByLabelText('CSV file'), file);
+
+    expect(await screen.findByText(/imported 2 rows successfully/i)).toBeInTheDocument();
+    expect(onContinue).not.toHaveBeenCalled();
+
+    // Continue is now enabled; clicking it advances explicitly.
+    expect(continueBtn).toBeEnabled();
+    await userEvent.click(continueBtn);
+    expect(onContinue).toHaveBeenCalledTimes(1);
   });
 });
 

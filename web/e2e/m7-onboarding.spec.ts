@@ -1,5 +1,9 @@
 import path from 'path';
+import { fileURLToPath } from 'node:url';
 import { expect, test, type Page } from '@playwright/test';
+
+// __dirname is not defined in ESM scope; derive it from import.meta.url.
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // M7 onboarding e2e (WP-7 Task 7.2 — the M7 milestone gate).
 // Serial, against the freshly-seeded cutover org (seed --org cutover).
@@ -94,13 +98,18 @@ test.describe.serial('M7 onboarding wizard', () => {
     await page.screenshot({ path: 'e2e-results/m7-01-redirect.png', fullPage: true });
   });
 
-  // ── Step 2: entity import ─────────────────────────────────────────────────
+  // ── Step 2: entity import (all four kinds in one session, then Continue) ───
+  //
+  // The wizard does NOT auto-advance — step advancement is explicit. So all four entity
+  // kinds are imported within ONE page session (no reload between them, which would resume
+  // the wizard at the balance step because entitiesImported flips true after the first import),
+  // each asserting its own success banner, then "Continue →" advances to the balance step.
 
-  test('banks configured: wizard auto-advances to entity import step', async ({ page }) => {
+  test('banks configured: wizard lands on the entity import step', async ({ page }) => {
     await login(page);
     await page.waitForURL(/\/onboarding/, { timeout: 10_000 });
 
-    // banksConfigured=true (seeder provisioned them) → activeStep=1 (entities).
+    // banksConfigured=true (seeder provisioned them) → firstIncompleteStep=1 (entities).
     await expect(page.getByRole('heading', { name: /import entities/i })).toBeVisible({
       timeout: 10_000,
     });
@@ -108,65 +117,46 @@ test.describe.serial('M7 onboarding wizard', () => {
     await page.screenshot({ path: 'e2e-results/m7-02-entity-step.png', fullPage: true });
   });
 
-  test('import owners CSV: 2 rows imported', async ({ page }) => {
+  test('entity import: owners → properties → units → tenants_leases (each banner), then Continue', async ({
+    page,
+  }) => {
     await login(page);
     await page.waitForURL(/\/onboarding/, { timeout: 10_000 });
     await expect(page.getByRole('heading', { name: /import entities/i })).toBeVisible({
       timeout: 10_000,
     });
 
-    const ownersRadio = page.locator('input[type="radio"][value="owners"]');
-    await expect(ownersRadio).toBeVisible();
-    await ownersRadio.check();
+    // The "Continue" button is disabled until at least one kind is imported.
+    const continueBtn = page.getByRole('button', { name: /continue/i });
+    await expect(continueBtn).toBeDisabled();
 
+    // Owners (2 rows).
+    await page.locator('input[type="radio"][value="owners"]').check();
     await uploadFixtureCsv(page, 'owners.csv');
     await expect(page.getByRole('status')).toContainText(/imported 2 rows/i, { timeout: 15_000 });
-
     await page.screenshot({ path: 'e2e-results/m7-03-owners.png', fullPage: true });
-  });
 
-  test('import properties CSV: 2 rows imported', async ({ page }) => {
-    await login(page);
-    await page.waitForURL(/\/onboarding/, { timeout: 10_000 });
-
-    const propertiesRadio = page.locator('input[type="radio"][value="properties"]');
-    await propertiesRadio.check();
+    // Properties (2 rows). Selecting a new radio resets the prior success banner.
+    await page.locator('input[type="radio"][value="properties"]').check();
     await uploadFixtureCsv(page, 'properties.csv');
     await expect(page.getByRole('status')).toContainText(/imported 2 rows/i, { timeout: 15_000 });
-
     await page.screenshot({ path: 'e2e-results/m7-04-properties.png', fullPage: true });
-  });
 
-  test('import units CSV: 3 rows imported', async ({ page }) => {
-    await login(page);
-    await page.waitForURL(/\/onboarding/, { timeout: 10_000 });
-
-    const unitsRadio = page.locator('input[type="radio"][value="units"]');
-    await unitsRadio.check();
+    // Units (3 rows).
+    await page.locator('input[type="radio"][value="units"]').check();
     await uploadFixtureCsv(page, 'units.csv');
     await expect(page.getByRole('status')).toContainText(/imported 3 rows/i, { timeout: 15_000 });
-
     await page.screenshot({ path: 'e2e-results/m7-05-units.png', fullPage: true });
-  });
 
-  test('import tenants_leases CSV: 3 rows imported', async ({ page }) => {
-    await login(page);
-    await page.waitForURL(/\/onboarding/, { timeout: 10_000 });
-
-    const tlRadio = page.locator('input[type="radio"][value="tenants_leases"]');
-    await tlRadio.check();
+    // Tenants & leases (3 rows).
+    await page.locator('input[type="radio"][value="tenants_leases"]').check();
     await uploadFixtureCsv(page, 'tenants_leases.csv');
     await expect(page.getByRole('status')).toContainText(/imported 3 rows/i, { timeout: 15_000 });
-
     await page.screenshot({ path: 'e2e-results/m7-06-tenants.png', fullPage: true });
-  });
 
-  // ── Step 3: balance import ────────────────────────────────────────────────
-
-  test('balance step is now active after entity import', async ({ page }) => {
-    await login(page);
-    await page.waitForURL(/\/onboarding/, { timeout: 10_000 });
-
+    // Continue → balance step.
+    await expect(continueBtn).toBeEnabled();
+    await continueBtn.click();
     await expect(page.getByRole('heading', { name: /import opening balances/i })).toBeVisible({
       timeout: 10_000,
     });
@@ -174,46 +164,51 @@ test.describe.serial('M7 onboarding wizard', () => {
     await page.screenshot({ path: 'e2e-results/m7-07-balance-step.png', fullPage: true });
   });
 
-  test('import owner_balances CSV: 2 rows imported', async ({ page }) => {
+  // ── Step 3: balance import (all three kinds in one session, then Continue) ──
+  //
+  // On a fresh login here, entitiesImported=true + balancesImported=false → the wizard
+  // resumes at the balance step. All three balance kinds are imported within ONE session,
+  // then "Continue →" advances to the verify step.
+
+  test('balance import: owner_balances → deposit_liabilities → bank_balances (each banner), then Continue', async ({
+    page,
+  }) => {
     await login(page);
     await page.waitForURL(/\/onboarding/, { timeout: 10_000 });
     await expect(page.getByRole('heading', { name: /import opening balances/i })).toBeVisible({
       timeout: 10_000,
     });
 
+    const continueBtn = page.getByRole('button', { name: /continue/i });
+    await expect(continueBtn).toBeDisabled();
+
+    // Owner balances (2 rows).
     await page.getByLabel('Cutover date').fill(CUTOVER_DATE);
-    const obRadio = page.locator('input[type="radio"][value="owner_balances"]');
-    await obRadio.check();
+    await page.locator('input[type="radio"][value="owner_balances"]').check();
     await uploadFixtureCsv(page, 'owner_balances.csv');
     await expect(page.getByRole('status')).toContainText(/imported 2 rows/i, { timeout: 15_000 });
-
     await page.screenshot({ path: 'e2e-results/m7-08-owner-balances.png', fullPage: true });
-  });
 
-  test('import deposit_liabilities CSV: 3 rows imported', async ({ page }) => {
-    await login(page);
-    await page.waitForURL(/\/onboarding/, { timeout: 10_000 });
-
+    // Deposit liabilities (3 rows).
     await page.getByLabel('Cutover date').fill(CUTOVER_DATE);
-    const dlRadio = page.locator('input[type="radio"][value="deposit_liabilities"]');
-    await dlRadio.check();
+    await page.locator('input[type="radio"][value="deposit_liabilities"]').check();
     await uploadFixtureCsv(page, 'deposit_liabilities.csv');
     await expect(page.getByRole('status')).toContainText(/imported 3 rows/i, { timeout: 15_000 });
-
     await page.screenshot({ path: 'e2e-results/m7-09-deposit-liabilities.png', fullPage: true });
-  });
 
-  test('import bank_balances CSV: 2 rows imported', async ({ page }) => {
-    await login(page);
-    await page.waitForURL(/\/onboarding/, { timeout: 10_000 });
-
+    // Bank balances (2 rows) — matched by name against the seeded cutover bank accounts.
     await page.getByLabel('Cutover date').fill(CUTOVER_DATE);
-    const bbRadio = page.locator('input[type="radio"][value="bank_balances"]');
-    await bbRadio.check();
+    await page.locator('input[type="radio"][value="bank_balances"]').check();
     await uploadFixtureCsv(page, 'bank_balances.csv');
     await expect(page.getByRole('status')).toContainText(/imported 2 rows/i, { timeout: 15_000 });
-
     await page.screenshot({ path: 'e2e-results/m7-10-bank-balances.png', fullPage: true });
+
+    // Continue → verify step.
+    await expect(continueBtn).toBeEnabled();
+    await continueBtn.click();
+    await expect(page.getByRole('heading', { name: /verify & sign off/i })).toBeVisible({
+      timeout: 10_000,
+    });
   });
 
   // ── Step 4: non-tying path (before sign-off) ──────────────────────────────
@@ -222,9 +217,9 @@ test.describe.serial('M7 onboarding wizard', () => {
     page,
   }) => {
     await login(page);
-    await page.waitForURL(/\/onboarding/, { timeout: 10_000 });
-
-    // After all balances imported, activeStep=3 (verify & sign off).
+    // Balances are now posted → hasJournalData=true → the dashboard no longer redirects.
+    // Navigate to the wizard explicitly; it resumes at the verify step (firstIncompleteStep=3).
+    await page.goto('/onboarding');
     await expect(page.getByRole('heading', { name: /verify & sign off/i })).toBeVisible({
       timeout: 10_000,
     });
@@ -320,8 +315,8 @@ test.describe.serial('M7 onboarding wizard', () => {
     page,
   }) => {
     await login(page);
-    await page.waitForURL(/\/onboarding/, { timeout: 10_000 });
-
+    // Navigate to the wizard explicitly (no redirect once journal data exists); resumes at verify.
+    await page.goto('/onboarding');
     await expect(page.getByRole('heading', { name: /verify & sign off/i })).toBeVisible({
       timeout: 10_000,
     });
@@ -358,12 +353,15 @@ test.describe.serial('M7 onboarding wizard', () => {
     // "Tied" badge (aria-label="Import is tied" on the span in VerificationStep.tsx).
     await expect(page.getByLabel('Import is tied')).toBeVisible({ timeout: 10_000 });
 
-    // Clearing residuals section: both $0.00 (MigrationClearing nets to zero in both bases).
+    // Clearing residuals section: both bases net to zero (MigrationClearing == 0).
+    // The <Money colorize> component renders an exact zero as an em-dash with class
+    // "pf-money zero" (formatMoney's dash for 0), NOT "$0.00". Assert two zero-class Money
+    // spans (clearing cash + clearing accrual), and assert NO non-zero dollar residual.
     const clearingSection = page.locator('.ob-clearing-residual');
     await expect(clearingSection).toBeVisible({ timeout: 5_000 });
-    // Two $0.00 values appear (cash + accrual).
-    const zeroAmounts = clearingSection.getByText('$0.00');
-    await expect(zeroAmounts.first()).toBeVisible();
+    const zeroMoney = clearingSection.locator('.pf-money.zero');
+    // Cash + accrual clearing residuals are both zero (plus the total-variance Money is zero too).
+    await expect(zeroMoney).toHaveCount(3, { timeout: 10_000 });
 
     await page.screenshot({ path: 'e2e-results/m7-12-tied-report.png', fullPage: true });
 
