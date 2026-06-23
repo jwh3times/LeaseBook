@@ -19,6 +19,9 @@ public static class OperationsModuleServiceCollectionExtensions
         // WP-2: Rent charge run + proration (ADR-017 / ADR-019).
         services.AddScoped<IRunStrategy, RentRunStrategy>();
 
+        // WP-3: Late-fee run (NC §42-46 clamp / ADR-019).
+        services.AddScoped<IRunStrategy, LateFeeRunStrategy>();
+
         return services;
     }
 }

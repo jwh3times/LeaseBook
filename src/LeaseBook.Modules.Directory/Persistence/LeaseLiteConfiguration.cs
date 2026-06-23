@@ -23,6 +23,16 @@ public sealed class LeaseLiteConfiguration : IEntityTypeConfiguration<LeaseLite>
         builder.Property(e => e.Status).IsRequired().HasConversion<LeaseStatusConverter>();
         builder.Property(e => e.CreatedAt).IsRequired();
 
+        // Late-fee per-lease overrides (WP-3 / NC §42-46). All nullable; null = use org default.
+        builder.Property(e => e.LateFeeRentDueDayOverride);
+        builder.Property(e => e.LateFeeGraceDaysOverride);
+        builder.Property(e => e.LateFeeKindOverride)
+            .HasConversion(
+                v => v.HasValue ? LateFeeKindConverter.ToDb(v.Value) : null,
+                v => v != null ? (LateFeeKind?)LateFeeKindConverter.FromDb(v) : null);
+        builder.Property(e => e.LateFeeAmountOverride).HasColumnType("numeric(14,2)");
+        builder.Property(e => e.LateFeeRateBpsOverride);
+
         builder.HasOne<Tenant>().WithMany().HasForeignKey(e => e.TenantId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<Unit>().WithMany().HasForeignKey(e => e.UnitId).OnDelete(DeleteBehavior.Restrict);
 
