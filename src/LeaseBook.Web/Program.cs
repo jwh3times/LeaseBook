@@ -141,6 +141,11 @@ builder.Services.AddBankingModule();
 builder.Services.AddScoped<LeaseBook.Modules.Banking.Contracts.IBankRegister, BankRegisterAdapter>();
 builder.Services.AddScoped<LeaseBook.Modules.Banking.Contracts.IBankClearing, BankClearingAdapter>();
 
+// M7 WP-3: onboarding entity-import service + external-id resolver. Host-owned (composition root);
+// reads across Directory commands via ISender and persists staging rows in the ambient RLS transaction.
+builder.Services.AddScoped<LeaseBook.Web.Onboarding.ExternalIdResolver>();
+builder.Services.AddScoped<LeaseBook.Web.Onboarding.EntityImportService>();
+
 // Host-composed dashboard (§C.6 / P45): the cross-module composition root, dispatching module read
 // queries via ISender. TimeProvider drives the "current accounting month" (injectable for tests).
 builder.Services.AddSingleton(TimeProvider.System);

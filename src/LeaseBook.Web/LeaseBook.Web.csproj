@@ -47,7 +47,9 @@
   </ItemGroup>
 
   <!-- Composition root: references SharedKernel + every module (host-only rule). -->
+  <!-- M7: the host orchestrates the Migrator library (pure parse/validate layer). -->
   <ItemGroup>
+    <ProjectReference Include="..\LeaseBook.Migrator\LeaseBook.Migrator.csproj" />
     <ProjectReference Include="..\LeaseBook.SharedKernel\LeaseBook.SharedKernel.csproj" />
     <ProjectReference Include="..\LeaseBook.Modules.Accounting\LeaseBook.Modules.Accounting.csproj" />
     <ProjectReference Include="..\LeaseBook.Modules.Directory\LeaseBook.Modules.Directory.csproj" />
