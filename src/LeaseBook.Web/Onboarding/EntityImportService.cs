@@ -127,7 +127,7 @@ public sealed class EntityImportService(
     {
         AddParseErrorOutcomes(parsed.Errors, outcomes);
 
-        foreach (var (row, rowNumber) in parsed.Rows.Select((r, i) => (r, i + 1)))
+        foreach (var (row, rowNumber) in WithSourceRowNumbers(parsed.Rows, parsed.Errors))
         {
             var rawJson = SerializeRaw(new { row.ExternalId, row.Name, row.Reserve });
             Guid leaseBookId;
@@ -155,7 +155,7 @@ public sealed class EntityImportService(
 
         var ownerMap = await resolver.BuildMapAsync(EntityKind.Owners, ct);
 
-        foreach (var (row, rowNumber) in parsed.Rows.Select((r, i) => (r, i + 1)))
+        foreach (var (row, rowNumber) in WithSourceRowNumbers(parsed.Rows, parsed.Errors))
         {
             var rawJson = SerializeRaw(new { row.ExternalId, row.ExternalOwnerId, row.Address });
 
@@ -192,7 +192,7 @@ public sealed class EntityImportService(
 
         var propertyMap = await resolver.BuildMapAsync(EntityKind.Properties, ct);
 
-        foreach (var (row, rowNumber) in parsed.Rows.Select((r, i) => (r, i + 1)))
+        foreach (var (row, rowNumber) in WithSourceRowNumbers(parsed.Rows, parsed.Errors))
         {
             var rawJson = SerializeRaw(new { row.ExternalId, row.ExternalPropertyId, row.Label, row.Rent, row.Status });
 
@@ -230,7 +230,7 @@ public sealed class EntityImportService(
 
         var unitMap = await resolver.BuildMapAsync(EntityKind.Units, ct);
 
-        foreach (var (row, rowNumber) in parsed.Rows.Select((r, i) => (r, i + 1)))
+        foreach (var (row, rowNumber) in WithSourceRowNumbers(parsed.Rows, parsed.Errors))
         {
             var rawJson = SerializeRaw(new
             {
@@ -297,6 +297,26 @@ public sealed class EntityImportService(
     {
         foreach (var e in parseErrors)
             outcomes.Add(RowOutcome.Error(e.RowNumber, string.Empty, "{}", e.Field, e.Reason));
+    }
+
+    /// <summary>
+    /// Pairs each successfully-parsed row with its true 1-based source CSV row number. The parser
+    /// returns valid rows and parse errors separately, with only the errors carrying their original
+    /// position; this reconstructs each valid row's position by skipping the row numbers already
+    /// claimed by parse errors, so persisted <see cref="ImportRow.RowNumber"/>s never collide with
+    /// (or leave gaps around) the parse-error rows — the operator sees one consistent numbering.
+    /// </summary>
+    private static IEnumerable<(TRow Row, int RowNumber)> WithSourceRowNumbers<TRow>(
+        IReadOnlyList<TRow> validRows,
+        IReadOnlyList<RowError> parseErrors)
+    {
+        var errorRowNumbers = parseErrors.Select(e => e.RowNumber).ToHashSet();
+        var sourceRow = 0;
+        foreach (var row in validRows)
+        {
+            do { sourceRow++; } while (errorRowNumbers.Contains(sourceRow));
+            yield return (row, sourceRow);
+        }
     }
 
     private static string SerializeRaw(object obj) =>

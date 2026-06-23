@@ -38,12 +38,22 @@ public sealed class ImportEntitiesEndpoints : IEndpointModule
                                     "Use one of: owners, properties, units, tenants_leases.",
                             statusCode: StatusCodes.Status400BadRequest);
 
+                    // Only the documented appfolio-default profile exists today (null/empty = default).
+                    // Reject any other value rather than silently parsing against the default.
+                    var requested = body.MappingProfile;
+                    if (!string.IsNullOrWhiteSpace(requested) && requested != "appfolio-default")
+                        return Results.Problem(
+                            title: "Unknown mapping profile",
+                            detail: $"unknown_mapping_profile: '{requested}'. " +
+                                    "The only supported profile is 'appfolio-default'.",
+                            statusCode: StatusCodes.Status400BadRequest);
+
                     var csvBytes = System.Text.Encoding.UTF8.GetBytes(body.CsvContent ?? string.Empty);
                     await using var csvStream = new MemoryStream(csvBytes);
 
                     var result = await service.ImportAsync(
                         entityKind,
-                        body.MappingProfile ?? "appfolio-default",
+                        "appfolio-default",
                         body.Filename ?? $"{kind}.csv",
                         csvStream,
                         ct);
@@ -54,17 +64,15 @@ public sealed class ImportEntitiesEndpoints : IEndpointModule
             .Produces(StatusCodes.Status400BadRequest);
     }
 
+    // The route uses snake_case kind tokens (e.g. "tenants_leases"); normalise to PascalCase
+    // (strip underscores) before the idiomatic Enum.TryParse + Enum.IsDefined check — no sentinel cast.
     private static bool TryParseEntityKind(string raw, out EntityKind kind)
     {
-        kind = raw switch
-        {
-            "owners" => EntityKind.Owners,
-            "properties" => EntityKind.Properties,
-            "units" => EntityKind.Units,
-            "tenants_leases" => EntityKind.TenantsLeases,
-            _ => (EntityKind)(-1),
-        };
-        return (int)kind >= 0;
+        var normalised = raw.Replace("_", string.Empty);
+        return Enum.TryParse(normalised, ignoreCase: true, out kind)
+               && Enum.IsDefined(kind)
+               && kind is EntityKind.Owners or EntityKind.Properties
+                   or EntityKind.Units or EntityKind.TenantsLeases;
     }
 }
 

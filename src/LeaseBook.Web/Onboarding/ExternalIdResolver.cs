@@ -24,14 +24,19 @@ public sealed class ExternalIdResolver(DbContext db)
     {
         var kindStr = kind.ToString();
 
-        // RLS scopes this to the current org automatically.
+        // RLS scopes this to the current org automatically. A batch with ≥1 bad row becomes
+        // "posted_with_errors", but its successfully-created rows still carry RowStatus == "posted"
+        // and a real leaseBookId — so include both batch statuses and filter to good rows at the
+        // row level. Filtering only at the batch level would drop every good row of a mixed batch.
         var mappedJsonRows = await db.Set<ImportBatch>()
-            .Where(b => b.EntityKind == kindStr && b.Status == "posted")
+            .Where(b => b.EntityKind == kindStr
+                        && (b.Status == "posted" || b.Status == "posted_with_errors"))
             .Join(db.Set<ImportRow>(),
                 b => b.Id,
                 r => r.BatchId,
-                (_, r) => r.MappedJson)
-            .Where(j => j != null)
+                (_, r) => r)
+            .Where(r => r.RowStatus == "posted")
+            .Select(r => r.MappedJson)
             .ToListAsync(ct);
 
         var result = new Dictionary<string, Guid>(StringComparer.Ordinal);
