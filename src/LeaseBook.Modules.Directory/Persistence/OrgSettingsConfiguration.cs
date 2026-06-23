@@ -34,6 +34,18 @@ public sealed class OrgSettingsConfiguration : IEntityTypeConfiguration<OrgSetti
         builder.Property(e => e.LogoBlobRef);
         builder.Property(e => e.CreatedAt).IsRequired();
 
+        // Late-fee org defaults (WP-3 / NC §42-46).
+        builder.Property(e => e.RentDueDay).IsRequired().HasDefaultValue(1);
+        builder.Property(e => e.LateFeeGraceDays).IsRequired().HasDefaultValue(5);
+        builder.Property(e => e.LateFeeKind).IsRequired()
+            .HasConversion(
+                v => LateFeeKindConverter.ToDb(v),
+                v => LateFeeKindConverter.FromDb(v))
+            .HasDefaultValue(LateFeeKind.Flat);
+        builder.Property(e => e.LateFeeAmount).IsRequired()
+            .HasColumnType("numeric(14,2)").HasDefaultValue(50m);
+        builder.Property(e => e.LateFeeRateBps).IsRequired().HasDefaultValue(500);
+
         // One settings row per org — unique org_id (§C.1, P46).
         builder.HasIndex(e => e.OrgId).IsUnique();
     }

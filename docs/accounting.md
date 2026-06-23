@@ -248,3 +248,75 @@ The eight-report catalog (`/reports`) follows the same pattern: each report prev
 through `ISender` to the appropriate Accounting or Directory handler; the host's
 `ReportPreviewService` aggregates the generic row payload the SPA renders. CSV and (for statements)
 PDF exports use the same data path — no separate re-query for a different output format.
+
+## Bulk operations (M6)
+
+A property manager's month is batch-shaped: charge all tenants' rent on the first, apply late fees
+to delinquent ledgers mid-month, then sweep owner equity and management fees out at month-end. M6
+implements these three **bulk runs** as a shared pipeline — preview → confirm → atomic post → run
+history — so the fiduciary concerns (idempotency, atomicity, audit, run-history) are written once
+and inherited by all three.
+
+### The three runs
+
+**Monthly rent charge run.** Charges rent for every active lease in the chosen period. Active leases
+whose `StartDate` or `EndDate` falls mid-period are **prorated** by actual days occupied (ADR-017):
+daily rate = monthly rent ÷ actual days in month; charge = daily rate × days the lease is active in
+the period; half-up rounding to the cent. The run is idempotent: re-running a period marks
+already-charged leases as "already done" and posts only newly eligible ones — never double-charges.
+
+**Late-fee run.** Selectively charges `FeeCharged(FeeKind.Late)` on delinquent ledgers past the
+grace period. The effective policy is resolved per lease: `lease override ?? org default`, then
+clamped to the **NC G.S. §42-46 statutory ceiling** (the late fee may not exceed the greater of
+$15.00 or 5% of the monthly rent, regardless of the policy configured). Operators review the preview
+and pick which delinquent ledgers to charge before confirming; the run is never silent.
+
+**Owner disbursement run (with folded management fee).** For each owner, posts two events
+atomically: `ManagementFeeAssessed` (equity × effective bps, half-up — ADR-018) followed by
+`OwnerDisbursed` (net equity after fee, subject to the configured reserve floor). The management fee
+is assessed on **owner equity available at run time** on the cash basis — not on rent collected —
+so it reflects real distributable cash, not accruals. If the net after fee would fall below the
+owner's `ReserveAmount`, the owner is excluded with a stated reason and the posting is not
+attempted. Per-owner property overrides are deferred to a later milestone; M6 uses the
+owner-level `DefaultMgmtFeeBps` only (documented in ADR-018).
+
+### Source-ref idempotency convention (ADR-019)
+
+Every posting made by a bulk run carries a deterministic `source_ref` key that ties the journal
+entry to the run target and period:
+
+```
+{runType}:{year}-{month:00}:{targetKind}={targetId}
+```
+
+Examples: `rent:2026-05:lease=<leaseId>`, `disbursement:2026-05:owner=<ownerId>`.
+
+The `source_ref` is checked by the existing `(org_id, source_ref)` partial unique index on
+`journal_entries` before and after posting. A second run for the same target and period raises
+`DuplicateSourceRefException`, which the run engine catches per-item and records as `Skipped` (not
+an error). This guarantees no double-posting even under concurrent confirms.
+
+### Cross-module boundary (ADR-019)
+
+Operations reads preview inputs from Directory and Accounting through **consumer-owned ports +
+host adapters**, exactly mirroring M5's read-direction ADR-016. The host adapter for writes
+(`BatchPostingAdapter`) loops the existing public `IAccountingEvents.PostAsync` for each intent;
+there is no new batch command in Accounting. Operations never references Accounting's event types —
+the adapter translates Operations primitives (target id, amount, date, period, kind) into the
+correct Accounting events (`RentCharged`, `FeeCharged`, `ManagementFeeAssessed`, `OwnerDisbursed`).
+
+### Run history
+
+Every confirmed run writes an auditable `bulk_runs` row (who ran, period, run type, summary
+counts) and one `bulk_run_items` row per target (status: `Posted` / `Skipped` / `Excluded`,
+snapshot JSON with the amounts and entry id). The run history view lists all completed runs
+for the organization, most recent first.
+
+### Period locking
+
+A locked accounting period (from a finalized bank reconciliation) surfaces as `Excluded` items in
+the run preview and confirm, not as a run-level failure. The run posts what it can and records the
+locked-period targets as excluded with a reason, so a partially locked month is handled gracefully.
+
+See also: **ADR-017** (rent proration method), **ADR-018** (management-fee rounding), **ADR-019**
+(bulk-run engine and cross-module batch posting).

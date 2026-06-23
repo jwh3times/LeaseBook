@@ -8,6 +8,7 @@ import { OwnerDetailPage } from '@/features/owners/OwnerDetailPage';
 import { OwnersPage } from '@/features/owners/OwnersPage';
 import { PropertiesPage } from '@/features/properties/PropertiesPage';
 import { PropertyDetailPage } from '@/features/properties/PropertyDetailPage';
+import { OperationsPage } from '@/features/operations';
 import { ReportsPage, StatementPage } from '@/features/reports';
 import { SettingsPage } from '@/features/settings/SettingsPage';
 import { LedgerPage } from '@/features/tenants/LedgerPage';
@@ -26,6 +27,7 @@ const FEATURE_PAGES: Record<string, ReactElement> = {
   '/properties': <PropertiesPage />,
   '/banking': <BankingPage />,
   '/reports': <ReportsPage />,
+  '/operations': <OperationsPage />,
   '/settings': <SettingsPage />,
 };
 

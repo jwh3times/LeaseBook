@@ -86,6 +86,33 @@ public sealed class SettingsTests(PostgresFixture fixture)
     }
 
     [Fact]
+    public async Task UpdateOrgSettings_preserves_AccountingBasis_when_null()
+    {
+        // Arrange: set basis to "accrual" (non-default).
+        var ct = TestContext.Current.CancellationToken;
+        var orgId = await NewOrgAsync(ct);
+
+        await DispatchAsync(orgId, (s, c) => s.Send(new UpdateOrgSettings(
+            "accrual", "parens", null, null, null, null, null, null, null), c), ct);
+
+        // Act: call UpdateOrgSettings with AccountingBasis=null and a late-fee field set.
+        // The "null = keep current" contract must leave AccountingBasis unchanged.
+        await DispatchAsync(orgId, (s, c) => s.Send(new UpdateOrgSettings(
+            AccountingBasis: null,
+            MoneyNegativeDisplay: null,
+            LegalName: null, Address: null, City: null, State: null, Zip: null, Phone: null, LogoBlobRef: null,
+            LateFeeGraceDays: 5), c), ct);
+
+        // Assert: AccountingBasis is still "accrual", not reset to the default "cash".
+        var settings = await DispatchAsync(orgId, (s, c) => s.Query(new GetOrgSettings(), c), ct);
+        settings.AccountingBasis.ShouldBe("accrual",
+            "AccountingBasis must be preserved when UpdateOrgSettings is called with null AccountingBasis");
+        // MoneyNegativeDisplay was last set to "parens" and should also be preserved.
+        settings.MoneyNegativeDisplay.ShouldBe("parens",
+            "MoneyNegativeDisplay must be preserved when UpdateOrgSettings is called with null MoneyNegativeDisplay");
+    }
+
+    [Fact]
     public async Task Effective_fee_resolves_property_override_over_owner_default()
     {
         var ct = TestContext.Current.CancellationToken;

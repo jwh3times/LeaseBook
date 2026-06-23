@@ -31,5 +31,25 @@ public sealed class LeaseLite : IOrgScoped
 
     public LeaseStatus Status { get; set; }
 
+    // ── Late-fee per-lease overrides (WP-3 / NC §42-46) ──────────────────────
+    // All four are nullable: null means "use org default" for that field. GetLateFeePolicies
+    // resolves (override ?? org default) per field before passing the effective policy to the
+    // late-fee run strategy via ILateFeePolicyData.
+
+    /// <summary>Per-lease override for rent due day (1–28). Null = use org default.</summary>
+    public int? LateFeeRentDueDayOverride { get; set; }
+
+    /// <summary>Per-lease override for grace days. Null = use org default.</summary>
+    public int? LateFeeGraceDaysOverride { get; set; }
+
+    /// <summary>Per-lease override for fee kind. Null = use org default.</summary>
+    public LateFeeKind? LateFeeKindOverride { get; set; }
+
+    /// <summary>Per-lease override for flat fee amount. Null = use org default.</summary>
+    public decimal? LateFeeAmountOverride { get; set; }
+
+    /// <summary>Per-lease override for fee rate in basis points. Null = use org default.</summary>
+    public int? LateFeeRateBpsOverride { get; set; }
+
     public DateTime CreatedAt { get; set; }
 }

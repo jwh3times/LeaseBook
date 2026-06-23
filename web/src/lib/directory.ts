@@ -39,9 +39,12 @@ export function useTenants(): UseQueryResult<
   });
 }
 
-export function useOwners(): UseQueryResult<components['schemas']['PagedResponseOfOwnerListRow']> {
+export function useOwners(
+  opts: { enabled?: boolean } = {},
+): UseQueryResult<components['schemas']['PagedResponseOfOwnerListRow']> {
   return useQuery({
     queryKey: ['owners'],
+    enabled: opts.enabled ?? true,
     queryFn: async () =>
       unwrap(
         await api.GET('/api/directory/owners', { params: { query: { pageSize: PAGE } } }),
@@ -50,11 +53,12 @@ export function useOwners(): UseQueryResult<components['schemas']['PagedResponse
   });
 }
 
-export function useProperties(): UseQueryResult<
-  components['schemas']['PagedResponseOfPropertyListRow']
-> {
+export function useProperties(
+  opts: { enabled?: boolean } = {},
+): UseQueryResult<components['schemas']['PagedResponseOfPropertyListRow']> {
   return useQuery({
     queryKey: ['properties'],
+    enabled: opts.enabled ?? true,
     queryFn: async () =>
       unwrap(
         await api.GET('/api/directory/properties', { params: { query: { pageSize: PAGE } } }),

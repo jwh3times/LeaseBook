@@ -100,6 +100,19 @@ public sealed class ReportingEndpointsTests(PostgresFixture fixture)
         stmt.Fiduciary.Variance.ShouldBe(0m);
         stmt.Fiduciary.PmIncomeExcluded.ShouldBeTrue();
 
+        // WP-6 (M6): ReconciliationSnapshotRow now includes bankName + accountMask.
+        // The demo seed finalizes the Operating Trust for April 2026, so the statement must
+        // surface that snapshot with the bank's display name ("Operating Trust") populated.
+        stmt.Fiduciary.LatestReconciledBank.ShouldNotBeNull(
+            "the seeded April 2026 finalized reconciliation must appear on the statement");
+        stmt.Fiduciary.LatestReconciledBank!.Year.ShouldBe(2026);
+        stmt.Fiduciary.LatestReconciledBank.Month.ShouldBe(4);
+        stmt.Fiduciary.LatestReconciledBank.BankName.ShouldBe("Operating Trust",
+            "bankName must be populated from the Directory bank-account record");
+        // The seeded OperBank has mask "4021" (set in DemoDirectorySeed).
+        stmt.Fiduciary.LatestReconciledBank.AccountMask.ShouldBe("4021",
+            "accountMask must be populated from the Directory bank-account record");
+
         // Owner display name should be resolved.
         stmt.OwnerName.ShouldBe("Ridgeline Investments");
     }
@@ -208,20 +221,27 @@ public sealed class ReportingEndpointsTests(PostgresFixture fixture)
     }
 
     [Fact]
-    public async Task Preview_bank_rec_returns_message_when_no_finalized_reconciliation()
+    public async Task Preview_bank_rec_returns_rows_for_seeded_finalized_reconciliation()
     {
-        // The demo seed does not finalize a reconciliation (clearances are set up, but no
-        // BankReconciliation row is in the database), so the endpoint must return an empty
-        // row list with a non-null message rather than throw.
+        // WP-6 (M6): the demo seed now includes a finalized BankReconciliation for the Operating
+        // Trust, April 2026 (see DemoBankClearingSeed.EnsureFinalizedReconciliationAsync). The
+        // bank-rec preview must return at least one row with the expected period and balance.
         var ct = TestContext.Current.CancellationToken;
         await DemoSeeder.SeedAsync(fixture.Api.Services, ct);
         var client = await DemoClientAsync(ct);
 
         var result = await GetAsync<PreviewSpaResponse>(client, "/api/reports/bank-rec/preview", ct);
 
-        result.Rows.ShouldBeEmpty();
-        result.Message.ShouldNotBeNullOrWhiteSpace(
-            "should surface a human-readable explanation when no finalized reconciliation exists");
+        result.Rows.ShouldNotBeEmpty("the seeded April 2026 finalized reconciliation should produce at least one row");
+        result.Message.ShouldBeNull("a non-empty result should carry no message");
+
+        // The first row should contain the April 2026 period data.
+        var rows = result.Rows.OfType<System.Text.Json.JsonElement>().ToList();
+        rows.ShouldNotBeEmpty();
+        var first = rows[0];
+        first.GetProperty("year").GetInt32().ShouldBe(2026);
+        first.GetProperty("month").GetInt32().ShouldBe(4);
+        first.GetProperty("statementEndingBalance").GetDecimal().ShouldBe(250_450.14m);
     }
 
     [Fact]

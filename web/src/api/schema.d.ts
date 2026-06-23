@@ -2038,6 +2038,159 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/operations/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["RunHistoryResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/operations/runs/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BulkRunDetailResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/operations/runs/{type}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    type: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ConfirmRunRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["RunResultSpaResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/operations/runs/{type}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    month?: number | string;
+                    year?: number | string;
+                };
+                header?: never;
+                path: {
+                    type: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["RunPreviewSpaResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/reports": {
         parameters: {
             query?: never;
@@ -2145,7 +2298,9 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["PreviewSpaResponse"];
+                    };
                 };
             };
         };
@@ -2742,6 +2897,34 @@ export interface components {
             met: null | boolean;
             task: string;
         };
+        BulkRunDetailResponse: {
+            items: components["schemas"]["BulkRunItemSpa"][];
+            run: components["schemas"]["BulkRunSpa"];
+        };
+        BulkRunItemSpa: {
+            /** Format: double */
+            amount: number | string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: uuid */
+            id: string;
+            status: string;
+            /** Format: uuid */
+            targetId: string;
+            targetKind: string;
+        };
+        BulkRunSpa: {
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: uuid */
+            id: string;
+            /** Format: int32 */
+            periodMonth: number | string;
+            /** Format: int32 */
+            periodYear: number | string;
+            runType: string;
+            summaryJson: string;
+        };
         ClearancesResult: {
             /** Format: int32 */
             affected: number | string;
@@ -2802,6 +2985,13 @@ export interface components {
         ConfirmMfaRequest: {
             code: string;
         };
+        ConfirmRunRequest: {
+            /** Format: int32 */
+            month: number | string;
+            selectedTargetIds: string[];
+            /** Format: int32 */
+            year: number | string;
+        };
         CreateBankAccount: {
             institution: null | string;
             mask: null | string;
@@ -2817,6 +3007,15 @@ export interface components {
             depositRequired: number | string;
             /** Format: date */
             endDate: null | string;
+            /** Format: double */
+            lateFeeAmountOverride?: null | number | string;
+            /** Format: int32 */
+            lateFeeGraceDaysOverride?: null | number | string;
+            lateFeeKindOverride?: null | string;
+            /** Format: int32 */
+            lateFeeRateBpsOverride?: null | number | string;
+            /** Format: int32 */
+            lateFeeRentDueDayOverride?: null | number | string;
             /** Format: double */
             rent: number | string;
             /** Format: date */
@@ -3160,6 +3359,26 @@ export interface components {
             /** Format: uuid */
             entryId: string;
         };
+        PreviewRowSpa: {
+            alreadyDone: boolean;
+            /** Format: double */
+            amount: number | string;
+            detail: {
+                [key: string]: string;
+            };
+            excludedReason: null | string;
+            label: string;
+            /** Format: uuid */
+            targetId: string;
+            targetKind: string;
+        };
+        PreviewSpaResponse: {
+            columns: string[];
+            message: null | string;
+            rows: unknown[];
+            /** Format: int32 */
+            totalRows: number | string;
+        };
         ProblemDetails: {
             detail?: null | string;
             instance?: null | string;
@@ -3206,8 +3425,10 @@ export interface components {
             status: string;
         };
         ReconciliationSnapshotRow: {
+            accountMask?: null | string;
             /** Format: uuid */
             bankAccountId: string;
+            bankName?: null | string;
             /** Format: date-time */
             finalizedAt: string;
             /** Format: int32 */
@@ -3326,6 +3547,35 @@ export interface components {
             message: string;
             /** Format: int32 */
             rowNumber: number | string;
+        };
+        RunHistoryResponse: {
+            runs: components["schemas"]["BulkRunSpa"][];
+        };
+        RunPreviewSpaResponse: {
+            exceptions: string[];
+            /** Format: int32 */
+            month: number | string;
+            rows: components["schemas"]["PreviewRowSpa"][];
+            runType: string;
+            /** Format: int32 */
+            year: number | string;
+        };
+        RunResultSpaResponse: {
+            /** Format: int32 */
+            excluded: number | string;
+            /** Format: int32 */
+            month: number | string;
+            /** Format: int32 */
+            posted: number | string;
+            /** Format: uuid */
+            runId: string;
+            runType: string;
+            /** Format: int32 */
+            skipped: number | string;
+            /** Format: double */
+            total: number | string;
+            /** Format: int32 */
+            year: number | string;
         };
         SaveColumnMapping: {
             /** Format: uuid */
@@ -3512,6 +3762,15 @@ export interface components {
             /** Format: uuid */
             id: string;
             /** Format: double */
+            lateFeeAmountOverride?: null | number | string;
+            /** Format: int32 */
+            lateFeeGraceDaysOverride?: null | number | string;
+            lateFeeKindOverride?: null | string;
+            /** Format: int32 */
+            lateFeeRateBpsOverride?: null | number | string;
+            /** Format: int32 */
+            lateFeeRentDueDayOverride?: null | number | string;
+            /** Format: double */
             rent: number | string;
             /** Format: date */
             startDate: null | string;
@@ -3522,13 +3781,22 @@ export interface components {
             unitId: string;
         };
         UpdateOrgSettings: {
-            accountingBasis: string;
+            accountingBasis: null | string;
             address: null | string;
             city: null | string;
+            /** Format: double */
+            lateFeeAmount?: null | number | string;
+            /** Format: int32 */
+            lateFeeGraceDays?: null | number | string;
+            lateFeeKind?: null | string;
+            /** Format: int32 */
+            lateFeeRateBps?: null | number | string;
             legalName: null | string;
             logoBlobRef: null | string;
-            moneyNegativeDisplay: string;
+            moneyNegativeDisplay: null | string;
             phone: null | string;
+            /** Format: int32 */
+            rentDueDay?: null | number | string;
             state: null | string;
             zip: null | string;
         };

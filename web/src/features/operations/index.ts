@@ -1,2 +1,2 @@
-// Barrel for features/operations. Populated by later work packages.
-export {};
+// Barrel for features/operations (M6 WP-5).
+export { OperationsPage } from './OperationsPage';

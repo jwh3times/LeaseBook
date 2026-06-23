@@ -21,6 +21,11 @@ public sealed record DelinquencyResponse(IReadOnlyList<DelinquencyRow> Rows);
 /// <param name="D61_90">61–90 days past due.</param>
 /// <param name="Over90">More than 90 days past due.</param>
 /// <param name="Total">Sum of all buckets.</param>
+/// <param name="OldestAgeDays">
+/// The actual age in days of the oldest past-due charge (age_days &gt; 0 and net_owed &gt; 0).
+/// Zero means no past-due balance (only a Current bucket). Used by the late-fee run strategy
+/// to gate grace-period eligibility against the real age rather than a bucket floor.
+/// </param>
 public sealed record DelinquencyRow(
     Guid TenantId,
     decimal Current,
@@ -28,7 +33,8 @@ public sealed record DelinquencyRow(
     decimal D31_60,
     decimal D61_90,
     decimal Over90,
-    decimal Total);
+    decimal Total,
+    int OldestAgeDays);
 
 internal sealed class GetDelinquencyAgingValidator : AbstractValidator<GetDelinquencyAging>
 {
@@ -71,7 +77,8 @@ internal sealed class GetDelinquencyAgingHandler(DbContext db)
                 COALESCE(SUM(CASE WHEN age_days BETWEEN 31 AND 60  THEN net_owed ELSE 0 END), 0) AS d31_60,
                 COALESCE(SUM(CASE WHEN age_days BETWEEN 61 AND 90  THEN net_owed ELSE 0 END), 0) AS d61_90,
                 COALESCE(SUM(CASE WHEN age_days > 90               THEN net_owed ELSE 0 END), 0) AS over90,
-                SUM(net_owed) AS total
+                SUM(net_owed) AS total,
+                COALESCE(MAX(CASE WHEN age_days > 0 AND net_owed > 0 THEN age_days ELSE NULL END), 0) AS oldest_age_days
             FROM receivable_by_entry
             GROUP BY tenant_id
             HAVING SUM(net_owed) > 0

@@ -10,11 +10,23 @@ namespace LeaseBook.Modules.Directory.Features.Leases;
 
 public sealed record CreateLease(
     Guid TenantId, Guid UnitId, DateOnly? StartDate, DateOnly? EndDate,
-    decimal Rent, decimal DepositRequired, string Status) : ICommand<Guid>;
+    decimal Rent, decimal DepositRequired, string Status,
+    // Late-fee per-lease overrides (WP-3 / NC §42-46). All optional; null = use org default.
+    int? LateFeeRentDueDayOverride = null,
+    int? LateFeeGraceDaysOverride = null,
+    string? LateFeeKindOverride = null,
+    decimal? LateFeeAmountOverride = null,
+    int? LateFeeRateBpsOverride = null) : ICommand<Guid>;
 
 public sealed record UpdateLease(
     Guid Id, Guid TenantId, Guid UnitId, DateOnly? StartDate, DateOnly? EndDate,
-    decimal Rent, decimal DepositRequired, string Status) : ICommand<bool>;
+    decimal Rent, decimal DepositRequired, string Status,
+    // Late-fee per-lease overrides (WP-3 / NC §42-46). All optional; null = use org default.
+    int? LateFeeRentDueDayOverride = null,
+    int? LateFeeGraceDaysOverride = null,
+    string? LateFeeKindOverride = null,
+    decimal? LateFeeAmountOverride = null,
+    int? LateFeeRateBpsOverride = null) : ICommand<bool>;
 
 public sealed class CreateLeaseValidator : AbstractValidator<CreateLease>
 {
@@ -63,6 +75,13 @@ internal sealed class CreateLeaseHandler(DbContext db) : ICommandHandler<CreateL
             Rent = new Money(command.Rent),
             DepositRequired = new Money(command.DepositRequired),
             Status = LeaseStatusConverter.FromDb(command.Status),
+            LateFeeRentDueDayOverride = command.LateFeeRentDueDayOverride,
+            LateFeeGraceDaysOverride = command.LateFeeGraceDaysOverride,
+            LateFeeKindOverride = command.LateFeeKindOverride is null
+                ? null
+                : LateFeeKindConverter.FromDb(command.LateFeeKindOverride),
+            LateFeeAmountOverride = command.LateFeeAmountOverride,
+            LateFeeRateBpsOverride = command.LateFeeRateBpsOverride,
         };
         db.Set<LeaseLite>().Add(lease);
         await db.SaveChangesAsync(ct);
@@ -87,6 +106,13 @@ internal sealed class UpdateLeaseHandler(DbContext db) : ICommandHandler<UpdateL
         lease.Rent = new Money(command.Rent);
         lease.DepositRequired = new Money(command.DepositRequired);
         lease.Status = LeaseStatusConverter.FromDb(command.Status);
+        lease.LateFeeRentDueDayOverride = command.LateFeeRentDueDayOverride;
+        lease.LateFeeGraceDaysOverride = command.LateFeeGraceDaysOverride;
+        lease.LateFeeKindOverride = command.LateFeeKindOverride is null
+            ? null
+            : LateFeeKindConverter.FromDb(command.LateFeeKindOverride);
+        lease.LateFeeAmountOverride = command.LateFeeAmountOverride;
+        lease.LateFeeRateBpsOverride = command.LateFeeRateBpsOverride;
         await db.SaveChangesAsync(ct);
         return true;
     }

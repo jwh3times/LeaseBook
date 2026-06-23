@@ -663,6 +663,26 @@ namespace LeaseBook.Web.Migrations
                         .HasColumnType("date")
                         .HasColumnName("end_date");
 
+                    b.Property<decimal?>("LateFeeAmountOverride")
+                        .HasColumnType("numeric(14,2)")
+                        .HasColumnName("late_fee_amount_override");
+
+                    b.Property<int?>("LateFeeGraceDaysOverride")
+                        .HasColumnType("integer")
+                        .HasColumnName("late_fee_grace_days_override");
+
+                    b.Property<string>("LateFeeKindOverride")
+                        .HasColumnType("text")
+                        .HasColumnName("late_fee_kind_override");
+
+                    b.Property<int?>("LateFeeRateBpsOverride")
+                        .HasColumnType("integer")
+                        .HasColumnName("late_fee_rate_bps_override");
+
+                    b.Property<int?>("LateFeeRentDueDayOverride")
+                        .HasColumnType("integer")
+                        .HasColumnName("late_fee_rent_due_day_override");
+
                     b.Property<Guid>("OrgId")
                         .HasColumnType("uuid")
                         .HasColumnName("org_id");
@@ -736,6 +756,31 @@ namespace LeaseBook.Web.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<decimal>("LateFeeAmount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("numeric(14,2)")
+                        .HasDefaultValue(50m)
+                        .HasColumnName("late_fee_amount");
+
+                    b.Property<int>("LateFeeGraceDays")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(5)
+                        .HasColumnName("late_fee_grace_days");
+
+                    b.Property<string>("LateFeeKind")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("flat")
+                        .HasColumnName("late_fee_kind");
+
+                    b.Property<int>("LateFeeRateBps")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(500)
+                        .HasColumnName("late_fee_rate_bps");
+
                     b.Property<string>("LegalName")
                         .HasColumnType("text")
                         .HasColumnName("legal_name");
@@ -758,6 +803,12 @@ namespace LeaseBook.Web.Migrations
                     b.Property<string>("Phone")
                         .HasColumnType("text")
                         .HasColumnName("phone");
+
+                    b.Property<int>("RentDueDay")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1)
+                        .HasColumnName("rent_due_day");
 
                     b.Property<string>("State")
                         .HasColumnType("text")
@@ -1019,6 +1070,106 @@ namespace LeaseBook.Web.Migrations
                         {
                             t.HasCheckConstraint("ck_units_status", "status IN ('occupied','vacant','unavailable')");
                         });
+                });
+
+            modelBuilder.Entity("LeaseBook.Modules.Operations.Domain.BulkRun", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("OrgId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("org_id");
+
+                    b.Property<int>("PeriodMonth")
+                        .HasColumnType("integer")
+                        .HasColumnName("period_month");
+
+                    b.Property<int>("PeriodYear")
+                        .HasColumnType("integer")
+                        .HasColumnName("period_year");
+
+                    b.Property<string>("RunType")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("run_type");
+
+                    b.Property<string>("SummaryJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("summary_json");
+
+                    b.HasKey("Id")
+                        .HasName("pk_bulk_runs");
+
+                    b.HasIndex("OrgId", "RunType", "PeriodYear", "PeriodMonth")
+                        .HasDatabaseName("ix_bulk_runs_org_id_run_type_period_year_period_month");
+
+                    b.ToTable("bulk_runs", (string)null);
+                });
+
+            modelBuilder.Entity("LeaseBook.Modules.Operations.Domain.BulkRunItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("numeric(14,2)")
+                        .HasColumnName("amount");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("OrgId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("org_id");
+
+                    b.Property<Guid?>("ResultingJournalEntryId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("resulting_journal_entry_id");
+
+                    b.Property<Guid>("RunId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("run_id");
+
+                    b.Property<string>("SnapshotJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("snapshot_json");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("TargetId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("target_id");
+
+                    b.Property<string>("TargetKind")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("target_kind");
+
+                    b.HasKey("Id")
+                        .HasName("pk_bulk_run_items");
+
+                    b.HasIndex("RunId")
+                        .HasDatabaseName("ix_bulk_run_items_run_id");
+
+                    b.HasIndex("OrgId", "RunId")
+                        .HasDatabaseName("ix_bulk_run_items_org_id_run_id");
+
+                    b.ToTable("bulk_run_items", (string)null);
                 });
 
             modelBuilder.Entity("LeaseBook.Modules.Reporting.Delivery.StatementDeliveryRecord", b =>
@@ -1501,6 +1652,16 @@ namespace LeaseBook.Web.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_units_properties_property_id");
+                });
+
+            modelBuilder.Entity("LeaseBook.Modules.Operations.Domain.BulkRunItem", b =>
+                {
+                    b.HasOne("LeaseBook.Modules.Operations.Domain.BulkRun", null)
+                        .WithMany()
+                        .HasForeignKey("RunId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_bulk_run_items_bulk_runs_run_id");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<System.Guid>", b =>

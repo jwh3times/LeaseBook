@@ -3,6 +3,7 @@ using Azure.Monitor.OpenTelemetry.Exporter;
 using LeaseBook.Modules.Accounting;
 using LeaseBook.Modules.Banking;
 using LeaseBook.Modules.Directory;
+using LeaseBook.Modules.Operations;
 using LeaseBook.Modules.Reporting;
 using LeaseBook.SharedKernel.Cqrs;
 using LeaseBook.SharedKernel.Endpoints;
@@ -110,6 +111,28 @@ builder.Services.AddScoped<ReportPreviewService>();
 builder.Services.AddScoped<LeaseBook.Modules.Reporting.Delivery.IArtifactStore,
     LeaseBook.Modules.Reporting.Delivery.LocalArtifactStore>();
 builder.Services.AddScoped<IStatementDelivery, LocalStatementDelivery>();
+
+// Operations module services (run engine; CQRS handlers are auto-discovered). The host implements
+// Operations' cross-module ports (ADR-007 / ADR-019):
+//   IBatchPosting — write-direction: translates run intents into IAccountingEvents.PostAsync calls.
+//   ILeaseScheduleData — read-direction: dispatches Directory's GetActiveLeaseSchedule via ISender.
+//   IPostedSourceRefs — read-direction: dispatches Accounting's GetExistingSourceRefs via ISender.
+builder.Services.AddOperationsModule();
+builder.Services.AddScoped<LeaseBook.Modules.Operations.Contracts.IBatchPosting, BatchPostingAdapter>();
+builder.Services.AddScoped<LeaseBook.Modules.Operations.Contracts.ILeaseScheduleData, LeaseScheduleDataAdapter>();
+builder.Services.AddScoped<LeaseBook.Modules.Operations.Contracts.IPostedSourceRefs, PostedSourceRefsAdapter>();
+// WP-3: Late-fee run ports — policy resolution and delinquency signal (ADR-007 / WP-3).
+builder.Services.AddScoped<LeaseBook.Modules.Operations.Contracts.ILateFeePolicyData, LateFeePolicyDataAdapter>();
+builder.Services.AddScoped<LeaseBook.Modules.Operations.Contracts.IDelinquencyData, DelinquencyDataAdapter>();
+
+// Fix A (M6 final): IPeriodChargeGuard — structural cross-source double-charge guard (ADR-007).
+// Detects charges posted by any means (manual, seed, import) in a period, not just bulk-run keys.
+builder.Services.AddScoped<LeaseBook.Modules.Operations.Contracts.IPeriodChargeGuard, PeriodChargeGuardAdapter>();
+
+// WP-4: Disbursement run ports — owner data, equity balances, bank account info (ADR-018).
+builder.Services.AddScoped<LeaseBook.Modules.Operations.Contracts.IOwnerDisbursementData, OwnerDisbursementDataAdapter>();
+builder.Services.AddScoped<LeaseBook.Modules.Operations.Contracts.IOwnerEquityBalances, OwnerEquityBalancesAdapter>();
+builder.Services.AddScoped<LeaseBook.Modules.Operations.Contracts.IBankAccountInfo, BankAccountInfoAdapter>();
 
 // Banking module services (CSV import/match; CQRS handlers are auto-discovered). The host implements
 // Banking's cross-module ports with thin adapters (ADR-007 / P68): IBankRegister reads uncleared register

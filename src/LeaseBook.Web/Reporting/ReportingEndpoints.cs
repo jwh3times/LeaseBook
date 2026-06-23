@@ -37,8 +37,10 @@ public sealed class ReportingEndpoints : IEndpointModule
             .Produces<IReadOnlyList<ReportDescriptor>>();
 
         // GET /api/reports/{id}/preview?year=&month=&ownerId=&propertyId=&bankAccountId=&asOf=
-        // Returns { columns, rows, totalRows } — the shape the SPA's useReportPreview hook expects.
-        // Columns are derived from the first row's key names (all preview rows share the same keys).
+        // Returns { columns, rows, totalRows, message } — the shape the SPA's useReportPreview hook
+        // expects. Columns are derived from the first row's key names (all preview rows share the same
+        // keys). Annotated with Produces<PreviewSpaResponse> so the OpenAPI generator types the response
+        // (removing the raw-fetch workaround that was needed when the response mapped to `never`).
         group.MapGet("/reports/{id}/preview",
                 async (string id, int? year, int? month, Guid? ownerId, Guid? propertyId,
                     Guid? bankAccountId, DateOnly? asOf,
@@ -56,7 +58,8 @@ public sealed class ReportingEndpoints : IEndpointModule
                         ? (IReadOnlyList<string>)first.Keys.ToList()
                         : [];
                     return Results.Ok(new PreviewSpaResponse(columns, result.Rows, result.Rows.Count, result.Message));
-                });
+                })
+            .Produces<PreviewSpaResponse>();
 
         // GET /api/reports/{id}/csv?year=&month=&ownerId=&propertyId=&bankAccountId=&asOf=
         // Returns the preview rows rendered to CSV. Delegates to ReportPreviewService (same data
