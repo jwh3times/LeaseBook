@@ -11,7 +11,8 @@ import { expect, test, type Page } from '@playwright/test';
 //   2. Late-fee run (May 2026) — selects delinquent leases and confirms.
 //   3. Mid-month manual charge via the M3 ledger composer (maintenance fee on Jasmine Carter).
 //   4. Bank-register / reconcile access (≤ 2 clicks UX budget — June already finalized by M4).
-//   5. Owner statement (M5) — Ridgeline Investments May 2026 fiduciary panel (3 green checks).
+//   5. Owner statement (M5) — Ridgeline Investments May 2026 fiduciary panel + concrete ending
+//      balance assertion ($22,640.30 — locked after seed arithmetic verification).
 //   6. Owner disbursement run (May 2026) — select all eligible owners, confirm.
 //   7. Run history — assert Rent and Disbursement rows appear.
 //
@@ -24,6 +25,21 @@ import { expect, test, type Page } from '@playwright/test';
 //   June 2026: EndDate(May 31) < periodStart(June 1) → GetActiveLeaseSchedule returns 0 rows.
 //   May is therefore the only period where active leases exist and the bank month is open.
 //
+// NOTE: There is NO fully-clean unbilled period in the demo seed where ALL 7 active leases
+//   are simultaneously eligible. All 7 leases expire 2026-05-31 (no active leases after May),
+//   and May has 6 of 7 already seeded. The strongest possible rent-run assertion within this
+//   constraint is confirmed below: the period guard correctly identifies exactly 1 eligible
+//   lease (Devon Pryor $1,380) and 6 AlreadyDone, and the result total is $1,380.00.
+//
+// Concrete figures locked after seed arithmetic (cash-basis, verified against DemoJournalSeed.cs):
+//   Rent run result total (1 lease posted): $1,380.00 (Devon Pryor May rent).
+//   O5 (Ridgeline Investments) May 2026 cash-basis ending balance: $22,640.30.
+//     Derivation: balance-forward Jan 31 $21,345.30 + PaymentReceived T4/P5/O5 May 28 $1,295.00
+//     = $22,640.30. Seed comment confirms: "22,640.30 target − 1,295.00 replayed" = $21,345.30 bfw.
+//     NOTE: RentCharged lines are EntryBasis.Accrual only (not cash/both) per the posting catalog,
+//     so the e2e's May rent run (which posts Devon Pryor — T2/P1/O1, not O5) does NOT shift O5's
+//     cash-basis May ending balance. The $22,640.30 figure is stable across the full test run.
+//
 // Run ordering notes:
 //   This spec runs AFTER m4-banking.spec.ts (alphabetical discovery; workers:1 serial). The M4
 //   spec finalizes the Operating Trust reconciliation for June 2026 (current month). May 2026 bank
@@ -33,16 +49,20 @@ import { expect, test, type Page } from '@playwright/test';
 //   June lock.
 //
 // Assertions:
-//   Rent run: Devon Pryor visible and eligible ($1,380); 1 charge posted; "Run complete 1 posted".
+//   Rent run: Devon Pryor visible and eligible ($1,380); exactly 1 "Eligible" badge; 6
+//     "Already done" badges (the structural guard proof); "1 posted"; total = "$1,380.00".
 //   Fiduciary panel: 3 passing checks on Ridgeline Investments May 2026 statement.
+//   O5 ending balance: $22,640.30 (locked cash-basis figure).
 //   Disbursement run: at least one owner eligible and posted.
 
 const ADMIN = 'renee.calloway@tarheelpg.test';
 const PASSWORD = 'Tarheel-Trust-2026!';
 
 // O5 = Ridgeline Investments (owns 230 Haywood Rd, property P5, tenant T4 Cole Ramsey).
+// Cash-basis May 2026 ending balance: $22,640.30 (locked from seed arithmetic).
 const O5_ID = '01923000-0000-7000-8000-000000000a05';
 const O5_NAME = 'Ridgeline Investments';
+const O5_MAY_ENDING_BALANCE = '$22,640.30';
 
 async function login(page: Page) {
   await page.goto('/login');
@@ -61,7 +81,7 @@ async function selectMay2026(page: Page) {
 test.describe.serial('M6 full-month cycle', () => {
   // ── Step 1: Rent charge run — May 2026 ────────────────────────────────────
 
-  test('rent run: structural period guard blocks 6 already-seeded leases; Devon Pryor (T2, $1,380) is the 1 eligible tenant', async ({
+  test('rent run: structural period guard shows 1 eligible (Devon Pryor $1,380) and 6 AlreadyDone; result total = $1,380.00', async ({
     page,
   }) => {
     await login(page);
@@ -88,6 +108,14 @@ test.describe.serial('M6 full-month cycle', () => {
     });
     await expect(page.getByRole('row').filter({ hasText: '$1,380.00' }).first()).toBeVisible();
 
+    // Structural guard proof: exactly 1 "Eligible" badge and 6 "Already done" badges.
+    // The guard's cross-source detection (Fix A) is proven when the 6 seeded May charges
+    // are correctly flagged AlreadyDone rather than generating a second charge.
+    const eligibleBadges = page.getByText('Eligible');
+    await expect(eligibleBadges).toHaveCount(1, { timeout: 10_000 });
+    const alreadyDoneBadges = page.getByText('Already done');
+    await expect(alreadyDoneBadges).toHaveCount(6, { timeout: 5_000 });
+
     // Confirm button: "Confirm — post N charge(s)" — matches 1 charge posted.
     const confirmBtn = page.getByRole('button', { name: /post \d+ charges?/i });
     await expect(confirmBtn).toBeEnabled({ timeout: 10_000 });
@@ -101,6 +129,12 @@ test.describe.serial('M6 full-month cycle', () => {
     // as separate spans — match them individually).
     await expect(page.getByText('Run complete')).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText(' posted')).toBeVisible();
+
+    // Concrete total assertion: lock-after-observation — Devon Pryor May rent = $1,380.00.
+    // RunResultPanel renders: <Money value={total} /> followed by <span> total</span>.
+    // The Money component formats $1,380.00 as "$1,380.00" (formatMoney, no dash for non-zero).
+    await expect(page.getByText('$1,380.00')).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByText(' total')).toBeVisible();
 
     await page.screenshot({ path: 'e2e-results/m6-rent-confirmed.png', fullPage: true });
   });
@@ -227,9 +261,9 @@ test.describe.serial('M6 full-month cycle', () => {
     await expect(page.getByRole('button', { name: /Operating Trust/ })).toBeVisible();
   });
 
-  // ── Step 5: Owner statement — O5 May 2026 fiduciary panel ─────────────────
+  // ── Step 5: Owner statement — O5 May 2026 fiduciary panel + ending balance ─
 
-  test('owner statement: O5 Ridgeline Investments May 2026 loads with 3 passing fiduciary checks', async ({
+  test('owner statement: O5 Ridgeline Investments May 2026 loads with 3 passing fiduciary checks and ending balance $22,640.30', async ({
     page,
   }) => {
     await login(page);
@@ -256,9 +290,16 @@ test.describe.serial('M6 full-month cycle', () => {
     });
 
     // Fiduciary integrity panel must be present and show its heading.
-    // (The exact ending balance is not asserted here because the M6 rent run posted an additional
-    // charge for Cole Ramsey May 2026, shifting the balance from the M5 WP-1 golden figure.)
     await expect(page.getByText('Fiduciary integrity')).toBeVisible({ timeout: 10_000 });
+
+    // Concrete ending-balance assertion (lock-after-observation — cash basis):
+    //   O5 bfw Jan 31 $21,345.30 + PaymentReceived T4/Cole Ramsey May 28 $1,295.00 = $22,640.30.
+    //   RentCharged is EntryBasis.Accrual — not included in the cash-basis statement.
+    //   The e2e rent run (Devon Pryor / T2 / O1) does NOT affect O5's balance.
+    //   Seed comment confirms: "22,640.30 target − 1,295.00 replayed" = $21,345.30 bfw.
+    const endingRow = page.locator('.pf-stmt-end');
+    await expect(endingRow).toBeVisible({ timeout: 10_000 });
+    await expect(endingRow).toContainText(O5_MAY_ENDING_BALANCE);
 
     await page.screenshot({ path: 'e2e-results/m6-statement.png', fullPage: true });
   });
