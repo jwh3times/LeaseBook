@@ -2038,6 +2038,234 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/onboarding/import-balances/{kind}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    kind: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["BalanceImportRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ImportBatchResult"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/onboarding/import/{kind}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    kind: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["EntityImportRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ImportBatchResult"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/onboarding/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["OnboardingStatusResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/onboarding/verification": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["VerificationRequestDto"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["VerificationReport"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/onboarding/verification/{id}/signoff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SignoffResult"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/operations/runs": {
         parameters: {
             query?: never;
@@ -2862,6 +3090,12 @@ export interface components {
             /** Format: date-time */
             occurredAt: string;
         };
+        BalanceImportRequest: {
+            csvContent: null | string;
+            cutoverDate: null | string;
+            filename: null | string;
+            mappingProfile: null | string;
+        };
         BankAccountResponse: {
             /** Format: uuid */
             id: string;
@@ -2870,6 +3104,13 @@ export interface components {
             mask: null | string;
             name: string;
             purpose: string;
+        };
+        BankBalanceDto: {
+            accountCode: null | string;
+            /** Format: uuid */
+            bankAccountId: string;
+            /** Format: double */
+            expectedBook: number | string;
         };
         BankBalanceRow: {
             /** Format: uuid */
@@ -3105,6 +3346,11 @@ export interface components {
             otpauthUri: string;
             secret: string;
         };
+        EntityImportRequest: {
+            csvContent: null | string;
+            filename: null | string;
+            mappingProfile: null | string;
+        };
         EntryAuditResponse: {
             rows: components["schemas"]["AuditRow"][];
         };
@@ -3119,6 +3365,21 @@ export interface components {
         HealthResponse: {
             status: string;
             version: string;
+        };
+        ImportBatchError: {
+            field: string;
+            reason: string;
+            /** Format: int32 */
+            rowNumber: number | string;
+        };
+        ImportBatchResult: {
+            /** Format: uuid */
+            batchId: string;
+            /** Format: int32 */
+            errorCount: number | string;
+            errors: components["schemas"]["ImportBatchError"][];
+            /** Format: int32 */
+            rowCount: number | string;
         };
         ImportResult: {
             errors: components["schemas"]["RowError"][];
@@ -3203,6 +3464,13 @@ export interface components {
         MfaRequest: {
             code: string;
             mfaToken: string;
+        };
+        OnboardingStatusResponse: {
+            balancesImported: boolean;
+            banksConfigured: boolean;
+            entitiesImported: boolean;
+            signedOff: boolean;
+            verified: boolean;
         };
         OrgSettingsResponse: {
             accountingBasis: string;
@@ -3599,6 +3867,12 @@ export interface components {
         SetBankActiveRequest: {
             isActive: boolean;
         };
+        SignoffResult: {
+            /** Format: date-time */
+            signedOffAt: string;
+            /** Format: uuid */
+            signedVerificationId: string;
+        };
         StartReconciliation: {
             /** Format: uuid */
             bankAccountId: string;
@@ -3839,6 +4113,39 @@ export interface components {
             /** Format: double */
             rent: number | string;
             status: string;
+        };
+        VarianceLine: {
+            /** Format: double */
+            actual: number | string;
+            /** Format: double */
+            expected: number | string;
+            key: string;
+            label: string;
+            /** Format: double */
+            variance: number | string;
+        };
+        VerificationReport: {
+            /** Format: double */
+            clearingAccrual: number | string;
+            /** Format: double */
+            clearingCash: number | string;
+            /** Format: date */
+            cutoverDate: string;
+            isTied: boolean;
+            lines: components["schemas"]["VarianceLine"][];
+            reportSnapshot: string;
+            /** Format: double */
+            varianceTotal: number | string;
+            /** Format: uuid */
+            verificationId: string;
+        };
+        VerificationRequestDto: {
+            bankBookBalances: null | components["schemas"]["BankBalanceDto"][];
+            cutoverDate: null | string;
+            /** Format: double */
+            depositLiabilityTotal: number | string;
+            /** Format: double */
+            ownerEquityTotal: number | string;
         };
         VoidEntry: {
             /** Format: date */
