@@ -63,6 +63,9 @@ public sealed class BulkRunItem : IOrgScoped
     /// <summary>
     /// Internal factory — the <see cref="IRunStrategy"/> implementations are the callers.
     /// <paramref name="snapshotJson"/> may be null; it defaults to <c>{}</c>.
+    /// <paramref name="createdAt"/> must be supplied by the caller (from the engine's injected
+    /// <see cref="TimeProvider"/>) so that test clocks control item timestamps consistently with
+    /// the parent <see cref="BulkRun"/>.
     /// </summary>
     internal static BulkRunItem Create(
         Guid runId,
@@ -70,6 +73,7 @@ public sealed class BulkRunItem : IOrgScoped
         Guid targetId,
         RunItemStatus status,
         decimal amount,
-        string? snapshotJson) =>
-        new(runId, targetKind, targetId, status, amount, snapshotJson, DateTime.UtcNow);
+        string? snapshotJson,
+        DateTime createdAt) =>
+        new(runId, targetKind, targetId, status, amount, snapshotJson, createdAt);
 }

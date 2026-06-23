@@ -39,7 +39,8 @@ public sealed class RunEngineTests(PostgresFixture fixture)
 
         // Assert counts returned
         result.ShouldNotBeNull();
-        result!.Posted.ShouldBe(2);
+        result!.RunId.ShouldNotBe(Guid.Empty);
+        result.Posted.ShouldBe(2);
         result.Skipped.ShouldBe(0);
         result.Excluded.ShouldBe(0);
         result.Total.ShouldBe(0m);   // NoOp returns zero-amount items
@@ -121,7 +122,7 @@ file sealed class NoOpStrategy(Guid[] targets) : IRunStrategy
         BulkRun run, IReadOnlyList<Guid> selectedTargetIds, IBatchPosting posting, CancellationToken ct)
     {
         IReadOnlyList<BulkRunItem> items = selectedTargetIds
-            .Select(id => BulkRunItem.Create(run.Id, RunTargetKind.Lease, id, RunItemStatus.Posted, 0m, null))
+            .Select(id => BulkRunItem.Create(run.Id, RunTargetKind.Lease, id, RunItemStatus.Posted, 0m, null, run.CreatedAt))
             .ToList();
         return Task.FromResult(items);
     }

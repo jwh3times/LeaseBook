@@ -70,12 +70,15 @@ namespace LeaseBook.Web.Migrations
                 columns: new[] { "org_id", "run_type", "period_year", "period_month" });
 
             // Org-scoped (§C.3 / CLAUDE.md): RLS policy + FORCE so SchemaGuardTests stays green.
-            // bulk_runs and bulk_run_items are append-only in intent (run history is never corrected);
-            // however, the summary_json on bulk_runs is written once at confirm time so no UPDATE is
-            // needed after the initial insert. We do NOT call RevokeAppendOnly here because both tables
-            // are stamped by the same SaveChangesAsync call (no post-save update is required).
+            // bulk_runs and bulk_run_items are genuinely write-once: summary_json is patched via
+            // BulkRun.SetSummaryJson before the row is first saved (while still in the Added/unsaved
+            // state), so no post-INSERT UPDATE is ever issued by the engine. The runtime app/ops roles
+            // therefore lose UPDATE/DELETE, enforcing the append-only guarantee the aggregates' XML docs
+            // claim at the DB-role level (CLAUDE.md invariant).
             migrationBuilder.EnableOrgRls("bulk_runs");
+            migrationBuilder.RevokeAppendOnly("bulk_runs");
             migrationBuilder.EnableOrgRls("bulk_run_items");
+            migrationBuilder.RevokeAppendOnly("bulk_run_items");
         }
 
         /// <inheritdoc />
