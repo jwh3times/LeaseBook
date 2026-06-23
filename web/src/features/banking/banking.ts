@@ -40,9 +40,12 @@ export function rowAmount(row: RegisterRow): number {
 
 // ---- queries ---------------------------------------------------------------
 
-export function useBankBalances(): UseQueryResult<BankBalanceRow[]> {
+export function useBankBalances(
+  opts: { enabled?: boolean } = {},
+): UseQueryResult<BankBalanceRow[]> {
   return useQuery({
     queryKey: ['bank-balances'],
+    enabled: opts.enabled ?? true,
     queryFn: async () => {
       const { data, error } = await api.GET('/api/accounting/banks/balances');
       if (error || !data) throw new Error('Failed to load bank balances');

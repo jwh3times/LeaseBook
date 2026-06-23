@@ -250,10 +250,10 @@ function BuilderPanel({ report }: BuilderPanelProps) {
   const showOwner = af.includes('ownerId');
   const showBank = af.includes('bankAccountId');
 
-  // Only fetch lists when the chip is actually shown.
-  const ownersQuery = useOwners();
-  const propertiesQuery = useProperties();
-  const banksQuery = useBankBalances();
+  // Only fetch lists when the corresponding filter chip is shown for the selected report.
+  const ownersQuery = useOwners({ enabled: showOwner });
+  const propertiesQuery = useProperties({ enabled: showProperty });
+  const banksQuery = useBankBalances({ enabled: showBank });
 
   const ownerOptions: SelectChipOption[] = (ownersQuery.data?.items ?? []).map((o) => ({
     id: o.id,

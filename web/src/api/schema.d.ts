@@ -2298,7 +2298,9 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["PreviewSpaResponse"];
+                    };
                 };
             };
         };
@@ -3370,6 +3372,13 @@ export interface components {
             targetId: string;
             targetKind: string;
         };
+        PreviewSpaResponse: {
+            columns: string[];
+            message: null | string;
+            rows: unknown[];
+            /** Format: int32 */
+            totalRows: number | string;
+        };
         ProblemDetails: {
             detail?: null | string;
             instance?: null | string;
@@ -3416,8 +3425,10 @@ export interface components {
             status: string;
         };
         ReconciliationSnapshotRow: {
+            accountMask?: null | string;
             /** Format: uuid */
             bankAccountId: string;
+            bankName?: null | string;
             /** Format: date-time */
             finalizedAt: string;
             /** Format: int32 */

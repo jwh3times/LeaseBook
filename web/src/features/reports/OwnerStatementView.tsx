@@ -351,7 +351,10 @@ export function OwnerStatementView({
                     <Icon name="bank" size={16} />
                   </div>
                   <div className="col" style={{ flex: 1, alignItems: 'flex-start' }}>
-                    <span className="fw6 fs13">Trust account</span>
+                    <span className="fw6 fs13">
+                      {bank.bankName ?? 'Trust account'}
+                      {bank.accountMask ? ` ••${bank.accountMask}` : ''}
+                    </span>
                     <span className="t3 fs12">
                       Reconciled through {monthLabel(num(bank.year), num(bank.month))}
                     </span>

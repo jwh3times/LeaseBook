@@ -87,14 +87,13 @@ export function useReportCatalog(): UseQueryResult<ReportDescriptor[]> {
   });
 }
 
-// Preview returns a generic JSON response; the schema marks content as never
-// (the backend streams an anonymous shape). We fetch raw and type as unknown rows.
+// Preview response shape — matches PreviewSpaResponse from the backend (now typed in OpenAPI).
 export interface PreviewResponse {
   columns: string[];
   rows: Record<string, unknown>[];
   totalRows: number;
   /** Backend-supplied contextual message (e.g. redirect hint, no-data explanation). */
-  message?: string;
+  message?: string | null;
 }
 
 export function useReportPreview(
@@ -106,25 +105,29 @@ export function useReportPreview(
     queryKey: reportPreviewKey(id, filters),
     enabled: !!id && enabled,
     queryFn: async () => {
-      // The generated client marks the preview response content as `never` (schema says content?: never)
-      // because the .NET endpoint returns an un-typed anonymous shape. Use a raw fetch so we can
-      // parse the actual JSON body; MSW intercepts this correctly in the test environment.
-      const params = new URLSearchParams();
-      if (filters.year != null) params.set('year', String(filters.year));
-      if (filters.month != null) params.set('month', String(filters.month));
-      if (filters.asOf) params.set('asOf', filters.asOf);
-      if (filters.basis) params.set('basis', filters.basis);
-      if (filters.propertyId) params.set('propertyId', filters.propertyId);
-      if (filters.ownerId) params.set('ownerId', filters.ownerId);
-      if (filters.bankAccountId) params.set('bankAccountId', filters.bankAccountId);
-
-      const response = await fetch(
-        `/api/reports/${encodeURIComponent(id)}/preview?${params.toString()}`,
-        { credentials: 'include' },
-      );
-      if (!response.ok) throw new Error(`Preview failed (${response.status})`);
-      const json = (await response.json()) as PreviewResponse;
-      return json;
+      // The preview endpoint is now annotated with Produces<PreviewSpaResponse> (WP-6/M6), so
+      // the generated client types the response correctly. Use the typed api client directly.
+      const { data, error } = await api.GET('/api/reports/{id}/preview', {
+        params: {
+          path: { id },
+          query: {
+            year: filters.year,
+            month: filters.month,
+            asOf: filters.asOf,
+            ownerId: filters.ownerId,
+            propertyId: filters.propertyId,
+            bankAccountId: filters.bankAccountId,
+          },
+        },
+      });
+      if (error || !data) throw new Error(`Preview failed`);
+      // The schema types rows as unknown[]; cast to the expected row shape for the preview table.
+      return {
+        columns: data.columns,
+        rows: data.rows as Record<string, unknown>[],
+        totalRows: Number(data.totalRows),
+        message: data.message,
+      };
     },
   });
 }

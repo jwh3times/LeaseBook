@@ -22,9 +22,13 @@ public interface IReconciliationSnapshots
 /// <param name="Month">Statement period month (1–12).</param>
 /// <param name="StatementEndingBalance">The bank-statement ending balance as reconciled.</param>
 /// <param name="FinalizedAt">UTC timestamp when the reconciliation was finalized.</param>
+/// <param name="BankName">Display name of the bank account (e.g. "Operating Trust"), or null if unavailable.</param>
+/// <param name="AccountMask">Last-4 account mask (e.g. "4021"), or null if not on record.</param>
 public sealed record ReconciliationSnapshotRow(
     Guid BankAccountId,
     int Year,
     int Month,
     decimal StatementEndingBalance,
-    DateTime FinalizedAt);
+    DateTime FinalizedAt,
+    string? BankName = null,
+    string? AccountMask = null);
