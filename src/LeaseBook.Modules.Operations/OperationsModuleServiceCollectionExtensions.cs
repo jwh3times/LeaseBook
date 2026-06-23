@@ -22,6 +22,9 @@ public static class OperationsModuleServiceCollectionExtensions
         // WP-3: Late-fee run (NC §42-46 clamp / ADR-019).
         services.AddScoped<IRunStrategy, LateFeeRunStrategy>();
 
+        // WP-4: Owner disbursement run + folded management fee (ADR-018 / ADR-019).
+        services.AddScoped<IRunStrategy, DisbursementRunStrategy>();
+
         return services;
     }
 }

@@ -125,6 +125,11 @@ builder.Services.AddScoped<LeaseBook.Modules.Operations.Contracts.IPostedSourceR
 builder.Services.AddScoped<LeaseBook.Modules.Operations.Contracts.ILateFeePolicyData, LateFeePolicyDataAdapter>();
 builder.Services.AddScoped<LeaseBook.Modules.Operations.Contracts.IDelinquencyData, DelinquencyDataAdapter>();
 
+// WP-4: Disbursement run ports — owner data, equity balances, bank account info (ADR-018).
+builder.Services.AddScoped<LeaseBook.Modules.Operations.Contracts.IOwnerDisbursementData, OwnerDisbursementDataAdapter>();
+builder.Services.AddScoped<LeaseBook.Modules.Operations.Contracts.IOwnerEquityBalances, OwnerEquityBalancesAdapter>();
+builder.Services.AddScoped<LeaseBook.Modules.Operations.Contracts.IBankAccountInfo, BankAccountInfoAdapter>();
+
 // Banking module services (CSV import/match; CQRS handlers are auto-discovered). The host implements
 // Banking's cross-module ports with thin adapters (ADR-007 / P68): IBankRegister reads uncleared register
 // lines and IBankClearing applies clearances, both delegating to Accounting via ISender.
