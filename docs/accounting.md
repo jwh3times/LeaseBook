@@ -320,3 +320,53 @@ locked-period targets as excluded with a reason, so a partially locked month is 
 
 See also: **ADR-017** (rent proration method), **ADR-018** (management-fee rounding), **ADR-019**
 (bulk-run engine and cross-module batch posting).
+
+## Migration / balance-forward cutover (M7)
+
+A new PM cuts over from AppFolio (or another system) by importing the **closing positions** from
+their last month-end in the old system. LeaseBook starts clean from that boundary — no fake history,
+no re-keying. Historical ledgers stay in AppFolio; everything before the cutover date is simply not
+in LeaseBook.
+
+### The clearing account is the tie-out
+
+Each imported position — owner equity, security deposit held, trust bank book balance, tenant
+receivable — posts as **one self-balancing journal entry**: one leg on the real account and an
+equal-and-opposite leg on a transient `MigrationClearing` account. The clearing account is what
+makes a non-tying import a detectable discrepancy rather than a posting failure or a silent error.
+
+After all rows are imported:
+
+- If the import is internally consistent — bank balances equal owner equity plus deposit liabilities
+  (the trust equation) — then every clearing debit is offset by an equal clearing credit, and the
+  **`MigrationClearing` balance nets to exactly $0.00** in both the cash and accrual bases.
+- If the import does not tie, the residual in `MigrationClearing` is the exact dollar amount of the
+  discrepancy, shown per-basis and per-account in the verification report.
+
+Go-live is blocked until the verification report shows $0.00 in both bases and the PM clicks
+**Approve**. That approval is recorded as an immutable, audited snapshot — the migration analogue
+of the M4 reconcile-to-$0 finalize and the M5 statement tie-out.
+
+### Deposits are liabilities, not income
+
+Imported deposit liabilities post to `security_deposits_held` — a liability account — exactly as a
+live deposit collection does. They do not hit income. This is the same rule that governs deposits
+collected through the normal workflow: the money belongs to the tenant until it is applied at
+move-out. Importing from AppFolio does not change the classification.
+
+### Opening entries, not fake history
+
+The engine posts one journal entry per imported row, dated at the cutover boundary. There are no
+synthetic per-month historical entries, no reconstructed ledger activity. Every owner statement,
+tenant ledger, and bank register for dates after the cutover is a projection of real LeaseBook
+activity, starting from these opening positions. Dates before the cutover are in AppFolio.
+
+### Idempotency and re-import
+
+Each opening entry carries a deterministic `source_ref`
+(`opening:{cutover}:{type}={subledgerId}`), keyed to the same `(org_id, source_ref)` partial
+unique index that bulk runs use. Re-uploading the same CSV is a no-op. A corrected re-import
+(with changed figures) supersedes the prior batch and posts only the changed rows.
+
+See also: **ADR-020** (opening-balance posting model and clearing-account design),
+**ADR-021** (migration toolkit architecture, verification gate, and AppFolio parser seam).
