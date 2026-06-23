@@ -4,8 +4,10 @@ import { expect, test, type Page } from '@playwright/test';
 // Serial, against a freshly seeded demo org (same pattern as M4/M5 specs).
 //
 // Drives the full PM monthly cycle ENTIRELY THROUGH THE UI — no SQL:
-//   1. Rent run (May 2026) — all 7 active leases are eligible (seed posts with null source_ref;
-//      the bulk-run idempotency key is "rent:2026-05:lease={id}", which no seed entry has).
+//   1. Rent run (May 2026) — the structural cross-source period guard (Fix A) detects that
+//      6 of 7 leases already have a RentCharged entry in May 2026 (from the seed, sourceRef=null).
+//      Only Devon Pryor (T2, $1,380) has no May seed charge → 1 eligible, 6 AlreadyDone.
+//      The bulk run posts exactly 1 new charge (Devon Pryor) and skips the other 6.
 //   2. Late-fee run (May 2026) — selects delinquent leases and confirms.
 //   3. Mid-month manual charge via the M3 ledger composer (maintenance fee on Jasmine Carter).
 //   4. Bank-register / reconcile access (≤ 2 clicks UX budget — June already finalized by M4).
@@ -15,8 +17,10 @@ import { expect, test, type Page } from '@playwright/test';
 //
 // Period selection rationale (critical — verified against DemoJournalSeed.cs):
 //   Active leases: all 7 have EndDate 2026-05-31 → they overlap May 2026 (end >= periodStart).
-//   Seed's May charges use sourceRef=null; the bulk run generates keys like "rent:2026-05:lease=…"
-//   so the AlreadyDone pre-check finds no matches → all 7 show as Eligible for the first run.
+//   Seed's May charges: T1,T3,T4,T5,T6,T7 have RentCharged with sourceRef=null.
+//   T2 (Devon Pryor, $1,380) has NO May seed charge → 1 eligible under the period guard.
+//   The structural guard (IPeriodChargeGuard) detects event_type='RentCharged' in the period
+//   regardless of source_ref, preventing double-charging even for charges posted by other means.
 //   June 2026: EndDate(May 31) < periodStart(June 1) → GetActiveLeaseSchedule returns 0 rows.
 //   May is therefore the only period where active leases exist and the bank month is open.
 //
@@ -29,7 +33,7 @@ import { expect, test, type Page } from '@playwright/test';
 //   June lock.
 //
 // Assertions:
-//   Rent run: all 7 eligible; Devon Pryor ($1,380) in preview grid; result "Run complete".
+//   Rent run: Devon Pryor visible and eligible ($1,380); 1 charge posted; "Run complete 1 posted".
 //   Fiduciary panel: 3 passing checks on Ridgeline Investments May 2026 statement.
 //   Disbursement run: at least one owner eligible and posted.
 
@@ -57,7 +61,7 @@ async function selectMay2026(page: Page) {
 test.describe.serial('M6 full-month cycle', () => {
   // ── Step 1: Rent charge run — May 2026 ────────────────────────────────────
 
-  test('rent run: posts all 7 active May leases (seed has null source_refs; run generates idempotency keys)', async ({
+  test('rent run: structural period guard blocks 6 already-seeded leases; Devon Pryor (T2, $1,380) is the 1 eligible tenant', async ({
     page,
   }) => {
     await login(page);
@@ -68,7 +72,9 @@ test.describe.serial('M6 full-month cycle', () => {
     await page.getByRole('button', { name: /rent charges/i }).click();
     await expect(page.getByText('Rent charge run')).toBeVisible({ timeout: 10_000 });
 
-    // Switch to May 2026 — all 7 leases should be Eligible.
+    // Switch to May 2026. The structural period guard (IPeriodChargeGuard) detects that T1,T3–T7
+    // already have a RentCharged entry in May 2026 (from the seed, sourceRef=null) and marks them
+    // AlreadyDone. Only Devon Pryor (T2) has no May seed charge → 1 eligible row.
     await selectMay2026(page);
 
     // Wait for preview to load (skeleton gone).
@@ -76,22 +82,22 @@ test.describe.serial('M6 full-month cycle', () => {
       timeout: 15_000,
     });
 
-    // The seed posts May charges with sourceRef=null; the rent run uses "rent:2026-05:lease={id}"
-    // as the idempotency key. No existing entry has that key → all 7 show as Eligible.
-    // Confirm button: "Confirm — post N charges" (em-dash). Match fragment only.
-    const confirmBtn = page.getByRole('button', { name: /post \d+ charges/i });
-    await expect(confirmBtn).toBeEnabled({ timeout: 10_000 });
-
-    // Devon Pryor must appear in the preview grid (all 7 active leases are shown).
-    await expect(page.getByRole('row').filter({ hasText: 'Devon Pryor' })).toBeVisible();
+    // Devon Pryor ($1,380) must appear in the preview grid as the one eligible lease.
+    await expect(page.getByRole('row').filter({ hasText: 'Devon Pryor' })).toBeVisible({
+      timeout: 10_000,
+    });
     await expect(page.getByRole('row').filter({ hasText: '$1,380.00' }).first()).toBeVisible();
+
+    // Confirm button: "Confirm — post N charge(s)" — matches 1 charge posted.
+    const confirmBtn = page.getByRole('button', { name: /post \d+ charges?/i });
+    await expect(confirmBtn).toBeEnabled({ timeout: 10_000 });
 
     await page.screenshot({ path: 'e2e-results/m6-rent-preview.png', fullPage: true });
 
-    // Confirm the run.
+    // Confirm the run — should post exactly 1 charge (Devon Pryor).
     await confirmBtn.click();
 
-    // Result panel: "Run complete" with "N posted" (RunResultPanel renders number and " posted"
+    // Result panel: "Run complete" with "1 posted" (RunResultPanel renders number and " posted"
     // as separate spans — match them individually).
     await expect(page.getByText('Run complete')).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText(' posted')).toBeVisible();
