@@ -51,7 +51,12 @@ export function DashboardPage() {
         <div>
           <h2>Dashboard</h2>
         </div>
-        <Button variant="primary" size="sm" icon="wallet" onClick={() => navigate('/operations')}>
+        <Button
+          variant="primary"
+          size="sm"
+          icon="wallet"
+          onClick={() => navigate('/operations?tab=disbursement')}
+        >
           Run owner disbursements
         </Button>
       </div>
