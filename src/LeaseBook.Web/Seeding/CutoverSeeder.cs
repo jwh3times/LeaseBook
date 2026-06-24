@@ -58,6 +58,9 @@ public static class CutoverSeeder
 
     public static async Task SeedAsync(IServiceProvider services, CancellationToken ct = default)
     {
+        // Refuse to provision the well-known cutover admin credential in Production (account-takeover risk).
+        SeederGuard.RequireNonProduction(services);
+
         await using var scope = services.CreateAsyncScope();
         var sp = scope.ServiceProvider;
 

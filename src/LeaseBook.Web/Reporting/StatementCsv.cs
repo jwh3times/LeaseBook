@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using CsvHelper;
+using LeaseBook.SharedKernel.Csv;
 
 namespace LeaseBook.Web.Reporting;
 
@@ -78,13 +79,16 @@ public static class StatementCsv
         return Encoding.UTF8.GetBytes(buffer.ToString());
     }
 
+    // Single chokepoint for every data/summary row — routes each cell through the formula-injection
+    // guard. Owner names, descriptions and property addresses are free text (and, via M7, imported);
+    // server-formatted dates and money are kept intact by the guard's number-aware rule.
     private static void WriteRow(CsvWriter csv, string section, string date, string desc, string property, string amount)
     {
-        csv.WriteField(section);
-        csv.WriteField(date);
-        csv.WriteField(desc);
-        csv.WriteField(property);
-        csv.WriteField(amount);
+        csv.WriteField(CsvFormulaGuard.Neutralize(section));
+        csv.WriteField(CsvFormulaGuard.Neutralize(date));
+        csv.WriteField(CsvFormulaGuard.Neutralize(desc));
+        csv.WriteField(CsvFormulaGuard.Neutralize(property));
+        csv.WriteField(CsvFormulaGuard.Neutralize(amount));
         csv.NextRecord();
     }
 

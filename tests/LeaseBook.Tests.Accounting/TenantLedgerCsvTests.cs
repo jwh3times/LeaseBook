@@ -37,4 +37,23 @@ public sealed class TenantLedgerCsvTests
         lines[2].ShouldBe("2026-02-02,EntryVoided,VOID: typo,0.00,1000.00,0.00,Reversal");
         lines[3].ShouldBe("2026-02-03,Payment,,0.00,250.00,-250.00,Posted");
     }
+
+    [Fact]
+    public void Write_neutralizes_csv_formula_injection_in_the_free_text_description()
+    {
+        // A memo (free text, and now also import-sourced via M7) that is a spreadsheet formula
+        // payload must be exported as text, not evaluated when the owner opens the CSV in Excel.
+        var ledger = new TenantLedgerResponse(
+            Guid.NewGuid(), 0m,
+            [
+                new TenantLedgerEntry(
+                    Guid.NewGuid(), new DateOnly(2026, 2, 1), "RentCharged", null, "Rent",
+                    "=cmd|'/c calc'!A1", 1000m, 0m, 1000m, IsVoided: false, ReversesEntryId: null),
+            ]);
+
+        var csv = Encoding.UTF8.GetString(TenantLedgerCsv.Write(ledger));
+
+        csv.ShouldContain("'=cmd");        // apostrophe-guarded → treated as text
+        csv.ShouldNotContain(",=cmd");      // never an unguarded formula at a field boundary
+    }
 }
