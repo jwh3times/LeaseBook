@@ -67,7 +67,7 @@ namespace LeaseBook.Web.Migrations
                         {
                             t.HasCheckConstraint("ck_accounts_bank_account_id_matches_class", "(bank_account_id IS NOT NULL) = (class IN ('trust_bank','pm_operating_bank'))");
 
-                            t.HasCheckConstraint("ck_accounts_class", "class IN ('trust_bank','owner_equity','tenant_receivable','deposit_liability','pm_income','pm_operating_bank')");
+                            t.HasCheckConstraint("ck_accounts_class", "class IN ('trust_bank','owner_equity','tenant_receivable','deposit_liability','pm_income','pm_operating_bank','migration_clearing')");
                         });
                 });
 
@@ -393,7 +393,7 @@ namespace LeaseBook.Web.Migrations
 
                     b.ToTable("journal_lines", null, t =>
                         {
-                            t.HasCheckConstraint("ck_journal_lines_account_class", "account_class IN ('trust_bank','owner_equity','tenant_receivable','deposit_liability','pm_income','pm_operating_bank')");
+                            t.HasCheckConstraint("ck_journal_lines_account_class", "account_class IN ('trust_bank','owner_equity','tenant_receivable','deposit_liability','pm_income','pm_operating_bank','migration_clearing')");
 
                             t.HasCheckConstraint("ck_journal_lines_basis", "basis IN ('cash','accrual','both')");
 
@@ -1315,6 +1315,179 @@ namespace LeaseBook.Web.Migrations
                     b.ToTable("asp_net_users", (string)null);
                 });
 
+            modelBuilder.Entity("LeaseBook.Web.Onboarding.Persistence.ImportBatch", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("Actor")
+                        .HasColumnType("uuid")
+                        .HasColumnName("actor");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("EntityKind")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("entity_kind");
+
+                    b.Property<int>("ErrorCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("error_count");
+
+                    b.Property<string>("MappingProfile")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("mapping_profile");
+
+                    b.Property<Guid>("OrgId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("org_id");
+
+                    b.Property<int>("RowCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("row_count");
+
+                    b.Property<string>("SourceFilename")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("source_filename");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("status");
+
+                    b.HasKey("Id")
+                        .HasName("pk_import_batches");
+
+                    b.HasIndex("OrgId", "EntityKind", "Status")
+                        .HasDatabaseName("ix_import_batches_org_id_entity_kind_status");
+
+                    b.ToTable("import_batches", (string)null);
+                });
+
+            modelBuilder.Entity("LeaseBook.Web.Onboarding.Persistence.ImportRow", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("BatchId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("batch_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("ErrorsJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("errors_json");
+
+                    b.Property<string>("MappedJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("mapped_json");
+
+                    b.Property<Guid>("OrgId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("org_id");
+
+                    b.Property<string>("RawJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("raw_json");
+
+                    b.Property<Guid?>("ResultingJournalEntryId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("resulting_journal_entry_id");
+
+                    b.Property<int>("RowNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("row_number");
+
+                    b.Property<string>("RowStatus")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("row_status");
+
+                    b.HasKey("Id")
+                        .HasName("pk_import_rows");
+
+                    b.HasIndex("BatchId")
+                        .HasDatabaseName("ix_import_rows_batch_id");
+
+                    b.HasIndex("OrgId", "BatchId")
+                        .HasDatabaseName("ix_import_rows_org_id_batch_id");
+
+                    b.ToTable("import_rows", (string)null);
+                });
+
+            modelBuilder.Entity("LeaseBook.Web.Onboarding.Persistence.MigrationVerification", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ActualJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("actual_json");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateOnly>("CutoverDate")
+                        .HasColumnType("date")
+                        .HasColumnName("cutover_date");
+
+                    b.Property<string>("ExpectedJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("expected_json");
+
+                    b.Property<bool>("IsTied")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_tied");
+
+                    b.Property<Guid>("OrgId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("org_id");
+
+                    b.Property<string>("ReportSnapshot")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("report_snapshot");
+
+                    b.Property<DateTime?>("SignedOffAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("signed_off_at");
+
+                    b.Property<string>("SignedOffBy")
+                        .HasColumnType("text")
+                        .HasColumnName("signed_off_by");
+
+                    b.Property<decimal>("VarianceTotal")
+                        .HasColumnType("numeric(14,2)")
+                        .HasColumnName("variance_total");
+
+                    b.HasKey("Id")
+                        .HasName("pk_migration_verifications");
+
+                    b.HasIndex("OrgId", "CutoverDate")
+                        .HasDatabaseName("ix_migration_verifications_org_id_cutover_date");
+
+                    b.ToTable("migration_verifications", (string)null);
+                });
+
             modelBuilder.Entity("LeaseBook.Web.Persistence.Org", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1662,6 +1835,16 @@ namespace LeaseBook.Web.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_bulk_run_items_bulk_runs_run_id");
+                });
+
+            modelBuilder.Entity("LeaseBook.Web.Onboarding.Persistence.ImportRow", b =>
+                {
+                    b.HasOne("LeaseBook.Web.Onboarding.Persistence.ImportBatch", null)
+                        .WithMany()
+                        .HasForeignKey("BatchId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_import_rows_import_batches_batch_id");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<System.Guid>", b =>

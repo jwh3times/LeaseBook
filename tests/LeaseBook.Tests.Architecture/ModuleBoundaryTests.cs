@@ -14,7 +14,7 @@ public sealed class ModuleBoundaryTests
 {
     private static readonly Assembly SharedKernel = typeof(SharedKernel.Cqrs.ISender).Assembly;
     private static readonly Assembly Web = typeof(Program).Assembly;
-    private static readonly Assembly Migrator = typeof(LeaseBook.Migrator.MigratorPlaceholder).Assembly;
+    private static readonly Assembly Migrator = typeof(LeaseBook.Migrator.Model.EntityKind).Assembly;
 
     private static readonly (string Name, Assembly Assembly)[] Modules =
     [

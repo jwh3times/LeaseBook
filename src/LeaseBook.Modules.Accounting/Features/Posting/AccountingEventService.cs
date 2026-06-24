@@ -61,6 +61,24 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
             request.Date, "BalanceForward", null, request.Description, request.SourceRef, lines), ct);
     }
 
+    public Task<Guid> PostOpeningPositionAsync(OpeningPositionRequest req, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(req);
+
+        // The clearing contra mirrors the real leg's amount on the opposite side, same basis + dims-light
+        // (clearing carries the bank dim only, for per-account residual reads). Both legs tagged req.Basis.
+        var realLeg = new PostLineRequest(
+            req.AccountCode, req.Debit, req.Credit, req.Basis,
+            req.PropertyId, req.UnitId, req.OwnerId, req.TenantId, req.BankAccountId, req.Memo);
+        var clearingLeg = new PostLineRequest(
+            AccountCodes.MigrationClearing, req.Credit, req.Debit, req.Basis,
+            BankAccountId: req.BankAccountId, Memo: req.Memo);
+
+        return posting.PostAsync(new PostEntryRequest(
+            req.Cutover, "OpeningBalance", null, req.Memo ?? "Opening balance", req.SourceRef,
+            [realLeg, clearingLeg]), ct);
+    }
+
     // ----- Accrual-only charges -------------------------------------------------------------------
 
     private Task<Guid> PostRentChargedAsync(RentCharged e, CancellationToken ct) =>

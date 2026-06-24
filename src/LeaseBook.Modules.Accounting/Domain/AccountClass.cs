@@ -1,7 +1,7 @@
 namespace LeaseBook.Modules.Accounting.Domain;
 
 /// <summary>
-/// The six account classes of the trust-accounting model (§C.1 / CLAUDE.md). Class — not a reporting
+/// The seven account classes of the trust-accounting model (§C.1 / CLAUDE.md). Class — not a reporting
 /// filter — is what isolates PM income from owner income at the data-model level: no owner-facing
 /// query selects <see cref="PmIncome"/>. Stored as snake_case text (a DB CHECK backs the set), and
 /// <b>denormalized onto every journal line</b> (P25) so Postgres CHECK constraints can reason about
@@ -26,4 +26,8 @@ public enum AccountClass
 
     /// <summary>The PM's own operating bank account — receives swept fees; outside the trust equation.</summary>
     PmOperatingBank,
+
+    /// <summary>Transient cutover suspense — the contra for imported opening positions. Nets to $0 once a
+    /// migration ties; outside the trust equation and structurally invisible to owner statements (M7/ADR-020).</summary>
+    MigrationClearing,
 }

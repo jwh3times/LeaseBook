@@ -141,6 +141,17 @@ builder.Services.AddBankingModule();
 builder.Services.AddScoped<LeaseBook.Modules.Banking.Contracts.IBankRegister, BankRegisterAdapter>();
 builder.Services.AddScoped<LeaseBook.Modules.Banking.Contracts.IBankClearing, BankClearingAdapter>();
 
+// M7 WP-3: onboarding import services + external-id resolver. Host-owned (composition root).
+// EntityImportService (3.1): reads across Directory commands via ISender; persists staging rows.
+// BalanceImportService (3.2): posts opening positions via IBalanceForward; persists staging rows.
+builder.Services.AddScoped<LeaseBook.Web.Onboarding.ExternalIdResolver>();
+builder.Services.AddScoped<LeaseBook.Web.Onboarding.EntityImportService>();
+builder.Services.AddScoped<LeaseBook.Web.Onboarding.BalanceImportService>();
+
+// M7 WP-4: verification + sign-off. VerificationService dispatches the Accounting
+// IMigrationVerificationData query via ISender and enforces the tie-out gate.
+builder.Services.AddScoped<LeaseBook.Web.Onboarding.Verification.VerificationService>();
+
 // Host-composed dashboard (§C.6 / P45): the cross-module composition root, dispatching module read
 // queries via ISender. TimeProvider drives the "current accounting month" (injectable for tests).
 builder.Services.AddSingleton(TimeProvider.System);
@@ -204,9 +215,20 @@ if (Environment.GetEnvironmentVariable("LEASEBOOK_OPENAPI_BUILD") != "1")
 }
 
 // CLI: `dotnet run --project src/LeaseBook.Web -- seed --org demo` provisions the demo org and exits.
+//      `dotnet run --project src/LeaseBook.Web -- seed --org cutover` provisions the cutover org (M7).
 if (args is ["seed", ..])
 {
-    await DemoSeeder.SeedAsync(app.Services);
+    var orgFlag = Array.IndexOf(args, "--org");
+    var orgValue = orgFlag >= 0 && orgFlag + 1 < args.Length ? args[orgFlag + 1] : "demo";
+
+    if (string.Equals(orgValue, "cutover", StringComparison.OrdinalIgnoreCase))
+    {
+        await CutoverSeeder.SeedAsync(app.Services);
+    }
+    else
+    {
+        await DemoSeeder.SeedAsync(app.Services);
+    }
     return;
 }
 

@@ -1,9 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- Phase 1-2 AppFolio import toolkit. Empty placeholder for M0.
-       Module reference rule: references SharedKernel only. -->
+  <!-- AppFolio import toolkit parse/validate library. References SharedKernel only (ADR-007). -->
   <ItemGroup>
     <ProjectReference Include="..\LeaseBook.SharedKernel\LeaseBook.SharedKernel.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CsvHelper" />
   </ItemGroup>
 
 </Project>
