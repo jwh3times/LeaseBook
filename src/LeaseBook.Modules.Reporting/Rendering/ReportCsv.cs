@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using CsvHelper;
 using LeaseBook.Modules.Reporting.Catalog;
+using LeaseBook.SharedKernel.Csv;
 
 namespace LeaseBook.Modules.Reporting.Rendering;
 
@@ -48,12 +49,13 @@ public static class ReportCsv
 
             csv.NextRecord();
 
-            // Data rows
+            // Data rows — cells are generic report values (owner/tenant names, addresses, money).
+            // Route each through the formula-injection guard; signed numbers are kept numeric.
             foreach (var row in rows)
             {
                 foreach (var cell in row)
                 {
-                    csv.WriteField(cell);
+                    csv.WriteField(CsvFormulaGuard.Neutralize(cell));
                 }
 
                 csv.NextRecord();

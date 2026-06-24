@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using CsvHelper;
+using LeaseBook.SharedKernel.Csv;
 
 namespace LeaseBook.Modules.Accounting.Features.Ledgers;
 
@@ -28,13 +29,16 @@ public static class TenantLedgerCsv
 
             foreach (var row in ledger.Rows)
             {
+                // Free-text / derived-string cells route through the formula-injection guard; the
+                // server-formatted date and money cells are safe by construction (Neutralize keeps
+                // signed numbers numeric anyway).
                 csv.WriteField(row.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
-                csv.WriteField(row.Category);
-                csv.WriteField(row.Description ?? string.Empty);
+                csv.WriteField(CsvFormulaGuard.Neutralize(row.Category));
+                csv.WriteField(CsvFormulaGuard.Neutralize(row.Description));
                 csv.WriteField(row.Charge.ToString("0.00", CultureInfo.InvariantCulture));
                 csv.WriteField(row.Payment.ToString("0.00", CultureInfo.InvariantCulture));
                 csv.WriteField(row.Balance.ToString("0.00", CultureInfo.InvariantCulture));
-                csv.WriteField(Status(row));
+                csv.WriteField(CsvFormulaGuard.Neutralize(Status(row)));
                 csv.NextRecord();
             }
         }
