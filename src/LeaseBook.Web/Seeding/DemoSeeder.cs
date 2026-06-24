@@ -31,6 +31,9 @@ public static class DemoSeeder
 
     public static async Task SeedAsync(IServiceProvider services, CancellationToken ct = default)
     {
+        // Refuse to provision the well-known demo admin credential in Production (account-takeover risk).
+        SeederGuard.RequireNonProduction(services);
+
         var data = LoadDataset();
 
         await using var scope = services.CreateAsyncScope();

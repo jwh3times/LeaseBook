@@ -77,6 +77,9 @@ services:
         condition: service_completed_successfully
     environment:
       ConnectionStrings__Default: *app-conn
+      # The demo seeder refuses to run in Production (it ships a well-known admin password); this
+      # local full-stack run is explicitly a dev environment, so mark it so the seeder proceeds.
+      ASPNETCORE_ENVIRONMENT: Development
     # ENTRYPOINT is `dotnet LeaseBook.Web.dll`; this runs the `seed` verb and exits instead of serving.
     command: ["seed", "--org", "demo"]
     restart: "no"
