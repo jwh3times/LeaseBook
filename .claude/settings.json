@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "agent",
+            "prompt": "LeaseBook docs freshness check. Run `git diff HEAD --name-only 2>/dev/null || git status --short` to see what files changed this turn. If nothing changed in src/, web/src/, infra/, or seed/ — respond with 'No source files changed, skipping docs check' and stop immediately. If source files did change, read .claude/agents/docs-updater.md and follow its instructions: detect and fix only the documentation drift caused by those specific changes. Do not do a full audit — focus only on the sections relevant to what changed (e.g., a new migration needs the migration checklist checked; a new endpoint needs the README port map verified if ports changed; a new dependency needs ADR coverage checked).",
+            "statusMessage": "Checking docs freshness...",
+            "timeout": 180
+          }
+        ]
+      }
+    ]
+  }
+}

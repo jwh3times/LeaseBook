@@ -51,9 +51,9 @@ reconstructing it from this summary.
 - **Don't build on unverified assumptions — check or ask first.** When a task depends on a fact you
   can't confirm from the code, the docs, or a quick check — especially **trust-accounting / domain
   facts** (an NCREC 58A .0116 recordkeeping rule, how a basis treats an event, a posting template's
-  per-basis lines, the prototype's golden figures, the demo seed's *actual* numbers, EF/RLS/posting
+  per-basis lines, the prototype's golden figures, the demo seed's _actual_ numbers, EF/RLS/posting
   runtime behavior) — stop and verify before designing against a guess. Ground truth here is almost
-  always *obtainable locally*, so get it **before** writing the implementation, not as a check deferred
+  always _obtainable locally_, so get it **before** writing the implementation, not as a check deferred
   to the end:
   - scope/intent → `private/LeaseBook_PRD_v1.0.md` (scope authority) and `private/claude_design_files/`
     (design-system + screen source of truth);
@@ -63,8 +63,8 @@ reconstructing it from this summary.
   - real figures/behavior → run `check-invariants` and the golden / invariant / property suites, or
     query the seeded demo org; read the migration / RLS-helper / posting-template code for actual
     behavior.
-  Designing a structure to "discover" an unknown at runtime is still building on an assumption — verify
-  the discovery against real data (a real journal replay, the golden dataset).
+    Designing a structure to "discover" an unknown at runtime is still building on an assumption — verify
+    the discovery against real data (a real journal replay, the golden dataset).
 - A sensible default for a genuinely low-stakes choice is fine — state it and proceed. The bar: would
   being wrong force a rework, move a golden figure, or ship something fiduciarily incorrect? If yes,
   it's load-bearing — verify or ask.
@@ -111,6 +111,25 @@ SPA and `/api` on port 8080 (the container's internal port). To run the **whole 
 <http://localhost:8082>; see docs/runbooks/local-dev.md).
 Migrations run as the migrator role via a one-shot `migrator`-target image (EF bundle), never at app startup.
 
+## Specialist agents
+
+Invoke the relevant specialist **before** working in its domain — don't rely on this file for
+implementation patterns, only for invariants and authority. Each agent has file-cited examples,
+banned-pattern tables, and domain rules that supersede any summary here.
+
+| Work type | Agent |
+|---|---|
+| .NET features, endpoints, commands/queries, integration tests | `dotnet-api` |
+| React components, hooks, design tokens, frontend tests | `react-frontend` |
+| Migrations, RLS policies, DB schema design, Postgres queries | `postgres-specialist` |
+| Accounting posting logic, journal entries, trust equation changes | `trust-accounting` |
+| Reviewing a diff for correctness bugs before merging | `code-reviewer` |
+| Documentation drift after source changes | `docs-updater` (auto-runs via Stop hook) |
+
+Cross-cutting rules (non-negotiable invariants, module boundary, tenancy model) are authoritative
+here in CLAUDE.md and apply to **all agents**. When an agent's guidance and an invariant here
+conflict, the invariant wins.
+
 ## Architecture (private/TODO.md §1 is the full blueprint)
 
 The patterns below are established and test-enforced in the built modules (Accounting, Directory,
@@ -124,25 +143,21 @@ SharedKernel, Web host); they bind the unbuilt modules (M4+) equally.
 - **Cross-module boundary (ADR-007 — applies to every milestone, not just M2)**: a feature module
   **never reads another module's tables or data directly** — no cross-module SQL, no cross-module
   LINQ, no referencing another module's entity types. A cross-module read goes through a
-  **consumer-owned port**: an interface declared in the *consuming* module's `Contracts`, implemented
+  **consumer-owned port**: an interface declared in the _consuming_ module's `Contracts`, implemented
   by a thin **host adapter** that delegates to the producing module via `ISender`. Ports expose
   **batch** reads (return a map), never per-id reads, and adapters run on the ambient RLS transaction
   (no new connection). `SharedKernel` stays pure cross-cutting primitives — module contracts do not
-  live there. *Within* a module, `db.Database.SqlQuery<T>` for that module's **own** analytical reads
+  live there. _Within_ a module, `db.Database.SqlQuery<T>` for that module's **own** analytical reads
   is fine (prefer EF LINQ for simple reads; reserve raw SQL for window-function / `FILTER` / trigram
   queries LINQ can't express — this crosses no boundary). **The sole exception is a dedicated
   reporting/read layer** (the M5 statement engine and any future read-model schema), which may read
   across the schema on purpose and records its own ADR. The assembly half of this rule is
   test-enforced; the no-cross-module-SQL half is a code-review rule (NetArchTest can't see SQL strings).
-- **Application pattern**: CQRS with vertical slices inside each module. Endpoints are minimal
-  APIs only (no MVC controllers) — per-module `IEndpointModule` registration, route groups,
-  `TypedResults` — and stay thin: bind → dispatch → map result. Commands/queries go through a
-  hand-rolled `ISender` dispatcher with a decorator pipeline; **FluentValidation** validators
-  (one per command/query, colocated with the slice) run in that pipeline as the single
-  validation home. **No MediatR, no AutoMapper** (both commercially licensed from
-  v13/v15 onward) — don't add them out of habit. Commands mutate only through domain services;
-  queries read projections/SQL directly within their own module (cross-module figures come through a
-  `Contracts` port, never a cross-module join — see the boundary rule above).
+- **Application pattern**: CQRS with vertical slices — one file per feature containing the
+  command/query record, `AbstractValidator`, and handler. Minimal APIs only (`IEndpointModule` +
+  `TypedResults`); hand-rolled `ISender` dispatcher; no MediatR, no AutoMapper. See the
+  **`dotnet-api` specialist agent** for the full slice anatomy, endpoint shape, test conventions,
+  and banned-pattern table.
 - **Accounting is the core module** and gets the highest test rigor: a double-entry journal
   (`journal_entries` + `journal_lines`) written only through posting templates keyed to
   business events (`RentCharged`, `DepositApplied`, `OwnerDisbursed`, …). Dual-basis posting:
@@ -177,7 +192,7 @@ Multi-tenancy (full design in private/TODO.md §1 "Multi-tenancy & row-level sec
 - Three DB roles: `leasebook_migrator` (schema owner, migrations only), `leasebook_app`
   (runtime, RLS-subject via `FORCE ROW LEVEL SECURITY`), `leasebook_ops` (read-only).
 - Every new org-scoped table goes through the migrations RLS helper (column + `USING`/`WITH
-  CHECK` policy + FORCE in one call); a schema guard test fails CI if any `org_id` table lacks
+CHECK` policy + FORCE in one call); a schema guard test fails CI if any `org_id` table lacks
   its policy.
 - Background jobs must establish org context explicitly and throw when it's missing.
 
@@ -208,3 +223,11 @@ UX contract (instrumented in telemetry; regressions fail the release checklist):
   change with them, deliberately.
 - Accounting-adjacent changes must run the invariant/property-based/golden-file suites; if a
   budgeted UX flow changed, the corresponding Playwright e2e must cover it.
+- **Invoke the specialist agent for the domain you're working in** before writing code (see the
+  Specialist agents table above). For .NET work: `dotnet-api`. For React/UI: `react-frontend`.
+  For schema/migrations: `postgres-specialist`. For accounting logic: `trust-accounting`. For
+  pre-merge review: `code-reviewer`.
+- **`docs-updater` runs automatically at every session end** via the Stop hook in
+  `.claude/settings.json` — it checks only files that changed and fixes drift in place. Invoke
+  it proactively mid-session if documentation accuracy is in doubt (new ADR candidate, port
+  change, new business event added).
