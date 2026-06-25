@@ -117,14 +117,14 @@ Invoke the relevant specialist **before** working in its domain — don't rely o
 implementation patterns, only for invariants and authority. Each agent has file-cited examples,
 banned-pattern tables, and domain rules that supersede any summary here.
 
-| Work type | Agent |
-|---|---|
-| .NET features, endpoints, commands/queries, integration tests | `dotnet-api` |
-| React components, hooks, design tokens, frontend tests | `react-frontend` |
-| Migrations, RLS policies, DB schema design, Postgres queries | `postgres-specialist` |
-| Accounting posting logic, journal entries, trust equation changes | `trust-accounting` |
-| Reviewing a diff for correctness bugs before merging | `code-reviewer` |
-| Documentation drift after source changes | `docs-updater` (auto-runs via Stop hook) |
+| Work type                                                         | Agent                                    |
+| ----------------------------------------------------------------- | ---------------------------------------- |
+| .NET features, endpoints, commands/queries, integration tests     | `dotnet-api`                             |
+| React components, hooks, design tokens, frontend tests            | `react-frontend`                         |
+| Migrations, RLS policies, DB schema design, Postgres queries      | `postgres-specialist`                    |
+| Accounting posting logic, journal entries, trust equation changes | `trust-accounting`                       |
+| Reviewing a diff for correctness bugs before merging              | `code-reviewer`                          |
+| Documentation drift after source changes                          | `docs-updater` (auto-runs via Stop hook) |
 
 Cross-cutting rules (non-negotiable invariants, module boundary, tenancy model) are authoritative
 here in CLAUDE.md and apply to **all agents**. When an agent's guidance and an invariant here
