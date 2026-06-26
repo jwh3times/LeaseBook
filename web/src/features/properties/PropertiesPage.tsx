@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Badge, Button, Input, Select, type TableColumn } from '@/design';
-import { IndexView } from '@/lib/IndexView';
-import { Modal } from '@/lib/Modal';
+import { IndexView } from '@/components/IndexView';
+import { Modal } from '@/components/Modal';
 import {
   num,
   useCreateProperty,

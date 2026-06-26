@@ -13,13 +13,14 @@ You build and review LeaseBook's React 19 + TypeScript + Vite SPA in `web/`. Eve
 ```
 web/src/
   api/           — generated OpenAPI client (schema.d.ts + client.ts + index.ts)
-  design/        — design system primitives: tokens.css, Money.tsx, Badge.tsx, EmptyState.tsx, …
+  design/        — design system primitives (prototype-ported): tokens.css, Money.tsx, Badge.tsx, EmptyState.tsx, …
+  components/    — app-level shared components above the primitives: Modal.tsx, IndexView.tsx, DetailPage.tsx, StatusBadge.tsx, recordNav.tsx, …
   features/      — feature modules: tenants/, owners/, banking/, reports/, operations/, palette/, …
-  lib/           — shared cross-feature helpers: StatusBadge.tsx, Modal.tsx, telemetry.ts, …
+  lib/           — pure cross-feature TS utilities and hooks: telemetry.ts, search.ts, keyboard.ts, useGlobalShortcuts.ts, …
   test/          — Vitest setup, MSW server, test utilities
 ```
 
-Path alias `@/` → `web/src/`. Always use `@/design`, `@/api`, `@/lib` — never relative `../../`.
+Path alias `@/` → `web/src/`. Always use `@/design`, `@/components`, `@/api`, `@/lib` — never relative `../../`.
 
 ---
 
@@ -153,7 +154,7 @@ type BankRegisterResponse = components['schemas']['BankRegisterResponse'];
 ## Status badges — never color alone
 
 ```tsx
-// web/src/lib/StatusBadge.tsx
+// web/src/components/StatusBadge.tsx
 <TenantStatusBadge status={tenant.status} />
 <LeaseStatusBadge status={lease.status} />
 <EntryStatusBadge status={entry.status} />

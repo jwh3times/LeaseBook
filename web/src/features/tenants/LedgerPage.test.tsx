@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { RecordNavProvider } from '@/lib/recordNav';
+import { RecordNavProvider } from '@/components/recordNav';
 import { server } from '@/test/mocks/server';
 import type { TenantLedgerEntry } from './ledger';
 import { LedgerPage } from './LedgerPage';

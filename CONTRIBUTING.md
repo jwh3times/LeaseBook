@@ -63,8 +63,10 @@ minimum bar, not the goal.
 ### Frontend (React / TypeScript)
 
 - Strict TypeScript; ESLint and Prettier are CI gates (`npm run lint`, `npm run typecheck`).
-- Shared UI lives in the design system (`web/src/design`); money renders through the `<Money>` primitive
-  with tabular numerals and the organization's negative-display preference — never hand-formatted.
+- Reusable UI primitives live in the design system (`web/src/design`); app-level shared components
+  composed above them (page scaffolds, modals, the record quick-switch) live in `web/src/components`;
+  `web/src/lib` holds pure TypeScript utilities and hooks only. Money renders through the `<Money>`
+  primitive with tabular numerals and the organization's negative-display preference — never hand-formatted.
 - Status is never conveyed by color alone (pair an icon or label with the color).
 - The API client (`web/src/api/schema.d.ts`) is **generated** from the host's OpenAPI document
   (`npm run api:generate`) — don't hand-edit it; regenerate and commit it when the contract changes.

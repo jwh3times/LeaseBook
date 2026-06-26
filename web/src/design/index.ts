@@ -1,5 +1,6 @@
-// Design system barrel (WP-07). Shared UI lives only here (§C.2). Importing the barrel also pulls
-// in the design tokens so any consumer gets the themed styles.
+// Design system barrel (WP-07). Reusable UI primitives live here (§C.2); app-level shared components
+// composed above them live in `web/src/components`, and pure utilities/hooks in `web/src/lib`.
+// Importing the barrel also pulls in the design tokens so any consumer gets the themed styles.
 import './tokens.css';
 import './m2.css';
 import './ledger.css';

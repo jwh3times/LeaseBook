@@ -1,6 +1,6 @@
 import { useNavigate, useParams } from 'react-router-dom';
 import { Card, CardHeader, Money, StatCard, Table, type TableColumn } from '@/design';
-import { DetailPage } from '@/lib/DetailPage';
+import { DetailPage } from '@/components/DetailPage';
 import { num, useOwnerDetail, type OwnerDetail, type PropertyListRow } from '@/lib/directory';
 
 const propertyColumns: TableColumn<PropertyListRow> = {

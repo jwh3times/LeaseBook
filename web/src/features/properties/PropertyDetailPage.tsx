@@ -1,7 +1,7 @@
 import { useNavigate, useParams } from 'react-router-dom';
 import { Card, CardHeader, Money, Table, type TableColumn } from '@/design';
-import { DetailPage } from '@/lib/DetailPage';
-import { TenantStatusBadge, UnitStatusBadge } from '@/lib/StatusBadge';
+import { DetailPage } from '@/components/DetailPage';
+import { TenantStatusBadge, UnitStatusBadge } from '@/components/StatusBadge';
 import {
   num,
   usePropertyDetail,
