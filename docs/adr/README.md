@@ -32,6 +32,15 @@ form, write it, and add a row to the index below. When a decision is replaced, m
 | [010](ADR-010-ledger-write-command-surface-and-actor-attribution.md) | Ledger write commands wrap the engine; the actor is attributed at the seam | Accepted | 2026-06-13 |
 | [011](ADR-011-deposit-prepayment-over-application-policy.md) | An application may not exceed the open receivable (warn + block) | Accepted | 2026-06-13 |
 | [012](ADR-012-openapi-client-drift-gate.md) | Enforce the generated API client with a build-time OpenAPI drift gate | Accepted | 2026-06-15 |
+| [013](ADR-013-composite-org-dimension-fks.md) | Promote the journal-dimension FKs to composite `(org_id, id)` | Accepted | 2026-06-20 |
+| [014](ADR-014-reconciliation-engine-and-lock.md) | Bank reconciliation — engine placement, clearance model, and the hybrid lock | Accepted | 2026-06-20 |
+| [015](ADR-015-csv-statement-import-and-matching.md) | CSV bank-statement import, auto-match, and dedup | Accepted | 2026-06-21 |
+| [016](ADR-016-reporting-read-layer.md) | Reporting read layer — Accounting owns the statement engine | Accepted | 2026-06-22 |
+| [017](ADR-017-rent-proration.md) | Rent proration method | Accepted | 2026-06-23 |
+| [018](ADR-018-management-fee-rounding.md) | Management-fee rounding for the owner disbursement run | Accepted | 2026-06-23 |
+| [019](ADR-019-bulk-run-engine-and-batch-posting.md) | Bulk run engine and batch posting | Accepted | 2026-06-23 |
+| [020](ADR-020-opening-balance-posting.md) | Balance-forward opening-balance posting model | Accepted | 2026-06-23 |
+| [021](ADR-021-migration-toolkit.md) | Migration toolkit architecture & verification gate | Accepted | 2026-06-23 |
 
 ## Status legend
 
