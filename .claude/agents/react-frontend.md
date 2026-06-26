@@ -194,6 +194,8 @@ All data-driven components handle all three branches:
 - All components `.tsx`, all hooks/utilities `.ts`
 - Feature components colocated with their hooks in `web/src/features/{feature}/`
 - Design primitives in `web/src/design/`, exported from `web/src/design/index.ts`
+- App-level shared components (page scaffolds, modals, the record quick-switch) in `web/src/components/`
+- Pure cross-feature utilities and hooks (`.ts`) in `web/src/lib/`
 - Tests colocated: `Component.test.tsx` beside `Component.tsx`
 - Path alias: `@/` always — never relative `../../`
 
@@ -245,7 +247,7 @@ test('records a payment', async () => {
 | Color as sole status indicator | `<Badge tone={…} dot>` (always `dot` or `icon`) |
 | `fetch(…)` for API calls | `api.GET(…)` / `api.POST(…)` from `@/api` |
 | Hand-written API types | `components['schemas']['TypeName']` from `@/api` |
-| Relative import paths `../../` | `@/design`, `@/api`, `@/lib`, `@/features/…` |
+| Relative import paths `../../` | `@/design`, `@/components`, `@/api`, `@/lib`, `@/features/…` |
 | Ad-hoc `font-variant-numeric` | `<td className="num">` / `<Money>` / `className="pf-num"` |
 | New CSS custom properties in feature CSS | Add to `web/src/design/tokens.css` only |
 | Direct `fetch` for XSRF-protected endpoints | `api.POST/PUT/DELETE` (handles XSRF automatically) |
