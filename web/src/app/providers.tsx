@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import type { ReactNode } from 'react';
 import { ThemeProvider } from '@/design';
-import { RecordNavProvider } from '@/lib/recordNav';
+import { RecordNavProvider } from '@/components/recordNav';
 
 const queryClient = new QueryClient({
   defaultOptions: {

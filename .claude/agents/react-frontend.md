@@ -13,13 +13,14 @@ You build and review LeaseBook's React 19 + TypeScript + Vite SPA in `web/`. Eve
 ```
 web/src/
   api/           — generated OpenAPI client (schema.d.ts + client.ts + index.ts)
-  design/        — design system primitives: tokens.css, Money.tsx, Badge.tsx, EmptyState.tsx, …
+  design/        — design system primitives (prototype-ported): tokens.css, Money.tsx, Badge.tsx, EmptyState.tsx, …
+  components/    — app-level shared components above the primitives: Modal.tsx, IndexView.tsx, DetailPage.tsx, StatusBadge.tsx, recordNav.tsx, …
   features/      — feature modules: tenants/, owners/, banking/, reports/, operations/, palette/, …
-  lib/           — shared cross-feature helpers: StatusBadge.tsx, Modal.tsx, telemetry.ts, …
+  lib/           — pure cross-feature TS utilities and hooks: telemetry.ts, search.ts, keyboard.ts, useGlobalShortcuts.ts, …
   test/          — Vitest setup, MSW server, test utilities
 ```
 
-Path alias `@/` → `web/src/`. Always use `@/design`, `@/api`, `@/lib` — never relative `../../`.
+Path alias `@/` → `web/src/`. Always use `@/design`, `@/components`, `@/api`, `@/lib` — never relative `../../`.
 
 ---
 
@@ -153,7 +154,7 @@ type BankRegisterResponse = components['schemas']['BankRegisterResponse'];
 ## Status badges — never color alone
 
 ```tsx
-// web/src/lib/StatusBadge.tsx
+// web/src/components/StatusBadge.tsx
 <TenantStatusBadge status={tenant.status} />
 <LeaseStatusBadge status={lease.status} />
 <EntryStatusBadge status={entry.status} />
@@ -193,6 +194,8 @@ All data-driven components handle all three branches:
 - All components `.tsx`, all hooks/utilities `.ts`
 - Feature components colocated with their hooks in `web/src/features/{feature}/`
 - Design primitives in `web/src/design/`, exported from `web/src/design/index.ts`
+- App-level shared components (page scaffolds, modals, the record quick-switch) in `web/src/components/`
+- Pure cross-feature utilities and hooks (`.ts`) in `web/src/lib/`
 - Tests colocated: `Component.test.tsx` beside `Component.tsx`
 - Path alias: `@/` always — never relative `../../`
 
@@ -244,7 +247,7 @@ test('records a payment', async () => {
 | Color as sole status indicator | `<Badge tone={…} dot>` (always `dot` or `icon`) |
 | `fetch(…)` for API calls | `api.GET(…)` / `api.POST(…)` from `@/api` |
 | Hand-written API types | `components['schemas']['TypeName']` from `@/api` |
-| Relative import paths `../../` | `@/design`, `@/api`, `@/lib`, `@/features/…` |
+| Relative import paths `../../` | `@/design`, `@/components`, `@/api`, `@/lib`, `@/features/…` |
 | Ad-hoc `font-variant-numeric` | `<td className="num">` / `<Money>` / `className="pf-num"` |
 | New CSS custom properties in feature CSS | Add to `web/src/design/tokens.css` only |
 | Direct `fetch` for XSRF-protected endpoints | `api.POST/PUT/DELETE` (handles XSRF automatically) |

@@ -72,8 +72,11 @@ The security model and reporting process are in [SECURITY.md](../SECURITY.md).
 
 ## Frontend and the generated API client
 
-The SPA is React 19 + TypeScript on Vite, with TanStack Query for server state. Shared UI lives in
-the design system (`web/src/design`); money always renders through the `<Money>` primitive with
+The SPA is React 19 + TypeScript on Vite, with TanStack Query for server state. Reusable UI
+primitives live in the design system (`web/src/design`); app-level shared components composed above
+them (page scaffolds, modals, the record quick-switch) live in `web/src/components`; and
+`web/src/lib` holds pure TypeScript utilities and hooks only. Money always renders through the
+`<Money>` primitive with
 tabular numerals and the organization's negative-display preference, and status is never conveyed by
 color alone. The typed API client (`web/src/api/schema.d.ts`) is **generated** from the host's
 OpenAPI document, never hand-edited. A build-time drift gate regenerates the client from a build-time

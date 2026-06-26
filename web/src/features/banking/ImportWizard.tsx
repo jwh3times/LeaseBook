@@ -1,7 +1,7 @@
 import { useMutation } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { Badge, type BadgeTone, Button, Icon, Money, Select } from '@/design';
-import { Modal } from '@/lib/Modal';
+import { Modal } from '@/components/Modal';
 import {
   type BankingError,
   type ColumnMap,

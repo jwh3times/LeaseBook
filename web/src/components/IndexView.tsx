@@ -10,7 +10,7 @@ import {
   type TableColumn,
 } from '@/design';
 import { useSetRecordOrder, type EntityKind } from './recordNav';
-import { trackInteraction } from './telemetry';
+import { trackInteraction } from '@/lib/telemetry';
 
 interface IndexViewProps<T> {
   kind: EntityKind;

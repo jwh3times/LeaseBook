@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Input, Money, Select, type TableColumn } from '@/design';
-import { IndexView } from '@/lib/IndexView';
-import { Modal } from '@/lib/Modal';
-import { TenantStatusBadge } from '@/lib/StatusBadge';
+import { IndexView } from '@/components/IndexView';
+import { Modal } from '@/components/Modal';
+import { TenantStatusBadge } from '@/components/StatusBadge';
 import { num, useCreateTenant, useTenants, type TenantListRow } from '@/lib/directory';
 
 const TENANT_STATUSES = ['current', 'late', 'prepaid', 'evicting', 'past'] as const;

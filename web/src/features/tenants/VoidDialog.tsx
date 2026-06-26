@@ -1,7 +1,7 @@
 import { useMutation } from '@tanstack/react-query';
 import { useRef, useState, type KeyboardEvent } from 'react';
 import { Button, Input } from '@/design';
-import { Modal } from '@/lib/Modal';
+import { Modal } from '@/components/Modal';
 import {
   type LedgerPostError,
   LOCKED_PERIOD_MESSAGE,

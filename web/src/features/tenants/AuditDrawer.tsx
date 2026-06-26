@@ -1,5 +1,5 @@
 import { EmptyState, Icon } from '@/design';
-import { Modal } from '@/lib/Modal';
+import { Modal } from '@/components/Modal';
 import { useEntryAudit } from './ledger';
 
 interface AuditDrawerProps {

@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { IconButton } from '@/design';
-import { isTypingTarget } from './keyboard';
+import { isTypingTarget } from '@/lib/keyboard';
 import { useRecordNav, type EntityKind } from './recordNav';
 
 /**

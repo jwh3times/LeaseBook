@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Badge, Button, Card, CardHeader, Input, Select, Table, type TableColumn } from '@/design';
-import { Modal } from '@/lib/Modal';
+import { Modal } from '@/components/Modal';
 import {
   useBankAccounts,
   useCreateBankAccount,

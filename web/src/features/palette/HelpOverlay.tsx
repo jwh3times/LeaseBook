@@ -1,4 +1,4 @@
-import { Modal } from '@/lib/Modal';
+import { Modal } from '@/components/Modal';
 
 const SHORTCUTS: { keys: string; desc: string }[] = [
   { keys: '⌘K', desc: 'Open command palette' },
