@@ -1,7 +1,7 @@
 import { useMutation } from '@tanstack/react-query';
 import { useRef, useState, type KeyboardEvent } from 'react';
 import { Button, Input, Select } from '@/design';
-import { Modal } from '@/lib/Modal';
+import { Modal } from '@/components/Modal';
 import { useBankAccounts } from '@/lib/settings';
 import {
   applyDeposit,
