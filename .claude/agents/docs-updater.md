@@ -57,12 +57,18 @@ To audit: `git diff main...HEAD -- src/ web/ docs/adr/` and check each `.cs`/`.t
 
 Next ADR number: count files matching `docs/adr/ADR-*.md` and increment. The format is `ADR-NNN` zero-padded to three digits.
 
-### 2. ADR index (`docs/adr/README.md`)
+### 2. ADR index (`docs/adr/README.md`) — reconcile, don't just append
 
-After any new ADR is created, add a one-line entry to the index table. Format matches existing rows:
-```
-| ADR-022 | Short title | Accepted | 2026-06-24 |
-```
+The index table must list **every** `docs/adr/ADR-*.md` file — not only one created by the current change. Past changes have added ADRs without updating the index, so reconcile the whole table on every audit rather than appending the current ADR alone:
+
+1. List the records on disk: `ls docs/adr/ADR-*.md`.
+2. For any ADR file with no row in `docs/adr/README.md`, add one. For any existing row whose title, status, or date no longer matches the file's header, correct it.
+3. Row format matches existing rows — link the number, take the title from the file's `# ADR-NNN …` heading (minus the `ADR-NNN` prefix), and read **Status** and **Date** from the file's header block:
+   ```
+   | [022](ADR-022-kebab-title.md) | Short title | Accepted | 2026-06-24 |
+   ```
+
+This is a standing reconciliation, not a one-time append — running it every audit is what keeps the index from silently falling behind again.
 
 ### 3. README.md port map
 
