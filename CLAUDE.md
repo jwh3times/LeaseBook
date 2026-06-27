@@ -124,6 +124,7 @@ banned-pattern tables, and domain rules that supersede any summary here.
 | Migrations, RLS policies, DB schema design, Postgres queries      | `postgres-specialist`                    |
 | Accounting posting logic, journal entries, trust equation changes | `trust-accounting`                       |
 | Reviewing a diff for correctness bugs before merging              | `code-reviewer`                          |
+| Azure infra, Bicep, deploy workflows, Key Vault/managed identity, PITR | `azure-infrastructure`                   |
 | Documentation drift after source changes                          | `docs-updater` (auto-runs via Stop hook) |
 
 Cross-cutting rules (non-negotiable invariants, module boundary, tenancy model) are authoritative
@@ -226,7 +227,7 @@ UX contract (instrumented in telemetry; regressions fail the release checklist):
 - **Invoke the specialist agent for the domain you're working in** before writing code (see the
   Specialist agents table above). For .NET work: `dotnet-api`. For React/UI: `react-frontend`.
   For schema/migrations: `postgres-specialist`. For accounting logic: `trust-accounting`. For
-  pre-merge review: `code-reviewer`.
+  pre-merge review: `code-reviewer`. For Azure infra/Bicep/deploy wiring: `azure-infrastructure`.
 - **`docs-updater` runs automatically at every session end** via the Stop hook in
   `.claude/settings.json` — it checks only files that changed and fixes drift in place. Invoke
   it proactively mid-session if documentation accuracy is in doubt (new ADR candidate, port
