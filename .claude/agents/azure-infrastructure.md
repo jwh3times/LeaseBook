@@ -105,7 +105,7 @@ Container App ingress: `external: true`, `targetPort: 8080`, `transport: 'auto'`
 
 ## 6. Secrets contract
 
-All three environment variables are supplied to the Container App from Key Vault via the managed identity. Real role passwords live in Key Vault only; `infra/db/bootstrap.sql` is dev-only.
+The two `ConnectionStrings__*` variables are supplied to the Container App from Key Vault via the managed identity; `APPLICATIONINSIGHTS_CONNECTION_STRING` comes from the App Insights module output, wired as a container-app secret (not a Key Vault reference). Real role passwords live in Key Vault only; `infra/db/bootstrap.sql` is dev-only.
 
 | Env var | Source | Consumer |
 |---|---|---|
@@ -159,7 +159,7 @@ permissions:
 | Secrets | `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `MIGRATIONS_CONNECTION_STRING` | Same |
 | Vars | `ACR_NAME`, `APP_NAME`, `RESOURCE_GROUP` | Same |
 
-Migrations run as `leasebook_migrator` from a one-shot EF bundle job in the workflow — **never at app startup**. The app role (`ConnectionStrings__Default`) has no DDL rights. Both workflows are authored but enablement is deferred until the operator configures OIDC federated credentials.
+Migrations run as `leasebook_migrator` from a one-shot migration job (`dotnet ef database update`) in the workflow — **never at app startup**. The app role (`ConnectionStrings__Default`) has no DDL rights. Both workflows are authored but enablement is deferred until the operator configures OIDC federated credentials.
 
 ---
 
