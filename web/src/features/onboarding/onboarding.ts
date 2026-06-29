@@ -19,10 +19,7 @@ export type BankBalanceDto = components['schemas']['BankBalanceDto'];
 
 export type EntityKind = 'owners' | 'properties' | 'units' | 'tenants_leases';
 export type BalanceKind =
-  | 'owner_balances'
-  | 'deposit_liabilities'
-  | 'bank_balances'
-  | 'tenant_receivables';
+  'owner_balances' | 'deposit_liabilities' | 'bank_balances' | 'tenant_receivables';
 
 // ─── Query keys ───────────────────────────────────────────────────────────────
 
