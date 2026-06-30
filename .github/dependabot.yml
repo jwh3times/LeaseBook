@@ -3,7 +3,8 @@
 # version-update sweep below also picks up fixed advisories as they ship.
 #
 # Noise control: minor + patch bumps are grouped into one PR per ecosystem; major
-# versions open individual PRs so breaking changes get reviewed on their own.
+# versions open individual PRs — EXCEPT for peer-locked families where a lone bump
+# would leave an unsatisfiable peer range. Those families travel together as one major PR.
 # Docs: https://docs.github.com/code-security/dependabot/dependabot-version-updates
 version: 2
 updates:
@@ -42,8 +43,69 @@ updates:
     commit-message:
       prefix: "build(deps)"
     groups:
+      # --- Peer-locked families — majors only. All minor/patch bumps land in the
+      #     catch-all group at the bottom. ---
+
+      # react + react-dom ship at identical versions and must match at runtime;
+      # the @types/* packages track the same major.
+      react:
+        applies-to: version-updates
+        patterns:
+          - "react"
+          - "react-dom"
+          - "@types/react"
+          - "@types/react-dom"
+        update-types:
+          - "major"
+
+      # @tanstack/react-query, -devtools, and react-virtual all require a compatible
+      # @tanstack core — major bumps typically ship across the family at once.
+      tanstack:
+        applies-to: version-updates
+        patterns:
+          - "@tanstack/*"
+        update-types:
+          - "major"
+
+      # @vitejs/plugin-react requires a matching Vite major; vitest and @vitest/*
+      # track the Vite majors they support.
+      vite-ecosystem:
+        applies-to: version-updates
+        patterns:
+          - "vite"
+          - "vitest"
+          - "@vitejs/plugin-react"
+          - "@vitest/*"
+        update-types:
+          - "major"
+
+      # @testing-library/react and user-event both peer-require @testing-library/dom.
+      testing-library:
+        applies-to: version-updates
+        patterns:
+          - "@testing-library/*"
+        update-types:
+          - "major"
+
+      # @eslint/js is lockstep-versioned with eslint; plugins peer-cap on the eslint
+      # major; typescript-eslint peer-bounds both eslint and typescript.
+      lint-and-typescript:
+        applies-to: version-updates
+        patterns:
+          - "eslint"
+          - "@eslint/*"
+          - "eslint-plugin-*"
+          - "eslint-config-*"
+          - "typescript-eslint"
+          - "globals"
+          - "typescript"
+        update-types:
+          - "major"
+
       npm-minor-and-patch:
         applies-to: version-updates
+        patterns:
+          - "*"
         update-types:
           - "minor"
           - "patch"
