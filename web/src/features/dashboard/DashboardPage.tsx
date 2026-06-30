@@ -52,7 +52,7 @@ export function DashboardPage() {
         <Card pad>
           <EmptyState
             icon="alert"
-            title="Couldn’t load the dashboard"
+            title="Couldn't load the dashboard"
             description="Try again in a moment."
           />
         </Card>
@@ -128,7 +128,7 @@ export function DashboardPage() {
                   of <Money value={num(d.kpis.collectedTarget)} />
                 </span>
               </span>
-              <ProgressBar pct={collectedPct} tone="pos" />
+              <ProgressBar pct={collectedPct} tone="pos" label="Rent collection progress" />
             </div>
           }
         />
