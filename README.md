@@ -44,11 +44,11 @@ suite — not by convention. See [`docs/accounting.md`](docs/accounting.md) for 
 
 ## What's implemented
 
-| Area | Capability |
-| --- | --- |
-| **Foundations** | Email/password auth with TOTP MFA, role-based authorization, Postgres row-level security as the tenancy boundary, an append-only audit log, a ported design system, and CI. |
-| **Trust accounting engine** | Double-entry journal with dual-basis (cash/accrual) posting templates per business event, a single write path, linked void/reversal, accounting periods, and a continuously-tested invariant suite. |
-| **Directory** | Owners, properties, units, tenants, and lite leases — lists, detail pages, full-text search, a ⌘K command palette, and a live dashboard with all-owner ending balances. |
+| Area                         | Capability                                                                                                                                                                                                              |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Foundations**              | Email/password auth with TOTP MFA, role-based authorization, Postgres row-level security as the tenancy boundary, an append-only audit log, a ported design system, and CI.                                             |
+| **Trust accounting engine**  | Double-entry journal with dual-basis (cash/accrual) posting templates per business event, a single write path, linked void/reversal, accounting periods, and a continuously-tested invariant suite.                     |
+| **Directory**                | Owners, properties, units, tenants, and lite leases — lists, detail pages, full-text search, a ⌘K command palette, and a live dashboard with all-owner ending balances.                                                 |
 | **Tenant ledger action hub** | Record a payment or charge in place (≤ 3 interactions), collect/hold/apply deposits and prepayments, void with a linked reversal and a per-entry audit drawer, and a filterable, CSV-exportable running-balance ledger. |
 
 On the roadmap: banking register & reconciliation, owner statements (PDF/CSV/email), bulk operations
@@ -80,7 +80,7 @@ Key design decisions (each recorded as an ADR in [`docs/adr/`](docs/adr)):
 - **Double-entry journal as the source of truth.** Tenant ledgers, owner ledgers, bank registers, and
   statements are all read-model projections of the journal — never independently maintained state.
   Business events (`RentCharged`, `PaymentReceived`, `DepositApplied`, …) post through balanced,
-  per-basis templates so each accounting basis is a *query*, not a transformation.
+  per-basis templates so each accounting basis is a _query_, not a transformation.
 - **PostgreSQL row-level security is the security boundary.** Every org-scoped table carries an `org_id`
   column with a `FORCE ROW LEVEL SECURITY` policy; org context is set per-transaction with
   `SET LOCAL app.org_id`. EF Core global query filters are ergonomics layered on top, not the boundary.
@@ -96,16 +96,16 @@ Key design decisions (each recorded as an ADR in [`docs/adr/`](docs/adr)):
 
 ## Tech stack
 
-| Layer | Technology |
-| --- | --- |
-| Backend | C# / .NET 10, ASP.NET Core minimal APIs, EF Core + Npgsql |
-| Database | PostgreSQL 18 (row-level security, `NUMERIC` money) |
-| Frontend | React 19 + TypeScript, Vite, TanStack Query, generated OpenAPI client |
-| Validation | FluentValidation (one validator per slice) |
-| CSV / PDF | CsvHelper (in use) · QuestPDF (planned, for statements) |
-| Telemetry | OpenTelemetry |
-| Testing | xUnit v3, Shouldly, Testcontainers, CsCheck (property-based), Playwright (e2e) |
-| Infra / CI | Docker, Azure Container Apps + Bicep (`infra/`), GitHub Actions |
+| Layer      | Technology                                                                     |
+| ---------- | ------------------------------------------------------------------------------ |
+| Backend    | C# / .NET 10, ASP.NET Core minimal APIs, EF Core + Npgsql                      |
+| Database   | PostgreSQL 18 (row-level security, `NUMERIC` money)                            |
+| Frontend   | React 19 + TypeScript, Vite, TanStack Query, generated OpenAPI client          |
+| Validation | FluentValidation (one validator per slice)                                     |
+| CSV / PDF  | CsvHelper (in use) · QuestPDF (planned, for statements)                        |
+| Telemetry  | OpenTelemetry                                                                  |
+| Testing    | xUnit v3, Shouldly, Testcontainers, CsCheck (property-based), Playwright (e2e) |
+| Infra / CI | Docker, Azure Container Apps + Bicep (`infra/`), GitHub Actions                |
 
 ---
 
@@ -180,34 +180,34 @@ projects. Only host-side ports move; container ports (and the Azure image) never
 
 **Inner-loop development** — backend and frontend on the host, Postgres in Docker (`./scripts/dev.ps1 up`):
 
-| Port | Service | Configured in |
-| --- | --- | --- |
-| `5373` | Vite dev server (SPA); proxies `/api` → `:5080` | `web/vite.config.ts` · `web/playwright.config.ts` |
-| `5080` | .NET API / host (`dotnet run`) | `src/LeaseBook.Web/Properties/launchSettings.json` (`http` profile) · `src/LeaseBook.Web/appsettings.Development.json` · proxied from `web/vite.config.ts` · `web/playwright.config.ts` |
-| `5632` | PostgreSQL (Docker, published to the host) | `docker-compose.yml` (`db`) · connection strings in `appsettings.Development.json` |
-| `5250` | pgAdmin (Docker) | `docker-compose.yml` (`pgadmin`) |
+| Port   | Service                                         | Configured in                                                                                                                                                                           |
+| ------ | ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `5373` | Vite dev server (SPA); proxies `/api` → `:5080` | `web/vite.config.ts` · `web/playwright.config.ts`                                                                                                                                       |
+| `5080` | .NET API / host (`dotnet run`)                  | `src/LeaseBook.Web/Properties/launchSettings.json` (`http` profile) · `src/LeaseBook.Web/appsettings.Development.json` · proxied from `web/vite.config.ts` · `web/playwright.config.ts` |
+| `5632` | PostgreSQL (Docker, published to the host)      | `docker-compose.yml` (`db`) · connection strings in `appsettings.Development.json`                                                                                                      |
+| `5250` | pgAdmin (Docker)                                | `docker-compose.yml` (`pgadmin`)                                                                                                                                                        |
 
 **Full Docker stack** — the whole product in containers (`./scripts/dev.ps1 app-up`, Compose `full` profile):
 
-| Port | Service | Configured in |
-| --- | --- | --- |
+| Port   | Service                                                                                         | Configured in                                                                           |
+| ------ | ----------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
 | `8082` | App container (host port) — SPA + `/api` → `http://localhost:8082`; container listens on `8080` | `Dockerfile` (`ASPNETCORE_HTTP_PORTS` / `EXPOSE` `8080`) · `docker-compose.yml` (`app`) |
-| `5632` | PostgreSQL container (internal `db:5432`, published to the host) | `docker-compose.yml` (`db`) |
-| `5250` | pgAdmin (Docker) | `docker-compose.yml` (`pgadmin`) |
+| `5632` | PostgreSQL container (internal `db:5432`, published to the host)                                | `docker-compose.yml` (`db`)                                                             |
+| `5250` | pgAdmin (Docker)                                                                                | `docker-compose.yml` (`pgadmin`)                                                        |
 
 **Production** — Azure Container Apps (`infra/`):
 
-| Port | Service | Configured in |
-| --- | --- | --- |
+| Port   | Service                                                       | Configured in                                     |
+| ------ | ------------------------------------------------------------- | ------------------------------------------------- |
 | `8080` | Container ingress `targetPort` (same image as the full stack) | `infra/modules/containerapp.bicep` · `Dockerfile` |
 
 **Host-port overrides** (the container's internal port is unchanged; only the host mapping moves):
 
-| Variable | Default | Remaps |
-| --- | --- | --- |
-| `LEASEBOOK_APP_PORT` | `8082` | host port for the full-stack app container (container stays `8080`) |
-| `LEASEBOOK_DB_PORT` | `5632` | host port for the Postgres container (container stays `5432`) |
-| `LEASEBOOK_PGADMIN_PORT` | `5250` | host port for pgAdmin |
+| Variable                 | Default | Remaps                                                              |
+| ------------------------ | ------- | ------------------------------------------------------------------- |
+| `LEASEBOOK_APP_PORT`     | `8082`  | host port for the full-stack app container (container stays `8080`) |
+| `LEASEBOOK_DB_PORT`      | `5632`  | host port for the Postgres container (container stays `5432`)       |
+| `LEASEBOOK_PGADMIN_PORT` | `5250`  | host port for pgAdmin                                               |
 
 ---
 

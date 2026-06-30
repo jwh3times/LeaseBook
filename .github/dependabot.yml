@@ -1,5 +1,5 @@
 # Dependabot version updates. Keeps every dependency ecosystem in the repo current.
-# Security updates are enabled separately in repo Settings → Code security; the weekly
+# Security updates are enabled separately in repo Settings → Code security; the daily
 # version-update sweep below also picks up fixed advisories as they ship.
 #
 # Noise control: minor + patch bumps are grouped into one PR per ecosystem; major
@@ -123,8 +123,7 @@ updates:
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
-      interval: "weekly"
-      day: "monday"
+      interval: "daily"
       time: "07:00"
       timezone: "America/New_York"
     open-pull-requests-limit: 5
@@ -145,8 +144,7 @@ updates:
   - package-ecosystem: "docker-compose"
     directory: "/"
     schedule:
-      interval: "weekly"
-      day: "monday"
+      interval: "daily"
       time: "07:00"
       timezone: "America/New_York"
     open-pull-requests-limit: 5
@@ -166,8 +164,7 @@ updates:
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "weekly"
-      day: "monday"
+      interval: "daily"
       time: "07:00"
       timezone: "America/New_York"
     open-pull-requests-limit: 5
