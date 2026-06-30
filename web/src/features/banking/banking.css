@@ -48,6 +48,10 @@
   background: var(--accent);
   color: var(--accent-fg);
 }
+/* WCAG 2 AA: --text-3 on accent-soft bg fails 4.5:1 at 12px; --text-2 passes (~5.3:1). */
+.pf-acct-tab.active .t3 {
+  color: var(--text-2);
+}
 
 .pf-bank-bal {
   display: grid;

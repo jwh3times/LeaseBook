@@ -56,7 +56,9 @@ html[data-theme='light'] {
   --border-strong: oklch(0.86 0.006 235);
   --text: oklch(0.25 0.012 255);
   --text-2: oklch(0.49 0.012 255);
-  --text-3: oklch(0.63 0.01 255);
+  --text-3: oklch(
+    0.54 0.01 255
+  ); /* darkened from 0.63 for WCAG 2 AA contrast on white (was ~3.5:1, now ~5:1) */
   --pos: oklch(0.53 0.12 152);
   --pos-soft: color-mix(in oklab, var(--pos) 13%, var(--surface));
   --neg: oklch(0.56 0.17 20);
@@ -446,7 +448,11 @@ th.num {
   background: var(--surface-3);
 }
 .pf-badge.tone-pos {
-  color: var(--pos);
+  color: color-mix(
+    in oklab,
+    var(--pos) 80%,
+    var(--text)
+  ); /* darkened for WCAG 2 AA on pos-soft bg (light mode ~3.5:1 → ~5.7:1); in dark mode --text is near-white so the mix lightens, keeping high contrast */
 }
 .pf-badge.tone-pos.soft {
   background: var(--pos-soft);
@@ -458,7 +464,11 @@ th.num {
   background: var(--neg-soft);
 }
 .pf-badge.tone-warn {
-  color: color-mix(in oklab, var(--warn) 75%, var(--text));
+  color: color-mix(
+    in oklab,
+    var(--warn) 60%,
+    var(--text)
+  ); /* reduced from 75% — darkens light-mode text for WCAG 2 AA on warn-soft bg (was ~3.9:1, now ~5:1) */
 }
 .pf-badge.tone-warn.soft {
   background: var(--warn-soft);

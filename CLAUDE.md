@@ -104,6 +104,7 @@ offset from the defaults so the stack runs alongside other local projects.
 - Single test: `npm run test -- src/design/formatMoney.test.ts`
 - Regenerate API client (host must be running on :5080): `npm run api:generate`
 - e2e (Playwright; specs in `web/e2e/`, run against a seeded host): `npm run e2e`
+- e2e a11y gate only: `npm run e2e -- a11y.spec.ts`
 
 **Container:** `docker build -t leasebook .` then run with `ConnectionStrings__Default` set — serves the
 SPA and `/api` on port 8080 (the container's internal port). To run the **whole product** locally

@@ -115,7 +115,7 @@ describe('DashboardPage', () => {
   it('shows an error state when the dashboard fails', async () => {
     server.use(http.get('/api/dashboard', () => new HttpResponse(null, { status: 500 })));
     renderDashboard();
-    expect(await screen.findByText(/couldn’t load the dashboard/i)).toBeInTheDocument();
+    expect(await screen.findByText(/couldn't load the dashboard/i)).toBeInTheDocument();
   });
 
   beforeEach(() => {

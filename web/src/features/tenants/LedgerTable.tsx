@@ -76,7 +76,18 @@ export function LedgerTable({ rows, flashId, rowActions }: LedgerTableProps) {
   };
 
   return (
-    <div className={`pf-ledger${hasActions ? ' has-actions' : ''}`}>
+    // role="grid" on the outer element: the header row (role="row") must be inside a grid/table
+    // context per ARIA — axe aria-required-parent fires when role="row" has no owning grid ancestor.
+    // tabIndex + onKeyDown live here (on the grid composite widget), not on the inner rowgroup — the
+    // keyboard handler fires when the grid itself has focus; events don't bubble inward to descendants.
+    <div
+      className={`pf-ledger${hasActions ? ' has-actions' : ''}`}
+      role="grid"
+      aria-label="Tenant ledger"
+      aria-rowcount={rows.length}
+      tabIndex={0}
+      onKeyDown={onKeyDown}
+    >
       <div className="pf-ledger-head" role="row">
         <span role="columnheader">Date</span>
         <span role="columnheader">Type</span>
@@ -97,15 +108,7 @@ export function LedgerTable({ rows, flashId, rowActions }: LedgerTableProps) {
           </span>
         )}
       </div>
-      <div
-        ref={scrollRef}
-        className="pf-ledger-body"
-        role="grid"
-        aria-label="Tenant ledger"
-        aria-rowcount={rows.length}
-        tabIndex={0}
-        onKeyDown={onKeyDown}
-      >
+      <div ref={scrollRef} className="pf-ledger-body" role="rowgroup">
         <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
           {virtualizer.getVirtualItems().map((item) => {
             const entry = rows[item.index];

@@ -203,15 +203,18 @@
   justify-self: end;
 }
 
+.pf-ledger {
+  outline: none;
+}
+
+.pf-ledger:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
 .pf-ledger-body {
   max-height: 60vh;
   overflow-y: auto;
   scrollbar-gutter: stable;
-  outline: none;
-}
-
-.pf-ledger-body:focus-visible {
-  box-shadow: inset 0 0 0 2px var(--accent);
 }
 
 .pf-ledger-row {
