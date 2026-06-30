@@ -235,7 +235,9 @@ dotnet ef database update --project src/LeaseBook.Web
 ```bash
 npm run dev | lint | typecheck | test | build
 npm run api:generate   # regenerate the TS client from the running host's OpenAPI doc
-npm run e2e            # Playwright end-to-end specs
+npx playwright install chromium   # install the browser once before first e2e run
+npm run e2e            # Playwright end-to-end specs (full suite)
+npm run e2e -- a11y.spec.ts        # a11y gate only (WCAG 2 AA via @axe-core/playwright)
 ```
 
 ---
@@ -278,7 +280,8 @@ LeaseBook follows a few firm conventions:
 - Significant decisions are recorded as short ADRs in `docs/adr/`.
 
 CI (GitHub Actions) builds, runs the full test suite against real PostgreSQL, type-checks and builds the
-web app, builds the container image, and scans for secrets on every push and pull request.
+web app, runs the Playwright e2e suite (including the WCAG 2 AA accessibility gate) in a dedicated `e2e`
+job, builds the container image, and scans for secrets on every push and pull request.
 
 ---
 
