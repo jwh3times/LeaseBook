@@ -193,9 +193,11 @@ npm run e2e                          # full suite
 npm run e2e -- a11y.spec.ts          # a11y gate only
 ```
 
-The a11y spec (`a11y.spec.ts`) asserts zero WCAG 2 AA violations on every routed page using
-`@axe-core/playwright`. It runs before `m7-onboarding` in file-discovery order, so the cutover
-org's `/onboarding` route is still empty when the a11y scan hits it — this is intentional and
-requires no special sequencing on your part.
+The a11y spec (`a11y.spec.ts`) asserts zero WCAG 2 AA violations on every routed page (the
+`nested-interactive` rule is deferred on `/operations` — see the inline rationale in
+`a11y.spec.ts`) using `@axe-core/playwright`. The scan covers the default (light) theme only;
+dark-theme accessibility is a tracked follow-on, not yet guarded. It runs before `m7-onboarding`
+in file-discovery order, so the cutover org's `/onboarding` route is still empty when the a11y
+scan hits it — this is intentional and requires no special sequencing on your part.
 
 CI runs the full suite in an `e2e` job (see `.github/workflows/ci.yml` and ADR-022).

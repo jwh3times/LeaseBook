@@ -37,3 +37,4 @@ attach to, and accessibility was a manual checklist.
   cross-platform (Windows-local vs Ubuntu-CI) baseline strategy; extended e2e coverage (Directory
   navigation, error states, keyboard-only sequences). This ADR covers only the CI e2e foundation +
   the a11y gate.
+- The axe scan covers the default (light) theme only; dark-theme accessibility is a tracked follow-on, not yet guarded.

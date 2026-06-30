@@ -24,11 +24,11 @@ export async function signIn(page: Page, creds: Credentials): Promise<void> {
 
 const WCAG_AA_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
 
-// WCAG 2 A+AA axe scan asserting zero violations. `exclude` selectors are for documented,
+// WCAG 2 A+AA axe scan asserting zero violations. `disableRules` are for documented,
 // intentional exceptions only — each call site must comment why.
-export async function runA11y(page: Page, opts: { exclude?: string[] } = {}): Promise<void> {
+export async function runA11y(page: Page, opts: { disableRules?: string[] } = {}): Promise<void> {
   let builder = new AxeBuilder({ page }).withTags(WCAG_AA_TAGS);
-  for (const selector of opts.exclude ?? []) builder = builder.exclude(selector);
+  if (opts.disableRules?.length) builder = builder.disableRules(opts.disableRules);
   const { violations } = await builder.analyze();
   const report = violations
     .map(
