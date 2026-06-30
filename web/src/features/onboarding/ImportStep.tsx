@@ -99,6 +99,21 @@ export function EntityImportStep({ title, description, kinds, onContinue }: Enti
         </fieldset>
       )}
 
+      {/* File input BEFORE (not inside) the dropzone button: nesting <input type="file"> inside
+          role="button" triggers axe nested-interactive (WCAG 4.1.2) because AT can focus file
+          inputs even with tabIndex=-1/aria-hidden when inside a button context.
+          display:none + programmatic .click() is the standard pattern; the picker still opens. */}
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".csv,text/csv"
+        aria-label="CSV file"
+        tabIndex={-1}
+        style={{ display: 'none' }}
+        onChange={(e) => {
+          void handleChange(e);
+        }}
+      />
       <div
         className={['ob-dropzone', mutation.isPending ? 'ob-dropzone--loading' : '']
           .filter(Boolean)
@@ -118,16 +133,6 @@ export function EntityImportStep({ title, description, kinds, onContinue }: Enti
         tabIndex={0}
         aria-label="Upload CSV file"
       >
-        <input
-          ref={fileRef}
-          type="file"
-          accept=".csv,text/csv"
-          aria-label="CSV file"
-          className="ob-file-input"
-          onChange={(e) => {
-            void handleChange(e);
-          }}
-        />
         {mutation.isPending ? (
           <EmptyState icon="arrowUpRight" title="Importing…" description="Processing your CSV." />
         ) : filename ? (
@@ -324,6 +329,21 @@ export function BalanceImportStep({
         />
       </div>
 
+      {/* File input BEFORE (not inside) the dropzone button: nesting <input type="file"> inside
+          role="button" triggers axe nested-interactive (WCAG 4.1.2) because AT can focus file
+          inputs even with tabIndex=-1/aria-hidden when inside a button context.
+          display:none + programmatic .click() is the standard pattern; the picker still opens. */}
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".csv,text/csv"
+        aria-label="CSV file"
+        tabIndex={-1}
+        style={{ display: 'none' }}
+        onChange={(e) => {
+          void handleChange(e);
+        }}
+      />
       <div
         className={['ob-dropzone', mutation.isPending ? 'ob-dropzone--loading' : '']
           .filter(Boolean)
@@ -343,16 +363,6 @@ export function BalanceImportStep({
         tabIndex={0}
         aria-label="Upload CSV file"
       >
-        <input
-          ref={fileRef}
-          type="file"
-          accept=".csv,text/csv"
-          aria-label="CSV file"
-          className="ob-file-input"
-          onChange={(e) => {
-            void handleChange(e);
-          }}
-        />
         {mutation.isPending ? (
           <EmptyState icon="arrowUpRight" title="Importing…" description="Processing your CSV." />
         ) : filename ? (

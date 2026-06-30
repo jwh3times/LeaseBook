@@ -235,7 +235,12 @@ export function BankingPage() {
               style={{
                 fontSize: '1.5em',
                 fontWeight: 700,
-                color: num(totals?.uncleared) !== 0 ? 'var(--warn)' : 'var(--text-3)',
+                /* WCAG 2 AA: --warn (#cf8634) is 2.95:1 on white — below the 3:1 large-text threshold.
+                   color-mix darkens toward --text so both light and dark themes stay adaptive. */
+                color:
+                  num(totals?.uncleared) !== 0
+                    ? 'color-mix(in oklab, var(--warn) 80%, var(--text))'
+                    : 'var(--text-3)',
               }}
             >
               {num(totals?.uncleared) !== 0 ? <Money value={num(totals?.uncleared)} plain /> : '—'}
