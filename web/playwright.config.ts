@@ -23,7 +23,14 @@ export default defineConfig({
       command:
         'dotnet run --project ../src/LeaseBook.Web --no-launch-profile --urls http://localhost:5080',
       url: 'http://localhost:5080/api/health',
-      env: { ASPNETCORE_ENVIRONMENT: 'Development' },
+      env: {
+        ASPNETCORE_ENVIRONMENT: 'Development',
+        // In CI, ConnectionStrings__Default points the host at the Postgres service container
+        // (port 5432, app role). Unset locally → host uses appsettings.Development.json (5632).
+        ...(process.env.ConnectionStrings__Default
+          ? { ConnectionStrings__Default: process.env.ConnectionStrings__Default }
+          : {}),
+      },
       reuseExistingServer: true,
       timeout: 180_000,
     },
