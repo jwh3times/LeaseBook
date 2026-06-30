@@ -25,7 +25,7 @@ thing you can include.
 Have an idea? Open a **Feature request** issue. Note that LeaseBook holds a deliberately narrow scope
 (small residential property management, correctness-first); proposals outside that scope are declined
 on sight through the current phase — see the scope-discipline notes in
-[CONTRIBUTING.md](CONTRIBUTING.md). Framing the underlying *problem*, not just the feature, makes a
+[CONTRIBUTING.md](CONTRIBUTING.md). Framing the underlying _problem_, not just the feature, makes a
 request much easier to act on.
 
 ## Asking a question

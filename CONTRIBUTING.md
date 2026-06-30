@@ -33,7 +33,7 @@ cd web && npm install && npm run typecheck && npm run test
 2. **Branch** off `main` (e.g. `feature/owner-statements`, `fix/ledger-running-balance`). Keep branches
    focused — one logical change per pull request.
 3. **Commit** in logical, self-contained steps with clear messages: a concise imperative subject line and
-   a body explaining the *why*, not just the *what*.
+   a body explaining the _why_, not just the _what_.
 4. **Open a pull request** against `main`. Fill in what changed and how you verified it. CI must be green
    and the PR reviewed before merge.
 
