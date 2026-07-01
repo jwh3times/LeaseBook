@@ -5,6 +5,11 @@ import { defineConfig, devices } from '@playwright/test';
 // org (`./scripts/dev.ps1 up` + `seed --org demo`) — the specs sign in as the seeded admin.
 export default defineConfig({
   testDir: './e2e',
+  expect: {
+    toHaveScreenshot: { maxDiffPixelRatio: 0.02, animations: 'disabled' },
+  },
+  // Baselines live under web/e2e-snapshots/ (relative to this config's dir), suffixed by project+platform.
+  snapshotPathTemplate: 'e2e-snapshots/{testFileName}/{arg}-{projectName}-{platform}{ext}',
   fullyParallel: false,
   // Serial, single worker: the specs share one seeded demo org, and the M4 reconcile spec finalizes a
   // per-account-month lock — persistent state that would race other specs posting into that month if files
