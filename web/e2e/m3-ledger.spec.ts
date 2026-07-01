@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { visualSnapshot } from './helpers';
 
 // The M3 ledger-hub budgeted flows (§D step 6), run against the seeded demo org. The seeded admin
 // (Renée Calloway) has no MFA, so login is email + password. Each spec mutates only with entries it
@@ -36,6 +37,8 @@ test('records a payment in ≤ 3 interactions, then voids it with a linked rever
     (request) => request.url().includes('/api/telemetry/budget') && request.method() === 'POST',
   );
   await page.getByRole('button', { name: 'Record payment' }).click();
+  // Visual regression (CI-only): the composer open BEFORE the random amount is typed → deterministic.
+  await visualSnapshot(page.locator('.pf-composer'), 'ledger-composer-open.png');
   await page.getByLabel('Amount').fill(UNIQUE_AMOUNT);
   await page.getByLabel('Amount').press('Enter');
 

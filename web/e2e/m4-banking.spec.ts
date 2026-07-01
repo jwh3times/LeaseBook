@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { visualSnapshot } from './helpers';
 
 // The M4 banking budgeted flows (§D step 5), run against the seeded demo org. The seeded admin (Renée
 // Calloway) has no MFA, so login is email + password. These two specs are SERIAL and designed to run
@@ -86,6 +87,8 @@ test.describe.serial('M4 banking', () => {
     await page.getByRole('button', { name: 'Reconcile account' }).click();
     await page.getByRole('button', { name: 'Select all uncleared' }).click();
     await expect(page.getByLabel('Difference')).toHaveText('$0.00');
+    // Visual regression (CI-only): the reconcile bar at difference $0.00, before finalize.
+    await visualSnapshot(page.locator('.pf-recon-bar'), 'reconcile-zero-strip.png');
     await page.getByRole('button', { name: 'Finalize' }).click();
 
     // Back to the balance strip; the reconciliation is recorded as finalized in history.
