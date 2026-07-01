@@ -70,5 +70,6 @@ jobs:
             echo "No baseline changes to commit."
           else
             git commit -m "chore(m8): update visual baselines"
+            git pull --rebase origin "${{ github.ref_name }}"
             git push
           fi

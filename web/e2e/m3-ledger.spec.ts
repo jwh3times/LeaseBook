@@ -37,8 +37,11 @@ test('records a payment in ≤ 3 interactions, then voids it with a linked rever
     (request) => request.url().includes('/api/telemetry/budget') && request.method() === 'POST',
   );
   await page.getByRole('button', { name: 'Record payment' }).click();
-  // Visual regression (CI-only): the composer open BEFORE the random amount is typed → deterministic.
-  await visualSnapshot(page.locator('.pf-composer'), 'ledger-composer-open.png');
+  // Visual regression (CI-only): the composer open BEFORE the random amount is typed. Mask the Date
+  // field — it defaults to today's date (wall-clock), which would otherwise drift the baseline.
+  await visualSnapshot(page.locator('.pf-composer'), 'ledger-composer-open.png', {
+    mask: [page.locator('.pf-composer-field').filter({ hasText: 'Date' })],
+  });
   await page.getByLabel('Amount').fill(UNIQUE_AMOUNT);
   await page.getByLabel('Amount').press('Enter');
 

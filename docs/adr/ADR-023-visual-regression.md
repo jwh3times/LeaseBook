@@ -26,8 +26,10 @@ and CI runs Ubuntu.
 4. **Baseline generation = a `workflow_dispatch` Action** ("Update visual baselines") that regenerates
    on the CI Ubuntu setup and commits baselines back. The Playwright Docker image lacks the .NET SDK
    our host needs, so local Docker generation is impractical.
-5. **Missing baseline fails** (we do not enable `updateSnapshots: 'missing'`) — a baseline must be
-   generated and committed deliberately, else the gate is vacuous.
+5. **Missing baseline fails.** We leave Playwright's default `updateSnapshots: 'missing'` in place:
+   on a missing baseline it writes the file to the ephemeral runner but still **fails the run** (and
+   suppresses retries for that case), so a baseline must be generated and committed deliberately —
+   the gate is never silently vacuous.
 
 ## Consequences
 
