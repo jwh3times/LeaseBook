@@ -96,23 +96,20 @@ test.describe.serial('M4 banking', () => {
     await expect(page.getByText('Finalized').first()).toBeVisible();
     await page.screenshot({ path: 'e2e-results/m4-reconciled.png', fullPage: true });
 
-    // A tenant payment dated into the locked month (June 2026, the demo's reconciled period) is rejected in place.
+    // A tenant payment dated into the locked month (today, the reconciled month) is rejected in place.
     await page.getByRole('button', { name: 'Tenants' }).click();
     await page.getByText('Jasmine Carter').click();
     await expect(page.getByRole('heading', { name: 'Jasmine Carter' })).toBeVisible();
 
     await page.getByRole('button', { name: 'Record payment' }).click();
     await page.getByLabel('Amount').fill('123.45');
-    // Explicitly date into the locked month (June 2026 — the demo's reconciled period) so this
-    // assertion is wall-clock-independent even after June 30 UTC passes.
-    await page.getByLabel('Date', { exact: true }).fill('2026-06-15');
     await page.getByRole('button', { name: 'Post payment' }).click();
     await expect(page.getByText(/reconciled and locked/)).toBeVisible();
 
-    // The same payment dated into a clearly-open month (August 2026 — after the locked June and
-    // outside the demo's data range) still posts — the lock is account-month-scoped.
-    // Both dates are fixed relative to the demo's June-2026 reconciled period, not wall-clock.
-    await page.getByLabel('Date', { exact: true }).fill('2026-08-15');
+    // The same payment dated into the open month (next month) still posts — the lock is account-month-scoped.
+    const now = new Date();
+    const openMonth = new Date(Date.UTC(now.getFullYear(), now.getMonth() + 1, 15));
+    await page.getByLabel('Date', { exact: true }).fill(openMonth.toISOString().slice(0, 10));
     await page.getByRole('button', { name: 'Post payment' }).click();
     await expect(
       page.getByRole('row').filter({ hasText: '$123.45' }).filter({ hasText: 'Payment' }),
