@@ -42,6 +42,7 @@ form, write it, and add a row to the index below. When a decision is replaced, m
 | [020](ADR-020-opening-balance-posting.md) | Balance-forward opening-balance posting model | Accepted | 2026-06-23 |
 | [021](ADR-021-migration-toolkit.md) | Migration toolkit architecture & verification gate | Accepted | 2026-06-23 |
 | [022](ADR-022-e2e-in-ci-and-a11y-gate.md) | e2e in CI + automated accessibility gate | Accepted | 2026-06-30 |
+| [023](ADR-023-visual-regression.md) | Visual regression — CI-only Linux baselines | Accepted | 2026-07-01 |
 
 ## Status legend
 
