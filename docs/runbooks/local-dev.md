@@ -216,6 +216,9 @@ on a local (Windows) `npm run e2e` — baselines are Linux (`*-chromium-linux.pn
   (`.github/workflows/update-visual-baselines.yml`) on your branch — it regenerates the Linux
   baselines and commits them to `web/e2e-snapshots/`. Do not hand-generate baselines on Windows
   (the OS renders differently). After it commits, re-run the `e2e` check (a GITHUB_TOKEN push does
-  not auto-trigger CI — push any commit) to confirm the gate is green.
+  not auto-trigger CI — push any commit) to confirm the gate is green. Note: a `workflow_dispatch`
+  workflow is only dispatchable once its file is on `main` (a GitHub constraint), so the **initial**
+  baseline set (before this workflow first merged) was seeded by committing the `-actual.png` images
+  the failing `e2e` run rendered — the same Linux output the workflow would produce.
 - **Review a failure:** download the `playwright-report` artifact from the failed `e2e` run and
   inspect the diff image; if the change was intended, re-baseline via the workflow.
