@@ -55,7 +55,7 @@ html[data-theme='light'] {
   --border: oklch(0.918 0.005 235);
   --border-strong: oklch(0.86 0.006 235);
   --text: oklch(0.25 0.012 255);
-  --text-2: oklch(0.49 0.012 255);
+  --text-2: oklch(0.4 0.01 255);
   --text-3: oklch(
     0.54 0.01 255
   ); /* darkened from 0.63 for WCAG 2 AA contrast on white (was ~3.5:1, now ~5:1) */
