@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { visualSnapshot } from './helpers';
 
 // M5 reporting e2e specs (§D step 5), serial, against the seeded demo org.
 // The seeded admin (Renée Calloway) has no MFA; login is email + password.
@@ -66,6 +67,8 @@ test.describe.serial('M5 reports', () => {
     await login(page);
     await gotoO5Statement(page);
     await selectMay2026Cash(page);
+    // Visual regression (CI-only): flagship owner statement (O5 May 2026 Cash — golden figures).
+    await visualSnapshot(page, 'owner-statement-full.png', { fullPage: true });
 
     // Screenshot for human review
     await page.screenshot({ path: 'e2e-results/m5-statement-loaded.png', fullPage: true });
@@ -76,6 +79,7 @@ test.describe.serial('M5 reports', () => {
     // Three checks must render in the panel.
     const fidPanel = page.locator('.pf-fiduciary');
     await expect(fidPanel).toBeVisible();
+    await visualSnapshot(fidPanel, 'fiduciary-panel.png');
 
     // PM income excluded check
     await expect(fidPanel.getByText(/PM income excluded/i)).toBeVisible();

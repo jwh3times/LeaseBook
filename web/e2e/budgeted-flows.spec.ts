@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { visualSnapshot } from './helpers';
 
 // The budgeted M2 flows (§D step 6), run against the seeded demo org. The seeded admin has no MFA
 // enrolled (M0 seed), so login is email + password → dashboard.
@@ -17,6 +18,13 @@ test('login lands on the dashboard with owner balances visible at 0 clicks', asy
   await login(page);
   await expect(page.getByText('Owner ending balances')).toBeVisible();
   await expect(page.getByText('Hargrove Family Trust')).toBeVisible();
+  // Visual regression (CI-only): flagship dashboard + the KPI strip. Mask the wall-clock-relative
+  // "Collected this month" card (DashboardService computes it from `now`).
+  const collectedCard = page.locator('.pf-card').filter({ hasText: 'Collected this month' });
+  await visualSnapshot(page, 'dashboard-full.png', { fullPage: true, mask: [collectedCard] });
+  await visualSnapshot(page.locator('.pf-statgrid').first(), 'dashboard-kpi-strip.png', {
+    mask: [collectedCard],
+  });
 });
 
 test('⌘K jumps to any tenant in ≤ 2 interactions', async ({ page }) => {

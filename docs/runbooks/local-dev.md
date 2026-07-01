@@ -201,3 +201,24 @@ in file-discovery order, so the cutover org's `/onboarding` route is still empty
 scan hits it — this is intentional and requires no special sequencing on your part.
 
 CI runs the full suite in an `e2e` job (see `.github/workflows/ci.yml` and ADR-022).
+
+### Visual regression
+
+A handful of high-value UI states are guarded by pixel baselines via Playwright's
+`toHaveScreenshot`, wrapped in the `visualSnapshot()` helper (`web/e2e/helpers.ts`). These
+assertions are **CI-only**: the helper no-ops unless `process.env.CI` is set, so they never run
+on a local (Windows) `npm run e2e` — baselines are Linux (`*-chromium-linux.png`), committed under
+`web/e2e-snapshots/`, and gate exclusively in the Ubuntu `e2e` job (ADR-023).
+
+- **Add a snapshot:** call `visualSnapshot(target, 'name.png')` at the state (a `Page` for a
+  full-page shot or a `Locator` for an element); mask any wall-clock-relative region.
+- **Create / update baselines:** run the **Update visual baselines** GitHub Action
+  (`.github/workflows/update-visual-baselines.yml`) on your branch — it regenerates the Linux
+  baselines and commits them to `web/e2e-snapshots/`. Do not hand-generate baselines on Windows
+  (the OS renders differently). After it commits, re-run the `e2e` check (a GITHUB_TOKEN push does
+  not auto-trigger CI — push any commit) to confirm the gate is green. Note: a `workflow_dispatch`
+  workflow is only dispatchable once its file is on `main` (a GitHub constraint), so the **initial**
+  baseline set (before this workflow first merged) was seeded by committing the `-actual.png` images
+  the failing `e2e` run rendered — the same Linux output the workflow would produce.
+- **Review a failure:** download the `playwright-report` artifact from the failed `e2e` run and
+  inspect the diff image; if the change was intended, re-baseline via the workflow.

@@ -1,0 +1,75 @@
+name: Update visual baselines
+
+# Manually dispatched: regenerates the Linux visual baselines on the same Ubuntu setup the e2e job
+# uses, then commits them back to the selected branch. Run this after adding/changing a snapshot, or
+# when an intended UI change makes the gate fail.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update-baselines:
+    name: Regenerate + commit visual baselines
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: dev_postgres_pw
+          POSTGRES_DB: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__Default: Host=localhost;Port=5432;Database=leasebook;Username=leasebook_app;Password=dev_app_pw
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.ref_name }}
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '26'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Create database + roles (bootstrap.sql)
+        run: psql "host=localhost port=5432 user=postgres dbname=postgres" -v ON_ERROR_STOP=1 -f infra/db/bootstrap.sql
+        env:
+          PGPASSWORD: dev_postgres_pw
+      - run: dotnet tool restore
+      - run: dotnet restore src/LeaseBook.Web
+      - name: Apply migrations as the migrator role
+        run: dotnet ef database update --project src/LeaseBook.Web
+        env:
+          ConnectionStrings__Migrations: Host=localhost;Port=5432;Database=leasebook;Username=leasebook_migrator;Password=dev_migrator_pw
+      - name: Seed demo + cutover orgs
+        run: |
+          dotnet run --project src/LeaseBook.Web -- seed --org demo
+          dotnet run --project src/LeaseBook.Web -- seed --org cutover
+      - name: Install web dependencies
+        working-directory: web
+        run: npm ci
+      - name: Install Playwright browser
+        working-directory: web
+        run: npx playwright install --with-deps chromium
+      - name: Regenerate visual baselines
+        working-directory: web
+        run: npm run e2e -- --update-snapshots
+      - name: Commit baselines back to the branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add web/e2e-snapshots
+          if git diff --cached --quiet; then
+            echo "No baseline changes to commit."
+          else
+            git commit -m "chore(m8): update visual baselines"
+            git pull --rebase origin "${{ github.ref_name }}"
+            git push
+          fi

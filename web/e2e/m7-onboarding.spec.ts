@@ -1,6 +1,7 @@
 import path from 'path';
 import { fileURLToPath } from 'node:url';
 import { expect, test, type Page } from '@playwright/test';
+import { visualSnapshot } from './helpers';
 
 // __dirname is not defined in ESM scope; derive it from import.meta.url.
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -362,6 +363,11 @@ test.describe.serial('M7 onboarding wizard', () => {
     const zeroMoney = clearingSection.locator('.pf-money.zero');
     // Cash + accrual clearing residuals are both zero (plus the total-variance Money is zero too).
     await expect(zeroMoney).toHaveCount(3, { timeout: 10_000 });
+    // Visual regression (CI-only): the tied verification variance report.
+    await visualSnapshot(
+      page.getByRole('table', { name: 'Verification variance report' }),
+      'onboarding-tied-report.png',
+    );
 
     await page.screenshot({ path: 'e2e-results/m7-12-tied-report.png', fullPage: true });
 
