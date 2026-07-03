@@ -26,6 +26,10 @@ be rolled into the first release when one is tagged.
 - **Tenant ledger action hub** — record a payment or charge in place (≤ 3 interactions),
   collect/hold/apply deposits and prepayments, void with a linked reversal and a per-entry audit
   drawer, and a filterable, CSV-exportable running-balance ledger.
+- **Banking & reconciliation** — a bank register and clearance layer projected from the immutable
+  journal, reconcile-in-place to $0 with finalize, a per-account period lock, and an immutable
+  reconciliation report, plus CSV statement import with auto-match and de-duplication (and the
+  composite `(org_id, id)` journal-dimension foreign keys from the ADR-008 revisit).
 
 ### Changed
 

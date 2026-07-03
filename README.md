@@ -13,7 +13,7 @@ level — the way fiduciary trust accounting for residential property management
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18-336791.svg)
 
 > **Status: pre-release, under active development.** The foundations, trust-accounting engine, directory,
-> and the tenant ledger action hub are implemented and tested; banking/reconciliation, statements,
+> the tenant ledger action hub, and banking & reconciliation are implemented and tested; statements,
 > bulk operations, and the migration toolkit are on the roadmap. Not yet deployed for production use.
 
 ---
@@ -50,8 +50,9 @@ suite — not by convention. See [`docs/accounting.md`](docs/accounting.md) for 
 | **Trust accounting engine**  | Double-entry journal with dual-basis (cash/accrual) posting templates per business event, a single write path, linked void/reversal, accounting periods, and a continuously-tested invariant suite.                     |
 | **Directory**                | Owners, properties, units, tenants, and lite leases — lists, detail pages, full-text search, a ⌘K command palette, and a live dashboard with all-owner ending balances.                                                 |
 | **Tenant ledger action hub** | Record a payment or charge in place (≤ 3 interactions), collect/hold/apply deposits and prepayments, void with a linked reversal and a per-entry audit drawer, and a filterable, CSV-exportable running-balance ledger. |
+| **Banking & reconciliation** | A bank register and clearance layer projected from the immutable journal, reconcile-in-place to $0 with finalize + per-account period lock and an immutable reconciliation report, and CSV statement import with auto-match and de-duplication.                    |
 
-On the roadmap: banking register & reconciliation, owner statements (PDF/CSV/email), bulk operations
+On the roadmap: owner statements (PDF/CSV/email), bulk operations
 (rent runs, late fees, disbursements), an import-first migration toolkit, and a compliance/hardening
 pass — followed by online payments, owner/tenant portals, and lease/maintenance workflows.
 
@@ -67,7 +68,7 @@ implemented by thin host adapters, so each module stays extractable.
 ASP.NET Core host (LeaseBook.Web)
 ├─ Modules.Accounting    journal, accounts, posting templates, periods  — the core
 ├─ Modules.Directory     orgs, owners, properties, units, tenants, leases-lite
-├─ Modules.Banking       register, import, reconciliation               (roadmap)
+├─ Modules.Banking       register, import, reconciliation
 ├─ Modules.Reporting     statement engine, report catalog, PDF/CSV      (roadmap)
 ├─ Modules.Operations    bulk runs: rent, late fees, disbursements      (roadmap)
 ├─ Modules.Payments      Stripe Connect, webhooks                       (roadmap)
