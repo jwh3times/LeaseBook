@@ -127,7 +127,7 @@ banned-pattern tables, and domain rules that supersede any summary here.
 | Accounting posting logic, journal entries, trust equation changes      | `trust-accounting`                       |
 | Reviewing a diff for correctness bugs before merging                   | `code-reviewer`                          |
 | Azure infra, Bicep, deploy workflows, Key Vault/managed identity, PITR | `azure-infrastructure`                   |
-| Documentation drift after source changes                               | `docs-updater` (auto-runs via Stop hook) |
+| Documentation drift after source changes                               | `docs-updater` (drift auto-detected by the Stop hook) |
 
 Cross-cutting rules (non-negotiable invariants, module boundary, tenancy model) are authoritative
 here in CLAUDE.md and apply to **all agents**. When an agent's guidance and an invariant here
@@ -230,7 +230,9 @@ UX contract (instrumented in telemetry; regressions fail the release checklist):
   Specialist agents table above). For .NET work: `dotnet-api`. For React/UI: `react-frontend`.
   For schema/migrations: `postgres-specialist`. For accounting logic: `trust-accounting`. For
   pre-merge review: `code-reviewer`. For Azure infra/Bicep/deploy wiring: `azure-infrastructure`.
-- **`docs-updater` runs automatically at every session end** via the Stop hook in
-  `.claude/settings.json` — it checks only files that changed and fixes drift in place. Invoke
-  it proactively mid-session if documentation accuracy is in doubt (new ADR candidate, port
-  change, new business event added).
+- **Docs freshness is auto-checked at the end of every response turn** by the read-only Stop
+  hook in `.claude/settings.json`. The hook only *detects* drift (single pre-approved git
+  command + Read/Grep/Glob — it never edits files); when it finds drift it blocks the stop
+  with specifics, and the main session invokes `docs-updater` to fix exactly that drift.
+  Invoke `docs-updater` proactively mid-session if documentation accuracy is in doubt (new
+  ADR candidate, port change, new business event added).

@@ -61,7 +61,7 @@ Next ADR number: count files matching `docs/adr/ADR-*.md` and increment. The for
 
 The index table must list **every** `docs/adr/ADR-*.md` file — not only one created by the current change. Past changes have added ADRs without updating the index, so reconcile the whole table on every audit rather than appending the current ADR alone:
 
-1. List the records on disk: `ls docs/adr/ADR-*.md`.
+1. List the records on disk with the Glob tool (pattern `docs/adr/ADR-*.md`) — not `ls`, which needs shell-permission approval in hook/subagent contexts.
 2. For any ADR file with no row in `docs/adr/README.md`, add one. For any existing row whose title, status, or date no longer matches the file's header, correct it.
 3. Row format matches existing rows — link the number, take the title from the file's `# ADR-NNN …` heading (minus the `ADR-NNN` prefix), and read **Status** and **Date** from the file's header block:
    ```
