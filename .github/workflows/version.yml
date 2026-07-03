@@ -1,0 +1,58 @@
+name: Version
+
+# Stamps every merge to main with an auto-incrementing build number.
+#
+# On each push to main this reads the base semantic version from the root VERSION file,
+# computes the next build number for that base from the existing build tags, and pushes
+# an annotated tag `v<base>.<build>` (e.g. v1.2.3.7) pointing at the merge commit.
+#
+# Why a tag instead of committing a bump back to main:
+#   - it works identically on protected branches (no bypass actor or bump-commit needed);
+#   - it never re-triggers CI or needs [skip ci] loops;
+#   - build numbers restart at 1 whenever the base version is bumped, and 4-part build
+#     tags (v1.2.3.7) can never collide with 3-part release tags (v1.2.3).
+#
+# To see which build a checkout corresponds to: git describe --tags
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write # required to push the build tag
+
+# Serialize runs so two closely-spaced merges can't compute the same build number.
+concurrency:
+  group: version-main
+  cancel-in-progress: false
+
+jobs:
+  tag-build:
+    name: Tag build number
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # full history + tags, needed to compute the next build number
+
+      - name: Compute next build number and push tag
+        run: |
+          base=$(tr -d '[:space:]' < VERSION)
+          if ! echo "$base" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::Base version '$base' is not a plain x.y.z semver."
+            exit 1
+          fi
+          last=$(git tag --list "v${base}.*" | sed "s/^v${base}\.//" | grep -E '^[0-9]+$' | sort -n | tail -1)
+          build=$(( ${last:-0} + 1 ))
+          tag="v${base}.${build}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$tag" -m "Build ${build} of v${base}"
+          git push origin "refs/tags/${tag}"
+          {
+            echo "### Build stamped: \`${tag}\`"
+            echo ""
+            echo "- Base version: \`${base}\`"
+            echo "- Build number: \`${build}\`"
+            echo "- Commit: \`${GITHUB_SHA}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
