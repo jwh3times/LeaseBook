@@ -11,6 +11,13 @@ on:
 permissions:
   contents: read
 
+# Cancel superseded runs on the same ref (e.g. rapid pushes to a PR). A cancelled main run
+# never triggers deploy-dev (its workflow_run gate requires conclusion == success); the
+# superseding run deploys instead.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   backend:
     name: Backend (build + test)
