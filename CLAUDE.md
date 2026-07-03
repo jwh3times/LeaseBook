@@ -92,6 +92,7 @@ offset from the defaults so the stack runs alongside other local projects.
 **Database (run from repo root; `dotnet tool restore` once for `dotnet-ef`):**
 
 - Local Postgres: `./scripts/dev.ps1 up` | `down` | `reset-db` | `psql` (see docs/runbooks/local-dev.md)
+- Full stack in Docker: `./scripts/dev.ps1 app-up` | `app-down` | `app-logs` (details under **Container** below)
 - Add migration: `dotnet ef migrations add <Name> --project src/LeaseBook.Web`
 - Apply migrations (migrator role): `dotnet ef database update --project src/LeaseBook.Web`
 - Seed demo org: `$env:ASPNETCORE_ENVIRONMENT='Development'; dotnet run --project src/LeaseBook.Web -- seed --org demo`
@@ -135,7 +136,7 @@ conflict, the invariant wins.
 ## Architecture (private/TODO.md §1 is the full blueprint)
 
 The patterns below are established and test-enforced in the built modules (Accounting, Directory,
-SharedKernel, Web host); they bind the unbuilt modules (M4+) equally.
+Banking, SharedKernel, Web host); they bind the unbuilt modules (M5+) equally.
 
 - **Modular monolith**: ASP.NET Core host + one project per module
   (`Accounting`, `Directory`, `Banking`, `Reporting`, `Operations`, `Payments`, `SharedKernel`,

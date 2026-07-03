@@ -19,7 +19,8 @@ Instead, use **[GitHub's private vulnerability reporting](https://docs.github.co
 open the repository's **Security** tab and choose **"Report a vulnerability."** This creates a private
 advisory visible only to you and the maintainers.
 
-> Maintainers: if you prefer email reports, add a dedicated security contact address here.
+If you prefer email, send reports to **<jerryholland00@gmail.com>** with the subject line
+`[SECURITY] LeaseBook`.
 
 A good report includes:
 
