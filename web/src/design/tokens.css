@@ -79,7 +79,15 @@ html[data-theme='dark'] {
   --border-strong: oklch(0.37 0.014 252);
   --text: oklch(0.965 0.004 252);
   --text-2: oklch(0.72 0.01 252);
-  --text-3: oklch(0.57 0.012 252);
+  /* WCAG AA (WP-2): muted body text must clear 4.5:1 on the dark surfaces; 0.57 fell to ~4.0. */
+  --text-3: oklch(0.64 0.012 252);
+  /* Dark-theme accent system (WP-2): the accent itself stays vivid (--accent below); on-accent text
+     goes near-black so white-on-bright-teal (2.9:1) is replaced by dark-on-teal (~5:1). --accent-strong,
+     never overridden for dark before this, is the emphasis/accent-text tone (e.g. .pf-navitem.active,
+     .pf-btn.v-soft) — it must read on a dark surface, so in dark mode it lightens the active --accent
+     (color-mix keeps it correct for every accent variant, not just teal). */
+  --accent-fg: oklch(0.18 0.02 235);
+  --accent-strong: color-mix(in oklab, var(--accent) 80%, white);
   --pos: oklch(0.74 0.13 155);
   --pos-soft: color-mix(in oklab, var(--pos) 16%, var(--surface));
   --neg: oklch(0.7 0.15 22);

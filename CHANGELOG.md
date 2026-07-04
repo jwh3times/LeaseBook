@@ -52,7 +52,9 @@ be rolled into the first release when one is tagged.
   guided import-first onboarding wizard — a clean, verified cutover with no fabricated history
   (ADR-020/021).
 - **Product hardening (in progress)** — the Playwright e2e suite now runs in CI with an automated
-  WCAG 2 AA accessibility gate across every routed page (ADR-022), visual-regression baselines on
+  WCAG 2 AA accessibility gate across every routed page (ADR-022) — now scanning both the light and
+  dark themes, with the dark-theme contrast fixes (muted text, on-accent and accent-emphasis
+  foregrounds, and two background-only buttons) it surfaced — visual-regression baselines on
   money-critical states via Playwright's built-in screenshot comparator with CI-rendered Linux
   baselines (ADR-023), and the authored Azure infrastructure (Bicep modules plus dev/prod deploy
   workflows, pending operator enablement).
