@@ -30,6 +30,32 @@ be rolled into the first release when one is tagged.
   journal, reconcile-in-place to $0 with finalize, a per-account period lock, and an immutable
   reconciliation report, plus CSV statement import with auto-match and de-duplication (and the
   composite `(org_id, id)` journal-dimension foreign keys from the ADR-008 revisit).
+- **Owner statements & reporting** — per-owner statements (per property or consolidated, in the
+  org's selected basis) with a structural statement-to-ledger tie-out that blocks issuance on any
+  non-zero variance, a computed fiduciary-integrity panel (PM income excluded, deposits recognized
+  on application, variance $0.00), and a report catalog with real filters and live preview — owner
+  statement, all-owner ending balances, trust-account ledger, bank reconciliation, deposit-liability
+  register, rent roll, delinquency aging, and (PM-facing) management-fee income — each rendered to
+  print-grade PDF (QuestPDF) or CSV, with a delivery seam that stores the immutable sent artifact.
+  The statement engine reads across module schemas as the one sanctioned reporting read layer
+  (ADR-016).
+- **Bulk operations** — preview-confirm-post runs for the batch-shaped work: a monthly rent charge
+  run (idempotent per month, proration at term boundaries), a late-fee run (grace/flat/percent
+  policy with the NC §42-46 statutory clamp), and an owner disbursement run (per-owner net payable,
+  held-back reserve, negative-balance exclusions, folding in the management-fee assessment) — each
+  reviewable before posting and recorded as an auditable run with its preview snapshot
+  (ADR-017/018/019).
+- **Migration toolkit & import-first onboarding** — a tolerant CSV parse/validate library with
+  per-entity AppFolio profiles, balance-forward opening-balance posting against a Migration Clearing
+  account that nets to $0.00 per basis exactly when the import ties, a hard verification sign-off
+  gate (go-live blocked until imported totals reconcile to the AppFolio closing figures), and a
+  guided import-first onboarding wizard — a clean, verified cutover with no fabricated history
+  (ADR-020/021).
+- **Product hardening (in progress)** — the Playwright e2e suite now runs in CI with an automated
+  WCAG 2 AA accessibility gate across every routed page (ADR-022), visual-regression baselines on
+  money-critical states via Playwright's built-in screenshot comparator with CI-rendered Linux
+  baselines (ADR-023), and the authored Azure infrastructure (Bicep modules plus dev/prod deploy
+  workflows, pending operator enablement).
 
 ### Changed
 
@@ -38,6 +64,15 @@ be rolled into the first release when one is tagged.
 ### Fixed
 
 - _Nothing yet._
+
+### Security
+
+- **Seeder production guard** — the demo and cutover seeders refuse to run outside a non-Production
+  environment (fail-closed: an unset environment is treated as Production), so the source-committed
+  admin credential can never provision a reachable org.
+- **CSV formula-injection guard** — free-text cells in the ledger, owner-statement, and
+  report-catalog CSV exports are neutralized (leading `= + - @`, tab, and carriage-return payloads),
+  so an imported AppFolio value cannot execute as a formula when staff open the export in Excel.
 
 <!-- Section vocabulary (Keep a Changelog): Added, Changed, Deprecated, Removed, Fixed, Security.
      When you tag a release, move the relevant Unreleased entries into a dated version section, e.g.:

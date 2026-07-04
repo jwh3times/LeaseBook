@@ -13,23 +13,32 @@ retrospectives live in `private/planning/` (`m{N}_plan.md` / `m{N}_retro.md`).
 **Progress (the `private/TODO.md` checkboxes and `private/planning/*_retro.md` are the live source of
 truth — consult them, don't trust a summary):**
 
-- **M0–M4 are complete and merged to `main`** — built and tested: foundations (solution, RLS, auth,
+- **M0–M7 are complete and merged to `main`** — built and tested: foundations (solution, RLS, auth,
   CI, design-system port), the trust-accounting engine (double-entry journal, posting-template
   catalog, dual-basis ledgers, invariant/property/golden-file harness), the Directory module
-  (owners/properties/units/tenants/leases-lite, index views, ⌘K palette, dashboard v1), the tenant
-  ledger action hub (inline composer, deposit apply, void/reverse, audit drawer), and **Banking &
+  (owners/properties/units/tenants/leases-lite, index views, ⌘K palette, dashboard), the tenant
+  ledger action hub (inline composer, deposit apply, void/reverse, audit drawer), **Banking &
   Reconciliation** (bank register + clearance over the immutable journal, reconcile-in-place → $0 →
   finalize → per-account lock + immutable report, CSV statement import + auto-match + dedup, and the
-  composite `(org_id, id)` journal-dimension FKs from the ADR-008 revisit).
-- **M5 (Owner Statements & Reporting) is the current frontier.** An **M5-prep close-out pass** first
-  cleared five carried M0–M4 loose ends — the dashboard uncleared KPI wired to the live register, the
-  `is_system` exclusion behind a `NotSystem()` funnel + behavioral test, guarded bank-account
-  deactivation, the project subagents in `.claude/agents/`, and the Node pin — leaving the M5 statement
-  engine + report catalog as the next build (see `private/TODO.md` §M5).
-- **Operator-gated remainder of M0** (deferred — not engineering work): Azure OIDC/ACR/Container App
-  deploy wiring, live Key Vault + managed identity, and the first PITR drill (M8 schedules it).
-- The `Banking` module is built (M4); `Reporting`, `Operations`, and `Payments` are scaffolded shells
-  awaiting their milestones (M5–M8 / Phase 2); `Migrator` is a placeholder (M7).
+  composite `(org_id, id)` journal-dimension FKs from the ADR-008 revisit), **Owner Statements &
+  Reporting** (statement engine with a structural statement-to-ledger tie-out, fiduciary-integrity
+  panel, the filterable report catalog, and QuestPDF/CSV output over the ADR-016 reporting read
+  layer), **Bulk Operations** (idempotent rent run, late-fee run, owner disbursement run —
+  preview → confirm → post, each an auditable run), and the **Migration toolkit & import-first
+  onboarding** (tolerant AppFolio CSV import, balance-forward opening postings against a Migration
+  Clearing account, a hard verification sign-off gate, and the onboarding wizard).
+- **M8 (Hardening, Compliance & Beta Launch) is the current frontier**, partially shipped: the
+  `azure-infrastructure` specialist agent, the CI e2e run + automated WCAG 2 AA accessibility gate
+  (ADR-022), and visual-regression baselines on money-critical states (ADR-023). The remaining M8
+  work is planned in **`docs/ROADMAP.md`** — the single consolidated engineering plan (Track A
+  engineering-ready work packages WP-1…WP-12, Track B operator-gated go-live, Track C
+  compliance/beta gates). `docs/ROADMAP.md` is committed and public-safe; `private/TODO.md` remains
+  canonical where the two disagree.
+- **Operator-gated remainder** (deferred — not engineering work): Azure OIDC/ACR/Container App
+  deploy wiring, live Key Vault + managed identity, the first PITR drill, and the
+  deployment-dependent telemetry/alerting — all scheduled by M8 (see `docs/ROADMAP.md` Track B).
+- The `Accounting`, `Directory`, `Banking`, `Reporting`, `Operations`, and `Migrator` modules are
+  built; **`Payments` is the one remaining scaffolded shell** (Phase 2).
 
 The `private/` directory is **gitignored (confidential, local-only)** and will be absent in a
 public clone. It holds everything not meant for the public repo:
@@ -119,14 +128,14 @@ Invoke the relevant specialist **before** working in its domain — don't rely o
 implementation patterns, only for invariants and authority. Each agent has file-cited examples,
 banned-pattern tables, and domain rules that supersede any summary here.
 
-| Work type                                                              | Agent                                    |
-| ---------------------------------------------------------------------- | ---------------------------------------- |
-| .NET features, endpoints, commands/queries, integration tests          | `dotnet-api`                             |
-| React components, hooks, design tokens, frontend tests                 | `react-frontend`                         |
-| Migrations, RLS policies, DB schema design, Postgres queries           | `postgres-specialist`                    |
-| Accounting posting logic, journal entries, trust equation changes      | `trust-accounting`                       |
-| Reviewing a diff for correctness bugs before merging                   | `code-reviewer`                          |
-| Azure infra, Bicep, deploy workflows, Key Vault/managed identity, PITR | `azure-infrastructure`                   |
+| Work type                                                              | Agent                                                 |
+| ---------------------------------------------------------------------- | ----------------------------------------------------- |
+| .NET features, endpoints, commands/queries, integration tests          | `dotnet-api`                                          |
+| React components, hooks, design tokens, frontend tests                 | `react-frontend`                                      |
+| Migrations, RLS policies, DB schema design, Postgres queries           | `postgres-specialist`                                 |
+| Accounting posting logic, journal entries, trust equation changes      | `trust-accounting`                                    |
+| Reviewing a diff for correctness bugs before merging                   | `code-reviewer`                                       |
+| Azure infra, Bicep, deploy workflows, Key Vault/managed identity, PITR | `azure-infrastructure`                                |
 | Documentation drift after source changes                               | `docs-updater` (drift auto-detected by the Stop hook) |
 
 Cross-cutting rules (non-negotiable invariants, module boundary, tenancy model) are authoritative
@@ -231,7 +240,7 @@ UX contract (instrumented in telemetry; regressions fail the release checklist):
   For schema/migrations: `postgres-specialist`. For accounting logic: `trust-accounting`. For
   pre-merge review: `code-reviewer`. For Azure infra/Bicep/deploy wiring: `azure-infrastructure`.
 - **Docs freshness is auto-checked at the end of every response turn** by the read-only Stop
-  hook in `.claude/settings.json`. The hook only *detects* drift (single pre-approved git
+  hook in `.claude/settings.json`. The hook only _detects_ drift (single pre-approved git
   command + Read/Grep/Glob — it never edits files); when it finds drift it blocks the stop
   with specifics, and the main session invokes `docs-updater` to fix exactly that drift.
   Invoke `docs-updater` proactively mid-session if documentation accuracy is in doubt (new

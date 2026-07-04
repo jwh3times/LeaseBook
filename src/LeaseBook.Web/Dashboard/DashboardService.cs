@@ -8,8 +8,8 @@ namespace LeaseBook.Web.Dashboard;
 /// <summary>
 /// Composes the dashboard payload (§C.6) in the <b>host</b> — the legitimate cross-module composition
 /// root (P45 / ADR-007), so dispatching Accounting + Directory read queries via <see cref="ISender"/> and
-/// merging in memory crosses no boundary (Reporting stays dormant; no cross-module SQL). The SPA does no
-/// client-side financial math (TODO M2.4). Owner names are merged from the Directory lookup, the
+/// merging in memory crosses no boundary (no cross-module SQL). The SPA does no client-side financial
+/// math — every figure here is server-computed. Owner names are merged from the Directory lookup, the
 /// <c>AggregateOwners</c> roll-up relabeled "All other owners" (P40) and excluded from
 /// <c>ownersPayable</c> (P41). Uncleared KPIs are sourced live from the M4 bank register.
 /// </summary>

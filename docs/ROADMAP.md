@@ -136,7 +136,7 @@ comment still says "(TODO M2.4)" / "Reporting stays dormant".
 
 **Steps.**
 
-- [ ] **1. CHANGELOG.** One `### Added` bullet block per milestone in the existing M0–M4 voice,
+- [x] **1. CHANGELOG.** One `### Added` bullet block per milestone in the existing M0–M4 voice,
       sourced from the merged PRs/ADRs (never memory): M5 = statements + structural tie-out +
       fiduciary panel + report catalog + QuestPDF/CSV + delivery seam (PR #31, ADR-016); M6 =
       rent/late-fee/disbursement runs + run history (PR #34, ADR-017/018/019); M7 = migration
@@ -144,14 +144,16 @@ comment still says "(TODO M2.4)" / "Reporting stays dormant".
       CI e2e + a11y gate (PR #54, ADR-022), visual regression (PR #59, ADR-023), authored Azure
       infra/workflows. New `### Security`: seeder production guard + CSV formula-injection guard
       (PR #37).
-- [ ] **2. CLAUDE.md "Repository state".** Rewrite: M0–M7 complete; M8 frontier with the shipped
+- [x] **2. CLAUDE.md "Repository state".** Rewrite: M0–M7 complete; M8 frontier with the shipped
       items from §1; `Payments` the only remaining shell; operator-gated remainder. Keep the
       "consult the live plan, not this summary" caveat verbatim.
-- [ ] **3. DashboardService comment.** Comment-only fix; then
+- [x] **3. DashboardService comment.** Comment-only fix; then
       `dotnet format --verify-no-changes --exclude src/LeaseBook.Web/Migrations`.
-- [ ] **4. README sweep.** Verify module-status prose and the Port map still hold (no port
-      changed; e2e/CI sections were refreshed by PR #54/#59 — likely no edit).
-- [ ] **5. Gate + commit.** `docs: catch public docs up to M5–M8 ground truth`.
+- [x] **4. README sweep.** Done — the "What's implemented" table, the Status blockquote, the
+      roadmap prose, and the architecture module tree were all M4-stale (statements/bulk-ops/
+      migration listed as roadmap); brought current and linked to `docs/ROADMAP.md`. Port map
+      unchanged (no port moved).
+- [x] **5. Gate + commit.** `docs: catch public docs up to M5–M8 ground truth`.
 
 ---
 
