@@ -13,8 +13,9 @@ level — the way fiduciary trust accounting for residential property management
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18-336791.svg)
 
 > **Status: pre-release, under active development.** The foundations, trust-accounting engine, directory,
-> the tenant ledger action hub, and banking & reconciliation are implemented and tested; statements,
-> bulk operations, and the migration toolkit are on the roadmap. Not yet deployed for production use.
+> the tenant ledger action hub, banking & reconciliation, owner statements & reporting, bulk operations,
+> and the migration toolkit are implemented and tested; a compliance and hardening pass toward beta is
+> underway. Not yet deployed for production use.
 
 ---
 
@@ -44,17 +45,20 @@ suite — not by convention. See [`docs/accounting.md`](docs/accounting.md) for 
 
 ## What's implemented
 
-| Area                         | Capability                                                                                                                                                                                                                                      |
-| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Foundations**              | Email/password auth with TOTP MFA, role-based authorization, Postgres row-level security as the tenancy boundary, an append-only audit log, a ported design system, and CI.                                                                     |
-| **Trust accounting engine**  | Double-entry journal with dual-basis (cash/accrual) posting templates per business event, a single write path, linked void/reversal, accounting periods, and a continuously-tested invariant suite.                                             |
-| **Directory**                | Owners, properties, units, tenants, and lite leases — lists, detail pages, full-text search, a ⌘K command palette, and a live dashboard with all-owner ending balances.                                                                         |
-| **Tenant ledger action hub** | Record a payment or charge in place (≤ 3 interactions), collect/hold/apply deposits and prepayments, void with a linked reversal and a per-entry audit drawer, and a filterable, CSV-exportable running-balance ledger.                         |
-| **Banking & reconciliation** | A bank register and clearance layer projected from the immutable journal, reconcile-in-place to $0 with finalize + per-account period lock and an immutable reconciliation report, and CSV statement import with auto-match and de-duplication. |
+| Area                             | Capability                                                                                                                                                                                                                                                       |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Foundations**                  | Email/password auth with TOTP MFA, role-based authorization, Postgres row-level security as the tenancy boundary, an append-only audit log, a ported design system, and CI.                                                                                      |
+| **Trust accounting engine**      | Double-entry journal with dual-basis (cash/accrual) posting templates per business event, a single write path, linked void/reversal, accounting periods, and a continuously-tested invariant suite.                                                              |
+| **Directory**                    | Owners, properties, units, tenants, and lite leases — lists, detail pages, full-text search, a ⌘K command palette, and a live dashboard with all-owner ending balances.                                                                                          |
+| **Tenant ledger action hub**     | Record a payment or charge in place (≤ 3 interactions), collect/hold/apply deposits and prepayments, void with a linked reversal and a per-entry audit drawer, and a filterable, CSV-exportable running-balance ledger.                                          |
+| **Banking & reconciliation**     | A bank register and clearance layer projected from the immutable journal, reconcile-in-place to $0 with finalize + per-account period lock and an immutable reconciliation report, and CSV statement import with auto-match and de-duplication.                  |
+| **Owner statements & reporting** | Per-owner statements (per property or consolidated) with a structural statement-to-ledger tie-out that blocks issuance on any variance and a computed fiduciary-integrity panel, plus a filterable report catalog rendered to print-grade PDF (QuestPDF) or CSV. |
+| **Bulk operations**              | Preview-confirm-post rent charge, late-fee, and owner disbursement runs — idempotent, reviewable before posting, and recorded as auditable runs.                                                                                                                 |
+| **Migration & onboarding**       | Tolerant AppFolio CSV import with balance-forward opening postings, a hard verification sign-off gate that blocks go-live until imported totals tie, and an import-first onboarding wizard.                                                                      |
 
-On the roadmap: owner statements (PDF/CSV/email), bulk operations
-(rent runs, late fees, disbursements), an import-first migration toolkit, and a compliance/hardening
-pass — followed by online payments, owner/tenant portals, and lease/maintenance workflows.
+On the roadmap: a compliance and hardening pass toward beta (accessibility, security, performance,
+and live deployment) — followed by online payments, owner/tenant portals, and lease/maintenance
+workflows. See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the detailed plan.
 
 ---
 
@@ -69,10 +73,10 @@ ASP.NET Core host (LeaseBook.Web)
 ├─ Modules.Accounting    journal, accounts, posting templates, periods  — the core
 ├─ Modules.Directory     orgs, owners, properties, units, tenants, leases-lite
 ├─ Modules.Banking       register, import, reconciliation
-├─ Modules.Reporting     statement engine, report catalog, PDF/CSV      (roadmap)
-├─ Modules.Operations    bulk runs: rent, late fees, disbursements      (roadmap)
+├─ Modules.Reporting     statement engine, report catalog, PDF/CSV
+├─ Modules.Operations    bulk runs: rent, late fees, disbursements
 ├─ Modules.Payments      Stripe Connect, webhooks                       (roadmap)
-├─ Modules.Migrator      data-import toolkit                            (roadmap)
+├─ Modules.Migrator      data-import toolkit
 └─ SharedKernel          Money, ids, CQRS spine, tenancy, result types
 ```
 
