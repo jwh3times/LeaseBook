@@ -15,6 +15,16 @@
   engineering supports). **Track C** is compliance/beta-gated (needs the external compliance
   review and the beta customer's data). Work is planned as work packages (**WP-1…WP-12**) whose
   numbering is stable — other documents reference these IDs.
+- **Handoff note (read before starting a decision-gated WP).** This file is self-contained for
+  every engineering-ready WP. But the _decision-gated_ specifics live only in the private overlay
+  (`private/planning/m8_plan.md`, `private/TODO.md`), which is **gitignored and absent from a fresh
+  clone** — so an agent working from a clean checkout will not see them. Those specifics are: the
+  **WP-5** MFA-enforcement UX choice and the **WP-10** prod CIDR ranges (both have a safe
+  engineering default stated in their WP block below, so work is not blocked — but confirm before
+  finalizing), the **Track C** legal/attorney gates and their scheduling, and an **overdue
+  product-strategy decision (D1)**. If you are a new agent and the private overlay is not present,
+  ask the maintainer for the private plan before finalizing any decision-gated WP rather than
+  guessing (per the repository's "verify, don't assume" rule).
 
 ---
 
@@ -216,7 +226,11 @@ export async function seedTheme(
       `test(m8): extend the a11y gate to the dark theme (ADR-022 follow-on)`.
 
 **Out of scope** (stated in the PR): the accent (teal/violet/green/navy) × density matrix — the
-gate covers the default accent in both themes; the matrix is a possible future follow-up.
+gate covers the **default (teal) accent** in both themes. Caveat for a successor: the non-teal dark
+accents received the dark `--accent-strong` fix _incidentally_ (it derives from the active
+`--accent` via `color-mix`, so it is correct for every variant), but they are **not gate-tested** —
+only teal is scanned. Promoting a non-default accent to a supported default should add it to the
+a11y matrix (tracked in §7).
 
 ---
 
@@ -683,19 +697,19 @@ fake for tests (M) → SPA surfaces + e2e (M). **Size: L overall.**
 Not scheduled work — each item names the event that promotes it into a WP. Kept here so deferrals
 stay deliberate instead of forgotten.
 
-| Deferred item                                                         | Where recorded                       | Fires when                                                                                                     |
-| --------------------------------------------------------------------- | ------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
-| OFX/QFX statement import (behind `IStatementParser`)                  | ADR-015                              | a bank can't produce workable CSV / import is scheduled                                                        |
-| Statement read-model materialization (Approach B)                     | ADR-016                              | statement generation measurably slows page loads at ~300-unit scale (WP-9 will produce the first real numbers) |
-| Trust-interest entitlement + trust-fee coverage policy                | ADR-014                              | Track C1 review (this roadmap schedules it)                                                                    |
-| Deposit-disposition wizard deriving refund bank from liability source | ADR-014 consequences / Phase-3 scope | Phase 3 move-out work                                                                                          |
-| Multi-source import (Buildium/Rentec profile registry)                | ADR-020/021                          | a second PM-software source is onboarded                                                                       |
-| Redis (cache/sessions)                                                | ADR-002                              | Phase-2 scale/session need materializes                                                                        |
-| Per-persona RLS for portals (vs app-layer scoping)                    | ADR-003                              | portal endpoint surface grows past a handful (Phase 2–3)                                                       |
-| Percy/Chromatic/Applitools cross-browser diffing                      | ADR-023                              | visual flake beyond the 2% tolerance                                                                           |
-| Accent × density a11y matrix                                          | WP-2 out-of-scope note               | a non-default accent ships as a supported default                                                              |
-| e2e job sharding                                                      | ADR-022 runtime note                 | e2e runtime becomes the CI constraint                                                                          |
-| TypeScript 6 upgrade                                                  | `ts6-unblock-watch.yml`              | automated — the watcher files an issue when `openapi-typescript` unblocks                                      |
+| Deferred item                                                                            | Where recorded                       | Fires when                                                                                                     |
+| ---------------------------------------------------------------------------------------- | ------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| OFX/QFX statement import (behind `IStatementParser`)                                     | ADR-015                              | a bank can't produce workable CSV / import is scheduled                                                        |
+| Statement read-model materialization (Approach B)                                        | ADR-016                              | statement generation measurably slows page loads at ~300-unit scale (WP-9 will produce the first real numbers) |
+| Trust-interest entitlement + trust-fee coverage policy                                   | ADR-014                              | Track C1 review (this roadmap schedules it)                                                                    |
+| Deposit-disposition wizard deriving refund bank from liability source                    | ADR-014 consequences / Phase-3 scope | Phase 3 move-out work                                                                                          |
+| Multi-source import (Buildium/Rentec profile registry)                                   | ADR-020/021                          | a second PM-software source is onboarded                                                                       |
+| Redis (cache/sessions)                                                                   | ADR-002                              | Phase-2 scale/session need materializes                                                                        |
+| Per-persona RLS for portals (vs app-layer scoping)                                       | ADR-003                              | portal endpoint surface grows past a handful (Phase 2–3)                                                       |
+| Percy/Chromatic/Applitools cross-browser diffing                                         | ADR-023                              | visual flake beyond the 2% tolerance                                                                           |
+| Accent × density a11y matrix (non-teal dark accents fixed incidentally, not gate-tested) | WP-2 out-of-scope note               | a non-default accent ships as a supported default                                                              |
+| e2e job sharding                                                                         | ADR-022 runtime note                 | e2e runtime becomes the CI constraint                                                                          |
+| TypeScript 6 upgrade                                                                     | `ts6-unblock-watch.yml`              | automated — the watcher files an issue when `openapi-typescript` unblocks                                      |
 
 ---
 
