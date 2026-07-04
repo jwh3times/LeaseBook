@@ -73,6 +73,12 @@
     0 0 0 1px var(--accent),
     var(--shadow-sm);
 }
+/* A bare <button> falls back to the UA default text color (#000). On light surfaces that reads fine
+   (and matches the committed light baselines), but on the dark surface it is invisible (~1.2:1). Pin
+   the theme text color in dark only, leaving the light rendering byte-identical (WCAG AA; WP-2). */
+html[data-theme='dark'] .pf-report-card {
+  color: var(--text);
+}
 
 .pf-report-ic {
   display: grid;

@@ -33,8 +33,10 @@ attach to, and accessibility was a manual checklist.
 - The `e2e` job is the slowest, most flake-prone CI job (serial, single-worker, boots .NET + Vite +
   Postgres). Mitigated by job isolation (a flake fails only e2e), `retries: 2`, and uploaded
   trace/report artifacts.
-- **Deferred (follow-on specs):** visual-regression baselines (`toHaveScreenshot`) and their
-  cross-platform (Windows-local vs Ubuntu-CI) baseline strategy; extended e2e coverage (Directory
-  navigation, error states, keyboard-only sequences). This ADR covers only the CI e2e foundation +
-  the a11y gate.
-- The axe scan covers the default (light) theme only; dark-theme accessibility is a tracked follow-on, not yet guarded.
+- **Deferred (follow-on specs):** visual-regression baselines (`toHaveScreenshot`) landed separately
+  (ADR-023); the remaining deferrals are dark-theme visual coverage and extended e2e coverage
+  (Directory navigation, error states, keyboard-only sequences). This ADR covers only the CI e2e
+  foundation + the a11y gate.
+- The axe scan now covers both the light and dark themes (WP-2) on the default accent, guarding
+  dark-theme accessibility as a merge gate; the full accent×density matrix remains an out-of-scope
+  future follow-up.

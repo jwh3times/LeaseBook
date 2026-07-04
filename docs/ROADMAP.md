@@ -46,6 +46,10 @@ CLAUDE.md "Repository state" still names M5 as the frontier · import re-import 
 imported (ADR-020 §5 / ADR-021) · dark-theme a11y and visual coverage are tracked follow-ons
 (ADR-022/023 Consequences).
 
+**Closed since this baseline:** **WP-1** (merged, PR #68) fixed the CHANGELOG-ends-at-M4 and
+CLAUDE.md-names-M5-frontier drift. **WP-2** guarded dark-theme a11y (the axe gate now scans both
+themes; ADR-022 amended) — dark-theme _visual_ coverage remains open as WP-3.
+
 ---
 
 ## 2. Track map, sequencing, and the old→new mapping
@@ -170,11 +174,11 @@ themes.
 
 **Steps.**
 
-- [ ] **1. Verify the theme contract (don't assume).** Read `ThemeProvider.tsx`: confirm the
-      localStorage key (believed `leasebook.theme`), stored shape (believed
-      `{ theme, accent, density }`), and that storage wins over `prefers-color-scheme`. Correct
-      the helper below to whatever the file actually does.
-- [ ] **2. Helper.** Add `seedTheme` to `web/e2e/helpers.ts` (WP-3 and WP-4 reuse it):
+- [x] **1. Verify the theme contract (don't assume).** Confirmed in `ThemeProvider.tsx`: key
+      `leasebook.theme`, shape `{ theme, accent, density }`, `readStored()` runs synchronously at
+      first render so storage wins over `prefers-color-scheme`; `data-theme` stamped on `<html>`.
+      The helper below was correct as written.
+- [x] **2. Helper.** Add `seedTheme` to `web/e2e/helpers.ts` (WP-3 and WP-4 reuse it):
 
 ```ts
 export async function seedTheme(
@@ -188,26 +192,31 @@ export async function seedTheme(
 }
 ```
 
-- [ ] **3. Parametrize `web/e2e/a11y.spec.ts`.** Wrap the existing describes in
-      `for (const theme of ['light', 'dark'] as const)`, calling `seedTheme` before `signIn`.
-      Stay inside `a11y.spec.ts` — its sorts-first-before-m7-mutates ordering comment (top of
-      file) is load-bearing; do not split into a second file. Keep the `/operations`
-      `nested-interactive` rule-disable identical in both branches. The light branch must remain
-      behavior-identical to today's gate.
-- [ ] **4. Run and fail.** `npm run e2e -- a11y.spec.ts` against a seeded host. Expected: light ✓;
-      dark reports violations (dominant class: `color-contrast` on dark token values).
-- [ ] **5. Fix tokens.** Contrast fixes in `tokens.css` **dark-theme custom properties only** —
-      mirror the PR #55 approach that re-separated the light muted-text tiers. No per-component
-      color overrides; status never by color alone. Genuinely out-of-scope clusters → documented
-      `exclude` + inline reason + follow-up (ADR-022 rule D4), never silent skips.
-- [ ] **6. Tripwire.** Full `npm run e2e`: all 7 light visual baselines must pass unchanged — a
-      light-pixel diff means a token fix leaked; fix it, don't re-baseline. Plus
-      `npm run lint/typecheck/test` (jsdom tests must not regress from token changes).
-- [ ] **7. Docs + commit.** Amend ADR-022 Consequences (dark theme now guarded); CHANGELOG.
+- [x] **3. Parametrize `web/e2e/a11y.spec.ts`.** Wrapped both describe blocks in
+      `for (const theme of ['light', 'dark'] as const)`, `seedTheme` before `signIn`, theme in the
+      describe titles for unique names. Stayed in one file (sort-first ordering preserved); the
+      `/operations` `nested-interactive` disable is identical in both branches; light branch
+      behavior-identical.
+- [x] **4. Run and fail.** First dark scan: 13 passed / 11 failed — all `color-contrast`, three
+      root causes (muted `--text-3`; accent-emphasis text using the un-overridden light
+      `--accent-strong`; white-on-vivid-accent buttons/avatars at 2.9:1).
+- [x] **5. Fix.** Dark tokens (`--text-3` 0.57→0.64; new dark `--accent-fg` near-black so
+      on-accent text is dark-on-vivid-teal per the maintainer's chosen direction; new dark
+      `--accent-strong` via `color-mix` for accent-emphasis text). **Deviation from the plan's
+      "dark tokens only, no per-component overrides":** two failures were pre-existing component
+      bugs, not token contrast — `.pf-report-card` and `.pf-acct-tab` are `<button>`s with no
+      `color`, so their text fell back to the UA default `#000` (invisible on dark). Fixed with a
+      **dark-scoped** `html[data-theme='dark'] … { color: var(--text) }` per component, which
+      leaves the light rendering (and its visual baselines) byte-identical. No silent excludes.
+- [x] **6. Tripwire.** `npm run e2e -- a11y.spec.ts` → **24 passed** (both themes); lint (0
+      errors), typecheck, 113 unit tests, and `format:check` all clean. Light visual baselines are
+      untouched by construction — every change is dark-theme-scoped (dark token block +
+      `html[data-theme='dark']` component rules); the CI visual gate confirms on the PR.
+- [x] **7. Docs + commit.** ADR-022 Consequences amended (dark now guarded); CHANGELOG updated.
       `test(m8): extend the a11y gate to the dark theme (ADR-022 follow-on)`.
 
-**Out of scope** (state in the PR): the accent (teal/violet/green/navy) × density matrix — the
-gate covers the default accent in both themes; note the matrix as a possible future follow-up.
+**Out of scope** (stated in the PR): the accent (teal/violet/green/navy) × density matrix — the
+gate covers the default accent in both themes; the matrix is a possible future follow-up.
 
 ---
 

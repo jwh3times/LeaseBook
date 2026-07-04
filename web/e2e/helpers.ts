@@ -13,6 +13,17 @@ export const CUTOVER_ADMIN: Credentials = {
   password: 'Cutover-Trust-2026!',
 };
 
+// Force a theme deterministically before the app boots. ThemeProvider reads localStorage
+// ('leasebook.theme' → { theme, accent, density }) synchronously on first render and storage wins
+// over prefers-color-scheme, so seeding via addInitScript (runs before page scripts) pins the theme
+// regardless of the CI runner's OS color-scheme. Seeds theme only → default accent (teal) + density.
+// Must be called before the first navigation (i.e. before signIn).
+export async function seedTheme(page: Page, theme: 'light' | 'dark'): Promise<void> {
+  await page.addInitScript((t) => {
+    localStorage.setItem('leasebook.theme', JSON.stringify({ theme: t }));
+  }, theme);
+}
+
 // Canonical sign-in. Demo admin lands on /dashboard; the empty cutover org redirects to /onboarding.
 export async function signIn(page: Page, creds: Credentials): Promise<void> {
   await page.goto('/login');
