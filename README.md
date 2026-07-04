@@ -44,13 +44,13 @@ suite — not by convention. See [`docs/accounting.md`](docs/accounting.md) for 
 
 ## What's implemented
 
-| Area                         | Capability                                                                                                                                                                                                              |
-| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Foundations**              | Email/password auth with TOTP MFA, role-based authorization, Postgres row-level security as the tenancy boundary, an append-only audit log, a ported design system, and CI.                                             |
-| **Trust accounting engine**  | Double-entry journal with dual-basis (cash/accrual) posting templates per business event, a single write path, linked void/reversal, accounting periods, and a continuously-tested invariant suite.                     |
-| **Directory**                | Owners, properties, units, tenants, and lite leases — lists, detail pages, full-text search, a ⌘K command palette, and a live dashboard with all-owner ending balances.                                                 |
-| **Tenant ledger action hub** | Record a payment or charge in place (≤ 3 interactions), collect/hold/apply deposits and prepayments, void with a linked reversal and a per-entry audit drawer, and a filterable, CSV-exportable running-balance ledger. |
-| **Banking & reconciliation** | A bank register and clearance layer projected from the immutable journal, reconcile-in-place to $0 with finalize + per-account period lock and an immutable reconciliation report, and CSV statement import with auto-match and de-duplication.                    |
+| Area                         | Capability                                                                                                                                                                                                                                      |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Foundations**              | Email/password auth with TOTP MFA, role-based authorization, Postgres row-level security as the tenancy boundary, an append-only audit log, a ported design system, and CI.                                                                     |
+| **Trust accounting engine**  | Double-entry journal with dual-basis (cash/accrual) posting templates per business event, a single write path, linked void/reversal, accounting periods, and a continuously-tested invariant suite.                                             |
+| **Directory**                | Owners, properties, units, tenants, and lite leases — lists, detail pages, full-text search, a ⌘K command palette, and a live dashboard with all-owner ending balances.                                                                         |
+| **Tenant ledger action hub** | Record a payment or charge in place (≤ 3 interactions), collect/hold/apply deposits and prepayments, void with a linked reversal and a per-entry audit drawer, and a filterable, CSV-exportable running-balance ledger.                         |
+| **Banking & reconciliation** | A bank register and clearance layer projected from the immutable journal, reconcile-in-place to $0 with finalize + per-account period lock and an immutable reconciliation report, and CSV statement import with auto-match and de-duplication. |
 
 On the roadmap: owner statements (PDF/CSV/email), bulk operations
 (rent runs, late fees, disbursements), an import-first migration toolkit, and a compliance/hardening
@@ -118,7 +118,7 @@ Key design decisions (each recorded as an ADR in [`docs/adr/`](docs/adr)):
 ├─ web/                     React + TypeScript SPA (Vite); e2e specs in web/e2e
 ├─ tests/                   xUnit test projects (accounting, integration, architecture, shared kernel)
 ├─ infra/                   Bicep modules and environment parameters
-├─ docs/                    ADRs (docs/adr), the accounting model, and runbooks
+├─ docs/                    ADRs (docs/adr), the accounting model, runbooks, and the roadmap
 ├─ scripts/                 local dev helpers (dev.ps1)
 ├─ seed/                    demo seed assets
 ├─ Dockerfile              production image (serves the API and built SPA on one port)
@@ -266,6 +266,8 @@ containers).
 
 - [`docs/accounting.md`](docs/accounting.md) — the trust-accounting model in plain English
 - [`docs/adr/`](docs/adr) — architecture decision records
+- [`docs/ROADMAP.md`](docs/ROADMAP.md) — the consolidated engineering roadmap (tracks and work
+  packages for the remaining build)
 - [`docs/runbooks/`](docs/runbooks) — local development and restore runbooks
 
 ---
