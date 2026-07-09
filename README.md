@@ -107,7 +107,7 @@ Key design decisions (each recorded as an ADR in [`docs/adr/`](docs/adr)):
 | Database   | PostgreSQL 18 (row-level security, `NUMERIC` money)                            |
 | Frontend   | React 19 + TypeScript, Vite, TanStack Query, generated OpenAPI client          |
 | Validation | FluentValidation (one validator per slice)                                     |
-| CSV / PDF  | CsvHelper (in use) · QuestPDF (planned, for statements)                        |
+| CSV / PDF  | CsvHelper (imports/exports) · QuestPDF (statement + report PDFs)               |
 | Telemetry  | OpenTelemetry                                                                  |
 | Testing    | xUnit v3, Shouldly, Testcontainers, CsCheck (property-based), Playwright (e2e) |
 | Infra / CI | Docker, Azure Container Apps + Bicep (`infra/`), GitHub Actions                |

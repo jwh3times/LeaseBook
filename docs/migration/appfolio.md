@@ -1,7 +1,7 @@
 # AppFolio Export Catalog — Migration Research Spike
 
 > **Status: Framework documented — column headers are best-guess candidates pending validation.**
-> See the [Gate section](#gate-validate-with-the-beta-customers-real-exports) below for what is
+> See the [Gate section](#gate-validate-with-real-appfolio-exports) below for what is
 > unverified and how to update it once real exports are in hand.
 
 This document maps each LeaseBook `EntityKind` to the AppFolio report/export an operator pulls,
@@ -168,12 +168,12 @@ Balance or Aged Receivables as of the cutover date. One row per tenant with an o
 
 ---
 
-## Gate: validate with the beta customer's real exports
+## Gate: validate with real AppFolio exports
 
 > **All AppFolio column header names in the tables above are best-guess candidates.** They have
-> NOT been validated against a real AppFolio export. Until the beta customer provides actual
-> export files, treat every header name in this document — and in `AppFolioProfiles.For(...)` —
-> as an unverified approximation.
+> NOT been validated against a real AppFolio export. Until real export files are in hand, treat
+> every header name in this document — and in `AppFolioProfiles.For(...)` — as an unverified
+> approximation.
 
 ### What is unverified
 
@@ -186,7 +186,7 @@ Balance or Aged Receivables as of the cutover date. One row per tenant with an o
 
 ### What to do when real exports are in hand
 
-1. Open the beta customer's CSV files and note the exact header row for each export.
+1. Open the real export CSV files and note the exact header row for each export.
 2. Compare each header against the `candidateHeaders` array in
    `src/LeaseBook.Migrator/Profiles/AppFolioProfiles.cs` for that `EntityKind`.
 3. Add any real header that is missing from the candidate list. Remove guesses that are wrong.
