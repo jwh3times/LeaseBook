@@ -7,8 +7,8 @@ expect in return.
 ## Supported versions
 
 LeaseBook is **pre-release and under active development**. There is not yet a formal supported-version
-matrix; security fixes land on the `main` branch. Once tagged releases exist, this section will list the
-versions that receive security updates.
+matrix; security fixes land on the `main` branch and ship through the next automatic tagged release.
+Once beta support begins, this section will list the versions that receive security updates.
 
 ## Reporting a vulnerability
 

@@ -136,6 +136,18 @@ the container image, and scans for secrets on every push and pull request.
 
 ---
 
+## Versioning and releases
+
+LeaseBook uses plain SemVer tags in `v<major>.<minor>.<build>` format. The root `VERSION` file declares
+the requested major/minor release line and the minimum build for that line. On every merge to `main`,
+`.github/workflows/version.yml` creates an annotated tag and GitHub Release for the merge commit.
+
+If the major/minor line already has tags, the workflow increments the third component. If a major or
+minor bump sets `VERSION` to `x.y.0` and no `vX.Y.*` tag exists yet, the first release is `vX.Y.0`, not
+`vX.Y.1`.
+
+---
+
 ## Reporting security issues
 
 Please do **not** open a public issue for security vulnerabilities. See [SECURITY.md](SECURITY.md) for
