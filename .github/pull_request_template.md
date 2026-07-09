@@ -4,7 +4,7 @@
 
 <!-- A sentence or two. Link the work package / issue. -->
 
-## Definition of Done (CLAUDE.md)
+## Definition of Done (CONTRIBUTING.md)
 
 - [ ] Tests at the right altitude (unit / integration / golden / e2e as appropriate)
 - [ ] Money-touching paths emit audit + telemetry events
@@ -14,7 +14,7 @@
 - [ ] New org-scoped tables go through the RLS helper (schema guard stays green)
 - [ ] No new MediatR / AutoMapper / FluentAssertions (licensed); no float/double for money
 - [ ] Demoable on the seed org
-- [ ] `private/TODO.md` updated if scope changed; ADR added for any §1 default deviation
+- [ ] Scope changes flagged for the maintainer's build plan (`private/TODO.md`); ADR added for any `docs/blueprint.md` default deviation
 
 ## Verification
 

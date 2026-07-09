@@ -8,7 +8,8 @@ LeaseBook is a property-management SaaS for small residential PMs, differentiate
 trust accounting** (NC fiduciary standard) and low click-depth UX. All work is
 governed by `private/TODO.md`, the master build plan: milestones M0–M8 implement PRD Phase 1 and
 are sequenced top-to-bottom; each milestone ends in a demonstrable state. Per-milestone plans and
-retrospectives live in `private/planning/` (`m{N}_plan.md` / `m{N}_retro.md`).
+retrospectives live in `private/planning/` (`m{N}_plan.md` / `m{N}_retro.md`); the m0–m7 retros
+are also published (lightly scrubbed) in `docs/planning/`.
 
 **Progress (the `private/TODO.md` checkboxes and `private/planning/*_retro.md` are the live source of
 truth — consult them, don't trust a summary):**
@@ -44,7 +45,8 @@ The `private/` directory is **gitignored (confidential, local-only)** and will b
 public clone. It holds everything not meant for the public repo:
 
 - `private/TODO.md` — the master build plan (lives here because it contains pricing/strategy
-  detail derived from the PRD)
+  detail derived from the PRD; its §1 architecture blueprint and Definition of Done have
+  committed projections in `docs/blueprint.md` and CONTRIBUTING.md)
 - `private/LeaseBook_PRD_v1.0.md` — product requirements; scope authority
 - `private/claude_design_files/` — interactive UI prototype (design-system source of truth)
   and the Design & Product Analysis Report (priority rationale)
@@ -142,7 +144,7 @@ Cross-cutting rules (non-negotiable invariants, module boundary, tenancy model) 
 here in CLAUDE.md and apply to **all agents**. When an agent's guidance and an invariant here
 conflict, the invariant wins.
 
-## Architecture (private/TODO.md §1 is the full blueprint)
+## Architecture (`docs/blueprint.md` is the committed blueprint; private/TODO.md §1 canonical)
 
 The patterns below are established and test-enforced in the built modules (Accounting, Directory,
 Banking, SharedKernel, Web host); they bind the unbuilt modules (M5+) equally.
@@ -178,7 +180,7 @@ Banking, SharedKernel, Web host); they bind the unbuilt modules (M5+) equally.
   of the journal — never independently maintained state.
 - **Stack** (PRD-locked): .NET current LTS, React + TypeScript (Vite), PostgreSQL, Azure
   Container Apps (East US 2), Key Vault + managed identity. Defaults (EF Core, Bicep,
-  QuestPDF, TanStack Query, etc.) are tabled in private/TODO.md §1 — changing one requires an ADR.
+  QuestPDF, TanStack Query, etc.) are tabled in `docs/blueprint.md` — changing one requires an ADR.
 
 ## Non-negotiable invariants (violating these is a correctness bug, not a style issue)
 
@@ -196,7 +198,7 @@ Trust accounting:
 - Money is `decimal` in C# / `NUMERIC(14,2)` in Postgres. Never float/double.
 - Reconciliation finalize locks the accounting period; postings into locked periods are rejected.
 
-Multi-tenancy (full design in private/TODO.md §1 "Multi-tenancy & row-level security"):
+Multi-tenancy (full design in `docs/blueprint.md` § "Multi-tenancy & row-level security"):
 
 - Postgres **RLS is the security boundary**; EF global query filters are ergonomics only.
 - Org context is set with `SET LOCAL app.org_id` inside the transaction (never session-level
@@ -220,15 +222,16 @@ UX contract (instrumented in telemetry; regressions fail the release checklist):
 - **Follow private/TODO.md order.** Check off boxes as tasks complete; keep it current — it is the
   living plan, and scope changes are edits to it, not side conversations. Items marked
   **🚧 GATE** block the work below them until resolved.
-- The **Definition of Done** at the bottom of private/TODO.md applies to every task (tests at the right
-  altitude, audit/telemetry events on money-touching paths, empty/loading/error states,
-  keyboard path, demoable on the seed org).
+- The **Definition of Done** (published in CONTRIBUTING.md; canonical at the bottom of
+  private/TODO.md) applies to every task (tests at the right altitude, audit/telemetry events on
+  money-touching paths, empty/loading/error states, keyboard path, demoable on the seed org).
 - **Scope discipline**: the PRD's exclusions (HOA, commercial, short-term rentals, native
   mobile, proprietary screening/listing engines, full GL bookkeeping, AI features, public API)
   are rejected on sight through Phase 5; additions require a formal scope change recorded in
   private/TODO.md.
-- **ADRs** (`docs/adr/`): every deviation from a private/TODO.md §1 default gets a short ADR; several
-  are pre-assigned in private/TODO.md (job scheduler choice, Redis deferral, portal scoping).
+- **ADRs** (`docs/adr/`): every deviation from a `docs/blueprint.md` default gets a short ADR; several
+  were pre-assigned in the plan (job scheduler choice, Redis deferral, portal scoping — since
+  recorded as ADR-001/002/003).
 - **Seed data is sacred**: the demo dataset (ported from the prototype's `data.jsx`) doubles as
   the golden-file test fixture — its figures reconcile to the cent and the accounting engine is
   validated against them. Don't casually edit seed numbers; if they change, the golden tests

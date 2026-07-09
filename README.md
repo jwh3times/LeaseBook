@@ -122,7 +122,7 @@ Key design decisions (each recorded as an ADR in [`docs/adr/`](docs/adr)):
 ├─ web/                     React + TypeScript SPA (Vite); e2e specs in web/e2e
 ├─ tests/                   xUnit test projects (accounting, integration, architecture, shared kernel)
 ├─ infra/                   Bicep modules and environment parameters
-├─ docs/                    ADRs (docs/adr), the accounting model, runbooks, and the roadmap
+├─ docs/                    ADRs, the blueprint, the accounting model, runbooks, retros, the roadmap
 ├─ scripts/                 local dev helpers (dev.ps1)
 ├─ seed/                    demo seed assets
 ├─ Dockerfile              production image (serves the API and built SPA on one port)
@@ -268,10 +268,14 @@ containers).
 
 ## Documentation
 
+- [`docs/architecture.md`](docs/architecture.md) — module map and data-flow overview
+- [`docs/blueprint.md`](docs/blueprint.md) — the architecture blueprint (tech defaults, RLS design,
+  trust-accounting data model)
 - [`docs/accounting.md`](docs/accounting.md) — the trust-accounting model in plain English
 - [`docs/adr/`](docs/adr) — architecture decision records
 - [`docs/ROADMAP.md`](docs/ROADMAP.md) — the consolidated engineering roadmap (tracks and work
   packages for the remaining build)
+- [`docs/planning/`](docs/planning) — published milestone retrospectives (M0–M7, point-in-time)
 - [`docs/runbooks/`](docs/runbooks) — local development and restore runbooks
 
 ---

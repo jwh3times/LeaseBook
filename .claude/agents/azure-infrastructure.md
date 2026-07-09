@@ -207,4 +207,4 @@ Before any infra PR is complete, confirm:
 - [ ] No `@secure` parameter has a committed default value
 - [ ] `infra/README.md` port map and secrets contract are in sync with any changes
 - [ ] `docs/runbooks/` cross-references are accurate after module changes
-- [ ] Any deviation from a `private/TODO.md §1` default (scheduler, Redis, etc.) or the Entra-auth role switch gets an ADR in `docs/adr/`
+- [ ] Any deviation from a blueprint default (`docs/blueprint.md`; scheduler, Redis, etc.) or the Entra-auth role switch gets an ADR in `docs/adr/`

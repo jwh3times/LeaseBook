@@ -10,7 +10,8 @@ LeaseBook is a property-management SaaS for small residential property managers,
 correct trust accounting and low click-depth UX. All milestone work is governed by
 `private/TODO.md`, the master build plan. Milestones M0-M8 implement PRD Phase 1 and are sequenced
 top-to-bottom; each milestone ends in a demonstrable state. Per-milestone plans and retrospectives
-live in `private/planning/` as `m{N}_plan.md` and `m{N}_retro.md`.
+live in `private/planning/` as `m{N}_plan.md` and `m{N}_retro.md`; the m0-m7 retros are also
+published (lightly scrubbed) in `docs/planning/`.
 
 `private/TODO.md` checkboxes and `private/planning/*_retro.md` are the live source of truth. Consult
 them directly; do not trust summaries, including this one, for current progress.
@@ -32,7 +33,8 @@ them directly; do not trust summaries, including this one, for current progress.
 The `private/` directory is gitignored, confidential, and local-only. It may be absent in a public
 clone. It holds:
 
-- `private/TODO.md`: master build plan
+- `private/TODO.md`: master build plan (its section-1 architecture blueprint and Definition of
+  Done have committed projections in `docs/blueprint.md` and CONTRIBUTING.md)
 - `private/LeaseBook_PRD_v1.0.md`: product requirements and scope authority
 - `private/claude_design_files/`: interactive UI prototype, design-system source of truth, and
   design/product analysis
@@ -142,8 +144,9 @@ the relevant docs in the same change.
 
 ## Architecture
 
-`private/TODO.md` section 1 is the full blueprint. The patterns below are established and
-test-enforced in built modules and bind future modules.
+`docs/blueprint.md` is the committed blueprint (`private/TODO.md` section 1 is canonical where
+they disagree). The patterns below are established and test-enforced in built modules and bind
+future modules.
 
 - Modular monolith: ASP.NET Core host plus one project per module: `Accounting`, `Directory`,
   `Banking`, `Reporting`, `Operations`, `Payments`, `SharedKernel`, and `Migrator`. Modules reference
@@ -174,7 +177,7 @@ test-enforced in built modules and bind future modules.
   journal, never independently maintained state.
 - Stack is PRD-locked: .NET current LTS, React and TypeScript with Vite, PostgreSQL, Azure Container
   Apps in East US 2, Key Vault and managed identity. Defaults such as EF Core, Bicep, QuestPDF, and
-  TanStack Query are tabled in `private/TODO.md` section 1. Changing one requires an ADR.
+  TanStack Query are tabled in `docs/blueprint.md`. Changing one requires an ADR.
 
 ## Non-Negotiable Invariants
 
@@ -226,14 +229,14 @@ These flows are instrumented in telemetry; regressions fail the release checklis
 - Follow `private/TODO.md` order. Check off boxes as tasks complete and keep it current. Scope
   changes are edits to the plan, not side conversations. Items marked `GATE` block the work below
   them until resolved.
-- The Definition of Done at the bottom of `private/TODO.md` applies to every task: tests at the right
-  altitude, audit/telemetry events on money-touching paths, empty/loading/error states, keyboard path,
-  and demoability on the seed org.
+- The Definition of Done (published in CONTRIBUTING.md; canonical at the bottom of
+  `private/TODO.md`) applies to every task: tests at the right altitude, audit/telemetry events on
+  money-touching paths, empty/loading/error states, keyboard path, and demoability on the seed org.
 - Scope discipline: the PRD exclusions are rejected on sight through Phase 5. These include HOA,
   commercial, short-term rentals, native mobile, proprietary screening/listing engines, full GL
   bookkeeping, AI features, and public API. Additions require a formal scope change recorded in
   `private/TODO.md`.
-- ADRs live in `docs/adr/`. Every deviation from a `private/TODO.md` section 1 default gets a short
+- ADRs live in `docs/adr/`. Every deviation from a `docs/blueprint.md` default gets a short
   ADR.
 - Seed data is sacred. The demo dataset, ported from the prototype's `data.jsx`, doubles as the
   golden-file test fixture. Its figures reconcile to the cent and validate the accounting engine.

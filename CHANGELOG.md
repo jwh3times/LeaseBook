@@ -60,6 +60,11 @@ For a major or minor bump, `x.y.0` is a valid first release when that line has n
   baselines (ADR-023), and the authored Azure infrastructure (Bicep modules plus dev/prod deploy
   workflows, pending operator enablement).
 
+- **Published engineering docs** — the architecture blueprint (`docs/blueprint.md`: tech defaults,
+  the multi-tenancy/RLS design, the trust-accounting data model), the Definition of Done
+  (CONTRIBUTING.md), and the M0–M7 milestone retrospectives (`docs/planning/`) are now committed,
+  so a public clone no longer depends on gitignored planning files for any engineering reference.
+
 ### Changed
 
 - _Nothing yet._
