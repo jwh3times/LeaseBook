@@ -118,6 +118,20 @@ Docker must be running for the integration and accounting suites.
 
 ---
 
+## Definition of Done
+
+Every task — feature, fix, or refactor — meets this bar before it merges (the pull-request
+template's checklist expands on it):
+
+1. Code reviewed against the project's constraints (click budgets, append-only ledgers, org scoping).
+2. Tests at the right altitude (unit for logic, invariant suite touched if accounting-adjacent,
+   e2e if a budgeted flow changed) — green in CI.
+3. Telemetry/audit events emitted where the feature touches money or budgeted interactions.
+4. Empty/loading/error states handled; keyboard path works; AA contrast respected.
+5. Demoable on the seeded demo org without manual data fixes.
+
+---
+
 ## Pull request checklist
 
 Before requesting review, confirm:

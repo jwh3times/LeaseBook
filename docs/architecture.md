@@ -115,7 +115,10 @@ Docker Compose — `./scripts/dev.ps1 app-up` brings up database → migrate →
 ## Related documents
 
 - [README](../README.md) — overview, getting started, and the port map
+- [`blueprint.md`](blueprint.md) — the committed architecture blueprint (tech defaults, RLS design,
+  trust-accounting data model)
 - [`accounting.md`](accounting.md) — the trust-accounting model in plain English
+- [`planning/`](planning/) — published milestone retrospectives (point-in-time)
 - [`adr/`](adr/) — architecture decision records (start with the [index](adr/README.md))
 - [`runbooks/`](runbooks/) — local development and restore runbooks
 - [`CLAUDE.md`](../CLAUDE.md) — the engineering constraints and non-negotiable invariants

@@ -17,7 +17,9 @@ docs/
   adr/                         — Architecture Decision Records (ADR-000 → ADR-021+)
     template.md                — canonical ADR format
     README.md                  — ADR index
+  ROADMAP.md                   — the consolidated engineering plan (tracks + work packages)
   architecture.md              — module dependency diagram + data flow overview
+  blueprint.md                 — committed architecture blueprint (projection of private/TODO.md §1)
   accounting.md                — double-entry model, trust equation, event catalog
   runbooks/
     local-dev.md               — dev setup, port map, seed commands, common ops
@@ -25,6 +27,7 @@ docs/
   migration/
     appfolio.md                — AppFolio export mapping guide
     parallel-run.md            — parallel-run checklist artifact for the beta cutover
+  planning/                    — published m0–m7 milestone retros (point-in-time; do not rewrite)
   superpowers/                 — AI specs and plans (internal; not customer-facing)
     plans/
     specs/
@@ -49,7 +52,7 @@ For every architectural or technology decision introduced by the current change,
 - A module boundary exception is being made (e.g., the reporting read-layer exception to ADR-007)
 - A new background job / scheduler mechanism is introduced
 - An invariant is being relaxed or a new one added
-- A decision diverges from private/TODO.md §1 defaults
+- A decision diverges from the blueprint defaults (`docs/blueprint.md`; canonical: private/TODO.md §1)
 
 **Not required for:** adding a feature within existing patterns, new endpoints following the established slice pattern, new migrations following the migration conventions.
 
@@ -158,5 +161,7 @@ For each `⚠️` item, either fix it yourself (if the change is mechanical) or 
 
 - Do **not** update `private/TODO.md` checkboxes — that's the developer's job during task work.
 - Do **not** touch `docs/superpowers/` — those are AI planning artifacts, not maintained documentation.
+- Do **not** rewrite `docs/planning/` retros — they are point-in-time historical records (confidentiality
+  redactions are the one exception).
 - Do **not** rewrite ADRs that are already accepted — add a superseding ADR if a decision changes.
 - The `private/` directory is gitignored and local-only. Read it for context; never commit changes to it.
