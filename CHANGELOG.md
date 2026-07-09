@@ -3,9 +3,10 @@
 All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
-adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). LeaseBook is pre-release and
-has not yet cut a tagged version; everything implemented so far lives under **Unreleased** and will
-be rolled into the first release when one is tagged.
+adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). LeaseBook is pre-release;
+released builds are tagged automatically from `VERSION` on merges to `main` in
+`v<major>.<minor>.<build>` format, with the third component auto-incremented per major/minor line.
+For a major or minor bump, `x.y.0` is a valid first release when that line has no existing tag.
 
 ## [Unreleased]
 
@@ -77,7 +78,8 @@ be rolled into the first release when one is tagged.
   so an imported AppFolio value cannot execute as a formula when staff open the export in Excel.
 
 <!-- Section vocabulary (Keep a Changelog): Added, Changed, Deprecated, Removed, Fixed, Security.
-     When you tag a release, move the relevant Unreleased entries into a dated version section, e.g.:
+     When you prepare a release-line changelog entry, move the relevant Unreleased entries into a
+     dated version section, e.g.:
 
 ## [0.1.0] - YYYY-MM-DD
 ### Added
