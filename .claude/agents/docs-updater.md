@@ -24,7 +24,7 @@ docs/
     restore.md                 — disaster recovery / PITR runbook
   migration/
     appfolio.md                — AppFolio export mapping guide
-    parallel-run.md            — parallel-run checklist artifact for beta customer
+    parallel-run.md            — parallel-run checklist artifact for the beta cutover
   superpowers/                 — AI specs and plans (internal; not customer-facing)
     plans/
     specs/

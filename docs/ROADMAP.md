@@ -1,9 +1,10 @@
 # LeaseBook Roadmap — the consolidated engineering plan
 
 - **Date:** 2026-07-04
-- **Supersedes:** `docs/IMPLEMENTATION_PLAN.md` (PR #66, merged 2026-07-04 — its items A–H are
-  absorbed below; mapping table in §2) and the maintainer's separate milestone plan for the same
-  scope. This file is now the **single committed engineering roadmap**.
+- **Supersedes:** `docs/IMPLEMENTATION_PLAN.md` (PR #66, merged 2026-07-04; that file has since
+  been removed from the tree — its items A–H are absorbed below; mapping table in §2) and the
+  maintainer's separate milestone plan for the same scope. This file is now the **single
+  committed engineering roadmap**.
 - **Authority note:** the canonical build plan is `private/TODO.md`, which is gitignored and
   absent from a public clone. This roadmap is its committed, engineering-only projection: where
   scope lives only in `private/` (product strategy, Phase-2 detail, anything commercial) that is
@@ -13,7 +14,7 @@
 - **Structure:** three gating tracks. **Track A** is engineering-ready (buildable and verifiable
   locally, no Azure access). **Track B** is operator-gated (needs Azure / GitHub-org access;
   engineering supports). **Track C** is compliance/beta-gated (needs the external compliance
-  review and the beta customer's data). Work is planned as work packages (**WP-1…WP-12**) whose
+  review and real AppFolio export data). Work is planned as work packages (**WP-1…WP-12**) whose
   numbering is stable — other documents reference these IDs.
 - **Handoff note (read before starting a decision-gated WP).** This file is self-contained for
   every engineering-ready WP. But the _decision-gated_ specifics live only in the private overlay
@@ -102,7 +103,7 @@ C1 NCREC-facing compliance review (ADR-014 names it; the two deferred fiduciary 
 inputs) · C2 AppFolio real-column validation (`docs/migration/appfolio.md` §Gate) · C3 beta
 cutover via the M7 toolkit.
 
-### Mapping from `docs/IMPLEMENTATION_PLAN.md` (PR #66)
+### Mapping from the former `docs/IMPLEMENTATION_PLAN.md` (PR #66, since removed)
 
 | Old item                                    | Now        |
 | ------------------------------------------- | ---------- |
@@ -649,7 +650,7 @@ code and infra but not as documents. Engineering drafts; external review finaliz
       deferred defaults with explicit policy; each change lands as an ADR-014 amendment or a new
       ADR + posting-template change with invariant tests.
 - [ ] **C2 — AppFolio real-column validation** (`docs/migration/appfolio.md` §Gate; clears only
-      with the beta customer's real export files): validate/update the `AppFolioProfiles` header
+      with real AppFolio export files): validate/update the `AppFolioProfiles` header
       candidates, drop the best-guess caveats, run the full import on a staging org, and confirm
       single-vs-multi trust accounts — if multiple, the `owner_balances` routing disambiguation
       (WP-7's design note; today `ResolveOperatingTrustAsync` picks the oldest Trust-purpose

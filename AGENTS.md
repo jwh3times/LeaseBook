@@ -7,7 +7,7 @@ both files intentionally.
 ## Repository State
 
 LeaseBook is a property-management SaaS for small residential property managers, differentiated on
-correct trust accounting, low click-depth UX, and flat pricing. All milestone work is governed by
+correct trust accounting and low click-depth UX. All milestone work is governed by
 `private/TODO.md`, the master build plan. Milestones M0-M8 implement PRD Phase 1 and are sequenced
 top-to-bottom; each milestone ends in a demonstrable state. Per-milestone plans and retrospectives
 live in `private/planning/` as `m{N}_plan.md` and `m{N}_retro.md`.

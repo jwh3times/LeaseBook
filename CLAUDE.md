@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Repository state
 
 LeaseBook is a property-management SaaS for small residential PMs, differentiated on **correct
-trust accounting** (NC fiduciary standard), low click-depth UX, and flat pricing. All work is
+trust accounting** (NC fiduciary standard) and low click-depth UX. All work is
 governed by `private/TODO.md`, the master build plan: milestones M0–M8 implement PRD Phase 1 and
 are sequenced top-to-bottom; each milestone ends in a demonstrable state. Per-milestone plans and
 retrospectives live in `private/planning/` (`m{N}_plan.md` / `m{N}_retro.md`).

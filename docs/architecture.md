@@ -97,9 +97,11 @@ grant on them, so corrections can only ever be linked reversals.
 ## Background work
 
 Durable background jobs (statement generation/email, the nightly trust-equation sweep, future
-webhook retries) run on **Hangfire backed by PostgreSQL** — no extra infrastructure, with a dashboard
-the solo operator can watch. Redis is deliberately deferred until a concrete need appears. Every job
-establishes org context transactionally before touching data and throws if it is missing. See
+webhook retries) are designed to run on **Hangfire backed by PostgreSQL** — no extra infrastructure.
+Hangfire is **not yet integrated**: the first real integration is the nightly invariant sweep
+(ROADMAP WP-11), and the Hangfire dashboard is deliberately not mounted in Phase 1 (attack surface).
+Redis is deliberately deferred until a concrete need appears. Every job must establish org context
+transactionally before touching data and throw if it is missing. See
 [ADR-001](adr/ADR-001-background-job-scheduler.md) and [ADR-002](adr/ADR-002-defer-redis.md).
 
 ## Deployment

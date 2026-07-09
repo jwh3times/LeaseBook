@@ -1,7 +1,7 @@
 # M7 — Migration Toolkit & Import-First Onboarding: Design Spec
 
 > **Status:** Approved design, pre-implementation. **Milestone:** M7 (`private/TODO.md` §M7).
-> **Scope authority:** PRD §M7 (months 14–16 toolkit) / Report §5.1 ("the unpriced risk") + §4.8
+> **Scope authority:** PRD §M7 / Report §5.1 + §4.8
 > (import-first onboarding). **Predecessor:** M6 (Bulk Operations) — see `private/planning/m6_retro.md`.
 > **Date:** 2026-06-23.
 
@@ -9,8 +9,8 @@
 
 M7 turns the empty `LeaseBook.Migrator` shell (`MigratorPlaceholder.cs`) into the toolkit that gets a
 real PM off AppFolio and onto LeaseBook **without re-keying** and **without fake history**. The target
-is the founding beta customer: a ~150-unit NC family-owned PM currently on AppFolio. Migration is the
-single largest unpriced adoption risk (Report §5.1) — if the first month's owner balances don't tie to
+is a representative small NC PM coming off AppFolio (~150 units is the design scale). Migration is the
+single largest adoption risk (Report §5.1) — if the first month's owner balances don't tie to
 the cent, the customer never trusts the platform.
 
 M7 delivers a **balance-forward cutover**: historical ledgers stay in AppFolio; LeaseBook starts clean
@@ -19,7 +19,7 @@ them as **opening journal entries**, and a **verification gate** proves — line
 imported totals tie to AppFolio before go-live is permitted.
 
 The whole engine + UX is built now. The **one** piece that waits on real data is the concrete AppFolio
-column maps: the research spike that catalogs the beta customer's actual export formats is a 🚧 GATE
+column maps: the research spike that catalogs real AppFolio export formats is a 🚧 GATE
 that feeds the parser's column-mapping profiles. M7 ships the tolerant parser **seam** + a documented
 default profile so plugging in the real columns is configuration, not a redesign.
 
@@ -32,7 +32,7 @@ the research spike unblocks.
 
 | #   | Decision                          | Choice                                                                                                                                  |
 | --- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| D1  | AppFolio export data availability | **Relationship exists, samples not yet in hand.** Build the full architecture + a tolerant/configurable parser seam; defer column maps |
+| D1  | AppFolio export data availability | **Real export samples not yet in hand.** Build the full architecture + a tolerant/configurable parser seam; defer column maps |
 | D2  | Onboarding + verification ambition | **Full guided wizard + hard, recorded sign-off gate** (Report §4.8/§5.1 P0)                                                            |
 | D3  | Opening-balance posting model     | **Approach A** — extend `IBalanceForward` (`PostOpeningPositionAsync`) + per-org **Migration Clearing** account; clearing nets to $0/basis = structural tie-out. Existing batched seam + demo golden untouched |
 | D4  | Cutover timing                    | **Clean month-end boundary**, balance-forward only (no historical ledger import — history stays in AppFolio)                            |

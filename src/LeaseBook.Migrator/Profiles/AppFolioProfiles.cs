@@ -5,8 +5,8 @@ namespace LeaseBook.Migrator.Profiles;
 
 /// <summary>
 /// The documented <c>appfolio-default</c> column-mapping profiles (spec §6). Header candidates are
-/// best-known guesses; the research spike (WP-6 / docs/migration/appfolio.md) replaces them with the
-/// beta customer's actual headers. Operators can also remap unrecognized columns in the wizard.
+/// best-known guesses; the research spike (WP-6 / docs/migration/appfolio.md) replaces them with
+/// real AppFolio headers. Operators can also remap unrecognized columns in the wizard.
 /// Plugging in real columns is editing this data, not code.
 /// </summary>
 public static class AppFolioProfiles
