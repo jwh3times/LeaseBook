@@ -17,13 +17,15 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 ### Added
 
 - **Published engineering docs** — the architecture blueprint (`docs/blueprint.md`: tech defaults,
-  the multi-tenancy/RLS design, the trust-accounting data model), the Definition of Done
-  (CONTRIBUTING.md), and the M0–M7 milestone retrospectives (`docs/planning/`) are now committed,
-  so a public clone no longer depends on gitignored planning files for any engineering reference.
+  the multi-tenancy/RLS design, and the trust-accounting data model) and the Definition of Done
+  (`CONTRIBUTING.md`) are now committed, so a public clone has the durable engineering references
+  needed to understand and contribute to the codebase.
 
 ### Changed
 
-- _Nothing yet._
+- **Documentation containment** — the public roadmap now presents shipped capabilities and broad
+  direction without internal execution details; milestone retrospectives, planning-session
+  artifacts, and unvalidated migration research remain private.
 
 ### Fixed
 

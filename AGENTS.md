@@ -10,8 +10,7 @@ LeaseBook is a property-management SaaS for small residential property managers,
 correct trust accounting and low click-depth UX. All milestone work is governed by
 `private/TODO.md`, the master build plan. Milestones M0-M8 implement PRD Phase 1 and are sequenced
 top-to-bottom; each milestone ends in a demonstrable state. Per-milestone plans and retrospectives
-live in `private/planning/` as `m{N}_plan.md` and `m{N}_retro.md`; the m0-m7 retros are also
-published (lightly scrubbed) in `docs/planning/`.
+live in `private/planning/` as `m{N}_plan.md` and `m{N}_retro.md`.
 
 `private/TODO.md` checkboxes and `private/planning/*_retro.md` are the live source of truth. Consult
 them directly; do not trust summaries, including this one, for current progress.
@@ -22,8 +21,8 @@ them directly; do not trust summaries, including this one, for current progress.
 - M8, Hardening, Compliance and Beta Launch, is the current frontier. It is partially shipped:
   `azure-infrastructure` specialist guidance, CI e2e run plus automated WCAG 2 AA accessibility gate
   from ADR-022, and visual-regression baselines for money-critical states from ADR-023. Remaining M8
-  work is planned in `docs/ROADMAP.md`. `docs/ROADMAP.md` is public-safe; `private/TODO.md` remains
-  canonical where they disagree.
+  work is summarized publicly in `docs/ROADMAP.md`; detailed sequencing lives in
+  `private/roadmap.md` and `private/TODO.md`, with `private/TODO.md` canonical where they disagree.
 - Operator-gated remainder is deferred and is not ordinary engineering work: Azure OIDC, ACR,
   Container App deploy wiring, live Key Vault and managed identity, the first PITR drill, and
   deployment-dependent telemetry/alerting.

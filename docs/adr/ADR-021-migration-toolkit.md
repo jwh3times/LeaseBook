@@ -109,12 +109,11 @@ in hand. M7 ships:
 - A documented `appfolio-default` profile per entity kind in `AppFolioProfiles.For(EntityKind)`.
 - A tolerant parser seam: unrecognized headers surface as `RowError`s; the wizard lets the
   operator remap columns inline.
-- `docs/migration/appfolio.md` — the research spike framework documenting what needs validation
-  and how to update the profiles once real exports arrive.
+- A private research spike documenting what needs validation and how to update the profiles once
+  real exports arrive; unvalidated mappings are not presented as public product documentation.
 
-The gate (`docs/migration/appfolio.md §Gate`) defines what is unverified and the exact edit
-procedure. Plugging in real headers is a string-array update in `AppFolioProfiles.cs` — no
-architectural change.
+The validation gate is maintained with the private migration research. Plugging in real headers is
+a string-array update in `AppFolioProfiles.cs` — no architectural change.
 
 **Consequence of this deferral:** the M7 exit criteria use a synthetic cutover fixture (CSV files
 with known-good figures) rather than real AppFolio exports. The real cutover run on a
