@@ -1,16 +1,18 @@
 # Architecture Blueprint
 
-- **Provenance:** this is the committed, engineering-only projection of the master build plan's
-  §1 "Architecture Blueprint" (`private/TODO.md`, gitignored and absent from a public clone) —
-  the design locked before M0 code was written. The private plan stays canonical: when the two
-  disagree, the private plan wins and this file gets fixed. Per the repository's confidentiality
-  rule this file carries no pricing, strategy, or customer detail.
+- **Audience:** Contributors and maintainers
+- **Status:** Historical architecture baseline
+- **Owner:** Maintainers
+- **Last reviewed:** 2026-07-09
+- **Provenance:** this is the public engineering baseline locked before M0 code was written. It
+  carries no pricing, strategy, customer detail, or private delivery sequencing.
 - **Authority:** decisions marked **PRD-locked** were fixed by the product requirements document;
   the rest are defaults decided here. **Changing any default requires an ADR**
   ([`docs/adr/`](adr/README.md)) in the same pull request — several defaults have since been
-  decided or refined that way and are annotated with their ADR below.
+  decided or refined that way and are annotated with their ADR below. Accepted ADRs and the living
+  [`architecture.md`](architecture.md) supersede this baseline where the implemented system evolved.
 - The binding day-to-day rules (invariants, module boundary, working conventions) live in
-  [`CLAUDE.md`](../CLAUDE.md); [`architecture.md`](architecture.md) is the narrative overview of
+  [`AGENTS.md`](../AGENTS.md); [`architecture.md`](architecture.md) is the narrative overview of
   the same system, and [`ROADMAP.md`](ROADMAP.md) summarizes public product direction.
 
 ## Technology defaults
@@ -21,7 +23,7 @@
 | Frontend            | React + TypeScript, Vite build                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | PRD-locked (Vite = default) |
 | Database            | PostgreSQL (Azure Database for PostgreSQL Flexible Server)                                                                                                                                                                                                                                                                                                                                                                                                                                          | PRD-locked                  |
 | ORM / data access   | EF Core + Npgsql; raw SQL allowed for reporting queries                                                                                                                                                                                                                                                                                                                                                                                                                                             | Default                     |
-| Cache / jobs        | Background jobs via a durable scheduler — **Hangfire w/ Postgres storage** (picked in ADR-001; first intended use is the nightly invariant sweep). Redis (Azure Cache) for sessions & rate limiting — **deliberately deferred** until a concrete need appears (ADR-002)                                                                                                                                                                                                                                   | Decided (ADR-001, ADR-002)  |
+| Cache / jobs        | Background jobs via a durable scheduler — **Hangfire w/ Postgres storage** (picked in ADR-001; first intended use is the nightly invariant sweep). Redis (Azure Cache) for sessions & rate limiting — **deliberately deferred** until a concrete need appears (ADR-002)                                                                                                                                                                                                                             | Decided (ADR-001, ADR-002)  |
 | Hosting             | Azure Container Apps, region East US 2                                                                                                                                                                                                                                                                                                                                                                                                                                                              | PRD-locked                  |
 | IaC                 | Bicep (Azure-native, solo-friendly)                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Default                     |
 | CI/CD               | GitHub Actions → ACR → Container Apps                                                                                                                                                                                                                                                                                                                                                                                                                                                               | Default                     |

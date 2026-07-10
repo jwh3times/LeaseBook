@@ -7,7 +7,7 @@
 ## Context
 
 What is the problem or force that requires a decision? What constraints apply (PRD lock,
-CLAUDE.md invariant, license, solo-operator capacity)? Keep it factual.
+AGENTS.md invariant, license, solo-operator capacity)? Keep it factual.
 
 ## Decision
 

@@ -20,12 +20,17 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   the multi-tenancy/RLS design, and the trust-accounting data model) and the Definition of Done
   (`CONTRIBUTING.md`) are now committed, so a public clone has the durable engineering references
   needed to understand and contribute to the codebase.
+- **Documentation governance** — a public documentation index, classification and ownership policy,
+  and sanitized product-scope contract now make the repository self-contained for contributors.
 
 ### Changed
 
 - **Documentation containment** — the public roadmap now presents shipped capabilities and broad
   direction without internal execution details; milestone retrospectives, planning-session
   artifacts, and unvalidated migration research remain private.
+- **Canonical documentation ownership** — architecture, accounting, development commands, product
+  scope, and the Definition of Done now have explicit public owners; `CLAUDE.md` is a tool adapter
+  over the canonical cross-agent contract in `AGENTS.md`.
 
 ### Fixed
 

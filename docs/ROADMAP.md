@@ -1,5 +1,10 @@
 # LeaseBook Roadmap
 
+- **Audience:** Evaluators, contributors, and maintainers
+- **Status:** Living public direction
+- **Owner:** Maintainers
+- **Last reviewed:** 2026-07-09
+
 LeaseBook is pre-release software. This page communicates shipped capabilities and broad product
 direction; it is not an implementation plan or a commitment to specific dates. Detailed sequencing,
 security findings, compliance workpapers, and customer-specific planning are maintained privately.
@@ -44,7 +49,7 @@ After Phase 1 and beta readiness, planned product areas include online payments,
 portals, fuller lease management, maintenance workflows, and vacancy/listing workflows. Detailed scope
 and ordering will be defined at each phase boundary rather than inferred from this summary.
 
-## Sources Of Truth
+## Sources of Truth
 
 - [Architecture](architecture.md) describes the system as implemented.
 - [Accounting](accounting.md) describes the trust-accounting model and shipped workflows.

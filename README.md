@@ -122,7 +122,7 @@ Key design decisions (each recorded as an ADR in [`docs/adr/`](docs/adr)):
 ├─ web/                     React + TypeScript SPA (Vite); e2e specs in web/e2e
 ├─ tests/                   xUnit test projects (accounting, integration, architecture, shared kernel)
 ├─ infra/                   Bicep modules and environment parameters
-├─ docs/                    ADRs, the blueprint, the accounting model, runbooks, retros, the roadmap
+├─ docs/                    architecture, accounting, ADRs, product scope, runbooks, and roadmap
 ├─ scripts/                 local dev helpers (dev.ps1)
 ├─ seed/                    demo seed assets
 ├─ Dockerfile              production image (serves the API and built SPA on one port)
@@ -156,25 +156,10 @@ you're done: `./scripts/dev.ps1 app-down`.
 
 ### Develop against the codebase
 
-Run the backend and frontend separately for a fast inner loop:
-
-```bash
-# 1. Start local Postgres (creates the database roles via bootstrap.sql)
-./scripts/dev.ps1 up
-
-# 2. Apply migrations and seed the demo organization
-dotnet tool restore
-dotnet ef database update --project src/LeaseBook.Web
-ASPNETCORE_ENVIRONMENT=Development dotnet run --project src/LeaseBook.Web -- seed --org demo
-
-# 3. Run the API (http://localhost:5080)
-ASPNETCORE_ENVIRONMENT=Development dotnet run --project src/LeaseBook.Web
-
-# 4. Run the SPA (http://localhost:5373, proxies /api → :5080)
-cd web && npm install && npm run dev
-```
-
-See [`docs/runbooks/local-dev.md`](docs/runbooks/local-dev.md) for the full local-development guide.
+For the split backend/frontend inner loop, database lifecycle, migrations, seeding, invariant checks,
+and the complete verification command set, follow the
+[local-development runbook](docs/runbooks/local-dev.md). That runbook owns development commands; this
+README keeps only the fastest product startup path and the authoritative port map.
 
 ### Port map
 
@@ -216,37 +201,6 @@ projects. Only host-side ports move; container ports (and the Azure image) never
 
 ---
 
-## Common commands
-
-**Backend** (from the repo root):
-
-```bash
-dotnet build LeaseBook.slnx -c Debug          # build (nullable + warnings-as-errors)
-dotnet test LeaseBook.slnx                     # all tests (Docker must be running)
-dotnet format --verify-no-changes --exclude src/LeaseBook.Web/Migrations   # format / CI gate
-ASPNETCORE_ENVIRONMENT=Development dotnet run --project src/LeaseBook.Web -- check-invariants --org demo
-```
-
-**Database** (`dotnet tool restore` once for `dotnet-ef`):
-
-```bash
-./scripts/dev.ps1 up | down | reset-db | psql
-dotnet ef migrations add <Name> --project src/LeaseBook.Web
-dotnet ef database update --project src/LeaseBook.Web
-```
-
-**Web** (from `web/`):
-
-```bash
-npm run dev | lint | typecheck | test | build
-npm run api:generate   # regenerate the TS client from the running host's OpenAPI doc
-npx playwright install chromium   # install the browser once before first e2e run
-npm run e2e            # Playwright end-to-end specs (full suite)
-npm run e2e -- a11y.spec.ts        # a11y gate only (WCAG 2 AA via @axe-core/playwright)
-```
-
----
-
 ## Testing
 
 Correctness is the product, so the accounting module carries the highest test rigor in the codebase:
@@ -261,21 +215,25 @@ Correctness is the product, so the accounting module carries the highest test ri
 - **Architecture tests** enforce the module boundaries.
 - **End-to-end tests** (Playwright) cover the budgeted user flows against a seeded host.
 
-Docker must be running for the integration and accounting suites (they spin up real PostgreSQL
-containers).
+Docker must be running for the integration and accounting suites. The
+[contributing guide](CONTRIBUTING.md#testing-expectations) defines which suites a change requires;
+the [local-development runbook](docs/runbooks/local-dev.md) owns the commands.
 
 ---
 
 ## Documentation
 
+- [`docs/README.md`](docs/README.md) — documentation index and audience-based navigation
+- [`docs/product-scope.md`](docs/product-scope.md) — supported product boundary and explicit non-goals
 - [`docs/architecture.md`](docs/architecture.md) — module map and data-flow overview
-- [`docs/blueprint.md`](docs/blueprint.md) — the architecture blueprint (tech defaults, RLS design,
-  trust-accounting data model)
+- [`docs/blueprint.md`](docs/blueprint.md) — the historical architecture baseline (tech defaults,
+  RLS design, trust-accounting data model)
 - [`docs/accounting.md`](docs/accounting.md) — the trust-accounting model in plain English
 - [`docs/adr/`](docs/adr) — architecture decision records
 - [`docs/ROADMAP.md`](docs/ROADMAP.md) — shipped capabilities and high-level product direction
 - [`docs/migration/parallel-run.md`](docs/migration/parallel-run.md) — migration parallel-run checklist
 - [`docs/runbooks/`](docs/runbooks) — local development and restore runbooks
+- [`docs/documentation-policy.md`](docs/documentation-policy.md) — classification and canonical ownership
 
 ---
 

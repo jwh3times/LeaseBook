@@ -8,11 +8,10 @@ you get a useful answer as quickly as possible.
 
 Most setup and usage questions are already answered in the docs:
 
+- [`docs/README.md`](docs/README.md) — documentation index by audience and task
 - [README](README.md) — overview, getting started, and the [port map](README.md#port-map)
 - [`docs/runbooks/local-dev.md`](docs/runbooks/local-dev.md) — the full local-development guide
-- [`docs/architecture.md`](docs/architecture.md) — how the system fits together
-- [`docs/accounting.md`](docs/accounting.md) — the trust-accounting model in plain English
-- [`docs/adr/`](docs/adr) — the reasoning behind the significant design decisions
+- [`docs/product-scope.md`](docs/product-scope.md) — supported scope and explicit non-goals
 
 ## Reporting a bug
 

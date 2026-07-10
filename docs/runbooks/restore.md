@@ -1,5 +1,10 @@
 # Runbook: Point-in-time restore (PostgreSQL Flexible Server)
 
+- **Audience:** Deployment operators and maintainers
+- **Status:** Draft runbook; blocked on the first live restore drill
+- **Owner:** Maintainers
+- **Last reviewed:** 2026-07-09
+
 Skeleton procedure. Real timings and screenshots are filled in after the first restore drill (M8
 schedules the drill).
 
