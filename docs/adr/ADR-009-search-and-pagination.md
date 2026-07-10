@@ -30,11 +30,11 @@ For search, the realistic options were:
   each searchable column (`owners.name`, `properties.address`, `units.label`, `tenants.display_name`,
   `bank_accounts.name`; §C.1).
 - `GET /api/search?q=&limit=` runs a **typed UNION** across the five entity sources, filtering with the
-  **word-similarity operator `<%`** (the query is fuzzy-matched as a *word/substring* of the column) and
+  **word-similarity operator `<%`** (the query is fuzzy-matched as a _word/substring_ of the column) and
   ranking by `word_similarity(q, col)` desc, then label. `<%` is GIN-indexable via `gin_trgm_ops`, so
   short queries hit the index rather than scanning. The handler lowers `pg_trgm.word_similarity_threshold`
   with `SET LOCAL` for the request transaction only (it dies with the tx — safe, M-E11). Whole-string
-  similarity (`%`) was rejected: "carter" has low similarity to "Jasmine Carter" but high *word*
+  similarity (`%`) was rejected: "carter" has low similarity to "Jasmine Carter" but high _word_
   similarity, which is the interaction we want.
 - Results are `{ type, id, label, sublabel, score }`, `WHERE NOT is_system` (aggregate rows never
   surface, P40/M2-E2), default limit 20 (max 50), `q` 1–100 chars (empty → 400 via the validation

@@ -10,8 +10,8 @@ A tenant payment that exceeds what is owed has a well-defined home: the `Payment
 auto-splits the excess into a prepayment liability (P31), so a receivable is never driven negative. An
 **application** of held funds — `DepositApplied(Target = AgainstCharges)` or `PrepaymentApplied` — has
 no such overflow path. The M1 review (carried into the m1/m2 retros as a "the M3 composer owns this"
-finding) noted that the engine guarded these applications against the *held liability* (you cannot apply
-more deposit than is held) but **not** against the *open receivable*. So an over-application would clear
+finding) noted that the engine guarded these applications against the _held liability_ (you cannot apply
+more deposit than is held) but **not** against the _open receivable_. So an over-application would clear
 the receivable past zero and silently leave it negative — a figure on the tenant ledger that disagrees
 with reality. No existing invariant caught this: I4 covers liabilities (held ≥ 0), not receivable sign.
 
@@ -43,7 +43,7 @@ cannot represent honestly.
   is the legitimate prepayment path. The tenant ledger stays trustworthy.
 - The over-application is caught at the engine, not the UI, so every caller (composer, future bulk runs,
   imports) inherits the rule — the UI only has to render the message.
-- Two pre-existing engine tests that applied against charges with *no* prior receivable (they exercised
+- Two pre-existing engine tests that applied against charges with _no_ prior receivable (they exercised
   line structure, not a realistic flow) now post a rent charge first; they assert the same line set
   under a valid precondition.
 

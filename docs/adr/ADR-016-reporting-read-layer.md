@@ -12,7 +12,7 @@ M5 introduces owner statement generation. Three approaches were considered:
 Breaks ADR-007's cross-module boundary. The per-basis filter (`basis IN (@b,'both')`), PM-income
 exclusion (`account_class = 'owner_equity'` + `owner_id`-scoped), and the section tie-out are
 trust-correctness rules that live in Accounting. Scattering them into a Reporting query produces a
-second, divergable implementation of how the journal is read correctly.
+second implementation of the journal read rules that can diverge.
 
 **B. A denormalized read-model schema (statement rows pre-materialized into a Reporting table).**
 Durable read models introduce an eventual-consistency gap between the journal and the statement; any

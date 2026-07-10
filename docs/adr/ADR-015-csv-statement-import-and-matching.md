@@ -47,7 +47,7 @@ A re-imported statement must not double-count. Each line gets a `dedup_hash` =
 whitespace runs (banks vary these between exports) but date and amount are exact. `statement_lines`
 carries `bank_account_id` (denormalized from its import) with `UNIQUE (org_id, bank_account_id,
 dedup_hash)`, so dedup spans **all** imports for that account, not just one file. The importer skips
-colliding lines (against prior imports *and* identical earlier rows in the same file) and reports the
+colliding lines (against prior imports _and_ identical earlier rows in the same file) and reports the
 count; the unique index is the database backstop. **Plan §B.6 listed the dedup unique on
 `statement_lines` but omitted `bank_account_id` from its column list — the column is required for the
 constraint to span imports, so it was added.**

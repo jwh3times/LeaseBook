@@ -121,6 +121,7 @@ public sealed class ImportEndpoints : IEndpointModule
 ```
 
 Rules:
+
 - `MapGroup` sets auth policy + tag; individual routes don't repeat `.RequireAuthorization`
 - Bind → dispatch → map result. No logic in the endpoint lambda
 - `TypedResults.Ok(…)` for success; `Results.NotFound()` (not `TypedResults`) for null 404s
@@ -161,6 +162,7 @@ internal sealed class BankClearingAdapter(ISender sender) : IBankClearing
 All accounting mutations go through business events → posting templates → journal entries. Never write to `journal_entries`/`journal_lines` directly.
 
 Events are in `Accounting/Features/Posting/Events/BusinessEvents.cs`. Each is a sealed record:
+
 ```csharp
 public sealed record PaymentReceived(
     Guid TenantId, Guid PropertyId, Guid OwnerId, Guid UnitId,
@@ -233,13 +235,13 @@ public sealed class MyFeatureTests(PostgresFixture fixture)
 
 ## Banned patterns
 
-| Pattern | Use instead |
-|---|---|
-| MediatR | Hand-rolled `ISender` / `ICommandHandler` |
-| AutoMapper | Manual mapping in the slice or a static `Map()` method |
-| MVC controllers | `IEndpointModule` + `MapGroup` + `MapGet`/`MapPost` |
-| Cross-module EF LINQ | Consumer-owned `Contracts` port + host adapter |
-| `float`/`double` for money | `decimal` in C#, `NUMERIC(14,2)` in Postgres |
-| UPDATE/DELETE on `journal_entries`/`journal_lines` | Linked reversal entry (`reverses_entry_id`) |
-| Global query filter as the only tenancy guard | RLS policy is the real boundary; EF filter is ergonomics |
-| `new Guid()` for IDs | `UuidV7.NewId()` from SharedKernel |
+| Pattern                                            | Use instead                                              |
+| -------------------------------------------------- | -------------------------------------------------------- |
+| MediatR                                            | Hand-rolled `ISender` / `ICommandHandler`                |
+| AutoMapper                                         | Manual mapping in the slice or a static `Map()` method   |
+| MVC controllers                                    | `IEndpointModule` + `MapGroup` + `MapGet`/`MapPost`      |
+| Cross-module EF LINQ                               | Consumer-owned `Contracts` port + host adapter           |
+| `float`/`double` for money                         | `decimal` in C#, `NUMERIC(14,2)` in Postgres             |
+| UPDATE/DELETE on `journal_entries`/`journal_lines` | Linked reversal entry (`reverses_entry_id`)              |
+| Global query filter as the only tenancy guard      | RLS policy is the real boundary; EF filter is ergonomics |
+| `new Guid()` for IDs                               | `UuidV7.NewId()` from SharedKernel                       |

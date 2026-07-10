@@ -30,12 +30,12 @@ has no UPDATE on journal tables). So status lives in **`bank_line_status`** (`jo
 upserted** — absence of a row ≡ `uncleared`. It is operational metadata, not a journal row, so the
 runtime role **keeps INSERT/UPDATE** on it (no `RevokeAppendOnly`). The journal and its golden figures
 stay byte-stable. The register reads it through a `LEFT JOIN`; clearing/un-clearing and finalize are
-raw upserts. FKs *into* `journal_lines` stay single-column (the journal PK is globally unique, P61);
+raw upserts. FKs _into_ `journal_lines` stay single-column (the journal PK is globally unique, P61);
 the FK from `bank_reconciliations` to `bank_accounts` is composite `(org_id, bank_account_id)` (P60).
 
 ### 3. The register is bank-**account** lines, not the bank dimension
 
-Many journal lines carry a `bank_account_id` *dimension* for attribution (an owner-equity cash line, a
+Many journal lines carry a `bank_account_id` _dimension_ for attribution (an owner-equity cash line, a
 pm-income line). Only lines whose **account class** is `trust_bank`/`pm_operating_bank` move the bank
 book, so the register, the cleared-balance math, and the posting lock all filter on `account_class`,
 never on the dimension alone.
@@ -67,7 +67,7 @@ attribution change would break it. The three templates therefore move the **PM's
 - **`TrustTransfer`** — `DR toBank / CR fromBank` + `DR pm_income@fromBank / CR pm_income@toBank`: cash
   and its held-fee attribution move together, so each account's equation stays balanced.
 
-Two policy questions are **deferred** (recorded here, not resolved): (a) interest *entitlement* on
+Two policy questions are **deferred** (recorded here, not resolved): (a) interest _entitlement_ on
 trust funds (PM vs owner vs a state housing fund) — M4 credits the PM's held position; (b) the
 operational rule that a trust bank fee must be covered by sufficient held PM fees (the PM keeping trust
 whole) is enforced procedurally, not structurally, in Phase 1 — the posting balances regardless.
@@ -85,5 +85,5 @@ whole) is enforced procedurally, not structurally, in Phase 1 — the posting ba
 
 When trust-account interest handling or trust-fee coverage becomes a compliance requirement (NCREC
 review, M8), replace the deferred defaults with explicit policy and record the change. If transfers of
-*owner* or *deposit* funds between accounts ever become a real workflow, they need their own template —
+_owner_ or _deposit_ funds between accounts ever become a real workflow, they need their own template —
 `TrustTransfer` deliberately moves only PM-held funds.

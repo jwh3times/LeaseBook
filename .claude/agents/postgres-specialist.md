@@ -11,11 +11,11 @@ You own all Postgres work in LeaseBook: schema design, RLS policy authorship, mi
 
 ## Three-role model
 
-| Role | Purpose | Grants |
-|---|---|---|
-| `leasebook_migrator` | Schema owner; runs EF migrations | DDL; SELECT/INSERT/UPDATE/DELETE on all tables |
-| `leasebook_app` | Runtime; RLS-subject | SELECT/INSERT on data tables; NO UPDATE/DELETE on journal/audit tables |
-| `leasebook_ops` | Read-only; pgAdmin / support queries | SELECT only |
+| Role                 | Purpose                              | Grants                                                                 |
+| -------------------- | ------------------------------------ | ---------------------------------------------------------------------- |
+| `leasebook_migrator` | Schema owner; runs EF migrations     | DDL; SELECT/INSERT/UPDATE/DELETE on all tables                         |
+| `leasebook_app`      | Runtime; RLS-subject                 | SELECT/INSERT on data tables; NO UPDATE/DELETE on journal/audit tables |
+| `leasebook_ops`      | Read-only; pgAdmin / support queries | SELECT only                                                            |
 
 The app **never** connects as `leasebook_migrator`. Migrations run as a one-shot container at deploy time (EF bundle via the `migrator` Dockerfile target), never at app startup. `FORCE ROW LEVEL SECURITY` on every org-scoped table means `leasebook_app`'s own rows are filtered even if the role owns the table.
 
@@ -35,6 +35,7 @@ migrationBuilder.Sql("""
 ```
 
 `Rls.EnableOrgRls` does three things in one call:
+
 1. Adds `org_id UUID NOT NULL` (if not already present — for tables seeded by EF)
 2. Creates `FOR ALL USING (org_id = current_setting('app.org_id', true)::uuid) WITH CHECK (…)` policy
 3. Applies `ALTER TABLE … FORCE ROW LEVEL SECURITY`
@@ -61,9 +62,11 @@ await tx.CommitAsync(ct);
 ### composite `(org_id, id)` FKs for journal dimensions
 
 Journal lines reference directory entities (tenants, properties, owners, units) via composite FKs:
+
 ```sql
 FOREIGN KEY (org_id, tenant_id) REFERENCES directory.tenants (org_id, id)
 ```
+
 This ensures a line's `org_id` matches its referenced entity's `org_id` at the constraint level — RLS can't enforce cross-table consistency on its own.
 
 ### Soft spot: `asp_net_users`
@@ -128,13 +131,13 @@ Never use `autoincrement`/`SERIAL` for primary keys — use `gen_random_uuid()` 
 
 ## Query pattern selection
 
-| Scenario | Use |
-|---|---|
-| Simple filter / join / projection | EF LINQ (`db.Set<T>().Where(…).Select(…)`) |
-| Window functions (`OVER`, `PARTITION BY`) | `db.Database.SqlQuery<T>($"…")` |
-| `FILTER (WHERE …)` aggregations | `db.Database.SqlQuery<T>($"…")` |
-| Trigram similarity (`%>>`, `<->`) | `db.Database.SqlQuery<T>($"…")` |
-| Full-text search | `db.Database.SqlQuery<T>($"…")` |
+| Scenario                                  | Use                                        |
+| ----------------------------------------- | ------------------------------------------ |
+| Simple filter / join / projection         | EF LINQ (`db.Set<T>().Where(…).Select(…)`) |
+| Window functions (`OVER`, `PARTITION BY`) | `db.Database.SqlQuery<T>($"…")`            |
+| `FILTER (WHERE …)` aggregations           | `db.Database.SqlQuery<T>($"…")`            |
+| Trigram similarity (`%>>`, `<->`)         | `db.Database.SqlQuery<T>($"…")`            |
+| Full-text search                          | `db.Database.SqlQuery<T>($"…")`            |
 
 ### Raw SQL rules
 

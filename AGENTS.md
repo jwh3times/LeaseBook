@@ -106,6 +106,7 @@ Run `dotnet tool restore` once for `dotnet-ef`.
 - Regenerate API client, with API host running on `:5080`: `npm run api:generate`
 - e2e, against a seeded host: `npm run e2e`
 - e2e accessibility gate only: `npm run e2e -- a11y.spec.ts`
+- Public documentation quality and policy gate: `npm run docs:check`
 
 ### Container
 

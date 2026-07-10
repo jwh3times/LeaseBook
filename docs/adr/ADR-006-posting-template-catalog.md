@@ -20,14 +20,14 @@ journal rows, and how the two bases coexist.
 ## Decision
 
 - **Templates are versioned C#, one per business event** (`Features/Posting/Events` +
-  `AccountingEventService`), posted through the single `IPostingService` write path — *not*
+  `AccountingEventService`), posted through the single `IPostingService` write path — _not_
   DB-configurable rows. A wrong posting is a correctness bug we want to catch in code review and
   unit tests, not a data-entry mistake in a config table. Each template's exact line set is pinned
   by a worked-example test, and a catalog-wide CsCheck property proves every event balances per
   basis by construction.
 
 - **Dual basis is a line tag, not a transformation.** Each line carries `basis ∈ cash·accrual·both`;
-  a `both` line participates in *each* basis. A basis report is then a query
+  a `both` line participates in _each_ basis. A basis report is then a query
   (`WHERE basis IN (@basis,'both')`), never a conversion pass. Consequence the code must respect:
   summing across all three tags double-counts the `both` set (pitfall M-E2), so balance/ledger
   queries always filter to exactly one requested basis plus `both`.
@@ -39,7 +39,7 @@ journal rows, and how the two bases coexist.
   - `PMFeesSwept` — moves held management fees from the operating trust to the PM's own operating
     bank. Without it the trust equation cannot survive a fee transfer (the cash leaves trust but the
     income attribution must move with it).
-  `EntryVoided` is reserved for the reversal service and is never posted directly.
+    `EntryVoided` is reserved for the reversal service and is never posted directly.
 
 - **Overpayment auto-splits (P31).** `PaymentReceived` posts the portion up to the tenant's open
   receivable against the receivable, and any excess to the `tenant_prepayments` **liability** — never
@@ -65,7 +65,7 @@ journal rows, and how the two bases coexist.
   queries must be basis-correct; both are enforced by tests, not convention.
 - **Hangfire stays deferred (P33).** ADR-001 chose Hangfire, but M1 has no recurring job: the
   invariant sweep ships as a domain service + `check-invariants` CLI verb, runnable by hand/CI. The
-  first milestone that needs a *scheduled* job wires Hangfire to `OrgScopedExecutor`. This is a timing
+  first milestone that needs a _scheduled_ job wires Hangfire to `OrgScopedExecutor`. This is a timing
   call, not a new default.
 - **Period auto-create can mask a wrong date (M-E10):** posting into a far-future month silently opens
   that period. Acceptable in M1 (no UI surface); the M3 composer adds date-sanity validation.

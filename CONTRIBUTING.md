@@ -143,14 +143,15 @@ Before requesting review, confirm:
 - [ ] `dotnet build LeaseBook.slnx -c Debug` is clean (0/0) and `dotnet test LeaseBook.slnx` is green.
 - [ ] `dotnet format --verify-no-changes --exclude src/LeaseBook.Web/Migrations` reports no changes.
 - [ ] Web `npm run lint`, `npm run typecheck`, `npm run test`, and `npm run build` are green (if the SPA changed).
+- [ ] `npm run docs:check` from `web/` is green when public documentation or its tooling changed.
 - [ ] Accounting-adjacent changes keep the invariant/property/golden suites green.
 - [ ] New org-scoped tables have their RLS policy; the schema guard passes.
 - [ ] A regenerated, committed `schema.d.ts` accompanies any API-contract change (CI's `schema-drift` job enforces it).
 - [ ] An ADR accompanies any significant design decision.
 - [ ] No secrets, credentials, or confidential planning material are committed (the secrets scan runs in CI).
 
-CI runs the full backend test suite against real PostgreSQL, type-checks and builds the web app, builds
-the container image, and scans for secrets on every push and pull request.
+CI runs the full backend test suite against real PostgreSQL, validates public documentation, type-checks
+and builds the web app, builds the container image, and scans for secrets on every push and pull request.
 
 ---
 

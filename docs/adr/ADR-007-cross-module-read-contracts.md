@@ -6,9 +6,9 @@
 
 ## Context
 
-Through M1 the modular monolith had only *host → module* calls (the host references every module;
+Through M1 the modular monolith had only _host → module_ calls (the host references every module;
 modules reference `SharedKernel` only — enforced absolutely by `ModuleBoundaryTests`). M2 introduces
-the first *module → module* data dependency: the Directory index screens must show financial figures
+the first _module → module_ data dependency: the Directory index screens must show financial figures
 the Accounting module owns (a tenant's balance, an owner's operating/deposit equity), and creating a
 bank account in Directory must provision the matching chart-of-accounts account in Accounting.
 
@@ -16,8 +16,8 @@ There are two tempting shortcuts, both of which we reject:
 
 1. **A cross-schema raw-SQL JOIN** — a Directory query handler reading `journal_lines` directly. This
    is invisible to the architecture tests (they analyse assemblies/namespaces, not SQL strings), so the
-   boundary is breached without any guard noticing. Worse, it re-implements *how the journal is read
-   correctly* — the per-basis filter (`basis IN (@b,'both')`; `both` lines count once per basis) and
+   boundary is breached without any guard noticing. Worse, it re-implements _how the journal is read
+   correctly_ — the per-basis filter (`basis IN (@b,'both')`; `both` lines count once per basis) and
    the structural PM-income exclusion (no `pm_income` line reachable by an owner-facing query) — outside
    the one module that owns those invariants. Trust correctness is the product; scattering its read
    rules across modules is how a figure on a list silently disagrees with the ledger, or PM income
@@ -36,7 +36,7 @@ maintainability, not throughput.
 cross-module LINQ, no referencing another module's entity types. A cross-module read goes through a
 **consumer-owned port implemented by a host adapter** (Dependency Inversion):
 
-- The **consuming** module declares the interface it needs in its *own* `Contracts` namespace
+- The **consuming** module declares the interface it needs in its _own_ `Contracts` namespace
   (e.g. `Directory.Contracts.ITenantFinancials`) and depends only on that abstraction.
 - The **host** (which legitimately references every module) implements the port with a thin adapter
   that delegates to the producing module — dispatching the producer's existing read query via
@@ -46,12 +46,12 @@ cross-module LINQ, no referencing another module's entity types. A cross-module 
 - Adapters are DI-scoped and dispatch on the ambient `ISender`, so the read rides the request's
   RLS-bearing transaction (`SET LOCAL app.org_id`) — no new connection, no context leak.
 
-**Within a module, raw SQL is fine** — `db.Database.SqlQuery<T>` for the module's *own* analytical
+**Within a module, raw SQL is fine** — `db.Database.SqlQuery<T>` for the module's _own_ analytical
 reads (window functions, `FILTER`, trigram) crosses no boundary. Prefer EF LINQ for simple
 intra-module reads (type-safe, the org query filter applies for free); reserve `SqlQuery<T>` for
 queries LINQ cannot express.
 
-**The one explicit exception: a dedicated reporting/read layer.** A module whose job *is* cross-cutting
+**The one explicit exception: a dedicated reporting/read layer.** A module whose job _is_ cross-cutting
 reporting (the M5 statement/report engine; a future read-model/reporting schema) may read broadly
 across the schema on purpose — that is a named, deliberate place for cross-entity reads, not an ad-hoc
 JOIN buried in a feature handler. Such a layer records its own ADR when it arrives.

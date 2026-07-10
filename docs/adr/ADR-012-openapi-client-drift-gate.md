@@ -7,8 +7,8 @@
 ## Context
 
 P11/WP-08 generate the SPA's typed client (`web/src/api/schema.d.ts`) from the host's OpenAPI
-document, and the README states the consequence plainly: *"the frontend and backend contracts
-cannot silently drift."* But the only thing enforcing that was a human remembering to run
+document, and the README states the consequence plainly: _"the frontend and backend contracts
+cannot silently drift."_ But the only thing enforcing that was a human remembering to run
 `npm run api:generate` (which needs the host running on `:5080`) and a reviewer catching a stale
 file — a CONTRIBUTING checkbox, not a gate. A changed endpoint shipped with a stale `schema.d.ts`
 would compile and pass CI. The guarantee was convention, not enforcement.
@@ -18,7 +18,7 @@ Two facts shaped the fix:
 - **The doc can be produced without running the app.** `Microsoft.AspNetCore.OpenApi`'s companion
   build tool (`Microsoft.Extensions.ApiDescription.Server`) emits the document during `dotnet build`.
   In testing it produced a document **byte-identical in content** to the live `:5080` document —
-  only the *order* of paths differed (build-time enumeration vs. live `EndpointDataSource` order).
+  only the _order_ of paths differed (build-time enumeration vs. live `EndpointDataSource` order).
 - **The generator runs the app's startup up to `app.Run()`.** Its `GetDocument` tool executes
   `Program.Main`, which reaches the startup role-seeding (`RoleSeeder.EnsureRolesAsync`) — a database
   call — before `app.Run()`. With no database it fails. Requiring a fully-migrated Postgres just to
