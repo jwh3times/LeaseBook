@@ -45,12 +45,12 @@ accounting event so the existing constraint deduplicates repeat runs.
 
 **`SourceRef` key convention (record here for WP-2/3/4):**
 
-| Run type | Target | `SourceRef` format |
-|---|---|---|
-| Rent | Lease | `rent:{year}-{month:00}:lease={leaseId}` |
-| Late fee | Lease | `latefee:{year}-{month:00}:lease={leaseId}` |
-| Disbursement fee | Owner | `disbursement-fee:{year}-{month:00}:owner={ownerId}` |
-| Disbursement | Owner | `disbursement:{year}-{month:00}:owner={ownerId}` |
+| Run type         | Target | `SourceRef` format                                   |
+| ---------------- | ------ | ---------------------------------------------------- |
+| Rent             | Lease  | `rent:{year}-{month:00}:lease={leaseId}`             |
+| Late fee         | Lease  | `latefee:{year}-{month:00}:lease={leaseId}`          |
+| Disbursement fee | Owner  | `disbursement-fee:{year}-{month:00}:owner={ownerId}` |
+| Disbursement     | Owner  | `disbursement:{year}-{month:00}:owner={ownerId}`     |
 
 ### 3. Run history tables — append-only, RLS-enforced
 
@@ -70,6 +70,7 @@ explicit code).
 ### 4. Run engine pattern
 
 `RunEngine.ConfirmAsync` runs inside the ambient org-scoped transaction. It:
+
 1. Creates a `BulkRun` header (unseeded summary).
 2. Calls `strategy.ConfirmAsync(run, selectedIds, posting, ct)` — the strategy owns the
    per-item posting loop and exception handling.

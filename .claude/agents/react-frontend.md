@@ -30,12 +30,12 @@ All money display flows through `formatMoney` or `<Money>`. Never `toFixed`, nev
 
 ```ts
 // web/src/design/formatMoney.ts
-import { formatMoney, formatMoneyPlain, formatMoneyK } from '@/design';
+import { formatMoney, formatMoneyPlain, formatMoneyK } from "@/design";
 
-formatMoney(0)          // → "—"  (em-dash, not "$0.00")
-formatMoney(-150.5)     // → "−$150.50"  (Unicode minus U+2212, not hyphen)
-formatMoney(1295, { sign: true })   // → "+$1,295.00"
-formatMoneyK(12500)     // → "$12.5k"  (dashboard KPIs)
+formatMoney(0); // → "—"  (em-dash, not "$0.00")
+formatMoney(-150.5); // → "−$150.50"  (Unicode minus U+2212, not hyphen)
+formatMoney(1295, { sign: true }); // → "+$1,295.00"
+formatMoneyK(12500); // → "$12.5k"  (dashboard KPIs)
 ```
 
 ```tsx
@@ -58,16 +58,16 @@ Tokens live in `web/src/design/tokens.css` as CSS custom properties on `html[dat
 
 **`pf-*` prefix** — all design-system primitives:
 
-| Class | Component |
-|---|---|
-| `pf-card` | Card container |
-| `pf-badge` | Status badge |
-| `pf-money` | Money span (tabular numerals) |
-| `pf-num` / `td.num` / `th.num` | Numeric table cells (tabular numerals) |
-| `pf-skeleton` | Loading placeholder (animates via `pfPulse` keyframe) |
-| `pf-empty` | Empty state container |
-| `pf-composer` | Inline action composer |
-| `pf-fiduciary` | Fiduciary integrity panel |
+| Class                          | Component                                             |
+| ------------------------------ | ----------------------------------------------------- |
+| `pf-card`                      | Card container                                        |
+| `pf-badge`                     | Status badge                                          |
+| `pf-money`                     | Money span (tabular numerals)                         |
+| `pf-num` / `td.num` / `th.num` | Numeric table cells (tabular numerals)                |
+| `pf-skeleton`                  | Loading placeholder (animates via `pfPulse` keyframe) |
+| `pf-empty`                     | Empty state container                                 |
+| `pf-composer`                  | Inline action composer                                |
+| `pf-fiduciary`                 | Fiduciary integrity panel                             |
 
 Feature stylesheets (`ledger.css`, `banking.css`, `reports.css`) import token classes and add surface-specific rules. Scope new feature styles to their own CSS file imported into the feature's entry component.
 
@@ -81,17 +81,22 @@ Numeric table columns: `<th className="num">` / `<td className="num">` — tabul
 // web/src/features/tenants/ledger.ts
 
 // 1. Export the query key as a typed const fn — mutations use it to invalidate
-export const tenantLedgerKey = (id: string) => ['tenant-ledger', id] as const;
+export const tenantLedgerKey = (id: string) => ["tenant-ledger", id] as const;
 
 // 2. Named hook per data shape
-export function useTenantLedger(id: string): UseQueryResult<TenantLedgerResponse> {
+export function useTenantLedger(
+  id: string,
+): UseQueryResult<TenantLedgerResponse> {
   return useQuery({
     queryKey: tenantLedgerKey(id),
     queryFn: async () => {
-      const { data, error } = await api.GET('/api/accounting/tenants/{tenantId}/ledger', {
-        params: { path: { tenantId: id } },
-      });
-      if (error || !data) throw new Error('Failed to load the ledger');
+      const { data, error } = await api.GET(
+        "/api/accounting/tenants/{tenantId}/ledger",
+        {
+          params: { path: { tenantId: id } },
+        },
+      );
+      if (error || !data) throw new Error("Failed to load the ledger");
       return data;
     },
   });
@@ -102,23 +107,30 @@ export function useRecordPayment(tenantId: string) {
   const queryClient = useQueryClient();
   return useMutation<PostResult, LedgerPostError, RecordPaymentRequest>({
     mutationFn: async (body) => {
-      const { data, error } = await api.POST('/api/accounting/tenants/{tenantId}/payments', {
-        params: { path: { tenantId } },
-        body,
-      });
+      const { data, error } = await api.POST(
+        "/api/accounting/tenants/{tenantId}/payments",
+        {
+          params: { path: { tenantId } },
+          body,
+        },
+      );
       if (error) throw error;
       return data!;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: tenantLedgerKey(tenantId) }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: tenantLedgerKey(tenantId) }),
     onError: (err) => {
       // Handle domain error codes explicitly; don't rely on generic catch
-      if (err.code === 'account_period_locked') { /* show inline warning */ }
+      if (err.code === "account_period_locked") {
+        /* show inline warning */
+      }
     },
   });
 }
 ```
 
 Rules:
+
 - Always throw on `error || !data` — never silently return null from a queryFn
 - Export the key fn so mutations can invalidate by the same key
 - Handle domain error codes (e.g., `'account_period_locked'`, `'duplicate_source_ref'`, `'insufficient_receivable'`) in `onError`, not via generic toast
@@ -128,21 +140,27 @@ Rules:
 ## API client
 
 ```ts
-import { api, type components } from '@/api';
+import { api, type components } from "@/api";
 
 // GET
-const { data, error } = await api.GET('/api/banking/banks/{bankAccountId}/register', {
-  params: { path: { bankAccountId }, query: { from, to } },
-});
+const { data, error } = await api.GET(
+  "/api/banking/banks/{bankAccountId}/register",
+  {
+    params: { path: { bankAccountId }, query: { from, to } },
+  },
+);
 
 // POST
-const { data, error } = await api.POST('/api/accounting/tenants/{tenantId}/payments', {
-  params: { path: { tenantId } },
-  body: { amount, date, memo },
-});
+const { data, error } = await api.POST(
+  "/api/accounting/tenants/{tenantId}/payments",
+  {
+    params: { path: { tenantId } },
+    body: { amount, date, memo },
+  },
+);
 
 // Types
-type BankRegisterResponse = components['schemas']['BankRegisterResponse'];
+type BankRegisterResponse = components["schemas"]["BankRegisterResponse"];
 ```
 
 - The client is generated via `npm run api:generate` (host must be on :5080) — don't hand-write API types
@@ -171,15 +189,21 @@ Adding a new status domain: extend the `*_TONE` map in `StatusBadge.tsx`; never 
 All data-driven components handle all three branches:
 
 ```tsx
-{query.isPending ? (
-  <div className="pf-skeleton" style={{ height: 20 }} />
-) : query.isError ? (
-  <EmptyState icon="alert" title="Something went wrong" description={query.error.message} />
-) : query.data.items.length === 0 ? (
-  <EmptyState icon="inbox" title="No items yet" />
-) : (
-  <RealContent data={query.data} />
-)}
+{
+  query.isPending ? (
+    <div className="pf-skeleton" style={{ height: 20 }} />
+  ) : query.isError ? (
+    <EmptyState
+      icon="alert"
+      title="Something went wrong"
+      description={query.error.message}
+    />
+  ) : query.data.items.length === 0 ? (
+    <EmptyState icon="inbox" title="No items yet" />
+  ) : (
+    <RealContent data={query.data} />
+  );
+}
 ```
 
 - Loading: `<div className="pf-skeleton">` — animates via `pfPulse` keyframe in tokens.css
@@ -207,26 +231,31 @@ All data-driven components handle all three branches:
 
 ```tsx
 // Component test
-import { render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import { server } from '@/test/mocks/server';
-import { http, HttpResponse } from 'msw';
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { server } from "@/test/mocks/server";
+import { http, HttpResponse } from "msw";
 
-test('records a payment', async () => {
+test("records a payment", async () => {
   server.use(
-    http.post('/api/accounting/tenants/:id/payments', () =>
-      HttpResponse.json({ id: 'uuid', amount: 100 })),
+    http.post("/api/accounting/tenants/:id/payments", () =>
+      HttpResponse.json({ id: "uuid", amount: 100 }),
+    ),
   );
 
   render(
-    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+    <QueryClientProvider
+      client={
+        new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      }
+    >
       <LedgerComposer tenantId="test-id" />
-    </QueryClientProvider>
+    </QueryClientProvider>,
   );
 
-  await userEvent.type(screen.getByLabelText('Amount'), '100');
-  await userEvent.keyboard('{Enter}');
-  expect(await screen.findByText('$100.00')).toBeInTheDocument();
+  await userEvent.type(screen.getByLabelText("Amount"), "100");
+  await userEvent.keyboard("{Enter}");
+  expect(await screen.findByText("$100.00")).toBeInTheDocument();
 });
 ```
 
@@ -239,15 +268,15 @@ test('records a payment', async () => {
 
 ## Banned patterns
 
-| Pattern | Use instead |
-|---|---|
-| `toFixed(2)` for display | `formatMoney(value)` or `<Money value={n} />` |
-| `Intl.NumberFormat` inline | `formatMoney` / `<Money>` |
-| Hardcoded color values | CSS tokens: `var(--text)`, `var(--surface)`, etc. |
-| Color as sole status indicator | `<Badge tone={…} dot>` (always `dot` or `icon`) |
-| `fetch(…)` for API calls | `api.GET(…)` / `api.POST(…)` from `@/api` |
-| Hand-written API types | `components['schemas']['TypeName']` from `@/api` |
-| Relative import paths `../../` | `@/design`, `@/components`, `@/api`, `@/lib`, `@/features/…` |
-| Ad-hoc `font-variant-numeric` | `<td className="num">` / `<Money>` / `className="pf-num"` |
-| New CSS custom properties in feature CSS | Add to `web/src/design/tokens.css` only |
-| Direct `fetch` for XSRF-protected endpoints | `api.POST/PUT/DELETE` (handles XSRF automatically) |
+| Pattern                                     | Use instead                                                  |
+| ------------------------------------------- | ------------------------------------------------------------ |
+| `toFixed(2)` for display                    | `formatMoney(value)` or `<Money value={n} />`                |
+| `Intl.NumberFormat` inline                  | `formatMoney` / `<Money>`                                    |
+| Hardcoded color values                      | CSS tokens: `var(--text)`, `var(--surface)`, etc.            |
+| Color as sole status indicator              | `<Badge tone={…} dot>` (always `dot` or `icon`)              |
+| `fetch(…)` for API calls                    | `api.GET(…)` / `api.POST(…)` from `@/api`                    |
+| Hand-written API types                      | `components['schemas']['TypeName']` from `@/api`             |
+| Relative import paths `../../`              | `@/design`, `@/components`, `@/api`, `@/lib`, `@/features/…` |
+| Ad-hoc `font-variant-numeric`               | `<td className="num">` / `<Money>` / `className="pf-num"`    |
+| New CSS custom properties in feature CSS    | Add to `web/src/design/tokens.css` only                      |
+| Direct `fetch` for XSRF-protected endpoints | `api.POST/PUT/DELETE` (handles XSRF automatically)           |

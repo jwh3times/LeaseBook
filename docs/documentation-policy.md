@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living policy
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-07-09
+- **Last reviewed:** 2026-07-10
 
 This policy keeps LeaseBook documentation public-safe, navigable, and maintainable. It applies to
 Markdown, runbooks, diagrams, planning artifacts, and documentation embedded in source or automation.
@@ -85,6 +85,23 @@ supersedes it.
 - Moving or deleting a document requires a repository-wide reference sweep in the same change.
 - Maintained public documents participate in link-check CI. Historical private artifacts do not.
 
+## Automated Enforcement
+
+Run the complete local gate from `web/`:
+
+```bash
+npm run docs:check
+```
+
+The command checks Prettier formatting, Markdown structure, spelling, lifecycle metadata, local and
+private-link boundaries, copied mutable commands, obsolete authority claims, and ADR index consistency.
+The ordinary CI web job runs the same command on every pull request. The separate Lychee workflow
+checks external links and anchors on documentation changes and on its weekly schedule.
+
+Project-specific spelling belongs in `cspell.json`; add stable domain terms, product names, or fixture
+names, not accidental misspellings or arbitrary code identifiers. Markdownlint is a structural check;
+Prettier remains the formatter.
+
 ## Change Checklist
 
 When behavior changes, update only the owning document and affected summaries:
@@ -93,4 +110,4 @@ When behavior changes, update only the owning document and affected summaries:
 2. Update that document with the code or configuration change.
 3. Check README, AGENTS, CLAUDE, and the docs index only when their summaries or navigation drift.
 4. Add or supersede an ADR when the decision policy requires it.
-5. Sweep for copied commands, removed paths, and confidential material before opening the PR.
+5. Run `npm run docs:check` from `web/` before opening the PR.

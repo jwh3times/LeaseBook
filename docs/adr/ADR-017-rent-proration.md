@@ -28,6 +28,7 @@ Both the move-in day and the move-out day are **counted** (inclusive). A tenant 
 day 16 of a 31-day month occupies days 16–31 = **16 days**, not 15.
 
 Rationale:
+
 - Inclusive counting is standard in residential property management.
 - It matches the most common tenant expectation ("I moved in on the 16th, so I pay from the 16th").
 - It is trivially verifiable against the lease start/end dates visible in the UI.
@@ -44,6 +45,7 @@ No intermediate rounding. `decimal` arithmetic (not `double`) throughout.
 `AwayFromZero` matches the North Carolina convention and common PM practice for money rounding.
 
 **Example (March 2026, 31 days, move-in Mar 16, rent $1,620):**
+
 - `daysOccupied` = 31 − 16 + 1 = 16
 - `1620 × 16 / 31` = 836.129032…
 - Rounded: **$836.13**
@@ -69,11 +71,11 @@ auditable, and all rent charges for a period fall in the same accounting period.
 
 Per-item exceptions from `IBatchPosting.PostRentChargesAsync` are caught and mapped:
 
-| Exception type name | Outcome |
-|---|---|
-| `DuplicateSourceRefException` | `Skipped` (already posted in a prior run) |
-| `AccountPeriodLockedException` | `Excluded` (period is locked) |
-| `PeriodClosedException` | `Excluded` (period is closed) |
+| Exception type name            | Outcome                                   |
+| ------------------------------ | ----------------------------------------- |
+| `DuplicateSourceRefException`  | `Skipped` (already posted in a prior run) |
+| `AccountPeriodLockedException` | `Excluded` (period is locked)             |
+| `PeriodClosedException`        | `Excluded` (period is closed)             |
 
 Type detection uses `ex.GetType().Name` (string comparison, not type reference) to avoid an
 ADR-007 violation: `Modules.Operations` must not reference `Modules.Accounting` types.

@@ -49,6 +49,9 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: npm ci
+      # Public docs are formatted, structurally linted, spell-checked, and validated against the
+      # repository's metadata, ADR-index, canonical-ownership, and private-link policies.
+      - run: npm run docs:check
       # Formatting gate: fails if anything under web/ wasn't run through Prettier (mirrors the
       # backend's `dotnet format` check). Run `npm run format` to fix locally.
       - run: npm run format:check

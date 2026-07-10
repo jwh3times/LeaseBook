@@ -20,7 +20,7 @@ small and the mapping is better done explicitly for money-touching code.
 - **Pipeline:** decorators composed in pinned order — telemetry (outermost) → validation → handler
   (P24) — applied via Scrutor `Decorate` over the open generic handler interfaces.
 - **Validation:** **FluentValidation** (Apache-2.0), one validator per command/query colocated with
-  its slice, executed by the `ValidationDecorator` as the *single* validation execution point.
+  its slice, executed by the `ValidationDecorator` as the _single_ validation execution point.
   Endpoint filters never re-validate.
 - **Mapping:** DTOs are hand-mapped `record`s. No AutoMapper.
 - **Endpoints:** minimal-API `IEndpointModule` per module (no MVC controllers).

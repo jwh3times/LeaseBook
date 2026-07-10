@@ -7,7 +7,7 @@
 ## Context
 
 Postgres Row-Level Security is the tenant-isolation boundary, scoped to the **org** via
-`app.org_id` (CLAUDE.md). Phase 2-3 introduce owner and tenant portal users who need *sub-org*
+`app.org_id` (CLAUDE.md). Phase 2-3 introduce owner and tenant portal users who need _sub-org_
 visibility: an owner sees only their own properties; a tenant only their own ledger. One option is
 to push these personas into RLS by stacking more session variables and per-persona policies. With
 four personas across many tables, that multiplies policy complexity for little gain while the

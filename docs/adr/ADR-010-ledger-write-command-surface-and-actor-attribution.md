@@ -12,7 +12,7 @@ engine already posts every business event M3 needs (`PaymentReceived`, `FeeCharg
 the reversal path) through a single write path — the posting service — which is the only thing that
 constructs `JournalEntry`/`JournalLine` rows and the only place the append-only and per-basis-balance
 invariants are enforced (ADR-006, CLAUDE.md). M3 needs an HTTP write surface the SPA can call, and it
-needs to finally record *who* posted each entry — the `created_by` / `actor_user_id` columns have
+needs to finally record _who_ posted each entry — the `created_by` / `actor_user_id` columns have
 existed since M0/M1 but were always stamped null.
 
 Two anti-patterns to avoid:
@@ -37,7 +37,7 @@ Two anti-patterns to avoid:
   consumer-owned port `Accounting.Contracts.ITenantPostingDimensions` + a host adapter that delegates to
   a Directory query (ADR-007). The request body carries only the tenant id + amount/date/method/bank. A
   tenant with no active lease is rejected (a validation failure), never defaulted.
-- Endpoints are minimal-API, `RequirePMStaff` (money entry is staff-level; only *settings* writes are
+- Endpoints are minimal-API, `RequirePMStaff` (money entry is staff-level; only _settings_ writes are
   admin), thin (bind → dispatch → `TypedResults`), and let the M1 `AccountingExceptionHandler` map
   domain rejections to 422/409. Each submit carries a client-minted `sourceRef` idempotency key, so a
   double-submit maps to `duplicate_source_ref` rather than double-posting; void supplies its own key via

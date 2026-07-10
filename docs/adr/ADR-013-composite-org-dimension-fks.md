@@ -9,8 +9,8 @@
 
 ADR-008 bound the five `journal_lines` dimension columns (`owner_id`, `property_id`, `unit_id`,
 `tenant_id`, `bank_account_id`) to their directory tables with **single-column** foreign keys, and
-explicitly flagged the limitation: a single-column FK proves only that the id exists in *some* org's
-row, not that it belongs to the *same* org as the journal line. Postgres referential-integrity checks
+explicitly flagged the limitation: a single-column FK proves only that the id exists in _some_ org's
+row, not that it belongs to the _same_ org as the journal line. Postgres referential-integrity checks
 **always bypass row-level security**, so the constraint is not itself a cross-org isolation boundary.
 ADR-008 named the belt-and-suspenders fix — a composite `(org_id, id)` FK — and **deferred it
 deliberately** to "the next milestone that already touches `journal_lines` … not as a standalone
@@ -44,7 +44,7 @@ and rework the harness to seed FK targets per test org.**
 - The dimension columns stay **nullable**; with Postgres `MATCH SIMPLE` the FK is enforced exactly
   when the dimension id is non-null (a line with no owner skips the check). `org_id` is `NOT NULL` on
   `journal_lines`, so a non-null dimension always carries a real `(org_id, dim_id)` pair to validate.
-- **FKs *into* the immutable journal stay single-column** (P61). New M4 tables that reference
+- **FKs _into_ the immutable journal stay single-column** (P61). New M4 tables that reference
   `journal_lines` (e.g. `bank_line_status.journal_line_id`) use a plain FK to `journal_lines(id)`:
   the journal PK is globally unique and generated in-org, and the row carries `org_id` under RLS, so
   no composite is needed. Composite FKs are the directory-dimension rework only.

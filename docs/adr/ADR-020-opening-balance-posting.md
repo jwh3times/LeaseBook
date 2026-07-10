@@ -57,13 +57,13 @@ transient cutover suspense account whose correct post-go-live balance is $0.00 i
 **Per-basis line construction.** The import host (`BalanceImportService`) maps each imported
 position to the correct account, normal side, and basis tag:
 
-| Imported position       | Account class        | Normal side | Basis tag   |
-|-------------------------|----------------------|-------------|-------------|
-| Trust bank book balance | `trust_bank`         | Debit       | `both`      |
-| Owner equity (cash)     | `owner_equity`       | Credit      | `both`      |
-| Owner equity accrual delta | `owner_equity`    | Credit      | `accrual`   |
-| Deposit liability       | `deposit_liability`  | Credit      | `both`      |
-| Tenant receivable       | `tenant_receivable`  | Debit       | `accrual`   |
+| Imported position          | Account class       | Normal side | Basis tag |
+| -------------------------- | ------------------- | ----------- | --------- |
+| Trust bank book balance    | `trust_bank`        | Debit       | `both`    |
+| Owner equity (cash)        | `owner_equity`      | Credit      | `both`    |
+| Owner equity accrual delta | `owner_equity`      | Credit      | `accrual` |
+| Deposit liability          | `deposit_liability` | Credit      | `both`    |
+| Tenant receivable          | `tenant_receivable` | Debit       | `accrual` |
 
 The `MigrationClearing` contra leg mirrors the real leg: if the real leg is DR $1,200, the contra
 is CR $1,200 (same basis, same amount). A non-positive figure ($0.00) is a no-op — skipped, never

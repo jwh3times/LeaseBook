@@ -22,6 +22,9 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   needed to understand and contribute to the codebase.
 - **Documentation governance** — a public documentation index, classification and ownership policy,
   and sanitized product-scope contract now make the repository self-contained for contributors.
+- **Documentation quality gate** — CI now formats, structurally lints, spell-checks, and validates
+  public docs, including lifecycle metadata, private-link boundaries, command ownership, and ADR index
+  consistency.
 
 ### Changed
 

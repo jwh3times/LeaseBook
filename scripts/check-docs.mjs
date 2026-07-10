@@ -1,0 +1,337 @@
+import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const scriptPath = fileURLToPath(import.meta.url);
+const defaultRoot = path.resolve(path.dirname(scriptPath), "..");
+
+const metadataFields = ["Audience", "Status", "Owner", "Last reviewed"];
+const commandFingerprints = [
+  "dotnet build LeaseBook.slnx",
+  "dotnet test LeaseBook.slnx",
+  "npm run typecheck",
+  "check-invariants --org demo",
+];
+
+function normalizePath(value) {
+  return value.replaceAll("\\", "/");
+}
+
+export function stripFencedCode(markdown) {
+  const output = [];
+  let fence = null;
+
+  for (const line of markdown.split(/\r?\n/)) {
+    const match = line.match(/^\s*(`{3,}|~{3,})/);
+    if (match) {
+      if (fence === null) {
+        fence = match[1][0];
+      } else if (match[1][0] === fence) {
+        fence = null;
+      }
+      output.push("");
+      continue;
+    }
+
+    output.push(fence === null ? line : "");
+  }
+
+  return output.join("\n");
+}
+
+export function extractMarkdownLinks(markdown) {
+  const links = [];
+  const rendered = stripFencedCode(markdown);
+  const pattern = /\[[^\]]*\]\((?<target>[^)]+)\)/g;
+
+  for (const match of rendered.matchAll(pattern)) {
+    links.push({
+      target: match.groups.target.trim().replace(/^<|>$/g, ""),
+      line: rendered.slice(0, match.index).split("\n").length,
+    });
+  }
+
+  return links;
+}
+
+export function parseAdr(markdown) {
+  const heading = markdown.match(/^# ADR-(?<number>\d{3}): (?<title>.+)$/m);
+  const status = markdown.match(/^- \*\*Status:\*\* (?<value>.+)$/m);
+  const date = markdown.match(/^- \*\*Date:\*\* (?<value>\d{4}-\d{2}-\d{2})$/m);
+  const amendedBy = markdown.match(
+    /^- \*\*Amended by:\*\* \[(?<number>ADR-\d{3})\]/m,
+  );
+
+  if (!heading || !status || !date) {
+    return null;
+  }
+
+  const adr = {
+    number: heading.groups.number,
+    title: heading.groups.title.trim(),
+    status: status.groups.value.trim(),
+    date: date.groups.value,
+  };
+  if (amendedBy) {
+    adr.amendedBy = amendedBy.groups.number;
+  }
+  return adr;
+}
+
+export function missingMetadata(markdown) {
+  return metadataFields.filter(
+    (field) => !markdown.includes(`- **${field}:**`),
+  );
+}
+
+function listMarkdownFiles(root) {
+  const result = execFileSync(
+    "git",
+    ["ls-files", "--cached", "--others", "--exclude-standard", "--", "*.md"],
+    { cwd: root, encoding: "utf8" },
+  );
+
+  return result.split(/\r?\n/).map(normalizePath).filter(Boolean).sort();
+}
+
+function isLivingDoc(file) {
+  return (
+    file.startsWith("docs/") &&
+    !/^docs\/adr\/ADR-\d{3}-.+\.md$/.test(file) &&
+    file !== "docs/adr/template.md"
+  );
+}
+
+function commandCopyAllowed(file) {
+  return (
+    file === "AGENTS.md" ||
+    file === "CONTRIBUTING.md" ||
+    file === "docs/runbooks/local-dev.md" ||
+    file.startsWith(".claude/agents/") ||
+    file.startsWith("docs/adr/")
+  );
+}
+
+function lineOf(content, index) {
+  return content.slice(0, index).split(/\r?\n/).length;
+}
+
+export function validateRepository(root = defaultRoot, suppliedFiles) {
+  const files = suppliedFiles ?? listMarkdownFiles(root);
+  const errors = [];
+  const contents = new Map();
+
+  for (const file of files) {
+    const absolute = path.join(root, file);
+    if (!existsSync(absolute)) {
+      errors.push({
+        file,
+        line: 1,
+        message: "Document is listed but missing.",
+      });
+      continue;
+    }
+    contents.set(file, readFileSync(absolute, "utf8"));
+  }
+
+  for (const [file, content] of contents) {
+    if (isLivingDoc(file)) {
+      for (const field of missingMetadata(content)) {
+        errors.push({
+          file,
+          line: 1,
+          message: `Living document is missing lifecycle metadata: ${field}.`,
+        });
+      }
+    }
+
+    for (const { target, line } of extractMarkdownLinks(content)) {
+      if (/^(https?:\/\/|mailto:|#)/i.test(target)) {
+        continue;
+      }
+
+      let pathPart;
+      try {
+        pathPart = decodeURIComponent(target.split("#", 1)[0]);
+      } catch {
+        errors.push({
+          file,
+          line,
+          message: `Markdown target has invalid URL encoding: ${target}.`,
+        });
+        continue;
+      }
+      if (!pathPart) {
+        continue;
+      }
+
+      const normalizedTarget = normalizePath(pathPart);
+      if (
+        /(^|\/)(private|\.superpowers)(\/|$)/.test(normalizedTarget) ||
+        normalizedTarget.startsWith("docs/superpowers/")
+      ) {
+        errors.push({
+          file,
+          line,
+          message: `Public document links to ignored/private content: ${target}.`,
+        });
+        continue;
+      }
+
+      if (path.isAbsolute(pathPart) || /^[A-Za-z]:[\\/]/.test(pathPart)) {
+        errors.push({
+          file,
+          line,
+          message: `Public document uses an absolute local path: ${target}.`,
+        });
+        continue;
+      }
+
+      const localTarget = path.resolve(root, path.dirname(file), pathPart);
+      if (!existsSync(localTarget)) {
+        errors.push({
+          file,
+          line,
+          message: `Local Markdown target does not exist: ${target}.`,
+        });
+      }
+    }
+
+    if (!commandCopyAllowed(file)) {
+      for (const command of commandFingerprints) {
+        const index = content.indexOf(command);
+        if (index >= 0) {
+          errors.push({
+            file,
+            line: lineOf(content, index),
+            message: `Mutable command duplicates the canonical runbook: ${command}.`,
+          });
+        }
+      }
+    }
+  }
+
+  const livingText = [...contents]
+    .filter(([file]) => isLivingDoc(file))
+    .map(([file, content]) => ({ file, content: stripFencedCode(content) }));
+  const obsoleteClaims = [
+    /CLAUDE\.md.{0,80}(authoritative|binding|canonical)/gi,
+    /(authoritative|binding|canonical).{0,80}CLAUDE\.md/gi,
+    /private\/(TODO|roadmap)\.md.{0,80}(authoritative|binding|canonical)/gi,
+  ];
+
+  for (const { file, content } of livingText) {
+    for (const pattern of obsoleteClaims) {
+      for (const match of content.matchAll(pattern)) {
+        errors.push({
+          file,
+          line: lineOf(content, match.index),
+          message:
+            "Living document contains an obsolete canonical-authority claim.",
+        });
+      }
+    }
+  }
+
+  const adrFiles = files.filter((file) =>
+    /^docs\/adr\/ADR-\d{3}-.+\.md$/.test(file),
+  );
+  const indexFile = "docs/adr/README.md";
+  const indexContent = contents.get(indexFile);
+  if (!indexContent) {
+    errors.push({ file: indexFile, line: 1, message: "ADR index is missing." });
+  } else {
+    const rows = new Map();
+    const rowPattern =
+      /^\|\s+\[(?<number>\d{3})\]\((?<file>[^)]+)\)\s+\|\s+(?<title>.*?)\s+\|\s+(?<status>.*?)\s+\|\s+(?<date>\d{4}-\d{2}-\d{2})\s+\|$/gm;
+    for (const row of indexContent.matchAll(rowPattern)) {
+      if (rows.has(row.groups.number)) {
+        errors.push({
+          file: indexFile,
+          line: lineOf(indexContent, row.index),
+          message: `ADR-${row.groups.number} appears more than once in the index.`,
+        });
+        continue;
+      }
+      rows.set(row.groups.number, {
+        number: row.groups.number,
+        file: row.groups.file.trim(),
+        title: row.groups.title.trim(),
+        status: row.groups.status.trim(),
+        date: row.groups.date,
+      });
+    }
+
+    for (const file of adrFiles) {
+      const adr = parseAdr(contents.get(file));
+      if (!adr) {
+        errors.push({
+          file,
+          line: 1,
+          message: "ADR must include a numbered heading, status, and ISO date.",
+        });
+        continue;
+      }
+
+      const row = rows.get(adr.number);
+      if (!row) {
+        errors.push({
+          file: indexFile,
+          line: 1,
+          message: `ADR-${adr.number} is missing from the index.`,
+        });
+        continue;
+      }
+
+      const expectedFile = path.basename(file);
+      const expectedStatus = adr.amendedBy
+        ? `${adr.status} (amended by ${adr.amendedBy})`
+        : adr.status;
+      for (const [field, actual, expected] of [
+        ["file", row.file, expectedFile],
+        ["title", row.title, adr.title],
+        ["status", row.status, expectedStatus],
+        ["date", row.date, adr.date],
+      ]) {
+        if (actual !== expected) {
+          errors.push({
+            file: indexFile,
+            line: 1,
+            message: `ADR-${adr.number} index ${field} is '${actual}', expected '${expected}'.`,
+          });
+        }
+      }
+    }
+
+    for (const number of rows.keys()) {
+      if (!adrFiles.some((file) => file.includes(`ADR-${number}-`))) {
+        errors.push({
+          file: indexFile,
+          line: 1,
+          message: `ADR-${number} is indexed but its file is missing.`,
+        });
+      }
+    }
+  }
+
+  return errors;
+}
+
+function printErrors(errors) {
+  for (const error of errors) {
+    console.error(`${error.file}:${error.line}: ${error.message}`);
+  }
+}
+
+const isMain =
+  process.argv[1] && path.resolve(process.argv[1]) === path.resolve(scriptPath);
+if (isMain) {
+  const errors = validateRepository();
+  if (errors.length > 0) {
+    printErrors(errors);
+    process.exitCode = 1;
+  } else {
+    console.log("Documentation policy check passed.");
+  }
+}
