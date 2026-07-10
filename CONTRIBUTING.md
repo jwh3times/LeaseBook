@@ -7,6 +7,10 @@ up, the conventions the codebase holds to, and what a change needs before it can
 By participating you agree to abide by our [Code of Conduct](CODE_OF_CONDUCT.md) — keep interactions
 respectful and constructive.
 
+Start with the [documentation index](docs/README.md) and confirm that proposed product work fits the
+[public product scope](docs/product-scope.md). Private planning files are not required for ordinary
+fixes or work accepted through a public issue.
+
 ---
 
 ## Getting set up
@@ -120,8 +124,8 @@ Docker must be running for the integration and accounting suites.
 
 ## Definition of Done
 
-Every task — feature, fix, or refactor — meets this bar before it merges (the pull-request
-template's checklist expands on it):
+This is the canonical public Definition of Done. Every task — feature, fix, or refactor — meets this
+bar before it merges (the pull-request template's checklist expands on it):
 
 1. Code reviewed against the project's constraints (click budgets, append-only ledgers, org scoping).
 2. Tests at the right altitude (unit for logic, invariant suite touched if accounting-adjacent,

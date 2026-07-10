@@ -1,8 +1,8 @@
 # AGENTS.md
 
-This file provides guidance to Codex and other coding agents when working in this repository.
-It is derived from `CLAUDE.md`; when the two files drift, preserve the project rules and update
-both files intentionally.
+This is the canonical cross-agent engineering contract for the repository. Tool-specific instruction
+files may add integration details but must defer to this file for project rules, commands, invariants,
+and documentation ownership.
 
 ## Repository State
 
@@ -32,8 +32,9 @@ them directly; do not trust summaries, including this one, for current progress.
 The `private/` directory is gitignored, confidential, and local-only. It may be absent in a public
 clone. It holds:
 
-- `private/TODO.md`: master build plan (its section-1 architecture blueprint and Definition of
-  Done have committed projections in `docs/blueprint.md` and CONTRIBUTING.md)
+- `private/TODO.md`: master build plan for unpublished sequencing and product decisions; its original
+  architecture baseline and Definition of Done have public counterparts in `docs/blueprint.md` and
+  `CONTRIBUTING.md`
 - `private/LeaseBook_PRD_v1.0.md`: product requirements and scope authority
 - `private/claude_design_files/`: interactive UI prototype, design-system source of truth, and
   design/product analysis
@@ -143,9 +144,9 @@ the relevant docs in the same change.
 
 ## Architecture
 
-`docs/blueprint.md` is the committed blueprint (`private/TODO.md` section 1 is canonical where
-they disagree). The patterns below are established and test-enforced in built modules and bind
-future modules.
+`docs/architecture.md` is the canonical public map of the implemented system. `docs/blueprint.md` is
+the historical pre-M0 baseline; accepted ADRs and implemented behavior supersede it where the system
+evolved. The patterns below are established and test-enforced in built modules and bind future modules.
 
 - Modular monolith: ASP.NET Core host plus one project per module: `Accounting`, `Directory`,
   `Banking`, `Reporting`, `Operations`, `Payments`, `SharedKernel`, and `Migrator`. Modules reference
@@ -228,13 +229,12 @@ These flows are instrumented in telemetry; regressions fail the release checklis
 - Follow `private/TODO.md` order. Check off boxes as tasks complete and keep it current. Scope
   changes are edits to the plan, not side conversations. Items marked `GATE` block the work below
   them until resolved.
-- The Definition of Done (published in CONTRIBUTING.md; canonical at the bottom of
-  `private/TODO.md`) applies to every task: tests at the right altitude, audit/telemetry events on
+- The Definition of Done in `CONTRIBUTING.md` applies to every task: tests at the right altitude,
+  audit/telemetry events on
   money-touching paths, empty/loading/error states, keyboard path, and demoability on the seed org.
-- Scope discipline: the PRD exclusions are rejected on sight through Phase 5. These include HOA,
-  commercial, short-term rentals, native mobile, proprietary screening/listing engines, full GL
-  bookkeeping, AI features, and public API. Additions require a formal scope change recorded in
-  `private/TODO.md`.
+- Scope discipline: `docs/product-scope.md` is the public product boundary. Additions outside its
+  explicit non-goals require a formal scope change before implementation; unpublished commercial or
+  customer consequences are recorded privately.
 - ADRs live in `docs/adr/`. Every deviation from a `docs/blueprint.md` default gets a short
   ADR.
 - Seed data is sacred. The demo dataset, ported from the prototype's `data.jsx`, doubles as the

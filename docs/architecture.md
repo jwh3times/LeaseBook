@@ -1,9 +1,14 @@
 # Architecture
 
-This is the conceptual companion to the README's [Architecture](../README.md#architecture) section:
-it explains how the pieces fit together and links the decisions that shaped them. The binding rules
-live in [`CLAUDE.md`](../CLAUDE.md) and the [ADRs](adr/); this document orients you, it does not
-restate them.
+- **Audience:** Contributors and maintainers
+- **Status:** Living architecture guide
+- **Owner:** Maintainers
+- **Last reviewed:** 2026-07-09
+
+This is the canonical public map of the system **as implemented**. It explains how the pieces fit
+together and links the decisions that shaped them without reproducing every invariant. Accepted
+[ADRs](adr/README.md) own decision rationale, and the code and architecture tests are the executable
+truth. Cross-agent working rules live in [`AGENTS.md`](../AGENTS.md).
 
 LeaseBook is a **modular monolith** whose core is a double-entry trust-accounting engine. Every
 tenant ledger, owner ledger, bank register, and statement is a _projection of one journal_ — never a
@@ -121,4 +126,4 @@ Docker Compose — `./scripts/dev.ps1 app-up` brings up database → migrate →
 - [`ROADMAP.md`](ROADMAP.md) — shipped capabilities and high-level product direction
 - [`adr/`](adr/) — architecture decision records (start with the [index](adr/README.md))
 - [`runbooks/`](runbooks/) — local development and restore runbooks
-- [`CLAUDE.md`](../CLAUDE.md) — the engineering constraints and non-negotiable invariants
+- [`AGENTS.md`](../AGENTS.md) — the cross-agent engineering constraints and non-negotiable invariants

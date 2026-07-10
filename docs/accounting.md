@@ -1,9 +1,15 @@
 # How LeaseBook keeps the books
 
-This is the plain-English description of the trust-accounting engine — written so a property
-manager, bookkeeper, or attorney can check that the software does what the law and the trade
-require, without reading C#. The authoritative detail is in `src/LeaseBook.Modules.Accounting`;
-the binding rules are in `CLAUDE.md` ("Non-negotiable invariants") and ADR-006.
+- **Audience:** Contributors, operators, and reviewers
+- **Status:** Living accounting guide
+- **Owner:** Maintainers
+- **Last reviewed:** 2026-07-09
+
+This is the canonical public explanation of the shipped trust-accounting model, written so a
+property manager, bookkeeper, or attorney can evaluate it without reading C#. The Accounting module
+and its invariant, property-based, and golden-file suites are the executable truth; accepted
+accounting ADRs record why the model takes its current shape. Cross-agent implementation constraints
+live in [`AGENTS.md`](../AGENTS.md).
 
 ## The one ledger
 
