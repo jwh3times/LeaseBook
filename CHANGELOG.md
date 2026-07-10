@@ -8,7 +8,32 @@ released builds are tagged automatically from `VERSION` on merges to `main` in
 `v<major>.<minor>.<build>` format, with the third component auto-incremented per major/minor line.
 For a major or minor bump, `x.y.0` is a valid first release when that line has no existing tag.
 
+**Cut policy:** `[Unreleased]` is cut into a dated version section at each **deliberate
+major/minor bump** (the `VERSION` file changing its line); the per-merge build tags
+(`vX.Y.<build>`) do not get their own sections and roll up into the next cut.
+
 ## [Unreleased]
+
+### Added
+
+- **Published engineering docs** — the architecture blueprint (`docs/blueprint.md`: tech defaults,
+  the multi-tenancy/RLS design, the trust-accounting data model), the Definition of Done
+  (CONTRIBUTING.md), and the M0–M7 milestone retrospectives (`docs/planning/`) are now committed,
+  so a public clone no longer depends on gitignored planning files for any engineering reference.
+
+### Changed
+
+- _Nothing yet._
+
+### Fixed
+
+- _Nothing yet._
+
+### Security
+
+- _Nothing yet._
+
+## [0.2.0] - 2026-07-09
 
 ### Added
 
@@ -52,26 +77,13 @@ For a major or minor bump, `x.y.0` is a valid first release when that line has n
   gate (go-live blocked until imported totals reconcile to the AppFolio closing figures), and a
   guided import-first onboarding wizard — a clean, verified cutover with no fabricated history
   (ADR-020/021).
-- **Product hardening (in progress)** — the Playwright e2e suite now runs in CI with an automated
+- **Product hardening (M8, first tranche)** — the Playwright e2e suite now runs in CI with an automated
   WCAG 2 AA accessibility gate across every routed page (ADR-022) — now scanning both the light and
   dark themes, with the dark-theme contrast fixes (muted text, on-accent and accent-emphasis
   foregrounds, and two background-only buttons) it surfaced — visual-regression baselines on
   money-critical states via Playwright's built-in screenshot comparator with CI-rendered Linux
   baselines (ADR-023), and the authored Azure infrastructure (Bicep modules plus dev/prod deploy
   workflows, pending operator enablement).
-
-- **Published engineering docs** — the architecture blueprint (`docs/blueprint.md`: tech defaults,
-  the multi-tenancy/RLS design, the trust-accounting data model), the Definition of Done
-  (CONTRIBUTING.md), and the M0–M7 milestone retrospectives (`docs/planning/`) are now committed,
-  so a public clone no longer depends on gitignored planning files for any engineering reference.
-
-### Changed
-
-- _Nothing yet._
-
-### Fixed
-
-- _Nothing yet._
 
 ### Security
 
@@ -92,4 +104,5 @@ For a major or minor bump, `x.y.0` is a valid first release when that line has n
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/commits/main
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.2.0

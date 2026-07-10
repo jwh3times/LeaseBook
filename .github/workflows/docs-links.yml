@@ -1,0 +1,47 @@
+name: Docs links
+
+# Conventional-CI complement to the session-scoped docs-drift Stop hook: the hook only fires in
+# Claude Code sessions, so Dependabot merges, Codex sessions, and manual edits bypass it. This job
+# catches broken links/anchors on every docs change, and the weekly run catches external link rot.
+on:
+  pull_request:
+    paths:
+      - '**/*.md'
+      - '.github/workflows/docs-links.yml'
+  push:
+    branches: [main]
+    paths:
+      - '**/*.md'
+      - '.github/workflows/docs-links.yml'
+  schedule:
+    - cron: '0 6 * * 1' # Mondays 06:00 UTC — external link rot sweep
+
+permissions:
+  contents: read
+
+jobs:
+  lychee:
+    name: Link check (lychee)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: lycheeverse/lychee-action@v2
+        env:
+          # Authenticates github.com link checks (avoids rate-limit 403s).
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          fail: true
+          # Explicit include list = the tracked docs set (never node_modules/bin/obj strays).
+          # --include-fragments validates intra-repo #anchor links (e.g. appfolio.md's Gate link).
+          # localhost/loopback URLs are dev-runbook examples, not checkable links.
+          # docs/superpowers/ is excluded by design: its README declares the tree frozen
+          # point-in-time, so link rot there is expected history, not an actionable failure.
+          args: >-
+            --no-progress
+            --include-fragments
+            --accept '200..=299, 429'
+            --exclude '^https?://(localhost|127\.0\.0\.1)'
+            --exclude-path docs/superpowers
+            'README.md' 'CHANGELOG.md' 'CONTRIBUTING.md' 'SECURITY.md' 'SUPPORT.md'
+            'CODE_OF_CONDUCT.md' 'AGENTS.md' 'CLAUDE.md'
+            'docs/**/*.md' 'infra/**/*.md' '.github/**/*.md' '.claude/**/*.md'

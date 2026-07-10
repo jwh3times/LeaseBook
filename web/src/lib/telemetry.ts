@@ -6,7 +6,7 @@ function readCookie(name: string): string | null {
 /**
  * Click-budget telemetry (§C.8 / P47): records how many interactions a budgeted task took. Posts to the
  * host, which emits a tags-only OTel `ux.budget` event — never amounts or PII. Fire-and-forget over a
- * raw fetch (the budget endpoint is host-owned, WP-10) so a failure never disrupts the UI; `met` is
+ * raw fetch (the budget endpoint is host-owned) so a failure never disrupts the UI; `met` is
  * whether the task came in at/under its interaction budget.
  */
 export function trackInteraction(task: string, interactions: number, met?: boolean): void {

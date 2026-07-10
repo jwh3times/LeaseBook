@@ -160,6 +160,9 @@ If the major/minor line already has tags, the workflow increments the third comp
 minor bump sets `VERSION` to `x.y.0` and no `vX.Y.*` tag exists yet, the first release is `vX.Y.0`, not
 `vX.Y.1`.
 
+`CHANGELOG.md` follows the same rhythm (see its cut policy): `[Unreleased]` is cut into a dated
+section only at a deliberate major/minor bump; the per-merge build tags roll up into the next cut.
+
 ---
 
 ## Reporting security issues

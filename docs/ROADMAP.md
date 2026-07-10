@@ -57,6 +57,11 @@ CLAUDE.md "Repository state" still names M5 as the frontier · import re-import 
 imported (ADR-020 §5 / ADR-021) · dark-theme a11y and visual coverage are tracked follow-ons
 (ADR-022/023 Consequences).
 
+**Tripwire — collapse before B1:** this consolidated file:line gap map is acceptable only while
+nothing is deployed. Before the first internet-reachable environment goes live (B1), reduce the
+still-open entries above to bare WP references — a public map of unpatched positions must not
+describe a running system.
+
 **Closed since this baseline:** **WP-1** (merged, PR #68) fixed the CHANGELOG-ends-at-M4 and
 CLAUDE.md-names-M5-frontier drift. **WP-2** guarded dark-theme a11y (the axe gate now scans both
 themes; ADR-022 amended) — dark-theme _visual_ coverage remains open as WP-3.
@@ -429,6 +434,11 @@ reconciles manually before sign-off.
       untouched; property suite green. ADR-020/021 get amendments (not new ADRs — this executes
       their documented deferrals). Commits: `feat(m8): pre-sign-off import supersede workflow` /
       `feat(m8): held-PM-fees opening-balance import (ADR-020 §5)`.
+- [ ] **5.** Doc blast — WP-7 invalidates prose recorded in several docs at once; update them in
+      the same PR: `docs/accounting.md` §migration (the "fixing a figure means re-provisioning
+      the org" guidance), the ADR-020/021 amendment notes (step 4), this file's §1 verified-open
+      entries for the supersede/held-fees deferrals, and `docs/migration/appfolio.md` if any
+      profile changes.
 
 ---
 
@@ -597,6 +607,8 @@ code and infra but not as documents. Engineering drafts; external review finaliz
 - [ ] [ENG] First-deploy fix PR if anything surfaces — fixes land in `infra/`/`Dockerfile`,
       never as portal-only drift. Optionally seed demo in dev (the seeder refuses Production —
       prod is never seeded).
+- [ ] [ENG] Before the environment is reachable: collapse §1's "verified-open positions" list to
+      bare WP references (the tripwire recorded in §1).
 
 ### B2 — First PITR restore drill (after B1)
 
@@ -626,6 +638,9 @@ code and infra but not as documents. Engineering drafts; external review finaliz
       enforcement; this adds the release-time view.
 - [ ] [ENG] Release-gate query/script: a budget regression fails the release checklist; document
       in the release runbook.
+- [ ] [ENG] Create `docs/runbooks/release.md` — the deploy + rollback + telemetry-release-gate
+      runbook the bullets above reference (and B5 executes against). Deliberately authored here,
+      against the live B1–B4 legs, so it documents observed reality rather than intention.
 - [ ] [OP] Alert rules: `trust.invariant.violation` (WP-11) → immediate page; failed-job /
       error-spike / uptime checks; a 2 a.m. on-call checklist in `docs/runbooks/`.
 
@@ -643,7 +658,9 @@ code and infra but not as documents. Engineering drafts; external review finaliz
 - [ ] **C1 — External trust-accounting compliance review** (the NCREC-facing review ADR-014
       anticipates; operator schedules — longest lead time in the remainder, start early).
       Engineering-visible inputs to the review packet: `docs/accounting.md`,
-      ADR-006/011/014/016/020, the WP-8 Compliance Pack output on the demo org, the WP-12
+      ADR-006/011/014/016/018/020 (ADR-018's equity basis and rounding convention are among the
+      fiduciary-policy calls the review confirms or replaces — its revisit trigger),
+      the WP-8 Compliance Pack output on the demo org, the WP-12
       drafts, and **ADR-014's two deliberately deferred fiduciary policies** — (a) interest
       entitlement on trust funds (M4 credits the PM's held position by default) and (b)
       trust-fee coverage being procedural rather than structural. The review replaces those
@@ -704,12 +721,15 @@ stay deliberate instead of forgotten.
 | Statement read-model materialization (Approach B)                                        | ADR-016                              | statement generation measurably slows page loads at ~300-unit scale (WP-9 will produce the first real numbers) |
 | Trust-interest entitlement + trust-fee coverage policy                                   | ADR-014                              | Track C1 review (this roadmap schedules it)                                                                    |
 | Deposit-disposition wizard deriving refund bank from liability source                    | ADR-014 consequences / Phase-3 scope | Phase 3 move-out work                                                                                          |
+| Proration convention (actual-days inclusive, `AwayFromZero`) — re-gold deliberately      | ADR-017 revisit trigger              | the C3 parallel run surfaces a prorated charge that disagrees with the incumbent system's figure               |
+| Property-level management-fee overrides (per-property equity decomposition)              | ADR-018 revisit trigger              | a real org needs per-property fee bps, or the C1 review redefines the equity basis / rounding convention       |
+| Bulk-run engine: non-monthly `SourceRef` scheme; chunked confirms with run-level resume  | ADR-019 revisit trigger              | an ad-hoc / non-monthly run type appears, or a single atomic confirm hits lock contention/timeouts at scale    |
 | Multi-source import (Buildium/Rentec profile registry)                                   | ADR-020/021                          | a second PM-software source is onboarded                                                                       |
 | Redis (cache/sessions)                                                                   | ADR-002                              | Phase-2 scale/session need materializes                                                                        |
 | Per-persona RLS for portals (vs app-layer scoping)                                       | ADR-003                              | portal endpoint surface grows past a handful (Phase 2–3)                                                       |
 | Percy/Chromatic/Applitools cross-browser diffing                                         | ADR-023                              | visual flake beyond the 2% tolerance                                                                           |
-| Accent × density a11y matrix (non-teal dark accents fixed incidentally, not gate-tested) | WP-2 out-of-scope note               | a non-default accent ships as a supported default                                                              |
-| e2e job sharding                                                                         | ADR-022 runtime note                 | e2e runtime becomes the CI constraint                                                                          |
+| Accent × density a11y matrix (non-teal dark accents fixed incidentally, not gate-tested) | WP-2 note / ADR-022 revisit trigger  | a non-default accent ships as a supported default                                                              |
+| e2e job sharding                                                                         | ADR-022 revisit trigger              | e2e runtime becomes the CI constraint                                                                          |
 | TypeScript 6 upgrade                                                                     | `ts6-unblock-watch.yml`              | automated — the watcher files an issue when `openapi-typescript` unblocks                                      |
 
 ---
@@ -729,4 +749,5 @@ stay deliberate instead of forgotten.
 - Scope changes are edits to the private plan first; this file follows. If a WP is dropped or
   re-cut, record why in the PR that edits this file.
 - ADR-per-deviation still applies: WP-10 records ADR-024; WP-7 amends ADR-020/021; WP-2/3 amend
-  ADR-022/023 Consequences; Track C1 outcomes amend ADR-014.
+  ADR-022/023 Consequences; Track C1 outcomes amend ADR-014 (and ADR-018, if the review changes
+  the fee equity basis or rounding convention).

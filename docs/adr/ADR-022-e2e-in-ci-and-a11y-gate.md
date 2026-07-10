@@ -40,3 +40,10 @@ attach to, and accessibility was a manual checklist.
 - The axe scan now covers both the light and dark themes (WP-2) on the default accent, guarding
   dark-theme accessibility as a merge gate; the full accent×density matrix remains an out-of-scope
   future follow-up.
+
+## Revisit trigger
+
+Reopen the single serial `e2e` job if suite runtime or flake rate makes the gate a merge
+bottleneck (then shard/parallelize workers, or split the a11y scan into its own job). Reopen the
+axe scan's scope when a new theme, accent, or density variant ships to users — the gate must
+cover what users actually see, and today that is light+dark on the default accent only.

@@ -9,7 +9,7 @@ using Shouldly;
 namespace LeaseBook.Tests.Integration;
 
 /// <summary>
-/// WP-10: the click-budget telemetry sink (§C.8). It is staff-gated (401 unauthenticated) and accepts a
+/// The click-budget telemetry sink (§C.8). It is staff-gated (401 unauthenticated) and accepts a
 /// tags-only sample, returning 204 so the fire-and-forget client call never blocks the UI.
 /// </summary>
 [Collection(nameof(DatabaseCollection))]

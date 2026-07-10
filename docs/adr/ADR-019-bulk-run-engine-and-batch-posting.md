@@ -1,10 +1,8 @@
-# ADR-019 — Bulk Run Engine and Batch Posting (M6)
+# ADR-019: Bulk run engine and batch posting
 
-**Date:** 2026-06-23  
-**Status:** Accepted  
-**Milestone:** M6 WP-1
-
----
+- **Status:** Accepted
+- **Date:** 2026-06-23
+- **Milestone:** M6 (plan-local WP-1 — not a `docs/ROADMAP.md` WP id)
 
 ## Context
 
@@ -101,3 +99,11 @@ gets an audit trail via the existing convention. This avoids an awkward cross-mo
   `Skipped`.
 - `ModuleBoundaryTests` enforces that `Modules.Operations` references only `SharedKernel`;
   `SchemaGuardTests` enforces RLS on both new tables.
+
+## Revisit trigger
+
+Reopen the `SourceRef` key convention if a run type appears whose targets cannot be keyed as
+`{runType}:{year}-{month:00}:{target}` (e.g. ad-hoc or non-monthly runs), and the
+one-transaction confirm path if per-item posting volume at real scale makes a single atomic
+run a lock-contention or timeout problem (then consider chunked confirms with a run-level
+resume, recorded as a new ADR).

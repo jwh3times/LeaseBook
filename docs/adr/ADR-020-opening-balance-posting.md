@@ -1,8 +1,9 @@
-# ADR-020 — Balance-Forward Opening-Balance Posting Model (M7)
+# ADR-020: Balance-forward opening-balance posting model
 
 - **Status:** Accepted
 - **Date:** 2026-06-23
 - **Deciders:** Engineering
+- **Milestone:** M7
 
 ## Context
 

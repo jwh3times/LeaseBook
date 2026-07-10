@@ -1,10 +1,8 @@
-# ADR-017 — Rent Proration Method (M6 WP-2)
+# ADR-017: Rent proration method
 
-**Date:** 2026-06-23  
-**Status:** Accepted  
-**Milestone:** M6 WP-2
-
----
+- **Status:** Accepted
+- **Date:** 2026-06-23
+- **Milestone:** M6 (plan-local WP-2 — not a `docs/ROADMAP.md` WP id)
 
 ## Context
 
@@ -96,3 +94,11 @@ surfaced as `Exceptions` in the preview (not rows), so the operator sees them ex
 - Trust accounting invariants are maintained: proration is a read-only computation; the
   double-entry entry is posted by `PostingService` using the rounded amount with no further
   manipulation.
+
+## Revisit trigger
+
+Reopen decisions 1–2 if the C3 parallel run (`docs/migration/parallel-run.md`) surfaces a
+prorated charge that disagrees with the incumbent system's figure — a real customer's convention
+(e.g. a 30-day "banker's month" denominator, or exclusive boundary-day counting) beats ours. The
+table-driven proration goldens are the tripwire: any formula change fails them loudly and must be
+a deliberate, re-golded edit.

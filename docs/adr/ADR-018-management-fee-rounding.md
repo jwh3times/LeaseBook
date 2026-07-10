@@ -1,7 +1,8 @@
-# ADR-018 — Management-fee rounding for the owner disbursement run
+# ADR-018: Management-fee rounding for the owner disbursement run
 
-**Status:** Accepted — M6 WP-4
-**Date:** 2026-06-23
+- **Status:** Accepted
+- **Date:** 2026-06-23
+- **Milestone:** M6 (plan-local WP-4 — not a `docs/ROADMAP.md` WP id)
 
 ## Context
 
@@ -46,3 +47,11 @@ distributable equity — only cash receipts (`PaymentReceived`, `DepositApplied`
 - The DuplicateSourceRefException catch is the idempotency backstop if the run is retried with
   the same source_refs; if equity is zero after disbursement, a re-run excludes the owner
   (correct — there is nothing left to disburse).
+
+## Revisit trigger
+
+Reopen when a real org needs **property-level fee overrides** — that requires the per-property
+equity decomposition this ADR deliberately defers — or if the C1 compliance review redefines
+either the distributable-equity basis (today: cash+both) or the rounding convention (today:
+`AwayFromZero`). Both are fiduciary-policy calls the external review is expected to confirm or
+replace.
