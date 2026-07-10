@@ -3,6 +3,8 @@
 - **Status:** Accepted
 - **Date:** 2026-06-13
 - **Deciders:** Engineering
+- **Amended by:** [ADR-013](ADR-013-composite-org-dimension-fks.md) — executes the composite
+  `(org_id, id)` dimension-FK promotion this ADR records as "Planned hardening"
 
 ## Context
 

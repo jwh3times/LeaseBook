@@ -1,8 +1,9 @@
-# ADR-021 — Migration Toolkit Architecture & Verification Gate (M7)
+# ADR-021: Migration toolkit architecture & verification gate
 
 - **Status:** Accepted
 - **Date:** 2026-06-23
 - **Deciders:** Engineering
+- **Milestone:** M7
 
 ## Context
 
