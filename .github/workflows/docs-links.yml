@@ -32,16 +32,13 @@ jobs:
         with:
           fail: true
           # Explicit include list = the tracked docs set (never node_modules/bin/obj strays).
-          # --include-fragments validates intra-repo #anchor links (e.g. appfolio.md's Gate link).
+          # --include-fragments validates intra-repo #anchor links.
           # localhost/loopback URLs are dev-runbook examples, not checkable links.
-          # docs/superpowers/ is excluded by design: its README declares the tree frozen
-          # point-in-time, so link rot there is expected history, not an actionable failure.
           args: >-
             --no-progress
             --include-fragments
             --accept '200..=299, 429'
             --exclude '^https?://(localhost|127\.0\.0\.1)'
-            --exclude-path docs/superpowers
             'README.md' 'CHANGELOG.md' 'CONTRIBUTING.md' 'SECURITY.md' 'SUPPORT.md'
             'CODE_OF_CONDUCT.md' 'AGENTS.md' 'CLAUDE.md'
             'docs/**/*.md' 'infra/**/*.md' '.github/**/*.md' '.claude/**/*.md'

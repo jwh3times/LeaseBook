@@ -58,7 +58,7 @@ suite — not by convention. See [`docs/accounting.md`](docs/accounting.md) for 
 
 On the roadmap: a compliance and hardening pass toward beta (accessibility, security, performance,
 and live deployment) — followed by online payments, owner/tenant portals, and lease/maintenance
-workflows. See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the detailed plan.
+workflows. See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the public product direction.
 
 ---
 
@@ -273,9 +273,8 @@ containers).
   trust-accounting data model)
 - [`docs/accounting.md`](docs/accounting.md) — the trust-accounting model in plain English
 - [`docs/adr/`](docs/adr) — architecture decision records
-- [`docs/ROADMAP.md`](docs/ROADMAP.md) — the consolidated engineering roadmap (tracks and work
-  packages for the remaining build)
-- [`docs/planning/`](docs/planning) — published milestone retrospectives (M0–M7, point-in-time)
+- [`docs/ROADMAP.md`](docs/ROADMAP.md) — shipped capabilities and high-level product direction
+- [`docs/migration/parallel-run.md`](docs/migration/parallel-run.md) — migration parallel-run checklist
 - [`docs/runbooks/`](docs/runbooks) — local development and restore runbooks
 
 ---

@@ -16,11 +16,11 @@ Postgres 18 runs via `docker-compose.yml`. On first start, `infra/db/bootstrap.s
 Row-Level Security a real boundary: RLS does not apply to a table's owner by default, so the role
 that runs traffic must not be the role that owns the tables (see CLAUDE.md → Multi-tenancy).
 
-| Role | Purpose | RLS | Dev password |
-| --- | --- | --- | --- |
-| `leasebook_migrator` | Owns the schema; runs migrations only; never serves traffic | owner (bypasses unless FORCE) | `dev_migrator_pw` |
-| `leasebook_app` | Runtime DML role used by the app | subject (FORCE ROW LEVEL SECURITY) | `dev_app_pw` |
-| `leasebook_ops` | Read-only support / ad-hoc reporting | subject | `dev_ops_pw` |
+| Role                 | Purpose                                                     | RLS                                | Dev password      |
+| -------------------- | ----------------------------------------------------------- | ---------------------------------- | ----------------- |
+| `leasebook_migrator` | Owns the schema; runs migrations only; never serves traffic | owner (bypasses unless FORCE)      | `dev_migrator_pw` |
+| `leasebook_app`      | Runtime DML role used by the app                            | subject (FORCE ROW LEVEL SECURITY) | `dev_app_pw`      |
+| `leasebook_ops`      | Read-only support / ad-hoc reporting                        | subject                            | `dev_ops_pw`      |
 
 Superuser `postgres` password (dev): `dev_postgres_pw`. **All dev-only** — real credentials live
 in Key Vault.
@@ -33,15 +33,15 @@ additionally revoke UPDATE/DELETE in their migration.
 
 Cross-platform helpers in `scripts/` (`dev.ps1` for Windows/pwsh, `dev.sh` for POSIX):
 
-| Command | Effect |
-| --- | --- |
-| `./scripts/dev.ps1 up` | Start **Postgres only** (inner-loop dev — see "Two ways to run" below) and wait until healthy |
-| `./scripts/dev.ps1 down` | Stop the containers, keep the data volume |
-| `./scripts/dev.ps1 reset-db` | Wipe the data volume (`down -v`) and re-bootstrap from scratch |
-| `./scripts/dev.ps1 psql` | Open `psql` inside the container as the migrator role |
-| `./scripts/dev.ps1 app-up` | Build + run the **whole product** in Docker (db → migrate → seed → app on :8082) |
-| `./scripts/dev.ps1 app-down` | Stop the full stack, keep the data volume |
-| `./scripts/dev.ps1 app-logs` | Follow the app container's logs |
+| Command                      | Effect                                                                                        |
+| ---------------------------- | --------------------------------------------------------------------------------------------- |
+| `./scripts/dev.ps1 up`       | Start **Postgres only** (inner-loop dev — see "Two ways to run" below) and wait until healthy |
+| `./scripts/dev.ps1 down`     | Stop the containers, keep the data volume                                                     |
+| `./scripts/dev.ps1 reset-db` | Wipe the data volume (`down -v`) and re-bootstrap from scratch                                |
+| `./scripts/dev.ps1 psql`     | Open `psql` inside the container as the migrator role                                         |
+| `./scripts/dev.ps1 app-up`   | Build + run the **whole product** in Docker (db → migrate → seed → app on :8082)              |
+| `./scripts/dev.ps1 app-down` | Stop the full stack, keep the data volume                                                     |
+| `./scripts/dev.ps1 app-logs` | Follow the app container's logs                                                               |
 
 ## Two ways to run
 
@@ -71,12 +71,12 @@ runs everything.
 
 The stack is four services wired by `depends_on` conditions so they start in the only safe order:
 
-| Service | Image / role | What it does |
-| --- | --- | --- |
-| `db` | `postgres:18` | The database (always on, both profiles). |
-| `migrate` | `leasebook-migrator`, **migrator role** | One-shot. Runs an **EF migrations bundle** (built in the Dockerfile `migrator` stage) to bring the schema to the latest migration, then exits 0. |
-| `seed` | `leasebook`, **app role** | One-shot. `dotnet LeaseBook.Web.dll seed --org demo` — provisions the demo org + admin + directory + journal. Idempotent, so it runs every `up` and skips when already seeded. Exits 0. |
-| `app` | `leasebook`, **app role** | Serves the SPA + `/api` on container port :8080, published on host :8082. |
+| Service   | Image / role                            | What it does                                                                                                                                                                            |
+| --------- | --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `db`      | `postgres:18`                           | The database (always on, both profiles).                                                                                                                                                |
+| `migrate` | `leasebook-migrator`, **migrator role** | One-shot. Runs an **EF migrations bundle** (built in the Dockerfile `migrator` stage) to bring the schema to the latest migration, then exits 0.                                        |
+| `seed`    | `leasebook`, **app role**               | One-shot. `dotnet LeaseBook.Web.dll seed --org demo` — provisions the demo org + admin + directory + journal. Idempotent, so it runs every `up` and skips when already seeded. Exits 0. |
+| `app`     | `leasebook`, **app role**               | Serves the SPA + `/api` on container port :8080, published on host :8082.                                                                                                               |
 
 `migrate` and `seed` are **one-shot** containers: in Docker Desktop they show as **`Exited (0)`** once
 the schema is current and the org is seeded — that is success, not a crash. The chain is
@@ -96,7 +96,7 @@ Notes:
   cookies reset when the app container is recreated — just sign in again. (Real environments persist
   keys; not worth the volume-permission friction for a local demo.)
 - The full stack is **dev-only** and uses the placeholder passwords from `infra/db/bootstrap.sql`. Real
-  environments use Azure Flexible Server + Key Vault + managed identity (`infra/`; ROADMAP WP-10 / Track B).
+  environments use Azure Flexible Server + Key Vault + managed identity (`infra/`).
 
 ## Connecting as each role
 

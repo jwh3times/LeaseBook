@@ -8,8 +8,7 @@ LeaseBook is a property-management SaaS for small residential PMs, differentiate
 trust accounting** (NC fiduciary standard) and low click-depth UX. All work is
 governed by `private/TODO.md`, the master build plan: milestones M0–M8 implement PRD Phase 1 and
 are sequenced top-to-bottom; each milestone ends in a demonstrable state. Per-milestone plans and
-retrospectives live in `private/planning/` (`m{N}_plan.md` / `m{N}_retro.md`); the m0–m7 retros
-are also published (lightly scrubbed) in `docs/planning/`.
+retrospectives live in `private/planning/` (`m{N}_plan.md` / `m{N}_retro.md`).
 
 **Progress (the `private/TODO.md` checkboxes and `private/planning/*_retro.md` are the live source of
 truth — consult them, don't trust a summary):**
@@ -30,14 +29,12 @@ truth — consult them, don't trust a summary):**
   Clearing account, a hard verification sign-off gate, and the onboarding wizard).
 - **M8 (Hardening, Compliance & Beta Launch) is the current frontier**, partially shipped: the
   `azure-infrastructure` specialist agent, the CI e2e run + automated WCAG 2 AA accessibility gate
-  (ADR-022), and visual-regression baselines on money-critical states (ADR-023). The remaining M8
-  work is planned in **`docs/ROADMAP.md`** — the single consolidated engineering plan (Track A
-  engineering-ready work packages WP-1…WP-12, Track B operator-gated go-live, Track C
-  compliance/beta gates). `docs/ROADMAP.md` is committed and public-safe; `private/TODO.md` remains
-  canonical where the two disagree.
+  (ADR-022), and visual-regression baselines on money-critical states (ADR-023). The public
+  direction is summarized in **`docs/ROADMAP.md`**; detailed M8 sequencing lives in
+  `private/roadmap.md` and `private/TODO.md`, with `private/TODO.md` canonical where they disagree.
 - **Operator-gated remainder** (deferred — not engineering work): Azure OIDC/ACR/Container App
   deploy wiring, live Key Vault + managed identity, the first PITR drill, and the
-  deployment-dependent telemetry/alerting — all scheduled by M8 (see `docs/ROADMAP.md` Track B).
+  deployment-dependent telemetry/alerting.
 - The `Accounting`, `Directory`, `Banking`, `Reporting`, `Operations`, and `Migrator` modules are
   built; **`Payments` is the one remaining scaffolded shell** (Phase 2).
 

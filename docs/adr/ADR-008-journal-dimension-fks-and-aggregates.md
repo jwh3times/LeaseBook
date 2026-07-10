@@ -105,5 +105,5 @@ RI bypassing RLS. Under a composite FK that global row no longer satisfies a *di
 so the harness must seed FK-target dimensions **into each test org**, and the full golden/invariant/
 integration gate must be re-run. Schedule it into the next milestone that already touches `journal_lines`
 (M3 money movement or M4's bank register), where the harness is in scope anyway — not as a standalone
-change against a green milestone branch. See `docs/planning/m2_retro.md` → "Known limitations &
-follow-up hardening".
+change against a green milestone branch. The rework was completed in M4 and recorded by
+[ADR-013](ADR-013-composite-org-dimension-fks.md).

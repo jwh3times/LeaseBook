@@ -6,7 +6,7 @@ live in [`CLAUDE.md`](../CLAUDE.md) and the [ADRs](adr/); this document orients 
 restate them.
 
 LeaseBook is a **modular monolith** whose core is a double-entry trust-accounting engine. Every
-tenant ledger, owner ledger, bank register, and statement is a *projection of one journal* — never a
+tenant ledger, owner ledger, bank register, and statement is a _projection of one journal_ — never a
 separately maintained number that could drift. Correctness is structural, not a reporting concern,
 and the architecture exists to keep it that way.
 
@@ -27,7 +27,7 @@ primitives (money, ids, the CQRS spine, tenancy, result types). A module referen
 and nothing else; the architecture tests (`ModuleBoundaryTests`) enforce this absolutely.
 
 A module **never reads another module's tables or types directly**. A cross-module read goes through
-a **consumer-owned port** — an interface declared in the *consuming* module's `Contracts` — that a
+a **consumer-owned port** — an interface declared in the _consuming_ module's `Contracts` — that a
 thin **host adapter** implements by delegating to the producing module via `ISender`, on the same
 ambient row-level-security transaction. Ports expose **batch** reads (they return a map), never
 per-id reads. This keeps every module independently extractable and keeps the boundary visible. The
@@ -38,8 +38,8 @@ purpose and records its own ADR. See [ADR-007](adr/ADR-007-cross-module-read-con
 
 The journal is `journal_entries` + `journal_lines`, written **only** through posting templates keyed
 to business events (`RentCharged`, `PaymentReceived`, `DepositApplied`, …). Every line is tagged
-`cash`, `accrual`, or `both`, so each accounting basis is a *query*, not a transformation — the two
-bases are two readings of the same history and can never disagree about the past. Account *class*
+`cash`, `accrual`, or `both`, so each accounting basis is a _query_, not a transformation — the two
+bases are two readings of the same history and can never disagree about the past. Account _class_
 (not a report filter) keeps fiduciary money separated: management income can never carry an owner's
 name, and deposits/prepayments are liabilities until applied. This module carries the highest test
 rigor in the codebase — invariant, property-based, and golden-file suites. See
@@ -98,8 +98,8 @@ grant on them, so corrections can only ever be linked reversals.
 
 Durable background jobs (statement generation/email, the nightly trust-equation sweep, future
 webhook retries) are designed to run on **Hangfire backed by PostgreSQL** — no extra infrastructure.
-Hangfire is **not yet integrated**: the first real integration is the nightly invariant sweep
-(ROADMAP WP-11), and the Hangfire dashboard is deliberately not mounted in Phase 1 (attack surface).
+Hangfire is **not yet integrated**: its first intended use is the nightly invariant sweep, and the
+Hangfire dashboard is deliberately not mounted in Phase 1 (attack surface).
 Redis is deliberately deferred until a concrete need appears. Every job must establish org context
 transactionally before touching data and throw if it is missing. See
 [ADR-001](adr/ADR-001-background-job-scheduler.md) and [ADR-002](adr/ADR-002-defer-redis.md).
@@ -118,7 +118,7 @@ Docker Compose — `./scripts/dev.ps1 app-up` brings up database → migrate →
 - [`blueprint.md`](blueprint.md) — the committed architecture blueprint (tech defaults, RLS design,
   trust-accounting data model)
 - [`accounting.md`](accounting.md) — the trust-accounting model in plain English
-- [`planning/`](planning/) — published milestone retrospectives (point-in-time)
+- [`ROADMAP.md`](ROADMAP.md) — shipped capabilities and high-level product direction
 - [`adr/`](adr/) — architecture decision records (start with the [index](adr/README.md))
 - [`runbooks/`](runbooks/) — local development and restore runbooks
 - [`CLAUDE.md`](../CLAUDE.md) — the engineering constraints and non-negotiable invariants

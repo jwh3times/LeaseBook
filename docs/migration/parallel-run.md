@@ -66,4 +66,4 @@ Once these are met, stop entering data in AppFolio. LeaseBook is your system of 
   navigate directly to `/onboarding/parallel-run`.
 - Engine design: `docs/adr/ADR-020-opening-balance-posting.md`,
   `docs/adr/ADR-021-migration-toolkit.md`.
-- AppFolio export column mapping: `docs/migration/appfolio.md`.
+- Import profile behavior: `src/LeaseBook.Migrator/Profiles/AppFolioProfiles.cs`.

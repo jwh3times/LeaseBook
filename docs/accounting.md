@@ -7,7 +7,7 @@ the binding rules are in `CLAUDE.md` ("Non-negotiable invariants") and ADR-006.
 
 ## The one ledger
 
-Everything is a **double-entry journal**. Each event writes one *entry* made of *lines*; within an
+Everything is a **double-entry journal**. Each event writes one _entry_ made of _lines_; within an
 entry the debits equal the credits. Nothing is ever edited or deleted after it is posted — a mistake
 is fixed by posting a linked **reversal** (an equal-and-opposite entry), so the history is always the
 truth of what happened and when. Every tenant statement, owner statement, bank balance, and deposit
@@ -18,14 +18,14 @@ register is a **query over this journal**, never a separately maintained number 
 Every line points at an account, and every account has a **class**. The class — not a report filter —
 is what keeps fiduciary money straight:
 
-| Class | What it holds |
-| --- | --- |
-| `trust_bank` | Money physically in a trust bank account (rent, deposits) — held *for* owners/tenants |
-| `owner_equity` | How much of the trust belongs to each owner |
-| `tenant_receivable` | What a tenant owes (rent, fees) — a promise, not cash |
-| `deposit_liability` | Security deposits and prepayments — money we **owe back** until it is applied |
-| `pm_income` | The property manager's earned management fee |
-| `pm_operating_bank` | The manager's *own* operating bank account |
+| Class               | What it holds                                                                         |
+| ------------------- | ------------------------------------------------------------------------------------- |
+| `trust_bank`        | Money physically in a trust bank account (rent, deposits) — held _for_ owners/tenants |
+| `owner_equity`      | How much of the trust belongs to each owner                                           |
+| `tenant_receivable` | What a tenant owes (rent, fees) — a promise, not cash                                 |
+| `deposit_liability` | Security deposits and prepayments — money we **owe back** until it is applied         |
+| `pm_income`         | The property manager's earned management fee                                          |
+| `pm_operating_bank` | The manager's _own_ operating bank account                                            |
 
 The crucial separation: **`pm_income` can never carry an owner's name.** It is enforced at the
 database level (a line tagged owner-and-PM-income is rejected), so the manager's fee income can never
@@ -36,9 +36,9 @@ are not income, and they do not become income until they are actually applied.
 
 Every line is tagged **cash**, **accrual**, or **both**:
 
-- *accrual* records what is owed/earned when it happens (rent charged today is income today).
-- *cash* records money when it actually moves (rent is income when the tenant pays).
-- *both* means the line counts in either view (a deposit hitting the bank is simultaneously real
+- _accrual_ records what is owed/earned when it happens (rent charged today is income today).
+- _cash_ records money when it actually moves (rent is income when the tenant pays).
+- _both_ means the line counts in either view (a deposit hitting the bank is simultaneously real
   cash and a real liability).
 
 Because the basis is just a tag, the cash and accrual views are two readings of the **same** journal —
@@ -50,13 +50,13 @@ each basis, so a balance is "this basis plus both," never a blind sum of all thr
 A tenant, Jasmine, rents a unit from an owner, Renée's client.
 
 1. **Rent charged ($1,450).** Jasmine now owes $1,450 (receivable up) and the owner has earned $1,450
-   (owner equity up). *Accrual only* — no cash has moved yet.
+   (owner equity up). _Accrual only_ — no cash has moved yet.
 2. **Payment received ($1,450, ACH into the operating trust).** The trust bank goes up $1,450 (cash
    in). That clears her receivable (accrual) and turns into the owner's cash income (cash). If she had
    **overpaid**, only the part covering what she owed would clear the receivable; the rest would be
    booked as a **prepayment liability** — money we hold for her — never as a negative balance.
 3. **Management fee assessed ($290).** The owner's equity goes down $290 and the manager's
-   `pm_income` goes up $290. The fee is *held in the trust bank* for now (it is the manager's money,
+   `pm_income` goes up $290. The fee is _held in the trust bank_ for now (it is the manager's money,
    sitting in the trust account until it is moved out).
 4. **Fees swept ($290, trust → the manager's own bank).** The $290 leaves the trust bank and lands in
    the manager's operating bank; the income attribution moves with the cash. Net income is unchanged —
@@ -65,7 +65,7 @@ A tenant, Jasmine, rents a unit from an owner, Renée's client.
    amount. A disbursement is refused if it would take the owner below their configured reserve.
 
 A **security deposit** follows a different rule on purpose: when collected it increases the deposit
-trust bank and a deposit *liability* — and books **no income at all**. It only becomes income (or
+trust bank and a deposit _liability_ — and books **no income at all**. It only becomes income (or
 clears a charge) when it is actually **applied** at move-out, and that recognition is identical in the
 cash and accrual views.
 
@@ -92,7 +92,7 @@ most once, and a reversal cannot itself be reversed.
 Two independent locks keep settled history settled. Each month is an accounting **period** that can be
 **closed** for the whole organization; the engine then refuses to post into it, and corrections for a
 closed month post into the current open month instead. Separately, **reconciling one bank account** for a
-month locks *that account's* month (see "Banking" below) — a finer-grained lock that is what month-end
+month locks _that account's_ month (see "Banking" below) — a finer-grained lock that is what month-end
 reconciliation actually uses. A post is rejected if either lock covers it.
 
 ## Writing entries through the ledger composer
@@ -103,26 +103,26 @@ exactly one write path to the journal. The command carries only a tenant id plus
 memo; the owner, property and unit are resolved server-side from the tenant's **active lease** (a post
 for a tenant with no active lease is rejected, never guessed). Each command maps to one business event:
 
-| Command (endpoint) | Business event |
-| --- | --- |
-| `POST /tenants/{id}/payments` | `PaymentReceived` (ACH/Card/Check/Cash) |
-| `POST /tenants/{id}/charges` | `RentCharged` (rent) or `FeeCharged` (late / maintenance-recharge / other) |
-| `POST /tenants/{id}/credits` | `CreditIssued` |
-| `POST /tenants/{id}/deposits` | `DepositCollected` |
-| `POST /tenants/{id}/prepayments` | `PrepaymentReceived` |
-| `POST /tenants/{id}/deposit-applications` | `DepositApplied` (to owner income, or against charges) |
-| `POST /tenants/{id}/prepayment-applications` | `PrepaymentApplied` |
-| `POST /entries/{id}/void` | a linked reversal (see "Fixing mistakes") |
+| Command (endpoint)                           | Business event                                                             |
+| -------------------------------------------- | -------------------------------------------------------------------------- |
+| `POST /tenants/{id}/payments`                | `PaymentReceived` (ACH/Card/Check/Cash)                                    |
+| `POST /tenants/{id}/charges`                 | `RentCharged` (rent) or `FeeCharged` (late / maintenance-recharge / other) |
+| `POST /tenants/{id}/credits`                 | `CreditIssued`                                                             |
+| `POST /tenants/{id}/deposits`                | `DepositCollected`                                                         |
+| `POST /tenants/{id}/prepayments`             | `PrepaymentReceived`                                                       |
+| `POST /tenants/{id}/deposit-applications`    | `DepositApplied` (to owner income, or against charges)                     |
+| `POST /tenants/{id}/prepayment-applications` | `PrepaymentApplied`                                                        |
+| `POST /entries/{id}/void`                    | a linked reversal (see "Fixing mistakes")                                  |
 
 Every submit carries a client-minted **idempotency key** (`sourceRef`), so a double-click or retry maps
 to "already posted" rather than posting twice. `GET /tenants/{id}/ledger.csv` exports the on-screen
 ledger.
 
 **The over-application rule (ADR-011).** A payment that exceeds what the tenant owes auto-splits the
-excess into a prepayment. An *application* has no such overflow, so applying a deposit **against charges**
+excess into a prepayment. An _application_ has no such overflow, so applying a deposit **against charges**
 — or applying a prepayment — that would exceed the tenant's open receivable is **rejected**
 (`insufficient_receivable`); the composer asks the user to lower the amount. Applying a deposit **to owner
-income** (damages) is deliberately *not* capped — damages legitimately exceed any rent owed. This sits
+income** (damages) is deliberately _not_ capped — damages legitimately exceed any rent owed. This sits
 alongside the existing rule that an application can never exceed the deposit/prepayment actually held.
 
 ## Who did it
@@ -137,7 +137,7 @@ actor to a name/email — an org-scoped identity lookup, so one company can neve
 
 A **bank register** is the journal seen from one bank account: every line posted to that account, shown
 statement-style (deposits = debits, withdrawals = credits), newest first. Like every other ledger it is a
-*projection* of the journal — nothing is independently maintained.
+_projection_ of the journal — nothing is independently maintained.
 
 **Clearing.** A bank line is `uncleared`, `cleared`, or `reconciled`. That status is operational metadata,
 not part of the immutable journal, so it lives in a side table (`bank_line_status`) the runtime may update —
@@ -180,16 +180,16 @@ generated, only lines carrying `account_class = 'owner_equity'` for the requeste
 considered — this is what structurally excludes PM income (`pm_income` lines can never match). Those
 lines are grouped by `event_type` using a single exhaustive map (`StatementSectionMap`):
 
-| Event type(s) | Statement section |
-| --- | --- |
-| `RentCharged`, `FeeCharged`, `PaymentReceived` | Income — rent collected |
-| `ManagementFeeAssessed`, `VendorPaid` | Operating expenses |
-| `DepositApplied`, `PrepaymentApplied`, `CreditIssued` | Applied deposits & credits |
-| `OwnerContribution` | Owner contributions |
-| `OwnerDisbursed` | Owner disbursement |
-| `BalanceForward` | Folded into beginning balance only; never an in-period section |
+| Event type(s)                                         | Statement section                                              |
+| ----------------------------------------------------- | -------------------------------------------------------------- |
+| `RentCharged`, `FeeCharged`, `PaymentReceived`        | Income — rent collected                                        |
+| `ManagementFeeAssessed`, `VendorPaid`                 | Operating expenses                                             |
+| `DepositApplied`, `PrepaymentApplied`, `CreditIssued` | Applied deposits & credits                                     |
+| `OwnerContribution`                                   | Owner contributions                                            |
+| `OwnerDisbursed`                                      | Owner disbursement                                             |
+| `BalanceForward`                                      | Folded into beginning balance only; never an in-period section |
 
-The map is *exhaustive by construction*: any event that posts to `owner_equity` but has no entry in
+The map is _exhaustive by construction_: any event that posts to `owner_equity` but has no entry in
 this map throws at runtime rather than silently dropping a line off the statement. Adding a new
 posting template that touches owner equity requires updating the map, and the property-based test
 suite will catch the omission before deployment.
@@ -202,7 +202,7 @@ The statement engine runs **three independent reads over the journal** per owner
 2. **Beginning balance** — cumulative owner equity before `entry_date < period_start`.
 3. **Independent period-end balance** — cumulative owner equity before `entry_date < period_end`
    (the same filter as the beginning balance but extended by one month, re-queried fresh from the
-   journal — it is *not* derived by adding the section totals).
+   journal — it is _not_ derived by adding the section totals).
 
 The tie-out then computes `variance = statement_ending − journal_ending_balance`. If variance is
 non-zero, the statement was not issued — the API returns HTTP 409 and the UI surfaces a fiduciary
@@ -211,7 +211,7 @@ an independent replay of the journal to the cent, ruling out any categorization 
 C# section pipeline.
 
 This design is deliberate: the three-query structure means a bug in the grouping or sign convention
-produces a *detectable* non-zero variance, not a silently balanced ledger (which would happen if the
+produces a _detectable_ non-zero variance, not a silently balanced ledger (which would happen if the
 ending balance were derived from the section totals themselves).
 
 ### The fiduciary panel
@@ -219,11 +219,11 @@ ending balance were derived from the section totals themselves).
 Every rendered owner statement carries a **fiduciary integrity panel** — three computed assertions,
 not static copy:
 
-| Check | What it proves |
-| --- | --- |
-| **PM income excluded ✓** | The query is structurally scoped to `owner_equity` lines; no `pm_income` account-class line can ever enter the owner's section totals. This is a data-model constraint, not a filter applied at reporting time. |
-| **Deposits recognized on application ✓** | A `DepositApplied` or `PrepaymentApplied` entry appears in the *Applied deposits & credits* section if and only if one was posted in the period. Collected-but-unapplied deposits sit in `deposit_liability` and never reach the owner's income. |
-| **$0.00 variance ✓** | The structural tie-out (above) confirmed that the statement's section arithmetic matches an independent journal re-query to the cent for this period. |
+| Check                                    | What it proves                                                                                                                                                                                                                                   |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **PM income excluded ✓**                 | The query is structurally scoped to `owner_equity` lines; no `pm_income` account-class line can ever enter the owner's section totals. This is a data-model constraint, not a filter applied at reporting time.                                  |
+| **Deposits recognized on application ✓** | A `DepositApplied` or `PrepaymentApplied` entry appears in the _Applied deposits & credits_ section if and only if one was posted in the period. Collected-but-unapplied deposits sit in `deposit_liability` and never reach the owner's income. |
+| **$0.00 variance ✓**                     | The structural tie-out (above) confirmed that the statement's section arithmetic matches an independent journal re-query to the cent for this period.                                                                                            |
 
 If the variance check fails, the statement is still shown (for diagnosis) but marked unbalanced, the
 panel flag is set, and delivery is blocked until the underlying journal discrepancy is resolved.
