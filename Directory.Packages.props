@@ -50,7 +50,7 @@
 
   <ItemGroup>
     <!-- PDF generation (M5 WP-04): QuestPDF Community license (free under $1M revenue threshold). -->
-    <PackageVersion Include="QuestPDF" Version="2026.7.0" />
+    <PackageVersion Include="QuestPDF" Version="2026.7.1" />
     <!-- PDF text extraction (test-only, M5 WP-04): PdfPig MIT — used to assert PDF content in tests. -->
     <PackageVersion Include="PdfPig" Version="0.1.15" />
   </ItemGroup>
