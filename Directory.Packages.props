@@ -21,23 +21,23 @@
 
   <ItemGroup>
     <!-- Data access (P4): EF Core 10 + Npgsql + snake_case naming -->
-    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.10" />
     <!-- Pinned to keep all EF assemblies at one version (the Npgsql provider's floor is lower). -->
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.9" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.10" />
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
     <PackageVersion Include="EFCore.NamingConventions" Version="10.0.1" />
     <!-- ASP.NET Core Identity EF stores (P12). Identity runtime itself is in the shared framework. -->
     <PackageVersion Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.9" />
     <!-- Built-in OpenAPI document (P11); the SPA generates its TS client from it (WP-08). -->
-    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.10" />
     <!-- Transitive of Microsoft.AspNetCore.OpenApi. Pinned to 2.7.5 (the patched release) to clear
          NU1903 / GHSA-v5pm-xwqc-g5wc — a stack-overflow DoS via circular schema refs affecting
          2.0.0-preview11 … 2.7.4. Transitive pinning (above) forces the resolved version up. Drop the
          pin once Microsoft.AspNetCore.OpenApi references a patched Microsoft.OpenApi transitively. -->
     <PackageVersion Include="Microsoft.OpenApi" Version="2.7.5" />
     <!-- Build-time OpenAPI doc emission for the CI schema-drift gate (ADR-012). Build-only tool. -->
-    <PackageVersion Include="Microsoft.Extensions.ApiDescription.Server" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.Extensions.ApiDescription.Server" Version="10.0.10" />
   </ItemGroup>
 
   <ItemGroup>
@@ -62,11 +62,11 @@
          LeaseBook.Tests.Common fixture library; the full xunit.v3 metapackage requires Exe. -->
     <PackageVersion Include="xunit.v3.extensibility.core" Version="3.2.2" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
-    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.8.0" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
     <PackageVersion Include="Shouldly" Version="4.3.0" />
     <PackageVersion Include="NetArchTest.Rules" Version="1.3.2" />
     <PackageVersion Include="Testcontainers.PostgreSql" Version="4.13.0" />
-    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.10" />
     <!-- Property-based testing (P29): framework-agnostic, runs under xUnit v3/MTP. FsCheck rejected
          (immature xunit-v3 adapter). The accounting harness (WP-07/WP-08) leans on this. -->
     <PackageVersion Include="CsCheck" Version="4.7.0" />
