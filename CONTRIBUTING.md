@@ -144,6 +144,9 @@ Before requesting review, confirm:
 - [ ] `dotnet format --verify-no-changes --exclude src/LeaseBook.Web/Migrations` reports no changes.
 - [ ] Web `npm run lint`, `npm run typecheck`, `npm run test`, and `npm run build` are green (if the SPA changed).
 - [ ] `npm run docs:check` from `web/` is green when public documentation or its tooling changed.
+- [ ] `CHANGELOG.md`'s `[Unreleased]` section records any user-visible change under `src/` or `web/src/`
+      (CI's `CHANGELOG [Unreleased] updated` job enforces this; apply the `skip-changelog` label when a
+      product-source change has no user-visible effect).
 - [ ] Accounting-adjacent changes keep the invariant/property/golden suites green.
 - [ ] New org-scoped tables have their RLS policy; the schema guard passes.
 - [ ] A regenerated, committed `schema.d.ts` accompanies any API-contract change (CI's `schema-drift` job enforces it).
@@ -167,6 +170,9 @@ minor bump sets `VERSION` to `x.y.0` and no `vX.Y.*` tag exists yet, the first r
 
 `CHANGELOG.md` follows the same rhythm (see its cut policy): `[Unreleased]` is cut into a dated
 section only at a deliberate major/minor bump; the per-merge build tags roll up into the next cut.
+A CI gate (`CHANGELOG [Unreleased] updated`) fails any pull request that changes product source
+(`src/` or `web/src/`) without adding to `[Unreleased]`; Dependabot PRs and PRs labeled
+`skip-changelog` are exempt.
 
 ---
 

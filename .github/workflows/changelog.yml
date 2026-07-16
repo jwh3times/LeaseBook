@@ -1,0 +1,82 @@
+name: Changelog
+
+# Enforces the CHANGELOG cut policy: a PR that changes product source (src/** or web/src/**)
+# must add to the [Unreleased] section. Per-merge build tags don't get their own sections —
+# they roll up into the next deliberate cut — so [Unreleased] is where each shipped change is
+# recorded (see the cut policy in CHANGELOG.md and .claude/skills/ship/SKILL.md).
+#
+# Exemptions: dependabot (its bumps roll up into the next cut) and a visible `skip-changelog`
+# label (for product-source changes with no user-visible effect, e.g. a pure refactor).
+#
+# The job always runs so branch protection always gets a conclusion; mark
+# "CHANGELOG [Unreleased] updated" a required status check on main for this to enforce.
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changelog:
+    name: CHANGELOG [Unreleased] updated
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # need base + head commits to diff the [Unreleased] section
+
+      - name: Require an [Unreleased] entry for product-source changes
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+        run: |
+          set -uo pipefail
+
+          # Dependabot bumps roll up into the next release cut — no [Unreleased] entry required.
+          if [[ "$PR_AUTHOR" == "dependabot[bot]" ]]; then
+            echo "Author is dependabot[bot]; changelog entry not required."
+            exit 0
+          fi
+
+          # Explicit, visible escape hatch for product-source changes with no user-visible effect.
+          if [[ ",${PR_LABELS}," == *",skip-changelog,"* ]]; then
+            echo "skip-changelog label present; changelog entry not required."
+            exit 0
+          fi
+
+          # Only product-source changes must be documented; docs/CI/test-only PRs are exempt.
+          needs_entry=false
+          while IFS= read -r f; do
+            case "$f" in
+              src/* | web/src/*) needs_entry=true ;;
+            esac
+          done < <(git diff --name-only "$BASE_SHA...$HEAD_SHA")
+
+          if [[ "$needs_entry" != true ]]; then
+            echo "No changes under src/ or web/src/; changelog entry not required."
+            exit 0
+          fi
+
+          # The [Unreleased] section body at a ref: lines after '## [Unreleased]' up to the next
+          # '## [' heading. Comparing base vs head is not fooled by edits to an older section.
+          extract_unreleased() {
+            git show "$1:CHANGELOG.md" 2>/dev/null | awk '
+              /^## \[Unreleased\]/ { capture = 1; next }
+              /^## \[/ && capture   { exit }
+              capture               { print }
+            ' || true
+          }
+
+          if [[ "$(extract_unreleased "$BASE_SHA")" == "$(extract_unreleased "$HEAD_SHA")" ]]; then
+            echo "::error file=CHANGELOG.md::This PR changes src/ or web/src/ but the [Unreleased] section is unchanged. Add an entry (run /ship), or apply the 'skip-changelog' label if there is no user-visible change."
+            exit 1
+          fi
+
+          echo "CHANGELOG [Unreleased] section updated."
