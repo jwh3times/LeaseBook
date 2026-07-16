@@ -28,6 +28,9 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 - **Changelog enforcement** — CI now fails a pull request that changes product source without adding
   to the `[Unreleased]` changelog section, so every shipped change is recorded before it merges;
   Dependabot bumps and a `skip-changelog` label are exempt.
+- **Dark-theme visual regression** — the CI visual gate now covers the dark theme for the three
+  theme-sensitive states (dashboard, ledger composer, owner statement) alongside the existing light
+  baselines, so a dark design-token regression fails CI instead of shipping unnoticed.
 
 ### Changed
 

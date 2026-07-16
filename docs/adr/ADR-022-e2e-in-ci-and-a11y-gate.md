@@ -34,9 +34,10 @@ attach to, and accessibility was a manual checklist.
   Postgres). Mitigated by job isolation (a flake fails only e2e), `retries: 2`, and uploaded
   trace/report artifacts.
 - **Deferred (follow-on specs):** visual-regression baselines (`toHaveScreenshot`) landed separately
-  (ADR-023); the remaining deferrals are dark-theme visual coverage and extended e2e coverage
-  (Directory navigation, error states, keyboard-only sequences). This ADR covers only the CI e2e
-  foundation + the a11y gate.
+  (ADR-023), and that ADR's own deferred dark-theme visual coverage closed in WP-3 — three
+  theme-sensitive states are now gated in dark (see the ADR-023 amendment). The remaining deferral is
+  extended e2e coverage (Directory navigation, error states, keyboard-only sequences). This ADR
+  covers only the CI e2e foundation + the a11y gate.
 - The axe scan now covers both the light and dark themes (WP-2) on the default accent, guarding
   dark-theme accessibility as a merge gate; the full accent×density matrix remains an out-of-scope
   future follow-up.

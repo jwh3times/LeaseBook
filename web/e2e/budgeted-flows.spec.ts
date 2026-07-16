@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { visualSnapshot } from './helpers';
+import { seedTheme, visualSnapshot } from './helpers';
 
 // The budgeted M2 flows (§D step 6), run against the seeded demo org. The seeded admin has no MFA
 // enrolled (M0 seed), so login is email + password → dashboard.
@@ -25,6 +25,21 @@ test('login lands on the dashboard with owner balances visible at 0 clicks', asy
   await visualSnapshot(page.locator('.pf-statgrid').first(), 'dashboard-kpi-strip.png', {
     mask: [collectedCard],
   });
+});
+
+// WP-3 (ADR-023's deferred dark coverage): the dark twin of the flagship dashboard shot above.
+// Read-only — same state, same mask, so a dark-token regression surfaces without touching the demo
+// org's golden figures. The data-theme assertion is load-bearing: baselines are bootstrapped from CI
+// actuals, so a silently-failed seed would commit a LIGHT image as the dark baseline and the gate
+// would pass forever against the wrong picture.
+test('dashboard renders the flagship layout in the dark theme', async ({ page }) => {
+  await seedTheme(page, 'dark'); // before login — ThemeProvider reads storage on boot
+  await login(page);
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await expect(page.getByText('Owner ending balances')).toBeVisible();
+  await expect(page.getByText('Hargrove Family Trust')).toBeVisible();
+  const collectedCard = page.locator('.pf-card').filter({ hasText: 'Collected this month' });
+  await visualSnapshot(page, 'dashboard-full-dark.png', { fullPage: true, mask: [collectedCard] });
 });
 
 test('⌘K jumps to any tenant in ≤ 2 interactions', async ({ page }) => {

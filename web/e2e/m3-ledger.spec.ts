@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { visualSnapshot } from './helpers';
+import { seedTheme, visualSnapshot } from './helpers';
 
 // The M3 ledger-hub budgeted flows (§D step 6), run against the seeded demo org. The seeded admin
 // (Renée Calloway) has no MFA, so login is email + password. Each spec mutates only with entries it
@@ -81,6 +81,25 @@ test('records a payment in ≤ 3 interactions, then voids it with a linked rever
       .filter({ hasText: `$${UNIQUE_AMOUNT}` })
       .filter({ hasText: 'Payment' }),
   ).toContainText('Voided');
+});
+
+// WP-3 (ADR-023's deferred dark coverage): the dark twin of the composer shot above. Deliberately
+// stops at "composer open" and never posts — the light test already covers the post/void round trip,
+// and repeating the mutation would write a second payment+reversal pair into the demo org for a
+// picture we already take. Same Date mask (the field defaults to wall-clock today). The data-theme
+// assertion guards the bootstrap-from-CI-actuals flow: a failed seed would bake a light baseline.
+test('the ledger composer renders in the dark theme', async ({ page }) => {
+  await seedTheme(page, 'dark'); // before login — ThemeProvider reads storage on boot
+  await login(page);
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await openTenantLedger(page);
+
+  await page.getByRole('button', { name: 'Record payment' }).click();
+  const composer = page.locator('.pf-composer');
+  await expect(composer).toBeVisible();
+  await visualSnapshot(composer, 'ledger-composer-open-dark.png', {
+    mask: [page.locator('.pf-composer-field').filter({ hasText: 'Date' })],
+  });
 });
 
 test('an over-application of held funds is blocked with a warning and the modal stays open', async ({
