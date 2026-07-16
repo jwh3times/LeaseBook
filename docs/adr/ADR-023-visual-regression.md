@@ -36,7 +36,16 @@ and CI runs Ubuntu.
 - Unintended visual drift on the gated states fails CI, with diff images in the `playwright-report`
   artifact. Intended changes are re-baselined via the workflow.
 - Baselines are Linux-only; local Windows visual feedback is not available (functional/a11y e2e still
-  runs locally). Dark-theme visual coverage is deferred (tracked with the dark-theme a11y follow-up).
+  runs locally).
+- **Dark-theme coverage (amended — the deferral above is closed).** Three theme-sensitive states are
+  now gated in dark as well as light: `dashboard-full`, `ledger-composer-open`, and
+  `owner-statement-full`, named with a `-dark` suffix. Coverage is deliberately narrower than the
+  light set — these are the states where a token regression actually shows; the remaining light
+  shots (KPI strip, reconcile strip, fiduciary panel, onboarding report) are composed from the same
+  tokens and would not fail independently. Each dark spec asserts `<html data-theme="dark">` before
+  snapshotting: baselines are bootstrapped from CI-rendered actuals, so a silently-failed theme seed
+  would otherwise commit a light image as the dark baseline and the gate would pass forever against
+  the wrong picture. Dark shots reuse their light twin's masks.
 - A GITHUB_TOKEN push from the workflow does not re-trigger CI; after re-baselining, re-run the `e2e`
   check (or push any commit) to confirm the gate is green.
 

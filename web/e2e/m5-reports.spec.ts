@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { visualSnapshot } from './helpers';
+import { seedTheme, visualSnapshot } from './helpers';
 
 // M5 reporting e2e specs (§D step 5), serial, against the seeded demo org.
 // The seeded admin (Renée Calloway) has no MFA; login is email + password.
@@ -98,6 +98,23 @@ test.describe.serial('M5 reports', () => {
     await expect(page.getByText('$22,640.30')).toBeVisible();
 
     await page.screenshot({ path: 'e2e-results/m5-fiduciary-panel.png', fullPage: true });
+  });
+
+  // WP-3 (ADR-023's deferred dark coverage): the dark twin of the flagship statement shot above.
+  // Read-only, same state (O5 May 2026 cash), no mask — matching the light call. Stays inside this
+  // serial block so it keeps the "runs after the M4 reconcile spec" ordering the file documents.
+  // The data-theme assertion guards the bootstrap-from-CI-actuals flow (a failed seed would commit a
+  // light image as the dark baseline).
+  test('owner statement renders in the dark theme', async ({ page }) => {
+    await seedTheme(page, 'dark'); // before login — ThemeProvider reads storage on boot
+    await login(page);
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+    await gotoO5Statement(page);
+    await selectMay2026Cash(page);
+    await visualSnapshot(page, 'owner-statement-full-dark.png', { fullPage: true });
+    // The golden ending balance must still render — a dark-theme shot of a broken statement is not
+    // coverage.
+    await expect(page.getByText('$22,640.30')).toBeVisible();
   });
 
   test('owner statement PDF export returns a non-empty PDF response', async ({ page }) => {
