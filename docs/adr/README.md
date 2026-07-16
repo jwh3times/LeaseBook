@@ -48,6 +48,7 @@ form, write it, and add a row to the index below. When a decision is replaced, m
 | [021](ADR-021-migration-toolkit.md)                                  | Migration toolkit architecture & verification gate                           | Accepted                      | 2026-06-23 |
 | [022](ADR-022-e2e-in-ci-and-a11y-gate.md)                            | e2e in CI + automated accessibility gate                                     | Accepted                      | 2026-06-30 |
 | [023](ADR-023-visual-regression.md)                                  | Visual regression (CI-only Linux baselines)                                  | Accepted                      | 2026-07-01 |
+| [024](ADR-024-changelog-cut-policy-gate.md)                          | Enforce the changelog cut policy with a CI gate                              | Accepted                      | 2026-07-16 |
 
 ## Status legend
 
