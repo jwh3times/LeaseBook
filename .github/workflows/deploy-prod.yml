@@ -20,7 +20,7 @@ jobs:
     environment: prod # required reviewers gate this deployment
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-dotnet@v5
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
 
