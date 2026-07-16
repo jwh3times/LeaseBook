@@ -25,6 +25,9 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 - **Documentation quality gate** — CI now formats, structurally lints, spell-checks, and validates
   public docs, including lifecycle metadata, private-link boundaries, command ownership, and ADR index
   consistency.
+- **Changelog enforcement** — CI now fails a pull request that changes product source without adding
+  to the `[Unreleased]` changelog section, so every shipped change is recorded before it merges;
+  Dependabot bumps and a `skip-changelog` label are exempt.
 
 ### Changed
 
