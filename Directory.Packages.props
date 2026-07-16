@@ -28,7 +28,7 @@
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
     <PackageVersion Include="EFCore.NamingConventions" Version="10.0.1" />
     <!-- ASP.NET Core Identity EF stores (P12). Identity runtime itself is in the shared framework. -->
-    <PackageVersion Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.10" />
     <!-- Built-in OpenAPI document (P11); the SPA generates its TS client from it (WP-08). -->
     <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.10" />
     <!-- Transitive of Microsoft.AspNetCore.OpenApi. Pinned to 2.7.5 (the patched release) to clear
