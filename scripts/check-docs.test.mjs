@@ -85,3 +85,23 @@ test("validateRepository rejects links to private content", (context) => {
     true,
   );
 });
+
+test("skill files may name canonical commands like agent files", (context) => {
+  const root = mkdtempSync(path.join(tmpdir(), "leasebook-docs-"));
+  context.after(() => rmSync(root, { recursive: true, force: true }));
+  const skill = ".claude/skills/ship/SKILL.md";
+  mkdirSync(path.join(root, ".claude", "skills", "ship"), { recursive: true });
+  writeFileSync(
+    path.join(root, skill),
+    ["# Ship", "", "Run `npm run typecheck` before pushing."].join("\n"),
+  );
+
+  const errors = validateRepository(root, [skill]);
+  assert.equal(
+    errors.some(
+      (error) =>
+        error.file === skill && error.message.includes("Mutable command"),
+    ),
+    false,
+  );
+});

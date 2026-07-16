@@ -109,6 +109,7 @@ function commandCopyAllowed(file) {
     file === "CONTRIBUTING.md" ||
     file === "docs/runbooks/local-dev.md" ||
     file.startsWith(".claude/agents/") ||
+    file.startsWith(".claude/skills/") ||
     file.startsWith("docs/adr/")
   );
 }
