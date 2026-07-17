@@ -46,6 +46,32 @@ export async function openPalette(page: Page): Promise<Locator> {
   return search;
 }
 
+// The detail text a forced 500 fulfills (WP-4 step 2). Exported so specs can assert the SPA's real
+// error-mapping (e.g. `ledgerMutations.ts`'s `toError`, which prefers `body.detail`) actually surfaced
+// this string, rather than asserting on a generic status message.
+export const ROUTE_FAIL_DETAIL = 'Simulated failure (e2e).';
+
+/**
+ * Forces every request matching `urlPattern` to fail with a 500 + JSON problem body, so a spec can
+ * assert the SPA's designed error branch renders (not blank content or a raw network error). A JSON
+ * body (not an empty one) matters: the client parses the response by content-type, and list/mutation
+ * error-handling reads `body.detail`/`body.title` off it.
+ *
+ * Register this inside the owning test only, with as narrow a `urlPattern` as the assertion needs —
+ * each test gets its own `page` (so a route never literally leaks to another spec's run), but a narrow
+ * pattern keeps a single test's interception from shadowing an unrelated request it also happens to
+ * make (e.g. a GET on the same list endpoint fired by a different part of the page).
+ */
+export async function routeFail(page: Page, urlPattern: string | RegExp): Promise<void> {
+  await page.route(urlPattern, (route) =>
+    route.fulfill({
+      status: 500,
+      contentType: 'application/json',
+      body: JSON.stringify({ title: 'Internal Server Error', detail: ROUTE_FAIL_DETAIL }),
+    }),
+  );
+}
+
 const WCAG_AA_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
 
 // WCAG 2 A+AA axe scan asserting zero violations. `disableRules` are for documented,
