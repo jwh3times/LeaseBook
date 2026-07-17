@@ -33,6 +33,19 @@ export async function signIn(page: Page, creds: Credentials): Promise<void> {
   await page.waitForURL(/\/(dashboard|onboarding)/, { timeout: 15_000 });
 }
 
+// Opens the ⌘K palette robustly and returns its search combobox. The global keydown listener attaches
+// in a useEffect after the app shell mounts (web/src/lib/useGlobalShortcuts.ts), so a single press fired
+// right after navigation can be missed in a slow (CI) environment — re-press only while the palette is
+// still closed (safe against toggle). The user-facing path is unchanged: one ⌘K press opens it.
+export async function openPalette(page: Page): Promise<Locator> {
+  const search = page.getByRole('combobox', { name: 'Search' });
+  await expect(async () => {
+    await page.keyboard.press('Control+k');
+    await expect(search).toBeVisible({ timeout: 1000 });
+  }).toPass({ timeout: 15_000 });
+  return search;
+}
+
 const WCAG_AA_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
 
 // WCAG 2 A+AA axe scan asserting zero violations. `disableRules` are for documented,
