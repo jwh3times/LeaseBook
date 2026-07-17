@@ -20,8 +20,10 @@ export function Modal({ title, onClose, children, footer }: ModalProps) {
     const panel = panelRef.current;
     // Focus the first field so a data-entry modal is immediately typable; fall back to the first
     // button (e.g. the header Close) for a modal with no field, so focus still enters the dialog.
-    (panel?.querySelector<HTMLElement>('input, select, textarea') ??
-      panel?.querySelector<HTMLElement>('button'))?.focus();
+    (
+      panel?.querySelector<HTMLElement>('input, select, textarea') ??
+      panel?.querySelector<HTMLElement>('button')
+    )?.focus();
     return () => trigger?.focus?.();
   }, []);
 

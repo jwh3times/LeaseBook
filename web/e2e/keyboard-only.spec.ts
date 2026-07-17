@@ -135,9 +135,7 @@ test.describe('keyboard-only operability', () => {
     await page.keyboard.press('Tab');
     const focused = page.locator('*:focus');
     await expect(focused).toBeVisible();
-    await expect
-      .poll(() => focused.evaluate((el) => el.matches(':focus-visible')))
-      .toBe(true);
+    await expect.poll(() => focused.evaluate((el) => el.matches(':focus-visible'))).toBe(true);
     const tag = await focused.evaluate((el) => el.tagName);
     expect(['A', 'BUTTON', 'INPUT', 'SELECT', 'TEXTAREA']).toContain(tag);
 
