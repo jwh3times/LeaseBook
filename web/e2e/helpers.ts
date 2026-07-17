@@ -33,6 +33,45 @@ export async function signIn(page: Page, creds: Credentials): Promise<void> {
   await page.waitForURL(/\/(dashboard|onboarding)/, { timeout: 15_000 });
 }
 
+// Opens the ⌘K palette robustly and returns its search combobox. The global keydown listener attaches
+// in a useEffect after the app shell mounts (web/src/lib/useGlobalShortcuts.ts), so a single press fired
+// right after navigation can be missed in a slow (CI) environment — re-press only while the palette is
+// still closed (safe against toggle). The user-facing path is unchanged: one ⌘K press opens it.
+export async function openPalette(page: Page): Promise<Locator> {
+  const search = page.getByRole('combobox', { name: 'Search' });
+  await expect(async () => {
+    await page.keyboard.press('Control+k');
+    await expect(search).toBeVisible({ timeout: 1000 });
+  }).toPass({ timeout: 15_000 });
+  return search;
+}
+
+// The detail text a forced 500 fulfills (WP-4 step 2). Exported so specs can assert the SPA's real
+// error-mapping (e.g. `ledgerMutations.ts`'s `toError`, which prefers `body.detail`) actually surfaced
+// this string, rather than asserting on a generic status message.
+export const ROUTE_FAIL_DETAIL = 'Simulated failure (e2e).';
+
+/**
+ * Forces every request matching `urlPattern` to fail with a 500 + JSON problem body, so a spec can
+ * assert the SPA's designed error branch renders (not blank content or a raw network error). A JSON
+ * body (not an empty one) matters: the client parses the response by content-type, and list/mutation
+ * error-handling reads `body.detail`/`body.title` off it.
+ *
+ * Register this inside the owning test only, with as narrow a `urlPattern` as the assertion needs —
+ * each test gets its own `page` (so a route never literally leaks to another spec's run), but a narrow
+ * pattern keeps a single test's interception from shadowing an unrelated request it also happens to
+ * make (e.g. a GET on the same list endpoint fired by a different part of the page).
+ */
+export async function routeFail(page: Page, urlPattern: string | RegExp): Promise<void> {
+  await page.route(urlPattern, (route) =>
+    route.fulfill({
+      status: 500,
+      contentType: 'application/json',
+      body: JSON.stringify({ title: 'Internal Server Error', detail: ROUTE_FAIL_DETAIL }),
+    }),
+  );
+}
+
 const WCAG_AA_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
 
 // WCAG 2 A+AA axe scan asserting zero violations. `disableRules` are for documented,

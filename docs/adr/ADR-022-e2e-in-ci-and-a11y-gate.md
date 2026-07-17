@@ -33,11 +33,14 @@ attach to, and accessibility was a manual checklist.
 - The `e2e` job is the slowest, most flake-prone CI job (serial, single-worker, boots .NET + Vite +
   Postgres). Mitigated by job isolation (a flake fails only e2e), `retries: 2`, and uploaded
   trace/report artifacts.
-- **Deferred (follow-on specs):** visual-regression baselines (`toHaveScreenshot`) landed separately
-  (ADR-023), and that ADR's own deferred dark-theme visual coverage closed in WP-3 — three
-  theme-sensitive states are now gated in dark (see the ADR-023 amendment). The remaining deferral is
-  extended e2e coverage (Directory navigation, error states, keyboard-only sequences). This ADR
-  covers only the CI e2e foundation + the a11y gate.
+- **Deferred (follow-on specs) — now all landed:** visual-regression baselines (`toHaveScreenshot`)
+  landed separately (ADR-023), and that ADR's own deferred dark-theme visual coverage closed in
+  WP-3 — three theme-sensitive states are now gated in dark (see the ADR-023 amendment). The extended
+  e2e coverage this ADR deferred — Directory-navigation depth, error/empty-state rendering, and
+  keyboard-only operability — landed in **WP-4** (`web/e2e/directory-navigation.spec.ts`,
+  `error-states.spec.ts`, `keyboard-only.spec.ts`), which also fixed a modal focus-restoration bug
+  (WCAG 2.4.3) that the keyboard-only guard surfaced. This ADR covers only the CI e2e foundation +
+  the a11y gate.
 - The axe scan now covers both the light and dark themes (WP-2) on the default accent, guarding
   dark-theme accessibility as a merge gate; the full accent×density matrix remains an out-of-scope
   future follow-up.

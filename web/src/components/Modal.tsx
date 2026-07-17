@@ -12,12 +12,27 @@ interface ModalProps {
 export function Modal({ title, onClose, children, footer }: ModalProps) {
   const panelRef = useRef<HTMLDivElement>(null);
 
+  // Move focus into the modal on open and restore it to the trigger on close (WCAG 2.4.3 focus order).
+  // Runs once: capturing the trigger and autofocusing the first field must not repeat as `onClose`
+  // identity changes across renders (a re-run would capture the modal's own field as the "trigger").
+  useEffect(() => {
+    const trigger = document.activeElement as HTMLElement | null;
+    const panel = panelRef.current;
+    // Focus the first field so a data-entry modal is immediately typable; fall back to the first
+    // button (e.g. the header Close) for a modal with no field, so focus still enters the dialog.
+    (
+      panel?.querySelector<HTMLElement>('input, select, textarea') ??
+      panel?.querySelector<HTMLElement>('button')
+    )?.focus();
+    return () => trigger?.focus?.();
+  }, []);
+
+  // Escape closes — bound to the latest onClose.
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       if (event.key === 'Escape') onClose();
     }
     window.addEventListener('keydown', onKey);
-    panelRef.current?.querySelector<HTMLElement>('input, select, textarea, button')?.focus();
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
