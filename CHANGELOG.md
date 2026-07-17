@@ -31,6 +31,11 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 - **Dark-theme visual regression** — the CI visual gate now covers the dark theme for the three
   theme-sensitive states (dashboard, ledger composer, owner statement) alongside the existing light
   baselines, so a dark design-token regression fails CI instead of shipping unnoticed.
+- **Extended end-to-end coverage** — the CI e2e suite now exercises Directory-navigation depth
+  (owner/property/tenant records, ⌘K jumps, and the record quick-switcher), the designed error and
+  empty states (server-failure and no-data rendering), and keyboard-only operability (command
+  palette, reconcile selection, focus return, autofocus, and focus-visible rings), closing the last
+  of ADR-022's deferred coverage.
 
 ### Changed
 
@@ -43,7 +48,9 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Fixed
 
-- _Nothing yet._
+- **Modal focus management** — closing a dialog now returns focus to the control that opened it, and
+  opening one moves focus to its first field (falling back to a button when the dialog has no field),
+  fixing a keyboard focus-order gap (WCAG 2.4.3) surfaced by the new keyboard-only e2e.
 
 ### Security
 
