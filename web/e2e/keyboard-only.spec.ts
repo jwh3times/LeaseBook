@@ -80,6 +80,11 @@ test.describe('keyboard-only operability', () => {
         .filter({ hasText: `$${UNIQUE_AMOUNT}` })
         .first(),
     ).toBeVisible();
+
+    // This payment is intentionally not voided (unlike m3-ledger's void-to-baseline). It is
+    // golden-safe as written: a unique amount dated today (July 2026) cannot enter the May-scoped
+    // goldens, no current/all-time balance is asserted here, and CI reseeds a fresh org each run.
+    // If a future spec ever asserts a July-inclusive or all-time balance, void this payment first.
   });
 
   test('palette arrow keys move the selection and Enter activates the highlighted result', async ({
