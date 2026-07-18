@@ -13,16 +13,28 @@ public sealed class SecurityHeadersMiddleware(RequestDelegate next, IWebHostEnvi
 
     public async Task InvokeAsync(HttpContext context)
     {
-        var headers = context.Response.Headers;
-        headers["X-Content-Type-Options"] = "nosniff";
-        headers["X-Frame-Options"] = "DENY";
-        headers["Referrer-Policy"] = SecurityHeaderOptions.ReferrerPolicy;
-        headers["Permissions-Policy"] = SecurityHeaderOptions.PermissionsPolicy;
-        headers["Content-Security-Policy"] = SecurityHeaderOptions.ContentSecurityPolicy;
-        if (_emitHsts)
+        // Registered via OnStarting rather than assigned directly: when a downstream handler throws,
+        // ExceptionHandlerMiddleware clears the response (wiping any headers already set on it) before
+        // invoking the app's registered IExceptionHandlers (ValidationExceptionHandler,
+        // AccountingExceptionHandler), which write the response body directly without re-entering this
+        // middleware. An OnStarting callback fires immediately before the response is actually sent to
+        // the client and survives that clear, so it lands on both normal and exception-handler-driven
+        // (400/409/422) responses alike.
+        context.Response.OnStarting(() =>
         {
-            headers[HeaderNames.StrictTransportSecurity] = "max-age=31536000; includeSubDomains";
-        }
+            var headers = context.Response.Headers;
+            headers["X-Content-Type-Options"] = "nosniff";
+            headers["X-Frame-Options"] = "DENY";
+            headers["Referrer-Policy"] = SecurityHeaderOptions.ReferrerPolicy;
+            headers["Permissions-Policy"] = SecurityHeaderOptions.PermissionsPolicy;
+            headers["Content-Security-Policy"] = SecurityHeaderOptions.ContentSecurityPolicy;
+            if (_emitHsts)
+            {
+                headers[HeaderNames.StrictTransportSecurity] = "max-age=31536000; includeSubDomains";
+            }
+
+            return Task.CompletedTask;
+        });
 
         await next(context);
     }
