@@ -63,6 +63,10 @@ builder.Services.AddDbContext<AppDbContext>(options => options
 // Identity, cookie auth, antiforgery, deny-by-default authorization (P12).
 builder.Services.AddLeaseBookIdentity(builder.Environment);
 
+// F6: keyring for the Identity token-store encryption converter (EncryptedStringConverter). Dev/test
+// use the default persisted keyring; at go-live the keys move to Key Vault (infra follow-up).
+builder.Services.AddDataProtection();
+
 // WP-5 F3b: config-gated MFA enforcement for PMAdmin (default off; Production turns it on).
 builder.Services.Configure<LeaseBook.Web.Auth.AuthOptions>(builder.Configuration.GetSection("Auth"));
 builder.Services.AddSingleton<Microsoft.AspNetCore.Authorization.IAuthorizationHandler,

@@ -4,6 +4,7 @@ using LeaseBook.SharedKernel;
 using LeaseBook.SharedKernel.Tenancy;
 using LeaseBook.Web.Auth;
 using LeaseBook.Web.Tenancy;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
@@ -26,7 +27,8 @@ namespace LeaseBook.Web.Persistence;
 public sealed class AppDbContext(
     DbContextOptions<AppDbContext> options,
     ITenantContext? tenantContext = null,
-    IActorContext? actorContext = null)
+    IActorContext? actorContext = null,
+    IDataProtectionProvider? dataProtection = null)
     : IdentityDbContext<AppUser, IdentityRole<Guid>, Guid>(options)
 {
     private readonly ITenantContext _tenant = tenantContext ?? NullTenantContext.Instance;
@@ -34,6 +36,11 @@ public sealed class AppDbContext(
     // The acting user for audit stamping (P52). Null for the seeder/jobs and any context built without
     // one (tests, design-time) — a system write, stamped null without throwing.
     private readonly IActorContext? _actor = actorContext;
+
+    // F6: present only when the host resolves it via DI. The migrator/design-time/test-fixture paths
+    // construct AppDbContext directly (no DI), so they get null → plaintext model — correct, because
+    // migrations only create the column; they never write token values.
+    private readonly IDataProtectionProvider? _dataProtection = dataProtection;
 
     public DbSet<Org> Orgs => Set<Org>();
 
@@ -53,6 +60,17 @@ public sealed class AppDbContext(
         modelBuilder.Entity<IdentityUserLogin<Guid>>().ToTable("asp_net_user_logins");
         modelBuilder.Entity<IdentityRoleClaim<Guid>>().ToTable("asp_net_role_claims");
         modelBuilder.Entity<IdentityUserToken<Guid>>().ToTable("asp_net_user_tokens");
+
+        // F6: encrypt the token store's Value column (TOTP authenticator key + 2FA recovery codes)
+        // at rest. Only applied when a protector is present — see the ctor param comment above.
+        if (_dataProtection is not null)
+        {
+            var converter = new EncryptedStringConverter(
+                _dataProtection.CreateProtector("LeaseBook.IdentityTokens.v1"));
+            modelBuilder.Entity<IdentityUserToken<Guid>>()
+                .Property(t => t.Value)
+                .HasConversion(converter);
+        }
 
         foreach (var assembly in PersistenceAssemblies.ModelAssemblies)
         {
