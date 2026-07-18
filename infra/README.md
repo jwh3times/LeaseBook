@@ -33,12 +33,12 @@ LEASEBOOK_PG_ADMIN_PASSWORD=... az deployment sub create \
 The app reads configuration from environment variables supplied by Container Apps, each referencing
 a Key Vault secret (resolved via the app's managed identity):
 
-| Env var                                 | Source                            | Used by                                                  |
-| --------------------------------------- | ---------------------------------- | --------------------------------------------------------- |
-| `ConnectionStrings__Default`            | Key Vault secret (app role)      | the running app (RLS-subject)     |
-| `ConnectionStrings__Migrations`         | Key Vault secret (migrator role) | the deploy migration job **only** |
-| `APPLICATIONINSIGHTS_CONNECTION_STRING` | App Insights (module output)     | telemetry exporter                |
-| `AllowedHosts`                          | app setting, supplied at deploy time | ASP.NET Core host filtering (`HostFilteringMiddleware`)  |
+| Env var                                 | Source                               | Used by                                                 |
+| --------------------------------------- | ------------------------------------ | ------------------------------------------------------- |
+| `ConnectionStrings__Default`            | Key Vault secret (app role)          | the running app (RLS-subject)                           |
+| `ConnectionStrings__Migrations`         | Key Vault secret (migrator role)     | the deploy migration job **only**                       |
+| `APPLICATIONINSIGHTS_CONNECTION_STRING` | App Insights (module output)         | telemetry exporter                                      |
+| `AllowedHosts`                          | app setting, supplied at deploy time | ASP.NET Core host filtering (`HostFilteringMiddleware`) |
 
 Real role passwords live in Key Vault only; `infra/db/bootstrap.sql` dev passwords are dev-only.
 
