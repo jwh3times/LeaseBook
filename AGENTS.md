@@ -138,10 +138,11 @@ invariant in this file conflicts.
 Cross-cutting rules, module boundaries, tenancy model, and trust-accounting invariants in this file
 apply to all work. If a domain guidance file conflicts with these invariants, the invariant wins.
 
-Claude's read-only Stop hook in `.claude/settings.json` detects documentation drift for Claude Code
-sessions. Codex should not assume that hook runs. When source changes affect docs, ports, ADR-worthy
-decisions, user workflows, commands, or business events, check documentation drift manually and update
-the relevant docs in the same change.
+Claude's `/ship` skill detects documentation drift for Claude Code sessions: it invokes the
+`docs-updater` agent for the docs it owns and flags private-roadmap WP drift. Codex should not assume
+that skill runs. When source changes affect docs, ports, ADR-worthy decisions, user workflows,
+commands, or business events, check documentation drift manually and update the relevant docs in the
+same change.
 
 ## Architecture
 

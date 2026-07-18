@@ -1,6 +1,6 @@
 ---
 name: ship
-description: Use when a branch is ready for review or the user says "ship it", "open a PR", or "push this" — refreshes docs, updates the CHANGELOG [Unreleased] section, runs the fast checks, pushes, and opens or updates the PR. LeaseBook-specific.
+description: Use when a branch is ready for review or the user says "ship it", "open a PR", or "push this" — refreshes docs, updates the CHANGELOG [Unreleased] section, flags private-roadmap WP drift, runs the fast checks, pushes, and opens or updates the PR. LeaseBook-specific.
 ---
 
 # Ship
@@ -52,6 +52,39 @@ the docs it owns (README.md, AGENTS.md, `docs/`, ADRs, runbooks, etc.). It runs
 
 **Tell it to leave `CHANGELOG.md` alone** — you own the changelog in step 3, so you don't
 fight over the file. `CHANGELOG.md` is not in the docs-updater topology anyway.
+
+### 2b. Flag private-roadmap WP drift (warn only — never edit or commit `private/`)
+
+The detailed plan lives in `private/roadmap.md` — **gitignored, so CI can never see it.** This local
+ship ritual is therefore the _only_ place its drift can be caught. That file's §10 ("Keeping this
+document honest") requires each WP's PR to tick that WP's own checkboxes and update the §1/§2 status
+lines in the same change; the `docs-updater` in step 2 cannot do this (it has no `private/` topology).
+
+**Skip entirely if `private/roadmap.md` is absent** — public clones and CI have no `private/` tree;
+do not warn about the missing file.
+
+Otherwise, find the WP this branch ships. The branch slug is the WP's roadmap tag, so grep for it:
+
+```
+branch=$(git branch --show-current)     # e.g. m8/compliance-pack
+grep -n "$branch" private/roadmap.md    # locates the WP block; its header names the slug
+```
+
+If the slug matches no WP block (a dependabot bump, a stray fix), there is no WP to tick — skip the
+rest. If it matches, read that WP block and **warn** — quoting the exact lines to fix — when any of
+these still read as "not done":
+
+- the WP block **header** carries no `✅` / **merged, PR #NN** marker, or its step checkboxes are
+  still `- [ ]`;
+- §1's **"verified-open positions"** list still names a gap this WP closed (e.g. "no compliance-pack
+  code");
+- §2's **"Remaining (do in this order)"** table still lists this WP, or the **"N of 12"** counts (§1
+  "Closed since this baseline"; §2 "Complete (merged)") were not incremented;
+- §3's **execution-order** line does not prefix this WP with `✅`.
+
+Surface the findings and let the maintainer edit `private/roadmap.md` themselves. **Never edit,
+stage, or commit it** — it is under `private/` (step 5 and the "Do not" list forbid it). Like the
+schema-drift nudge, this only warns; it never blocks the push.
 
 ### 3. Update the CHANGELOG `[Unreleased]` section
 
@@ -147,6 +180,7 @@ Give the user:
 - the PR URL and branch;
 - what `docs-updater` changed;
 - the `[Unreleased]` entries you added;
+- any private-roadmap WP-drift warning from step 2b (and confirm you did **not** touch `private/`);
 - fast-check results, and any schema-drift or accounting-suite notes.
 
 State plainly that the full test suites run in CI, not locally — do not imply the branch is
@@ -165,3 +199,5 @@ enforces when marked a **required status check** on the `main` branch protection
 - Compute a version, write a dated `## [x.y.z]` section, or edit the compare links. Ordinary
   ships only touch `[Unreleased]`.
 - Commit anything under `private/`.
+- Edit or stage `private/roadmap.md` — the step 2b drift check only **warns**; the maintainer
+  updates that file themselves.

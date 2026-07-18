@@ -10,19 +10,5 @@
       "Bash(git diff:*)",
       "Bash(git log:*)"
     ]
-  },
-  "hooks": {
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "agent",
-            "prompt": "LeaseBook docs freshness check — detection only; you must NOT edit any file. Step 1: run exactly `git status --porcelain` as a single command (it is pre-approved; do not add pipes, redirects, `||`, or chain it with anything — compound commands are not covered by the permission rules and will be denied). If you need content detail, `git diff HEAD` and `git diff HEAD --name-only` are also pre-approved as standalone commands. Step 2: if no changed or untracked files are under src/, web/src/, infra/, or seed/, allow the stop — respond that no source files changed. Step 3: otherwise use the Read, Grep, and Glob tools (no other shell commands) to spot-check whether the docs owned by .claude/agents/docs-updater.md — README.md (port map), CLAUDE.md (milestone frontier), docs/adr/ (ADR coverage + index), and docs/runbooks/ — still match the changed code (e.g., a new migration needs the migration checklist checked; a port change needs the README port map verified; a new dependency in a .csproj or package.json needs ADR coverage). Check only sections relevant to the changed files, not a full audit. Step 4: if the docs are consistent, allow the stop. If there is drift, block the stop with a reason that lists the changed source files, the specific stale doc sections, and this instruction: 'Invoke the docs-updater subagent to fix exactly this drift, then finish.'",
-            "statusMessage": "Checking docs freshness...",
-            "timeout": 180
-          }
-        ]
-      }
-    ]
   }
 }
