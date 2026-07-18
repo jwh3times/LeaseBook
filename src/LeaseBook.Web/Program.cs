@@ -187,6 +187,8 @@ var app = builder.Build();
 
 app.UseExceptionHandler();
 
+app.UseMiddleware<LeaseBook.Web.Security.SecurityHeadersMiddleware>();
+
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi().AllowAnonymous(); // GET /openapi/v1.json
