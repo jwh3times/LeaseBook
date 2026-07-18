@@ -26,7 +26,7 @@ public sealed class MfaEnforcementTests(PostgresFixture fixture)
         await AuthTestSupport.CreateUserAsync(fixture, orgId, email, "Admin", Roles.PMAdmin, ct);
 
         var client = EnforcingClient();
-        await AuthTestSupport.PrimeCsrfAsync(client, ct);
+        await client.PrimeCsrfAsync(ct);
         (await AuthTestSupport.LoginAsync(client, email, ct)).Status.ShouldBe(LoginStatus.Ok);
 
         // Blocked from business endpoints...
@@ -35,7 +35,7 @@ public sealed class MfaEnforcementTests(PostgresFixture fixture)
         blocked.Content.Headers.ContentType!.MediaType.ShouldBe("application/problem+json");
 
         // ...but the enrollment endpoints stay reachable.
-        await AuthTestSupport.PrimeCsrfAsync(client, ct);
+        await client.PrimeCsrfAsync(ct);
         var enroll = await client.PostAsync("/api/auth/mfa/enroll", content: null, ct);
         enroll.StatusCode.ShouldBe(HttpStatusCode.OK);
     }
@@ -50,9 +50,9 @@ public sealed class MfaEnforcementTests(PostgresFixture fixture)
         await AuthTestSupport.CreateUserAsync(fixture, orgId, email, "Admin", Roles.PMAdmin, ct);
 
         var client = EnforcingClient();
-        await AuthTestSupport.PrimeCsrfAsync(client, ct);
+        await client.PrimeCsrfAsync(ct);
         await AuthTestSupport.LoginAsync(client, email, ct);
-        await AuthTestSupport.PrimeCsrfAsync(client, ct);
+        await client.PrimeCsrfAsync(ct);
 
         await AuthTestSupport.EnrollMfaAsync(client, ct); // confirm refreshes the sign-in cookie
 
@@ -70,7 +70,7 @@ public sealed class MfaEnforcementTests(PostgresFixture fixture)
         await AuthTestSupport.CreateUserAsync(fixture, orgId, email, "Staff", Roles.PMStaff, ct);
 
         var client = EnforcingClient();
-        await AuthTestSupport.PrimeCsrfAsync(client, ct);
+        await client.PrimeCsrfAsync(ct);
         await AuthTestSupport.LoginAsync(client, email, ct);
 
         (await client.GetAsync(ProtectedPath, ct)).StatusCode.ShouldBe(HttpStatusCode.OK);
@@ -86,7 +86,7 @@ public sealed class MfaEnforcementTests(PostgresFixture fixture)
         await AuthTestSupport.CreateUserAsync(fixture, orgId, email, "Admin", Roles.PMAdmin, ct);
 
         var client = fixture.Api.CreateClient(); // default Development config: flag off
-        await AuthTestSupport.PrimeCsrfAsync(client, ct);
+        await client.PrimeCsrfAsync(ct);
         await AuthTestSupport.LoginAsync(client, email, ct);
 
         (await client.GetAsync(ProtectedPath, ct)).StatusCode.ShouldBe(HttpStatusCode.OK);

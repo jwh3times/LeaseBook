@@ -33,7 +33,9 @@ namespace LeaseBook.Tests.Integration.Security;
 /// <b>Verdict: F7 is not exploitable through the OpenTelemetry export path as currently
 /// configured.</b> This test is kept as a regression guard — it fails if a future change (e.g. an
 /// explicit opt-out of redaction, an enrichment hook copying the raw query, or a switch to the
-/// legacy <c>http.target</c>/<c>http.url</c> tags) reintroduces the leak.
+/// legacy <c>http.target</c>/<c>http.url</c> tags) reintroduces the leak. It checks both wire
+/// encodings of the recipient email (raw and percent-encoded), since a reintroduced leak could
+/// surface either form.
 /// </para>
 /// </summary>
 [Collection(nameof(DatabaseCollection))]

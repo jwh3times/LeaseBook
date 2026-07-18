@@ -21,9 +21,9 @@ public sealed class MfaSecretAtRestTests(PostgresFixture fixture)
         await AuthTestSupport.CreateUserAsync(fixture, orgId, email, "Secret User", Roles.PMAdmin, ct);
 
         var client = fixture.Api.CreateClient();
-        await AuthTestSupport.PrimeCsrfAsync(client, ct);
+        await client.PrimeCsrfAsync(ct);
         await AuthTestSupport.LoginAsync(client, email, ct);
-        await AuthTestSupport.PrimeCsrfAsync(client, ct);
+        await client.PrimeCsrfAsync(ct);
         var secret = await AuthTestSupport.EnrollMfaAsync(client, ct); // the plaintext base32 key
 
         // Read the raw column directly (bypassing EF/the converter) — it must NOT be the plaintext key.
@@ -37,7 +37,7 @@ public sealed class MfaSecretAtRestTests(PostgresFixture fixture)
         stored!.Length.ShouldBeGreaterThan(secret.Length);
 
         // And the app can still validate a fresh code (decrypt round-trip through the host).
-        await AuthTestSupport.PrimeCsrfAsync(client, ct);
+        await client.PrimeCsrfAsync(ct);
         var confirmAgain = await client.PostAsJsonAsync(
             "/api/auth/mfa/enroll/confirm", new ConfirmMfaRequest(AuthTestSupport.ComputeTotp(secret)), ct);
         confirmAgain.EnsureSuccessStatusCode();

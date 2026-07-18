@@ -1,5 +1,6 @@
 using LeaseBook.Web.Auth;
 using LeaseBook.Web.Persistence;
+using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -30,8 +31,12 @@ public sealed class CookieSecurePolicyTests
         using var provider = services.BuildServiceProvider();
         var cookie = provider.GetRequiredService<IOptionsMonitor<CookieAuthenticationOptions>>()
             .Get(IdentityConstants.ApplicationScheme);
+        var antiforgery = provider.GetRequiredService<IOptions<AntiforgeryOptions>>().Value;
 
         cookie.Cookie.SecurePolicy.ShouldBe(expected);
+        // Same environment-driven policy must apply to the antiforgery cookie, or a future divergence
+        // between the two (e.g. an unrelated edit inside AddAntiforgery) would ship silently.
+        antiforgery.Cookie.SecurePolicy.ShouldBe(expected);
     }
 
     private sealed class StubEnvironment(string environmentName) : IWebHostEnvironment

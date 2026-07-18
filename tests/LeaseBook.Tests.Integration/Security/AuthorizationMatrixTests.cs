@@ -41,9 +41,9 @@ public sealed class AuthorizationMatrixTests(PostgresFixture fixture)
 
             var pattern = "/" + endpoint.RoutePattern.RawText?.TrimStart('/');
             // The SPA fallback (MapFallbackToFile) is anonymous by design: it registers a catch-all
-            // route (e.g. "/{*path:nonfile}") plus the bare "/" — detect via the route pattern's
-            // parameter metadata rather than a literal string match, since the constraint suffix varies.
-            if (endpoint.RoutePattern.Parameters.Any(p => p.IsCatchAll) || pattern == "/")
+            // route (e.g. "/{*path:nonfile}") — detect via the route pattern's parameter metadata
+            // rather than a literal string match, since the constraint suffix varies.
+            if (endpoint.RoutePattern.Parameters.Any(p => p.IsCatchAll))
             {
                 continue;
             }
@@ -68,7 +68,7 @@ public sealed class AuthorizationMatrixTests(PostgresFixture fixture)
 
         // Anonymous → 401.
         var anon = fixture.Api.CreateClient();
-        await AuthTestSupport.PrimeCsrfAsync(anon, ct);
+        await anon.PrimeCsrfAsync(ct);
         (await anon.PostAsync(adminOnlyPath, content: null, ct)).StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
 
         // Barred PMStaff → 403.
@@ -77,12 +77,16 @@ public sealed class AuthorizationMatrixTests(PostgresFixture fixture)
         await AuthTestSupport.CreateOrgAsync(fixture, staffOrg, "Matrix Staff Org", ct);
         await AuthTestSupport.CreateUserAsync(fixture, staffOrg, staffEmail, "Staff", Roles.PMStaff, ct);
         var staff = fixture.Api.CreateClient();
-        await AuthTestSupport.PrimeCsrfAsync(staff, ct);
+        await staff.PrimeCsrfAsync(ct);
         await AuthTestSupport.LoginAsync(staff, staffEmail, ct);
         // The antiforgery token is bound to the (then-anonymous) identity that requested it; login
         // changes identity, so the token must be re-primed post-login or ValidateRequestAsync throws
         // and the request never reaches authorization (400, not the 403 this test is probing for).
-        await AuthTestSupport.PrimeCsrfAsync(staff, ct);
-        (await staff.PostAsync(adminOnlyPath, content: null, ct)).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        await staff.PrimeCsrfAsync(ct);
+        var denied = await staff.PostAsync(adminOnlyPath, content: null, ct);
+        denied.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        // A role denial is a plain 403 from the authorization middleware, not the MFA-enforcement
+        // result handler's problem-details response — pins the result-handler scoping to MFA only.
+        denied.Content.Headers.ContentType?.MediaType.ShouldNotBe("application/problem+json");
     }
 }

@@ -11,8 +11,10 @@ using OrgEntity = LeaseBook.Web.Persistence.Org;
 
 namespace LeaseBook.Tests.Common;
 
-/// <summary>Shared auth-flow helpers for the integration suites (org/user creation, CSRF, login,
-/// MFA enrollment, RFC 6238 TOTP). Extracted from AuthEndpointsTests so WP-5's security tests reuse it.</summary>
+/// <summary>Shared auth-flow helpers for the integration suites (org/user creation, login,
+/// MFA enrollment, RFC 6238 TOTP). Extracted from AuthEndpointsTests so WP-5's security tests reuse it.
+/// CSRF priming/cookie extraction lives in <see cref="ApiClientExtensions"/> — use the
+/// <c>client.PrimeCsrfAsync(ct)</c> extension form.</summary>
 public static class AuthTestSupport
 {
     public const string DefaultPassword = "Tarheel-Trust-2026!";
@@ -51,15 +53,6 @@ public static class AuthTestSupport
         }
     }
 
-    public static async Task PrimeCsrfAsync(HttpClient client, CancellationToken ct)
-    {
-        var response = await client.GetAsync("/api/auth/csrf", ct);
-        var token = ExtractCookie(response, "XSRF-TOKEN")
-            ?? throw new InvalidOperationException("CSRF endpoint did not set the XSRF-TOKEN cookie.");
-        client.DefaultRequestHeaders.Remove("X-XSRF-TOKEN");
-        client.DefaultRequestHeaders.Add("X-XSRF-TOKEN", token);
-    }
-
     public static async Task<LoginResponse> LoginAsync(HttpClient client, string email, CancellationToken ct)
     {
         var response = await client.PostAsJsonAsync("/api/auth/login", new LoginRequest(email, DefaultPassword), ct);
@@ -89,27 +82,6 @@ public static class AuthTestSupport
         var binary = ((hash[offset] & 0x7f) << 24) | ((hash[offset + 1] & 0xff) << 16)
                      | ((hash[offset + 2] & 0xff) << 8) | (hash[offset + 3] & 0xff);
         return (binary % 1_000_000).ToString("D6");
-    }
-
-    public static string? ExtractCookie(HttpResponseMessage response, string name)
-    {
-        if (!response.Headers.TryGetValues("Set-Cookie", out var setCookies))
-        {
-            return null;
-        }
-
-        var prefix = name + "=";
-        foreach (var cookie in setCookies)
-        {
-            if (cookie.StartsWith(prefix, StringComparison.Ordinal))
-            {
-                var value = cookie[prefix.Length..];
-                var end = value.IndexOf(';');
-                return Uri.UnescapeDataString(end >= 0 ? value[..end] : value);
-            }
-        }
-
-        return null;
     }
 
     private static byte[] Base32Decode(string input)

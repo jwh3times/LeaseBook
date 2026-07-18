@@ -55,7 +55,6 @@ public static class AuthServiceCollectionExtensions
             options.Cookie.Name = "LeaseBook.Auth";
             options.Cookie.HttpOnly = true;
             options.Cookie.SameSite = SameSiteMode.Lax;
-            // Secure on https (prod via Container Apps); plain http on localhost still works (E10).
             options.Cookie.SecurePolicy = securePolicy;
             options.SlidingExpiration = true;
             options.ExpireTimeSpan = TimeSpan.FromHours(8);

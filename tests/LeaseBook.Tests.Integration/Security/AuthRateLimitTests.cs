@@ -24,7 +24,7 @@ public sealed class AuthRateLimitTests(PostgresFixture fixture)
         var ct = TestContext.Current.CancellationToken;
         var factory = fixture.Api.WithWebHostBuilder(b => b.UseSetting("RateLimiting:AuthPermitLimit", "3"));
         var client = factory.CreateClient();
-        await AuthTestSupport.PrimeCsrfAsync(client, ct);
+        await client.PrimeCsrfAsync(ct);
 
         HttpStatusCode last = HttpStatusCode.OK;
         // Limit is 3/min for this isolated host; the 4th unauthenticated attempt trips the limiter
