@@ -36,6 +36,7 @@ not enforce this broader confidentiality boundary.
 | Released capabilities                            | `CHANGELOG.md`                                   |
 | Broad future direction                           | `docs/ROADMAP.md`                                |
 | Azure infrastructure operation                   | `infra/README.md` and `docs/runbooks/restore.md` |
+| Data-handling and safeguards posture             | `docs/compliance/data-handling.md`               |
 | Cross-agent repository rules                     | `AGENTS.md`                                      |
 
 The code and executable configuration remain the runtime truth. When they disagree with a living
