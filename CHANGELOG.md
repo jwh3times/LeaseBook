@@ -42,7 +42,8 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   ledger, the security-deposit liability register, the finalized reconciliation report snapshots, and
   a money-touching audit-log extract, plus a manifest. It composes existing reads (computes no new
   figures); no PM-income figure appears in any owner-facing artifact; generating a pack is itself
-  audited; and a pack is produced only for a reconciliation-closed period. Supported by period-end
+  audited; and a pack is produced only when every month in the period is reconciliation-locked (so the
+  bundle can't change after it is handed to an auditor). Supported by period-end
   read parameters on the trust-equation and deposit-register reads (variance proven 0.00 at any
   as-of). See the ADR-016 addendum.
 

@@ -4,7 +4,7 @@ import { useBankBalances } from '@/features/banking/banking';
 import { SelectChip, type SelectChipOption } from './chips';
 import { downloadCompliancePack, type ReportDescriptor } from './reports';
 
-// Sensible defaults: the current year to date. The period-end month must be reconciliation-locked,
+// Sensible defaults: the current year to date. Every month in the range must be reconciliation-locked,
 // so the operator adjusts these to a closed period before downloading.
 function currentYearStart(): string {
   return `${new Date().getFullYear()}-01-01`;
@@ -22,7 +22,7 @@ interface CompliancePackPanelProps {
 /**
  * The WP-8 Trust Compliance Pack builder. Unlike the generic report builder, its primary action is a
  * ZIP download (not a live preview / CSV): the operator picks one trust account and a from/to range,
- * then downloads an audit-ready pack. The period-end month must be reconciliation-locked; an open
+ * then downloads an audit-ready pack. Every month in the range must be reconciliation-locked; an open
  * period surfaces a clear, non-color-only error (WCAG 1.4.1). PMAdmin-only.
  */
 export function CompliancePackPanel({ report, isAdmin }: CompliancePackPanelProps) {
@@ -194,7 +194,7 @@ export function CompliancePackPanel({ report, isAdmin }: CompliancePackPanelProp
               Closed period required
             </Badge>
             <span className="t3 fs12">
-              The period-end month must be reconciliation-locked for the selected trust account
+              Every month in the range must be reconciliation-locked for the selected trust account
               before a pack can be generated.
             </span>
           </div>

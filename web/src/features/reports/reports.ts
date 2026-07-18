@@ -249,7 +249,7 @@ export function compliancePackError(body: ProblemBody, status: number): ReportsE
     return {
       code: 'period_not_closed',
       message:
-        "This period isn't closed yet — finalize the reconciliation for the period-end month first.",
+        "This period isn't closed yet — finalize the reconciliation for every month in the range first.",
     };
   }
   if (status === 404) {

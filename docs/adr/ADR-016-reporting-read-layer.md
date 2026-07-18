@@ -101,9 +101,13 @@ within Approach C. What is worth recording durably (it is a C1 attorney-review p
 - **PM-income isolation holds.** No owner-facing artifact carries a `pm_income` figure; the PM-facing
   management-fee report is deliberately excluded. The `HeldPmFees` component appears only in the
   fiduciary trust-equation cover, not in any owner-facing artifact.
-- **Closed-period gate.** A pack is produced only for a period whose end month is
-  reconciliation-locked for the trust account (422 `period_not_closed` otherwise). Period-end
-  held-per-tenant balances are guaranteed non-negative only once the period is closed; a backdated
-  application into an open period could otherwise show a transient negative as-of.
+- **Closed-period gate.** A pack is produced only for a period whose **every** month is
+  reconciliation-locked for the trust account (422 `period_not_closed` otherwise). Locking only the
+  period-end month would leave earlier in-range months open, where a backdated posting (rejected in a
+  locked month by `account_period_locked`) would still shift the pack's cumulative figures after it
+  was generated; requiring every in-range month locked makes the displayed period immutable. Held
+  balances are also guaranteed non-negative only once the period is closed. (A backdated posting into
+  an open month _before_ the period could still move the opening balance; requiring every historical
+  month locked is impractical, so the in-range boundary is the pragmatic guarantee.)
 - **Generation is audited.** Producing a pack emits a `compliance-pack-generated` audit event
   (audit-worthy, but not money-touching, so it never appears inside the extract).

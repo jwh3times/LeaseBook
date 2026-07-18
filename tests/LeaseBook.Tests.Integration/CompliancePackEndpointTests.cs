@@ -33,10 +33,11 @@ public sealed class CompliancePackEndpointTests(PostgresFixture fixture)
         var setup = await SetupAsync(admin: true, ct);
         var client = await LoggedInClientAsync(setup.Email, ct);
 
-        // Close the period end (2026-12): a zero-activity bank reconciles trivially (difference 0.00).
+        // Close December 2026 (a zero-activity bank reconciles trivially, difference 0.00) and pull a
+        // pack scoped to that single closed month.
         await FinalizeZeroReconciliationAsync(client, setup.TrustBankId, 2026, 12, ct);
 
-        var url = $"/api/reports/compliance-pack?bankAccountId={setup.TrustBankId}&from=2026-01-01&to=2026-12-31";
+        var url = $"/api/reports/compliance-pack?bankAccountId={setup.TrustBankId}&from=2026-12-01&to=2026-12-31";
         var response = await client.GetAsync(url, ct);
 
         response.StatusCode.ShouldBe(HttpStatusCode.OK, await response.Content.ReadAsStringAsync(ct));
@@ -51,13 +52,16 @@ public sealed class CompliancePackEndpointTests(PostgresFixture fixture)
     }
 
     [Fact]
-    public async Task An_open_period_is_rejected_with_422()
+    public async Task A_period_with_any_open_month_is_rejected_with_422()
     {
         var ct = TestContext.Current.CancellationToken;
         var setup = await SetupAsync(admin: true, ct);
         var client = await LoggedInClientAsync(setup.Email, ct);
 
-        // No finalized reconciliation for 2026-12 → the period is not closed.
+        // Lock only the END month (December); January–November stay open. The gate requires EVERY month
+        // in the period to be closed, so an end-month-only lock must still be rejected.
+        await FinalizeZeroReconciliationAsync(client, setup.TrustBankId, 2026, 12, ct);
+
         var url = $"/api/reports/compliance-pack?bankAccountId={setup.TrustBankId}&from=2026-01-01&to=2026-12-31";
         var response = await client.GetAsync(url, ct);
 

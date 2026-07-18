@@ -114,15 +114,26 @@ public sealed class ReportingEndpoints : IEndpointModule
                             statusCode: StatusCodes.Status400BadRequest, title: "invalid_period");
                     }
 
-                    // Closed-period gate: require a finalized reconciliation for the period-end month.
+                    // Closed-period gate: EVERY month the pack spans must be reconciliation-locked for
+                    // this trust account. Locking only the end month leaves earlier in-range months open,
+                    // where a backdated posting would still shift the pack's cumulative figures after it
+                    // is generated. All months locked → the displayed period is immutable.
                     var history = await sender.Query(new GetReconciliationHistory(bankAccountId), ct);
-                    var closed = history.Rows.Any(
-                        r => r.Status == "finalized" && r.Year == to.Year && r.Month == to.Month);
-                    if (!closed)
+                    var lockedMonths = history.Rows
+                        .Where(r => r.Status == "finalized")
+                        .Select(r => (r.Year, r.Month))
+                        .ToHashSet();
+                    var firstOpen = MonthsInRange(from, to)
+                        .Where(m => !lockedMonths.Contains(m))
+                        .Select(m => ((int Year, int Month)?)m)
+                        .FirstOrDefault();
+                    if (firstOpen is { } open)
                     {
                         return Results.Problem(
-                            detail: $"The period ending {to:yyyy-MM} is not reconciliation-locked for this " +
-                                    "trust account. A compliance pack can only be generated for a closed period.",
+                            detail: $"The period {from:yyyy-MM}–{to:yyyy-MM} has a month that is not " +
+                                    $"reconciliation-locked for this trust account (first open: " +
+                                    $"{open.Year:D4}-{open.Month:D2}). A compliance pack requires every month " +
+                                    "in the period to be closed.",
                             statusCode: StatusCodes.Status422UnprocessableEntity, title: "period_not_closed");
                     }
 
@@ -259,6 +270,27 @@ public sealed class ReportingEndpoints : IEndpointModule
                             });
                     }
                 });
+    }
+
+    // ─── helper: enumerate the (year, month) pairs a from..to range spans (inclusive) ─────
+
+    private static IEnumerable<(int Year, int Month)> MonthsInRange(DateOnly from, DateOnly to)
+    {
+        var year = from.Year;
+        var month = from.Month;
+        while (year < to.Year || (year == to.Year && month <= to.Month))
+        {
+            yield return (year, month);
+            if (month == 12)
+            {
+                month = 1;
+                year++;
+            }
+            else
+            {
+                month++;
+            }
+        }
     }
 
     // ─── helper: project preview rows (generic objects) to a string table ─────
