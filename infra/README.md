@@ -33,13 +33,23 @@ LEASEBOOK_PG_ADMIN_PASSWORD=... az deployment sub create \
 The app reads configuration from environment variables supplied by Container Apps, each referencing
 a Key Vault secret (resolved via the app's managed identity):
 
-| Env var                                 | Source                           | Used by                           |
-| --------------------------------------- | -------------------------------- | --------------------------------- |
+| Env var                                 | Source                            | Used by                                                  |
+| --------------------------------------- | ---------------------------------- | --------------------------------------------------------- |
 | `ConnectionStrings__Default`            | Key Vault secret (app role)      | the running app (RLS-subject)     |
 | `ConnectionStrings__Migrations`         | Key Vault secret (migrator role) | the deploy migration job **only** |
 | `APPLICATIONINSIGHTS_CONNECTION_STRING` | App Insights (module output)     | telemetry exporter                |
+| `AllowedHosts`                          | app setting, supplied at deploy time | ASP.NET Core host filtering (`HostFilteringMiddleware`)  |
 
 Real role passwords live in Key Vault only; `infra/db/bootstrap.sql` dev passwords are dev-only.
+
+`AllowedHosts` in `appsettings.Production.json` ships as an empty placeholder — the real deploy must
+set it to the production hostname(s), semicolon-separated (e.g. `app.leasebook.com;www.leasebook.com`),
+as a Container Apps app setting / env var. Leaving it empty or `*` disables host filtering.
+
+**Follow-up:** correct per-client-IP rate limiting (a later hardening task) needs the real client IP,
+which behind Container Apps' ingress proxy means configuring `ForwardedHeaders` with the Container
+Apps proxy registered as a known network/proxy — otherwise every request appears to originate from the
+ingress hop. Not yet wired; tracked as a follow-up alongside that task.
 
 ## Production networking
 
