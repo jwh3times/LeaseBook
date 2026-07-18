@@ -35,6 +35,13 @@ summaries elsewhere should link here rather than restating mutable detail.
 - [Local development](runbooks/local-dev.md)
 - [Point-in-time restore](runbooks/restore.md)
 
+## Compliance
+
+- [Data handling and safeguards](compliance/data-handling.md) maps where personal and financial data
+  lives and how it is encrypted, isolated, and retained (draft, pending external review).
+- [Privacy notice draft](compliance/privacy-notice-draft.md) is a GLBA-style notice skeleton pending
+  legal review.
+
 ## Governance
 
 - [Documentation policy](documentation-policy.md) defines classification, canonical ownership,

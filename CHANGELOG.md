@@ -46,6 +46,10 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   bundle can't change after it is handed to an auditor). Supported by period-end
   read parameters on the trust-equation and deposit-register reads (variance proven 0.00 at any
   as-of). See the ADR-016 addendum.
+- **Data-handling and privacy compliance drafts** — a public `docs/compliance/` set now documents the
+  GLBA data map, the encryption/access/retention posture, and a GLBA-style privacy-notice skeleton
+  with explicit legal-review markers, giving the external compliance review a versioned engineering
+  packet to finalize. Draft status; legal determinations are deferred to that review.
 
 ### Changed
 
