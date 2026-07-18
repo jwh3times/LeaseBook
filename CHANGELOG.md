@@ -68,7 +68,13 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Security
 
-- _Nothing yet._
+- **Host security hardening** — every response now carries security headers and a strict
+  Content-Security-Policy (`frame-ancestors 'none'`), including error responses; `AllowedHosts` is
+  pinned in Production; auth and antiforgery cookies are `Secure` outside Development; login and the
+  MFA challenge are per-IP rate limited (configurable, generous in dev, strict in prod); `PMAdmin`
+  accounts must complete TOTP enrollment before use once `Auth:EnforceAdminMfa` is on (Production
+  default); an authorization-matrix regression test guards deny-by-default; and the Identity token
+  store (TOTP secret and recovery codes) is now encrypted at rest via ASP.NET Data Protection.
 
 ## [0.2.0] - 2026-07-09
 
