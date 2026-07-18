@@ -99,9 +99,8 @@ public sealed class ReportingEndpoints : IEndpointModule
         // PMAdmin only (it contains the audit-log extract): the route-level RequirePMAdmin ANDs with the
         // group's RequirePMStaff to admin-only. Generating a pack is itself audit-worthy, so a
         // compliance-pack-generated event is recorded (audit-worthy but not money-touching, so it never
-        // appears inside the extract). Closed-period gate: the period-end month must be
-        // reconciliation-locked for this trust account — period-end held balances are only guaranteed
-        // non-negative once the period is closed (WP-8 design gate §2). 422 otherwise.
+        // appears inside the extract). The closed-period gate below requires every in-range month to be
+        // reconciliation-locked for this trust account (422 `period_not_closed`; WP-8 design gate §2).
         group.MapGet("/reports/compliance-pack",
                 async (Guid bankAccountId, DateOnly from, DateOnly to,
                     CompliancePackAssembler assembler, ISender sender, IPmBranding branding, AppDbContext db,
