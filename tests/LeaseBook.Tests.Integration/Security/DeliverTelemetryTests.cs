@@ -44,6 +44,7 @@ public sealed class DeliverTelemetryTests(PostgresFixture fixture)
     {
         var ct = TestContext.Current.CancellationToken;
         const string secretEmail = "recipient-secret@example.com";
+        var secretEmailEncoded = Uri.EscapeDataString(secretEmail);
         var captured = new List<string>();
 
         // Listen on every Activity the ASP.NET Core hosting pipeline produces (the same Activity
@@ -58,7 +59,13 @@ public sealed class DeliverTelemetryTests(PostgresFixture fixture)
             {
                 foreach (var tag in activity.TagObjects)
                 {
-                    if (tag.Value is string v && v.Contains(secretEmail, StringComparison.OrdinalIgnoreCase))
+                    // The request is sent with the email percent-encoded on the wire
+                    // (Uri.EscapeDataString below), so a leaked tag could carry either the
+                    // percent-encoded wire form or a decoded form. Check both — matching only the
+                    // decoded form would miss a raw url.query leak entirely (see F7 critical finding).
+                    if (tag.Value is string v &&
+                        (v.Contains(secretEmail, StringComparison.OrdinalIgnoreCase) ||
+                         v.Contains(secretEmailEncoded, StringComparison.OrdinalIgnoreCase)))
                     {
                         captured.Add($"{tag.Key}={v}");
                     }
@@ -79,7 +86,7 @@ public sealed class DeliverTelemetryTests(PostgresFixture fixture)
         await client.PrimeCsrfAsync(ct); // XSRF token rotates on sign-in
 
         var url = $"/api/statements/{DemoIds.O5}/deliver" +
-                  $"?year=2026&month=5&basis=cash&toEmail={Uri.EscapeDataString(secretEmail)}";
+                  $"?year=2026&month=5&basis=cash&toEmail={secretEmailEncoded}";
         var response = await client.PostAsync(url, null, ct);
         response.StatusCode.ShouldBe(HttpStatusCode.OK,
             "the deliver call must actually succeed for this test to exercise the real request path: " +
