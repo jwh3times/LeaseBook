@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Threading.RateLimiting;
 using Azure.Monitor.OpenTelemetry.Exporter;
 using LeaseBook.Modules.Accounting;
 using LeaseBook.Modules.Banking;
@@ -15,9 +16,12 @@ using LeaseBook.Web.Cli;
 using LeaseBook.Web.Endpoints;
 using LeaseBook.Web.Persistence;
 using LeaseBook.Web.Reporting;
+using LeaseBook.Web.Security;
 using LeaseBook.Web.Seeding;
 using LeaseBook.Web.Tenancy;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using QuestPDF.Infrastructure;
@@ -58,6 +62,38 @@ builder.Services.AddDbContext<AppDbContext>(options => options
 
 // Identity, cookie auth, antiforgery, deny-by-default authorization (P12).
 builder.Services.AddLeaseBookIdentity(builder.Environment);
+
+// Per-IP auth rate limiting (WP-5): "auth" policy applied to login + mfa only (Task 4). Limits are
+// configurable per environment — generous in Development/tests (appsettings.json), strict in
+// Production (appsettings.Production.json) — so the shared TestServer "unknown" IP partition is
+// never tripped by unrelated tests.
+builder.Services.Configure<RateLimitingOptions>(builder.Configuration.GetSection("RateLimiting"));
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("auth", httpContext =>
+    {
+        var rateLimiting = httpContext.RequestServices.GetRequiredService<IOptions<RateLimitingOptions>>().Value;
+        return RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = rateLimiting.AuthPermitLimit,
+                Window = TimeSpan.FromSeconds(rateLimiting.AuthWindowSeconds),
+                QueueLimit = 0,
+            });
+    });
+    options.OnRejected = (context, _) =>
+    {
+        if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
+        {
+            context.HttpContext.Response.Headers.RetryAfter =
+                ((int)retryAfter.TotalSeconds).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        return ValueTask.CompletedTask;
+    };
+});
 
 // Tenancy ergonomics: one request-scoped TenantContext, exposed read-only as ITenantContext (which
 // the DbContext query filter reads). DbContext is also resolvable as its base type so the
@@ -203,6 +239,7 @@ app.UseAuthentication();
 // XSRF on unsafe /api requests, before authorization/org-context so a rejected request opens no tx.
 app.UseMiddleware<ApiAntiforgeryMiddleware>();
 app.UseAuthorization();
+app.UseRateLimiter();
 // Establishes app.org_id inside a per-request transaction for authenticated requests (§C.4).
 app.UseMiddleware<OrgContextMiddleware>();
 

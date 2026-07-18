@@ -3,6 +3,7 @@ using LeaseBook.Web.Endpoints;
 using LeaseBook.Web.Persistence;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 
@@ -55,7 +56,8 @@ public sealed class AuthEndpoints : IEndpointModule
         })
         .AddEndpointFilter<ValidationEndpointFilter<LoginRequest>>()
         .Produces<LoginResponse>()
-        .AllowAnonymous();
+        .AllowAnonymous()
+        .RequireRateLimiting("auth");
 
         group.MapPost("/mfa", async (MfaRequest request, SignInManager<AppUser> signInManager) =>
         {
@@ -73,7 +75,8 @@ public sealed class AuthEndpoints : IEndpointModule
         })
         .AddEndpointFilter<ValidationEndpointFilter<MfaRequest>>()
         .Produces<LoginResponse>()
-        .AllowAnonymous();
+        .AllowAnonymous()
+        .RequireRateLimiting("auth");
 
         group.MapPost("/logout", async (SignInManager<AppUser> signInManager) =>
         {
