@@ -27,6 +27,10 @@ public sealed class InvariantPropertyTests(PostgresFixture fixture)
     private static int Iterations =>
         int.TryParse(Environment.GetEnvironmentVariable("LEASEBOOK_PROPERTY_ITER"), out var n) ? n : 20;
 
+    // WP-8: partial-prefix period ends inside the posted window (02-01..02-28). The as-of-now I2 check
+    // in the loop already covers the full prefix; these probe the earlier prefixes it can't see.
+    private static readonly DateOnly[] AsOfProbes = [new(2026, 2, 1), new(2026, 2, 14)];
+
     [Fact]
     public async Task Random_valid_sequences_keep_the_invariants_and_converge_after_settlement()
     {
@@ -58,6 +62,15 @@ public sealed class InvariantPropertyTests(PostgresFixture fixture)
                 // "at all times": every always-true invariant holds after this posting.
                 var violations = await new InvariantChecks(scope.Db).CheckCoreAsync(ct);
                 violations.ShouldBeEmpty(string.Join("; ", violations.Select(v => $"{v.Invariant}:{v.Detail}")));
+
+                // WP-8: I2 must also hold as of any period end, not just as-of-now. Each posting (voids
+                // included, as linked mirrors) nets to zero per trust bank within its single dated entry,
+                // so every date-bounded prefix is balanced too.
+                foreach (var asOf in AsOfProbes)
+                {
+                    var equation = await new GetTrustEquationHandler(scope.Db).Handle(new GetTrustEquation(asOf), ct);
+                    equation.Rows.ShouldAllBe(r => r.Variance == 0m, $"I2 as of {asOf}");
+                }
             }, ct);
         }
 

@@ -36,6 +36,15 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   empty states (server-failure and no-data rendering), and keyboard-only operability (command
   palette, reconcile selection, focus return, autofocus, and focus-visible rings), closing the last
   of ADR-022's deferred coverage.
+- **Trust Compliance Pack** — a one-click, PMAdmin-only audit bundle
+  (`GET /api/reports/compliance-pack`) for a trust account × period, downloaded as a ZIP of discrete
+  documents: a cover/index PDF carrying the period-end trust-equation tie-out, the trust-account
+  ledger, the security-deposit liability register, the finalized reconciliation report snapshots, and
+  a money-touching audit-log extract, plus a manifest. It composes existing reads (computes no new
+  figures); no PM-income figure appears in any owner-facing artifact; generating a pack is itself
+  audited; and a pack is produced only for a reconciliation-closed period. Supported by period-end
+  read parameters on the trust-equation and deposit-register reads (variance proven 0.00 at any
+  as-of). See the ADR-016 addendum.
 
 ### Changed
 

@@ -227,6 +227,75 @@ export async function downloadStatement(
   URL.revokeObjectURL(url);
 }
 
+// ---- Compliance pack (WP-8) --------------------------------------------------
+
+/** A trust-account × from/to date range — the two inputs the compliance pack needs. */
+export interface CompliancePackRange {
+  bankAccountId: string;
+  /** Inclusive period start, yyyy-MM-dd. */
+  from: string;
+  /** Inclusive period end, yyyy-MM-dd; its month must be reconciliation-locked. */
+  to: string;
+}
+
+/**
+ * Maps a failed compliance-pack response to a clear, human error. The RFC7807 problem body carries
+ * the domain code in `title` (`period_not_closed`, `invalid_period`); we key off status + title so
+ * the message never depends on color alone (WCAG 1.4.1) and reads sensibly for each failure.
+ */
+export function compliancePackError(body: ProblemBody, status: number): ReportsError {
+  const code = body.code ?? body.title;
+  if (status === 422 || code === 'period_not_closed') {
+    return {
+      code: 'period_not_closed',
+      message:
+        "This period isn't closed yet — finalize the reconciliation for the period-end month first.",
+    };
+  }
+  if (status === 404) {
+    return { code: 'bank_not_found', message: 'That trust account could not be found.' };
+  }
+  if (status === 400 || code === 'invalid_period') {
+    return { code: 'invalid_period', message: 'The start date must be on or before the end date.' };
+  }
+  return { code, message: body.detail ?? body.title ?? `Download failed (${status}).` };
+}
+
+/**
+ * Triggers a browser download of the trust compliance pack ZIP for one trust account and period
+ * (authenticated fetch → blob → anchor click, matching downloadStatement / downloadReportCsv). On a
+ * non-2xx it throws a {@link ReportsError} with a friendly, code-aware message (see
+ * {@link compliancePackError}); the caller renders `.message` in a non-color-only alert.
+ */
+export async function downloadCompliancePack(
+  bankAccountId: string,
+  from: string,
+  to: string,
+): Promise<void> {
+  const params = new URLSearchParams({ bankAccountId, from, to });
+  const response = await fetch(`/api/reports/compliance-pack?${params.toString()}`, {
+    credentials: 'include',
+  });
+  if (!response.ok) {
+    let body: ProblemBody;
+    try {
+      body = (await response.json()) as ProblemBody;
+    } catch {
+      body = {};
+    }
+    throw compliancePackError(body, response.status);
+  }
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = `compliance-pack-${from}-${to}.zip`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
 /** Triggers a browser download for a report's CSV export. */
 export async function downloadReportCsv(id: string, filters: ReportFilters): Promise<void> {
   const response = await fetch(

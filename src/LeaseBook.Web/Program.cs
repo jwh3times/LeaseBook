@@ -104,6 +104,8 @@ builder.Services.AddReportingModule();
 // boundaries via ISender (composition root pattern, same as DashboardService).
 builder.Services.AddScoped<StatementAssembler>();
 builder.Services.AddScoped<ReportPreviewService>();
+// WP-8: the trust-compliance pack composes existing reads (ISender) + the host audit extract.
+builder.Services.AddScoped<CompliancePackAssembler>();
 
 // M5 WP-05: statement delivery seam + artifact store. IArtifactStore is the byte-only store
 // (local = file system; M8 = Azure Blob). IStatementDelivery is host-owned (references StatementPdf
@@ -160,6 +162,8 @@ builder.Services.AddScoped<LeaseBook.Web.Dashboard.DashboardService>();
 // Host-composed per-entry audit trail (P56): joins host audit/identity tables with the Accounting
 // reversal link, resolving actors via an org-filtered identity lookup (the soft-spot has no RLS).
 builder.Services.AddScoped<LeaseBook.Web.Audit.EntryAuditReader>();
+// WP-8: the period-scoped money-touching audit extract for the trust-compliance pack.
+builder.Services.AddScoped<LeaseBook.Web.Audit.AuditExtractReader>();
 
 // OpenAPI document (P11) — the SPA's `npm run api:generate` reads /openapi/v1.json.
 builder.Services.AddOpenApi();

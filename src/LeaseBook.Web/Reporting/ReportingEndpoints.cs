@@ -1,7 +1,15 @@
 using System.Globalization;
+using System.Text.Json;
+using LeaseBook.Modules.Accounting.Features.Reconciliation;
 using LeaseBook.Modules.Reporting.Catalog;
+using LeaseBook.Modules.Reporting.Contracts;
 using LeaseBook.Modules.Reporting.Rendering;
+using LeaseBook.SharedKernel;
+using LeaseBook.SharedKernel.Cqrs;
 using LeaseBook.SharedKernel.Endpoints;
+using LeaseBook.SharedKernel.Tenancy;
+using LeaseBook.Web.Persistence;
+using LeaseBook.Web.Tenancy;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -86,6 +94,68 @@ public sealed class ReportingEndpoints : IEndpointModule
                     var fileName = $"{id}-{(year ?? DateTime.UtcNow.Year)}-{(month ?? DateTime.UtcNow.Month):D2}.csv";
                     return Results.File(bytes, "text/csv", fileName);
                 });
+
+        // GET /api/reports/compliance-pack?bankAccountId=&from=&to= — the trust compliance pack ZIP.
+        // PMAdmin only (it contains the audit-log extract): the route-level RequirePMAdmin ANDs with the
+        // group's RequirePMStaff to admin-only. Generating a pack is itself audit-worthy, so a
+        // compliance-pack-generated event is recorded (audit-worthy but not money-touching, so it never
+        // appears inside the extract). Closed-period gate: the period-end month must be
+        // reconciliation-locked for this trust account — period-end held balances are only guaranteed
+        // non-negative once the period is closed (WP-8 design gate §2). 422 otherwise.
+        group.MapGet("/reports/compliance-pack",
+                async (Guid bankAccountId, DateOnly from, DateOnly to,
+                    CompliancePackAssembler assembler, ISender sender, IPmBranding branding, AppDbContext db,
+                    IActorContext actor, CancellationToken ct) =>
+                {
+                    if (from > to)
+                    {
+                        return Results.Problem(
+                            detail: "from must be on or before to.",
+                            statusCode: StatusCodes.Status400BadRequest, title: "invalid_period");
+                    }
+
+                    // Closed-period gate: require a finalized reconciliation for the period-end month.
+                    var history = await sender.Query(new GetReconciliationHistory(bankAccountId), ct);
+                    var closed = history.Rows.Any(
+                        r => r.Status == "finalized" && r.Year == to.Year && r.Month == to.Month);
+                    if (!closed)
+                    {
+                        return Results.Problem(
+                            detail: $"The period ending {to:yyyy-MM} is not reconciliation-locked for this " +
+                                    "trust account. A compliance pack can only be generated for a closed period.",
+                            statusCode: StatusCodes.Status422UnprocessableEntity, title: "period_not_closed");
+                    }
+
+                    CompliancePack pack;
+                    try
+                    {
+                        pack = await assembler.AssembleAsync(bankAccountId, from, to, ct);
+                    }
+                    catch (KeyNotFoundException)
+                    {
+                        return Results.NotFound(new { error = $"Trust account '{bankAccountId}' not found." });
+                    }
+
+                    var company = (await branding.GetAsync(ct)).CompanyName ?? "Property Manager";
+                    var generatedAt = DateTime.UtcNow;
+                    var bytes = CompliancePackZip.Render(pack, company, generatedAt);
+
+                    db.Set<AuditEvent>().Add(new AuditEvent
+                    {
+                        Id = UuidV7.NewId(),
+                        ActorUserId = actor.UserId,
+                        EntityType = "compliance-pack-generated",
+                        EntityId = bankAccountId,
+                        Action = "insert",
+                        After = JsonSerializer.Serialize(new { bankAccountId, from, to, generatedAt }),
+                        OccurredAt = generatedAt,
+                    });
+                    await db.SaveChangesAsync(ct);
+
+                    var fileName = $"compliance-pack-{bankAccountId:N}-{from:yyyyMMdd}-{to:yyyyMMdd}.zip";
+                    return Results.File(bytes, "application/zip", fileName);
+                })
+            .RequireAuthorization("RequirePMAdmin");
 
         // GET /api/statements/{ownerId}?propertyId=&year=&month=&basis=
         // Always returns 200 with zero figures for an owner with no journal activity in the period
