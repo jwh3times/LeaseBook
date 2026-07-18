@@ -30,7 +30,7 @@ public sealed class ReportingEndpointsTests(PostgresFixture fixture)
     // ─── catalog ───────────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task Catalog_returns_all_8_reports_in_prototype_order()
+    public async Task Catalog_returns_all_reports_in_prototype_order()
     {
         var ct = TestContext.Current.CancellationToken;
         await DemoSeeder.SeedAsync(fixture.Api.Services, ct);
@@ -38,11 +38,13 @@ public sealed class ReportingEndpointsTests(PostgresFixture fixture)
 
         var catalog = await GetAsync<IReadOnlyList<ReportDescriptor>>(client, "/api/reports", ct);
 
-        catalog.Count.ShouldBe(8);
+        // The 8 prototype reports, in order, followed by the WP-8 Compliance pack.
+        catalog.Count.ShouldBe(9);
         catalog.Select(r => r.Id).ShouldBe(
         [
             "owner-stmt", "owner-bal", "trust-ledger", "bank-rec",
             "deposit-liab", "rent-roll", "delinquency", "mgmt-fee",
+            "compliance-pack",
         ], ignoreOrder: false);
     }
 

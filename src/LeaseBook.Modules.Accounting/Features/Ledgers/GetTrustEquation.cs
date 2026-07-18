@@ -6,8 +6,11 @@ namespace LeaseBook.Modules.Accounting.Features.Ledgers;
 /// <summary>
 /// The trust equation per trust bank (§C.6 / invariant I2): for cash+both lines,
 /// book = owner equity + deposit liabilities + prepayments + held PM fees. Variance must be 0.00.
+/// <para><see cref="AsOf"/> (inclusive) bounds every component to entries dated on or before it, so the
+/// equation can be read as of a period end; null ⇒ all-time (as-of-now). Because each posting balances
+/// per bank within a single dated entry, a date-bounded prefix still nets to variance 0.00 (WP-8).</para>
 /// </summary>
-public sealed record GetTrustEquation : IQuery<TrustEquationResponse>;
+public sealed record GetTrustEquation(DateOnly? AsOf = null) : IQuery<TrustEquationResponse>;
 
 public sealed record TrustEquationResponse(IReadOnlyList<TrustEquationRow> Rows);
 
@@ -37,8 +40,10 @@ internal sealed class GetTrustEquationHandler(DbContext db) : IQueryHandler<GetT
                                      THEN COALESCE(jl.credit, 0) - COALESCE(jl.debit, 0) ELSE 0 END), 0) AS held_pm_fees
             FROM journal_lines jl
             JOIN accounts a ON a.id = jl.account_id
+            JOIN journal_entries e ON e.id = jl.entry_id
             WHERE jl.basis IN ('cash', 'both')
               AND jl.bank_account_id IN (SELECT bank_account_id FROM accounts WHERE class = 'trust_bank')
+              AND ({query.AsOf}::date IS NULL OR e.entry_date <= {query.AsOf})
             GROUP BY jl.bank_account_id
             ORDER BY jl.bank_account_id
             """).ToListAsync(ct);

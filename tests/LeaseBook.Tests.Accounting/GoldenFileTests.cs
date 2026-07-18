@@ -147,6 +147,87 @@ public sealed class GoldenFileTests(PostgresFixture fixture)
         equation.Rows.ShouldAllBe(r => r.Variance == 0m); // variance 0.00 on both trust banks
     }
 
+    // WP-8: the trust equation must reconcile as of an arbitrary period end (the compliance pack is
+    // period-scoped). Date-bounding a balanced replay stays balanced at every AsOf.
+    [Fact]
+    public async Task Trust_equation_holds_and_date_bounds_at_period_ends()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await SeedAsync(ct);
+
+        async Task<TrustEquationResponse> AsOf(DateOnly? asOf) =>
+            await QueryAsync(db => new GetTrustEquationHandler(db).Handle(new GetTrustEquation(AsOf: asOf), ct), ct);
+
+        // AsOf at/after the last entry (2026-06-03) reproduces the unbounded, as-of-now figures — the
+        // "latest == all-time" tie, anchored to the sacred bank books.
+        var unbounded = await AsOf(null);
+        var atLatest = await AsOf(new DateOnly(2026, 6, 30));
+        Oper(atLatest).Book.ShouldBe(Oper(unbounded).Book);
+        Deposit(atLatest).Book.ShouldBe(Deposit(unbounded).Book);
+        Oper(atLatest).Book.ShouldBe(248_930.14m);    // sacred (GetBankBalances golden)
+        Deposit(atLatest).Book.ShouldBe(196_450.00m); // sacred
+
+        // Cutover (2026-01-31): only the BalanceForward is posted, so the operating book is exactly
+        // the opening position and no post-cutover activity is in view.
+        var atCutover = await AsOf(new DateOnly(2026, 1, 31));
+        Oper(atCutover).Book.ShouldBe(246_075.14m);    // sacred (DemoJournalSeed cutover)
+        Deposit(atCutover).Book.ShouldBe(196_450.00m);
+
+        // Pre-cutover: nothing posted at/before 2026-01-01 → no trust-bank rows at all.
+        (await AsOf(new DateOnly(2026, 1, 1))).Rows.ShouldBeEmpty();
+
+        // Date-bounding is real, not a no-op: the Mercer overpayment (2026-05-22) creates a 75.00
+        // prepayment on the operating trust — present as-of 05-31, absent as-of 05-01.
+        Oper(await AsOf(new DateOnly(2026, 5, 31))).Prepayments.ShouldBe(75.00m);
+        Oper(await AsOf(new DateOnly(2026, 5, 1))).Prepayments.ShouldBe(0.00m);
+
+        // The equation itself (variance 0.00 on every trust bank) holds at every period end.
+        foreach (var asOf in new[]
+                 {
+                     new DateOnly(2026, 1, 31), new DateOnly(2026, 2, 28),
+                     new DateOnly(2026, 5, 31), new DateOnly(2026, 6, 30),
+                 })
+        {
+            (await AsOf(asOf)).Rows.ShouldAllBe(r => r.Variance == 0m);
+        }
+    }
+
+    // WP-8: the deposit register must scope to one trust account and to a period end, and reconcile to
+    // the trust equation's held components on that bank.
+    [Fact]
+    public async Task Deposit_register_filters_by_trust_account_and_period_end()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await SeedAsync(ct);
+
+        async Task<DepositRegisterResponse> Reg(Guid? bank, DateOnly? asOf) =>
+            await QueryAsync(db => new GetDepositRegisterHandler(db).Handle(new GetDepositRegister(bank, asOf), ct), ct);
+
+        // Security-deposit trust, as of the latest period end: deposits only (prepayments live on the
+        // operating bank), summing to the trust equation's deposit-liability component. Jasmine (T1)
+        // holds 1,450.00.
+        var depositBank = await Reg(DemoIds.DepositBank, new DateOnly(2026, 6, 30));
+        depositBank.Rows.ShouldAllBe(r => r.Kind == "deposit");
+        depositBank.Rows.Sum(r => r.Held).ShouldBe(196_450.00m);
+        depositBank.Rows.Single(r => r.TenantId == DemoIds.T1).Held.ShouldBe(1_450.00m);
+        depositBank.Rows.ShouldAllBe(r => r.Held >= 0m);
+
+        // Operating trust, end of May: the 75.00 Mercer prepayment (2026-05-22) is the only held
+        // position, reconciling to the equation's Prepayments component; no deposits live here.
+        var operMayEnd = await Reg(DemoIds.OperBank, new DateOnly(2026, 5, 31));
+        operMayEnd.Rows.ShouldAllBe(r => r.Kind == "prepayment");
+        operMayEnd.Rows.Sum(r => r.Held).ShouldBe(75.00m);
+
+        // As-of 05-01, before the overpayment: nothing held yet on the operating trust.
+        (await Reg(DemoIds.OperBank, new DateOnly(2026, 5, 1))).Rows.ShouldBeEmpty();
+    }
+
+    private static TrustEquationRow Oper(TrustEquationResponse r) =>
+        r.Rows.Single(x => x.BankAccountId == DemoIds.OperBank);
+
+    private static TrustEquationRow Deposit(TrustEquationResponse r) =>
+        r.Rows.Single(x => x.BankAccountId == DemoIds.DepositBank);
+
     [Fact]
     public async Task Seeding_twice_does_not_duplicate_the_journal()
     {

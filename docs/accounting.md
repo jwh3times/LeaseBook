@@ -250,7 +250,7 @@ span module boundaries (the ADR-007 cross-module exception). The rule is documen
   figure that Accounting doesn't already expose, the fix is to extend the Accounting port — not to
   write a cross-module SQL join inside Reporting.
 
-The eight-report catalog (`/reports`) follows the same pattern: each report preview is dispatched
+The report catalog (`/reports`) follows the same pattern: each report preview is dispatched
 through `ISender` to the appropriate Accounting or Directory handler; the host's
 `ReportPreviewService` aggregates the generic row payload the SPA renders. CSV and (for statements)
 PDF exports use the same data path — no separate re-query for a different output format.

@@ -2,8 +2,9 @@ namespace LeaseBook.Modules.Reporting.Catalog;
 
 /// <summary>
 /// The registry of all supported reports (§M5, screen-reports.jsx priority order). Stateless
-/// singleton — <see cref="All"/> exposes the 8 descriptors in the same order as the prototype's
-/// <c>REPORTS</c> array (Owner → Trust accounting → Banking by category position).
+/// singleton — <see cref="All"/> exposes the descriptors in the same order as the prototype's
+/// <c>REPORTS</c> array (Owner → Trust accounting → Banking by category position), followed by the
+/// WP-8 Compliance pack.
 /// </summary>
 public static class ReportCatalog
 {
@@ -14,9 +15,13 @@ public static class ReportCatalog
     private static readonly IReadOnlyList<string> AsOfDate = ["asOf"];
     private static readonly IReadOnlyList<string> None = [];
 
+    // WP-8: the compliance pack is a trust-account × from/to range export (a ZIP, not a preview).
+    // The filter keys are the literal query params the endpoint binds (GET /api/reports/compliance-pack).
+    private static readonly IReadOnlyList<string> BankPeriodRange = ["bankAccountId", "from", "to"];
+
     /// <summary>
-    /// All 8 report descriptors in the prototype's priority order (screen-reports.jsx <c>REPORTS</c>
-    /// array). Tests assert all 8 are present and that each category has the correct reports.
+    /// All report descriptors in the prototype's priority order (screen-reports.jsx <c>REPORTS</c>
+    /// array), plus the WP-8 Compliance pack. Tests assert each category has the correct reports.
     /// </summary>
     public static readonly IReadOnlyList<ReportDescriptor> All =
     [
@@ -28,6 +33,7 @@ public static class ReportCatalog
         new("rent-roll",     "Rent roll",                   "Owner",           "building", "Units, tenants, rent & status portfolio-wide",      None),
         new("delinquency",   "Delinquency",                 "Banking",         "clock",    "Outstanding tenant balances by age",               AsOfDate),
         new("mgmt-fee",      "Management fee income",       "Trust accounting","reports",  "PM income — isolated from owner reporting",        YearMonth),
+        new("compliance-pack","Trust compliance pack",      "Compliance",      "doc",      "Audit-ready ZIP — trust ledger, deposit register, reconciliations & audit log for a closed period", BankPeriodRange),
     ];
 
     /// <summary>Look up a descriptor by id. Returns null if not found.</summary>

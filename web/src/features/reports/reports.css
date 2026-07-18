@@ -220,6 +220,67 @@ html[data-theme='dark'] .pf-report-card {
   display: inline-block;
 }
 
+/* ---- Compliance pack panel (WP-8) ------------------------------------------ */
+
+.pf-pack-dates {
+  display: flex;
+  gap: 9px;
+  flex-wrap: wrap;
+}
+
+.pf-pack-date {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pf-pack-date .pf-field {
+  min-width: 150px;
+}
+
+.pf-pack-ok {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--pos);
+  font-size: 12.5px;
+  font-weight: 550;
+}
+
+.pf-pack-body {
+  padding: 0;
+}
+
+.pf-pack-list {
+  list-style: none;
+  margin: 0 0 14px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.pf-pack-list svg {
+  color: var(--pos);
+  flex: none;
+}
+
+.pf-pack-note {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  /* Neutral surface (not accent-soft): the muted .t3 description only meets WCAG AA contrast on the
+     standard surface tokens; the accent Badge carries the color emphasis. */
+  background: var(--surface-2);
+}
+
 /* ---- Owner statement layout ------------------------------------------------ */
 
 .pf-stmt-layout {

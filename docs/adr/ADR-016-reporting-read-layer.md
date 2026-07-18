@@ -74,3 +74,40 @@ silently dropping off a statement.
 If statement generation (the `GetOwnerStatementData` handler) measurably contributes to page-load
 time at the anticipated Pro-tier scale (~300 units, ~23 owners), or if a denormalized read-model
 schema is needed for another M5+ feature, re-evaluate Approach B and record a new ADR.
+
+## Addendum (2026-07-18): WP-8 Trust Compliance Pack
+
+The M8 Trust Compliance Pack extends this read layer rather than adding a new decision, so it is
+recorded here instead of as a standalone ADR. It composes a one-click, PMAdmin-only audit bundle for
+a trust account × period from **existing** reads dispatched via `ISender` (the host composition root,
+`CompliancePackAssembler`) — it computes **no** new figures and writes no ledger state, squarely
+within Approach C. What is worth recording durably (it is a C1 attorney-review packet input):
+
+- **Period-end read parameters.** `GetTrustEquation` gained an optional `AsOf`, and
+  `GetDepositRegister` gained optional `BankAccountId` + `AsOf`. Each is a date-bounded read of the
+  same balanced journal (bounding on `journal_entries.entry_date`, cash basis). Because every posting
+  nets to zero per trust bank within its single dated entry (reversals included, as linked mirrors),
+  the trust equation's `Variance` is 0.00 at **any** `AsOf` — proven by golden assertions at period
+  ends and by a property test drawing a random as-of after each posting. This is reading a prefix of
+  an existing figure, not a new computation.
+- **Money-touching audit-log extract.** The pack's fourth artifact is a period-scoped extract of
+  `audit_events` filtered to a curated **money-touching `entity_type` allowlist**:
+  `journal_entries`, `journal_lines`, `bank_reconciliations`, `bank_line_status`,
+  `accounting_periods`, `statement_matches`, `statement_imports`, and the synthetic
+  `migration-signed-off`. Config/directory/identity/provisioning types are excluded. The allowlist is
+  a single constant, drift-guarded by a test that pins the emitted audit-type universe so a new money
+  table cannot silently drop out. (The judgment calls flagged for the review: `accounts`,
+  `statement_imports`, `bank_csv_mappings` — classified as config/linking per the test.)
+- **PM-income isolation holds.** No owner-facing artifact carries a `pm_income` figure; the PM-facing
+  management-fee report is deliberately excluded. The `HeldPmFees` component appears only in the
+  fiduciary trust-equation cover, not in any owner-facing artifact.
+- **Closed-period gate.** A pack is produced only for a period whose **every** month is
+  reconciliation-locked for the trust account (422 `period_not_closed` otherwise). Locking only the
+  period-end month would leave earlier in-range months open, where a backdated posting (rejected in a
+  locked month by `account_period_locked`) would still shift the pack's cumulative figures after it
+  was generated; requiring every in-range month locked makes the displayed period immutable. Held
+  balances are also guaranteed non-negative only once the period is closed. (A backdated posting into
+  an open month _before_ the period could still move the opening balance; requiring every historical
+  month locked is impractical, so the in-range boundary is the pragmatic guarantee.)
+- **Generation is audited.** Producing a pack emits a `compliance-pack-generated` audit event
+  (audit-worthy, but not money-touching, so it never appears inside the extract).

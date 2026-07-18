@@ -1,7 +1,15 @@
 using System.Globalization;
+using System.Text.Json;
+using LeaseBook.Modules.Accounting.Features.Reconciliation;
 using LeaseBook.Modules.Reporting.Catalog;
+using LeaseBook.Modules.Reporting.Contracts;
 using LeaseBook.Modules.Reporting.Rendering;
+using LeaseBook.SharedKernel;
+using LeaseBook.SharedKernel.Cqrs;
 using LeaseBook.SharedKernel.Endpoints;
+using LeaseBook.SharedKernel.Tenancy;
+using LeaseBook.Web.Persistence;
+using LeaseBook.Web.Tenancy;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -86,6 +94,78 @@ public sealed class ReportingEndpoints : IEndpointModule
                     var fileName = $"{id}-{(year ?? DateTime.UtcNow.Year)}-{(month ?? DateTime.UtcNow.Month):D2}.csv";
                     return Results.File(bytes, "text/csv", fileName);
                 });
+
+        // GET /api/reports/compliance-pack?bankAccountId=&from=&to= — the trust compliance pack ZIP.
+        // PMAdmin only (it contains the audit-log extract): the route-level RequirePMAdmin ANDs with the
+        // group's RequirePMStaff to admin-only. Generating a pack is itself audit-worthy, so a
+        // compliance-pack-generated event is recorded (audit-worthy but not money-touching, so it never
+        // appears inside the extract). The closed-period gate below requires every in-range month to be
+        // reconciliation-locked for this trust account (422 `period_not_closed`; WP-8 design gate §2).
+        group.MapGet("/reports/compliance-pack",
+                async (Guid bankAccountId, DateOnly from, DateOnly to,
+                    CompliancePackAssembler assembler, ISender sender, IPmBranding branding, AppDbContext db,
+                    IActorContext actor, CancellationToken ct) =>
+                {
+                    if (from > to)
+                    {
+                        return Results.Problem(
+                            detail: "from must be on or before to.",
+                            statusCode: StatusCodes.Status400BadRequest, title: "invalid_period");
+                    }
+
+                    // Closed-period gate: EVERY month the pack spans must be reconciliation-locked for
+                    // this trust account. Locking only the end month leaves earlier in-range months open,
+                    // where a backdated posting would still shift the pack's cumulative figures after it
+                    // is generated. All months locked → the displayed period is immutable.
+                    var history = await sender.Query(new GetReconciliationHistory(bankAccountId), ct);
+                    var lockedMonths = history.Rows
+                        .Where(r => r.Status == "finalized")
+                        .Select(r => (r.Year, r.Month))
+                        .ToHashSet();
+                    var firstOpen = MonthsInRange(from, to)
+                        .Where(m => !lockedMonths.Contains(m))
+                        .Select(m => ((int Year, int Month)?)m)
+                        .FirstOrDefault();
+                    if (firstOpen is { } open)
+                    {
+                        return Results.Problem(
+                            detail: $"The period {from:yyyy-MM}–{to:yyyy-MM} has a month that is not " +
+                                    $"reconciliation-locked for this trust account (first open: " +
+                                    $"{open.Year:D4}-{open.Month:D2}). A compliance pack requires every month " +
+                                    "in the period to be closed.",
+                            statusCode: StatusCodes.Status422UnprocessableEntity, title: "period_not_closed");
+                    }
+
+                    CompliancePack pack;
+                    try
+                    {
+                        pack = await assembler.AssembleAsync(bankAccountId, from, to, ct);
+                    }
+                    catch (KeyNotFoundException)
+                    {
+                        return Results.NotFound(new { error = $"Trust account '{bankAccountId}' not found." });
+                    }
+
+                    var company = (await branding.GetAsync(ct)).CompanyName ?? "Property Manager";
+                    var generatedAt = DateTime.UtcNow;
+                    var bytes = CompliancePackZip.Render(pack, company, generatedAt);
+
+                    db.Set<AuditEvent>().Add(new AuditEvent
+                    {
+                        Id = UuidV7.NewId(),
+                        ActorUserId = actor.UserId,
+                        EntityType = "compliance-pack-generated",
+                        EntityId = bankAccountId,
+                        Action = "insert",
+                        After = JsonSerializer.Serialize(new { bankAccountId, from, to, generatedAt }),
+                        OccurredAt = generatedAt,
+                    });
+                    await db.SaveChangesAsync(ct);
+
+                    var fileName = $"compliance-pack-{bankAccountId:N}-{from:yyyyMMdd}-{to:yyyyMMdd}.zip";
+                    return Results.File(bytes, "application/zip", fileName);
+                })
+            .RequireAuthorization("RequirePMAdmin");
 
         // GET /api/statements/{ownerId}?propertyId=&year=&month=&basis=
         // Always returns 200 with zero figures for an owner with no journal activity in the period
@@ -189,6 +269,27 @@ public sealed class ReportingEndpoints : IEndpointModule
                             });
                     }
                 });
+    }
+
+    // ─── helper: enumerate the (year, month) pairs a from..to range spans (inclusive) ─────
+
+    private static IEnumerable<(int Year, int Month)> MonthsInRange(DateOnly from, DateOnly to)
+    {
+        var year = from.Year;
+        var month = from.Month;
+        while (year < to.Year || (year == to.Year && month <= to.Month))
+        {
+            yield return (year, month);
+            if (month == 12)
+            {
+                month = 1;
+                year++;
+            }
+            else
+            {
+                month++;
+            }
+        }
     }
 
     // ─── helper: project preview rows (generic objects) to a string table ─────
