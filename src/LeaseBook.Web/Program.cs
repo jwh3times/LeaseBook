@@ -63,6 +63,13 @@ builder.Services.AddDbContext<AppDbContext>(options => options
 // Identity, cookie auth, antiforgery, deny-by-default authorization (P12).
 builder.Services.AddLeaseBookIdentity(builder.Environment);
 
+// WP-5 F3b: config-gated MFA enforcement for PMAdmin (default off; Production turns it on).
+builder.Services.Configure<LeaseBook.Web.Auth.AuthOptions>(builder.Configuration.GetSection("Auth"));
+builder.Services.AddSingleton<Microsoft.AspNetCore.Authorization.IAuthorizationHandler,
+    LeaseBook.Web.Security.MfaEnrolledAuthorizationHandler>();
+builder.Services.AddSingleton<Microsoft.AspNetCore.Authorization.IAuthorizationMiddlewareResultHandler,
+    LeaseBook.Web.Security.MfaAuthorizationResultHandler>();
+
 // Per-IP auth rate limiting (WP-5): "auth" policy applied to login + mfa only (Task 4). Limits are
 // configurable per environment — generous in Development/tests (appsettings.json), strict in
 // Production (appsettings.Production.json) — so the shared TestServer "unknown" IP partition is

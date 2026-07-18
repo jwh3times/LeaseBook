@@ -1,5 +1,6 @@
 using FluentValidation;
 using LeaseBook.Web.Persistence;
+using LeaseBook.Web.Security;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
@@ -71,10 +72,16 @@ public static class AuthServiceCollectionExtensions
             options.Cookie.SecurePolicy = securePolicy;
         });
 
+        var mfaEnrolled = new MfaEnrolledRequirement();
         services.AddAuthorizationBuilder()
-            .SetFallbackPolicy(new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build())
-            .AddPolicy(AuthPolicies.RequirePMAdmin, policy => policy.RequireRole(Roles.PMAdmin))
-            .AddPolicy(AuthPolicies.RequirePMStaff, policy => policy.RequireRole(Roles.PMAdmin, Roles.PMStaff));
+            .SetFallbackPolicy(new AuthorizationPolicyBuilder()
+                .RequireAuthenticatedUser().AddRequirements(mfaEnrolled).Build())
+            .AddPolicy(AuthPolicies.RequirePMAdmin, policy => policy
+                .RequireRole(Roles.PMAdmin).AddRequirements(mfaEnrolled))
+            .AddPolicy(AuthPolicies.RequirePMStaff, policy => policy
+                .RequireRole(Roles.PMAdmin, Roles.PMStaff).AddRequirements(mfaEnrolled))
+            .AddPolicy(AuthPolicies.AuthenticatedMfaExempt, policy => policy
+                .RequireAuthenticatedUser());
 
         return services;
     }
