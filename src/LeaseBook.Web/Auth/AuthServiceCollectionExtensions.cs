@@ -3,6 +3,7 @@ using LeaseBook.Web.Persistence;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
 
 namespace LeaseBook.Web.Auth;
@@ -13,8 +14,14 @@ namespace LeaseBook.Web.Auth;
 /// </summary>
 public static class AuthServiceCollectionExtensions
 {
-    public static IServiceCollection AddLeaseBookIdentity(this IServiceCollection services)
+    public static IServiceCollection AddLeaseBookIdentity(
+        this IServiceCollection services, IWebHostEnvironment environment)
     {
+        // http://localhost is plain HTTP in dev; every other environment terminates TLS at the edge.
+        var securePolicy = environment.IsDevelopment()
+            ? CookieSecurePolicy.SameAsRequest
+            : CookieSecurePolicy.Always;
+
         services
             .AddIdentity<AppUser, IdentityRole<Guid>>(options =>
             {
@@ -48,7 +55,7 @@ public static class AuthServiceCollectionExtensions
             options.Cookie.HttpOnly = true;
             options.Cookie.SameSite = SameSiteMode.Lax;
             // Secure on https (prod via Container Apps); plain http on localhost still works (E10).
-            options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+            options.Cookie.SecurePolicy = securePolicy;
             options.SlidingExpiration = true;
             options.ExpireTimeSpan = TimeSpan.FromHours(8);
             // SPA over /api expects status codes, not redirects to a login page.
@@ -61,7 +68,7 @@ public static class AuthServiceCollectionExtensions
             options.HeaderName = "X-XSRF-TOKEN";
             options.Cookie.Name = "LeaseBook.Antiforgery";
             options.Cookie.SameSite = SameSiteMode.Lax;
-            options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+            options.Cookie.SecurePolicy = securePolicy;
         });
 
         services.AddAuthorizationBuilder()

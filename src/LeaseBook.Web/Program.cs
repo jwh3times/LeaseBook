@@ -57,7 +57,7 @@ builder.Services.AddDbContext<AppDbContext>(options => options
     .UseSnakeCaseNamingConvention());
 
 // Identity, cookie auth, antiforgery, deny-by-default authorization (P12).
-builder.Services.AddLeaseBookIdentity();
+builder.Services.AddLeaseBookIdentity(builder.Environment);
 
 // Tenancy ergonomics: one request-scoped TenantContext, exposed read-only as ITenantContext (which
 // the DbContext query filter reads). DbContext is also resolvable as its base type so the
