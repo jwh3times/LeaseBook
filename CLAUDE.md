@@ -33,10 +33,11 @@ an invariant or module boundary from `AGENTS.md`.
 
 ## Claude Code Integration
 
-- `.claude/settings.json` contains a read-only Stop hook that reports likely documentation drift.
-  Treat the report as a prompt to inspect the owning document, not as permission to update every
-  mentioned file.
+- The `/ship` skill runs the pre-push documentation-drift check: it invokes `docs-updater` for the
+  docs it owns and flags private-roadmap WP drift. Treat its report as a prompt to inspect the owning
+  document, not as permission to update every mentioned file.
 - Invoke `docs-updater` before a push or PR when source behavior, commands, ports, architecture,
   business events, or user workflows changed.
-- Never assume the Stop hook runs in Codex, CI, Dependabot, or manual editing sessions; repository CI
-  and the contributor checklist must carry enforceable guarantees.
+- Do not rely on these session-scoped checks as guarantees: they do not run in Codex, CI, Dependabot,
+  or manual editing sessions, so repository CI and the contributor checklist must carry the
+  enforceable guarantees.

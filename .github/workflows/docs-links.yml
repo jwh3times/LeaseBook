@@ -1,8 +1,9 @@
 name: Docs links
 
-# Conventional-CI complement to the session-scoped docs-drift Stop hook: the hook only fires in
-# Claude Code sessions, so Dependabot merges, Codex sessions, and manual edits bypass it. This job
-# catches broken links/anchors on every docs change, and the weekly run catches external link rot.
+# Conventional-CI complement to the session-scoped docs-drift check in the /ship skill: that check
+# only runs in Claude Code sessions, so Dependabot merges, Codex sessions, and manual edits bypass
+# it. This job catches broken links/anchors on every docs change, and the weekly run catches
+# external link rot.
 on:
   pull_request:
     paths:

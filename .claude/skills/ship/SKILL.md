@@ -56,7 +56,7 @@ fight over the file. `CHANGELOG.md` is not in the docs-updater topology anyway.
 ### 2b. Flag private-roadmap WP drift (warn only — never edit or commit `private/`)
 
 The detailed plan lives in `private/roadmap.md` — **gitignored, so CI can never see it.** This local
-ship ritual is therefore the *only* place its drift can be caught. That file's §10 ("Keeping this
+ship ritual is therefore the _only_ place its drift can be caught. That file's §10 ("Keeping this
 document honest") requires each WP's PR to tick that WP's own checkboxes and update the §1/§2 status
 lines in the same change; the `docs-updater` in step 2 cannot do this (it has no `private/` topology).
 
