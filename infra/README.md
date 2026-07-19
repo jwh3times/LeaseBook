@@ -55,6 +55,11 @@ default does not survive a restart or scale-out: once a keyring generation is lo
 with no break-glass path. Persisting the Data Protection keyring to Key Vault (or another shared,
 durable store) is therefore a hard go-live (B1) blocker, tracked as finding F8. Not yet wired.
 
+The app now fails fast at startup in any non-Development environment unless `AllowedHosts` is set to
+a real host (not empty, not `*`) and `DataProtection:Durable=true`. Leave `DataProtection:Durable`
+unset until a durable keyring is actually configured — that is what makes this a hard blocker rather
+than a silent one: Production will refuse to boot until WP-10 wires Key Vault and this flag is set.
+
 **Follow-up:** the Production auth rate limit partitions requests by client IP, but behind Container
 Apps' ingress proxy every request currently appears to originate from the same ingress hop. Until
 `ForwardedHeaders` is configured with the Container Apps proxy registered as a known network/proxy, that

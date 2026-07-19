@@ -294,6 +294,15 @@ if (args is ["check-invariants", ..])
     return;
 }
 
+// Task 10 (F3a, F8): fail-fast in any non-Development environment if AllowedHosts is left open or
+// the Data Protection keyring hasn't been attested durable — a no-op in Development, and skipped
+// for the OpenAPI build (no real config/environment is being started up there, same as RoleSeeder
+// above) and for the CLI paths (which have already returned above and never reach this line).
+if (Environment.GetEnvironmentVariable("LEASEBOOK_OPENAPI_BUILD") != "1")
+{
+    ProductionSecurityGuards.Validate(app.Configuration, app.Environment);
+}
+
 app.Run();
 
 // Exposed so the integration test project can drive the host with WebApplicationFactory.
