@@ -68,16 +68,12 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Security
 
-- **Host security hardening** — every response now carries security headers and a strict
-  Content-Security-Policy (`frame-ancestors 'none'`), including error responses; `AllowedHosts` is
-  pinned in Production; auth and antiforgery cookies are `Secure` outside Development; login and the
-  MFA challenge are per-IP rate limited (configurable, generous in dev, strict in prod); `PMAdmin`
-  accounts must complete TOTP enrollment before use once `Auth:EnforceAdminMfa` is on (Production
-  default); an authorization-matrix regression test guards deny-by-default; and the Identity token
-  store (TOTP secret and recovery codes) is now encrypted at rest via ASP.NET Data Protection. Outside
-  Development the app also fails fast at startup when `AllowedHosts` is left open or a durable Data
-  Protection keyring is not affirmed (`DataProtection:Durable`), turning silent fail-open
-  misconfiguration into a loud boot failure.
+- **Host security hardening** — a defense-in-depth pass on the backend: security response headers and
+  a strict Content-Security-Policy on every response (including error responses), production
+  host-header filtering, secure cookies outside Development, rate limiting on the authentication
+  endpoints, config-gated multi-factor enforcement for admin accounts, encryption of sensitive
+  authentication data at rest, an authorization-matrix regression guard, and a fail-fast startup check
+  that blocks a non-Development boot when required security configuration is missing.
 
 ## [0.2.0] - 2026-07-09
 

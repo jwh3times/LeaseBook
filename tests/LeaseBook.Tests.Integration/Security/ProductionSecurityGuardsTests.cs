@@ -50,7 +50,7 @@ public sealed class ProductionSecurityGuardsTests
         var ex = Should.Throw<InvalidOperationException>(
             () => ProductionSecurityGuards.Validate(config, new StubEnvironment("Production")));
         ex.Message.ShouldContain("DataProtection:Durable");
-        ex.Message.ShouldContain("F8");
+        ex.Message.ShouldContain("Key Vault");
     }
 
     [Fact]

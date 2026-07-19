@@ -44,28 +44,7 @@ Real role passwords live in Key Vault only; `infra/db/bootstrap.sql` dev passwor
 
 `AllowedHosts` in `appsettings.Production.json` ships as an empty placeholder — the real deploy must
 set it to the production hostname(s), semicolon-separated (e.g. `app.leasebook.com;www.leasebook.com`),
-as a Container Apps app setting / env var. Leaving it empty or `*` disables host filtering.
-
-**Follow-up (F8, hard go-live blocker):** the Identity token store (TOTP secret and recovery codes) is
-encrypted at rest via ASP.NET Data Protection, but the app only calls the bare `AddDataProtection()` —
-no shared key store is configured, so the Data Protection keyring persists to the container's default
-local filesystem. Container Apps replicas are multi-instance and recycle on every deploy, so that
-default does not survive a restart or scale-out: once a keyring generation is lost, every TOTP secret
-**and recovery codes** it encrypted can never be decrypted again, locking out every MFA-enrolled account
-with no break-glass path. Persisting the Data Protection keyring to Key Vault (or another shared,
-durable store) is therefore a hard go-live (B1) blocker, tracked as finding F8. Not yet wired.
-
-The app now fails fast at startup in any non-Development environment unless `AllowedHosts` is set to
-a real host (not empty, not `*`) and `DataProtection:Durable=true`. Leave `DataProtection:Durable`
-unset until a durable keyring is actually configured — that is what makes this a hard blocker rather
-than a silent one: Production will refuse to boot until WP-10 wires Key Vault and this flag is set.
-
-**Follow-up:** the Production auth rate limit partitions requests by client IP, but behind Container
-Apps' ingress proxy every request currently appears to originate from the same ingress hop. Until
-`ForwardedHeaders` is configured with the Container Apps proxy registered as a known network/proxy, that
-partition key resolves to a single value for every client — so the interim Production rate limit is, in
-effect, one global limit shared by all clients, not a per-client one. Size the interim limit with that
-in mind. Not yet wired; tracked as a follow-up.
+as a Container Apps app setting / env var.
 
 ## Production networking
 

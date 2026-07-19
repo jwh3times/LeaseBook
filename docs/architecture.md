@@ -75,12 +75,11 @@ sub-org visibility (an owner sees only their properties) is enforced at the appl
 than by stacking more RLS policies — see [ADR-003](adr/ADR-003-portal-suborg-scoping-at-app-layer.md).
 
 Layered on top of that tenant boundary, the host applies defense-in-depth hardening: a middleware
-that sets security response headers and a strict content-security policy (`Content-Security-Policy`)
-on every response, per-IP rate limiting on the auth endpoints, config-gated MFA enforcement for admin
-accounts, and at-rest encryption of the Identity token store (TOTP secrets and recovery codes) via
-ASP.NET Data Protection. These controls are environment- and config-gated — permissive in Development
-and tests — and any non-Development environment fails fast at startup if host filtering or a durable
-Data Protection keyring is not configured. The security model and reporting process are in
+that sets security response headers and a strict content-security policy on every response, rate
+limiting on the authentication endpoints, config-gated multi-factor enforcement for admin accounts,
+and encryption of sensitive authentication data at rest. These controls are environment- and
+config-gated — permissive in Development and tests — and a non-Development environment fails fast at
+startup if required security configuration is missing. The security model and reporting process are in
 [SECURITY.md](../SECURITY.md).
 
 ## Frontend and the generated API client

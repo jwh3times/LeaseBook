@@ -27,21 +27,16 @@ public static class ProductionSecurityGuards
                 "this environment.");
         }
 
-        // F8: the Identity token store (TOTP secret + recovery codes) is encrypted at rest with
-        // ASP.NET Data Protection. The default keyring persists to local, per-instance disk — outside
-        // Development that keyring must be durable/shared (e.g. persisted to Key Vault) or a restart /
-        // scale-out loses the keys, permanently locking out every MFA-enrolled account with no
-        // break-glass path. This flag is the operator's attestation that a durable keyring is wired.
+        // Outside Development the app encrypts sensitive data at rest with ASP.NET Data Protection,
+        // which requires a durable, shared keyring (e.g. persisted to Key Vault); the default keyring
+        // is per-instance and unsuitable outside Development. This flag is the operator's attestation
+        // that a durable keyring is configured.
         if (!config.GetValue<bool>("DataProtection:Durable"))
         {
             throw new InvalidOperationException(
                 $"A durable Data Protection keyring is required in the '{environment.EnvironmentName}' " +
-                "environment (finding F8). The Identity token store (TOTP secret and recovery codes) is " +
-                "encrypted at rest with ASP.NET Data Protection; the default keyring is ephemeral / " +
-                "per-instance and is lost on restart or scale-out, which permanently locks out every " +
-                "MFA-enrolled account with no break-glass path. Configure a durable, shared keyring " +
-                "(persisted to Key Vault or an equivalent shared store) and then set the " +
-                "'DataProtection:Durable' configuration key to true.");
+                "environment. Configure a durable, shared keyring (e.g. persisted to Key Vault) and set " +
+                "the 'DataProtection:Durable' configuration key to true before starting this environment.");
         }
     }
 }
