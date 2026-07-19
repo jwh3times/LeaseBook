@@ -198,13 +198,84 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  # Builds the container images *and* proves they actually run. This replaces a build-only job that
+  # verified the image compiled but never started it — the gap that let a startup-guard
+  # misconfiguration put `app` into a silent restart loop while every check stayed green.
+  #
+  # Bringing up the Compose `full` profile subsumes the old build check and widens it:
+  #   - `runtime` is the Dockerfile's last stage, so Compose builds exactly what the build-only job
+  #     built (pushing the image is deploy-dev's job, and is exercised separately on main).
+  #   - it additionally builds the `migrator` target, which no CI job built before.
+  #   - it then runs the documented local stack end to end (`./scripts/dev.ps1 app-up`):
+  #     db healthy → migrate completes → seed completes → app serves.
   container:
-    name: Container build
+    name: Container build + full-stack smoke
     runs-on: ubuntu-latest
+    env:
+      # Host port the `app` service publishes; the container always listens on 8080. Matches the
+      # README port map's default so CI exercises the same mapping a developer gets.
+      LEASEBOOK_APP_PORT: 8082
     steps:
       - uses: actions/checkout@v7
-      - uses: docker/setup-buildx-action@v4
-      - uses: docker/build-push-action@v7
-        with:
-          context: .
-          push: false # PR builds verify the image compiles; pushing happens in deploy-dev.
+
+      # Builds db/migrate/seed/app and runs the depends_on chain: db healthy → migrate completes →
+      # seed completes → app starts. A non-zero exit here means the chain itself broke.
+      - name: Bring up the full profile
+        run: docker compose --profile full up -d --build
+
+      # Poll from the runner rather than adding a container HEALTHCHECK: the runtime image is not
+      # guaranteed to carry curl/wget, and the runner always does. Fails fast with logs if the
+      # container exits or starts flapping instead of waiting out the full timeout.
+      - name: Wait for /api/health to serve
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 60); do
+            if curl -fsS "http://localhost:${LEASEBOOK_APP_PORT}/api/health" -o /tmp/health.json; then
+              echo "Healthy after ~$((attempt * 2))s: $(cat /tmp/health.json)"
+              exit 0
+            fi
+            status="$(docker inspect -f '{{.State.Status}}' leasebook-app 2>/dev/null || echo missing)"
+            if [ "$status" = "exited" ] || [ "$status" = "missing" ]; then
+              echo "::error::leasebook-app is '$status' — it never came up."
+              exit 1
+            fi
+            # A crash loop reports 'restarting', not 'exited', so a status check alone would wait out
+            # the whole timeout and report a vague failure. Any restart before the first healthy
+            # response is already the bug — fail immediately with the real reason.
+            if [ "$(docker inspect -f '{{.RestartCount}}' leasebook-app)" -ne 0 ]; then
+              echo "::error::leasebook-app is crash-looping (status '$status'). It died before serving."
+              exit 1
+            fi
+            sleep 2
+          done
+          echo "::error::Timed out after 120s waiting for /api/health."
+          exit 1
+
+      # The regression that motivated this job was a *restart loop*, not a hard failure: with
+      # `restart: unless-stopped` the container kept dying and coming back. A healthy response alone
+      # would not have caught it, so assert the app reached ready state without ever restarting.
+      - name: Assert the app did not crash-loop on the way up
+        run: |
+          set -euo pipefail
+          restarts="$(docker inspect -f '{{.RestartCount}}' leasebook-app)"
+          echo "RestartCount=$restarts"
+          if [ "$restarts" -ne 0 ]; then
+            echo "::error::leasebook-app restarted $restarts time(s) before serving — it is crash-looping."
+            exit 1
+          fi
+
+      # The image serves the built SPA and the API from one origin; a 200 here proves the published
+      # port reaches the app and the web assets made it into the runtime layer.
+      - name: Assert the SPA is served
+        run: |
+          set -euo pipefail
+          code="$(curl -fsS -o /dev/null -w '%{http_code}' "http://localhost:${LEASEBOOK_APP_PORT}/")"
+          echo "SPA root returned HTTP $code"
+
+      - name: Dump Compose logs on failure
+        if: failure()
+        run: docker compose --profile full logs --no-color --tail 200
+
+      - name: Tear down
+        if: always()
+        run: docker compose --profile full down -v --remove-orphans

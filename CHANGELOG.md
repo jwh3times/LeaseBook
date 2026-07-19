@@ -46,6 +46,14 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   bundle can't change after it is handed to an auditor). Supported by period-end
   read parameters on the trust-equation and deposit-register reads (variance proven 0.00 at any
   as-of). See the ADR-016 addendum.
+- **Full-stack boot gate** — the container CI job now brings up the Compose `full` profile
+  (db → migrate → seed → app), waits for `/api/health`, and asserts the app served without ever
+  restarting. It previously only proved the image compiled; nothing ever started it, so a startup
+  misconfiguration could put the documented local stack into a silent restart loop and still pass
+  every check. The restart-count assertion is the load-bearing one — a crash-looping container
+  reports itself as `running` between bounces, so a liveness check alone does not catch it. Booting
+  the stack subsumes the old build-only check and also builds the `migrator` image target, which no
+  job built before.
 - **Data-handling and privacy compliance drafts** — a public `docs/compliance/` set now documents the
   GLBA data map, the encryption/access/retention posture, and a GLBA-style privacy-notice skeleton
   with explicit legal-review markers, giving the external compliance review a versioned engineering
@@ -68,6 +76,15 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 - **Not-found entry void returns 404** — voiding a nonexistent or cross-org journal entry now returns
   a 404 (`entry_not_found`) instead of a generic 500, matching the read endpoints; the nonexistent and
   cross-org cases are indistinguishable, so there is no existence oracle.
+- **Local full-stack run starts again** — the Compose `app` service did not set an environment, so it
+  defaulted to Production and the new startup guards failed it on the empty `AllowedHosts`; with
+  `restart: unless-stopped` that was a silent crash loop that left `./scripts/dev.ps1 app-up`
+  unusable. The service is now explicitly `Development`, matching the `seed` service beside it.
+- **Container binds its documented ingress port** — `appsettings.Development.json` pinned `Urls` to
+  the inner-loop address `http://localhost:5080`, which overrode the image's `ASPNETCORE_HTTP_PORTS`
+  and made the container listen on loopback:5080 instead of `:8080`, so the published port answered
+  nothing. That key was redundant — the inner loop already gets `:5080` from `launchSettings.json`
+  and the e2e host passes `--urls` explicitly — so it has been removed.
 
 ### Security
 
