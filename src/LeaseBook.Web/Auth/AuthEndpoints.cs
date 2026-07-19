@@ -3,6 +3,7 @@ using LeaseBook.Web.Endpoints;
 using LeaseBook.Web.Persistence;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 
@@ -55,7 +56,8 @@ public sealed class AuthEndpoints : IEndpointModule
         })
         .AddEndpointFilter<ValidationEndpointFilter<LoginRequest>>()
         .Produces<LoginResponse>()
-        .AllowAnonymous();
+        .AllowAnonymous()
+        .RequireRateLimiting("auth");
 
         group.MapPost("/mfa", async (MfaRequest request, SignInManager<AppUser> signInManager) =>
         {
@@ -73,13 +75,14 @@ public sealed class AuthEndpoints : IEndpointModule
         })
         .AddEndpointFilter<ValidationEndpointFilter<MfaRequest>>()
         .Produces<LoginResponse>()
-        .AllowAnonymous();
+        .AllowAnonymous()
+        .RequireRateLimiting("auth");
 
         group.MapPost("/logout", async (SignInManager<AppUser> signInManager) =>
         {
             await signInManager.SignOutAsync();
             return TypedResults.NoContent();
-        });
+        }).RequireAuthorization(AuthPolicies.AuthenticatedMfaExempt);
 
         group.MapGet("/me", async (HttpContext http, UserManager<AppUser> userManager, AppDbContext db) =>
         {
@@ -97,7 +100,9 @@ public sealed class AuthEndpoints : IEndpointModule
 
             return Results.Ok(new MeResponse(
                 user.Id, user.DisplayName, user.Email, roles.FirstOrDefault(), user.OrgId, orgName));
-        }).Produces<MeResponse>();
+        })
+        .Produces<MeResponse>()
+        .RequireAuthorization(AuthPolicies.AuthenticatedMfaExempt);
 
         group.MapPost("/mfa/enroll", async (HttpContext http, UserManager<AppUser> userManager) =>
         {
@@ -116,10 +121,12 @@ public sealed class AuthEndpoints : IEndpointModule
 
             var account = user.Email ?? user.UserName ?? user.Id.ToString();
             return Results.Ok(new EnrollResponse(BuildOtpauthUri("LeaseBook", account, key!), key!));
-        }).Produces<EnrollResponse>();
+        })
+        .Produces<EnrollResponse>()
+        .RequireAuthorization(AuthPolicies.AuthenticatedMfaExempt);
 
         group.MapPost("/mfa/enroll/confirm", async (
-            ConfirmMfaRequest request, HttpContext http, UserManager<AppUser> userManager) =>
+            ConfirmMfaRequest request, HttpContext http, UserManager<AppUser> userManager, SignInManager<AppUser> signInManager) =>
         {
             var user = await userManager.GetUserAsync(http.User);
             if (user is null)
@@ -135,9 +142,11 @@ public sealed class AuthEndpoints : IEndpointModule
             }
 
             await userManager.SetTwoFactorEnabledAsync(user, true);
+            await signInManager.RefreshSignInAsync(user); // re-issue the cookie so mfa_enrolled flips to true
             return Results.NoContent();
         })
-        .AddEndpointFilter<ValidationEndpointFilter<ConfirmMfaRequest>>();
+        .AddEndpointFilter<ValidationEndpointFilter<ConfirmMfaRequest>>()
+        .RequireAuthorization(AuthPolicies.AuthenticatedMfaExempt);
     }
 
     private static string BuildOtpauthUri(string issuer, string account, string secret)

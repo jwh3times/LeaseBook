@@ -68,7 +68,12 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Security
 
-- _Nothing yet._
+- **Host security hardening** — a defense-in-depth pass on the backend: security response headers and
+  a strict Content-Security-Policy on every response (including error responses), production
+  host-header filtering, secure cookies outside Development, rate limiting on the authentication
+  endpoints, config-gated multi-factor enforcement for admin accounts, encryption of sensitive
+  authentication data at rest, an authorization-matrix regression guard, and a fail-fast startup check
+  that blocks a non-Development boot when required security configuration is missing.
 
 ## [0.2.0] - 2026-07-09
 

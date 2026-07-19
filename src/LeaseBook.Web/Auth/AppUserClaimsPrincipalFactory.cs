@@ -20,6 +20,7 @@ public sealed class AppUserClaimsPrincipalFactory(
     {
         var identity = await base.GenerateClaimsAsync(user);
         identity.AddClaim(new Claim(OrgContextMiddleware.OrgIdClaim, user.OrgId.ToString()));
+        identity.AddClaim(new Claim(AuthClaims.MfaEnrolled, user.TwoFactorEnabled ? "true" : "false"));
         return identity;
     }
 }

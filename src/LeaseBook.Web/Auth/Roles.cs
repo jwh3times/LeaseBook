@@ -19,4 +19,5 @@ public static class AuthPolicies
 {
     public const string RequirePMAdmin = "RequirePMAdmin";
     public const string RequirePMStaff = "RequirePMStaff";
+    public const string AuthenticatedMfaExempt = "AuthenticatedMfaExempt";
 }

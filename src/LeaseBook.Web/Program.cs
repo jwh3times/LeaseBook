@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Threading.RateLimiting;
 using Azure.Monitor.OpenTelemetry.Exporter;
 using LeaseBook.Modules.Accounting;
 using LeaseBook.Modules.Banking;
@@ -15,9 +16,12 @@ using LeaseBook.Web.Cli;
 using LeaseBook.Web.Endpoints;
 using LeaseBook.Web.Persistence;
 using LeaseBook.Web.Reporting;
+using LeaseBook.Web.Security;
 using LeaseBook.Web.Seeding;
 using LeaseBook.Web.Tenancy;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using QuestPDF.Infrastructure;
@@ -57,7 +61,50 @@ builder.Services.AddDbContext<AppDbContext>(options => options
     .UseSnakeCaseNamingConvention());
 
 // Identity, cookie auth, antiforgery, deny-by-default authorization (P12).
-builder.Services.AddLeaseBookIdentity();
+builder.Services.AddLeaseBookIdentity(builder.Environment);
+
+// F6: keyring for the Identity token-store encryption converter (EncryptedStringConverter). Dev/test
+// use the default persisted keyring; at go-live the keys move to Key Vault (infra follow-up).
+builder.Services.AddDataProtection();
+
+// WP-5 F3b: config-gated MFA enforcement for PMAdmin (default off; Production turns it on).
+builder.Services.Configure<LeaseBook.Web.Auth.AuthOptions>(builder.Configuration.GetSection("Auth"));
+builder.Services.AddSingleton<Microsoft.AspNetCore.Authorization.IAuthorizationHandler,
+    LeaseBook.Web.Security.MfaEnrolledAuthorizationHandler>();
+builder.Services.AddSingleton<Microsoft.AspNetCore.Authorization.IAuthorizationMiddlewareResultHandler,
+    LeaseBook.Web.Security.MfaAuthorizationResultHandler>();
+
+// Per-IP auth rate limiting (WP-5): "auth" policy applied to login + mfa only (Task 4). Limits are
+// configurable per environment — generous in Development/tests (appsettings.json), strict in
+// Production (appsettings.Production.json) — so the shared TestServer "unknown" IP partition is
+// never tripped by unrelated tests.
+builder.Services.Configure<RateLimitingOptions>(builder.Configuration.GetSection("RateLimiting"));
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("auth", httpContext =>
+    {
+        var rateLimiting = httpContext.RequestServices.GetRequiredService<IOptions<RateLimitingOptions>>().Value;
+        return RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = rateLimiting.AuthPermitLimit,
+                Window = TimeSpan.FromSeconds(rateLimiting.AuthWindowSeconds),
+                QueueLimit = 0,
+            });
+    });
+    options.OnRejected = (context, _) =>
+    {
+        if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
+        {
+            context.HttpContext.Response.Headers.RetryAfter =
+                ((int)retryAfter.TotalSeconds).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        return ValueTask.CompletedTask;
+    };
+});
 
 // Tenancy ergonomics: one request-scoped TenantContext, exposed read-only as ITenantContext (which
 // the DbContext query filter reads). DbContext is also resolvable as its base type so the
@@ -187,6 +234,8 @@ var app = builder.Build();
 
 app.UseExceptionHandler();
 
+app.UseMiddleware<LeaseBook.Web.Security.SecurityHeadersMiddleware>();
+
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi().AllowAnonymous(); // GET /openapi/v1.json
@@ -201,6 +250,7 @@ app.UseAuthentication();
 // XSRF on unsafe /api requests, before authorization/org-context so a rejected request opens no tx.
 app.UseMiddleware<ApiAntiforgeryMiddleware>();
 app.UseAuthorization();
+app.UseRateLimiter();
 // Establishes app.org_id inside a per-request transaction for authenticated requests (§C.4).
 app.UseMiddleware<OrgContextMiddleware>();
 
@@ -242,6 +292,15 @@ if (args is ["check-invariants", ..])
 {
     Environment.ExitCode = await InvariantSweep.RunAsync(app.Services, args);
     return;
+}
+
+// Task 10 (F3a, F8): fail-fast in any non-Development environment if AllowedHosts is left open or
+// the Data Protection keyring hasn't been attested durable — a no-op in Development, and skipped
+// for the OpenAPI build (no real config/environment is being started up there, same as RoleSeeder
+// above) and for the CLI paths (which have already returned above and never reach this line).
+if (Environment.GetEnvironmentVariable("LEASEBOOK_OPENAPI_BUILD") != "1")
+{
+    ProductionSecurityGuards.Validate(app.Configuration, app.Environment);
 }
 
 app.Run();
