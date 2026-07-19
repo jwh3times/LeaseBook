@@ -27,7 +27,7 @@ internal sealed class ReversalService(DbContext db, ITenantContext tenant, IPost
 
         var original = await db.Set<JournalEntry>().AsNoTracking()
             .FirstOrDefaultAsync(e => e.Id == entryId, ct)
-            ?? throw new InvalidOperationException($"Entry {entryId} was not found in the current org.");
+            ?? throw new EntryNotFoundException(entryId);
 
         // A reversal cannot itself be reversed.
         if (original.ReversesEntryId is not null)

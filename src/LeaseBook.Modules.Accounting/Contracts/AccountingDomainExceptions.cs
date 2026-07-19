@@ -89,6 +89,14 @@ public sealed class ReconciliationNotFoundException(Guid reconciliationId)
     public Guid ReconciliationId { get; } = reconciliationId;
 }
 
+/// <summary>No journal entry with the given id exists in this org (404). Resolved via RLS, so a
+/// cross-org id is indistinguishable from a nonexistent one — no existence oracle.</summary>
+public sealed class EntryNotFoundException(Guid entryId)
+    : AccountingDomainException("entry_not_found", $"No entry with id {entryId} exists.")
+{
+    public Guid EntryId { get; } = entryId;
+}
+
 /// <summary>An entry with this source_ref already exists in the org (409); the existing id is carried.</summary>
 public sealed class DuplicateSourceRefException(string sourceRef, Guid existingEntryId)
     : AccountingDomainException(

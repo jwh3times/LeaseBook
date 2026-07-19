@@ -120,6 +120,24 @@ public sealed class LedgerHttpTests(PostgresFixture fixture)
         bad.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
     }
 
+    [Fact]
+    public async Task Voiding_a_nonexistent_entry_maps_to_404_not_500()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var setup = await SetupAsync(ct);
+        var client = await LoggedInClientAsync(setup, ct);
+
+        // A random entry id — also the cross-org shape: RLS makes another org's entry invisible, so it
+        // resolves to "not found" through the same path, with no existence oracle. Must be a 404
+        // domain error (entry_not_found), not the generic 500 a bare exception would produce (F5).
+        var response = await client.PostAsJsonAsync(
+            $"/api/accounting/entries/{UuidV7.NewId()}/void",
+            new { reason = "entered in error", sourceRef = Key() }, ct);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound, await response.Content.ReadAsStringAsync(ct));
+        (await response.Content.ReadFromJsonAsync<ProblemWithCode>(ct))!.Code.ShouldBe("entry_not_found");
+    }
+
     private sealed record ProblemWithCode(string Code);
 
     private sealed record Setup(Guid OrgId, string Email, Guid TenantId, Guid TrustBankId, Guid DepositBankId);

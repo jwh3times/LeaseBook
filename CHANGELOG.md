@@ -65,6 +65,9 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 - **Modal focus management** — closing a dialog now returns focus to the control that opened it, and
   opening one moves focus to its first field (falling back to a button when the dialog has no field),
   fixing a keyboard focus-order gap (WCAG 2.4.3) surfaced by the new keyboard-only e2e.
+- **Not-found entry void returns 404** — voiding a nonexistent or cross-org journal entry now returns
+  a 404 (`entry_not_found`) instead of a generic 500, matching the read endpoints; the nonexistent and
+  cross-org cases are indistinguishable, so there is no existence oracle.
 
 ### Security
 
