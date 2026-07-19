@@ -301,6 +301,17 @@ if (args is ["check-invariants", ..])
     return;
 }
 
+// CLI: `dotnet run --project src/LeaseBook.Web -- perf-probe [--base-url <url>] [--n <count>]
+//      [--warmup <count>] [--budget-ms <ms>]` measures p50/p95/p99 on the three money-critical read
+// paths against the load fixture and exits non-zero when p95 misses the budget (WP-9).
+// Unlike the verbs above it drives an ALREADY-RUNNING host over HTTP rather than this process's
+// services, so start the host (and `seed --org load`) first. Not a CI gate — see docs/perf.md.
+if (args is ["perf-probe", ..])
+{
+    Environment.ExitCode = await PerfProbe.RunAsync(args);
+    return;
+}
+
 // Task 10 (F3a, F8): fail-fast in any non-Development environment if AllowedHosts is left open or
 // the Data Protection keyring hasn't been attested durable — a no-op in Development, and skipped
 // for the OpenAPI build (no real config/environment is being started up there, same as RoleSeeder

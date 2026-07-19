@@ -163,7 +163,23 @@ non-zero on any violation. It is the body of the future nightly sweep (P33 / ADR
 $env:ASPNETCORE_ENVIRONMENT = "Development"
 dotnet run --project src/LeaseBook.Web -- check-invariants --all          # every org
 dotnet run --project src/LeaseBook.Web -- check-invariants --org demo     # one org (or a GUID)
+dotnet run --project src/LeaseBook.Web -- check-invariants --org load     # the load fixture
 ```
+
+## Measuring read-path latency
+
+`seed --org load` provisions a ~300-unit synthetic org, and the `perf-probe` verb measures
+p50/p95/p99 on the tenant ledger, dashboard, and bank register against a **running** host, exiting
+non-zero when p95 misses the 300 ms budget. Seed and start the host first, then probe from a second
+shell:
+
+```powershell
+$env:ASPNETCORE_ENVIRONMENT = "Development"
+dotnet run --project src/LeaseBook.Web -- seed --org load                 # once; idempotent
+dotnet run --project src/LeaseBook.Web -- perf-probe                      # against a running host
+```
+
+[`docs/perf.md`](../perf.md) owns the method, the flags, and the recorded numbers.
 
 The accounting property suite (`LeaseBook.Tests.Accounting`) runs random valid event sequences
 through the real engine. Its iteration count is the `LEASEBOOK_PROPERTY_ITER` environment variable
