@@ -74,7 +74,10 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   MFA challenge are per-IP rate limited (configurable, generous in dev, strict in prod); `PMAdmin`
   accounts must complete TOTP enrollment before use once `Auth:EnforceAdminMfa` is on (Production
   default); an authorization-matrix regression test guards deny-by-default; and the Identity token
-  store (TOTP secret and recovery codes) is now encrypted at rest via ASP.NET Data Protection.
+  store (TOTP secret and recovery codes) is now encrypted at rest via ASP.NET Data Protection. Outside
+  Development the app also fails fast at startup when `AllowedHosts` is left open or a durable Data
+  Protection keyring is not affirmed (`DataProtection:Durable`), turning silent fail-open
+  misconfiguration into a loud boot failure.
 
 ## [0.2.0] - 2026-07-09
 

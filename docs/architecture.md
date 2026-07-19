@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living architecture guide
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-07-09
+- **Last reviewed:** 2026-07-18
 
 This is the canonical public map of the system **as implemented**. It explains how the pieces fit
 together and links the decisions that shaped them without reproducing every invariant. Accepted
@@ -73,7 +73,15 @@ org-scoped table is created through the migrations RLS helper (column + `USING`/
 `FORCE` in one call), and a schema-guard test fails CI if any `org_id` table lacks its policy. Portal
 sub-org visibility (an owner sees only their properties) is enforced at the application layer rather
 than by stacking more RLS policies — see [ADR-003](adr/ADR-003-portal-suborg-scoping-at-app-layer.md).
-The security model and reporting process are in [SECURITY.md](../SECURITY.md).
+
+Layered on top of that tenant boundary, the host applies defense-in-depth hardening: a middleware
+that sets security response headers and a strict content-security policy (`Content-Security-Policy`)
+on every response, per-IP rate limiting on the auth endpoints, config-gated MFA enforcement for admin
+accounts, and at-rest encryption of the Identity token store (TOTP secrets and recovery codes) via
+ASP.NET Data Protection. These controls are environment- and config-gated — permissive in Development
+and tests — and any non-Development environment fails fast at startup if host filtering or a durable
+Data Protection keyring is not configured. The security model and reporting process are in
+[SECURITY.md](../SECURITY.md).
 
 ## Frontend and the generated API client
 
