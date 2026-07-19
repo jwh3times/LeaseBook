@@ -166,6 +166,14 @@ dotnet run --project src/LeaseBook.Web -- check-invariants --org demo     # one 
 dotnet run --project src/LeaseBook.Web -- check-invariants --org load     # the load fixture
 ```
 
+The accounting property suite (`LeaseBook.Tests.Accounting`) runs random valid event sequences
+through the real engine. Its iteration count is the `LEASEBOOK_PROPERTY_ITER` environment variable
+(default 20); CI and pre-merge runs raise it (e.g. `100`) for deeper coverage:
+
+```powershell
+$env:LEASEBOOK_PROPERTY_ITER = "100"; dotnet test tests/LeaseBook.Tests.Accounting/LeaseBook.Tests.Accounting.csproj
+```
+
 ## Measuring read-path latency
 
 `seed --org load` provisions a ~300-unit synthetic org, and the `perf-probe` verb measures
@@ -180,14 +188,6 @@ dotnet run --project src/LeaseBook.Web -- perf-probe                      # agai
 ```
 
 [`docs/perf.md`](../perf.md) owns the method, the flags, and the recorded numbers.
-
-The accounting property suite (`LeaseBook.Tests.Accounting`) runs random valid event sequences
-through the real engine. Its iteration count is the `LEASEBOOK_PROPERTY_ITER` environment variable
-(default 20); CI and pre-merge runs raise it (e.g. `100`) for deeper coverage:
-
-```powershell
-$env:LEASEBOOK_PROPERTY_ITER = "100"; dotnet test tests/LeaseBook.Tests.Accounting/LeaseBook.Tests.Accounting.csproj
-```
 
 ## End-to-end (Playwright) + a11y
 

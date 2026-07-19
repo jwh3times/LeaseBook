@@ -57,10 +57,13 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 - **Performance fixture and latency harness** — `seed --org load` provisions a ~300-unit synthetic
   org (25 owners, 40 properties, 12 months of activity, ~7,700 journal entries) generated entirely
   through the real posting engine and bulk-run engine, and a new `perf-probe` verb measures
-  p50/p95/p99 on the tenant ledger, dashboard, and bank register against a running host, exiting
-  non-zero when p95 misses the 300 ms budget. First measurement records all three read paths an
-  order of magnitude inside budget, so no query or index changed. Method and numbers are recorded in
-  `docs/perf.md`. Not a CI gate — runner variance would make a latency threshold flaky.
+  p50/p95/p99 on the four money-critical read paths — tenant ledger, dashboard, bank register, and
+  owner statement — against a running host, exiting non-zero when p95 misses the 300 ms budget.
+  The first measurement puts all four an order of magnitude inside budget, so no query and no index
+  changed; notably the owner statement, assembled from the live journal, comes in at 21.7 ms p95, so
+  ADR-016's revisit trigger for materializing statement read models has not fired at this scale.
+  Method and numbers are recorded in `docs/perf.md`. Not a CI gate — runner variance would make a
+  latency threshold flaky.
 - **Data-handling and privacy compliance drafts** — a public `docs/compliance/` set now documents the
   GLBA data map, the encryption/access/retention posture, and a GLBA-style privacy-notice skeleton
   with explicit legal-review markers, giving the external compliance review a versioned engineering

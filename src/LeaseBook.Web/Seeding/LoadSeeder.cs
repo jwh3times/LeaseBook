@@ -100,6 +100,13 @@ public static class LoadSeeder
     /// <summary>First month of generated activity; eleven more follow (through June 2026).</summary>
     private static readonly DateOnly WindowStart = new(2025, 7, 1);
 
+    /// <summary>
+    /// Last month of generated activity. Public so a consumer that needs a period with real figures
+    /// in it — the <c>perf-probe</c> statement read — targets the fixture's window instead of
+    /// hardcoding a literal that silently goes stale if the window moves.
+    /// </summary>
+    public static readonly DateOnly LastActivityMonth = WindowStart.AddMonths(MonthCount - 1);
+
     /// <summary>The PM's own accumulated (already swept) income at cutover — outside the trust equation.</summary>
     private const decimal OpeningPmOperatingBalance = 18_500.00m;
 

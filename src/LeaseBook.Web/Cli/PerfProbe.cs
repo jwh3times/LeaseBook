@@ -8,10 +8,15 @@ using LeaseBook.Web.Seeding;
 namespace LeaseBook.Web.Cli;
 
 /// <summary>
-/// The WP-9 latency harness: measures p50/p95/p99 on the three money-critical read paths (tenant
-/// ledger, dashboard, bank register) against a <b>already-running</b> host and the
-/// <see cref="LoadSeeder"/> org, and fails when p95 misses the 300 ms budget (ADR-016's design
-/// target at ~300-unit scale).
+/// The WP-9 latency harness: measures p50/p95/p99 on the four money-critical read paths (tenant
+/// ledger, dashboard, bank register, owner statement) against an <b>already-running</b> host and the
+/// <see cref="LoadSeeder"/> org, and fails when p95 misses the budget. The p95 &lt; 300 ms figure is
+/// declared in <c>docs/perf.md</c>; ADR-016 supplies the ~300-unit scale, not a latency number.
+/// <para>
+/// The owner statement is probed deliberately: ADR-016's revisit trigger is worded about
+/// <c>GetOwnerStatementData</c> contributing to page-load time, so a probe that skipped statements
+/// could say nothing about that trigger.
+/// </para>
 /// <para>
 /// Deliberately an over-the-wire HTTP client rather than an in-process query timer: the budget is a
 /// user-facing promise, so the number has to include routing, authorization, serialization, and the
@@ -134,34 +139,45 @@ public static class PerfProbe
     }
 
     /// <summary>
-    /// The three read paths under budget. The bank id is a <see cref="LoadSeeder"/> constant; the
-    /// tenant is discovered at run time because tenant ids are generated per seed run. Picks the
-    /// most-active tenant page so the ledger read is a realistic one, not an empty projection.
+    /// The four read paths under budget. The bank id is a <see cref="LoadSeeder"/> constant; the
+    /// tenant and owner are discovered at run time because their ids are generated per seed run.
+    /// Sorts to the most-active row so each read is a realistic one, not an empty projection, and
+    /// targets the fixture's last activity month so the statement has real figures in it — a
+    /// statement for a quiet period returns zeros and would time an unrepresentatively cheap read.
     /// </summary>
     private static async Task<IReadOnlyList<(string Label, string Path)>> ResolveTargetsAsync(
         HttpClient http, CancellationToken ct)
     {
-        var response = await http.GetAsync("/api/directory/tenants?page=1&pageSize=1&sort=balance:desc", ct);
-        response.EnsureSuccessStatusCode();
+        var tenantId = await FirstIdAsync(
+            http, "/api/directory/tenants?page=1&pageSize=1&sort=balance:desc", "tenants", ct);
+        var ownerId = await FirstIdAsync(
+            http, "/api/directory/owners?page=1&pageSize=1", "owners", ct);
 
-        await using var stream = await response.Content.ReadAsStreamAsync(ct);
-        using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
-
-        var items = doc.RootElement.GetProperty("items");
-        if (items.GetArrayLength() == 0)
-        {
-            throw new InvalidOperationException(
-                "the load org has no tenants. Seed it: `dotnet run --project src/LeaseBook.Web -- seed --org load`.");
-        }
-
-        var tenantId = items[0].GetProperty("id").GetGuid();
+        var period = LoadSeeder.LastActivityMonth;
 
         return
         [
             ("tenant ledger", $"/api/accounting/tenants/{tenantId}/ledger"),
             ("dashboard", "/api/dashboard"),
             ("bank register", $"/api/accounting/banks/{LoadSeeder.OperatingTrustId}/register"),
+            ("owner statement", $"/api/statements/{ownerId}?year={period.Year}&month={period.Month}&basis=cash"),
         ];
+    }
+
+    /// <summary>First id from a paged directory list, or a seed-the-fixture error if the list is empty.</summary>
+    private static async Task<Guid> FirstIdAsync(HttpClient http, string path, string what, CancellationToken ct)
+    {
+        var response = await http.GetAsync(path, ct);
+        response.EnsureSuccessStatusCode();
+
+        await using var stream = await response.Content.ReadAsStreamAsync(ct);
+        using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
+
+        var items = doc.RootElement.GetProperty("items");
+        return items.GetArrayLength() == 0
+            ? throw new InvalidOperationException(
+                $"the load org has no {what}. Seed it: `dotnet run --project src/LeaseBook.Web -- seed --org load`.")
+            : items[0].GetProperty("id").GetGuid();
     }
 
     /// <summary>
