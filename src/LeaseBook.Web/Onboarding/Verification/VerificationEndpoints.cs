@@ -1,4 +1,5 @@
 using LeaseBook.SharedKernel.Endpoints;
+using LeaseBook.Web.Endpoints;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -33,14 +34,16 @@ public sealed class VerificationEndpoints : IEndpointModule
         // Body: { cutoverDate, ownerEquityTotal, depositLiabilityTotal, bankBookBalances: [...] }
         // Returns: VerificationReport (200)
         group.MapPost("/",
-                async (VerificationRequestDto body, VerificationService service, CancellationToken ct) =>
+                async (VerificationRequestDto body, VerificationService service, HttpContext httpContext,
+                    CancellationToken ct) =>
                 {
                     if (!DateOnly.TryParse(body.CutoverDate, out var cutoverDate))
                     {
-                        return Results.Problem(
-                            title: "Invalid cutover date",
-                            detail: $"cutover_date '{body.CutoverDate}' is not a valid ISO date (yyyy-MM-dd).",
-                            statusCode: StatusCodes.Status400BadRequest);
+                        return ProblemResults.Problem(
+                            httpContext,
+                            code: "invalid_cutover_date",
+                            detail: "The cutover date must be a valid date in YYYY-MM-DD format.",
+                            status: StatusCodes.Status400BadRequest);
                     }
 
                     var banks = (body.BankBookBalances ?? [])
@@ -62,7 +65,7 @@ public sealed class VerificationEndpoints : IEndpointModule
         // POST /api/onboarding/verification/{id}/signoff
         // Returns: SignoffResult (200) or 409 not_tied (if IsTied == false)
         group.MapPost("/{id:guid}/signoff",
-                async (Guid id, VerificationService service, CancellationToken ct) =>
+                async (Guid id, VerificationService service, HttpContext httpContext, CancellationToken ct) =>
                 {
                     try
                     {
@@ -71,10 +74,11 @@ public sealed class VerificationEndpoints : IEndpointModule
                     }
                     catch (MigrationNotTiedException ex)
                     {
-                        return Results.Problem(
+                        return ProblemResults.Problem(
+                            httpContext,
+                            code: "not_tied",
                             detail: ex.Message,
-                            statusCode: StatusCodes.Status409Conflict,
-                            title: "not_tied",
+                            status: StatusCodes.Status409Conflict,
                             extensions: new Dictionary<string, object?>
                             {
                                 ["verificationId"] = ex.VerificationId,
@@ -83,12 +87,13 @@ public sealed class VerificationEndpoints : IEndpointModule
                                 ["clearingAccrual"] = ex.ClearingAccrual,
                             });
                     }
-                    catch (KeyNotFoundException ex)
+                    catch (KeyNotFoundException)
                     {
-                        return Results.Problem(
-                            detail: ex.Message,
-                            statusCode: StatusCodes.Status404NotFound,
-                            title: "verification_not_found");
+                        return ProblemResults.Problem(
+                            httpContext,
+                            code: "verification_not_found",
+                            detail: "That verification was not found. Re-run verification and try again.",
+                            status: StatusCodes.Status404NotFound);
                     }
                 })
             .Produces<SignoffResult>()

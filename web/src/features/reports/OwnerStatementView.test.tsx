@@ -216,7 +216,7 @@ describe('OwnerStatementView', () => {
     server.use(
       http.post('/api/statements/:ownerId/deliver', () =>
         HttpResponse.json(
-          { code: 'NotBalanced', detail: 'Statement is not balanced.' },
+          { code: 'statement_not_balanced', detail: 'Statement is not balanced.' },
           { status: 409 },
         ),
       ),

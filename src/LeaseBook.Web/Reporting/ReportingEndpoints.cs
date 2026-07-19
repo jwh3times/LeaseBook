@@ -8,6 +8,7 @@ using LeaseBook.SharedKernel;
 using LeaseBook.SharedKernel.Cqrs;
 using LeaseBook.SharedKernel.Endpoints;
 using LeaseBook.SharedKernel.Tenancy;
+using LeaseBook.Web.Endpoints;
 using LeaseBook.Web.Persistence;
 using LeaseBook.Web.Tenancy;
 using Microsoft.AspNetCore.Builder;
@@ -231,7 +232,7 @@ public sealed class ReportingEndpoints : IEndpointModule
                 async (Guid ownerId, Guid? propertyId, int? year, int? month, string? basis,
                     string? toEmail,
                     StatementAssembler assembler, IStatementDelivery delivery,
-                    CancellationToken ct) =>
+                    HttpContext httpContext, CancellationToken ct) =>
                 {
                     if (string.IsNullOrWhiteSpace(toEmail))
                     {
@@ -256,13 +257,13 @@ public sealed class ReportingEndpoints : IEndpointModule
                     }
                     catch (StatementNotBalancedException ex)
                     {
-                        return Results.Problem(
+                        return ProblemResults.Problem(
+                            httpContext,
+                            code: "statement_not_balanced",
                             detail: ex.Message,
-                            statusCode: StatusCodes.Status409Conflict,
-                            title: "statement_not_balanced",
+                            status: StatusCodes.Status409Conflict,
                             extensions: new Dictionary<string, object?>
                             {
-                                ["ownerId"] = ex.OwnerId,
                                 ["year"] = ex.Year,
                                 ["month"] = ex.Month,
                                 ["variance"] = ex.Variance,
