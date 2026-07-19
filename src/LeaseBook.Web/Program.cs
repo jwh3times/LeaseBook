@@ -270,19 +270,26 @@ if (Environment.GetEnvironmentVariable("LEASEBOOK_OPENAPI_BUILD") != "1")
 
 // CLI: `dotnet run --project src/LeaseBook.Web -- seed --org demo` provisions the demo org and exits.
 //      `dotnet run --project src/LeaseBook.Web -- seed --org cutover` provisions the cutover org (M7).
+//      `dotnet run --project src/LeaseBook.Web -- seed --org load` provisions the ~300-unit load
+//      fixture (M8 / WP-9). Any other value (including none) falls back to the demo org.
 if (args is ["seed", ..])
 {
     var orgFlag = Array.IndexOf(args, "--org");
     var orgValue = orgFlag >= 0 && orgFlag + 1 < args.Length ? args[orgFlag + 1] : "demo";
 
-    if (string.Equals(orgValue, "cutover", StringComparison.OrdinalIgnoreCase))
+    switch (orgValue.ToLowerInvariant())
     {
-        await CutoverSeeder.SeedAsync(app.Services);
+        case "cutover":
+            await CutoverSeeder.SeedAsync(app.Services);
+            break;
+        case "load":
+            await LoadSeeder.SeedAsync(app.Services);
+            break;
+        default:
+            await DemoSeeder.SeedAsync(app.Services);
+            break;
     }
-    else
-    {
-        await DemoSeeder.SeedAsync(app.Services);
-    }
+
     return;
 }
 
@@ -291,6 +298,17 @@ if (args is ["seed", ..])
 if (args is ["check-invariants", ..])
 {
     Environment.ExitCode = await InvariantSweep.RunAsync(app.Services, args);
+    return;
+}
+
+// CLI: `dotnet run --project src/LeaseBook.Web -- perf-probe [--base-url <url>] [--n <count>]
+//      [--warmup <count>] [--budget-ms <ms>]` measures p50/p95/p99 on the three money-critical read
+// paths against the load fixture and exits non-zero when p95 misses the budget (WP-9).
+// Unlike the verbs above it drives an ALREADY-RUNNING host over HTTP rather than this process's
+// services, so start the host (and `seed --org load`) first. Not a CI gate — see docs/perf.md.
+if (args is ["perf-probe", ..])
+{
+    Environment.ExitCode = await PerfProbe.RunAsync(args);
     return;
 }
 

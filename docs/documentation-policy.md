@@ -32,6 +32,7 @@ not enforce this broader confidentiality boundary.
 | Trust-accounting behavior and event workflows    | `docs/accounting.md`                             |
 | Significant engineering decisions                | Accepted ADRs in `docs/adr/`                     |
 | Development and verification commands            | `docs/runbooks/local-dev.md`                     |
+| Read-path latency budget and measurements        | `docs/perf.md`                                   |
 | Contribution requirements and Definition of Done | `CONTRIBUTING.md`                                |
 | Released capabilities                            | `CHANGELOG.md`                                   |
 | Broad future direction                           | `docs/ROADMAP.md`                                |

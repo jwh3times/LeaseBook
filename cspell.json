@@ -57,6 +57,7 @@
     "parameterizes",
     "PITR",
     "Playwright",
+    "PRNG",
     "Postgres",
     "PostgreSQL",
     "QuestPDF",
@@ -86,6 +87,7 @@
     "WebAuthn",
     "workpapers",
     "Wrangler",
+    "xorshift",
     "xUnit"
   ]
 }

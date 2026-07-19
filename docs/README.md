@@ -17,6 +17,7 @@ summaries elsewhere should link here rather than restating mutable detail.
 | Understand the implemented system                 | [Architecture](architecture.md)                        |
 | Understand trust-accounting behavior              | [Accounting](accounting.md)                            |
 | Set up or operate a development environment       | [Local-development runbook](runbooks/local-dev.md)     |
+| Measure read-path latency against the budget      | [Performance](perf.md)                                 |
 | Contribute a change                               | [Contributing guide](../CONTRIBUTING.md)               |
 | See shipped capabilities and broad direction      | [Roadmap](ROADMAP.md) and [changelog](../CHANGELOG.md) |
 

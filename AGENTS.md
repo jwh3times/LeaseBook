@@ -94,6 +94,10 @@ Run `dotnet tool restore` once for `dotnet-ef`.
 - Seed demo org: `$env:ASPNETCORE_ENVIRONMENT='Development'; dotnet run --project src/LeaseBook.Web -- seed --org demo`
 - Check invariants: `$env:ASPNETCORE_ENVIRONMENT='Development'; dotnet run --project src/LeaseBook.Web -- check-invariants --org demo`
 - Check all org invariants: `$env:ASPNETCORE_ENVIRONMENT='Development'; dotnet run --project src/LeaseBook.Web -- check-invariants --all`
+- Seed the 300-unit load fixture: `$env:ASPNETCORE_ENVIRONMENT='Development'; dotnet run --project src/LeaseBook.Web -- seed --org load`
+- Measure read-path p95 against a running host: `$env:ASPNETCORE_ENVIRONMENT='Development'; dotnet run --project src/LeaseBook.Web -- perf-probe`
+  (needs the load fixture seeded and the host already running; `docs/perf.md` owns the method and the
+  recorded numbers)
 
 ### Web (run from `web/`)
 
