@@ -1,4 +1,5 @@
 using FluentValidation;
+using LeaseBook.Web.Observability;
 using Microsoft.AspNetCore.Diagnostics;
 
 namespace LeaseBook.Web.Endpoints;
@@ -8,7 +9,7 @@ namespace LeaseBook.Web.Endpoints;
 /// ProblemDetails with the <c>errors</c> dictionary. The single mapping home for dispatched messages;
 /// real CQRS slices arrive in M1, but the contract is wired now.
 /// </summary>
-public sealed class ValidationExceptionHandler : IExceptionHandler
+public sealed class ValidationExceptionHandler(ILogger<ValidationExceptionHandler> logger) : IExceptionHandler
 {
     public async ValueTask<bool> TryHandleAsync(
         HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
@@ -22,7 +23,12 @@ public sealed class ValidationExceptionHandler : IExceptionHandler
             .GroupBy(e => e.PropertyName)
             .ToDictionary(g => g.Key, g => g.Select(e => e.ErrorMessage).ToArray());
 
-        await Results.ValidationProblem(errors).ExecuteAsync(httpContext);
+        logger.LogWarning(
+            LogEvents.ValidationRejection,
+            "Validation rejection on {FieldCount} field(s)",
+            errors.Count);
+
+        await ProblemResults.ValidationProblem(httpContext, errors).ExecuteAsync(httpContext);
         return true;
     }
 }
