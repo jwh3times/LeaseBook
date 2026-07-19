@@ -53,13 +53,17 @@ public sealed class ReportingEndpoints : IEndpointModule
         group.MapGet("/reports/{id}/preview",
                 async (string id, int? year, int? month, Guid? ownerId, Guid? propertyId,
                     Guid? bankAccountId, DateOnly? asOf,
-                    ReportPreviewService previewService, CancellationToken ct) =>
+                    ReportPreviewService previewService, HttpContext httpContext, CancellationToken ct) =>
                 {
                     var filters = new ReportFilters(year, month, ownerId, propertyId, bankAccountId, asOf);
                     var result = await previewService.PreviewAsync(id, filters, ct);
                     if (result is null)
                     {
-                        return Results.NotFound(new { error = $"Report '{id}' not found in catalog." });
+                        return ProblemResults.Problem(
+                            httpContext,
+                            code: "report_not_found",
+                            detail: $"Report '{id}' is not in the catalog.",
+                            status: StatusCodes.Status404NotFound);
                     }
 
                     // Extract column names from the dictionary keys (all preview rows share the same schema).
@@ -76,13 +80,17 @@ public sealed class ReportingEndpoints : IEndpointModule
         group.MapGet("/reports/{id}/csv",
                 async (string id, int? year, int? month, Guid? ownerId, Guid? propertyId,
                     Guid? bankAccountId, DateOnly? asOf,
-                    ReportPreviewService previewService, CancellationToken ct) =>
+                    ReportPreviewService previewService, HttpContext httpContext, CancellationToken ct) =>
                 {
                     var filters = new ReportFilters(year, month, ownerId, propertyId, bankAccountId, asOf);
                     var result = await previewService.PreviewAsync(id, filters, ct);
                     if (result is null)
                     {
-                        return Results.NotFound(new { error = $"Report '{id}' not found in catalog." });
+                        return ProblemResults.Problem(
+                            httpContext,
+                            code: "report_not_found",
+                            detail: $"Report '{id}' is not in the catalog.",
+                            status: StatusCodes.Status404NotFound);
                     }
 
                     // The preview rows are generic objects; project them to string rows for the CSV
@@ -105,13 +113,15 @@ public sealed class ReportingEndpoints : IEndpointModule
         group.MapGet("/reports/compliance-pack",
                 async (Guid bankAccountId, DateOnly from, DateOnly to,
                     CompliancePackAssembler assembler, ISender sender, IPmBranding branding, AppDbContext db,
-                    IActorContext actor, CancellationToken ct) =>
+                    IActorContext actor, HttpContext httpContext, CancellationToken ct) =>
                 {
                     if (from > to)
                     {
-                        return Results.Problem(
+                        return ProblemResults.Problem(
+                            httpContext,
+                            code: "invalid_period",
                             detail: "from must be on or before to.",
-                            statusCode: StatusCodes.Status400BadRequest, title: "invalid_period");
+                            status: StatusCodes.Status400BadRequest);
                     }
 
                     // Closed-period gate: EVERY month the pack spans must be reconciliation-locked for
@@ -129,12 +139,14 @@ public sealed class ReportingEndpoints : IEndpointModule
                         .FirstOrDefault();
                     if (firstOpen is { } open)
                     {
-                        return Results.Problem(
+                        return ProblemResults.Problem(
+                            httpContext,
+                            code: "period_not_closed",
                             detail: $"The period {from:yyyy-MM}–{to:yyyy-MM} has a month that is not " +
                                     $"reconciliation-locked for this trust account (first open: " +
                                     $"{open.Year:D4}-{open.Month:D2}). A compliance pack requires every month " +
                                     "in the period to be closed.",
-                            statusCode: StatusCodes.Status422UnprocessableEntity, title: "period_not_closed");
+                            status: StatusCodes.Status422UnprocessableEntity);
                     }
 
                     CompliancePack pack;
@@ -144,7 +156,11 @@ public sealed class ReportingEndpoints : IEndpointModule
                     }
                     catch (KeyNotFoundException)
                     {
-                        return Results.NotFound(new { error = $"Trust account '{bankAccountId}' not found." });
+                        return ProblemResults.Problem(
+                            httpContext,
+                            code: "trust_account_not_found",
+                            detail: "That trust account was not found.",
+                            status: StatusCodes.Status404NotFound);
                     }
 
                     var company = (await branding.GetAsync(ct)).CompanyName ?? "Property Manager";
@@ -236,10 +252,11 @@ public sealed class ReportingEndpoints : IEndpointModule
                 {
                     if (string.IsNullOrWhiteSpace(toEmail))
                     {
-                        return Results.Problem(
+                        return ProblemResults.Problem(
+                            httpContext,
+                            code: "missing_to_email",
                             detail: "toEmail is required.",
-                            statusCode: StatusCodes.Status400BadRequest,
-                            title: "missing_to_email");
+                            status: StatusCodes.Status400BadRequest);
                     }
 
                     var now = DateTime.UtcNow;
