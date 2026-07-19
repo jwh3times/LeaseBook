@@ -1,6 +1,5 @@
 using LeaseBook.Migrator.Model;
 using LeaseBook.SharedKernel.Endpoints;
-using LeaseBook.Web.Endpoints;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;

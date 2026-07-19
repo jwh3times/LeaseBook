@@ -8,7 +8,6 @@ using LeaseBook.SharedKernel;
 using LeaseBook.SharedKernel.Cqrs;
 using LeaseBook.SharedKernel.Endpoints;
 using LeaseBook.SharedKernel.Tenancy;
-using LeaseBook.Web.Endpoints;
 using LeaseBook.Web.Persistence;
 using LeaseBook.Web.Tenancy;
 using Microsoft.AspNetCore.Builder;

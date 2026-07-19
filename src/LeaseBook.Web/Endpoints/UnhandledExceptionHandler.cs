@@ -1,3 +1,4 @@
+using LeaseBook.SharedKernel.Endpoints;
 using LeaseBook.Web.Observability;
 using Microsoft.AspNetCore.Diagnostics;
 

@@ -1,5 +1,5 @@
 using System.Diagnostics;
-using LeaseBook.Web.Endpoints;
+using LeaseBook.SharedKernel.Endpoints;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Shouldly;

@@ -1,7 +1,8 @@
 using System.Diagnostics;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 
-namespace LeaseBook.Web.Endpoints;
+namespace LeaseBook.SharedKernel.Endpoints;
 
 /// <summary>
 /// The single problem-details factory (ADR-025). Stamps the machine-readable <c>code</c> and the
