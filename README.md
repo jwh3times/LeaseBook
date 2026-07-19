@@ -170,12 +170,12 @@ projects. Only host-side ports move; container ports (and the Azure image) never
 
 **Inner-loop development** — backend and frontend on the host, Postgres in Docker (`./scripts/dev.ps1 up`):
 
-| Port   | Service                                         | Configured in                                                                                                                                                                           |
-| ------ | ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `5373` | Vite dev server (SPA); proxies `/api` → `:5080` | `web/vite.config.ts` · `web/playwright.config.ts`                                                                                                                                       |
-| `5080` | .NET API / host (`dotnet run`)                  | `src/LeaseBook.Web/Properties/launchSettings.json` (`http` profile) · `src/LeaseBook.Web/appsettings.Development.json` · proxied from `web/vite.config.ts` · `web/playwright.config.ts` |
-| `5632` | PostgreSQL (Docker, published to the host)      | `docker-compose.yml` (`db`) · connection strings in `appsettings.Development.json`                                                                                                      |
-| `5250` | pgAdmin (Docker)                                | `docker-compose.yml` (`pgadmin`)                                                                                                                                                        |
+| Port   | Service                                         | Configured in                                                                                                                                   |
+| ------ | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `5373` | Vite dev server (SPA); proxies `/api` → `:5080` | `web/vite.config.ts` · `web/playwright.config.ts`                                                                                               |
+| `5080` | .NET API / host (`dotnet run`)                  | `src/LeaseBook.Web/Properties/launchSettings.json` (`http` profile) · proxied from `web/vite.config.ts` · `web/playwright.config.ts` (`--urls`) |
+| `5632` | PostgreSQL (Docker, published to the host)      | `docker-compose.yml` (`db`) · connection strings in `appsettings.Development.json`                                                              |
+| `5250` | pgAdmin (Docker)                                | `docker-compose.yml` (`pgadmin`)                                                                                                                |
 
 **Full Docker stack** — the whole product in containers (`./scripts/dev.ps1 app-up`, Compose `full` profile):
 

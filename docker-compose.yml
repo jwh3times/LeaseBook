@@ -95,6 +95,13 @@ services:
         condition: service_completed_successfully
     environment:
       ConnectionStrings__Default: *app-conn
+      # This local full-stack run is explicitly a dev environment, same rationale as `seed` above.
+      # Without this the container defaults to Production and `ProductionSecurityGuards.Validate`
+      # fails startup on the empty AllowedHosts; with `restart: unless-stopped` that is a silent
+      # crash loop. Production's AllowedHosts and its durable Data Protection keyring are supplied
+      # by the deployed environment — never faked here, since `DataProtection:Durable` is an
+      # operator attestation and this stack has no durable keyring.
+      ASPNETCORE_ENVIRONMENT: Development
     ports:
       # Browse http://localhost:8082 once healthy (host port offset from the default;
       # the container always listens on 8080 and the Azure image is unchanged).
