@@ -198,24 +198,18 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  # Builds the container images *and* proves they actually run. This replaces a build-only job that
+  # verified the image compiled but never started it — the gap that let a startup-guard
+  # misconfiguration put `app` into a silent restart loop while every check stayed green.
+  #
+  # Bringing up the Compose `full` profile subsumes the old build check and widens it:
+  #   - `runtime` is the Dockerfile's last stage, so Compose builds exactly what the build-only job
+  #     built (pushing the image is deploy-dev's job, and is exercised separately on main).
+  #   - it additionally builds the `migrator` target, which no CI job built before.
+  #   - it then runs the documented local stack end to end (`./scripts/dev.ps1 app-up`):
+  #     db healthy → migrate completes → seed completes → app serves.
   container:
-    name: Container build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: docker/setup-buildx-action@v4
-      - uses: docker/build-push-action@v7
-        with:
-          context: .
-          push: false # PR builds verify the image compiles; pushing happens in deploy-dev.
-
-  # The `container` job above proves the image *compiles*; it never runs it. This job proves the
-  # documented local full-stack command (`./scripts/dev.ps1 app-up`, Compose `full` profile) actually
-  # boots and serves — the whole db → migrate → seed → app chain, exercised end to end. It exists
-  # because a startup-guard misconfiguration once put `app` into a silent restart loop that no gate
-  # caught: the image built fine, and nothing in CI ever started it.
-  compose-smoke:
-    name: Full stack boots and serves (Compose)
+    name: Container build + full-stack smoke
     runs-on: ubuntu-latest
     env:
       # Host port the `app` service publishes; the container always listens on 8080. Matches the
