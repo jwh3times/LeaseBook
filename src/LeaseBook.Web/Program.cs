@@ -270,19 +270,26 @@ if (Environment.GetEnvironmentVariable("LEASEBOOK_OPENAPI_BUILD") != "1")
 
 // CLI: `dotnet run --project src/LeaseBook.Web -- seed --org demo` provisions the demo org and exits.
 //      `dotnet run --project src/LeaseBook.Web -- seed --org cutover` provisions the cutover org (M7).
+//      `dotnet run --project src/LeaseBook.Web -- seed --org load` provisions the ~300-unit load
+//      fixture (M8 / WP-9). Any other value (including none) falls back to the demo org.
 if (args is ["seed", ..])
 {
     var orgFlag = Array.IndexOf(args, "--org");
     var orgValue = orgFlag >= 0 && orgFlag + 1 < args.Length ? args[orgFlag + 1] : "demo";
 
-    if (string.Equals(orgValue, "cutover", StringComparison.OrdinalIgnoreCase))
+    switch (orgValue.ToLowerInvariant())
     {
-        await CutoverSeeder.SeedAsync(app.Services);
+        case "cutover":
+            await CutoverSeeder.SeedAsync(app.Services);
+            break;
+        case "load":
+            await LoadSeeder.SeedAsync(app.Services);
+            break;
+        default:
+            await DemoSeeder.SeedAsync(app.Services);
+            break;
     }
-    else
-    {
-        await DemoSeeder.SeedAsync(app.Services);
-    }
+
     return;
 }
 
