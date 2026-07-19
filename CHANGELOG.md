@@ -46,6 +46,12 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   bundle can't change after it is handed to an auditor). Supported by period-end
   read parameters on the trust-equation and deposit-register reads (variance proven 0.00 at any
   as-of). See the ADR-016 addendum.
+- **Full-stack boot gate** — CI now brings up the Compose `full` profile (db → migrate → seed → app),
+  waits for `/api/health`, and asserts the app served without ever restarting. The existing container
+  job only proved the image compiles; nothing started it, so a startup misconfiguration could put the
+  documented local stack into a silent restart loop and still pass every check. The restart-count
+  assertion is the load-bearing one — a crash-looping container reports itself as `running` between
+  bounces, so a liveness check alone does not catch it.
 - **Data-handling and privacy compliance drafts** — a public `docs/compliance/` set now documents the
   GLBA data map, the encryption/access/retention posture, and a GLBA-style privacy-notice skeleton
   with explicit legal-review markers, giving the external compliance review a versioned engineering
