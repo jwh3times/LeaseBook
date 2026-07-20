@@ -98,7 +98,7 @@ public sealed class LateFeeRunStrategy(
 
             if (!policyMap.TryGetValue(row.LeaseId, out var policy))
             {
-                exceptions.Add($"Lease {row.LeaseId} ({row.TenantName}): no late-fee policy found — skipped.");
+                exceptions.Add($"{row.TenantName}: no late-fee policy found — skipped.");
                 continue;
             }
 

@@ -254,7 +254,7 @@ public sealed class ReportingEndpoints : IEndpointModule
                         return ProblemResults.Problem(
                             httpContext,
                             code: "missing_to_email",
-                            detail: "toEmail is required.",
+                            detail: "An email address is required.",
                             status: StatusCodes.Status400BadRequest);
                     }
 

@@ -269,6 +269,11 @@ dropped:
   `ApiFactory` (`WebApplicationFactory`), which has no current seam to intercept or capture its
   logger. Add one (e.g. a swappable `ILoggerProvider` registered in `ApiFactory`) and assert the log
   side.
+- **`EntityImportService` per-row catch logs expected validation failures at `Error`.** The per-row
+  catch logs a `ValidationException` raised by command validation against a parseable-but-invalid row
+  at `Error` under `ImportRowFailed` (1003) — the same level as a genuinely unexpected failure. Before
+  Track B's B4 wires alerting to key on `Error` events, split the expected `ValidationException` case
+  (`Warning`) from genuinely unexpected failures, so routine dirty-CSV imports don't page.
 - **Leak-guard coverage for host-project exception messages.** `DomainExceptionMessageTests`
   reflectively covers every concrete `AccountingDomainException` — Accounting module only. Host-project
   exceptions (`MigrationNotTiedException` and others outside
@@ -279,12 +284,14 @@ dropped:
   (bare 404s carry no correlation id) holds as long as a body-less 404 stays undiagnosable-by-design.
   If a real support case turns up needing to correlate a specific 404 request rather than "the id
   doesn't resolve," revisit converting the relevant bare 404s to the `ProblemDetails` shape.
-- **`LateFeeRunStrategy.cs:101` GUID cleanup (found during this WP; not fixed here — out of this
-  task's scope).** Two of the three operator-facing exception strings in
+- **`LateFeeRunStrategy.cs:101` / `RentRunStrategy.cs:67` GUID cleanup — resolved pre-merge.** Found
+  during this WP: two of the three operator-facing exception strings in
   `LateFeeRunStrategy.PreviewAsync` were cleaned of the raw `row.LeaseId` GUID during this WP (the
   "multiple active leases" and "within the grace period" skip reasons now read `{row.TenantName}: …`
-  only). The third, at line 101 — `$"Lease {row.LeaseId} ({row.TenantName}): no late-fee policy
-found — skipped."` — still interpolates the raw lease id. Same leak category
-  `DomainExceptionMessageTests` guards against in Accounting; this file lives in
-  `LeaseBook.Modules.Operations`, outside that guard's reflective scope (another instance of the
-  leak-guard-coverage gap above). Fix in the next change that touches this file.
+  only). The third, at line 101 (the "no late-fee policy found" skip reason), still interpolated the
+  raw lease id, and final review found the same pattern at `RentRunStrategy.cs:67` (the "rent is 0"
+  skip reason). Both were fixed pre-merge, on this branch, to the same `{row.TenantName}: …` shape
+  as their siblings. Same leak category `DomainExceptionMessageTests` guards against
+  in Accounting; both files live in `LeaseBook.Modules.Operations`, outside that guard's reflective
+  scope — closing these two instances does not close the leak-guard-coverage gap itself (tracked
+  above).

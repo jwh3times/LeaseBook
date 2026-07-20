@@ -64,7 +64,7 @@ public sealed class RentRunStrategy(
             // Exception: no rent set.
             if (row.Rent == 0m)
             {
-                exceptions.Add($"Lease {row.LeaseId} ({row.TenantName}): rent is 0 — skipped.");
+                exceptions.Add($"{row.TenantName}: rent is 0 — skipped.");
                 continue;
             }
 
