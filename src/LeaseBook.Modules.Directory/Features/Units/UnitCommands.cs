@@ -20,7 +20,7 @@ public sealed class CreateUnitValidator : AbstractValidator<CreateUnit>
         RuleFor(x => x.Label).NotEmpty().MaximumLength(60);
         RuleFor(x => x.Rent).MoneyAmount();
         RuleFor(x => x.Status).Must(v => UnitStatusConverter.DbValues.Contains(v))
-            .WithMessage($"status must be one of: {string.Join(", ", UnitStatusConverter.DbValues)}.");
+            .WithMessage($"Status must be one of: {string.Join(", ", UnitStatusConverter.DbValues)}.");
     }
 }
 
@@ -32,7 +32,7 @@ public sealed class UpdateUnitValidator : AbstractValidator<UpdateUnit>
         RuleFor(x => x.Label).NotEmpty().MaximumLength(60);
         RuleFor(x => x.Rent).MoneyAmount();
         RuleFor(x => x.Status).Must(v => UnitStatusConverter.DbValues.Contains(v))
-            .WithMessage($"status must be one of: {string.Join(", ", UnitStatusConverter.DbValues)}.");
+            .WithMessage($"Status must be one of: {string.Join(", ", UnitStatusConverter.DbValues)}.");
     }
 }
 

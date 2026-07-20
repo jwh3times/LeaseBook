@@ -25,16 +25,16 @@ public sealed class RecordBankAdjustmentValidator : AbstractValidator<RecordBank
         RuleFor(x => x.BankAccountId).NotEmpty();
         RuleFor(x => x.SourceRef).NotEmpty();
         RuleFor(x => x.Kind).Must(k => Kinds.Contains(k, StringComparer.OrdinalIgnoreCase))
-            .WithMessage($"kind must be one of: {string.Join(", ", Kinds)}.");
+            .WithMessage($"Kind must be one of: {string.Join(", ", Kinds)}.");
         LedgerPostingMaps.RuleForAmount(this, x => x.Amount);
 
         // A transfer needs a distinct destination account; the other kinds must not carry one.
         When(x => string.Equals(x.Kind, "transfer", StringComparison.OrdinalIgnoreCase), () =>
         {
             RuleFor(x => x.ToBankAccountId).NotNull().NotEqual(Guid.Empty)
-                .WithMessage("a transfer requires a destination bank account.");
+                .WithMessage("A transfer requires a destination bank account.");
             RuleFor(x => x.ToBankAccountId).NotEqual(x => x.BankAccountId)
-                .WithMessage("a transfer's source and destination must differ.");
+                .WithMessage("A transfer's source and destination must differ.");
         });
     }
 }

@@ -24,7 +24,7 @@ public sealed class ApplyDepositValidator : AbstractValidator<ApplyDeposit>
         RuleFor(x => x.SourceRef).NotEmpty();
         RuleFor(x => x.Reason).NotEmpty();
         RuleFor(x => x.Target).Must(LedgerPostingMaps.DepositTargets.ContainsKey)
-            .WithMessage($"target must be one of: {string.Join(", ", LedgerPostingMaps.DepositTargets.Keys)}.");
+            .WithMessage($"Target must be one of: {string.Join(", ", LedgerPostingMaps.DepositTargets.Keys)}.");
         LedgerPostingMaps.RuleForAmount(this, x => x.Amount);
     }
 }

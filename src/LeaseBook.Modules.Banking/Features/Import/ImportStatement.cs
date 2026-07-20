@@ -35,7 +35,7 @@ public sealed class ImportStatementValidator : AbstractValidator<ImportStatement
             RuleFor(x => x.ColumnMap)
                 .Must(m => !string.IsNullOrWhiteSpace(m.Amount)
                            || !string.IsNullOrWhiteSpace(m.Debit) || !string.IsNullOrWhiteSpace(m.Credit))
-                .WithMessage("the column map needs an amount column, or a debit and/or credit column.");
+                .WithMessage("The column map needs an amount column, or a debit and credit column.");
         });
     }
 }

@@ -23,7 +23,7 @@ public sealed class StartReconciliationValidator : AbstractValidator<StartReconc
         RuleFor(x => x.Year).InclusiveBetween(2000, 2100);
         RuleFor(x => x.Month).InclusiveBetween(1, 12);
         RuleFor(x => x.StatementEndingBalance).Must(a => decimal.Round(a, 2) == a)
-            .WithMessage("statement ending balance must have at most 2 decimal places.");
+            .WithMessage("The statement ending balance must have at most 2 decimal places.");
     }
 }
 

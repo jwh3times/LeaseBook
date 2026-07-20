@@ -32,10 +32,10 @@ public sealed class ConfirmMatchesValidator : AbstractValidator<ConfirmMatches>
         {
             d.RuleFor(x => x.StatementLineId).NotEmpty();
             d.RuleFor(x => x.Kind).Must(MatchKinds.All.Contains)
-                .WithMessage($"kind must be one of: {string.Join(", ", MatchKinds.All)}.");
+                .WithMessage($"Kind must be one of: {string.Join(", ", MatchKinds.All)}.");
             d.RuleFor(x => x.JournalLineId).NotNull()
                 .When(x => MatchKinds.ClearsRegisterLine(x.Kind))
-                .WithMessage("a matched/suggested/created decision must carry a journal line id.");
+                .WithMessage("A matched, suggested, or created decision must carry a journal line id.");
         });
     }
 }
