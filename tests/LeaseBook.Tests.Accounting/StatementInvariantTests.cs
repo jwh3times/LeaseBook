@@ -46,6 +46,7 @@ public sealed class StatementInvariantTests(PostgresFixture fixture)
         var owner = UuidV7.NewId();
         var property = UuidV7.NewId();
         var voidable = new List<Guid>();
+        var reversalIds = new HashSet<Guid>();
 
         await EnsureDirectoryAsync(fixture, scope, ct, owners: [owner], tenants: [tenant], properties: [property]);
 
@@ -94,7 +95,7 @@ public sealed class StatementInvariantTests(PostgresFixture fixture)
                         {
                             var id = voidable[^1];
                             voidable.RemoveAt(voidable.Count - 1);
-                            await Reversal(scope).ReverseAsync(id, "rng void", new DateOnly(2026, 5, 20), ct);
+                            reversalIds.Add(await Reversal(scope).ReverseAsync(id, "rng void", new DateOnly(2026, 5, 20), ct));
                         }
 
                         break;
@@ -135,10 +136,10 @@ public sealed class StatementInvariantTests(PostgresFixture fixture)
                 //     resolves through the reversal link (Task 1's COALESCE(orig.event_type, …), see
                 //     VoidedStatementTests) — so once Void is in the op mix only the aggregate, not each
                 //     individual line, can be asserted non-positive.
-                (s.Sections.SelectMany(sec => sec.Lines)
-                    .Where(l => l.EventType == "ManagementFeeAssessed")
-                    .Sum(l => l.Amount) <= 0m)
-                    .ShouldBeTrue($"{basis}: ManagementFeeAssessed must never net to income for the owner");
+                s.Sections.SelectMany(sec => sec.Lines)
+                    .Where(l => l.EventType == "ManagementFeeAssessed" && !reversalIds.Contains(l.EntryId))
+                    .ShouldNotContain(l => l.Amount > 0,
+                        $"{basis}: ManagementFeeAssessed must appear as an expense (negative), not income");
                 // (b) ManagementFeeAssessed lines may only appear in the OperatingExpenses section,
                 //     never in Income, AppliedDepositsCredits, Contributions, or Disbursement.
                 var feeLines = s.Sections
