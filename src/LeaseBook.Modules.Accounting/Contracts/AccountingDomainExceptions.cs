@@ -122,9 +122,11 @@ public sealed class InsufficientReceivableException(
     ReceivableSource source, decimal requested, decimal owed, Guid? tenantId = null)
     : AccountingDomainException("insufficient_receivable", Describe(source, requested, owed))
 {
-    // `new` is required: System.Exception already declares a virtual string? Source — this is a
-    // distinct, differently-typed diagnostic property that intentionally shadows it (CS0114).
-    public new ReceivableSource Source { get; } = source;
+    /// <summary>Diagnostic discriminator. Named Kind, not Source — a property named Source would
+    /// hide <see cref="Exception.Source"/> (CS0114, a build error under TreatWarningsAsErrors) and
+    /// give ex.Source two meanings by static type. (Execution revision: the original plan text
+    /// used Source and did not compile.)</summary>
+    public ReceivableSource Kind { get; } = source;
 
     public decimal Requested { get; } = requested;
 
