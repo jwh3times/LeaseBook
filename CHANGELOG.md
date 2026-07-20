@@ -68,6 +68,16 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   GLBA data map, the encryption/access/retention posture, and a GLBA-style privacy-notice skeleton
   with explicit legal-review markers, giving the external compliance review a versioned engineering
   packet to finalize. Draft status; legal determinations are deferred to that review.
+- **Correlation-id error surface** — every error response and error alert now carries a
+  machine-readable `code` plus a correlation reference: a selectable `Reference: <32-hex>` string
+  that is the same trace id Application Insights indexes as `operation_Id`, so an operator can quote
+  it directly in a support conversation and an engineer can search on it with no separate lookup
+  step. `ILogger` output now routes through OpenTelemetry to Application Insights (a local no-op
+  until a connection string is configured), and a terminal exception handler ensures nothing falls
+  through to a silent, uncoded 500. See ADR-025.
+- **Diagnostics runbook** — `docs/runbooks/diagnostics.md` documents how to turn an on-screen
+  correlation reference into an Application Insights query, and lists the stable `LogEvents` ids
+  Track B's alert rules will key on.
 
 ### Changed
 
@@ -95,6 +105,11 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   and made the container listen on loopback:5080 instead of `:8080`, so the published port answered
   nothing. That key was redundant — the inner loop already gets `:5080` from `launchSettings.json`
   and the e2e host passes `--urls` explicitly — so it has been removed.
+- **Reachable frontend error copy** — two error responses (`not_tied`, `statement_not_balanced`) set
+  a human-readable `title` but never the machine-readable `code` extension every frontend error
+  mapper reads, so the friendly copy already written for one of them could never render. Every error
+  response now goes through one factory that stamps `code` consistently, enforced by a build-time
+  source scan; the frontend's five independently drifted error mappers were consolidated into one.
 
 ### Security
 
@@ -104,6 +119,8 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   endpoints, config-gated multi-factor enforcement for admin accounts, encryption of sensitive
   authentication data at rest, an authorization-matrix regression guard, and a fail-fast startup check
   that blocks a non-Development boot when required security configuration is missing.
+- **Safe error responses** — error responses and import row errors no longer include internal
+  exception detail; unexpected errors return a generic response with a support reference.
 
 ## [0.2.0] - 2026-07-09
 
