@@ -253,3 +253,9 @@ public sealed class DuplicateSourceRefException(string sourceRef, Guid existingE
 
     public Guid ExistingEntryId { get; } = existingEntryId;
 }
+
+/// <summary>No active trust bank account exists, so trust-money operations cannot proceed (409).</summary>
+public sealed class NoTrustAccountException()
+    : AccountingDomainException(
+        "no_trust_account",
+        "No active trust bank account was found. Create one before running disbursements.");

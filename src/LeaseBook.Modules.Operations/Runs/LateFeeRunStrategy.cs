@@ -92,7 +92,7 @@ public sealed class LateFeeRunStrategy(
             // active lease and the balance cannot be attributed to a single lease.
             if (row.DaysLate < 0)
             {
-                exceptions.Add($"Lease {row.LeaseId} ({row.TenantName}): ambiguous_multiple_active_leases — tenant has multiple active leases; cannot attribute balance. Skipped.");
+                exceptions.Add($"{row.TenantName}: multiple active leases — the balance cannot be attributed. Skipped.");
                 continue;
             }
 
@@ -107,7 +107,7 @@ public sealed class LateFeeRunStrategy(
             // DaysLate is the real age in days from GetDelinquencyAging.OldestAgeDays, not a bucket floor.
             if (row.DaysLate <= policy.GraceDays)
             {
-                exceptions.Add($"Lease {row.LeaseId} ({row.TenantName}): within grace period ({row.DaysLate} days late, {policy.GraceDays} grace) — skipped.");
+                exceptions.Add($"{row.TenantName}: within the grace period ({row.DaysLate} days late, {policy.GraceDays} allowed) — skipped.");
                 continue;
             }
 

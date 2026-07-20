@@ -11,8 +11,8 @@ namespace LeaseBook.Web.Reporting;
 /// </summary>
 public sealed class StatementNotBalancedException(Guid ownerId, int year, int month, decimal variance)
     : Exception(
-        $"Statement for owner {ownerId} ({year}-{month:D2}) has a non-zero tie-out variance of " +
-        $"{variance:0.00}; delivery is blocked until the variance is resolved.")
+        $"The statement for {year}-{month:D2} has a tie-out variance of {variance:0.00}; " +
+        "delivery is blocked until it balances.")
 {
     public Guid OwnerId { get; } = ownerId;
     public int Year { get; } = year;

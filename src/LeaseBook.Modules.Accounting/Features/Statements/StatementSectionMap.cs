@@ -6,7 +6,10 @@ public enum StatementSectionKey { Beginning, Income, OperatingExpenses, AppliedD
 /// <summary>Thrown when an owner-equity-bearing event has no statement section — the guard that keeps
 /// the §4.1 tie-out exhaustive (a new event type fails loudly instead of dropping off a statement).</summary>
 public sealed class UncategorizedEventException(string eventType)
-    : Exception($"Event '{eventType}' posts to owner equity but has no statement section. Add it to StatementSectionMap.");
+    : Exception("This statement contains an entry type that cannot be categorized yet.")
+{
+    public string EventType { get; } = eventType;
+}
 
 /// <summary>The single source of the event_type → section rule (ADR-006 catalog, owner-equity lines only).</summary>
 public static class StatementSectionMap

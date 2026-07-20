@@ -28,7 +28,7 @@ public sealed class AccountingExceptionStatusTests
         (new ReconciliationNotFoundException(Guid.NewGuid()), StatusCodes.Status404NotFound),
         (new EntryNotFoundException(Guid.NewGuid()), StatusCodes.Status404NotFound),
         (new DuplicateSourceRefException("ref", Guid.NewGuid()), StatusCodes.Status409Conflict),
-        // Task 14 adds NoTrustAccountException
+        (new NoTrustAccountException(), StatusCodes.Status409Conflict),
     ];
 
     public static TheoryData<int> RowIndexes()

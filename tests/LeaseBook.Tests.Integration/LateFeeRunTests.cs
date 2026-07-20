@@ -326,7 +326,7 @@ public sealed class LateFeeRunTests(PostgresFixture fixture)
         preview.ShouldNotBeNull();
         preview!.Rows.ShouldNotContain(r => r.TargetId == leaseId,
             "lease with 30 days late must be skipped when GraceDays=40 (within grace)");
-        preview.Exceptions.ShouldContain(e => e.Contains("within grace period"),
+        preview.Exceptions.ShouldContain(e => e.Contains("within the grace period"),
             "skipped lease must appear in exceptions with 'within grace period' message");
     }
 
@@ -389,7 +389,7 @@ public sealed class LateFeeRunTests(PostgresFixture fixture)
         preview.Rows.ShouldNotContain(r => r.TargetId == leaseId2,
             "lease2 of ambiguous tenant must NOT be in chargeable rows");
         // The ambiguity must be visible in exceptions.
-        preview.Exceptions.ShouldContain(e => e.Contains("ambiguous_multiple_active_leases"),
+        preview.Exceptions.ShouldContain(e => e.Contains("multiple active leases"),
             "ambiguous multi-lease tenant must surface 'ambiguous_multiple_active_leases' in exceptions");
     }
 

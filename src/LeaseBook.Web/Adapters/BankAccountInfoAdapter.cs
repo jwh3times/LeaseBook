@@ -1,3 +1,4 @@
+using LeaseBook.Modules.Accounting.Contracts;
 using LeaseBook.Modules.Directory.Features.BankAccounts;
 using LeaseBook.Modules.Operations.Contracts;
 using LeaseBook.SharedKernel.Cqrs;
@@ -20,8 +21,7 @@ internal sealed class BankAccountInfoAdapter(ISender sender) : IBankAccountInfo
     {
         var banks = await sender.Query(new ListBankAccounts(ActiveOnly: true), ct);
         var trust = banks.FirstOrDefault(b => b.Purpose == "trust")
-            ?? throw new InvalidOperationException(
-                "No active trust bank account found. Create a trust bank account before running disbursements.");
+            ?? throw new NoTrustAccountException();
         return (trust.Id, trust.Name);
     }
 }
