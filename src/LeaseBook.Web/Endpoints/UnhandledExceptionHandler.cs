@@ -8,7 +8,9 @@ namespace LeaseBook.Web.Endpoints;
 /// The terminal handler (ADR-025), registered last: everything the typed handlers decline lands
 /// here. Logs the full exception at Error with the correlation id, and returns a generic 500 that
 /// carries nothing but that reference. The exception message, type, and stack trace never cross
-/// the wire.
+/// the wire. Request method and path are deliberately absent from the log template — they are
+/// caller-supplied (CWE-117 log forging) and the trace-correlated request span already carries
+/// them.
 /// </summary>
 public sealed class UnhandledExceptionHandler(ILogger<UnhandledExceptionHandler> logger) : IExceptionHandler
 {
@@ -20,8 +22,8 @@ public sealed class UnhandledExceptionHandler(ILogger<UnhandledExceptionHandler>
         logger.LogError(
             LogEvents.UnhandledException,
             exception,
-            "Unhandled exception. CorrelationId={CorrelationId} Method={Method} Path={Path}",
-            correlationId, httpContext.Request.Method, httpContext.Request.Path.Value);
+            "Unhandled exception. CorrelationId={CorrelationId}",
+            correlationId);
 
         await ProblemResults.Problem(
                 httpContext,
