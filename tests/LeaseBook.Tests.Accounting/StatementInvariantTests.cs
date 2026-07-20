@@ -134,8 +134,8 @@ public sealed class StatementInvariantTests(PostgresFixture fixture)
                 //     always a debit to owner equity (negative); a fee's own void mirrors it as a credit
                 //     (positive) but nets the pair back to $0.00 in the same section — event_type
                 //     resolves through the reversal link (Task 1's COALESCE(orig.event_type, …), see
-                //     VoidedStatementTests) — so once Void is in the op mix only the aggregate, not each
-                //     individual line, can be asserted non-positive.
+                //     VoidedStatementTests) — so a reversal's own mirror line, identified by
+                //     `EntryId`, must be excluded before asserting each remaining line non-positive.
                 s.Sections.SelectMany(sec => sec.Lines)
                     .Where(l => l.EventType == "ManagementFeeAssessed" && !reversalIds.Contains(l.EntryId))
                     .ShouldNotContain(l => l.Amount > 0,
