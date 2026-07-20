@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using LeaseBook.Modules.Accounting.Domain;
+using LeaseBook.Modules.Directory.Domain;
 using LeaseBook.Modules.Directory.Features.BankAccounts;
 using LeaseBook.SharedKernel;
 using LeaseBook.SharedKernel.Cqrs;
@@ -10,6 +11,7 @@ using LeaseBook.Tests.Integration.Fixtures;
 using LeaseBook.Web.Auth;
 using LeaseBook.Web.Onboarding;
 using LeaseBook.Web.Onboarding.Persistence;
+using LeaseBook.Web.Reporting;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -578,6 +580,56 @@ public sealed class BalanceImportTests(PostgresFixture fixture)
         {
             (await db.Set<JournalEntry>().CountAsync(ct)).ShouldBe(0);
         }, ct);
+    }
+
+    // -------------------------------------------------------------------------
+    // WP-7 §0.3 regression: a cutover-month statement over a migrated org must not 500
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task Cutover_month_statement_over_a_migrated_org_ties_out()
+    {
+        // WP-7 §0.3: the per-position import posts "OpeningBalance" at the cutover date, so the
+        // statement for the cutover month used to throw UncategorizedEventException (surfacing as
+        // a 500). After the fix it folds into Beginning and ties out.
+        var ct = TestContext.Current.CancellationToken;
+        var setup = await SetupAsync("CutoverStmt", ct);
+        await ImportOwnerTenantChainAsync(setup.Client, ct);
+
+        const string csv = "Owner ID,Owner Name,Cash Balance,Accrual Balance\nO-1,Chain Owner LLC,1250.00,1250.00\n";
+        await PostBalanceImportAsync<object>(setup.Client, "owner_balances",
+            new { csvContent = csv, cutoverDate = CutoverStr, filename = "owners.csv" }, ct);
+
+        // Resolve the imported owner's LeaseBook id the same way every other test in this file
+        // resolves directory state after an import: an app-role context bound to this test's org
+        // (the TenantContext/OrgScopedExecutor pair used throughout), queried by the name
+        // ImportOwnerTenantChainAsync imported O-1 under ("Chain Owner LLC").
+        var tenant = new TenantContext { OrgId = setup.OrgId };
+        await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
+        var executor = new OrgScopedExecutor(db, tenant);
+
+        var ownerId = Guid.Empty;
+        await executor.RunAsync(setup.OrgId, async () =>
+        {
+            ownerId = await db.Set<Owner>().AsNoTracking()
+                .Where(o => o.Name == "Chain Owner LLC")
+                .Select(o => o.Id)
+                .SingleAsync(ct);
+        }, ct);
+
+        var response = await setup.Client.GetAsync(
+            $"/api/statements/{ownerId}?year=2026&month=6&basis=cash", ct);
+        response.StatusCode.ShouldBe(HttpStatusCode.OK,
+            await response.Content.ReadAsStringAsync(ct));
+
+        var stmt = (await response.Content.ReadFromJsonAsync<StatementView>(ct))!;
+        stmt.Beginning.ShouldBe(1250.00m, "the opening position folds into Beginning");
+        stmt.Ending.ShouldBe(1250.00m);
+
+        // The tie-out is the point: the independent journal re-query must agree, not just the
+        // categorical pipeline's own arithmetic.
+        stmt.Fiduciary.Variance.ShouldBe(0m);
+        stmt.Fiduciary.Balanced.ShouldBeTrue();
     }
 
     // -------------------------------------------------------------------------

@@ -1,4 +1,5 @@
 using CsCheck;
+using LeaseBook.Modules.Accounting.Contracts;
 using LeaseBook.Modules.Accounting.Domain;
 using LeaseBook.Modules.Accounting.Features.Posting;
 using LeaseBook.Modules.Accounting.Features.Posting.Events;
@@ -22,7 +23,7 @@ namespace LeaseBook.Tests.Accounting;
 [Collection(nameof(DatabaseCollection))]
 public sealed class StatementInvariantTests(PostgresFixture fixture)
 {
-    private enum Op { Charge, Pay, Fee, Disburse, DepositApply }
+    private enum Op { Charge, Pay, Fee, Disburse, DepositApply, Void, Opening }
 
     private static int Iterations =>
         int.TryParse(Environment.GetEnvironmentVariable("LEASEBOOK_PROPERTY_ITER"), out var n) ? n : 20;
@@ -34,7 +35,7 @@ public sealed class StatementInvariantTests(PostgresFixture fixture)
     {
         var ct = TestContext.Current.CancellationToken;
 
-        var genOp = Gen.Select(Gen.Int[0, 4].Select(i => (Op)i), Gen.Int[1, 300_000]);
+        var genOp = Gen.Select(Gen.Int[0, 6].Select(i => (Op)i), Gen.Int[1, 300_000]);
         await genOp.Array[10].SampleAsync(ops => RunTieOutCaseAsync(ops, ct), iter: Iterations);
     }
 
@@ -44,12 +45,15 @@ public sealed class StatementInvariantTests(PostgresFixture fixture)
         var tenant = UuidV7.NewId();
         var owner = UuidV7.NewId();
         var property = UuidV7.NewId();
+        var voidable = new List<Guid>();
+        var reversalIds = new HashSet<Guid>();
 
         await EnsureDirectoryAsync(fixture, scope, ct, owners: [owner], tenants: [tenant], properties: [property]);
 
         var date = new DateOnly(2026, 5, 15);
 
-        // Run a mix of rent charges, payments, fee assessments, disbursements, and deposit applies.
+        // Run a mix of rent charges, payments, fee assessments, disbursements, deposit applies, voids,
+        // and in-period opening positions.
         foreach (var (kind, cents) in ops)
         {
             var amount = cents / 100m;
@@ -61,30 +65,45 @@ public sealed class StatementInvariantTests(PostgresFixture fixture)
                 switch (kind)
                 {
                     case Op.Charge:
-                        await events.PostAsync(new RentCharged(tenant, property, owner, null, new Money(amount), date, "rent"), ct);
+                        voidable.Add(await events.PostAsync(new RentCharged(tenant, property, owner, null, new Money(amount), date, "rent"), ct));
                         break;
                     case Op.Pay:
-                        await events.PostAsync(new PaymentReceived(tenant, property, owner, new Money(amount), date, PaymentMethod.Ach, scope.TrustBankId, "pay"), ct);
+                        voidable.Add(await events.PostAsync(new PaymentReceived(tenant, property, owner, new Money(amount), date, PaymentMethod.Ach, scope.TrustBankId, "pay"), ct));
                         break;
                     case Op.Fee:
-                        await events.PostAsync(new ManagementFeeAssessed(owner, property, new Money(amount), date, scope.TrustBankId, "fee"), ct);
+                        voidable.Add(await events.PostAsync(new ManagementFeeAssessed(owner, property, new Money(amount), date, scope.TrustBankId, "fee"), ct));
                         break;
                     case Op.Disburse:
                         var equity = await balances.OwnerEquityCashAsync(owner, ct);
                         var draw = Math.Min(amount, Math.Max(equity, 0m));
                         if (draw > 0m)
                         {
-                            await events.PostAsync(new OwnerDisbursed(owner, new Money(draw), date, scope.TrustBankId, "draw"), ct);
+                            voidable.Add(await events.PostAsync(new OwnerDisbursed(owner, new Money(draw), date, scope.TrustBankId, "draw"), ct));
                         }
                         break;
                     case Op.DepositApply:
                         // First collect a small deposit so apply has something to work with.
-                        await events.PostAsync(new DepositCollected(tenant, property, owner, new Money(amount), date, scope.DepositBankId, "dep"), ct);
+                        voidable.Add(await events.PostAsync(new DepositCollected(tenant, property, owner, new Money(amount), date, scope.DepositBankId, "dep"), ct));
                         var held = await balances.DepositsHeldAsync(tenant, ct);
                         if (held > 0m)
                         {
-                            await events.PostAsync(new DepositApplied(tenant, property, owner, new Money(held), date, scope.DepositBankId, scope.TrustBankId, DepositApplication.ToOwnerIncome, "da"), ct);
+                            voidable.Add(await events.PostAsync(new DepositApplied(tenant, property, owner, new Money(held), date, scope.DepositBankId, scope.TrustBankId, DepositApplication.ToOwnerIncome, "da"), ct));
                         }
+                        break;
+                    case Op.Void:
+                        if (voidable.Count > 0)
+                        {
+                            var id = voidable[^1];
+                            voidable.RemoveAt(voidable.Count - 1);
+                            reversalIds.Add(await Reversal(scope).ReverseAsync(id, "rng void", new DateOnly(2026, 5, 20), ct));
+                        }
+
+                        break;
+                    case Op.Opening:
+                        await events.PostOpeningPositionAsync(new OpeningPositionRequest(
+                            AccountCodes.OwnerEquity, Debit: null, Credit: new Money(amount), EntryBasis.Both,
+                            Cutover: new DateOnly(2026, 5, 15), SourceRef: $"open:{UuidV7.NewId()}",
+                            OwnerId: owner), ct);
                         break;
                 }
             }, ct);
@@ -111,10 +130,15 @@ public sealed class StatementInvariantTests(PostgresFixture fixture)
 
                 // Fact 2: PM-income exclusion — the pm_income account class carries no owner_id, so it
                 // cannot appear in any owner-scoped statement section.
-                // (a) No ManagementFeeAssessed line appears with a positive amount (the PM fee is a
-                //     debit to owner equity, so it must always be negative in the owner view).
+                // (a) ManagementFeeAssessed lines never net positive for the owner: an un-reversed fee is
+                //     always a debit to owner equity (negative); a fee's own void mirrors it as a credit
+                //     (positive) but nets the pair back to $0.00 in the same section — event_type
+                //     resolves through the reversal link (Task 1's COALESCE(orig.event_type, …), see
+                //     VoidedStatementTests) — so a reversal's own mirror line, identified by
+                //     `EntryId`, must be excluded before asserting each remaining line non-positive.
                 s.Sections.SelectMany(sec => sec.Lines)
-                    .ShouldNotContain(l => l.EventType == "ManagementFeeAssessed" && l.Amount > 0,
+                    .Where(l => l.EventType == "ManagementFeeAssessed" && !reversalIds.Contains(l.EntryId))
+                    .ShouldNotContain(l => l.Amount > 0,
                         $"{basis}: ManagementFeeAssessed must appear as an expense (negative), not income");
                 // (b) ManagementFeeAssessed lines may only appear in the OperatingExpenses section,
                 //     never in Income, AppliedDepositsCredits, Contributions, or Disbursement.
