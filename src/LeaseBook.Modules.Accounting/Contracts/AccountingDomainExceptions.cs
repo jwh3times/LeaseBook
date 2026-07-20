@@ -191,12 +191,44 @@ public sealed class AccountPeriodLockedException(Guid bankAccountId, int year, i
 }
 
 /// <summary>Finalize was attempted with a non-zero reconciliation difference (409, M4).</summary>
-public sealed class ReconciliationUnbalancedException(string message)
-    : AccountingDomainException("reconciliation_unbalanced", message);
+public sealed class ReconciliationUnbalancedException(decimal difference)
+    : AccountingDomainException(
+        "reconciliation_unbalanced",
+        $"The reconciliation difference is {difference:0.00}; clear items until it is 0.00 before finalizing.")
+{
+    public decimal Difference { get; } = difference;
+}
 
-/// <summary>The reconciliation is not in the state the operation requires — e.g. finalizing a finalized one (409).</summary>
-public sealed class ReconciliationStateException(string message)
-    : AccountingDomainException("reconciliation_state", message);
+public enum ReconciliationStateProblem
+{
+    AlreadyFinalized,
+    NotFinalized,
+    PeriodFinalized,
+}
+
+/// <summary>The reconciliation is not in the state the operation requires (409).</summary>
+public sealed class ReconciliationStateException(
+    ReconciliationStateProblem problem, Guid? reconciliationId = null, int? year = null, int? month = null)
+    : AccountingDomainException("reconciliation_state", Describe(problem, year, month))
+{
+    public ReconciliationStateProblem Problem { get; } = problem;
+
+    public Guid? ReconciliationId { get; } = reconciliationId;
+
+    public int? Year { get; } = year;
+
+    public int? Month { get; } = month;
+
+    private static string Describe(ReconciliationStateProblem problem, int? year, int? month) => problem switch
+    {
+        ReconciliationStateProblem.AlreadyFinalized => "That reconciliation is already finalized.",
+        ReconciliationStateProblem.NotFinalized =>
+            "That reconciliation is not finalized — there is nothing to unlock.",
+        _ => year is null || month is null
+            ? "That reconciliation period is finalized; unlock it to re-reconcile."
+            : $"The reconciliation for {year}-{month:D2} is finalized; unlock it to re-reconcile.",
+    };
+}
 
 /// <summary>No reconciliation with the given id exists in this org (404).</summary>
 public sealed class ReconciliationNotFoundException(Guid reconciliationId)

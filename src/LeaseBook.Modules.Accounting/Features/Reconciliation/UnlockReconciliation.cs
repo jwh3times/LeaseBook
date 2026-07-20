@@ -27,7 +27,7 @@ internal sealed class UnlockReconciliationHandler(DbContext db) : ICommandHandle
 
         if (recon.Status != ReconciliationStatus.Finalized)
         {
-            throw new ReconciliationStateException($"Reconciliation {recon.Id} is {recon.Status}, not finalized — nothing to unlock.");
+            throw new ReconciliationStateException(ReconciliationStateProblem.NotFinalized, recon.Id);
         }
 
         recon.Reopen(command.Reason);

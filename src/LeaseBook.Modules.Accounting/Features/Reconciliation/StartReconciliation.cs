@@ -43,7 +43,7 @@ internal sealed class StartReconciliationHandler(DbContext db) : ICommandHandler
         else if (recon.Status == ReconciliationStatus.Finalized)
         {
             throw new ReconciliationStateException(
-                $"The reconciliation for {command.Year}-{command.Month:D2} is finalized; unlock it to re-reconcile.");
+                ReconciliationStateProblem.PeriodFinalized, null, command.Year, command.Month);
         }
         else
         {

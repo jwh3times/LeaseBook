@@ -24,15 +24,14 @@ internal sealed class FinalizeReconciliationHandler(DbContext db, IActorContext?
 
         if (recon.Status == ReconciliationStatus.Finalized)
         {
-            throw new ReconciliationStateException($"Reconciliation {recon.Id} is already finalized.");
+            throw new ReconciliationStateException(ReconciliationStateProblem.AlreadyFinalized, recon.Id);
         }
 
         var cleared = await ReconciliationSql.ClearedBalanceAsync(db, recon.BankAccountId, ct);
         var difference = recon.StatementEndingBalance.Amount - cleared;
         if (difference != 0m)
         {
-            throw new ReconciliationUnbalancedException(
-                $"The reconciliation difference is {difference:0.00}; clear items until it is $0.00 before finalizing.");
+            throw new ReconciliationUnbalancedException(difference);
         }
 
         // Lock the account's currently-cleared lines into this reconciliation.
