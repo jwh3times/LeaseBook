@@ -3,7 +3,7 @@
 - **Audience:** Evaluators, contributors, and maintainers
 - **Status:** Living public direction
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-07-09
+- **Last reviewed:** 2026-07-20
 
 LeaseBook is pre-release software. This page communicates shipped capabilities and broad product
 direction; it is not an implementation plan or a commitment to specific dates. Detailed sequencing,
@@ -28,7 +28,12 @@ Milestones M0-M7 are complete:
 
 Hardening and beta readiness are in progress. Shipped work includes CI end-to-end coverage, automated
 WCAG 2 AA checks, visual-regression coverage for money-critical states, production safeguards for
-development seed data, CSV formula-injection protection, and authored Azure infrastructure.
+development seed data, CSV formula-injection protection, authored Azure infrastructure, a security
+hardening pass (security headers and CSP, enforced admin MFA, authentication rate limiting,
+encrypted MFA secrets at rest, and production startup configuration guards), and a diagnostic
+observability seam (a uniform API error contract with machine-readable codes and support-reference
+correlation ids, safe user-facing error messages, and application logging wired to Application
+Insights — see the error diagnostics runbook and ADR-025).
 
 ## Near-Term Priorities
 
