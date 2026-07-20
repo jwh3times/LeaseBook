@@ -88,8 +88,9 @@ internal sealed class GetOwnerStatementDataHandler(DbContext db)
         var beginning = begins.ToDictionary(b => b.OwnerId, b => b.Amount);
 
         // Independent period-end cumulative balance re-queried directly from the journal.
-        // Same filter shape as the beginning-balance query but with boundary e.entry_date < {end}.
-        // This makes the tie-out structural: a categorization or sign slip in the C# section
+        // Same owner/basis/property filters as the queries above, boundary e.entry_date < {end}, and
+        // deliberately NO reversal join or event-type predicate — this is the independent cumulative
+        // check. This makes the tie-out structural: a categorization or sign slip in the C# section
         // pipeline produces a non-zero variance rather than silently computing x - x = 0.
         var endBalancesFromJournal = await db.Database.SqlQuery<EndBalance>(
             $"""

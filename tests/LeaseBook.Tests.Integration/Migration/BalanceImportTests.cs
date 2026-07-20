@@ -625,6 +625,11 @@ public sealed class BalanceImportTests(PostgresFixture fixture)
         var stmt = (await response.Content.ReadFromJsonAsync<StatementView>(ct))!;
         stmt.Beginning.ShouldBe(1250.00m, "the opening position folds into Beginning");
         stmt.Ending.ShouldBe(1250.00m);
+
+        // The tie-out is the point: the independent journal re-query must agree, not just the
+        // categorical pipeline's own arithmetic.
+        stmt.Fiduciary.Variance.ShouldBe(0m);
+        stmt.Fiduciary.Balanced.ShouldBeTrue();
     }
 
     // -------------------------------------------------------------------------
