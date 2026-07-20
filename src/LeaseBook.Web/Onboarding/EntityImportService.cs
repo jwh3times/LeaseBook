@@ -10,6 +10,7 @@ using LeaseBook.Modules.Directory.Features.Tenants;
 using LeaseBook.Modules.Directory.Features.Units;
 using LeaseBook.SharedKernel.Cqrs;
 using LeaseBook.SharedKernel.Tenancy;
+using LeaseBook.Web.Observability;
 using LeaseBook.Web.Onboarding.Persistence;
 using Microsoft.EntityFrameworkCore;
 // Alias avoids the UnitRow ambiguity (LeaseBook.Migrator.Model.UnitRow vs
@@ -40,7 +41,8 @@ public sealed class EntityImportService(
     DbContext db,
     ISender sender,
     IActorContext actor,
-    ExternalIdResolver resolver)
+    ExternalIdResolver resolver,
+    ILogger<EntityImportService> logger)
 {
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
 
@@ -138,7 +140,18 @@ public sealed class EntityImportService(
             }
             catch (Exception ex)
             {
-                outcomes.Add(RowOutcome.Error(rowNumber, row.ExternalId, rawJson, "*", ex.Message));
+                logger.LogError(
+                    LogEvents.ImportRowFailed,
+                    ex,
+                    "Import row failed. Kind={EntityKind} RowNumber={RowNumber}",
+                    "owners", rowNumber);
+
+                outcomes.Add(RowOutcome.Error(
+                    rowNumber,
+                    row.ExternalId,
+                    rawJson,
+                    "*",
+                    "This row could not be imported. Check the values and try again."));
                 continue;
             }
 
@@ -175,7 +188,18 @@ public sealed class EntityImportService(
             }
             catch (Exception ex)
             {
-                outcomes.Add(RowOutcome.Error(rowNumber, row.ExternalId, rawJson, "*", ex.Message));
+                logger.LogError(
+                    LogEvents.ImportRowFailed,
+                    ex,
+                    "Import row failed. Kind={EntityKind} RowNumber={RowNumber}",
+                    "properties", rowNumber);
+
+                outcomes.Add(RowOutcome.Error(
+                    rowNumber,
+                    row.ExternalId,
+                    rawJson,
+                    "*",
+                    "This row could not be imported. Check the values and try again."));
                 continue;
             }
 
@@ -213,7 +237,18 @@ public sealed class EntityImportService(
             }
             catch (Exception ex)
             {
-                outcomes.Add(RowOutcome.Error(rowNumber, row.ExternalId, rawJson, "*", ex.Message));
+                logger.LogError(
+                    LogEvents.ImportRowFailed,
+                    ex,
+                    "Import row failed. Kind={EntityKind} RowNumber={RowNumber}",
+                    "units", rowNumber);
+
+                outcomes.Add(RowOutcome.Error(
+                    rowNumber,
+                    row.ExternalId,
+                    rawJson,
+                    "*",
+                    "This row could not be imported. Check the values and try again."));
                 continue;
             }
 
@@ -262,7 +297,18 @@ public sealed class EntityImportService(
             }
             catch (Exception ex)
             {
-                outcomes.Add(RowOutcome.Error(rowNumber, row.ExternalId, rawJson, "*", ex.Message));
+                logger.LogError(
+                    LogEvents.ImportRowFailed,
+                    ex,
+                    "Import row failed. Kind={EntityKind} RowNumber={RowNumber}",
+                    "tenants_leases", rowNumber);
+
+                outcomes.Add(RowOutcome.Error(
+                    rowNumber,
+                    row.ExternalId,
+                    rawJson,
+                    "*",
+                    "This row could not be imported. Check the values and try again."));
                 continue;
             }
 
@@ -276,7 +322,18 @@ public sealed class EntityImportService(
             }
             catch (Exception ex)
             {
-                outcomes.Add(RowOutcome.Error(rowNumber, row.ExternalId, rawJson, "*", ex.Message));
+                logger.LogError(
+                    LogEvents.ImportRowFailed,
+                    ex,
+                    "Import row failed. Kind={EntityKind} RowNumber={RowNumber}",
+                    "tenants_leases", rowNumber);
+
+                outcomes.Add(RowOutcome.Error(
+                    rowNumber,
+                    row.ExternalId,
+                    rawJson,
+                    "*",
+                    "This row could not be imported. Check the values and try again."));
                 continue;
             }
 
