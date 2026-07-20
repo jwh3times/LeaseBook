@@ -42,31 +42,47 @@ internal sealed class GetOwnerStatementDataHandler(DbContext db)
         var start = new DateOnly(q.Year, q.Month, 1);
         var end = start.AddMonths(1); // exclusive
 
-        // In-period owner-equity movement, one row per (entry, property), with event metadata.
+        // In-period owner-equity movement, one row per (entry, property), with event metadata. Event
+        // type is resolved through the reversal link (COALESCE(orig.event_type, e.event_type)): a
+        // void lands in the section of whatever it reverses, not a separate "EntryVoided" bucket.
+        // Opening-typed entries (OpeningBalance/BalanceForward) are excluded here because they fold
+        // into Beginning instead of appearing as in-period movement (see the `begins` query below).
         var rows = await db.Database.SqlQuery<Row>(
             $"""
-            SELECT jl.owner_id, e.id AS entry_id, e.entry_date AS date, e.event_type, e.event_subtype,
+            SELECT jl.owner_id, e.id AS entry_id, e.entry_date AS date,
+                   COALESCE(orig.event_type, e.event_type) AS event_type, e.event_subtype,
                    e.description, jl.property_id,
                    SUM(COALESCE(jl.credit,0) - COALESCE(jl.debit,0)) AS amount
             FROM journal_lines jl
             JOIN journal_entries e ON e.id = jl.entry_id
+            LEFT JOIN journal_entries orig ON orig.id = e.reverses_entry_id
             WHERE jl.owner_id = ANY({owners}) AND jl.account_class = 'owner_equity'
               AND jl.basis IN ({q.Basis}, 'both')
               AND ({q.PropertyId}::uuid IS NULL OR jl.property_id = {q.PropertyId})
               AND e.entry_date >= {start} AND e.entry_date < {end}
-            GROUP BY jl.owner_id, e.id, e.entry_date, e.event_type, e.event_subtype, e.description, jl.property_id
+              AND COALESCE(orig.event_type, e.event_type) NOT IN ('OpeningBalance', 'BalanceForward')
+            GROUP BY jl.owner_id, e.id, e.entry_date, COALESCE(orig.event_type, e.event_type),
+                     e.event_subtype, e.description, jl.property_id
             ORDER BY e.entry_date, e.posted_at, e.id
             """).ToListAsync(ct);
 
-        // Beginning balance = cumulative owner-equity before the period start.
+        // Beginning balance = cumulative owner-equity before the period start. Also picks up an
+        // in-period opening-typed entry (OpeningBalance/BalanceForward, resolved through the same
+        // reversal-link COALESCE): the M7 per-position import posts its opening position dated at
+        // cutover, which can fall inside the statement period, and it belongs in Beginning rather
+        // than as an in-period movement line.
         var begins = await db.Database.SqlQuery<Begin>(
             $"""
             SELECT jl.owner_id, COALESCE(SUM(COALESCE(jl.credit,0) - COALESCE(jl.debit,0)), 0) AS amount
-            FROM journal_lines jl JOIN journal_entries e ON e.id = jl.entry_id
+            FROM journal_lines jl
+            JOIN journal_entries e ON e.id = jl.entry_id
+            LEFT JOIN journal_entries orig ON orig.id = e.reverses_entry_id
             WHERE jl.owner_id = ANY({owners}) AND jl.account_class = 'owner_equity'
               AND jl.basis IN ({q.Basis}, 'both')
               AND ({q.PropertyId}::uuid IS NULL OR jl.property_id = {q.PropertyId})
-              AND e.entry_date < {start}
+              AND (e.entry_date < {start}
+                   OR (e.entry_date < {end}
+                       AND COALESCE(orig.event_type, e.event_type) IN ('OpeningBalance', 'BalanceForward')))
             GROUP BY jl.owner_id
             """).ToListAsync(ct);
         var beginning = begins.ToDictionary(b => b.OwnerId, b => b.Amount);
