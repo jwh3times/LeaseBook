@@ -3,7 +3,7 @@
 - **Audience:** Evaluators, contributors, operators, and maintainers
 - **Status:** Living index
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-07-09
+- **Last reviewed:** 2026-07-20
 
 Use this page to find the maintained source for a question. Documents intentionally have one owner;
 summaries elsewhere should link here rather than restating mutable detail.
@@ -35,6 +35,7 @@ summaries elsewhere should link here rather than restating mutable detail.
 
 - [Local development](runbooks/local-dev.md)
 - [Point-in-time restore](runbooks/restore.md)
+- [Error diagnostics](runbooks/diagnostics.md)
 
 ## Compliance
 

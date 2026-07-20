@@ -232,7 +232,7 @@ the [local-development runbook](docs/runbooks/local-dev.md) owns the commands.
 - [`docs/adr/`](docs/adr) — architecture decision records
 - [`docs/ROADMAP.md`](docs/ROADMAP.md) — shipped capabilities and high-level product direction
 - [`docs/migration/parallel-run.md`](docs/migration/parallel-run.md) — migration parallel-run checklist
-- [`docs/runbooks/`](docs/runbooks) — local development and restore runbooks
+- [`docs/runbooks/`](docs/runbooks) — local development, restore, and diagnostics runbooks
 - [`docs/documentation-policy.md`](docs/documentation-policy.md) — classification and canonical ownership
 
 ---

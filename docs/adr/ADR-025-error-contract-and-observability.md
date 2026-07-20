@@ -148,7 +148,7 @@ export provider rather than the category globally, the local console logger is u
 run` still prints SQL exactly as it did before this WP.
 
 **The one deliberate status change: `no_trust_account`, 500 → 409.** This WP is not a status-code
-audit — every other response keeps the status it had. `BankAccountInfoAdapter.GetTrustAccountAsync`
+audit — every other response keeps the status it had. `BankAccountInfoAdapter.GetOperatingTrustAsync`
 previously threw a plain `InvalidOperationException` when no active trust bank account existed. That
 type is not an `AccountingDomainException`, so the typed handler never saw it; it fell straight
 through to a generic, uncoded 500, and after this WP's terminal handler lands, a raw
