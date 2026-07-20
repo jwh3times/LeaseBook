@@ -13,7 +13,7 @@ public sealed class GetOwnerLedgerValidator : AbstractValidator<GetOwnerLedger>
     {
         RuleFor(q => q.OwnerId).NotEmpty();
         RuleFor(q => q.Basis).Must(b => b is "cash" or "accrual")
-            .WithMessage("basis must be 'cash' or 'accrual'.");
+            .WithMessage("Basis must be 'cash' or 'accrual'.");
     }
 }
 

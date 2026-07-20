@@ -1,6 +1,7 @@
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import { api, primeCsrf, type components } from '@/api';
 import { num } from '@/lib/directory';
+import { toApiError, type ApiError } from '@/lib/apiError';
 
 export type StatementView = components['schemas']['StatementView'];
 export type StatementSectionView = components['schemas']['StatementSectionView'];
@@ -146,23 +147,14 @@ function buildFilterParams(filters: ReportFilters): string {
 
 // ---- Mutations ---------------------------------------------------------------
 
-export interface ReportsError {
-  code?: string;
-  message: string;
-}
+export type ReportsError = ApiError;
+const toReportsError = toApiError;
 
 interface ProblemBody {
   code?: string;
   detail?: string;
   title?: string;
-}
-
-function toReportsError(error: unknown, status: number): ReportsError {
-  const body = (error ?? {}) as ProblemBody;
-  return {
-    code: body.code,
-    message: body.detail ?? body.title ?? `Request failed (${status}).`,
-  };
+  correlationId?: string;
 }
 
 async function unwrapResponse(call: Promise<Response>): Promise<void> {
@@ -215,7 +207,15 @@ export async function downloadStatement(
     `/api/statements/${encodeURIComponent(ownerId)}/${format}?${params.toString()}`,
     { credentials: 'include' },
   );
-  if (!response.ok) throw new Error(`Download failed (${response.status})`);
+  if (!response.ok) {
+    let body: unknown;
+    try {
+      body = await response.json();
+    } catch {
+      body = {};
+    }
+    throw toApiError(body, response.status);
+  }
   const blob = await response.blob();
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
@@ -245,20 +245,34 @@ export interface CompliancePackRange {
  */
 export function compliancePackError(body: ProblemBody, status: number): ReportsError {
   const code = body.code ?? body.title;
+  const correlationId = body.correlationId;
   if (status === 422 || code === 'period_not_closed') {
     return {
       code: 'period_not_closed',
       message:
         "This period isn't closed yet — finalize the reconciliation for every month in the range first.",
+      correlationId,
     };
   }
   if (status === 404) {
-    return { code: 'bank_not_found', message: 'That trust account could not be found.' };
+    return {
+      code: 'bank_not_found',
+      message: 'That trust account could not be found.',
+      correlationId,
+    };
   }
   if (status === 400 || code === 'invalid_period') {
-    return { code: 'invalid_period', message: 'The start date must be on or before the end date.' };
+    return {
+      code: 'invalid_period',
+      message: 'The start date must be on or before the end date.',
+      correlationId,
+    };
   }
-  return { code, message: body.detail ?? body.title ?? `Download failed (${status}).` };
+  return {
+    code,
+    message: body.detail ?? body.title ?? `Download failed (${status}).`,
+    correlationId,
+  };
 }
 
 /**
@@ -302,7 +316,15 @@ export async function downloadReportCsv(id: string, filters: ReportFilters): Pro
     `/api/reports/${encodeURIComponent(id)}/csv?` + buildFilterParams(filters),
     { credentials: 'include' },
   );
-  if (!response.ok) throw new Error(`Download failed (${response.status})`);
+  if (!response.ok) {
+    let body: unknown;
+    try {
+      body = await response.json();
+    } catch {
+      body = {};
+    }
+    throw toApiError(body, response.status);
+  }
   const blob = await response.blob();
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');

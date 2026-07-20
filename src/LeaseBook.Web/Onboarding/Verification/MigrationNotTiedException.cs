@@ -18,9 +18,9 @@ namespace LeaseBook.Web.Onboarding.Verification;
 public sealed class MigrationNotTiedException(
     Guid verificationId, decimal varianceTotal, decimal clearingCash, decimal clearingAccrual)
     : Exception(
-        $"Verification {verificationId} no longer ties: variance total {varianceTotal:0.00}, " +
-        $"clearing residual cash {clearingCash:0.00} / accrual {clearingAccrual:0.00}. " +
-        "Sign-off is blocked until all variances are $0.00 and clearing nets to $0.00 in both bases.")
+        $"This import no longer ties: the variance total is {varianceTotal:0.00}, with " +
+        $"{clearingCash:0.00} unresolved on a cash basis and {clearingAccrual:0.00} on an accrual basis. " +
+        "Re-run verification, then sign off.")
 {
     public Guid VerificationId { get; } = verificationId;
     public decimal VarianceTotal { get; } = varianceTotal;

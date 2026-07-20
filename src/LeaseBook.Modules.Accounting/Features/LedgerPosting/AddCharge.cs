@@ -17,7 +17,7 @@ public sealed class AddChargeValidator : AbstractValidator<AddCharge>
         RuleFor(x => x.TenantId).NotEmpty();
         RuleFor(x => x.SourceRef).NotEmpty();
         RuleFor(x => x.Kind).Must(LedgerPostingMaps.ChargeKinds.ContainsKey)
-            .WithMessage($"kind must be one of: {string.Join(", ", LedgerPostingMaps.ChargeKinds.Keys)}.");
+            .WithMessage($"Kind must be one of: {string.Join(", ", LedgerPostingMaps.ChargeKinds.Keys)}.");
         LedgerPostingMaps.RuleForAmount(this, x => x.Amount);
     }
 }

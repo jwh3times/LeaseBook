@@ -5,17 +5,18 @@
  */
 import { useState } from 'react';
 import { Button, Card, CardHeader, EmptyState } from '@/design';
+import { ApiErrorNotice } from '@/components/ApiErrorNotice';
 import { trackInteraction } from '@/lib/telemetry';
 import { PeriodPicker } from './PeriodPicker';
 import { currentPeriod } from './periodUtils';
 import { RunPreviewGrid, RunResultPanel } from './RunPreviewGrid';
 import { useConfirmRun, useRunPreview } from './useRuns';
-import type { RunResultSpaResponse } from './useRuns';
+import type { RunError, RunResultSpaResponse } from './useRuns';
 
 export function RentRunScreen() {
   const [period, setPeriod] = useState(currentPeriod);
   const [result, setResult] = useState<RunResultSpaResponse | null>(null);
-  const [confirmError, setConfirmError] = useState<string | null>(null);
+  const [confirmError, setConfirmError] = useState<RunError | null>(null);
 
   const preview = useRunPreview('rent', period.year, period.month);
   const confirm = useConfirmRun('rent');
@@ -36,7 +37,7 @@ export function RentRunScreen() {
           setResult(data);
           setConfirmError(null);
         },
-        onError: (err) => setConfirmError(err.message),
+        onError: (err) => setConfirmError(err),
       },
     );
   };
@@ -97,11 +98,7 @@ export function RentRunScreen() {
               selected={allSelected}
               selectable={false}
             />
-            {confirmError && (
-              <p className="pf-composer-error" role="alert" style={{ marginTop: 8 }}>
-                {confirmError}
-              </p>
-            )}
+            <ApiErrorNotice error={confirmError} style={{ marginTop: 8 }} />
             <div className="row gap10" style={{ marginTop: 16 }}>
               <Button
                 variant="primary"

@@ -96,6 +96,8 @@ public sealed class LedgerHttpTests(PostgresFixture fixture)
         over.StatusCode.ShouldBe(HttpStatusCode.Conflict);
         var problem = await over.Content.ReadFromJsonAsync<ProblemWithCode>(ct);
         problem!.Code.ShouldBe("insufficient_receivable");
+        problem.CorrelationId.ShouldNotBeNullOrWhiteSpace(
+            "every error response must carry a correlationId the operator can quote (ADR-025)");
 
         // Exactly the receivable → 200, ledger nets to 0, deposit register shows the remainder held.
         await PostOkAsync<PostResult>(client, $"/api/accounting/tenants/{setup.TenantId}/deposit-applications",
@@ -118,6 +120,10 @@ public sealed class LedgerHttpTests(PostgresFixture fixture)
         var bad = await client.PostAsJsonAsync($"/api/accounting/tenants/{setup.TenantId}/charges",
             new { amount = -5m, date = Feb1, kind = "rent", sourceRef = Key() }, ct);
         bad.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+
+        var problem = (await bad.Content.ReadFromJsonAsync<ProblemWithCode>(ct))!;
+        problem.Code.ShouldBe("validation_failed");
+        problem.CorrelationId.ShouldNotBeNullOrWhiteSpace();
     }
 
     [Fact]
@@ -135,10 +141,13 @@ public sealed class LedgerHttpTests(PostgresFixture fixture)
             new { reason = "entered in error", sourceRef = Key() }, ct);
 
         response.StatusCode.ShouldBe(HttpStatusCode.NotFound, await response.Content.ReadAsStringAsync(ct));
-        (await response.Content.ReadFromJsonAsync<ProblemWithCode>(ct))!.Code.ShouldBe("entry_not_found");
+        var problem = (await response.Content.ReadFromJsonAsync<ProblemWithCode>(ct))!;
+        problem.Code.ShouldBe("entry_not_found");
+        problem.CorrelationId.ShouldNotBeNullOrWhiteSpace(
+            "every error response must carry a correlationId the operator can quote (ADR-025)");
     }
 
-    private sealed record ProblemWithCode(string Code);
+    private sealed record ProblemWithCode(string Code, string? CorrelationId);
 
     private sealed record Setup(Guid OrgId, string Email, Guid TenantId, Guid TrustBankId, Guid DepositBankId);
 

@@ -49,7 +49,14 @@ describe('ApplyModal', () => {
       http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 })),
       http.get('/api/settings/banks', () => HttpResponse.json(BANKS)),
       http.post('/api/accounting/tenants/:tenantId/deposit-applications', () =>
-        HttpResponse.json({ code: 'account_period_locked', detail: 'locked' }, { status: 409 }),
+        HttpResponse.json(
+          {
+            code: 'account_period_locked',
+            detail:
+              'This bank account is reconciled and locked for 2026-02; post into the open month.',
+          },
+          { status: 409 },
+        ),
       ),
     );
     const { onApplied } = renderModal();

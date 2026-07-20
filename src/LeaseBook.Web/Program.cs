@@ -22,6 +22,7 @@ using LeaseBook.Web.Tenancy;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using OpenTelemetry.Logs;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using QuestPDF.Infrastructure;
@@ -52,6 +53,10 @@ builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<ValidationExceptionHandler>();
 // Typed accounting domain errors → §C.5 ProblemDetails (422/409). Wired now so M3's write path inherits it.
 builder.Services.AddExceptionHandler<AccountingExceptionHandler>();
+// Terminal handler — MUST stay last. Handlers run in registration order; this one claims
+// everything the typed handlers decline, so nothing reaches the framework default (a bodyless
+// 500 with no log).
+builder.Services.AddExceptionHandler<UnhandledExceptionHandler>();
 
 // Data access (runtime = app role, RLS-subject). Migrations use the migrator connection via the
 // design-time factory; the running app never connects as migrator.
@@ -223,10 +228,30 @@ var telemetry = builder.Services.AddOpenTelemetry()
         .AddSource(LeaseBookTelemetry.SourceName)
         .AddAspNetCoreInstrumentation());
 
+// ILogger → OpenTelemetry. Same service name as the tracing pipeline, so logs and spans
+// correlate under one operation_Id in App Insights. IncludeScopes/ParseStateValues keep the
+// structured state searchable rather than flattening to a rendered string.
+builder.Logging.AddOpenTelemetry(logging =>
+{
+    logging.IncludeFormattedMessage = true;
+    logging.IncludeScopes = true;
+    logging.ParseStateValues = true;
+    logging.SetResourceBuilder(ResourceBuilder.CreateDefault().AddService("LeaseBook.Web"));
+});
+
+// Provider-scoped: quiets EF's per-query Information logs on the EXPORT channel only — the local
+// dev console keeps showing SQL exactly as today (ADR-025; appsettings filters only
+// Microsoft.AspNetCore, so without this every Executed DbCommand would ship to App Insights).
+builder.Logging.AddFilter<OpenTelemetryLoggerProvider>("Microsoft.EntityFrameworkCore", LogLevel.Warning);
+
 var appInsightsConnection = builder.Configuration["APPLICATIONINSIGHTS_CONNECTION_STRING"];
 if (!string.IsNullOrWhiteSpace(appInsightsConnection))
 {
     telemetry.WithTracing(tracing => tracing.AddAzureMonitorTraceExporter(
+        exporter => exporter.ConnectionString = appInsightsConnection));
+
+    // Logs ride the same connection string; like tracing, this is a no-op locally.
+    builder.Logging.AddOpenTelemetry(logging => logging.AddAzureMonitorLogExporter(
         exporter => exporter.ConnectionString = appInsightsConnection));
 }
 

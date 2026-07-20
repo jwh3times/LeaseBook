@@ -4,6 +4,7 @@
  */
 import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { api, primeCsrf, type components } from '@/api';
+import { toApiError, type ApiError } from '@/lib/apiError';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -27,26 +28,8 @@ export const onboardingStatusKey = () => ['onboarding', 'status'] as const;
 
 // ─── Error types ──────────────────────────────────────────────────────────────
 
-export interface OnboardingError {
-  code?: string;
-  message: string;
-}
-
-interface ProblemBody {
-  code?: string;
-  detail?: string;
-  title?: string;
-  errors?: Record<string, string[]>;
-}
-
-function toOnboardingError(error: unknown, status: number): OnboardingError {
-  const body = (error ?? {}) as ProblemBody;
-  const firstValidation = body.errors ? Object.values(body.errors)[0]?.[0] : undefined;
-  return {
-    code: body.code,
-    message: firstValidation ?? body.detail ?? body.title ?? `Request failed (${status}).`,
-  };
-}
+export type OnboardingError = ApiError;
+const toOnboardingError = toApiError;
 
 async function unwrap<T>(
   call: Promise<{ data?: T; error?: unknown; response: Response }>,

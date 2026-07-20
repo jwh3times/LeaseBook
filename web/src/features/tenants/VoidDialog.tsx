@@ -1,6 +1,7 @@
 import { useMutation } from '@tanstack/react-query';
 import { useRef, useState, type KeyboardEvent } from 'react';
 import { Button, Input } from '@/design';
+import { ApiErrorNotice } from '@/components/ApiErrorNotice';
 import { Modal } from '@/components/Modal';
 import {
   type LedgerPostError,
@@ -23,7 +24,7 @@ interface VoidDialogProps {
  */
 export function VoidDialog({ entryId, onClose, onVoided }: VoidDialogProps) {
   const [reason, setReason] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<LedgerPostError | null>(null);
   const sourceRef = useRef(newSourceRef());
 
   const mutation = useMutation<PostResult, LedgerPostError>({
@@ -31,21 +32,21 @@ export function VoidDialog({ entryId, onClose, onVoided }: VoidDialogProps) {
     onSuccess: (result) => onVoided(result.entryId),
     onError: (err) => {
       if (err.code === 'already_reversed') {
-        setError('This entry has already been voided.');
+        setError({ ...err, message: 'This entry has already been voided.' });
       } else if (err.code === 'duplicate_source_ref' && err.existingEntryId) {
         onVoided(err.existingEntryId);
       } else if (err.code === 'account_period_locked') {
         // Reversal lands a bank line in the original's month; if it's reconciled, the lock blocks it.
-        setError(LOCKED_PERIOD_MESSAGE);
+        setError({ ...err, message: LOCKED_PERIOD_MESSAGE });
       } else {
-        setError(err.message);
+        setError(err);
       }
     },
   });
 
   const confirm = () => {
     if (reason.trim() === '') {
-      setError('A reason is required to void an entry.');
+      setError({ message: 'A reason is required to void an entry.' });
       return;
     }
     setError(null);
@@ -89,11 +90,7 @@ export function VoidDialog({ entryId, onClose, onVoided }: VoidDialogProps) {
             aria-label="Reason"
           />
         </label>
-        {error && (
-          <span className="pf-composer-error" role="alert">
-            {error}
-          </span>
-        )}
+        <ApiErrorNotice error={error} />
       </div>
     </Modal>
   );

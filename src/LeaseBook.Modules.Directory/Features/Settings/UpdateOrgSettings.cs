@@ -35,10 +35,10 @@ public sealed class UpdateOrgSettingsValidator : AbstractValidator<UpdateOrgSett
     {
         RuleFor(x => x.AccountingBasis)
             .Must(v => v is null || AccountingBasisConverter.DbValues.Contains(v))
-            .WithMessage($"accountingBasis must be one of: {string.Join(", ", AccountingBasisConverter.DbValues)}.");
+            .WithMessage($"Accounting basis must be one of: {string.Join(", ", AccountingBasisConverter.DbValues)}.");
         RuleFor(x => x.MoneyNegativeDisplay)
             .Must(v => v is null || MoneyNegativeDisplayConverter.DbValues.Contains(v))
-            .WithMessage($"moneyNegativeDisplay must be one of: {string.Join(", ", MoneyNegativeDisplayConverter.DbValues)}.");
+            .WithMessage($"Negative amount display must be one of: {string.Join(", ", MoneyNegativeDisplayConverter.DbValues)}.");
         RuleFor(x => x.LegalName).MaximumLength(200);
         RuleFor(x => x.Address).MaximumLength(200);
         RuleFor(x => x.City).MaximumLength(100);
@@ -49,7 +49,7 @@ public sealed class UpdateOrgSettingsValidator : AbstractValidator<UpdateOrgSett
         RuleFor(x => x.LateFeeGraceDays).GreaterThanOrEqualTo(0).When(x => x.LateFeeGraceDays.HasValue);
         RuleFor(x => x.LateFeeKind)
             .Must(v => v is null || LateFeeKindConverter.DbValues.Contains(v))
-            .WithMessage($"lateFeeKind must be one of: {string.Join(", ", LateFeeKindConverter.DbValues)}.");
+            .WithMessage($"Late fee kind must be one of: {string.Join(", ", LateFeeKindConverter.DbValues)}.");
         RuleFor(x => x.LateFeeAmount).GreaterThanOrEqualTo(0m).When(x => x.LateFeeAmount.HasValue);
         RuleFor(x => x.LateFeeRateBps).GreaterThanOrEqualTo(0).When(x => x.LateFeeRateBps.HasValue);
     }

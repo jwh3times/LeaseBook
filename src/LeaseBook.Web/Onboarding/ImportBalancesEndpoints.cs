@@ -29,35 +29,38 @@ public sealed class ImportBalancesEndpoints : IEndpointModule
                     string kind,
                     BalanceImportRequest body,
                     BalanceImportService service,
+                    HttpContext httpContext,
                     CancellationToken ct) =>
                 {
                     if (!TryParseBalanceKind(kind, out var balanceKind))
-                        return Results.Problem(
-                            title: "Invalid balance kind",
-                            detail: $"'{kind}' is not a valid balance kind for import. " +
-                                    "Use one of: owner_balances, deposit_liabilities, bank_balances, tenant_receivables.",
-                            statusCode: StatusCodes.Status400BadRequest);
+                        return ProblemResults.Problem(
+                            httpContext,
+                            code: "invalid_balance_kind",
+                            detail: "That is not a balance type this import supports.",
+                            status: StatusCodes.Status400BadRequest);
 
                     // Only the documented appfolio-default profile exists today.
                     var requested = body.MappingProfile;
                     if (!string.IsNullOrWhiteSpace(requested) && requested != "appfolio-default")
-                        return Results.Problem(
-                            title: "Unknown mapping profile",
-                            detail: $"unknown_mapping_profile: '{requested}'. " +
-                                    "The only supported profile is 'appfolio-default'.",
-                            statusCode: StatusCodes.Status400BadRequest);
+                        return ProblemResults.Problem(
+                            httpContext,
+                            code: "unknown_mapping_profile",
+                            detail: "That column-mapping profile is not available.",
+                            status: StatusCodes.Status400BadRequest);
 
                     if (!DateOnly.TryParse(body.CutoverDate, out var cutoverDate))
-                        return Results.Problem(
-                            title: "Invalid cutover date",
-                            detail: $"cutover_date '{body.CutoverDate}' is not a valid ISO date (yyyy-MM-dd).",
-                            statusCode: StatusCodes.Status400BadRequest);
+                        return ProblemResults.Problem(
+                            httpContext,
+                            code: "invalid_cutover_date",
+                            detail: "The cutover date must be a valid date in YYYY-MM-DD format.",
+                            status: StatusCodes.Status400BadRequest);
 
                     if (string.IsNullOrWhiteSpace(body.CsvContent))
-                        return Results.Problem(
-                            title: "Empty CSV",
-                            detail: "empty_csv: the uploaded CSV content is empty. Provide the cutover balance rows.",
-                            statusCode: StatusCodes.Status400BadRequest);
+                        return ProblemResults.Problem(
+                            httpContext,
+                            code: "empty_csv",
+                            detail: "The uploaded file is empty.",
+                            status: StatusCodes.Status400BadRequest);
 
                     var csvBytes = System.Text.Encoding.UTF8.GetBytes(body.CsvContent);
                     await using var csvStream = new MemoryStream(csvBytes);

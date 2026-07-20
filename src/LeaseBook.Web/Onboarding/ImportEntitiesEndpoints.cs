@@ -29,24 +29,25 @@ public sealed class ImportEntitiesEndpoints : IEndpointModule
                     string kind,
                     EntityImportRequest body,
                     EntityImportService service,
+                    HttpContext httpContext,
                     CancellationToken ct) =>
                 {
                     if (!TryParseEntityKind(kind, out var entityKind))
-                        return Results.Problem(
-                            title: "Invalid entity kind",
-                            detail: $"'{kind}' is not a valid entity kind for import. " +
-                                    "Use one of: owners, properties, units, tenants_leases.",
-                            statusCode: StatusCodes.Status400BadRequest);
+                        return ProblemResults.Problem(
+                            httpContext,
+                            code: "invalid_entity_kind",
+                            detail: "That is not an entity type this import supports.",
+                            status: StatusCodes.Status400BadRequest);
 
                     // Only the documented appfolio-default profile exists today (null/empty = default).
                     // Reject any other value rather than silently parsing against the default.
                     var requested = body.MappingProfile;
                     if (!string.IsNullOrWhiteSpace(requested) && requested != "appfolio-default")
-                        return Results.Problem(
-                            title: "Unknown mapping profile",
-                            detail: $"unknown_mapping_profile: '{requested}'. " +
-                                    "The only supported profile is 'appfolio-default'.",
-                            statusCode: StatusCodes.Status400BadRequest);
+                        return ProblemResults.Problem(
+                            httpContext,
+                            code: "unknown_mapping_profile",
+                            detail: "That column-mapping profile is not available.",
+                            status: StatusCodes.Status400BadRequest);
 
                     var csvBytes = System.Text.Encoding.UTF8.GetBytes(body.CsvContent ?? string.Empty);
                     await using var csvStream = new MemoryStream(csvBytes);

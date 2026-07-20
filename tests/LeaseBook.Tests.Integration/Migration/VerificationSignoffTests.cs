@@ -164,6 +164,10 @@ public sealed class VerificationSignoffTests(PostgresFixture fixture)
         var problemBody = await signoffResponse.Content.ReadAsStringAsync(ct);
         problemBody.ShouldContain("not_tied");
 
+        var problem = (await signoffResponse.Content.ReadFromJsonAsync<ProblemWithCode>(ct))!;
+        problem.Code.ShouldBe("not_tied");
+        problem.CorrelationId.ShouldNotBeNullOrWhiteSpace();
+
         // --- Gate-before-side-effect: assert NO audit row and NO signed row were written ---
         var tenant = new TenantContext { OrgId = setup.OrgId };
         await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
@@ -294,6 +298,10 @@ public sealed class VerificationSignoffTests(PostgresFixture fixture)
         var problemBody = await signoffResponse.Content.ReadAsStringAsync(ct);
         problemBody.ShouldContain("not_tied");
 
+        var problem = (await signoffResponse.Content.ReadFromJsonAsync<ProblemWithCode>(ct))!;
+        problem.Code.ShouldBe("not_tied");
+        problem.CorrelationId.ShouldNotBeNullOrWhiteSpace();
+
         // --- No signed row, no audit row: the gate fired before any side effect ---
         var tenant = new TenantContext { OrgId = setup.OrgId };
         await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
@@ -323,6 +331,8 @@ public sealed class VerificationSignoffTests(PostgresFixture fixture)
     // ──────────────────────────────────────────────────────────────────────────────────────────────
     // Helpers
     // ──────────────────────────────────────────────────────────────────────────────────────────────
+
+    private sealed record ProblemWithCode(string Code, string? CorrelationId);
 
     private sealed record TestSetup(
         Guid OrgId,

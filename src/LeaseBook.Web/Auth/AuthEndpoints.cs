@@ -33,7 +33,8 @@ public sealed class AuthEndpoints : IEndpointModule
         }).AllowAnonymous();
 
         group.MapPost("/login", async (
-            LoginRequest request, SignInManager<AppUser> signInManager, UserManager<AppUser> userManager) =>
+            LoginRequest request, SignInManager<AppUser> signInManager, UserManager<AppUser> userManager,
+            HttpContext httpContext) =>
         {
             var user = await userManager.FindByEmailAsync(request.Email);
             if (user is not null)
@@ -52,26 +53,39 @@ public sealed class AuthEndpoints : IEndpointModule
             }
 
             // Generic message for bad credentials, lockout, and unknown email alike.
-            return Results.Problem(statusCode: StatusCodes.Status401Unauthorized, title: "Invalid credentials.");
+            return ProblemResults.Problem(
+                httpContext,
+                code: "invalid_credentials",
+                detail: "Invalid credentials.",
+                status: StatusCodes.Status401Unauthorized);
         })
         .AddEndpointFilter<ValidationEndpointFilter<LoginRequest>>()
         .Produces<LoginResponse>()
         .AllowAnonymous()
         .RequireRateLimiting("auth");
 
-        group.MapPost("/mfa", async (MfaRequest request, SignInManager<AppUser> signInManager) =>
+        group.MapPost("/mfa", async (
+            MfaRequest request, SignInManager<AppUser> signInManager, HttpContext httpContext) =>
         {
             var user = await signInManager.GetTwoFactorAuthenticationUserAsync();
             if (user is null || !string.Equals(request.MfaToken, user.Id.ToString(), StringComparison.OrdinalIgnoreCase))
             {
-                return Results.Problem(statusCode: StatusCodes.Status401Unauthorized, title: "Invalid credentials.");
+                return ProblemResults.Problem(
+                    httpContext,
+                    code: "invalid_credentials",
+                    detail: "Invalid credentials.",
+                    status: StatusCodes.Status401Unauthorized);
             }
 
             var result = await signInManager.TwoFactorAuthenticatorSignInAsync(
                 request.Code, isPersistent: false, rememberClient: false);
             return result.Succeeded
                 ? Results.Ok(new LoginResponse(LoginStatus.Ok, null))
-                : Results.Problem(statusCode: StatusCodes.Status401Unauthorized, title: "Invalid code.");
+                : ProblemResults.Problem(
+                    httpContext,
+                    code: "invalid_mfa_code",
+                    detail: "Invalid code.",
+                    status: StatusCodes.Status401Unauthorized);
         })
         .AddEndpointFilter<ValidationEndpointFilter<MfaRequest>>()
         .Produces<LoginResponse>()
@@ -89,7 +103,11 @@ public sealed class AuthEndpoints : IEndpointModule
             var user = await userManager.GetUserAsync(http.User);
             if (user is null)
             {
-                return Results.Problem(statusCode: StatusCodes.Status401Unauthorized, title: "Not authenticated.");
+                return ProblemResults.Problem(
+                    http,
+                    code: "not_authenticated",
+                    detail: "Not authenticated.",
+                    status: StatusCodes.Status401Unauthorized);
             }
 
             var roles = await userManager.GetRolesAsync(user);
@@ -109,7 +127,11 @@ public sealed class AuthEndpoints : IEndpointModule
             var user = await userManager.GetUserAsync(http.User);
             if (user is null)
             {
-                return Results.Problem(statusCode: StatusCodes.Status401Unauthorized, title: "Not authenticated.");
+                return ProblemResults.Problem(
+                    http,
+                    code: "not_authenticated",
+                    detail: "Not authenticated.",
+                    status: StatusCodes.Status401Unauthorized);
             }
 
             var key = await userManager.GetAuthenticatorKeyAsync(user);
@@ -131,14 +153,22 @@ public sealed class AuthEndpoints : IEndpointModule
             var user = await userManager.GetUserAsync(http.User);
             if (user is null)
             {
-                return Results.Problem(statusCode: StatusCodes.Status401Unauthorized, title: "Not authenticated.");
+                return ProblemResults.Problem(
+                    http,
+                    code: "not_authenticated",
+                    detail: "Not authenticated.",
+                    status: StatusCodes.Status401Unauthorized);
             }
 
             var valid = await userManager.VerifyTwoFactorTokenAsync(
                 user, userManager.Options.Tokens.AuthenticatorTokenProvider, request.Code);
             if (!valid)
             {
-                return Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Invalid code.");
+                return ProblemResults.Problem(
+                    http,
+                    code: "invalid_mfa_code",
+                    detail: "Invalid code.",
+                    status: StatusCodes.Status400BadRequest);
             }
 
             await userManager.SetTwoFactorEnabledAsync(user, true);

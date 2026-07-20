@@ -37,10 +37,10 @@ public sealed class CreateLeaseValidator : AbstractValidator<CreateLease>
         RuleFor(x => x.Rent).MoneyAmount();
         RuleFor(x => x.DepositRequired).MoneyAmount();
         RuleFor(x => x.Status).Must(v => LeaseStatusConverter.DbValues.Contains(v))
-            .WithMessage($"status must be one of: {string.Join(", ", LeaseStatusConverter.DbValues)}.");
+            .WithMessage($"Status must be one of: {string.Join(", ", LeaseStatusConverter.DbValues)}.");
         RuleFor(x => x.EndDate).GreaterThanOrEqualTo(x => x.StartDate)
             .When(x => x.StartDate.HasValue && x.EndDate.HasValue)
-            .WithMessage("endDate must be on or after startDate.");
+            .WithMessage("End date must be on or after the start date.");
     }
 }
 
@@ -54,10 +54,10 @@ public sealed class UpdateLeaseValidator : AbstractValidator<UpdateLease>
         RuleFor(x => x.Rent).MoneyAmount();
         RuleFor(x => x.DepositRequired).MoneyAmount();
         RuleFor(x => x.Status).Must(v => LeaseStatusConverter.DbValues.Contains(v))
-            .WithMessage($"status must be one of: {string.Join(", ", LeaseStatusConverter.DbValues)}.");
+            .WithMessage($"Status must be one of: {string.Join(", ", LeaseStatusConverter.DbValues)}.");
         RuleFor(x => x.EndDate).GreaterThanOrEqualTo(x => x.StartDate)
             .When(x => x.StartDate.HasValue && x.EndDate.HasValue)
-            .WithMessage("endDate must be on or after startDate.");
+            .WithMessage("End date must be on or after the start date.");
     }
 }
 

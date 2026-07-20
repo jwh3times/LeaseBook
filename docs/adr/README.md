@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living decision index
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-07-09
+- **Last reviewed:** 2026-07-19
 
 An **Architecture Decision Record** captures a single significant or non-obvious engineering
 decision — the context that forced it, the choice made, and the consequences accepted — so it can be
@@ -49,6 +49,7 @@ form, write it, and add a row to the index below. When a decision is replaced, m
 | [022](ADR-022-e2e-in-ci-and-a11y-gate.md)                            | e2e in CI + automated accessibility gate                                     | Accepted                      | 2026-06-30 |
 | [023](ADR-023-visual-regression.md)                                  | Visual regression (CI-only Linux baselines)                                  | Accepted                      | 2026-07-01 |
 | [024](ADR-024-changelog-cut-policy-gate.md)                          | Enforce the changelog cut policy with a CI gate                              | Accepted                      | 2026-07-16 |
+| [025](ADR-025-error-contract-and-observability.md)                   | Error contract, correlation ids, and diagnostic logging                      | Accepted                      | 2026-07-19 |
 
 ## Status legend
 

@@ -18,7 +18,7 @@ public sealed class RecordPaymentValidator : AbstractValidator<RecordPayment>
         RuleFor(x => x.BankAccountId).NotEmpty();
         RuleFor(x => x.SourceRef).NotEmpty();
         RuleFor(x => x.Method).Must(LedgerPostingMaps.Methods.ContainsKey)
-            .WithMessage($"method must be one of: {string.Join(", ", LedgerPostingMaps.Methods.Keys)}.");
+            .WithMessage($"Method must be one of: {string.Join(", ", LedgerPostingMaps.Methods.Keys)}.");
         LedgerPostingMaps.RuleForAmount(this, x => x.Amount);
     }
 }

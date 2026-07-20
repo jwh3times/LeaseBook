@@ -244,6 +244,31 @@ public sealed class EntityImportTests(PostgresFixture fixture)
     }
 
     // -------------------------------------------------------------------------
+    // Task 13: a row that parses but fails command validation must surface the typed
+    // copy, not the raw FluentValidation exception text.
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task Handler_rejected_row_reports_the_typed_copy_not_the_raw_exception()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (_, client) = await SetupAsync("RowLeak", ct);
+
+        // A negative reserve parses as a valid decimal (so the CSV layer accepts the row) but fails
+        // CreateOwner's MoneyAmount() validator inside the command pipeline — the one reliable route
+        // into the catch block. Today the operator sees the raw FluentValidation text.
+        const string csv =
+            "Owner ID,Owner Name,Reserve\n" +
+            "O-1,Alice Adams,-50.00\n";
+
+        var result = await PostImportAsync<ImportBatchResult>(client, "owners",
+            new { csvContent = csv, filename = "owners.csv" }, ct);
+
+        var error = result.Errors.ShouldHaveSingleItem();
+        error.Reason.ShouldBe("This row could not be imported. Check the values and try again.");
+    }
+
+    // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
 

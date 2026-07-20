@@ -531,6 +531,11 @@ public sealed class BalanceImportTests(PostgresFixture fixture)
         response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
         var detail = await response.Content.ReadAsStringAsync(ct);
         detail.ShouldContain("empty_csv");
+
+        var problem = System.Text.Json.JsonSerializer.Deserialize<ProblemWithCode>(
+            detail, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))!;
+        problem.Code.ShouldBe("empty_csv");
+        problem.CorrelationId.ShouldNotBeNullOrWhiteSpace();
     }
 
     // -------------------------------------------------------------------------
@@ -699,4 +704,6 @@ public sealed class BalanceImportTests(PostgresFixture fixture)
     }
 
     private sealed record ClearingNet(decimal Net);
+
+    private sealed record ProblemWithCode(string Code, string? CorrelationId);
 }

@@ -1,4 +1,6 @@
 using LeaseBook.Modules.Accounting.Contracts;
+using LeaseBook.SharedKernel.Endpoints;
+using LeaseBook.Web.Observability;
 using Microsoft.AspNetCore.Diagnostics;
 
 namespace LeaseBook.Web.Endpoints;
@@ -9,7 +11,7 @@ namespace LeaseBook.Web.Endpoints;
 /// has no write endpoints, so this surfaces only through tests/seeder today — but the mapping is wired
 /// now so the M3 composer inherits it.
 /// </summary>
-public sealed class AccountingExceptionHandler : IExceptionHandler
+public sealed class AccountingExceptionHandler(ILogger<AccountingExceptionHandler> logger) : IExceptionHandler
 {
     public async ValueTask<bool> TryHandleAsync(
         HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
@@ -29,13 +31,21 @@ public sealed class AccountingExceptionHandler : IExceptionHandler
                                                 // reconciliation_unbalanced, reconciliation_state
         };
 
-        var extensions = new Dictionary<string, object?> { ["code"] = domain.Code };
+        var extensions = new Dictionary<string, object?>();
         if (domain is DuplicateSourceRefException duplicate)
         {
+            // Contractual, not a leak: LedgerComposer reads this to treat a double-submit as success.
             extensions["existingEntryId"] = duplicate.ExistingEntryId;
         }
 
-        await Results.Problem(detail: domain.Message, statusCode: status, title: domain.Code, extensions: extensions)
+        // Expected domain rejection: Warning, not Error. The typed properties carry the detail the
+        // user-facing message deliberately omits.
+        logger.LogWarning(
+            LogEvents.DomainRejection,
+            "Domain rejection {Code} mapped to {Status} for {ExceptionType}",
+            domain.Code, status, domain.GetType().Name);
+
+        await ProblemResults.Problem(httpContext, domain.Code, domain.Message, status, extensions)
             .ExecuteAsync(httpContext);
         return true;
     }

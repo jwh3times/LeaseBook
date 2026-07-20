@@ -62,18 +62,19 @@ public sealed class SettingsEndpoints : IEndpointModule
 
         group.MapPut("/banks/{id:guid}/active",
                 async Task<Results<Ok<BankAccountResponse>, NotFound, ProblemHttpResult>> (
-                    Guid id, SetBankActiveRequest body, ISender sender, CancellationToken ct) =>
+                    Guid id, SetBankActiveRequest body, ISender sender, HttpContext httpContext,
+                    CancellationToken ct) =>
                 {
                     var result = await sender.Send(new SetBankAccountActive(id, body.IsActive), ct);
                     return result.Outcome switch
                     {
                         SetActiveOutcome.Updated => TypedResults.Ok(result.Bank!),
                         SetActiveOutcome.NotFound => TypedResults.NotFound(),
-                        _ => TypedResults.Problem(
-                            title: "Bank account has uncleared items",
+                        _ => ProblemResults.TypedProblem(
+                            httpContext,
+                            code: "bank_account_has_uncleared",
                             detail: "Clear or reconcile outstanding items before deactivating.",
-                            statusCode: StatusCodes.Status409Conflict,
-                            extensions: new Dictionary<string, object?> { ["code"] = "bank_account_has_uncleared" }),
+                            status: StatusCodes.Status409Conflict),
                     };
                 })
             .RequireAuthorization("RequirePMAdmin")

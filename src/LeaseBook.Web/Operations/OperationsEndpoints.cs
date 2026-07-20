@@ -41,14 +41,16 @@ public sealed class OperationsEndpoints : IEndpointModule
         // GET /api/operations/runs/{type}/preview?year=&month=
         // Returns the SPA-shaped preview: rows with label/amount/status + exceptions list.
         group.MapGet("/runs/{type}/preview",
-                async (string type, int? year, int? month, RunEngine engine, CancellationToken ct) =>
+                async (string type, int? year, int? month, RunEngine engine, HttpContext httpContext,
+                    CancellationToken ct) =>
                 {
                     if (!TryParseRunType(type, out var runType))
                     {
-                        return Results.Problem(
-                            detail: $"Unknown run type '{type}'. Valid values: rent, latefee, disbursement.",
-                            statusCode: StatusCodes.Status400BadRequest,
-                            title: "unknown_run_type");
+                        return ProblemResults.Problem(
+                            httpContext,
+                            code: "unknown_run_type",
+                            detail: "That is not a run type this screen supports.",
+                            status: StatusCodes.Status400BadRequest);
                     }
 
                     var now = DateTime.UtcNow;
@@ -57,10 +59,11 @@ public sealed class OperationsEndpoints : IEndpointModule
 
                     if (actualMonth < 1 || actualMonth > 12 || actualYear < 2000 || actualYear > 2100)
                     {
-                        return Results.Problem(
+                        return ProblemResults.Problem(
+                            httpContext,
+                            code: "invalid_period",
                             detail: $"Invalid period: year={actualYear} month={actualMonth}. Year must be 2000–2100; month must be 1–12.",
-                            statusCode: StatusCodes.Status400BadRequest,
-                            title: "invalid_period");
+                            status: StatusCodes.Status400BadRequest);
                     }
 
                     var period = new RunPeriod(actualYear, actualMonth);
@@ -87,22 +90,25 @@ public sealed class OperationsEndpoints : IEndpointModule
         // POST /api/operations/runs/{type}/confirm
         // Body: { year, month, selectedTargetIds }
         group.MapPost("/runs/{type}/confirm",
-                async (string type, ConfirmRunRequest body, RunEngine engine, CancellationToken ct) =>
+                async (string type, ConfirmRunRequest body, RunEngine engine, HttpContext httpContext,
+                    CancellationToken ct) =>
                 {
                     if (!TryParseRunType(type, out var runType))
                     {
-                        return Results.Problem(
-                            detail: $"Unknown run type '{type}'. Valid values: rent, latefee, disbursement.",
-                            statusCode: StatusCodes.Status400BadRequest,
-                            title: "unknown_run_type");
+                        return ProblemResults.Problem(
+                            httpContext,
+                            code: "unknown_run_type",
+                            detail: "That is not a run type this screen supports.",
+                            status: StatusCodes.Status400BadRequest);
                     }
 
                     if (body.Month < 1 || body.Month > 12 || body.Year < 2000 || body.Year > 2100)
                     {
-                        return Results.Problem(
+                        return ProblemResults.Problem(
+                            httpContext,
+                            code: "invalid_period",
                             detail: $"Invalid period: year={body.Year} month={body.Month}. Year must be 2000–2100; month must be 1–12.",
-                            statusCode: StatusCodes.Status400BadRequest,
-                            title: "invalid_period");
+                            status: StatusCodes.Status400BadRequest);
                     }
 
                     var period = new RunPeriod(body.Year, body.Month);
@@ -142,7 +148,7 @@ public sealed class OperationsEndpoints : IEndpointModule
 
         // GET /api/operations/runs/{id} — single run header + its items.
         group.MapGet("/runs/{id:guid}",
-                async (Guid id, DbContext db, CancellationToken ct) =>
+                async (Guid id, DbContext db, HttpContext httpContext, CancellationToken ct) =>
                 {
                     var run = await db.Set<BulkRun>()
                         .Where(r => r.Id == id)
@@ -157,7 +163,11 @@ public sealed class OperationsEndpoints : IEndpointModule
 
                     if (run is null)
                     {
-                        return Results.NotFound(new { error = $"Run '{id}' not found." });
+                        return ProblemResults.Problem(
+                            httpContext,
+                            code: "run_not_found",
+                            detail: "That run was not found.",
+                            status: StatusCodes.Status404NotFound);
                     }
 
                     var items = await db.Set<BulkRunItem>()

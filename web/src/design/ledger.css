@@ -129,6 +129,19 @@
   color: var(--neg);
 }
 
+.pf-api-error {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--neg);
+}
+
+.pf-error-ref {
+  font-size: 11px;
+  user-select: all;
+}
+
 /* WP-06 modals (apply/void) + audit drawer body. */
 .pf-modal-body {
   padding: 16px 20px;

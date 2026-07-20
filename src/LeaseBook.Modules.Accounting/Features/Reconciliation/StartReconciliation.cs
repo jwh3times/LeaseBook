@@ -23,7 +23,7 @@ public sealed class StartReconciliationValidator : AbstractValidator<StartReconc
         RuleFor(x => x.Year).InclusiveBetween(2000, 2100);
         RuleFor(x => x.Month).InclusiveBetween(1, 12);
         RuleFor(x => x.StatementEndingBalance).Must(a => decimal.Round(a, 2) == a)
-            .WithMessage("statement ending balance must have at most 2 decimal places.");
+            .WithMessage("The statement ending balance must have at most 2 decimal places.");
     }
 }
 
@@ -43,7 +43,7 @@ internal sealed class StartReconciliationHandler(DbContext db) : ICommandHandler
         else if (recon.Status == ReconciliationStatus.Finalized)
         {
             throw new ReconciliationStateException(
-                $"The reconciliation for {command.Year}-{command.Month:D2} is finalized; unlock it to re-reconcile.");
+                ReconciliationStateProblem.PeriodFinalized, null, command.Year, command.Month);
         }
         else
         {

@@ -1,3 +1,4 @@
+using LeaseBook.SharedKernel.Endpoints;
 using Microsoft.AspNetCore.Antiforgery;
 
 namespace LeaseBook.Web.Auth;
@@ -23,9 +24,12 @@ public sealed class ApiAntiforgeryMiddleware(RequestDelegate next, IAntiforgery 
             }
             catch (AntiforgeryValidationException)
             {
-                await Results.Problem(
-                    statusCode: StatusCodes.Status400BadRequest,
-                    title: "Invalid or missing antiforgery token.").ExecuteAsync(context);
+                await ProblemResults.Problem(
+                        context,
+                        code: "antiforgery_rejected",
+                        detail: "Invalid or missing antiforgery token.",
+                        status: StatusCodes.Status400BadRequest)
+                    .ExecuteAsync(context);
                 return;
             }
         }

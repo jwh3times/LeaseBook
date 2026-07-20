@@ -24,7 +24,7 @@ public sealed class CreateBankAccountValidator : AbstractValidator<CreateBankAcc
         RuleFor(x => x.Institution).MaximumLength(120);
         RuleFor(x => x.Mask).MaximumLength(8);
         RuleFor(x => x.Purpose).Must(v => BankPurposeConverter.DbValues.Contains(v))
-            .WithMessage($"purpose must be one of: {string.Join(", ", BankPurposeConverter.DbValues)}.");
+            .WithMessage($"Purpose must be one of: {string.Join(", ", BankPurposeConverter.DbValues)}.");
     }
 }
 

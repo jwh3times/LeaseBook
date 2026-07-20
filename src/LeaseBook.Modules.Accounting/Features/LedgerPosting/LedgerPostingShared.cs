@@ -50,7 +50,7 @@ internal static class LedgerPostingMaps
     public static void RuleForAmount<T>(AbstractValidator<T> validator, Expression<Func<T, decimal>> amount)
         where T : class =>
         validator.RuleFor(amount).Must(a => a > 0m && decimal.Round(a, 2) == a)
-            .WithMessage("amount must be a positive value with at most 2 decimal places.");
+            .WithMessage("Amount must be a positive value with at most 2 decimal places.");
 
     /// <summary>
     /// Resolve the tenant's posting dimensions from the active lease, or reject (no active lease ⇒ 400

@@ -361,4 +361,49 @@ describe('VerificationStep sign-off button', () => {
 
     expect(await screen.findByText(/migration verified and signed off/i)).toBeInTheDocument();
   });
+
+  it('renders its own copy for not_tied rather than the raw server message', async () => {
+    server.use(
+      http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 })),
+      http.post('/api/onboarding/verification', () => HttpResponse.json(TIED_REPORT)),
+      http.post('/api/onboarding/verification/:id/signoff', () =>
+        HttpResponse.json(
+          {
+            code: 'not_tied',
+            title: 'not_tied',
+            detail: 'Verification 0193ab7c-dead-beef no longer ties.',
+            correlationId: 'abc123def456',
+          },
+          { status: 409 },
+        ),
+      ),
+      http.get('/api/onboarding/status', () =>
+        HttpResponse.json({
+          banksConfigured: true,
+          entitiesImported: true,
+          balancesImported: true,
+          verified: true,
+          signedOff: true,
+          hasJournalData: true,
+        }),
+      ),
+    );
+
+    render(withRouter(<VerificationStep />));
+
+    await userEvent.type(screen.getByLabelText('Owner equity total from AppFolio'), '5000');
+    await userEvent.type(screen.getByLabelText('Deposit liability total from AppFolio'), '0');
+    await userEvent.click(screen.getByRole('button', { name: /run verification/i }));
+
+    const signoffBtn = await screen.findByRole('button', { name: /sign off migration/i });
+    await userEvent.click(signoffBtn);
+
+    // The component's own copy (VerificationStep.tsx:96-100) — NOT the server detail. Note the
+    // component's copy says "Correct and re-import before signing off." — asserting the *server's*
+    // rewritten text here would invert the test's purpose.
+    expect(
+      await screen.findByText(/correct and re-import before signing off/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/0193ab7c-dead-beef/)).not.toBeInTheDocument();
+  });
 });

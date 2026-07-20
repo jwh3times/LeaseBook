@@ -1,6 +1,7 @@
 import { useMutation } from '@tanstack/react-query';
 import { useRef, useState, type KeyboardEvent } from 'react';
 import { Button, Input, Select } from '@/design';
+import { ApiErrorNotice } from '@/components/ApiErrorNotice';
 import { Modal } from '@/components/Modal';
 import { useBankAccounts } from '@/lib/settings';
 import {
@@ -34,7 +35,7 @@ export function ApplyModal({ tenantId, initialKind, onClose, onApplied }: ApplyM
   const [amount, setAmount] = useState('');
   const [target, setTarget] = useState('against-charges');
   const [reason, setReason] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<LedgerPostError | null>(null);
   const sourceRef = useRef(newSourceRef());
 
   const banks = useBankAccounts(true);
@@ -70,10 +71,10 @@ export function ApplyModal({ tenantId, initialKind, onClose, onApplied }: ApplyM
         onApplied(err.existingEntryId);
       } else if (err.code === 'account_period_locked') {
         // The trust bank's month is reconciled (M4 lock): keep the modal open with the move-the-date hint.
-        setError(LOCKED_PERIOD_MESSAGE);
+        setError({ ...err, message: LOCKED_PERIOD_MESSAGE });
       } else {
         // insufficient_receivable / insufficient_liability messages already name the limit hit.
-        setError(err.message);
+        setError(err);
       }
     },
   });
@@ -81,11 +82,11 @@ export function ApplyModal({ tenantId, initialKind, onClose, onApplied }: ApplyM
   const submit = () => {
     const value = Number.parseFloat(amount);
     if (!(value > 0)) {
-      setError('Enter an amount greater than zero.');
+      setError({ message: 'Enter an amount greater than zero.' });
       return;
     }
     if (!depositBank || !operatingBank) {
-      setError('No trust bank is configured for this org.');
+      setError({ message: 'No trust bank is configured for this org.' });
       return;
     }
     setError(null);
@@ -172,11 +173,7 @@ export function ApplyModal({ tenantId, initialKind, onClose, onApplied }: ApplyM
           />
         </label>
 
-        {error && (
-          <span className="pf-composer-error" role="alert">
-            {error}
-          </span>
-        )}
+        <ApiErrorNotice error={error} />
       </div>
     </Modal>
   );

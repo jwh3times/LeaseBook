@@ -1,6 +1,14 @@
 import { useState } from 'react';
 import { Button, Card, CardHeader, Icon, Money } from '@/design';
-import { useSignoff, useVerify, type VarianceLine, type VerificationReport } from './onboarding';
+import { ApiErrorNotice } from '@/components/ApiErrorNotice';
+import { asApiError } from '@/lib/apiError';
+import {
+  type OnboardingError,
+  useSignoff,
+  useVerify,
+  type VarianceLine,
+  type VerificationReport,
+} from './onboarding';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -52,7 +60,7 @@ export function VerificationStep({
   ]);
   const [report, setReport] = useState<VerificationReport | null>(initialReport ?? null);
   const [reportId, setReportId] = useState<string | null>(initialId ?? null);
-  const [signoffError, setSignoffError] = useState<string | null>(null);
+  const [signoffError, setSignoffError] = useState<OnboardingError | null>(null);
   const [signedOff, setSignedOff] = useState(false);
 
   const verify = useVerify();
@@ -91,15 +99,16 @@ export function VerificationStep({
       await signoff.mutateAsync({ id: reportId });
       setSignedOff(true);
     } catch (err) {
-      const e = err as { code?: string; message?: string };
+      const e = asApiError(err, 'Sign-off failed.');
       if (e.code === 'not_tied') {
-        setSignoffError(
-          `Import doesn't tie — variance is ${
+        setSignoffError({
+          ...e,
+          message: `Import doesn't tie — variance is ${
             report ? num(report.varianceTotal).toFixed(2) : 'unknown'
           }. Correct and re-import before signing off.`,
-        );
+        });
       } else {
-        setSignoffError(e.message ?? 'Sign-off failed.');
+        setSignoffError(e);
       }
     }
   }
@@ -218,12 +227,7 @@ export function VerificationStep({
         </Button>
       </div>
 
-      {verify.isError && (
-        <div className="ob-error-banner" role="alert">
-          <Icon name="alert" size={16} />
-          <span>{(verify.error as { message?: string })?.message ?? 'Verification failed.'}</span>
-        </div>
-      )}
+      {verify.isError && <ApiErrorNotice error={verify.error} fallback="Verification failed." />}
 
       {report && (
         <div className="ob-verification-report">
@@ -273,12 +277,7 @@ export function VerificationStep({
             </div>
           )}
 
-          {signoffError && (
-            <div className="ob-error-banner" role="alert">
-              <Icon name="alert" size={16} />
-              <span>{signoffError}</span>
-            </div>
-          )}
+          <ApiErrorNotice error={signoffError} />
 
           <div className="ob-verify-actions">
             <Button

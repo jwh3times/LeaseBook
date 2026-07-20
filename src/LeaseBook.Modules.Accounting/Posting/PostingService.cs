@@ -32,7 +32,7 @@ internal sealed class PostingService(
 
         if (request.Lines.Count == 0)
         {
-            throw new InvalidLineException("An entry must have at least one line.");
+            throw new InvalidLineException(InvalidLineReason.NoLines);
         }
 
         // (b) resolve every referenced account through the org-filtered context — a cross-org code is
@@ -55,23 +55,21 @@ internal sealed class PostingService(
             var hasCredit = line.Credit is not null;
             if (hasDebit == hasCredit)
             {
-                throw new InvalidLineException(
-                    $"Line on '{line.AccountCode}' must have exactly one of debit/credit set.");
+                throw new InvalidLineException(InvalidLineReason.DebitCreditAmbiguous, line.AccountCode);
             }
 
             var amount = (line.Debit ?? line.Credit)!.Value;
             if (!amount.IsPositive)
             {
                 throw new InvalidLineException(
-                    $"Line on '{line.AccountCode}' must have a strictly positive amount, was {amount}.");
+                    InvalidLineReason.NonPositiveAmount, line.AccountCode, amount.Amount);
             }
 
             // (e) denormalize account_class from the resolved account — never trust the caller (M-E4).
             // (f) a pm_income line may not carry an owner dimension (the structural isolation).
             if (account.Class == AccountClass.PmIncome && line.OwnerId is not null)
             {
-                throw new PmIncomeOwnerDimException(
-                    "A pm_income line may not carry an owner_id — PM income is isolated from owner income.");
+                throw new PmIncomeOwnerDimException();
             }
 
             lines.Add(JournalLine.Create(
@@ -97,8 +95,7 @@ internal sealed class PostingService(
 
             if (debits != credits)
             {
-                throw new UnbalancedEntryException(
-                    $"Entry does not balance in {basis} basis: debits {debits:0.00} != credits {credits:0.00}.");
+                throw new UnbalancedEntryException(basis.ToString(), debits, credits);
             }
         }
 
@@ -181,7 +178,7 @@ internal sealed class PostingService(
                 .FirstOrDefaultAsync(e => e.ReversesEntryId == reversed, ct);
             if (existing is not null)
             {
-                throw new AlreadyReversedException($"Entry {reversed} has already been reversed.");
+                throw new AlreadyReversedException(reversed, AlreadyReversedReason.AlreadyReversed);
             }
         }
     }

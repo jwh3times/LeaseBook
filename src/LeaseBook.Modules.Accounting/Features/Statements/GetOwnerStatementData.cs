@@ -16,7 +16,7 @@ public sealed class GetOwnerStatementDataValidator : AbstractValidator<GetOwnerS
         RuleFor(q => q.OwnerIds).NotEmpty();
         RuleFor(q => q.Year).InclusiveBetween(2000, 2100);
         RuleFor(q => q.Month).InclusiveBetween(1, 12);
-        RuleFor(q => q.Basis).Must(b => b is "cash" or "accrual").WithMessage("basis must be 'cash' or 'accrual'.");
+        RuleFor(q => q.Basis).Must(b => b is "cash" or "accrual").WithMessage("Basis must be 'cash' or 'accrual'.");
     }
 }
 

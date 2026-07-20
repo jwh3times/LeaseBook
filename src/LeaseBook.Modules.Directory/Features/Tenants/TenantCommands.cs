@@ -21,7 +21,7 @@ public sealed class CreateTenantValidator : AbstractValidator<CreateTenant>
         RuleFor(x => x.DisplayName).NotEmpty().MaximumLength(200);
         RuleFor(x => x.ContactEmail).EmailAddress().When(x => !string.IsNullOrWhiteSpace(x.ContactEmail));
         RuleFor(x => x.Status).Must(v => TenantStatusConverter.DbValues.Contains(v))
-            .WithMessage($"status must be one of: {string.Join(", ", TenantStatusConverter.DbValues)}.");
+            .WithMessage($"Status must be one of: {string.Join(", ", TenantStatusConverter.DbValues)}.");
     }
 }
 
@@ -33,7 +33,7 @@ public sealed class UpdateTenantValidator : AbstractValidator<UpdateTenant>
         RuleFor(x => x.DisplayName).NotEmpty().MaximumLength(200);
         RuleFor(x => x.ContactEmail).EmailAddress().When(x => !string.IsNullOrWhiteSpace(x.ContactEmail));
         RuleFor(x => x.Status).Must(v => TenantStatusConverter.DbValues.Contains(v))
-            .WithMessage($"status must be one of: {string.Join(", ", TenantStatusConverter.DbValues)}.");
+            .WithMessage($"Status must be one of: {string.Join(", ", TenantStatusConverter.DbValues)}.");
     }
 }
 

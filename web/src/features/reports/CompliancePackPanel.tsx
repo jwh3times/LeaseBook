@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { Badge, Button, Card, CardHeader, EmptyState, Icon, Input } from '@/design';
+import { ApiErrorNotice } from '@/components/ApiErrorNotice';
+import { asApiError } from '@/lib/apiError';
 import { useBankBalances } from '@/features/banking/banking';
 import { SelectChip, type SelectChipOption } from './chips';
-import { downloadCompliancePack, type ReportDescriptor } from './reports';
+import { downloadCompliancePack, type ReportDescriptor, type ReportsError } from './reports';
 
 // Sensible defaults: the current year to date. Every month in the range must be reconciliation-locked,
 // so the operator adjusts these to a closed period before downloading.
@@ -30,7 +32,7 @@ export function CompliancePackPanel({ report, isAdmin }: CompliancePackPanelProp
   const [from, setFrom] = useState(currentYearStart);
   const [to, setTo] = useState(today);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ReportsError | null>(null);
   const [done, setDone] = useState(false);
 
   const banksQuery = useBankBalances({ enabled: isAdmin });
@@ -54,11 +56,7 @@ export function CompliancePackPanel({ report, isAdmin }: CompliancePackPanelProp
       await downloadCompliancePack(bankAccountId, from, to);
       setDone(true);
     } catch (e) {
-      const message =
-        e && typeof e === 'object' && 'message' in e
-          ? String((e as { message: unknown }).message)
-          : 'Download failed. Please retry.';
-      setError(message);
+      setError(asApiError(e, 'Download failed. Please retry.'));
     } finally {
       setBusy(false);
     }
@@ -153,15 +151,7 @@ export function CompliancePackPanel({ report, isAdmin }: CompliancePackPanelProp
         </p>
       )}
 
-      {error && (
-        <p
-          className="pf-composer-error row gap6"
-          role="alert"
-          style={{ padding: '8px var(--card-pad)' }}
-        >
-          <Icon name="alert" size={14} /> {error}
-        </p>
-      )}
+      <ApiErrorNotice error={error} style={{ padding: '8px var(--card-pad)' }} />
 
       {done && (
         <p className="pf-pack-ok" role="status" style={{ padding: '8px var(--card-pad)' }}>
