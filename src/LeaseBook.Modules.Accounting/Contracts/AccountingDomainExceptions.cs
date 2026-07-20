@@ -73,23 +73,86 @@ public sealed class PeriodClosedException(int year, int month)
     public int Month { get; } = month;
 }
 
+public enum LiabilityKind
+{
+    Deposit,
+    Prepayment,
+    FeeSweep,
+    Refund,
+}
+
 /// <summary>An application would over-draw a held liability (deposit/prepayment) — guarded events (409).</summary>
-public sealed class InsufficientLiabilityException(string message)
-    : AccountingDomainException("insufficient_liability", message);
+public sealed class InsufficientLiabilityException(
+    LiabilityKind kind, decimal requested, decimal held, Guid? tenantId = null)
+    : AccountingDomainException("insufficient_liability", Describe(kind, requested, held))
+{
+    public LiabilityKind Kind { get; } = kind;
+
+    public decimal Requested { get; } = requested;
+
+    public decimal Held { get; } = held;
+
+    public Guid? TenantId { get; } = tenantId;
+
+    private static string Describe(LiabilityKind kind, decimal requested, decimal held) => kind switch
+    {
+        LiabilityKind.Deposit =>
+            $"Deposit application of {requested:0.00} exceeds the {held:0.00} held for this tenant.",
+        LiabilityKind.Prepayment =>
+            $"Prepayment application of {requested:0.00} exceeds the {held:0.00} held for this tenant.",
+        LiabilityKind.FeeSweep =>
+            $"Fee sweep of {requested:0.00} exceeds the {held:0.00} held in the operating trust account.",
+        _ => $"Refund of {requested:0.00} exceeds the {held:0.00} held for this tenant.",
+    };
+}
+
+public enum ReceivableSource
+{
+    Deposit,
+    Prepayment,
+}
 
 /// <summary>
-/// A deposit-applied-against-charges or a prepayment application would exceed the tenant's open
-/// receivable (409, ADR-011 / P51). Unlike <c>PaymentReceived</c> (which auto-splits the excess to a
-/// prepayment), an application has no excess path, so over-applying would silently drive the receivable
-/// negative — the engine rejects instead and the composer asks the user to lower the amount. A deposit
-/// applied <c>ToOwnerIncome</c> (damages) is deliberately <b>not</b> guarded.
+/// An application would exceed the tenant's open receivable (409, ADR-011 / P51). Unlike
+/// <c>PaymentReceived</c> (which auto-splits the excess to a prepayment), an application has no
+/// excess path, so over-applying would silently drive the receivable negative — the engine rejects
+/// instead and the composer asks the user to lower the amount.
 /// </summary>
-public sealed class InsufficientReceivableException(string message)
-    : AccountingDomainException("insufficient_receivable", message);
+public sealed class InsufficientReceivableException(
+    ReceivableSource source, decimal requested, decimal owed, Guid? tenantId = null)
+    : AccountingDomainException("insufficient_receivable", Describe(source, requested, owed))
+{
+    // `new` is required: System.Exception already declares a virtual string? Source — this is a
+    // distinct, differently-typed diagnostic property that intentionally shadows it (CS0114).
+    public new ReceivableSource Source { get; } = source;
+
+    public decimal Requested { get; } = requested;
+
+    public decimal Owed { get; } = owed;
+
+    public Guid? TenantId { get; } = tenantId;
+
+    private static string Describe(ReceivableSource source, decimal requested, decimal owed) =>
+        source == ReceivableSource.Deposit
+            ? $"Deposit application of {requested:0.00} exceeds the {owed:0.00} currently owed by this tenant."
+            : $"Prepayment application of {requested:0.00} exceeds the {owed:0.00} currently owed by this tenant.";
+}
 
 /// <summary>A disbursement would take owner equity below its reserve floor (409).</summary>
-public sealed class ReserveFloorException(string message)
-    : AccountingDomainException("reserve_floor", message);
+public sealed class ReserveFloorException(decimal amount, decimal equity, decimal reserve, Guid ownerId)
+    : AccountingDomainException(
+        "reserve_floor",
+        $"This disbursement of {amount:0.00} would take the owner's equity from {equity:0.00} " +
+        $"below their {reserve:0.00} reserve floor.")
+{
+    public decimal Amount { get; } = amount;
+
+    public decimal Equity { get; } = equity;
+
+    public decimal Reserve { get; } = reserve;
+
+    public Guid OwnerId { get; } = ownerId;
+}
 
 public enum AlreadyReversedReason
 {

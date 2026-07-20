@@ -170,8 +170,7 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
         var held = await _balances.DepositsHeldAsync(e.TenantId, ct);
         if (e.Amount.Amount > held)
         {
-            throw new InsufficientLiabilityException(
-                $"Deposit application {e.Amount} exceeds the {held:0.00} held for tenant {e.TenantId}.");
+            throw new InsufficientLiabilityException(LiabilityKind.Deposit, e.Amount.Amount, held, e.TenantId);
         }
 
         // Applied against charges has no excess path (unlike PaymentReceived's auto-split), so it may
@@ -183,7 +182,7 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
             if (e.Amount.Amount > owed)
             {
                 throw new InsufficientReceivableException(
-                    $"Deposit application {e.Amount} exceeds the {owed:0.00} owed by tenant {e.TenantId}.");
+                    ReceivableSource.Deposit, e.Amount.Amount, owed, e.TenantId);
             }
         }
 
@@ -224,8 +223,7 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
         var held = await _balances.PrepaymentsHeldAsync(e.TenantId, ct);
         if (e.Amount.Amount > held)
         {
-            throw new InsufficientLiabilityException(
-                $"Prepayment application {e.Amount} exceeds the {held:0.00} held for tenant {e.TenantId}.");
+            throw new InsufficientLiabilityException(LiabilityKind.Prepayment, e.Amount.Amount, held, e.TenantId);
         }
 
         // A prepayment clears charges and likewise has no excess path — it may not exceed the open
@@ -234,7 +232,7 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
         if (e.Amount.Amount > owed)
         {
             throw new InsufficientReceivableException(
-                $"Prepayment application {e.Amount} exceeds the {owed:0.00} owed by tenant {e.TenantId}.");
+                ReceivableSource.Prepayment, e.Amount.Amount, owed, e.TenantId);
         }
 
         // No bank movement — both positions sit in the same operating trust.
@@ -267,8 +265,7 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
         var held = await _balances.HeldFeesAsync(e.OperatingBankId, ct);
         if (e.Amount.Amount > held)
         {
-            throw new InsufficientLiabilityException(
-                $"Fee sweep {e.Amount} exceeds the {held:0.00} held in the operating trust bank.");
+            throw new InsufficientLiabilityException(LiabilityKind.FeeSweep, e.Amount.Amount, held);
         }
 
         // Cash moves trust → PM operating; the income attribution moves with it; net income unchanged.
@@ -333,8 +330,7 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
 
         if (e.Amount.Amount > held)
         {
-            throw new InsufficientLiabilityException(
-                $"Refund {e.Amount} exceeds the {held:0.00} held ({subtype}) for tenant {e.TenantId}.");
+            throw new InsufficientLiabilityException(LiabilityKind.Refund, e.Amount.Amount, held, e.TenantId);
         }
 
         return await posting.PostAsync(new PostEntryRequest(e.Date, "RefundIssued", subtype, e.Description, e.SourceRef,
@@ -404,9 +400,7 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
         var equity = await _balances.OwnerEquityCashAsync(ownerId, ct);
         if (equity - amount.Amount < reserve.Amount)
         {
-            throw new ReserveFloorException(
-                $"Disbursement {amount} would take owner {ownerId} equity from {equity:0.00} below the " +
-                $"reserve floor {reserve}.");
+            throw new ReserveFloorException(amount.Amount, equity, reserve.Amount, ownerId);
         }
     }
 
