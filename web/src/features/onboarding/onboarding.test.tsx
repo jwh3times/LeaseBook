@@ -401,7 +401,9 @@ describe('VerificationStep sign-off button', () => {
     // The component's own copy (VerificationStep.tsx:96-100) — NOT the server detail. Note the
     // component's copy says "Correct and re-import before signing off." — asserting the *server's*
     // rewritten text here would invert the test's purpose.
-    expect(await screen.findByText(/correct and re-import before signing off/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/correct and re-import before signing off/i),
+    ).toBeInTheDocument();
     expect(screen.queryByText(/0193ab7c-dead-beef/)).not.toBeInTheDocument();
   });
 });

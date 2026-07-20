@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { Badge, Button, Card, CardHeader, EmptyState, Icon } from '@/design';
+import { ApiErrorNotice } from '@/components/ApiErrorNotice';
+import { asApiError } from '@/lib/apiError';
 import { useOwners, useProperties } from '@/lib/directory';
 import { useBankBalances } from '@/features/banking/banking';
 import { useSession } from '@/features/auth/useSession';
@@ -7,6 +9,7 @@ import {
   downloadReportCsv,
   type ReportDescriptor,
   type ReportFilters,
+  type ReportsError,
   useReportCatalog,
   useReportPreview,
 } from './reports';
@@ -156,7 +159,7 @@ function BuilderPanel({ report }: BuilderPanelProps) {
   const [propertyId, setPropertyId] = useState<string | null>(null);
   const [ownerId, setOwnerId] = useState<string | null>(null);
   const [bankAccountId, setBankAccountId] = useState<string | null>(null);
-  const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [downloadError, setDownloadError] = useState<ReportsError | null>(null);
   const [periodOpen, setPeriodOpen] = useState(false);
 
   const af = (report.acceptedFilters as string[] | undefined) ?? [];
@@ -215,7 +218,7 @@ function BuilderPanel({ report }: BuilderPanelProps) {
     try {
       await downloadReportCsv(report.id, filters);
     } catch (e) {
-      setDownloadError(e instanceof Error ? e.message : 'Download failed');
+      setDownloadError(asApiError(e, 'Download failed'));
     }
   };
 
@@ -348,11 +351,7 @@ function BuilderPanel({ report }: BuilderPanelProps) {
       {/* Basis toggle (for applicable reports) */}
       {showBasisToggle && <BasisToggle basis={basis} onChange={setBasis} />}
 
-      {downloadError && (
-        <p className="pf-composer-error" role="alert" style={{ padding: '8px var(--card-pad)' }}>
-          {downloadError}
-        </p>
-      )}
+      <ApiErrorNotice error={downloadError} style={{ padding: '8px var(--card-pad)' }} />
 
       {/* Preview */}
       <div className="pf-builder-preview">

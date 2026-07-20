@@ -5,12 +5,13 @@
  */
 import { useState } from 'react';
 import { Badge, Button, Card, CardHeader, EmptyState, Money } from '@/design';
+import { ApiErrorNotice } from '@/components/ApiErrorNotice';
 import { trackInteraction } from '@/lib/telemetry';
 import { PeriodPicker } from './PeriodPicker';
 import { currentPeriod } from './periodUtils';
 import { RunResultPanel, excludedLabel } from './RunPreviewGrid';
 import { useConfirmRun, useRunPreview } from './useRuns';
-import type { PreviewRowSpa, RunResultSpaResponse } from './useRuns';
+import type { PreviewRowSpa, RunError, RunResultSpaResponse } from './useRuns';
 
 /** Disburse detail keys from the strategy: equity / fee / netBeforeReserve / reserve. */
 function DisbursementDetail({ row }: { row: PreviewRowSpa }) {
@@ -31,7 +32,7 @@ export function DisbursementRunScreen() {
   const [period, setPeriod] = useState(currentPeriod);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [result, setResult] = useState<RunResultSpaResponse | null>(null);
-  const [confirmError, setConfirmError] = useState<string | null>(null);
+  const [confirmError, setConfirmError] = useState<RunError | null>(null);
 
   const preview = useRunPreview('disbursement', period.year, period.month);
   const confirm = useConfirmRun('disbursement');
@@ -72,7 +73,7 @@ export function DisbursementRunScreen() {
           setResult(data);
           setConfirmError(null);
         },
-        onError: (err) => setConfirmError(err.message),
+        onError: (err) => setConfirmError(err),
       },
     );
   };
@@ -222,11 +223,7 @@ export function DisbursementRunScreen() {
               </div>
             )}
 
-            {confirmError && (
-              <p className="pf-composer-error" role="alert" style={{ marginTop: 8 }}>
-                {confirmError}
-              </p>
-            )}
+            <ApiErrorNotice error={confirmError} style={{ marginTop: 8 }} />
 
             <div className="row gap10" style={{ marginTop: 16 }}>
               <Button

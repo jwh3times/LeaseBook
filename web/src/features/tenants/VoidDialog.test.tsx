@@ -29,7 +29,14 @@ describe('VoidDialog', () => {
     server.use(
       http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 })),
       http.post('/api/accounting/entries/:entryId/void', () =>
-        HttpResponse.json({ code: 'account_period_locked', detail: 'locked' }, { status: 409 }),
+        HttpResponse.json(
+          {
+            code: 'account_period_locked',
+            detail:
+              'This bank account is reconciled and locked for 2026-02; post into the open month.',
+          },
+          { status: 409 },
+        ),
       ),
     );
     const { onVoided } = renderDialog();

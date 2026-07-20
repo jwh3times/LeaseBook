@@ -1,6 +1,8 @@
 import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Avatar, Button, Card, Icon, Money } from '@/design';
+import { ApiErrorNotice } from '@/components/ApiErrorNotice';
+import { asApiError } from '@/lib/apiError';
 import {
   deliverStatement,
   downloadStatement,
@@ -225,8 +227,8 @@ export function OwnerStatementView({
   const [deliverStatus, setDeliverStatus] = useState<'idle' | 'pending' | 'queued' | 'error'>(
     'idle',
   );
-  const [deliverError, setDeliverError] = useState<string | null>(null);
-  const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [deliverError, setDeliverError] = useState<ReportsError | null>(null);
+  const [downloadError, setDownloadError] = useState<ReportsError | null>(null);
 
   const beginning = num(statement.beginning);
   const ending = num(statement.ending);
@@ -249,7 +251,7 @@ export function OwnerStatementView({
     onSuccess: () => setDeliverStatus('queued'),
     onError: (err) => {
       setDeliverStatus('error');
-      setDeliverError(err.message);
+      setDeliverError(err);
     },
   });
 
@@ -258,7 +260,7 @@ export function OwnerStatementView({
     try {
       await downloadStatement(ownerId, filters, 'pdf');
     } catch (e) {
-      setDownloadError(e instanceof Error ? e.message : 'Download failed');
+      setDownloadError(asApiError(e, 'Download failed'));
     }
   };
 
@@ -267,7 +269,7 @@ export function OwnerStatementView({
     try {
       await downloadStatement(ownerId, filters, 'csv');
     } catch (e) {
-      setDownloadError(e instanceof Error ? e.message : 'Download failed');
+      setDownloadError(asApiError(e, 'Download failed'));
     }
   };
 
@@ -293,11 +295,7 @@ export function OwnerStatementView({
         </div>
       </div>
 
-      {downloadError && (
-        <p className="pf-composer-error" role="alert" style={{ marginBottom: 'var(--gap)' }}>
-          {downloadError}
-        </p>
-      )}
+      <ApiErrorNotice error={downloadError} style={{ marginBottom: 'var(--gap)' }} />
 
       <div className="pf-stmt-layout">
         {/* Statement document */}
@@ -409,11 +407,7 @@ export function OwnerStatementView({
                     <Icon name="check" size={13} /> Queued for delivery
                   </span>
                 )}
-                {deliverStatus === 'error' && deliverError && (
-                  <span className="pf-deliver-status error" role="alert">
-                    <Icon name="alert" size={13} /> {deliverError}
-                  </span>
-                )}
+                <ApiErrorNotice error={deliverError} className="pf-deliver-status error" />
               </div>
             </div>
           </Card>

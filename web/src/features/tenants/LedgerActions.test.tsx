@@ -78,7 +78,10 @@ describe('VoidDialog', () => {
     server.use(
       csrf(),
       http.post('/api/accounting/entries/:entryId/void', () =>
-        HttpResponse.json({ code: 'already_reversed', detail: 'x' }, { status: 409 }),
+        HttpResponse.json(
+          { code: 'already_reversed', detail: 'This entry has already been voided.' },
+          { status: 409 },
+        ),
       ),
     );
     renderWith(<VoidDialog entryId="e1" onClose={vi.fn()} onVoided={vi.fn()} />);
@@ -135,7 +138,8 @@ describe('ApplyModal', () => {
         HttpResponse.json(
           {
             code: 'insufficient_receivable',
-            detail: 'Deposit application 1200.00 exceeds the 1000.00 owed.',
+            detail:
+              'Deposit application of 1200.00 exceeds the 1000.00 currently owed by this tenant.',
           },
           { status: 409 },
         ),
@@ -150,7 +154,9 @@ describe('ApplyModal', () => {
     await userEvent.type(screen.getByLabelText('Amount'), '1200');
     await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(/exceeds the 1000.00 owed/i);
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      /exceeds the 1000.00 currently owed/i,
+    );
     expect(onApplied).not.toHaveBeenCalled();
     expect(screen.getByLabelText('Amount')).toBeInTheDocument(); // still open
   });

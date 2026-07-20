@@ -1,6 +1,7 @@
 import { useMutation } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { Button, Icon, Input, Select } from '@/design';
+import { ApiErrorNotice } from '@/components/ApiErrorNotice';
 import { useBankAccounts } from '@/lib/settings';
 import { trackInteraction } from '@/lib/telemetry';
 import {
@@ -43,7 +44,7 @@ export function LedgerComposer({ tenantId, onPosted, initialMode }: LedgerCompos
   const [category, setCategory] = useState<string>('Rent');
   const [date, setDate] = useState(todayIso);
   const [bankId, setBankId] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<LedgerPostError | null>(null);
 
   const sourceRef = useRef('');
   const interactions = useRef(1);
@@ -90,7 +91,9 @@ export function LedgerComposer({ tenantId, onPosted, initialMode }: LedgerCompos
         return;
       }
       // The bank's month is reconciled (M4 lock): keep the composer open with the move-the-date hint.
-      setError(post.code === 'account_period_locked' ? LOCKED_PERIOD_MESSAGE : post.message);
+      setError(
+        post.code === 'account_period_locked' ? { ...post, message: LOCKED_PERIOD_MESSAGE } : post,
+      );
     },
   });
 
@@ -109,11 +112,11 @@ export function LedgerComposer({ tenantId, onPosted, initialMode }: LedgerCompos
     setError(null);
     const value = Number.parseFloat(amount);
     if (!(value > 0)) {
-      setError('Enter an amount greater than zero.');
+      setError({ message: 'Enter an amount greater than zero.' });
       return;
     }
     if (needsBank && !effectiveBankId) {
-      setError('Select a bank account.');
+      setError({ message: 'Select a bank account.' });
       return;
     }
     mutation.mutate();
@@ -242,9 +245,7 @@ export function LedgerComposer({ tenantId, onPosted, initialMode }: LedgerCompos
           </div>
           <div className="pf-composer-foot">
             {error ? (
-              <span className="pf-composer-error" role="alert">
-                {error}
-              </span>
+              <ApiErrorNotice error={error} />
             ) : (
               <span className="t3 fs12">
                 Posts to the ledger and trust bank instantly — no page change.

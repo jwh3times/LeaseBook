@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { Button, Card, EmptyState, formatMoneyK, Icon, Money, Select } from '@/design';
+import { ApiErrorNotice } from '@/components/ApiErrorNotice';
 import { num, useProperties } from '@/lib/directory';
 import { trackInteraction } from '@/lib/telemetry';
 import { ImportWizard } from './ImportWizard';
@@ -31,7 +32,7 @@ export function BankingPage() {
   const [reconciling, setReconciling] = useState(false);
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [statementBalance, setStatementBalance] = useState('');
-  const [reconcileError, setReconcileError] = useState<string | null>(null);
+  const [reconcileError, setReconcileError] = useState<BankingError | null>(null);
   const [importing, setImporting] = useState(false);
 
   const [search, setSearch] = useState('');
@@ -138,7 +139,7 @@ export function BankingPage() {
       refreshAccount();
       exitReconcile();
     },
-    onError: (err) => setReconcileError(err.message),
+    onError: (err) => setReconcileError(err),
   });
 
   const inView = display.reduce((sum, r) => sum + (r.deposit != null ? rowAmount(r) : 0), 0);
@@ -275,11 +276,7 @@ export function BankingPage() {
             onFinalize={() => finalize.mutate()}
             finalizing={finalize.isPending}
           />
-          {reconcileError && (
-            <p className="pf-composer-error" role="alert" style={{ marginBottom: 'var(--gap)' }}>
-              {reconcileError}
-            </p>
-          )}
+          <ApiErrorNotice error={reconcileError} style={{ marginBottom: 'var(--gap)' }} />
         </>
       )}
 

@@ -1,6 +1,7 @@
 import { useMutation } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { Badge, type BadgeTone, Button, Icon, Money, Select } from '@/design';
+import { ApiErrorNotice } from '@/components/ApiErrorNotice';
 import { Modal } from '@/components/Modal';
 import {
   type BankingError,
@@ -58,7 +59,7 @@ export function ImportWizard({ bankAccountId, onClose, onConfirmed }: ImportWiza
   const [importId, setImportId] = useState('');
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [preview, setPreview] = useState<MatchPreviewResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<BankingError | null>(null);
 
   const savedMappings = useColumnMappings(bankAccountId);
 
@@ -100,13 +101,13 @@ export function ImportWizard({ bankAccountId, onClose, onConfirmed }: ImportWiza
       setPreview(await fetchMatchPreview(result.importId));
       setStep('preview');
     },
-    onError: (err) => setError(err.message),
+    onError: (err) => setError(err),
   });
 
   const confirmMutation = useMutation<unknown, BankingError>({
     mutationFn: () => confirmMatches(importId, buildDecisions(preview)),
     onSuccess: () => onConfirmed(),
-    onError: (err) => setError(err.message),
+    onError: (err) => setError(err),
   });
 
   const canMap =
@@ -269,11 +270,7 @@ export function ImportWizard({ bankAccountId, onClose, onConfirmed }: ImportWiza
           </>
         )}
 
-        {error && (
-          <span className="pf-composer-error" role="alert">
-            {error}
-          </span>
-        )}
+        <ApiErrorNotice error={error} />
       </div>
     </Modal>
   );

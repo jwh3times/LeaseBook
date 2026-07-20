@@ -138,7 +138,10 @@ describe('LedgerComposer', () => {
       ...baseHandlers(),
       http.post('/api/accounting/tenants/:tenantId/payments', () =>
         HttpResponse.json(
-          { code: 'insufficient_liability', detail: 'exceeds held' },
+          {
+            code: 'insufficient_liability',
+            detail: 'Prepayment application of 1200.00 exceeds the 1000.00 held for this tenant.',
+          },
           { status: 409 },
         ),
       ),
@@ -150,7 +153,7 @@ describe('LedgerComposer', () => {
     await userEvent.type(screen.getByLabelText('Amount'), '1450');
     await userEvent.keyboard('{Enter}');
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('exceeds held');
+    expect(await screen.findByRole('alert')).toHaveTextContent(/exceeds the 1000.00 held/i);
     expect(onPosted).not.toHaveBeenCalled();
     expect(screen.getByLabelText('Amount')).toBeInTheDocument();
   });
@@ -160,7 +163,11 @@ describe('LedgerComposer', () => {
       ...baseHandlers(),
       http.post('/api/accounting/tenants/:tenantId/payments', () =>
         HttpResponse.json(
-          { code: 'account_period_locked', detail: 'account_period_locked' },
+          {
+            code: 'account_period_locked',
+            detail:
+              'This bank account is reconciled and locked for 2026-02; post into the open month.',
+          },
           { status: 409 },
         ),
       ),

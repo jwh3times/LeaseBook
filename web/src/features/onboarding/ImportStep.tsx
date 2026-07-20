@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { Button, Card, CardHeader, EmptyState, Icon } from '@/design';
+import { ApiErrorNotice } from '@/components/ApiErrorNotice';
 import {
   useImportBalances,
   useImportEntities,
@@ -150,12 +151,7 @@ export function EntityImportStep({ title, description, kinds, onContinue }: Enti
         )}
       </div>
 
-      {mutation.isError && (
-        <div className="ob-error-banner" role="alert">
-          <Icon name="alert" size={16} />
-          <span>{(mutation.error as { message?: string })?.message ?? 'Import failed.'}</span>
-        </div>
-      )}
+      {mutation.isError && <ApiErrorNotice error={mutation.error} fallback="Import failed." />}
 
       {isSuccess && (
         <div className="ob-success-banner" role="status">
@@ -380,12 +376,7 @@ export function BalanceImportStep({
         )}
       </div>
 
-      {mutation.isError && (
-        <div className="ob-error-banner" role="alert">
-          <Icon name="alert" size={16} />
-          <span>{(mutation.error as { message?: string })?.message ?? 'Import failed.'}</span>
-        </div>
-      )}
+      {mutation.isError && <ApiErrorNotice error={mutation.error} fallback="Import failed." />}
 
       {isSuccess && (
         <div className="ob-success-banner" role="status">
