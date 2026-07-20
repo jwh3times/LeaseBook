@@ -21,7 +21,7 @@ public sealed class InvalidLineException(string message)
 
 /// <summary>No account with the requested code exists in this org (422). Resolved via RLS, not FK (M-E5).</summary>
 public sealed class UnknownAccountException(string accountCode)
-    : AccountingDomainException("unknown_account", $"No account with code '{accountCode}' exists in this org.")
+    : AccountingDomainException("unknown_account", "The requested account does not exist in this organization.")
 {
     public string AccountCode { get; } = accountCode;
 }
@@ -65,7 +65,7 @@ public sealed class AlreadyReversedException(string message)
 public sealed class AccountPeriodLockedException(Guid bankAccountId, int year, int month)
     : AccountingDomainException(
         "account_period_locked",
-        $"Bank account {bankAccountId} is reconciled and locked for {year}-{month:D2}; post into the open month.")
+        $"This bank account is reconciled and locked for {year}-{month:D2}; post into the open month.")
 {
     public Guid BankAccountId { get; } = bankAccountId;
 
@@ -84,7 +84,7 @@ public sealed class ReconciliationStateException(string message)
 
 /// <summary>No reconciliation with the given id exists in this org (404).</summary>
 public sealed class ReconciliationNotFoundException(Guid reconciliationId)
-    : AccountingDomainException("reconciliation_not_found", $"No reconciliation with id {reconciliationId} exists.")
+    : AccountingDomainException("reconciliation_not_found", "That reconciliation was not found.")
 {
     public Guid ReconciliationId { get; } = reconciliationId;
 }
@@ -92,16 +92,14 @@ public sealed class ReconciliationNotFoundException(Guid reconciliationId)
 /// <summary>No journal entry with the given id exists in this org (404). Resolved via RLS, so a
 /// cross-org id is indistinguishable from a nonexistent one — no existence oracle.</summary>
 public sealed class EntryNotFoundException(Guid entryId)
-    : AccountingDomainException("entry_not_found", $"No entry with id {entryId} exists.")
+    : AccountingDomainException("entry_not_found", "That entry was not found.")
 {
     public Guid EntryId { get; } = entryId;
 }
 
 /// <summary>An entry with this source_ref already exists in the org (409); the existing id is carried.</summary>
 public sealed class DuplicateSourceRefException(string sourceRef, Guid existingEntryId)
-    : AccountingDomainException(
-        "duplicate_source_ref",
-        $"An entry with source_ref '{sourceRef}' already exists (id {existingEntryId}).")
+    : AccountingDomainException("duplicate_source_ref", "This has already been posted.")
 {
     public string SourceRef { get; } = sourceRef;
 
