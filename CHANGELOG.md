@@ -110,6 +110,10 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   mapper reads, so the friendly copy already written for one of them could never render. Every error
   response now goes through one factory that stamps `code` consistently, enforced by a build-time
   source scan; the frontend's five independently drifted error mappers were consolidated into one.
+- **Owner statements no longer fail for months containing voided entries or migration opening
+  positions.** A void now nets inside the section of the entry it reverses, and opening-balance
+  entries dated inside the statement month fold into the beginning balance; the statement tie-out
+  remains an independent journal re-check.
 
 ### Security
 
