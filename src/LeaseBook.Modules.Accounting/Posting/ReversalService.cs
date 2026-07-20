@@ -32,7 +32,7 @@ internal sealed class ReversalService(DbContext db, ITenantContext tenant, IPost
         // A reversal cannot itself be reversed.
         if (original.ReversesEntryId is not null)
         {
-            throw new AlreadyReversedException($"Entry {entryId} is a reversal and cannot be reversed.");
+            throw new AlreadyReversedException(entryId, AlreadyReversedReason.IsAReversal);
         }
 
         // An entry is reversed at most once (the partial unique index is the backstop in PostingService).
@@ -40,7 +40,7 @@ internal sealed class ReversalService(DbContext db, ITenantContext tenant, IPost
             .AnyAsync(e => e.ReversesEntryId == entryId, ct);
         if (alreadyReversed)
         {
-            throw new AlreadyReversedException($"Entry {entryId} has already been reversed.");
+            throw new AlreadyReversedException(entryId, AlreadyReversedReason.AlreadyReversed);
         }
 
         // Mirror lines, resolving each account's code so the reversal posts through the same code-based

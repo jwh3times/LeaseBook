@@ -12,12 +12,46 @@ public abstract class AccountingDomainException(string code, string message) : E
 }
 
 /// <summary>Per-basis debits ≠ credits (422). I1 would be violated.</summary>
-public sealed class UnbalancedEntryException(string message)
-    : AccountingDomainException("unbalanced_entry", message);
+public sealed class UnbalancedEntryException(string basis, decimal debits, decimal credits)
+    : AccountingDomainException(
+        "unbalanced_entry",
+        $"This entry does not balance: debits of {debits:0.00} do not equal credits of {credits:0.00}.")
+{
+    /// <summary>Diagnostic only — the basis name is an internal enum and never reaches the user.</summary>
+    public string Basis { get; } = basis;
+
+    public decimal Debits { get; } = debits;
+
+    public decimal Credits { get; } = credits;
+}
+
+public enum InvalidLineReason
+{
+    NoLines,
+    DebitCreditAmbiguous,
+    NonPositiveAmount,
+}
 
 /// <summary>A line is malformed: not exactly one of debit/credit, or amount ≤ 0, or no lines (422).</summary>
-public sealed class InvalidLineException(string message)
-    : AccountingDomainException("invalid_line", message);
+public sealed class InvalidLineException(
+    InvalidLineReason reason, string? accountCode = null, decimal? amount = null)
+    : AccountingDomainException("invalid_line", Describe(reason))
+{
+    public InvalidLineReason Reason { get; } = reason;
+
+    public string? AccountCode { get; } = accountCode;
+
+    public decimal? Amount { get; } = amount;
+
+    private static string Describe(InvalidLineReason reason) => reason switch
+    {
+        InvalidLineReason.NoLines => "This entry has no lines.",
+        InvalidLineReason.DebitCreditAmbiguous =>
+            "Each line must have either a debit or a credit, not both.",
+        InvalidLineReason.NonPositiveAmount => "Each line amount must be greater than zero.",
+        _ => "This entry has an invalid line.",
+    };
+}
 
 /// <summary>No account with the requested code exists in this org (422). Resolved via RLS, not FK (M-E5).</summary>
 public sealed class UnknownAccountException(string accountCode)
@@ -27,8 +61,8 @@ public sealed class UnknownAccountException(string accountCode)
 }
 
 /// <summary>A pm_income line carries an owner dimension — the structural PM/owner isolation (422).</summary>
-public sealed class PmIncomeOwnerDimException(string message)
-    : AccountingDomainException("pm_income_owner_dim", message);
+public sealed class PmIncomeOwnerDimException()
+    : AccountingDomainException("pm_income_owner_dim", "PM income cannot be recorded against an owner.");
 
 /// <summary>A posting targets a closed accounting period (409).</summary>
 public sealed class PeriodClosedException(int year, int month)
@@ -57,9 +91,26 @@ public sealed class InsufficientReceivableException(string message)
 public sealed class ReserveFloorException(string message)
     : AccountingDomainException("reserve_floor", message);
 
+public enum AlreadyReversedReason
+{
+    AlreadyReversed,
+    IsAReversal,
+}
+
 /// <summary>The entry is already reversed, or is itself a reversal (409).</summary>
-public sealed class AlreadyReversedException(string message)
-    : AccountingDomainException("already_reversed", message);
+public sealed class AlreadyReversedException(Guid entryId, AlreadyReversedReason reason)
+    : AccountingDomainException("already_reversed", Describe(reason))
+{
+    public Guid EntryId { get; } = entryId;
+
+    public AlreadyReversedReason Reason { get; } = reason;
+
+    private static string Describe(AlreadyReversedReason reason) => reason switch
+    {
+        AlreadyReversedReason.IsAReversal => "This entry is itself a reversal and cannot be voided.",
+        _ => "This entry has already been voided.",
+    };
+}
 
 /// <summary>A bank-account line targets a finalized/locked reconciliation month (409, M4 / ADR-014).</summary>
 public sealed class AccountPeriodLockedException(Guid bankAccountId, int year, int month)
