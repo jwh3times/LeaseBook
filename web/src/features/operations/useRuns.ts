@@ -4,6 +4,7 @@
  */
 import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { api, primeCsrf, type components } from '@/api';
+import { toApiError, type ApiError } from '@/lib/apiError';
 
 // ─── Types mirroring the SPA-response records ─────────────────────────────────
 
@@ -59,26 +60,8 @@ export function useRunHistory(): UseQueryResult<RunHistoryResponse> {
 // ─── Mutations ────────────────────────────────────────────────────────────────
 
 /** Error shape from the operations API (400 / 409 / 500 ProblemDetails). */
-export interface RunError {
-  code?: string;
-  message: string;
-}
-
-interface ProblemBody {
-  code?: string;
-  detail?: string;
-  title?: string;
-  errors?: Record<string, string[]>;
-}
-
-function toRunError(error: unknown, status: number): RunError {
-  const body = (error ?? {}) as ProblemBody;
-  const firstValidation = body.errors ? Object.values(body.errors)[0]?.[0] : undefined;
-  return {
-    code: body.code,
-    message: firstValidation ?? body.detail ?? body.title ?? `Request failed (${status}).`,
-  };
-}
+export type RunError = ApiError;
+const toRunError = toApiError;
 
 async function unwrap<T>(
   call: Promise<{ data?: T; error?: unknown; response: Response }>,

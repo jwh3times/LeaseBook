@@ -1,4 +1,5 @@
 import { api, primeCsrf, type components } from '@/api';
+import { toApiError, type ApiError } from '@/lib/apiError';
 
 export type PostResult = components['schemas']['PostResult'];
 
@@ -20,28 +21,14 @@ export const LOCKED_PERIOD_MESSAGE =
   "This account's month is reconciled and locked — post into the open month, or unlock the reconciliation first.";
 
 /** A normalized failure from a ledger post: the domain `code` (422/409), or a validation message (400). */
-export interface LedgerPostError {
-  code?: string;
+export interface LedgerPostError extends ApiError {
   existingEntryId?: string;
-  message: string;
-}
-
-interface ProblemBody {
-  code?: string;
-  existingEntryId?: string;
-  detail?: string;
-  title?: string;
-  errors?: Record<string, string[]>;
 }
 
 function toError(error: unknown, status: number): LedgerPostError {
-  const body = (error ?? {}) as ProblemBody;
-  const firstValidation = body.errors ? Object.values(body.errors)[0]?.[0] : undefined;
-  return {
-    code: body.code,
-    existingEntryId: body.existingEntryId,
-    message: firstValidation ?? body.detail ?? body.title ?? `Request failed (${status}).`,
-  };
+  const body = (error ?? {}) as { existingEntryId?: string };
+  // Do not break the P54 duplicate-as-success path: LedgerComposer.tsx:87-91 reads this.
+  return { ...toApiError(error, status), existingEntryId: body.existingEntryId };
 }
 
 async function unwrap(

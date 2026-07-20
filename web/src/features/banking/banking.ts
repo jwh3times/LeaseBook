@@ -2,6 +2,7 @@ import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import { api, primeCsrf, type components } from '@/api';
 import type { BadgeTone } from '@/design';
 import { num } from '@/lib/directory';
+import { toApiError, type ApiError } from '@/lib/apiError';
 
 export type BankBalanceRow = components['schemas']['BankBalanceRow'];
 export type RegisterResponse = components['schemas']['RegisterResponse'];
@@ -107,26 +108,8 @@ export function useColumnMappings(bankAccountId: string): UseQueryResult<ColumnM
 // ---- mutations -------------------------------------------------------------
 
 /** A normalized failure from a banking write: the domain `code` (409) or a validation message (400). */
-export interface BankingError {
-  code?: string;
-  message: string;
-}
-
-interface ProblemBody {
-  code?: string;
-  detail?: string;
-  title?: string;
-  errors?: Record<string, string[]>;
-}
-
-function toBankingError(error: unknown, status: number): BankingError {
-  const body = (error ?? {}) as ProblemBody;
-  const firstValidation = body.errors ? Object.values(body.errors)[0]?.[0] : undefined;
-  return {
-    code: body.code,
-    message: firstValidation ?? body.detail ?? body.title ?? `Request failed (${status}).`,
-  };
-}
+export type BankingError = ApiError;
+const toBankingError = toApiError;
 
 async function unwrap<T>(
   call: Promise<{ data?: T; error?: unknown; response: Response }>,
