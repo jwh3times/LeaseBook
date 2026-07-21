@@ -21,7 +21,9 @@ namespace LeaseBook.Web.Onboarding;
 /// <see cref="IBalanceForward.PostOpeningPositionAsync"/> per valid row — all in one ambient
 /// RLS transaction. Each row posts into the real account + a <c>migration_clearing</c> contra so the
 /// set is self-balancing; a non-tying import simply leaves a clearing residual (WP-4 verification,
-/// not this task, blocks go-live on non-zero residuals).
+/// not this task, blocks go-live on non-zero residuals). Row resolution (CSV row → account/dims) is
+/// split out into <see cref="PlanAsync"/> so the WP-7 supersede engine can reuse the same resolution
+/// logic without re-implementing it against posting.
 /// </summary>
 public sealed class BalanceImportService(
     DbContext db,
@@ -39,25 +41,55 @@ public sealed class BalanceImportService(
         Stream csvStream,
         CancellationToken ct)
     {
-        var profile = AppFolioProfiles.For(kind);
-        var rowOutcomes = new List<BalanceRowOutcome>();
+        var plan = await PlanAsync(kind, cutoverDate, csvStream, ct);
+        var rowOutcomes = new List<BalanceRowOutcome>(plan.ResolutionErrors);
 
-        switch (kind)
+        foreach (var group in plan.Positions.GroupBy(p => p.RowNumber))
         {
-            case EntityKind.BankBalances:
-                await ImportBankBalancesAsync(EntityImporter.ReadBankBalances(csvStream, profile), cutoverDate, rowOutcomes, ct);
-                break;
-            case EntityKind.OwnerBalances:
-                await ImportOwnerBalancesAsync(EntityImporter.ReadOwnerBalances(csvStream, profile), cutoverDate, rowOutcomes, ct);
-                break;
-            case EntityKind.DepositLiabilities:
-                await ImportDepositLiabilitiesAsync(EntityImporter.ReadDepositLiabilities(csvStream, profile), cutoverDate, rowOutcomes, ct);
-                break;
-            case EntityKind.TenantReceivables:
-                await ImportTenantReceivablesAsync(EntityImporter.ReadTenantReceivables(csvStream, profile), cutoverDate, rowOutcomes, ct);
-                break;
-            default:
-                throw new ArgumentOutOfRangeException(nameof(kind), kind, "Not a balance kind.");
+            var lines = new List<(PlannedPosition Position, LineResult Result)>();
+            foreach (var p in group)
+            {
+                var result = await PostLineAsync(
+                    p.Figure, p.DebitNormal, p.AccountCode, p.Basis,
+                    cutoverDate, p.SourceRef, p.OwnerId, p.TenantId, p.BankAccountId, ct);
+                lines.Add((p, result));
+            }
+
+            var head = lines[0].Position;
+
+            if (kind == EntityKind.OwnerBalances)
+            {
+                // owner_balances plans two independent positions per row, in this order: the cash
+                // position (Basis=Both) then the accrual-delta position (Basis=Accrual) — see
+                // PlanOwnerBalancesAsync. The row's recorded outcome tracks the cash line (the
+                // primary opening position). If the cash line was a no-op but the accrual delta
+                // posted, the accrual entry id surfaces instead so the row is recorded as posted,
+                // not skipped. Only when NEITHER line posted is the row a no-op skip.
+                var (_, cashResult) = lines[0];
+                var (_, accrualResult) = lines[1];
+
+                if (cashResult.Posted)
+                {
+                    rowOutcomes.Add(BalanceRowOutcome.Success(group.Key, head.ExternalId, head.RawJson,
+                        cashResult.EntryId, cashResult.AlreadyPosted));
+                }
+                else if (accrualResult.Posted)
+                {
+                    rowOutcomes.Add(BalanceRowOutcome.Success(group.Key, head.ExternalId, head.RawJson,
+                        accrualResult.EntryId, accrualResult.AlreadyPosted));
+                }
+                else
+                {
+                    rowOutcomes.Add(BalanceRowOutcome.Skipped(group.Key, head.ExternalId, head.RawJson));
+                }
+            }
+            else
+            {
+                var (_, result) = lines[0];
+                rowOutcomes.Add(result.Posted
+                    ? BalanceRowOutcome.Success(group.Key, head.ExternalId, head.RawJson, result.EntryId, result.AlreadyPosted)
+                    : BalanceRowOutcome.Skipped(group.Key, head.ExternalId, head.RawJson));
+            }
         }
 
         var totalErrors = rowOutcomes.Count(r => r.IsError);
@@ -118,21 +150,48 @@ public sealed class BalanceImportService(
     }
 
     // -------------------------------------------------------------------------
-    // Per-kind import methods
+    // Planning: CSV row → resolved account/dims, with no posting (WP-7 Task 4).
     // -------------------------------------------------------------------------
 
     /// <summary>
-    /// bank_balances: resolve the bank by name-match (case-insensitive) against org bank accounts;
-    /// post debit-normal to TrustBank or PmOperatingBank. Negative balance flips to Credit side.
+    /// Parses <paramref name="csv"/> for <paramref name="kind"/> and resolves every row to either a
+    /// <see cref="BalanceRowOutcome.Error"/> (unresolvable owner/tenant/bank, a missing operating or
+    /// deposit trust bank, or a CSV parse error) or one-or-more <see cref="PlannedPosition"/>s — never
+    /// both for the same row. Does no posting: <see cref="ImportAsync"/> posts the plan, and the
+    /// upcoming supersede engine (WP-7 Task 5) will diff it against prior positions instead.
+    /// </summary>
+    private Task<BalancePlan> PlanAsync(EntityKind kind, DateOnly cutover, Stream csv, CancellationToken ct)
+    {
+        var profile = AppFolioProfiles.For(kind);
+
+        return kind switch
+        {
+            EntityKind.BankBalances =>
+                PlanBankBalancesAsync(EntityImporter.ReadBankBalances(csv, profile), cutover, ct),
+            EntityKind.OwnerBalances =>
+                PlanOwnerBalancesAsync(EntityImporter.ReadOwnerBalances(csv, profile), cutover, ct),
+            EntityKind.DepositLiabilities =>
+                PlanDepositLiabilitiesAsync(EntityImporter.ReadDepositLiabilities(csv, profile), cutover, ct),
+            EntityKind.TenantReceivables =>
+                PlanTenantReceivablesAsync(EntityImporter.ReadTenantReceivables(csv, profile), cutover, ct),
+            _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Not a balance kind."),
+        };
+    }
+
+    /// <summary>
+    /// bank_balances: resolves the bank by name-match (case-insensitive) against org bank accounts
+    /// and plans a debit-normal position against TrustBank or PmOperatingBank (a negative figure
+    /// flips to the credit side when the position is posted).
     /// SourceRef: "opening:{cutover}:bank={bankId}".
     /// </summary>
-    private async Task ImportBankBalancesAsync(
+    private async Task<BalancePlan> PlanBankBalancesAsync(
         ImportResult<BankBalanceRow> parsed,
         DateOnly cutover,
-        List<BalanceRowOutcome> outcomes,
         CancellationToken ct)
     {
-        AddParseErrorOutcomes(parsed.Errors, outcomes);
+        var positions = new List<PlannedPosition>();
+        var errors = new List<BalanceRowOutcome>();
+        AddParseErrorOutcomes(parsed.Errors, errors);
 
         // Load all active bank accounts for this org (RLS scopes to current org).
         var bankAccounts = await db.Set<BankAccount>()
@@ -152,14 +211,14 @@ public sealed class BalanceImportService(
 
             if (matches.Count == 0)
             {
-                outcomes.Add(BalanceRowOutcome.Error(rowNumber, row.ExternalBankId, rawJson,
+                errors.Add(BalanceRowOutcome.Error(rowNumber, row.ExternalBankId, rawJson,
                     "name", $"No bank account named '{row.Name}' found in this org"));
                 continue;
             }
 
             if (matches.Count > 1)
             {
-                outcomes.Add(BalanceRowOutcome.Error(rowNumber, row.ExternalBankId, rawJson,
+                errors.Add(BalanceRowOutcome.Error(rowNumber, row.ExternalBankId, rawJson,
                     "name", $"ambiguous_bank_name: {matches.Count} active bank accounts named '{row.Name}' — cannot route opening balance"));
                 continue;
             }
@@ -171,30 +230,31 @@ public sealed class BalanceImportService(
 
             var sourceRef = $"opening:{cutover:yyyy-MM-dd}:bank={bank.Id}";
 
-            // bank is debit-normal; figure of exactly $0.00 → skipped (no-op).
-            var result = await PostLineAsync(
-                row.BookBalance, debitNormal: true, accountCode, EntryBasis.Both,
-                cutover, sourceRef, ownerId: null, tenantId: null, bankAccountId: bank.Id, ct);
-
-            outcomes.Add(result.Posted
-                ? BalanceRowOutcome.Success(rowNumber, row.ExternalBankId, rawJson, result.EntryId, result.AlreadyPosted)
-                : BalanceRowOutcome.Skipped(rowNumber, row.ExternalBankId, rawJson));
+            // bank is debit-normal; a figure of exactly $0.00 is still planned — PostLineAsync skips it.
+            positions.Add(new PlannedPosition(
+                rowNumber, row.ExternalBankId, rawJson, sourceRef,
+                accountCode, DebitNormal: true, row.BookBalance, EntryBasis.Both,
+                OwnerId: null, TenantId: null, BankAccountId: bank.Id));
         }
+
+        return new BalancePlan(positions, errors);
     }
 
     /// <summary>
-    /// owner_balances: resolve ownerId and the operating trust bank (Trust-purpose). Post a cash
-    /// line (Basis=Both, credit-normal) and optionally a second accrual-delta line (Basis=Accrual)
-    /// when accrual ≠ cash. Negative balance flips to debit side.
+    /// owner_balances: resolves ownerId and the operating trust bank (Trust-purpose) and plans a
+    /// cash position (Basis=Both, credit-normal) plus an accrual-delta position (Basis=Accrual,
+    /// accrual − cash) for every resolved row — both are planned even when a figure is exactly
+    /// $0.00; PostLineAsync skips a zero figure when the plan is posted.
     /// SourceRefs: "opening:{cutover}:owner-equity={ownerId}" + "…:owner-equity-accrual={ownerId}".
     /// </summary>
-    private async Task ImportOwnerBalancesAsync(
+    private async Task<BalancePlan> PlanOwnerBalancesAsync(
         ImportResult<OwnerBalanceRow> parsed,
         DateOnly cutover,
-        List<BalanceRowOutcome> outcomes,
         CancellationToken ct)
     {
-        AddParseErrorOutcomes(parsed.Errors, outcomes);
+        var positions = new List<PlannedPosition>();
+        var errors = new List<BalanceRowOutcome>();
+        AddParseErrorOutcomes(parsed.Errors, errors);
 
         var ownerMap = await resolver.BuildMapAsync(EntityKind.Owners, ct);
         var operatingTrustId = await ResolveOperatingTrustAsync(ct);
@@ -204,10 +264,10 @@ public sealed class BalanceImportService(
             foreach (var (row, rowNumber) in WithSourceRowNumbers(parsed.Rows, parsed.Errors))
             {
                 var rawJson = SerializeRaw(new { row.ExternalOwnerId, row.Name, row.CashBalance, row.AccrualBalance });
-                outcomes.Add(BalanceRowOutcome.Error(rowNumber, row.ExternalOwnerId, rawJson,
+                errors.Add(BalanceRowOutcome.Error(rowNumber, row.ExternalOwnerId, rawJson,
                     "bank", "No operating trust bank account (Trust purpose) found in this org"));
             }
-            return;
+            return new BalancePlan(positions, errors);
         }
 
         foreach (var (row, rowNumber) in WithSourceRowNumbers(parsed.Rows, parsed.Errors))
@@ -216,60 +276,48 @@ public sealed class BalanceImportService(
 
             if (!ownerMap.TryGetValue(row.ExternalOwnerId, out var ownerId))
             {
-                outcomes.Add(BalanceRowOutcome.Error(rowNumber, row.ExternalOwnerId, rawJson,
+                errors.Add(BalanceRowOutcome.Error(rowNumber, row.ExternalOwnerId, rawJson,
                     "external_owner_id",
                     $"'{row.ExternalOwnerId}' not found in imported owners"));
                 continue;
             }
 
-            // Two independent lines per row (Fix 1): the cash line (Basis=Both) and the accrual-delta
-            // line (Basis=Accrual). Each is evaluated and skipped independently when its figure is $0.00,
-            // so cash=0/accrual=200 still posts the $200 accrual delta. owner_equity is credit-normal.
+            // Two independent positions per row (Fix 1): the cash position (Basis=Both) and the
+            // accrual-delta position (Basis=Accrual). Each is posted independently and skipped only
+            // when ITS figure is $0.00, so cash=0/accrual=200 still posts the $200 accrual delta.
+            // owner_equity is credit-normal.
             var cashSourceRef = $"opening:{cutover:yyyy-MM-dd}:owner-equity={ownerId}";
-            var cashResult = await PostLineAsync(
-                row.CashBalance, debitNormal: false, AccountCodes.OwnerEquity, EntryBasis.Both,
-                cutover, cashSourceRef, ownerId: ownerId, tenantId: null, bankAccountId: operatingTrustId, ct);
+            positions.Add(new PlannedPosition(
+                rowNumber, row.ExternalOwnerId, rawJson, cashSourceRef,
+                AccountCodes.OwnerEquity, DebitNormal: false, row.CashBalance, EntryBasis.Both,
+                OwnerId: ownerId, TenantId: null, BankAccountId: operatingTrustId));
 
-            // Accrual-delta line: posts the (accrual − cash) delta tagged Accrual, distinct source_ref.
-            // A delta of 0 (accrual == cash) is a no-op.
+            // Accrual-delta position: the (accrual − cash) delta tagged Accrual, distinct source_ref.
+            // A delta of 0 (accrual == cash) posts as a no-op.
             var delta = row.AccrualBalance - row.CashBalance;
             var accrualSourceRef = $"opening:{cutover:yyyy-MM-dd}:owner-equity-accrual={ownerId}";
-            var accrualResult = await PostLineAsync(
-                delta, debitNormal: false, AccountCodes.OwnerEquity, EntryBasis.Accrual,
-                cutover, accrualSourceRef, ownerId: ownerId, tenantId: null, bankAccountId: operatingTrustId, ct);
-
-            // The row's recorded outcome tracks the cash line (the primary opening position). If the cash
-            // line was a no-op but the accrual delta posted, surface the accrual entry id so the row is
-            // recorded as posted, not skipped. Only when NEITHER line posted is the row a no-op skip.
-            if (cashResult.Posted)
-            {
-                outcomes.Add(BalanceRowOutcome.Success(rowNumber, row.ExternalOwnerId, rawJson,
-                    cashResult.EntryId, cashResult.AlreadyPosted));
-            }
-            else if (accrualResult.Posted)
-            {
-                outcomes.Add(BalanceRowOutcome.Success(rowNumber, row.ExternalOwnerId, rawJson,
-                    accrualResult.EntryId, accrualResult.AlreadyPosted));
-            }
-            else
-            {
-                outcomes.Add(BalanceRowOutcome.Skipped(rowNumber, row.ExternalOwnerId, rawJson));
-            }
+            positions.Add(new PlannedPosition(
+                rowNumber, row.ExternalOwnerId, rawJson, accrualSourceRef,
+                AccountCodes.OwnerEquity, DebitNormal: false, delta, EntryBasis.Accrual,
+                OwnerId: ownerId, TenantId: null, BankAccountId: operatingTrustId));
         }
+
+        return new BalancePlan(positions, errors);
     }
 
     /// <summary>
-    /// deposit_liabilities: resolve tenantId and ownerId; post to SecurityDepositsHeld
-    /// (credit-normal, Basis=Both) against the deposit trust bank.
+    /// deposit_liabilities: resolves tenantId and ownerId and plans a position against
+    /// SecurityDepositsHeld (credit-normal, Basis=Both) against the deposit trust bank.
     /// SourceRef: "opening:{cutover}:deposit={tenantId}".
     /// </summary>
-    private async Task ImportDepositLiabilitiesAsync(
+    private async Task<BalancePlan> PlanDepositLiabilitiesAsync(
         ImportResult<DepositLiabilityRow> parsed,
         DateOnly cutover,
-        List<BalanceRowOutcome> outcomes,
         CancellationToken ct)
     {
-        AddParseErrorOutcomes(parsed.Errors, outcomes);
+        var positions = new List<PlannedPosition>();
+        var errors = new List<BalanceRowOutcome>();
+        AddParseErrorOutcomes(parsed.Errors, errors);
 
         var ownerMap = await resolver.BuildMapAsync(EntityKind.Owners, ct);
         var tenantMap = await BuildTenantMapAsync(ct);
@@ -280,10 +328,10 @@ public sealed class BalanceImportService(
             foreach (var (row, rowNumber) in WithSourceRowNumbers(parsed.Rows, parsed.Errors))
             {
                 var rawJson = SerializeRaw(new { row.ExternalTenantId, row.ExternalOwnerId, row.HeldAmount });
-                outcomes.Add(BalanceRowOutcome.Error(rowNumber, row.ExternalTenantId, rawJson,
+                errors.Add(BalanceRowOutcome.Error(rowNumber, row.ExternalTenantId, rawJson,
                     "bank", "No deposit trust bank account (Deposit purpose) found in this org"));
             }
-            return;
+            return new BalancePlan(positions, errors);
         }
 
         foreach (var (row, rowNumber) in WithSourceRowNumbers(parsed.Rows, parsed.Errors))
@@ -292,7 +340,7 @@ public sealed class BalanceImportService(
 
             if (!tenantMap.TryGetValue(row.ExternalTenantId, out var tenantId))
             {
-                outcomes.Add(BalanceRowOutcome.Error(rowNumber, row.ExternalTenantId, rawJson,
+                errors.Add(BalanceRowOutcome.Error(rowNumber, row.ExternalTenantId, rawJson,
                     "external_tenant_id",
                     $"'{row.ExternalTenantId}' not found in imported tenants"));
                 continue;
@@ -300,36 +348,37 @@ public sealed class BalanceImportService(
 
             if (!ownerMap.TryGetValue(row.ExternalOwnerId, out var ownerId))
             {
-                outcomes.Add(BalanceRowOutcome.Error(rowNumber, row.ExternalTenantId, rawJson,
+                errors.Add(BalanceRowOutcome.Error(rowNumber, row.ExternalTenantId, rawJson,
                     "external_owner_id",
                     $"'{row.ExternalOwnerId}' not found in imported owners"));
                 continue;
             }
 
-            // SecurityDepositsHeld is credit-normal; a held amount of exactly $0.00 → skipped (no-op).
+            // SecurityDepositsHeld is credit-normal; a held amount of exactly $0.00 is still planned —
+            // PostLineAsync skips it.
             var sourceRef = $"opening:{cutover:yyyy-MM-dd}:deposit={tenantId}";
-            var result = await PostLineAsync(
-                row.HeldAmount, debitNormal: false, AccountCodes.SecurityDepositsHeld, EntryBasis.Both,
-                cutover, sourceRef, ownerId: ownerId, tenantId: tenantId, bankAccountId: depositTrustId, ct);
-
-            outcomes.Add(result.Posted
-                ? BalanceRowOutcome.Success(rowNumber, row.ExternalTenantId, rawJson, result.EntryId, result.AlreadyPosted)
-                : BalanceRowOutcome.Skipped(rowNumber, row.ExternalTenantId, rawJson));
+            positions.Add(new PlannedPosition(
+                rowNumber, row.ExternalTenantId, rawJson, sourceRef,
+                AccountCodes.SecurityDepositsHeld, DebitNormal: false, row.HeldAmount, EntryBasis.Both,
+                OwnerId: ownerId, TenantId: tenantId, BankAccountId: depositTrustId));
         }
+
+        return new BalancePlan(positions, errors);
     }
 
     /// <summary>
-    /// tenant_receivables: resolve tenantId and ownerId; post to TenantReceivable
-    /// (debit-normal, Basis=Accrual). No bank dimension.
+    /// tenant_receivables: resolves tenantId and ownerId and plans a position against
+    /// TenantReceivable (debit-normal, Basis=Accrual). No bank dimension.
     /// SourceRef: "opening:{cutover}:receivable={tenantId}".
     /// </summary>
-    private async Task ImportTenantReceivablesAsync(
+    private async Task<BalancePlan> PlanTenantReceivablesAsync(
         ImportResult<TenantReceivableRow> parsed,
         DateOnly cutover,
-        List<BalanceRowOutcome> outcomes,
         CancellationToken ct)
     {
-        AddParseErrorOutcomes(parsed.Errors, outcomes);
+        var positions = new List<PlannedPosition>();
+        var errors = new List<BalanceRowOutcome>();
+        AddParseErrorOutcomes(parsed.Errors, errors);
 
         var ownerMap = await resolver.BuildMapAsync(EntityKind.Owners, ct);
         var tenantMap = await BuildTenantMapAsync(ct);
@@ -340,7 +389,7 @@ public sealed class BalanceImportService(
 
             if (!tenantMap.TryGetValue(row.ExternalTenantId, out var tenantId))
             {
-                outcomes.Add(BalanceRowOutcome.Error(rowNumber, row.ExternalTenantId, rawJson,
+                errors.Add(BalanceRowOutcome.Error(rowNumber, row.ExternalTenantId, rawJson,
                     "external_tenant_id",
                     $"'{row.ExternalTenantId}' not found in imported tenants"));
                 continue;
@@ -348,22 +397,22 @@ public sealed class BalanceImportService(
 
             if (!ownerMap.TryGetValue(row.ExternalOwnerId, out var ownerId))
             {
-                outcomes.Add(BalanceRowOutcome.Error(rowNumber, row.ExternalTenantId, rawJson,
+                errors.Add(BalanceRowOutcome.Error(rowNumber, row.ExternalTenantId, rawJson,
                     "external_owner_id",
                     $"'{row.ExternalOwnerId}' not found in imported owners"));
                 continue;
             }
 
-            // TenantReceivable is debit-normal; a balance of exactly $0.00 → skipped (no-op). No bank dim.
+            // TenantReceivable is debit-normal; a balance of exactly $0.00 is still planned —
+            // PostLineAsync skips it. No bank dimension.
             var sourceRef = $"opening:{cutover:yyyy-MM-dd}:receivable={tenantId}";
-            var result = await PostLineAsync(
-                row.Balance, debitNormal: true, AccountCodes.TenantReceivable, EntryBasis.Accrual,
-                cutover, sourceRef, ownerId: ownerId, tenantId: tenantId, bankAccountId: null, ct);
-
-            outcomes.Add(result.Posted
-                ? BalanceRowOutcome.Success(rowNumber, row.ExternalTenantId, rawJson, result.EntryId, result.AlreadyPosted)
-                : BalanceRowOutcome.Skipped(rowNumber, row.ExternalTenantId, rawJson));
+            positions.Add(new PlannedPosition(
+                rowNumber, row.ExternalTenantId, rawJson, sourceRef,
+                AccountCodes.TenantReceivable, DebitNormal: true, row.Balance, EntryBasis.Accrual,
+                OwnerId: ownerId, TenantId: tenantId, BankAccountId: null));
         }
+
+        return new BalancePlan(positions, errors);
     }
 
     // -------------------------------------------------------------------------
@@ -554,4 +603,23 @@ public sealed class BalanceImportService(
         public static BalanceRowOutcome Error(int rowNumber, string externalId, string rawJson, string field, string reason) =>
             new(rowNumber, externalId, rawJson, null, false, false, true, field, reason);
     }
+
+    // -------------------------------------------------------------------------
+    // Planner shapes (WP-7 Task 4) — private nested like BalanceRowOutcome above, since Task 5's
+    // supersede engine lives in this same file and needs no wider visibility.
+    // -------------------------------------------------------------------------
+
+    /// <summary>One resolvable opening position derived from a CSV row (figure may be 0).</summary>
+    private sealed record PlannedPosition(
+        int RowNumber, string ExternalId, string RawJson, string SourceRef,
+        string AccountCode, bool DebitNormal, decimal Figure, EntryBasis Basis,
+        Guid? OwnerId, Guid? TenantId, Guid? BankAccountId);
+
+    /// <summary>
+    /// The result of <see cref="PlanAsync"/>: every resolvable row's position(s) plus every
+    /// unresolvable row's error. A given <see cref="PlannedPosition.RowNumber"/> appears in
+    /// exactly one of the two lists, never both.
+    /// </summary>
+    private sealed record BalancePlan(
+        List<PlannedPosition> Positions, List<BalanceRowOutcome> ResolutionErrors);
 }
