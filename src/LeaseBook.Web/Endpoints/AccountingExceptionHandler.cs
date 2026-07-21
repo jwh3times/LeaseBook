@@ -28,7 +28,8 @@ public sealed class AccountingExceptionHandler(ILogger<AccountingExceptionHandle
             "reconciliation_not_found" or "entry_not_found" => StatusCodes.Status404NotFound,
             _ => StatusCodes.Status409Conflict, // period_closed, insufficient_liability, reserve_floor,
                                                 // already_reversed, duplicate_source_ref, account_period_locked,
-                                                // reconciliation_unbalanced, reconciliation_state
+                                                // reconciliation_unbalanced, reconciliation_state,
+                                                // held_fees_* / pm_income_owner_dimension (opening shape)
         };
 
         var extensions = new Dictionary<string, object?>();

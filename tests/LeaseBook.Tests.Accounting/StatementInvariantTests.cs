@@ -47,6 +47,7 @@ public sealed class StatementInvariantTests(PostgresFixture fixture)
         var property = UuidV7.NewId();
         var voidable = new List<Guid>();
         var reversalIds = new HashSet<Guid>();
+        var heldFeeEntryIds = new HashSet<Guid>();
 
         await EnsureDirectoryAsync(fixture, scope, ct, owners: [owner], tenants: [tenant], properties: [property]);
 
@@ -104,6 +105,10 @@ public sealed class StatementInvariantTests(PostgresFixture fixture)
                             AccountCodes.OwnerEquity, Debit: null, Credit: new Money(amount), EntryBasis.Both,
                             Cutover: new DateOnly(2026, 5, 15), SourceRef: $"open:{UuidV7.NewId()}",
                             OwnerId: owner), ct);
+                        heldFeeEntryIds.Add(await events.PostOpeningPositionAsync(new OpeningPositionRequest(
+                            AccountCodes.PmIncome, Debit: null, Credit: new Money(amount), EntryBasis.Both,
+                            Cutover: new DateOnly(2026, 5, 15), SourceRef: $"open-held:{UuidV7.NewId()}",
+                            BankAccountId: scope.TrustBankId), ct));
                         break;
                 }
             }, ct);
@@ -149,6 +154,12 @@ public sealed class StatementInvariantTests(PostgresFixture fixture)
                     .ToList();
                 feeLines.ShouldBeEmpty(
                     $"{basis}: ManagementFeeAssessed must only appear in OperatingExpenses, not in any other section");
+
+                // WP-7 Half B: no statement line originates from a held-fees opening entry —
+                // pm_income is doubly unreachable (class ≠ owner_equity, owner_id null).
+                s.Sections.SelectMany(sec => sec.Lines)
+                    .ShouldNotContain(l => heldFeeEntryIds.Contains(l.EntryId),
+                        $"{basis}: a held-fees opening leaked into an owner statement");
             }
         }, ct);
     }

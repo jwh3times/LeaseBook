@@ -75,20 +75,18 @@ Three tables are added by the `AddImportToolkit` migration. All go through the m
 helper (`EnableOrgRls`) and are covered by `SchemaGuardTests`.
 
 **`import_batches`** — one row per CSV upload, recording the entity kind, mapping profile,
-filename, row/error counts, and batch status (`staged` / `posted` / `superseded`). The audit trail
-for what was uploaded and when.
+filename, row/error counts, and batch status (`posted` / `posted_with_errors`; supersession is
+recorded on the successor row via `supersedes_batch_id` — the runtime role has no UPDATE grant, so
+a status flip is structurally impossible). The audit trail for what was uploaded and when.
 
-> **Re-import is figure-blind idempotency, not supersede (M7).** The `source_ref`
-> (`opening:{cutover}:{type}={subledgerId}`) identifies the subledger position, not the amount, so a
-> re-import with a **changed figure does NOT overwrite** the already-posted opening entry — the
-> duplicate `source_ref` is caught (`DuplicateSourceRefException` → row recorded as already-posted)
-> and the corrected figure never posts. The `superseded` status is **defined in the schema but not
-> exercised by any M7 supersede path**: correcting an already-posted opening figure before sign-off is
-> done by re-provisioning the cutover org and re-importing. An in-product supersede/correction
-> workflow is **deferred to M8**. Note also that the **held-PM-fees opening position (ADR-020 §5) is
-> not imported in M7** — only owner / deposit / bank / receivable kinds are; held fees would touch
-> `pm_income` (kept out of the import path) and instead surface as a migration-clearing residual the
-> operator reconciles before sign-off.
+> **Amended by M8 WP-7.** Both deferrals recorded here are now closed. (1) A **pre-sign-off
+> supersede workflow** exists: `POST /api/onboarding/import-balances/{kind}/supersede` compares
+> corrected figures against the live opening positions per `source_ref` family, posts a linked
+> reversal (dated at cutover) plus a corrected revision (`#r{N}` suffix) per changed position,
+> leaves unchanged positions untouched, and records lineage on the successor batch
+> (`supersedes_batch_id`). After sign-off the endpoint returns 409 — corrections become ordinary
+> ledger reversals. (2) The **held-PM-fees opening position** (ADR-020 §5) is now imported as the
+> fifth balance kind rather than surfacing as a clearing residual the operator reconciles by hand.
 
 **`import_rows`** — one row per CSV data line. Stores the original parsed cells (`raw_json`),
 canonical fields (`mapped_json`), row status, and — for balance rows that posted successfully —

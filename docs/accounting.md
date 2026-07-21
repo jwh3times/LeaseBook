@@ -3,7 +3,7 @@
 - **Audience:** Contributors, operators, and reviewers
 - **Status:** Living accounting guide
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-07-09
+- **Last reviewed:** 2026-07-21
 
 This is the canonical public explanation of the shipped trust-accounting model, written so a
 property manager, bookkeeper, or attorney can evaluate it without reading C#. The Accounting module
@@ -337,15 +337,17 @@ in LeaseBook.
 ### The clearing account is the tie-out
 
 Each imported position — owner equity, security deposit held, trust bank book balance, tenant
-receivable — posts as **one self-balancing journal entry**: one leg on the real account and an
-equal-and-opposite leg on a transient `MigrationClearing` account. The clearing account is what
-makes a non-tying import a detectable discrepancy rather than a posting failure or a silent error.
+receivable, PM fees held — posts as **one self-balancing journal entry**: one leg on the real
+account and an equal-and-opposite leg on a transient `MigrationClearing` account. The clearing
+account is what makes a non-tying import a detectable discrepancy rather than a posting failure or
+a silent error.
 
 After all rows are imported:
 
 - If the import is internally consistent — bank balances equal owner equity plus deposit liabilities
-  (the trust equation) — then every clearing debit is offset by an equal clearing credit, and the
-  **`MigrationClearing` balance nets to exactly $0.00** in both the cash and accrual bases.
+  plus held PM fees (the trust equation) — then every clearing debit is offset by an equal clearing
+  credit, and the **`MigrationClearing` balance nets to exactly $0.00** in both the cash and accrual
+  bases.
 - If the import does not tie, the residual in `MigrationClearing` is the exact dollar amount of the
   discrepancy, shown per-basis and per-account in the verification report.
 
@@ -375,13 +377,19 @@ unique index that bulk runs use. Re-uploading the same CSV is a no-op. The `sour
 **figure-blind** — it identifies the subledger position, not the amount — so re-importing a balance
 with a **changed figure does NOT overwrite** the already-posted opening entry (the duplicate
 `source_ref` is detected and the row is recorded as already-posted; the corrected figure never
-posts). To correct an already-posted opening figure **before sign-off**, re-provision the cutover
-org and re-import. An in-product supersede/correction workflow is **deferred to M8**.
+posts). To correct an already-posted opening figure **before sign-off**, the operator submits a
+**supersede** request: a corrected file for that balance kind. Only the positions present in the
+file are affected — a position **omitted** from the file is left untouched, not removed; a position
+resubmitted at a genuinely different figure is corrected with an ordinary linked reversal (dated at
+the cutover boundary) plus a corrected revision entry, both ordinary journal postings visible in the
+audit trail like any other correction; a position resubmitted at **$0.00** is removed outright —
+only the reversal posts, with no replacement revision. Supersede only works **before sign-off** —
+once the batch is signed off, corrections become ordinary ledger reversals instead.
 
-> **Not imported in M7:** only owner / deposit / bank / receivable balance kinds are imported. The
-> **held-PM-fees opening position** (ADR-020 §5) is **not** imported — it would touch `pm_income`,
-> which M7 deliberately keeps out of the import path. Any held-fee opening position surfaces as a
-> migration-clearing residual the operator reconciles before sign-off.
+Held PM fees — the un-swept management-fee cash sitting in a trust bank — now import as a fifth
+balance kind, posting the two-leg entry defined in **ADR-020 §5**. The verification report carries a
+dedicated **Held PM Fees (Cash)** line, and sign-off is refused until the operator attests to that figure
+whenever the journal holds a non-zero held-fee position.
 
 See also: **ADR-020** (opening-balance posting model and clearing-account design),
 **ADR-021** (migration toolkit architecture, verification gate, and AppFolio parser seam).

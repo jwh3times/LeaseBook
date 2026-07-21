@@ -10,3 +10,4 @@ public sealed record OwnerBalanceRow(string ExternalOwnerId, string Name, decima
 public sealed record DepositLiabilityRow(string ExternalTenantId, string ExternalOwnerId, decimal HeldAmount);
 public sealed record BankBalanceRow(string ExternalBankId, string Name, decimal BookBalance);
 public sealed record TenantReceivableRow(string ExternalTenantId, string ExternalOwnerId, decimal Balance);
+public sealed record HeldPmFeeRow(string ExternalBankId, string Name, decimal HeldAmount);

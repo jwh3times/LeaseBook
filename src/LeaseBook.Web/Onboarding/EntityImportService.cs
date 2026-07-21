@@ -19,11 +19,21 @@ using MigratorModel = LeaseBook.Migrator.Model;
 
 namespace LeaseBook.Web.Onboarding;
 
+/// <summary>
+/// Per-outcome row counts for one import batch (S1: "nothing fails silently" — an already-posted
+/// row is no longer folded into one undifferentiated success count). Ordinary entity and balance
+/// imports report <see cref="Unchanged"/> = <see cref="Superseded"/> = 0; those two are filled by the
+/// WP-7 supersede (corrected re-import) workflow (<c>BalanceImportService.SupersedeAsync</c>).
+/// </summary>
+public sealed record ImportOutcomeCounts(
+    int Posted, int AlreadyPosted, int Unchanged, int Superseded, int Skipped, int Errors);
+
 /// <summary>Result returned from a single entity import batch.</summary>
 public sealed record ImportBatchResult(
     Guid BatchId,
     int RowCount,
     int ErrorCount,
+    ImportOutcomeCounts Counts,
     IReadOnlyList<ImportBatchError> Errors);
 
 /// <summary>A per-row error surfaced in the import batch result.</summary>
@@ -115,7 +125,18 @@ public sealed class EntityImportService(
 
         await db.SaveChangesAsync(ct);
 
-        return new ImportBatchResult(batch.Id, rowOutcomes.Count, totalErrors, batchErrors);
+        // RowOutcome only distinguishes success vs. error (entity creates have no already-posted,
+        // unchanged, superseded, or skipped concept), so every non-error row counts as Posted and
+        // the rest of the vocabulary stays at zero.
+        var counts = new ImportOutcomeCounts(
+            Posted: rowOutcomes.Count(r => !r.IsError),
+            AlreadyPosted: 0,
+            Unchanged: 0,
+            Superseded: 0,
+            Skipped: 0,
+            Errors: totalErrors);
+
+        return new ImportBatchResult(batch.Id, rowOutcomes.Count, totalErrors, counts, batchErrors);
     }
 
     // -------------------------------------------------------------------------

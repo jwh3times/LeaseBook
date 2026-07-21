@@ -1,4 +1,5 @@
 using LeaseBook.Migrator.Model;
+using LeaseBook.Modules.Accounting.Contracts;
 using LeaseBook.SharedKernel.Endpoints;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -15,6 +16,15 @@ namespace LeaseBook.Web.Onboarding;
 /// position per row via <see cref="IBalanceForward.PostOpeningPositionAsync"/>. Returns an
 /// <see cref="ImportBatchResult"/> with per-row error detail. Non-tying imports succeed (clearing
 /// accumulates the residual; WP-4 verification blocks go-live, not this endpoint).
+///
+/// <c>POST /api/onboarding/import-balances/{kind}/supersede</c> — the WP-7 pre-sign-off corrected
+/// re-import (<see cref="BalanceImportService.SupersedeAsync"/>): same request/response shape, but
+/// diffs the corrected CSV against the live opening positions instead of posting fresh. The three
+/// §2 guards surface as a 409 problem via <see cref="SupersedeConflictException"/>. A held-fees shape
+/// violation (<see cref="InvalidOpeningPositionException"/>) also becomes a 409, but by propagating to
+/// <c>AccountingExceptionHandler</c> rather than being caught here — it aborts the whole corrected
+/// re-import rather than becoming a row error, and the rollback lives in the middleware it has to reach.
+/// Both routes share <see cref="ValidateImportRequest"/> for the request-shape checks so they cannot drift.
 /// </summary>
 public sealed class ImportBalancesEndpoints : IEndpointModule
 {
@@ -32,37 +42,10 @@ public sealed class ImportBalancesEndpoints : IEndpointModule
                     HttpContext httpContext,
                     CancellationToken ct) =>
                 {
-                    if (!TryParseBalanceKind(kind, out var balanceKind))
-                        return ProblemResults.Problem(
-                            httpContext,
-                            code: "invalid_balance_kind",
-                            detail: "That is not a balance type this import supports.",
-                            status: StatusCodes.Status400BadRequest);
+                    var invalid = ValidateImportRequest(kind, body, httpContext, out var balanceKind, out var cutoverDate);
+                    if (invalid is not null) return invalid;
 
-                    // Only the documented appfolio-default profile exists today.
-                    var requested = body.MappingProfile;
-                    if (!string.IsNullOrWhiteSpace(requested) && requested != "appfolio-default")
-                        return ProblemResults.Problem(
-                            httpContext,
-                            code: "unknown_mapping_profile",
-                            detail: "That column-mapping profile is not available.",
-                            status: StatusCodes.Status400BadRequest);
-
-                    if (!DateOnly.TryParse(body.CutoverDate, out var cutoverDate))
-                        return ProblemResults.Problem(
-                            httpContext,
-                            code: "invalid_cutover_date",
-                            detail: "The cutover date must be a valid date in YYYY-MM-DD format.",
-                            status: StatusCodes.Status400BadRequest);
-
-                    if (string.IsNullOrWhiteSpace(body.CsvContent))
-                        return ProblemResults.Problem(
-                            httpContext,
-                            code: "empty_csv",
-                            detail: "The uploaded file is empty.",
-                            status: StatusCodes.Status400BadRequest);
-
-                    var csvBytes = System.Text.Encoding.UTF8.GetBytes(body.CsvContent);
+                    var csvBytes = System.Text.Encoding.UTF8.GetBytes(body.CsvContent!);
                     await using var csvStream = new MemoryStream(csvBytes);
 
                     var result = await service.ImportAsync(
@@ -77,6 +60,46 @@ public sealed class ImportBalancesEndpoints : IEndpointModule
                 })
             .Produces<ImportBatchResult>()
             .Produces(StatusCodes.Status400BadRequest);
+
+        group.MapPost("/import-balances/{kind}/supersede",
+                async (
+                    string kind,
+                    BalanceImportRequest body,
+                    BalanceImportService service,
+                    HttpContext httpContext,
+                    CancellationToken ct) =>
+                {
+                    var invalid = ValidateImportRequest(kind, body, httpContext, out var balanceKind, out var cutoverDate);
+                    if (invalid is not null) return invalid;
+
+                    var csvBytes = System.Text.Encoding.UTF8.GetBytes(body.CsvContent!);
+                    await using var csvStream = new MemoryStream(csvBytes);
+
+                    try
+                    {
+                        var result = await service.SupersedeAsync(
+                            balanceKind, "appfolio-default", body.Filename ?? $"{kind}.csv",
+                            cutoverDate, csvStream, ct);
+                        return TypedResults.Ok(result);
+                    }
+                    catch (SupersedeConflictException ex)
+                    {
+                        return ProblemResults.Problem(
+                            httpContext,
+                            code: ex.Code,
+                            detail: ex.Message,
+                            status: StatusCodes.Status409Conflict);
+                    }
+                    // NOTE: InvalidOpeningPositionException is deliberately NOT caught here. It escapes
+                    // SupersedeAsync so a reversal cannot commit without its revision, and only an
+                    // exception that leaves this endpoint reaches OrgContextMiddleware's rollback.
+                    // Catching it to build the same 409 by hand would let the middleware commit the
+                    // half-finished correction — the exact bug the propagation exists to prevent.
+                    // AccountingExceptionHandler maps it to a 409 by code, after the rollback.
+                })
+            .Produces<ImportBatchResult>()
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status409Conflict);
     }
 
     // The route uses snake_case kind tokens (e.g. "owner_balances"); normalise to PascalCase
@@ -87,7 +110,56 @@ public sealed class ImportBalancesEndpoints : IEndpointModule
         return Enum.TryParse(normalised, ignoreCase: true, out kind)
                && Enum.IsDefined(kind)
                && kind is EntityKind.OwnerBalances or EntityKind.DepositLiabilities
-                   or EntityKind.BankBalances or EntityKind.TenantReceivables;
+                   or EntityKind.BankBalances or EntityKind.TenantReceivables or EntityKind.HeldPmFees;
+    }
+
+    /// <summary>
+    /// The request-shape validation ladder shared verbatim by the import and supersede routes (kind →
+    /// mapping profile → cutover date → csv presence), so the two routes cannot silently drift apart.
+    /// Returns null when every check passes; <paramref name="balanceKind"/> and
+    /// <paramref name="cutoverDate"/> are only meaningful when the return value is null.
+    /// </summary>
+    private static IResult? ValidateImportRequest(
+        string kind,
+        BalanceImportRequest body,
+        HttpContext httpContext,
+        out EntityKind balanceKind,
+        out DateOnly cutoverDate)
+    {
+        balanceKind = default;
+        cutoverDate = default;
+
+        if (!TryParseBalanceKind(kind, out balanceKind))
+            return ProblemResults.Problem(
+                httpContext,
+                code: "invalid_balance_kind",
+                detail: "That is not a balance type this import supports.",
+                status: StatusCodes.Status400BadRequest);
+
+        // Only the documented appfolio-default profile exists today.
+        var requested = body.MappingProfile;
+        if (!string.IsNullOrWhiteSpace(requested) && requested != "appfolio-default")
+            return ProblemResults.Problem(
+                httpContext,
+                code: "unknown_mapping_profile",
+                detail: "That column-mapping profile is not available.",
+                status: StatusCodes.Status400BadRequest);
+
+        if (!DateOnly.TryParse(body.CutoverDate, out cutoverDate))
+            return ProblemResults.Problem(
+                httpContext,
+                code: "invalid_cutover_date",
+                detail: "The cutover date must be a valid date in YYYY-MM-DD format.",
+                status: StatusCodes.Status400BadRequest);
+
+        if (string.IsNullOrWhiteSpace(body.CsvContent))
+            return ProblemResults.Problem(
+                httpContext,
+                code: "empty_csv",
+                detail: "The uploaded file is empty.",
+                status: StatusCodes.Status400BadRequest);
+
+        return null;
     }
 }
 

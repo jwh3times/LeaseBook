@@ -46,10 +46,10 @@ public sealed class OnboardingStatusEndpoints : IEndpointModule
 
                     // balancesImported: ≥1 ImportBatch in a balance-kind family with a successful status.
                     // EntityKind.ToString() produces PascalCase names (OwnerBalances, DepositLiabilities,
-                    // BankBalances, TenantReceivables).
+                    // BankBalances, TenantReceivables, HeldPmFees).
                     var balanceKinds = new[]
                     {
-                        "OwnerBalances", "DepositLiabilities", "BankBalances", "TenantReceivables",
+                        "OwnerBalances", "DepositLiabilities", "BankBalances", "TenantReceivables", "HeldPmFees",
                     };
 
                     var balancesImported = await db.Set<ImportBatch>()
