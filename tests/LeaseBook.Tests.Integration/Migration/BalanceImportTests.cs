@@ -773,6 +773,61 @@ public sealed class BalanceImportTests(PostgresFixture fixture)
     }
 
     // -------------------------------------------------------------------------
+    // Fix wave: DEPOSIT-purpose bank routed through the held-fees gate. Every fact above this one
+    // routes held fees into the TRUST-purpose bank; this is the only fact that names the DEPOSIT
+    // bank in the held_pm_fees CSV itself, proving the acceptance path end to end (CSV-layer purpose
+    // gate + AccountingEventService's isTrustClass guard) rather than resting on code inspection.
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task Held_fees_import_into_a_deposit_purpose_bank_posts_and_enters_the_equation()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var setup = await SetupAsync("HeldFeesDeposit", ct);
+
+        // Minimal self-contained tied pair on the DEPOSIT bank alone: its book balance (40.00) is
+        // entirely explained by held fees (40.00) sitting inside it — nothing else on this bank, and
+        // no owner/tenant chain needed, so the tie doesn't ride on any other position.
+        var bankCsv = $"Account ID,Account Name,Book Balance\n" +
+                      $"B-DEP,{setup.DepositBankName},40.00\n";
+        var bankResult = await PostBalanceImportAsync<ImportBatchResult>(
+            setup.Client, "bank_balances",
+            new { csvContent = bankCsv, cutoverDate = CutoverStr, filename = "banks.csv" }, ct);
+        bankResult.ErrorCount.ShouldBe(0, $"bank errors: {string.Join("; ", bankResult.Errors.Select(e => e.Reason))}");
+
+        var heldCsv = $"Account ID,Account Name,Held Fees\nB-DEP,{setup.DepositBankName},40.00\n";
+        var heldResult = await PostBalanceImportAsync<ImportBatchResult>(
+            setup.Client, "held_pm_fees",
+            new { csvContent = heldCsv, cutoverDate = CutoverStr, filename = "held_fees.csv" }, ct);
+        heldResult.ErrorCount.ShouldBe(0,
+            $"held fees errors (DEPOSIT-purpose bank): {string.Join("; ", heldResult.Errors.Select(e => e.Reason))}");
+
+        var tenant = new TenantContext { OrgId = setup.OrgId };
+        await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
+        var executor = new OrgScopedExecutor(db, tenant);
+
+        var depositBankId = Guid.Empty;
+        await executor.RunAsync(setup.OrgId, async () =>
+        {
+            depositBankId = await db.Set<BankAccount>().AsNoTracking()
+                .Where(b => b.Name == setup.DepositBankName)
+                .Select(b => b.Id)
+                .SingleAsync(ct);
+
+            var cashNet = await ClearingNetAsync(db, "cash", ct);
+            var accrualNet = await ClearingNetAsync(db, "accrual", ct);
+            cashNet.ShouldBe(0m,
+                $"deposit-bank book (40) and held fees against it (40) should tie clearing to $0 in cash basis; got {cashNet}");
+            accrualNet.ShouldBe(0m,
+                $"deposit-bank book (40) and held fees against it (40) should tie clearing to $0 in accrual basis; got {accrualNet}");
+
+            var heldTerm = await HeldFeesTermAsync(db, depositBankId, ct);
+            heldTerm.ShouldBe(40.00m,
+                $"the trust equation's held_pm_fees term for the DEPOSIT-purpose bank should read the imported 40.00; got {heldTerm}");
+        }, ct);
+    }
+
+    // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
 
