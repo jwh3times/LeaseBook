@@ -55,12 +55,32 @@ public sealed class BalanceImportService(
         foreach (var group in plan.Positions.GroupBy(p => p.RowNumber))
         {
             var lines = new List<(PlannedPosition Position, LineResult Result)>();
+            var rowRejected = false;
             foreach (var p in group)
             {
-                var result = await PostLineAsync(
-                    p.Figure, p.DebitNormal, p.AccountCode, p.Basis,
-                    cutoverDate, p.SourceRef, p.OwnerId, p.TenantId, p.BankAccountId, ct);
-                lines.Add((p, result));
+                try
+                {
+                    var result = await PostLineAsync(
+                        p.Figure, p.DebitNormal, p.AccountCode, p.Basis,
+                        cutoverDate, p.SourceRef, p.OwnerId, p.TenantId, p.BankAccountId, ct);
+                    lines.Add((p, result));
+                }
+                catch (InvalidOpeningPositionException ex)
+                {
+                    // WP-7 §3.1: a pm_income opening whose shape violates the held-fees invariant
+                    // (checked at post time, not plan time — Task 9). S2-clean message to the row;
+                    // the code + source_ref are the technical detail, logged not surfaced.
+                    logger.LogWarning(LogEvents.HeldFeesShapeRejected,
+                        "Held-fees opening rejected ({Code}) for source_ref {SourceRef}", ex.Code, p.SourceRef);
+                    rowOutcomes.Add(BalanceRowOutcome.Error(p.RowNumber, p.ExternalId, p.RawJson, "held_fees", ex.Message));
+                    rowRejected = true;
+                    break;
+                }
+            }
+
+            if (rowRejected)
+            {
+                continue;
             }
 
             var head = lines[0].Position;
@@ -220,6 +240,7 @@ public sealed class BalanceImportService(
             var anyChanged = false;
             var anyNewPost = false;
             var anyUnchanged = false;
+            var rowRejected = false;
 
             // A row groups one-or-more positions (owner rows plan two: cash then accrual-delta); each is
             // diffed against its own family independently, so this stays cardinality-agnostic.
@@ -266,18 +287,36 @@ public sealed class BalanceImportService(
                     var newRef = current is null && family.Count == 0
                         ? p.SourceRef                                        // never posted → base ref
                         : $"{p.SourceRef}#r{nextRev}";
-                    var result = await PostLineAsync(
-                        p.Figure, p.DebitNormal, p.AccountCode, p.Basis,
-                        cutoverDate, newRef, p.OwnerId, p.TenantId, p.BankAccountId, ct);
-                    if (result.Posted)
+                    try
                     {
-                        revisionEntryId ??= result.EntryId;
-                        if (current is null)
+                        var result = await PostLineAsync(
+                            p.Figure, p.DebitNormal, p.AccountCode, p.Basis,
+                            cutoverDate, newRef, p.OwnerId, p.TenantId, p.BankAccountId, ct);
+                        if (result.Posted)
                         {
-                            anyNewPost = true;
+                            revisionEntryId ??= result.EntryId;
+                            if (current is null)
+                            {
+                                anyNewPost = true;
+                            }
                         }
                     }
+                    catch (InvalidOpeningPositionException ex)
+                    {
+                        // WP-7 §3.1: same post-time held-fees shape guard as ImportAsync (Task 9).
+                        // S2-clean message to the row; code + source_ref are the logged technical detail.
+                        logger.LogWarning(LogEvents.HeldFeesShapeRejected,
+                            "Held-fees opening rejected ({Code}) for source_ref {SourceRef}", ex.Code, p.SourceRef);
+                        outcomes.Add(BalanceRowOutcome.Error(p.RowNumber, p.ExternalId, p.RawJson, "held_fees", ex.Message));
+                        rowRejected = true;
+                        break;
+                    }
                 }
+            }
+
+            if (rowRejected)
+            {
+                continue;
             }
 
             // Bucket the row exactly once by precedence, and record one outcome row for it. The resulting
@@ -429,6 +468,8 @@ public sealed class BalanceImportService(
                 PlanDepositLiabilitiesAsync(EntityImporter.ReadDepositLiabilities(csv, profile), cutover, ct),
             EntityKind.TenantReceivables =>
                 PlanTenantReceivablesAsync(EntityImporter.ReadTenantReceivables(csv, profile), cutover, ct),
+            EntityKind.HeldPmFees =>
+                PlanHeldPmFeesAsync(EntityImporter.ReadHeldPmFees(csv, profile), cutover, ct),
             _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Not a balance kind."),
         };
     }
@@ -665,6 +706,76 @@ public sealed class BalanceImportService(
                 rowNumber, row.ExternalTenantId, rawJson, sourceRef,
                 AccountCodes.TenantReceivable, DebitNormal: true, row.Balance, EntryBasis.Accrual,
                 OwnerId: ownerId, TenantId: tenantId, BankAccountId: null));
+        }
+
+        return new BalancePlan(positions, errors);
+    }
+
+    /// <summary>
+    /// held_pm_fees (WP-7 Task 10 / ADR-020 §5): resolves the bank via the same case-insensitive
+    /// name-match + ambiguity rejection as bank_balances, then gates on purpose — a Trust- or
+    /// Deposit-purpose bank is trust_bank-class and accepted (§3.1/F1); an Operating-purpose match
+    /// is a row error, never silently routed. Plans a credit-normal position against PmIncome (a
+    /// negative HeldAmount silently flips to a pm_income debit — D9, deliberately legal, no guard).
+    /// SourceRef: "opening:{cutover}:held-fees={bankId}".
+    /// </summary>
+    private async Task<BalancePlan> PlanHeldPmFeesAsync(
+        ImportResult<HeldPmFeeRow> parsed,
+        DateOnly cutover,
+        CancellationToken ct)
+    {
+        var positions = new List<PlannedPosition>();
+        var errors = new List<BalanceRowOutcome>();
+        AddParseErrorOutcomes(parsed.Errors, errors);
+
+        var bankAccounts = await db.Set<BankAccount>()
+            .AsNoTracking()
+            .Where(b => b.IsActive)
+            .ToListAsync(ct);
+
+        foreach (var (row, rowNumber) in WithSourceRowNumbers(parsed.Rows, parsed.Errors))
+        {
+            var rawJson = SerializeRaw(new { row.ExternalBankId, row.Name, row.HeldAmount });
+
+            // Case-insensitive name match; two same-named active banks would misroute held fees, so
+            // an ambiguous match is a row error, not a guess (same rule as bank_balances).
+            var matches = bankAccounts
+                .Where(b => string.Equals(b.Name, row.Name, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            if (matches.Count == 0)
+            {
+                errors.Add(BalanceRowOutcome.Error(rowNumber, row.ExternalBankId, rawJson,
+                    "name", $"No bank account named '{row.Name}' found in this org"));
+                continue;
+            }
+
+            if (matches.Count > 1)
+            {
+                errors.Add(BalanceRowOutcome.Error(rowNumber, row.ExternalBankId, rawJson,
+                    "name", $"ambiguous_bank_name: {matches.Count} active bank accounts named '{row.Name}' — cannot route held fees"));
+                continue;
+            }
+
+            var bank = matches[0];
+
+            // §3.1/F1: Trust- AND Deposit-purpose banks are trust_bank-class and accepted; only an
+            // Operating-purpose (pm_operating_bank) match is rejected.
+            if (bank.Purpose == DirectoryBankPurpose.Operating)
+            {
+                errors.Add(BalanceRowOutcome.Error(rowNumber, row.ExternalBankId, rawJson,
+                    "name", $"'{row.Name}' is an operating account — held fees can only be imported into a trust bank account"));
+                continue;
+            }
+
+            var sourceRef = $"opening:{cutover:yyyy-MM-dd}:held-fees={bank.Id}";
+
+            // pm_income is credit-normal; a held amount of exactly $0.00 is still planned —
+            // PostLineAsync skips it, uniform with every other balance kind.
+            positions.Add(new PlannedPosition(
+                rowNumber, row.ExternalBankId, rawJson, sourceRef,
+                AccountCodes.PmIncome, DebitNormal: false, row.HeldAmount, EntryBasis.Both,
+                OwnerId: null, TenantId: null, BankAccountId: bank.Id));
         }
 
         return new BalancePlan(positions, errors);

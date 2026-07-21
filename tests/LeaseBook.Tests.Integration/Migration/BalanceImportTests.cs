@@ -638,10 +638,146 @@ public sealed class BalanceImportTests(PostgresFixture fixture)
     }
 
     // -------------------------------------------------------------------------
+    // WP-7 Task 10: held_pm_fees opening-balance import (ADR-020 §5)
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task Held_fees_import_converts_the_clearing_residual_to_zero()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var setup = await SetupAsync("HeldFees", ct);
+        await ImportOwnerTenantChainAsync(setup.Client, ct);
+
+        // The §5 acceptance shape: the trust bank's book balance also carries $100.00 of unremitted
+        // PM fees still sitting inside the account, so bank (600.00) = owner equity (500.00) + held
+        // fees (100.00). The deposit side ties independently (deposit bank 500.00 = deposit liability
+        // 500.00) and contributes nothing to the gap — it is here only to mirror the standard tied set.
+        var bankCsv = $"Account ID,Account Name,Book Balance\n" +
+                      $"B-TRUST,{setup.TrustBankName},600.00\n" +
+                      $"B-DEP,{setup.DepositBankName},500.00\n";
+        var bankResult = await PostBalanceImportAsync<ImportBatchResult>(
+            setup.Client, "bank_balances",
+            new { csvContent = bankCsv, cutoverDate = CutoverStr, filename = "banks.csv" }, ct);
+        bankResult.ErrorCount.ShouldBe(0, $"bank errors: {string.Join("; ", bankResult.Errors.Select(e => e.Reason))}");
+
+        const string ownerBalCsv =
+            "Owner ID,Owner Name,Cash Balance,Accrual Balance\n" +
+            "O-1,Chain Owner LLC,500.00,500.00\n";
+        var ownerBalResult = await PostBalanceImportAsync<ImportBatchResult>(
+            setup.Client, "owner_balances",
+            new { csvContent = ownerBalCsv, cutoverDate = CutoverStr, filename = "owner_balances.csv" }, ct);
+        ownerBalResult.ErrorCount.ShouldBe(0, $"owner_bal errors: {string.Join("; ", ownerBalResult.Errors.Select(e => e.Reason))}");
+
+        const string depositCsv =
+            "Tenant ID,Owner ID,Deposit Held\n" +
+            "T-1,O-1,500.00\n";
+        var depositResult = await PostBalanceImportAsync<ImportBatchResult>(
+            setup.Client, "deposit_liabilities",
+            new { csvContent = depositCsv, cutoverDate = CutoverStr, filename = "deposits.csv" }, ct);
+        depositResult.ErrorCount.ShouldBe(0, $"deposit errors: {string.Join("; ", depositResult.Errors.Select(e => e.Reason))}");
+
+        var tenant = new TenantContext { OrgId = setup.OrgId };
+        await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
+        var executor = new OrgScopedExecutor(db, tenant);
+
+        var trustBankId = Guid.Empty;
+        await executor.RunAsync(setup.OrgId, async () =>
+        {
+            trustBankId = await db.Set<BankAccount>().AsNoTracking()
+                .Where(b => b.Name == setup.TrustBankName)
+                .Select(b => b.Id)
+                .SingleAsync(ct);
+
+            // Before the held-fees import: the trust bank's book (600) exceeds what owner equity (500)
+            // accounts for by exactly the $100.00 of held fees not yet recorded — the ADR-021
+            // manual-reconciliation residual an operator would otherwise have to true up by hand.
+            // Sign: PostOpeningPositionAsync's clearing contra mirrors the opposite side of the real
+            // leg (clearingLeg Debit = req.Credit, Credit = req.Debit), so a real DEBIT (the bank
+            // position) mirrors to a clearing CREDIT. In ClearingNetAsync's SUM(debit-credit)
+            // convention an unmatched bank excess therefore reads NEGATIVE.
+            var preNet = await ClearingNetAsync(db, "cash", ct);
+            preNet.ShouldBe(-100.00m,
+                $"the trust bank's unrecorded $100 of held fees should show as a -100 clearing residual; got {preNet}");
+        }, ct);
+
+        // Import the held fees themselves — the row that reconciles the residual.
+        var heldCsv = $"Account ID,Account Name,Held Fees\nB-TRUST,{setup.TrustBankName},100.00\n";
+        var heldResult = await PostBalanceImportAsync<ImportBatchResult>(
+            setup.Client, "held_pm_fees",
+            new { csvContent = heldCsv, cutoverDate = CutoverStr, filename = "held_fees.csv" }, ct);
+        heldResult.ErrorCount.ShouldBe(0, $"held fees errors: {string.Join("; ", heldResult.Errors.Select(e => e.Reason))}");
+
+        await executor.RunAsync(setup.OrgId, async () =>
+        {
+            var cashNet = await ClearingNetAsync(db, "cash", ct);
+            var accrualNet = await ClearingNetAsync(db, "accrual", ct);
+            cashNet.ShouldBe(0m, $"held-fees import should zero out the clearing residual in cash basis; got {cashNet}");
+            accrualNet.ShouldBe(0m, $"held-fees import should zero out the clearing residual in accrual basis; got {accrualNet}");
+
+            var heldTerm = await HeldFeesTermAsync(db, trustBankId, ct);
+            heldTerm.ShouldBe(100.00m,
+                $"the trust equation's held_pm_fees term should read the imported 100.00; got {heldTerm}");
+        }, ct);
+    }
+
+    [Fact]
+    public async Task Held_fees_row_naming_an_operating_bank_is_a_row_error()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var setup = await SetupAsync("HeldFeesOperating", ct);
+
+        var heldCsv = $"Account ID,Account Name,Held Fees\nB-OP,{setup.OperatingBankName},100.00\n";
+        var result = await PostBalanceImportAsync<ImportBatchResult>(
+            setup.Client, "held_pm_fees",
+            new { csvContent = heldCsv, cutoverDate = CutoverStr, filename = "held_fees.csv" }, ct);
+
+        result.ErrorCount.ShouldBe(1);
+        var error = result.Errors.ShouldHaveSingleItem();
+        error.Field.ShouldBe("name");
+        error.Reason.ShouldContain("trust bank");
+        error.Reason.ShouldNotContain("pm_income");
+
+        // S2: the resolved bank's internal id must not leak into the operator-facing reason, in
+        // either Guid.ToString() format ("D" dashed or "N" bare-hex) — the reason echoes only the
+        // operator's own CSV text (row.Name), never an internally generated identifier.
+        var tenant = new TenantContext { OrgId = setup.OrgId };
+        await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
+        var executor = new OrgScopedExecutor(db, tenant);
+        var operatingBankId = Guid.Empty;
+        await executor.RunAsync(setup.OrgId, async () =>
+        {
+            operatingBankId = await db.Set<BankAccount>().AsNoTracking()
+                .Where(b => b.Name == setup.OperatingBankName)
+                .Select(b => b.Id)
+                .SingleAsync(ct);
+        }, ct);
+        error.Reason.ShouldNotContain(operatingBankId.ToString());
+        error.Reason.ShouldNotContain(operatingBankId.ToString("N"));
+    }
+
+    [Fact]
+    public async Task Held_fees_row_with_unknown_bank_name_is_a_row_error()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var setup = await SetupAsync("HeldFeesUnknownBank", ct);
+
+        var heldCsv = "Account ID,Account Name,Held Fees\nB-X,Nonexistent Bank Account,100.00\n";
+        var result = await PostBalanceImportAsync<ImportBatchResult>(
+            setup.Client, "held_pm_fees",
+            new { csvContent = heldCsv, cutoverDate = CutoverStr, filename = "held_fees.csv" }, ct);
+
+        result.ErrorCount.ShouldBe(1);
+        var error = result.Errors.ShouldHaveSingleItem();
+        error.Field.ShouldBe("name");
+        error.Reason.ShouldBe("No bank account named 'Nonexistent Bank Account' found in this org");
+    }
+
+    // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
 
-    private sealed record TestSetup(Guid OrgId, HttpClient Client, string TrustBankName, string DepositBankName);
+    private sealed record TestSetup(
+        Guid OrgId, HttpClient Client, string TrustBankName, string DepositBankName, string OperatingBankName);
 
     private async Task<TestSetup> SetupAsync(string tag, CancellationToken ct)
     {
@@ -670,9 +806,12 @@ public sealed class BalanceImportTests(PostgresFixture fixture)
             (await userManager.AddToRoleAsync(user, Roles.PMStaff)).Succeeded.ShouldBeTrue();
         }
 
-        // Create trust + deposit bank accounts for this org via the service layer.
+        // Create trust + deposit + operating bank accounts for this org via the service layer. The
+        // operating bank exists so held-fees row-error tests can name a bank that is NOT trust_bank-class
+        // (WP-7 Task 10) without every other test in the file paying for a bank it never uses.
         var trustBankName = $"Operating Trust {orgId:N}";
         var depositBankName = $"Security Deposit Trust {orgId:N}";
+        var operatingBankName = $"PM Operating {orgId:N}";
 
         await using (var scope = fixture.Api.Services.CreateAsyncScope())
         {
@@ -682,6 +821,7 @@ public sealed class BalanceImportTests(PostgresFixture fixture)
             {
                 await sender.Send(new CreateBankAccount(trustBankName, null, null, "trust"), ct);
                 await sender.Send(new CreateBankAccount(depositBankName, null, null, "deposit"), ct);
+                await sender.Send(new CreateBankAccount(operatingBankName, null, null, "operating"), ct);
             }, ct);
         }
 
@@ -692,7 +832,7 @@ public sealed class BalanceImportTests(PostgresFixture fixture)
         login.StatusCode.ShouldBe(HttpStatusCode.OK, await login.Content.ReadAsStringAsync(ct));
         await client.PrimeCsrfAsync(ct); // XSRF rotates on sign-in
 
-        return new TestSetup(orgId, client, trustBankName, depositBankName);
+        return new TestSetup(orgId, client, trustBankName, depositBankName, operatingBankName);
     }
 
     private static async Task<T> PostImportAsync<T>(
@@ -755,6 +895,28 @@ public sealed class BalanceImportTests(PostgresFixture fixture)
             ) AS net
             FROM journal_lines
             WHERE account_class = 'migration_clearing'
+            """).ToListAsync(ct);
+
+        return rows.Count == 0 ? 0m : rows[0].Net;
+    }
+
+    /// <summary>
+    /// Queries the trust equation's held_pm_fees term for one bank (mirrors GetTrustEquation's own
+    /// pm_income component): SUM(credit - debit) over pm_income lines tagged that bank's id, for cash
+    /// + both basis. pm_income is credit-normal, so a positive value is the held-fees balance.
+    /// </summary>
+    private static async Task<decimal> HeldFeesTermAsync(
+        Microsoft.EntityFrameworkCore.DbContext db, Guid bankAccountId, CancellationToken ct)
+    {
+        var rows = await db.Database.SqlQuery<ClearingNet>(
+            $"""
+            SELECT COALESCE(
+                SUM(COALESCE(credit, 0) - COALESCE(debit, 0))
+                    FILTER (WHERE basis IN ('cash', 'both')),
+                0
+            ) AS net
+            FROM journal_lines
+            WHERE account_class = 'pm_income' AND bank_account_id = {bankAccountId}
             """).ToListAsync(ct);
 
         return rows.Count == 0 ? 0m : rows[0].Net;

@@ -100,7 +100,7 @@ public sealed class ImportBalancesEndpoints : IEndpointModule
         return Enum.TryParse(normalised, ignoreCase: true, out kind)
                && Enum.IsDefined(kind)
                && kind is EntityKind.OwnerBalances or EntityKind.DepositLiabilities
-                   or EntityKind.BankBalances or EntityKind.TenantReceivables;
+                   or EntityKind.BankBalances or EntityKind.TenantReceivables or EntityKind.HeldPmFees;
     }
 
     /// <summary>

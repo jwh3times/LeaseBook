@@ -460,6 +460,90 @@ public sealed class BalanceSupersedeTests(PostgresFixture fixture)
     }
 
     // ──────────────────────────────────────────────────────────────────────────────────────────────
+    // 12. WP-7 Task 10: held_pm_fees participates in the same family/supersede machinery as every
+    //     other balance kind (ADR-020 §5) — the planner arm alone made this work, no supersede-code
+    //     change was needed.
+    // ──────────────────────────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Held_fees_supersede_participates_in_the_family_machinery()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var setup = await SetupAsync("HeldFeesSupersede", ct);
+        await OnboardingTestHelpers.ImportOwnerTenantChainAsync(setup.Client, ct);
+
+        // The §5 acceptance shape: trust bank book 600.00 = owner equity 500.00 + held fees 100.00.
+        await OnboardingTestHelpers.PostBalanceImportAsync<ImportBatchResult>(setup.Client, "bank_balances",
+            new
+            {
+                csvContent = $"Account ID,Account Name,Book Balance\nB-TRUST,{setup.TrustBankName},600.00\n",
+                cutoverDate = CutoverStr,
+                filename = "banks.csv",
+            }, ct);
+        await OnboardingTestHelpers.PostBalanceImportAsync<ImportBatchResult>(setup.Client, "owner_balances",
+            new
+            {
+                csvContent = "Owner ID,Owner Name,Cash Balance,Accrual Balance\nO-1,Chain Owner LLC,500.00,500.00\n",
+                cutoverDate = CutoverStr,
+                filename = "owners.csv",
+            }, ct);
+
+        var (trustBankId, _) = await ResolveBankIdsAsync(setup.OrgId, ct);
+
+        var heldResult = await OnboardingTestHelpers.PostBalanceImportAsync<ImportBatchResult>(setup.Client, "held_pm_fees",
+            new
+            {
+                csvContent = $"Account ID,Account Name,Held Fees\nB-TRUST,{setup.TrustBankName},100.00\n",
+                cutoverDate = CutoverStr,
+                filename = "held_fees.csv",
+            }, ct);
+        heldResult.ErrorCount.ShouldBe(0);
+
+        await ReadAsync(setup.OrgId, async db =>
+        {
+            (await OnboardingTestHelpers.ClearingNetAsync(db, "cash", ct)).ShouldBe(0m,
+                "the tied set (bank 600 = equity 500 + held fees 100) zeroes the residual before the supersede");
+            (await OnboardingTestHelpers.ClearingNetAsync(db, "accrual", ct)).ShouldBe(0m);
+        }, ct);
+
+        // Supersede: held fees 100 → 80, and the bank book down to 580 to keep the set tied (the
+        // tied variant — clearing re-zeroes rather than showing the 20.00 shift).
+        var result = await SupersedeInScopeAsync(setup.OrgId, EntityKind.HeldPmFees,
+            $"Account ID,Account Name,Held Fees\nB-TRUST,{setup.TrustBankName},80.00\n", Cutover, ct);
+        result.Counts.Superseded.ShouldBe(1);
+
+        await SupersedeInScopeAsync(setup.OrgId, EntityKind.BankBalances,
+            $"Account ID,Account Name,Book Balance\nB-TRUST,{setup.TrustBankName},580.00\n", Cutover, ct);
+
+        var baseRef = $"opening:{CutoverStr}:held-fees={trustBankId}";
+        await ReadAsync(setup.OrgId, async db =>
+        {
+            var family = await FamilyEntriesAsync(db, baseRef, ct);
+
+            // Original opening entry — now reversed, still credit 100 (the original recorded value).
+            var original = family.Single(r => r.SourceRef == baseRef);
+            original.EventType.ShouldBe("OpeningBalance");
+            original.IsReversed.ShouldBeTrue("the superseded original must carry a linked reversal");
+            original.Credit.ShouldBe(100.00m);
+
+            // #r2 revision — the corrected credit 80.
+            var r2 = family.Single(r => r.SourceRef == baseRef + "#r2");
+            r2.EventType.ShouldBe("OpeningBalance");
+            r2.Credit.ShouldBe(80.00m);
+            r2.IsReversed.ShouldBeFalse();
+
+            // The family (original + void mirror + #r2) nets to the corrected 80.
+            var net = family.Sum(r => (r.Credit ?? 0m) - (r.Debit ?? 0m));
+            net.ShouldBe(80.00m, "the held-fees family nets to the corrected 80.00");
+
+            // Both corrections landed (bank 580 = equity 500 + held 80) → clearing re-zeroes.
+            (await OnboardingTestHelpers.ClearingNetAsync(db, "cash", ct)).ShouldBe(0m,
+                "held fees down 20 + bank book down 20 keeps the set tied");
+            (await OnboardingTestHelpers.ClearingNetAsync(db, "accrual", ct)).ShouldBe(0m);
+        }, ct);
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────────────────────────
     // Arrange + invoke helpers
     // ──────────────────────────────────────────────────────────────────────────────────────────────
 
