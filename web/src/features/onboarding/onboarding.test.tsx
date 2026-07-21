@@ -331,6 +331,76 @@ describe('BalanceImportStep — corrected re-import (supersede)', () => {
   });
 });
 
+// ─── (b4) BalanceImportStep — banner reflects the mode that produced it ──────
+//
+// Regression coverage for the reviewer finding: the success banner used to key its content off
+// the LIVE `supersede` checkbox rather than which mode actually produced the displayed
+// result/counts, so toggling the checkbox after a result landed (without re-uploading)
+// instantly relabeled a stale result under the wrong mode.
+
+describe('BalanceImportStep — banner reflects the mode that produced the result', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '';
+    server.use(http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 })));
+  });
+
+  test('plain import success then toggling supersede does not relabel the banner', async () => {
+    server.use(
+      http.post('/api/onboarding/import-balances/owner_balances', () =>
+        HttpResponse.json({
+          batchId: 'b4',
+          rowCount: 3,
+          errorCount: 0,
+          // Nonzero counts on a *plain* import response: ImportBatchResult.counts is populated on
+          // every response, plain or supersede, so a plain import's counts alone can't be trusted
+          // to gate the "corrected" copy — only resultMode can.
+          counts: { posted: 3, alreadyPosted: 0, unchanged: 5, superseded: 4, skipped: 0, errors: 0 },
+          errors: [],
+        }),
+      ),
+    );
+    renderBalanceStep(); // supersede unchecked by default → hits the plain import endpoint
+    await uploadCsv('Owner ID,Owner Name,Cash Balance,Accrual Balance\nO-1,X,450.00,450.00\n');
+    expect(await screen.findByText(/imported 3 rows successfully/i)).toBeInTheDocument();
+
+    // Toggle supersede WITHOUT uploading again.
+    await userEvent.click(screen.getByLabelText('This is a corrected re-import (supersede)'));
+
+    // Scoped to the role="status" banner itself: the checkbox's own always-present label text
+    // ("This is a corrected re-import (supersede)") also contains "corrected", so an unscoped
+    // queryByText(/corrected/i) would false-positive on a "multiple elements found" error rather
+    // than actually asserting on the banner's content.
+    const banner = screen.getByRole('status');
+    expect(within(banner).getByText(/imported 3 rows successfully/i)).toBeInTheDocument();
+    expect(within(banner).queryByText(/corrected/i)).not.toBeInTheDocument();
+  });
+
+  test('supersede success then unchecking does not revert the banner', async () => {
+    server.use(
+      http.post('/api/onboarding/import-balances/owner_balances/supersede', () =>
+        HttpResponse.json({
+          batchId: 'b5',
+          rowCount: 3,
+          errorCount: 0,
+          counts: { posted: 0, alreadyPosted: 0, unchanged: 2, superseded: 1, skipped: 0, errors: 0 },
+          errors: [],
+        }),
+      ),
+    );
+    renderBalanceStep();
+    await userEvent.click(screen.getByLabelText('This is a corrected re-import (supersede)'));
+    await uploadCsv('Owner ID,Owner Name,Cash Balance,Accrual Balance\nO-1,X,450.00,450.00\n');
+    expect(await screen.findByText(/1 corrected, 2 unchanged/)).toBeInTheDocument();
+
+    // Uncheck supersede WITHOUT uploading again.
+    await userEvent.click(screen.getByLabelText('This is a corrected re-import (supersede)'));
+
+    const banner = screen.getByRole('status');
+    expect(within(banner).getByText(/1 corrected, 2 unchanged/)).toBeInTheDocument();
+    expect(within(banner).queryByText(/imported/i)).not.toBeInTheDocument();
+  });
+});
+
 // ─── (c) VerificationStep sign-off button ────────────────────────────────────
 
 describe('VerificationStep sign-off button', () => {

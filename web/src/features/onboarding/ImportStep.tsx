@@ -244,12 +244,19 @@ export function BalanceImportStep({
   // breakdown from the last import/supersede response so the success banner can differentiate.
   const [supersede, setSupersede] = useState(false);
   const [counts, setCounts] = useState<ImportOutcomeCounts | null>(null);
+  // Which mode actually produced the current `result`/`counts` — NOT the live `supersede`
+  // checkbox. The success banner must key off this, never off `supersede` directly: `isSuccess`
+  // stays true until the next upload, so if the banner read the live checkbox, toggling it after
+  // a result had already landed (without re-uploading) would instantly relabel that stale result
+  // under the wrong mode.
+  const [resultMode, setResultMode] = useState<'import' | 'supersede' | null>(null);
   // Tracks which balance kinds imported cleanly, so the "Continue" affordance only appears once
   // the operator has imported at least one kind on this step.
   const [importedKinds, setImportedKinds] = useState<Set<BalanceKind>>(new Set());
   const fileRef = useRef<HTMLInputElement>(null);
   const mutation = useImportBalances(selectedKind);
   const supersedeMutation = useSupersedeBalances(selectedKind);
+  const activeMutation = supersede ? supersedeMutation : mutation;
   const isPending = mutation.isPending || supersedeMutation.isPending;
 
   async function handleFile(file: File) {
@@ -257,8 +264,12 @@ export function BalanceImportStep({
     setErrors([]);
     setResult(null);
     setCounts(null);
+    setResultMode(null);
+    // Captured before the awaits below (not read again afterwards) so a mid-flight toggle of the
+    // checkbox can't skew which mode this request's result gets attributed to.
+    const mode = supersede ? 'supersede' : 'import';
     const csvContent = await file.text();
-    const res = await (supersede ? supersedeMutation : mutation).mutateAsync({
+    const res = await activeMutation.mutateAsync({
       csvContent,
       filename: file.name,
       cutoverDate,
@@ -268,6 +279,7 @@ export function BalanceImportStep({
     setResult({ rowCount: Number(res.rowCount), errorCount });
     setErrors(res.errors ?? []);
     setCounts(res.counts ?? null);
+    setResultMode(mode);
     if (errorCount === 0) {
       setImportedKinds((prev) => new Set(prev).add(selectedKind));
     }
@@ -317,6 +329,7 @@ export function BalanceImportStep({
                     setErrors([]);
                     setSupersede(false);
                     setCounts(null);
+                    setResultMode(null);
                   }}
                 />
                 {label}
@@ -413,18 +426,15 @@ export function BalanceImportStep({
         )}
       </div>
 
-      {(supersede ? supersedeMutation.isError : mutation.isError) && (
-        <ApiErrorNotice
-          error={supersede ? supersedeMutation.error : mutation.error}
-          fallback="Import failed."
-        />
+      {activeMutation.isError && (
+        <ApiErrorNotice error={activeMutation.error} fallback="Import failed." />
       )}
 
       {isSuccess && (
         <div className="ob-success-banner" role="status">
           <Icon name="check" size={16} />
           <span>
-            {supersede && counts
+            {resultMode === 'supersede' && counts
               ? Number(counts.superseded) === 0
                 ? 'No figures differed — nothing was superseded.'
                 : `${Number(counts.superseded)} corrected, ${Number(counts.unchanged)} unchanged.`
