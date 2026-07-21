@@ -106,7 +106,15 @@ public sealed class BalanceImportService(
 
         await db.SaveChangesAsync(ct);
 
-        return new ImportBatchResult(batch.Id, rowOutcomes.Count, totalErrors, batchErrors);
+        var counts = new ImportOutcomeCounts(
+            Posted: rowOutcomes.Count(r => !r.IsError && !r.IsSkipped && !r.AlreadyPosted),
+            AlreadyPosted: rowOutcomes.Count(r => r.AlreadyPosted),
+            Unchanged: 0,
+            Superseded: 0,
+            Skipped: rowOutcomes.Count(r => r.IsSkipped),
+            Errors: totalErrors);
+
+        return new ImportBatchResult(batch.Id, rowOutcomes.Count, totalErrors, counts, batchErrors);
     }
 
     // -------------------------------------------------------------------------

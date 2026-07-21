@@ -89,6 +89,9 @@ public sealed class BalanceImportTests(PostgresFixture fixture)
             new { csvContent = bankCsv, cutoverDate = CutoverStr, filename = "banks.csv" }, ct);
         bankResult.ErrorCount.ShouldBe(0, $"bank errors: {string.Join("; ", bankResult.Errors.Select(e => e.Reason))}");
         bankResult.RowCount.ShouldBe(2);
+        bankResult.Counts.Posted.ShouldBe(2);
+        bankResult.Counts.AlreadyPosted.ShouldBe(0);
+        bankResult.Counts.Errors.ShouldBe(0);
 
         const string ownerBalCsv =
             "Owner ID,Owner Name,Cash Balance,Accrual Balance\n" +
@@ -182,6 +185,8 @@ public sealed class BalanceImportTests(PostgresFixture fixture)
         r2Bank.ErrorCount.ShouldBe(0);
         // Re-import rows should be already-posted, not errors
         r2Bank.RowCount.ShouldBe(1);
+        r2Bank.Counts.AlreadyPosted.ShouldBe(r2Bank.RowCount);
+        r2Bank.Counts.Posted.ShouldBe(0);
 
         var r2Owner = await PostBalanceImportAsync<ImportBatchResult>(
             setup.Client, "owner_balances",
