@@ -136,6 +136,14 @@ null — enforced by the posting service, a DB CHECK, and invariant I3. The shap
 time (`InvalidOpeningPositionException`): both wrong-shape outcomes are I1-invisible and would
 surface only later as an I2 variance.
 
+The guard fires at post time, so where it lands depends on the caller. A plain import records the
+rejection as a row error and continues — its held-fees rows are single-position, so nothing partial
+can commit. A corrected re-import (ADR-021's supersede path) instead lets the rejection abort the
+whole batch: it has already posted the reversal by the time the replacement is rejected, and the two
+must commit together or the live position would be removed with nothing put back. Given the planner
+supplies the basis, bank, and owner dimensions structurally, the only rule a corrected re-import can
+actually trip is the `trust_bank`-class check — a chart-of-accounts divergence, not a fixable row.
+
 ## Revisit trigger
 
 If a future import source (Buildium, Rentec) requires per-position semantics that differ materially

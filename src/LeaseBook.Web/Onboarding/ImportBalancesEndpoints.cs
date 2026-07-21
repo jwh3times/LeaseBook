@@ -1,4 +1,5 @@
 using LeaseBook.Migrator.Model;
+using LeaseBook.Modules.Accounting.Contracts;
 using LeaseBook.SharedKernel.Endpoints;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -19,8 +20,11 @@ namespace LeaseBook.Web.Onboarding;
 /// <c>POST /api/onboarding/import-balances/{kind}/supersede</c> — the WP-7 pre-sign-off corrected
 /// re-import (<see cref="BalanceImportService.SupersedeAsync"/>): same request/response shape, but
 /// diffs the corrected CSV against the live opening positions instead of posting fresh. The three
-/// §2 guards surface as a 409 problem via <see cref="SupersedeConflictException"/>. Both routes
-/// share <see cref="ValidateImportRequest"/> for the request-shape checks so they cannot drift.
+/// §2 guards surface as a 409 problem via <see cref="SupersedeConflictException"/>, as does a
+/// held-fees shape violation (<see cref="InvalidOpeningPositionException"/>) — which aborts the whole
+/// corrected re-import rather than becoming a row error, so a reversal can never commit without its
+/// revision. Both routes share <see cref="ValidateImportRequest"/> for the request-shape checks so
+/// they cannot drift.
 /// </summary>
 public sealed class ImportBalancesEndpoints : IEndpointModule
 {
@@ -80,6 +84,19 @@ public sealed class ImportBalancesEndpoints : IEndpointModule
                     }
                     catch (SupersedeConflictException ex)
                     {
+                        return ProblemResults.Problem(
+                            httpContext,
+                            code: ex.Code,
+                            detail: ex.Message,
+                            status: StatusCodes.Status409Conflict);
+                    }
+                    catch (InvalidOpeningPositionException ex)
+                    {
+                        // A held-fees shape violation escapes SupersedeAsync on purpose (a reversal and
+                        // its revision must commit together), so the whole batch has rolled back. Surface
+                        // it as a typed conflict rather than a 500: the message is S2-clean and the code
+                        // names the broken rule. Only the supersede route needs this — the plain import
+                        // route records the same condition as a row error, which is safe there.
                         return ProblemResults.Problem(
                             httpContext,
                             code: ex.Code,

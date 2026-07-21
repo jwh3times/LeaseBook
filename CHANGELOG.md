@@ -85,7 +85,9 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   cutover boundary) plus a corrected revision (`#r{N}`); a position left out of the file is
   untouched (omission is not removal); a position resubmitted at $0.00 is removed outright. The
   successor batch records `supersedes_batch_id` for lineage, and after sign-off the endpoint returns
-  409 — corrections become ordinary ledger reversals instead. See ADR-021.
+  409 — corrections become ordinary ledger reversals instead. A correction is all-or-nothing: a
+  position whose corrected figure is rejected at post time rolls the whole batch back (409) rather
+  than leaving that position's reversal committed without its replacement. See ADR-021.
 - **Held-PM-fees opening import** — a fifth balance kind: an un-swept property-management-fee
   position sitting in a trust or deposit-purpose bank account now imports as a real opening position
   (a `pm_income` credit plus a `migration_clearing` contra, both bases, bank-dimensioned, no owner

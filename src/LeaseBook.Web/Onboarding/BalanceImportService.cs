@@ -166,6 +166,13 @@ public sealed class BalanceImportService(
     /// ambient RLS transaction with one terminal <c>SaveChanges</c> — a mid-way throw rolls back whole.
     /// The three §2 guards throw <see cref="SupersedeConflictException"/> before any write, so a blocked
     /// path leaves no batch, audit, or journal row.
+    /// <para>
+    /// A held-fees shape violation (<see cref="InvalidOpeningPositionException"/>) is likewise allowed to
+    /// escape rather than becoming a row error — unlike in <see cref="ImportAsync"/>. A reversal and its
+    /// revision must commit together: the reversal is already flushed by the time the revision posts, so
+    /// recording the row as an error and carrying on would ship the reversal alone — silently removing a
+    /// live position while reporting to the operator that the row did nothing. See the note at the repost site.
+    /// </para>
     /// </summary>
     public async Task<ImportBatchResult> SupersedeAsync(
         EntityKind kind,
@@ -240,7 +247,6 @@ public sealed class BalanceImportService(
             var anyChanged = false;
             var anyNewPost = false;
             var anyUnchanged = false;
-            var rowRejected = false;
 
             // A row groups one-or-more positions (owner rows plan two: cash then accrual-delta); each is
             // diffed against its own family independently, so this stays cardinality-agnostic.
@@ -281,6 +287,17 @@ public sealed class BalanceImportService(
                 }
 
                 // Repost the corrected figure at the next revision ref; a $0 correction posts nothing.
+                //
+                // WP-7 §3.1: the post-time held-fees shape guard is NOT converted to a row error here,
+                // the way ImportAsync does it. By this point the reversal above has already been flushed
+                // (PostingService SaveChanges-per-post), so recording an error and continuing would let
+                // the terminal commit ship the reversal without its revision — the live position silently
+                // removed while the batch tells the operator the row failed. Letting it escape rolls the
+                // whole batch back, which is what this method's contract promises anyway. That costs
+                // nothing real: the planner satisfies the basis/bank/owner checks structurally, so the
+                // only rule reachable from here is held_fees_bank_not_trust — org-level chart-of-accounts
+                // corruption, not a row the operator could fix by editing the CSV. ImportAsync's catch is
+                // safe by contrast: held-fees rows are single-position there, so nothing partial exists.
                 if (p.Figure != 0m)
                 {
                     var nextRev = 1 + family.Count;                          // journal-derived (§2.3/R3)
@@ -303,20 +320,14 @@ public sealed class BalanceImportService(
                     }
                     catch (InvalidOpeningPositionException ex)
                     {
-                        // WP-7 §3.1: same post-time held-fees shape guard as ImportAsync (Task 9).
-                        // S2-clean message to the row; code + source_ref are the logged technical detail.
+                        // Log the technical detail (S2: code + source_ref never reach the operator), then
+                        // rethrow so the ambient transaction unwinds — see the note above.
                         logger.LogWarning(LogEvents.HeldFeesShapeRejected,
-                            "Held-fees opening rejected ({Code}) for source_ref {SourceRef}", ex.Code, p.SourceRef);
-                        outcomes.Add(BalanceRowOutcome.Error(p.RowNumber, p.ExternalId, p.RawJson, "held_fees", ex.Message));
-                        rowRejected = true;
-                        break;
+                            "Held-fees opening rejected ({Code}) for source_ref {SourceRef}; rolling back the supersede batch",
+                            ex.Code, p.SourceRef);
+                        throw;
                     }
                 }
-            }
-
-            if (rowRejected)
-            {
-                continue;
             }
 
             // Bucket the row exactly once by precedence, and record one outcome row for it. The resulting

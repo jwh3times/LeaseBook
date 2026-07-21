@@ -544,6 +544,138 @@ public sealed class BalanceSupersedeTests(PostgresFixture fixture)
     }
 
     // ──────────────────────────────────────────────────────────────────────────────────────────────
+    // 13. D8: a same-kind family left OUT of the corrected file is untouched (omission ≠ removal).
+    //     The headline semantic of the file-scoped engine — structurally guaranteed today (nothing
+    //     iterates absent positions, and there is no removal path), but nothing pinned it.
+    // ──────────────────────────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Omitted_same_kind_family_is_left_untouched()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var setup = await SetupAsync("Omission", ct);
+
+        // Two owners of the SAME kind, so the omitted one is a peer of the corrected one — not merely
+        // a different balance kind the file never addressed.
+        await OnboardingTestHelpers.PostImportAsync<ImportBatchResult>(setup.Client, "owners",
+            new
+            {
+                csvContent = "Owner ID,Owner Name,Reserve\nO-1,Chain Owner LLC,0\nO-2,Omitted Owner LLC,0\n",
+                filename = "owners.csv",
+            }, ct);
+
+        await OnboardingTestHelpers.PostBalanceImportAsync<ImportBatchResult>(setup.Client, "owner_balances",
+            new
+            {
+                csvContent = "Owner ID,Owner Name,Cash Balance,Accrual Balance\n"
+                             + "O-1,Chain Owner LLC,500.00,500.00\nO-2,Omitted Owner LLC,700.00,700.00\n",
+                cutoverDate = CutoverStr,
+                filename = "owners.csv",
+            }, ct);
+
+        var correctedId = await ResolveOwnerIdAsync(setup.OrgId, "Chain Owner LLC", ct);
+        var omittedId = await ResolveOwnerIdAsync(setup.OrgId, "Omitted Owner LLC", ct);
+
+        // The corrected file carries O-1 only. O-2 is absent — which must mean "leave it alone",
+        // never "remove it" (the $0.00 resubmission in test 4 is the removal gesture).
+        var result = await SupersedeInScopeAsync(setup.OrgId, EntityKind.OwnerBalances,
+            "Owner ID,Owner Name,Cash Balance,Accrual Balance\nO-1,Chain Owner LLC,450.00,450.00\n", Cutover, ct);
+
+        result.RowCount.ShouldBe(1, "the batch spans the corrected file's rows only, not the live position set");
+        result.Counts.Superseded.ShouldBe(1);
+        result.Counts.Unchanged.ShouldBe(0, "the omitted family is absent from the batch, not counted as unchanged");
+        result.Counts.Posted.ShouldBe(0);
+        result.Counts.Skipped.ShouldBe(0);
+
+        var omittedBase = $"opening:{CutoverStr}:owner-equity={omittedId}";
+        var correctedBase = $"opening:{CutoverStr}:owner-equity={correctedId}";
+        await ReadAsync(setup.OrgId, async db =>
+        {
+            // The omitted family is exactly as imported: one live entry, no void mirror, no revision.
+            var omitted = await FamilyEntriesAsync(db, omittedBase, ct);
+            var live = omitted.ShouldHaveSingleItem();
+            live.SourceRef.ShouldBe(omittedBase);
+            live.EventType.ShouldBe("OpeningBalance");
+            live.IsReversed.ShouldBeFalse("an omitted family must never be reversed");
+            live.Credit.ShouldBe(700.00m);
+            (await OwnerEquityNetAsync(db, omittedId, "cash", "both", ct)).ShouldBe(700.00m,
+                "the omitted owner's live position is unmoved");
+
+            // …while the family that WAS in the file moved, proving the run did real work.
+            var corrected = await FamilyEntriesAsync(db, correctedBase, ct);
+            corrected.ShouldContain(r => r.SourceRef == correctedBase + ":void");
+            corrected.ShouldContain(r => r.SourceRef == correctedBase + "#r2" && r.Credit == 450.00m);
+            (await OwnerEquityNetAsync(db, correctedId, "cash", "both", ct)).ShouldBe(450.00m);
+        }, ct);
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────────────────────────
+    // 14. A held-fees shape violation mid-supersede aborts the WHOLE batch — it must never commit a
+    //     reversal without its revision. The reversal is flushed before the repost runs
+    //     (SaveChanges-per-post), so converting the throw to a row error would silently remove the
+    //     live position while reporting the row as failed. Only reachable through reference-data
+    //     divergence, which is what this test arranges deliberately.
+    // ──────────────────────────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Held_fees_shape_violation_mid_supersede_rolls_the_whole_batch_back()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var setup = await SetupAsync("ShapeRollback", ct);
+        await OnboardingTestHelpers.ImportOwnerTenantChainAsync(setup.Client, ct);
+
+        // A clean held-fees position against the properly-provisioned trust bank.
+        await OnboardingTestHelpers.PostBalanceImportAsync<ImportBatchResult>(setup.Client, "held_pm_fees",
+            new
+            {
+                csvContent = $"Account ID,Account Name,Held Fees\nB-TRUST,{setup.TrustBankName},100.00\n",
+                cutoverDate = CutoverStr,
+                filename = "held_fees.csv",
+            }, ct);
+
+        var (trustBankId, _) = await ResolveBankIdsAsync(setup.OrgId, ct);
+        var baseRef = $"opening:{CutoverStr}:held-fees={trustBankId}";
+
+        // Diverge the reference data: the bank keeps its Trust purpose (so the planner still accepts
+        // the row) but its chart entry is no longer trust_bank-class — exactly the corruption the
+        // post-time shape guard exists to catch. The CHECK constraint on accounts allows this swap
+        // because pm_operating_bank also carries a bank_account_id.
+        await ReadAsync(setup.OrgId, async db =>
+        {
+            await db.Database.ExecuteSqlAsync(
+                $"UPDATE accounts SET class = 'pm_operating_bank' WHERE bank_account_id = {trustBankId} AND class = 'trust_bank'",
+                ct);
+        }, ct);
+
+        var (journalBefore, batchesBefore) = await CountsAsync(setup.OrgId, ct);
+
+        // The corrected figure differs, so the engine reverses the live entry and THEN reposts —
+        // the repost trips the guard. The exception must escape rather than becoming a row error.
+        // Fully qualified: an unaliased `using` for Accounting.Contracts would make BankPurpose
+        // ambiguous against Directory.Domain's, which ResolveBankIdsAsync below depends on.
+        var ex = await Should.ThrowAsync<LeaseBook.Modules.Accounting.Contracts.InvalidOpeningPositionException>(async () =>
+            await SupersedeInScopeAsync(setup.OrgId, EntityKind.HeldPmFees,
+                $"Account ID,Account Name,Held Fees\nB-TRUST,{setup.TrustBankName},80.00\n", Cutover, ct));
+        ex.Code.ShouldBe("held_fees_bank_not_trust");
+
+        var (journalAfter, batchesAfter) = await CountsAsync(setup.OrgId, ct);
+        journalAfter.ShouldBe(journalBefore, "the aborted supersede must leave the journal untouched");
+        batchesAfter.ShouldBe(batchesBefore, "the aborted supersede must not add an import batch");
+
+        await ReadAsync(setup.OrgId, async db =>
+        {
+            var family = await FamilyEntriesAsync(db, baseRef, ct);
+
+            // The decisive assertion: no orphan reversal survived. The original is still live at 100.
+            family.ShouldNotContain(r => r.SourceRef.EndsWith(":void", StringComparison.Ordinal),
+                "a reversal must never commit without its corrected revision");
+            var original = family.Single(r => r.SourceRef == baseRef);
+            original.IsReversed.ShouldBeFalse("the rolled-back reversal must not survive the abort");
+            original.Credit.ShouldBe(100.00m, "the live held-fees position is exactly as imported");
+        }, ct);
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────────────────────────
     // Arrange + invoke helpers
     // ──────────────────────────────────────────────────────────────────────────────────────────────
 
