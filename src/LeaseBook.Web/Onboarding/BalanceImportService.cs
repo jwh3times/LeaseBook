@@ -5,11 +5,16 @@ using LeaseBook.Migrator.Model;
 using LeaseBook.Migrator.Profiles;
 using LeaseBook.Modules.Accounting.Contracts;
 using LeaseBook.Modules.Accounting.Domain;
+using LeaseBook.Modules.Accounting.Features.Migration;
 using LeaseBook.Modules.Directory.Domain;
 using LeaseBook.SharedKernel;
+using LeaseBook.SharedKernel.Cqrs;
 using LeaseBook.SharedKernel.Tenancy;
+using LeaseBook.Web.Observability;
 using LeaseBook.Web.Onboarding.Persistence;
+using LeaseBook.Web.Tenancy;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using DirectoryBankPurpose = LeaseBook.Modules.Directory.Domain.BankPurpose;
 
 namespace LeaseBook.Web.Onboarding;
@@ -29,7 +34,10 @@ public sealed class BalanceImportService(
     DbContext db,
     IBalanceForward balanceForward,
     IActorContext actor,
-    ExternalIdResolver resolver)
+    ExternalIdResolver resolver,
+    ISender sender,
+    IReversalService reversal,
+    ILogger<BalanceImportService> logger)
 {
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
 
@@ -109,8 +117,267 @@ public sealed class BalanceImportService(
             actor: actor.UserId);
 
         db.Set<ImportBatch>().Add(batch);
+        PersistRows(batch.Id, rowOutcomes);
 
-        foreach (var outcome in rowOutcomes)
+        await db.SaveChangesAsync(ct);
+
+        var counts = new ImportOutcomeCounts(
+            Posted: rowOutcomes.Count(r => !r.IsError && !r.IsSkipped && !r.AlreadyPosted),
+            AlreadyPosted: rowOutcomes.Count(r => r.AlreadyPosted),
+            Unchanged: 0,
+            Superseded: 0,
+            Skipped: rowOutcomes.Count(r => r.IsSkipped),
+            Errors: totalErrors);
+
+        return new ImportBatchResult(batch.Id, rowOutcomes.Count, totalErrors, counts, batchErrors);
+    }
+
+    // -------------------------------------------------------------------------
+    // Supersede: pre-sign-off corrected re-import (WP-7 Task 5, design §2).
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Pre-sign-off corrected re-import (WP-7 Half A, design §2). File-scoped: only positions present
+    /// in the corrected file are considered — an omitted family is left as-is (omission ≠ removal, D8).
+    /// Per position, diffed against the live opening entry of its base source_ref family: an identical
+    /// figure is left untouched (S3 idempotency by figure comparison); a changed figure posts a linked
+    /// reversal dated at <paramref name="cutoverDate"/> (never today, R1) then a corrected revision at
+    /// the next <c>#r{N}</c>; a correction to $0.00 posts the reversal only. Everything runs on the
+    /// ambient RLS transaction with one terminal <c>SaveChanges</c> — a mid-way throw rolls back whole.
+    /// The three §2 guards throw <see cref="SupersedeConflictException"/> before any write, so a blocked
+    /// path leaves no batch, audit, or journal row.
+    /// </summary>
+    public async Task<ImportBatchResult> SupersedeAsync(
+        EntityKind kind,
+        string mappingProfile,
+        string filename,
+        DateOnly cutoverDate,
+        Stream csvStream,
+        CancellationToken ct)
+    {
+        // Guard 1 (§2.5): a signed-off migration is closed to import machinery — corrections are ledger
+        // reversals now, not re-imports.
+        if (await db.Set<MigrationVerification>().AnyAsync(v => v.SignedOffAt != null, ct))
+        {
+            throw new SupersedeConflictException("already_signed_off",
+                "This migration is already signed off. Correct figures with a ledger reversal instead.");
+        }
+
+        // Guard 2 (§2.9): a corrected re-import needs a prior import of this balance type to correct.
+        var priorStatuses = new[] { "posted", "posted_with_errors" };
+        var priorBatch = await db.Set<ImportBatch>()
+            .Where(b => b.EntityKind == kind.ToString() && priorStatuses.Contains(b.Status))
+            .OrderByDescending(b => b.CreatedAt)
+            .FirstOrDefaultAsync(ct);
+        if (priorBatch is null)
+        {
+            throw new SupersedeConflictException("nothing_to_supersede",
+                "No prior import of this balance type exists. Use the ordinary import instead.");
+        }
+
+        // The live opening positions (event_type='OpeningBalance', real leg, IsReversed flag) — the
+        // #r{N} count is derived from THIS journal read, never from the request (R3). Voids never appear.
+        var live = await sender.Query(new GetOpeningPositions(), ct);
+
+        // Guard 3 (§2.9): the base refs embed the cutover date; a different date would match no family
+        // and double-post every position as new. The date is read from the journal, never trusted.
+        var existingDates = live.Entries
+            .Select(e => e.SourceRef.Split(':'))
+            .Where(parts => parts.Length >= 3 && parts[0] == "opening")
+            .Select(parts => parts[1])
+            .Distinct()
+            .ToList();
+        var requestDate = cutoverDate.ToString("yyyy-MM-dd");
+        if (existingDates.Count > 0 && !existingDates.Contains(requestDate))
+        {
+            throw new SupersedeConflictException("cutover_date_mismatch",
+                $"The corrected file's cutover date ({requestDate}) does not match the imported cutover date ({existingDates[0]}). Changing the cutover date requires re-provisioning.");
+        }
+
+        // Family map keyed by base ref (strip a trailing #r{N}); the live member is the unreversed entry.
+        // Snapshotted before any reversal, so 1 + family.Count is the pre-supersede revision count.
+        var families = live.Entries
+            .GroupBy(e => BaseRef(e.SourceRef))
+            .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
+
+        var plan = await PlanAsync(kind, cutoverDate, csvStream, ct);
+        var outcomes = new List<BalanceRowOutcome>(plan.ResolutionErrors);
+
+        // Row buckets partition every resolvable row exactly once, by precedence
+        // Superseded > Posted > Unchanged > Skipped (error rows are the pre-seeded ResolutionErrors).
+        var posted = 0;
+        var unchanged = 0;
+        var superseded = 0;
+        var skipped = 0;
+        var reversedEntryIds = new List<Guid>();
+
+        foreach (var rowGroup in plan.Positions.GroupBy(p => p.RowNumber))
+        {
+            var head = rowGroup.First();
+            Guid? revisionEntryId = null;  // a newly posted corrected revision or brand-new position
+            Guid? reversalEntryId = null;  // a void mirror (the only journal effect of a $0 correction)
+            Guid? unchangedEntryId = null; // an untouched live entry (idempotent row)
+            var anyChanged = false;
+            var anyNewPost = false;
+            var anyUnchanged = false;
+
+            // A row groups one-or-more positions (owner rows plan two: cash then accrual-delta); each is
+            // diffed against its own family independently, so this stays cardinality-agnostic.
+            foreach (var p in rowGroup)
+            {
+                var family = families.GetValueOrDefault(p.SourceRef, []);
+                var current = family.FirstOrDefault(e => !e.IsReversed);
+                var (targetDebit, targetCredit) = MapToSides(p.Figure, p.DebitNormal);
+
+                // Unchanged: a live entry exists and already sits on the corrected side/amount (S3).
+                if (current is not null && current.Debit == targetDebit && current.Credit == targetCredit)
+                {
+                    anyUnchanged = true;
+                    unchangedEntryId ??= current.EntryId;
+                    continue;
+                }
+
+                // Changed family: reverse the live entry FIRST (§2.1), dated at the cutover (§2.2/R1).
+                if (current is not null)
+                {
+                    try
+                    {
+                        reversalEntryId = await reversal.ReverseAsync(
+                            current.EntryId, "Superseded by corrected re-import", cutoverDate,
+                            sourceRef: $"{current.SourceRef}:void", ct);
+                        reversedEntryIds.Add(current.EntryId);
+                    }
+                    catch (AlreadyReversedException)
+                    {
+                        // Concurrency backstop (§2.1/S3): a racing request already reversed it — converge
+                        // on success and treat it exactly like our own reversal (never a 409).
+                        logger.LogInformation(LogEvents.SupersedeReversalRace,
+                            "Supersede reversal race on entry {EntryId}; treating as already reversed",
+                            current.EntryId);
+                    }
+
+                    anyChanged = true;
+                }
+
+                // Repost the corrected figure at the next revision ref; a $0 correction posts nothing.
+                if (p.Figure != 0m)
+                {
+                    var nextRev = 1 + family.Count;                          // journal-derived (§2.3/R3)
+                    var newRef = current is null && family.Count == 0
+                        ? p.SourceRef                                        // never posted → base ref
+                        : $"{p.SourceRef}#r{nextRev}";
+                    var result = await PostLineAsync(
+                        p.Figure, p.DebitNormal, p.AccountCode, p.Basis,
+                        cutoverDate, newRef, p.OwnerId, p.TenantId, p.BankAccountId, ct);
+                    if (result.Posted)
+                    {
+                        revisionEntryId ??= result.EntryId;
+                        if (current is null)
+                        {
+                            anyNewPost = true;
+                        }
+                    }
+                }
+            }
+
+            // Bucket the row exactly once by precedence, and record one outcome row for it. The resulting
+            // journal-entry id prefers a new revision, then the void mirror, then the untouched entry.
+            bool alreadyPosted;
+            if (anyChanged) { superseded++; alreadyPosted = false; }
+            else if (anyNewPost) { posted++; alreadyPosted = false; }
+            else if (anyUnchanged) { unchanged++; alreadyPosted = true; }
+            else { skipped++; alreadyPosted = false; }
+
+            var resultingId = revisionEntryId ?? reversalEntryId ?? unchangedEntryId;
+            outcomes.Add(resultingId is Guid id
+                ? BalanceRowOutcome.Success(head.RowNumber, head.ExternalId, head.RawJson, id, alreadyPosted)
+                : BalanceRowOutcome.Skipped(head.RowNumber, head.ExternalId, head.RawJson));
+        }
+
+        var totalErrors = outcomes.Count(r => r.IsError);
+        var batch = ImportBatch.Create(
+            kind.ToString(),
+            mappingProfile,
+            filename,
+            rowCount: outcomes.Count,
+            errorCount: totalErrors,
+            status: totalErrors == 0 ? "posted" : "posted_with_errors",
+            actor: actor.UserId,
+            supersedesBatchId: priorBatch.Id);
+
+        db.Set<ImportBatch>().Add(batch);
+        PersistRows(batch.Id, outcomes);
+
+        // Explicit domain audit alongside the row-level auto-audit (mirrors VerificationService's pattern).
+        db.Set<AuditEvent>().Add(new AuditEvent
+        {
+            Id = UuidV7.NewId(),
+            ActorUserId = actor.UserId,
+            EntityType = "import-superseded",
+            EntityId = batch.Id,
+            Action = "insert",
+            Before = null,
+            After = JsonSerializer.Serialize(new
+            {
+                batchId = batch.Id,
+                supersedesBatchId = priorBatch.Id,
+                kind = kind.ToString(),
+                superseded,
+                posted,
+                unchanged,
+                skipped,
+                reversedEntryIds,
+            }, JsonOpts),
+        });
+
+        await db.SaveChangesAsync(ct);
+
+        var counts = new ImportOutcomeCounts(posted, AlreadyPosted: 0, unchanged, superseded, skipped, totalErrors);
+        return new ImportBatchResult(batch.Id, outcomes.Count, totalErrors, counts,
+            outcomes.Where(r => r.IsError)
+                .Select(r => new ImportBatchError(r.RowNumber, r.ErrorField!, r.ErrorReason!))
+                .ToList());
+    }
+
+    /// <summary>
+    /// Strips a trailing <c>#r{N}</c> revision suffix to recover the base source_ref, so the original
+    /// entry and every revision of the same position group under one family. Refs never contain
+    /// <c>#r</c> otherwise (voids are excluded from the source query, so their <c>:void</c> suffix is
+    /// never seen here).
+    /// </summary>
+    private static string BaseRef(string sourceRef)
+    {
+        var i = sourceRef.LastIndexOf("#r", StringComparison.Ordinal);
+        return i < 0 ? sourceRef : sourceRef[..i];
+    }
+
+    /// <summary>
+    /// Maps a signed figure onto the (debit, credit) sides an opening line would post — the pure-function
+    /// twin of <see cref="PostLineAsync"/>'s side logic, used to compare a corrected figure against a
+    /// live entry's real leg. A $0.00 figure maps to (null, null): no side, so it never equals a posted
+    /// leg and a live entry corrected to zero always reads as changed.
+    /// </summary>
+    private static (decimal? Debit, decimal? Credit) MapToSides(decimal figure, bool debitNormal)
+    {
+        if (figure == 0m)
+        {
+            return (null, null);
+        }
+
+        var onDebit = debitNormal ? figure > 0m : figure < 0m;
+        var amount = Math.Abs(figure);
+        return onDebit ? (amount, null) : (null, amount);
+    }
+
+    /// <summary>
+    /// Stages one <see cref="ImportRow"/> per outcome (shared verbatim by <see cref="ImportAsync"/> and
+    /// <see cref="SupersedeAsync"/>): error rows carry their field/reason, others carry the resulting
+    /// journal-entry id, and the row status derives from the outcome (error / skipped / already-posted /
+    /// posted). No SaveChanges — the caller flushes with the batch in one terminal write.
+    /// </summary>
+    private void PersistRows(Guid batchId, List<BalanceRowOutcome> outcomes)
+    {
+        foreach (var outcome in outcomes)
         {
             var mappedJson = outcome.IsError
                 ? JsonSerializer.Serialize(new { outcome.ExternalId }, JsonOpts)
@@ -127,7 +394,7 @@ public sealed class BalanceImportService(
                 : "posted";
 
             db.Set<ImportRow>().Add(ImportRow.Create(
-                batch.Id,
+                batchId,
                 outcome.RowNumber,
                 outcome.RawJson,
                 mappedJson,
@@ -135,18 +402,6 @@ public sealed class BalanceImportService(
                 errorsJson,
                 outcome.JournalEntryId));
         }
-
-        await db.SaveChangesAsync(ct);
-
-        var counts = new ImportOutcomeCounts(
-            Posted: rowOutcomes.Count(r => !r.IsError && !r.IsSkipped && !r.AlreadyPosted),
-            AlreadyPosted: rowOutcomes.Count(r => r.AlreadyPosted),
-            Unchanged: 0,
-            Superseded: 0,
-            Skipped: rowOutcomes.Count(r => r.IsSkipped),
-            Errors: totalErrors);
-
-        return new ImportBatchResult(batch.Id, rowOutcomes.Count, totalErrors, counts, batchErrors);
     }
 
     // -------------------------------------------------------------------------
@@ -622,4 +877,16 @@ public sealed class BalanceImportService(
     /// </summary>
     private sealed record BalancePlan(
         List<PlannedPosition> Positions, List<BalanceRowOutcome> ResolutionErrors);
+}
+
+/// <summary>
+/// A typed pre-flight conflict raised by <see cref="BalanceImportService.SupersedeAsync"/> before any
+/// write (the §2 guards). The onboarding endpoint (WP-7 Task 6) maps <see cref="Code"/> to a 409
+/// ProblemDetails; the message is display-safe (dates and instructions only — no ids, account codes,
+/// or table names), so technical detail belongs in the log, not here.
+/// </summary>
+public sealed class SupersedeConflictException(string code, string detail) : Exception(detail)
+{
+    /// <summary><c>already_signed_off</c> | <c>nothing_to_supersede</c> | <c>cutover_date_mismatch</c>.</summary>
+    public string Code { get; } = code;
 }

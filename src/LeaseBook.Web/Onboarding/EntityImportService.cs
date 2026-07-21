@@ -22,8 +22,8 @@ namespace LeaseBook.Web.Onboarding;
 /// <summary>
 /// Per-outcome row counts for one import batch (S1: "nothing fails silently" — an already-posted
 /// row is no longer folded into one undifferentiated success count). Ordinary entity and balance
-/// imports report <see cref="Unchanged"/> = <see cref="Superseded"/> = 0; those two are reserved
-/// for reconciliation-batch semantics introduced later in WP-7.
+/// imports report <see cref="Unchanged"/> = <see cref="Superseded"/> = 0; those two are filled by the
+/// WP-7 supersede (corrected re-import) workflow (<c>BalanceImportService.SupersedeAsync</c>).
 /// </summary>
 public sealed record ImportOutcomeCounts(
     int Posted, int AlreadyPosted, int Unchanged, int Superseded, int Skipped, int Errors);
