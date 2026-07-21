@@ -35,6 +35,12 @@ public static class EntityImporter
                 ? new TenantReceivableRow(ctx.Cells["external_tenant_id"], ctx.Cells["external_owner_id"], bal)
                 : ctx.Reject<TenantReceivableRow>("balance", "not a number"));
 
+    public static ImportResult<HeldPmFeeRow> ReadHeldPmFees(Stream csv, ColumnMappingProfile profile) =>
+        CsvImporter.Read(csv, profile, ctx =>
+            Dec(ctx.Cells, "held_amount", out var held)
+                ? new HeldPmFeeRow(ctx.Cells["external_bank_id"], ctx.Cells["name"], held)
+                : ctx.Reject<HeldPmFeeRow>("held_amount", "not a number"));
+
     // Entity binders — WP-3 Task 3.1.
 
     public static ImportResult<OwnerRow> ReadOwners(Stream csv, ColumnMappingProfile profile) =>

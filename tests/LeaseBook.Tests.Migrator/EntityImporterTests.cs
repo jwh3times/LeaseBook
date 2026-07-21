@@ -205,4 +205,31 @@ public sealed class EntityImporterTests
         row.EndDate.ShouldBeNull();
         row.Status.ShouldBe("active"); // default
     }
+
+    [Fact]
+    public void ReadHeldPmFees_binds_bank_name_and_amount()
+    {
+        var csv = "Account ID,Account Name,Held Fees\nB-TRUST,Trust Operating,125.50\n";
+        var result = EntityImporter.ReadHeldPmFees(Csv(csv), AppFolioProfiles.For(EntityKind.HeldPmFees));
+        result.Errors.ShouldBeEmpty();
+        result.Rows.Count.ShouldBe(1);
+        result.Rows[0].ShouldBe(new HeldPmFeeRow("B-TRUST", "Trust Operating", 125.50m));
+    }
+
+    [Fact]
+    public void ReadHeldPmFees_rejects_non_numeric_amount_and_keeps_going()
+    {
+        var csv = "Account ID,Account Name,Held Fees\nB-1,Trust A,abc\nB-2,Trust B,50.00\n";
+        var result = EntityImporter.ReadHeldPmFees(Csv(csv), AppFolioProfiles.For(EntityKind.HeldPmFees));
+        result.Errors.Count.ShouldBe(1);
+        result.Errors[0].Field.ShouldBe("held_amount");
+        result.Rows.Count.ShouldBe(1);
+    }
+
+    [Fact]
+    public void Every_entity_kind_resolves_a_profile()   // guards AppFolioProfiles' throwing default (R9)
+    {
+        foreach (var kind in Enum.GetValues<EntityKind>())
+            Should.NotThrow(() => AppFolioProfiles.For(kind), $"no profile for {kind}");
+    }
 }
