@@ -38,8 +38,8 @@ namespace LeaseBook.Web.Seeding;
 ///   Deposit Trust book = $4,500.00 = $1,500 + $1,250 + $1,750 = Σ deposit liabilities ✓
 ///   Cash == Accrual (happy path): no accrual-delta line → MigrationClearing nets to $0.00 in both bases.
 ///   The e2e correction leg deliberately understates O-C1 at $4,950.00 in <c>owner_balances.csv</c>;
-///   the fifth fixture CSV, <c>owner_balances_corrected.csv</c>, supersedes it back to $5,000.00
-///   before the tie above is checked.
+///   the dedicated correction CSV, <c>owner_balances_corrected.csv</c>, supersedes it back to
+///   $5,000.00 before the tie above is checked.
 /// </para>
 ///
 /// <para>
