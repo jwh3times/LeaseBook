@@ -388,6 +388,78 @@ public sealed class BalanceSupersedeTests(PostgresFixture fixture)
     }
 
     // ──────────────────────────────────────────────────────────────────────────────────────────────
+    // 10. HTTP: the real supersede route returns 200 with the superseded count (WP-7 Task 6).
+    // ──────────────────────────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Http_supersede_route_returns_200_and_superseded_count()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (setup, _) = await ArrangeTiedSetAsync("HttpHappy", ct);
+
+        var response = await setup.Client.PostAsJsonAsync(
+            "/api/onboarding/import-balances/owner_balances/supersede",
+            new
+            {
+                csvContent = "Owner ID,Owner Name,Cash Balance,Accrual Balance\nO-1,Chain Owner LLC,450.00,450.00\n",
+                cutoverDate = CutoverStr,
+                filename = "owners.csv",
+            }, ct);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK, await response.Content.ReadAsStringAsync(ct));
+        var result = (await response.Content.ReadFromJsonAsync<ImportBatchResult>(ct))!;
+        result.Counts.Superseded.ShouldBe(1);
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────────────────────────
+    // 11. HTTP: a signed-off org gets a typed 409 problem with a code + correlationId (WP-7 Task 6).
+    // ──────────────────────────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Http_supersede_route_returns_409_for_signed_off_org()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (setup, _) = await ArrangeTiedSetAsync("HttpConflict", ct);
+
+        // Verify + sign off through the real endpoints (mirrors Signed_off_org_returns_conflict_with_no_side_effect).
+        var (trustBankId, depositBankId) = await ResolveBankIdsAsync(setup.OrgId, ct);
+        var verBody = new
+        {
+            cutoverDate = CutoverStr,
+            ownerEquityTotal = 500.00m,
+            depositLiabilityTotal = 500.00m,
+            bankBookBalances = new[]
+            {
+                new { bankAccountId = trustBankId, expectedBook = 500.00m, accountCode = (string?)null },
+                new { bankAccountId = depositBankId, expectedBook = 500.00m, accountCode = (string?)null },
+            },
+        };
+        var verResponse = await setup.Client.PostAsJsonAsync("/api/onboarding/verification", verBody, ct);
+        verResponse.StatusCode.ShouldBe(HttpStatusCode.OK, await verResponse.Content.ReadAsStringAsync(ct));
+        var report = (await verResponse.Content.ReadFromJsonAsync<VerificationReport>(ct))!;
+        report.IsTied.ShouldBeTrue();
+
+        var signoffResponse = await setup.Client.PostAsJsonAsync(
+            $"/api/onboarding/verification/{report.VerificationId}/signoff", new { }, ct);
+        signoffResponse.StatusCode.ShouldBe(HttpStatusCode.OK, await signoffResponse.Content.ReadAsStringAsync(ct));
+
+        var response = await setup.Client.PostAsJsonAsync(
+            "/api/onboarding/import-balances/owner_balances/supersede",
+            new
+            {
+                csvContent = "Owner ID,Owner Name,Cash Balance,Accrual Balance\nO-1,Chain Owner LLC,450.00,450.00\n",
+                cutoverDate = CutoverStr,
+                filename = "owners.csv",
+            }, ct);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+        var problem = (await response.Content.ReadFromJsonAsync<ProblemWithCode>(ct))!;
+        problem.Code.ShouldBe("already_signed_off");
+        problem.CorrelationId.ShouldNotBeNullOrWhiteSpace(
+            "every error response must carry a correlationId the operator can quote (ADR-025)");
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────────────────────────
     // Arrange + invoke helpers
     // ──────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -585,4 +657,6 @@ public sealed class BalanceSupersedeTests(PostgresFixture fixture)
     private sealed record FamilyRow(
         string SourceRef, string EventType, DateOnly EntryDate, bool IsReversed,
         decimal? Debit, decimal? Credit, string Basis);
+
+    private sealed record ProblemWithCode(string Code, string? CorrelationId);
 }
