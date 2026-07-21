@@ -61,15 +61,18 @@ This returns, in order, everything logged for that one request:
 structured log this contract produces. Track B's B4 alert rules key on these ids, so a query can
 filter on `customDimensions.EventId` (or the trace message) instead of matching text:
 
-| Id   | Name                  | Level   | Meaning                                                                                       |
-| ---- | --------------------- | ------- | --------------------------------------------------------------------------------------------- |
-| 1000 | `UnhandledException`  | Error   | The terminal handler caught an exception no typed handler claimed. Always has the exception.  |
-| 1001 | `DomainRejection`     | Warning | A typed accounting domain rule declined the request (a 404/409/422) — expected, not a defect. |
-| 1002 | `ValidationRejection` | Warning | A command/query or auth DTO failed FluentValidation — a 400.                                  |
-| 1003 | `ImportRowFailed`     | Error   | One row of a migration import failed after parsing; the batch continued. Has the exception.   |
+| Id   | Name                    | Level       | Meaning                                                                                                                                                   |
+| ---- | ----------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1000 | `UnhandledException`    | Error       | The terminal handler caught an exception no typed handler claimed. Always has the exception.                                                              |
+| 1001 | `DomainRejection`       | Warning     | A typed accounting domain rule declined the request (a 404/409/422) — expected, not a defect.                                                             |
+| 1002 | `ValidationRejection`   | Warning     | A command/query or auth DTO failed FluentValidation — a 400.                                                                                              |
+| 1003 | `ImportRowFailed`       | Error       | One row of a migration import failed after parsing; the batch continued. Has the exception.                                                               |
+| 1100 | `SupersedeReversalRace` | Information | The corrected re-import (supersede) path found the entry already reversed by a racing request; it converges on success anyway — expected, not a defect.   |
+| 1101 | `HeldFeesShapeRejected` | Warning     | A balance-import row's pm_income opening violated the held-fees shape at post time; the row is recorded as an error and the batch continues, never a 500. |
 
-1000-1099 is reserved for host/error plumbing; 1100+ is reserved for future domain areas as they
-add their own structured events.
+1000-1099 is reserved for host/error plumbing; 1100-1199 is the import-supersede/held-fees domain
+(WP-7 — the first block claimed under ADR-025's 1100+ convention). Later domain areas take the next
+hundred-block (1200+, 1300+, …) as they add their own structured events.
 
 ## Production caution: Npgsql `Include Error Detail`
 
