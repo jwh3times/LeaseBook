@@ -80,6 +80,17 @@ public sealed class ClearingInvariantTests(PostgresFixture fixture)
                     AccountCodes.TrustBank(scope.TrustBankId), Debit: amount, Credit: null, EntryBasis.Both,
                     cutover, $"opening:{cutover:yyyy-MM-dd}:trust-bank={owner}",
                     BankAccountId: scope.TrustBankId), ct);
+
+                // WP-7: a held-fees position + covering bank debit keeps the set balanced while
+                // proving clearing→0 and CheckCoreAsync-clean with trust-bank pm_income in the mix.
+                await balanceForward.PostOpeningPositionAsync(new OpeningPositionRequest(
+                    AccountCodes.PmIncome, Debit: null, Credit: amount, EntryBasis.Both,
+                    cutover, $"opening:{cutover:yyyy-MM-dd}:held-fees={owner}",
+                    BankAccountId: scope.TrustBankId), ct);
+                await balanceForward.PostOpeningPositionAsync(new OpeningPositionRequest(
+                    AccountCodes.TrustBank(scope.TrustBankId), Debit: amount, Credit: null, EntryBasis.Both,
+                    cutover, $"opening:{cutover:yyyy-MM-dd}:trust-bank-held={owner}",
+                    BankAccountId: scope.TrustBankId), ct);
             }
 
             // I5: clearing nets to $0 in both bases after a balanced set.
