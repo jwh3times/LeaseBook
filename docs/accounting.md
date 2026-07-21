@@ -388,7 +388,7 @@ once the batch is signed off, corrections become ordinary ledger reversals inste
 
 Held PM fees — the un-swept management-fee cash sitting in a trust bank — now import as a fifth
 balance kind, posting the two-leg entry defined in **ADR-020 §5**. The verification report carries a
-dedicated **Held PM Fees** line, and sign-off is refused until the operator attests to that figure
+dedicated **Held PM Fees (Cash)** line, and sign-off is refused until the operator attests to that figure
 whenever the journal holds a non-zero held-fee position.
 
 See also: **ADR-020** (opening-balance posting model and clearing-account design),
