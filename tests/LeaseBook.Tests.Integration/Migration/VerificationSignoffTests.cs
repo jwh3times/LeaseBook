@@ -469,8 +469,11 @@ public sealed class VerificationSignoffTests(PostgresFixture fixture)
 
         var problemBody = await signoffResponse.Content.ReadAsStringAsync(ct);
         problemBody.ShouldContain("held_fees_not_attested");
-        problemBody.ShouldContain(
-            "This verification was recorded before held PM fees were tracked. Re-run verification to include them.");
+        // The message must name BOTH routes to this gate — a pre-WP-7 row and a blank "leave blank if
+        // none" field — since the blank field is the likelier cause for a current-day operator.
+        problemBody.ShouldContain("This verification has no held PM fees figure");
+        problemBody.ShouldContain("recorded before held PM fees were tracked");
+        problemBody.ShouldContain("left blank");
 
         var problem = (await signoffResponse.Content.ReadFromJsonAsync<ProblemWithCode>(ct))!;
         problem.Code.ShouldBe("held_fees_not_attested");
