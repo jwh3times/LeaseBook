@@ -105,6 +105,29 @@ public sealed class HeldFeesOpeningTests(PostgresFixture fixture)
         }, ct);
     }
 
+    [Fact]
+    public async Task Fee_report_excludes_openings_and_their_voids_symmetrically()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var scope = await ProvisionedScopeAsync(fixture, ct);
+        var bf = (IBalanceForward)Events(scope);
+
+        await scope.RunAsync(async () =>
+        {
+            var heldId = await bf.PostOpeningPositionAsync(HeldFees(scope.TrustBankId, 300m), ct);
+
+            // Cutover-month report: the opening is position, not flow (D10).
+            var handler = new GetManagementFeeIncomeHandler(scope.Db);
+            var june = await handler.Handle(new GetManagementFeeIncome(2026, 6), ct);
+            june.Rows.ShouldBeEmpty("a held-fees opening must not read as June fee income");
+
+            // Supersede symmetry (R13): void the opening — the month must not read −300 either.
+            await Reversal(scope).ReverseAsync(heldId, "supersede test", Cutover, ct);
+            var juneAfterVoid = await handler.Handle(new GetManagementFeeIncome(2026, 6), ct);
+            juneAfterVoid.Rows.ShouldBeEmpty("a voided opening's mirror must be excluded symmetrically");
+        }, ct);
+    }
+
     /// <summary>
     /// One entry's lines projected to account class + amounts/basis/dims via raw SQL (snake_case
     /// aliases map to the record's PascalCase members under the context's snake-case convention). Class
