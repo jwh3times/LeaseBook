@@ -55,6 +55,7 @@ export function VerificationStep({
   const [cutoverDate, setCutoverDate] = useState(today);
   const [ownerEquity, setOwnerEquity] = useState('');
   const [depositLiability, setDepositLiability] = useState('');
+  const [heldPmFees, setHeldPmFees] = useState('');
   const [bankRows, setBankRows] = useState([
     { bankAccountId: '', accountCode: '', expectedBook: '' },
   ]);
@@ -80,6 +81,9 @@ export function VerificationStep({
       cutoverDate,
       ownerEquityTotal: parseFloat(ownerEquity) || 0,
       depositLiabilityTotal: parseFloat(depositLiability) || 0,
+      // D5: a blank field means UNATTESTED (null), NOT zero. Never coerce blank → 0 here, or the
+      // sign-off gate would read a fabricated attestation. A filled field sends the parsed number.
+      heldPmFeesTotal: heldPmFees.trim() === '' ? null : parseFloat(heldPmFees) || 0,
       bankBookBalances: bankRows
         .filter((r) => r.bankAccountId || r.accountCode)
         .map((r) => ({
@@ -176,6 +180,22 @@ export function VerificationStep({
           onChange={(e) => setDepositLiability(e.target.value)}
           aria-label="Deposit liability total from AppFolio"
           placeholder="0.00"
+        />
+      </div>
+
+      <div className="ob-field">
+        <label className="fs13 fw6" htmlFor="ver-held-fees">
+          Held PM fees total (AppFolio) — leave blank if none
+        </label>
+        <input
+          id="ver-held-fees"
+          type="number"
+          step="0.01"
+          className="ob-number-input"
+          value={heldPmFees}
+          onChange={(e) => setHeldPmFees(e.target.value)}
+          aria-label="Held PM fees total from AppFolio"
+          placeholder="Leave blank if none"
         />
       </div>
 

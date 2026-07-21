@@ -4253,6 +4253,8 @@ export interface components {
             /** Format: double */
             depositLiabilityTotal: number | string;
             /** Format: double */
+            heldPmFeesTotal?: null | number | string;
+            /** Format: double */
             ownerEquityTotal: number | string;
         };
         VoidEntry: {

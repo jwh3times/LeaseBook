@@ -605,3 +605,70 @@ describe('VerificationStep sign-off button', () => {
     expect(screen.queryByText(/0193ab7c-dead-beef/)).not.toBeInTheDocument();
   });
 });
+
+// ─── (d) VerificationStep held-fees attestation field (WP-7 Task 13) ──────────
+//
+// D5 (fiduciary): the held-fees field is a first-class "unattested" input. A BLANK field must send
+// heldPmFeesTotal: null in the request body — absence ≠ zero, so blank must NEVER be coerced to 0.
+// A filled field sends the parsed number. The variance line then renders automatically from
+// report.lines (no bespoke rendering), so these tests assert only the request-body contract.
+
+describe('VerificationStep held-fees attestation field', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  const HELD_REPORT = {
+    verificationId: 'v-held',
+    cutoverDate: '2026-01-31',
+    isTied: true,
+    varianceTotal: 0.0,
+    clearingCash: 0.0,
+    clearingAccrual: 0.0,
+    reportSnapshot: '{}',
+    lines: [],
+  };
+
+  it('sends heldPmFeesTotal: null when the held-fees field is left blank (absence ≠ zero)', async () => {
+    let verifyBody: Record<string, unknown> | undefined;
+    server.use(
+      http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 })),
+      http.post('/api/onboarding/verification', async ({ request }) => {
+        verifyBody = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json(HELD_REPORT);
+      }),
+    );
+
+    render(withRouter(<VerificationStep />));
+
+    await userEvent.type(screen.getByLabelText('Owner equity total from AppFolio'), '500');
+    await userEvent.type(screen.getByLabelText('Deposit liability total from AppFolio'), '500');
+    // Held-fees field deliberately left BLANK.
+    await userEvent.click(screen.getByRole('button', { name: /run verification/i }));
+
+    await waitFor(() => expect(verifyBody).toBeDefined());
+    // The property is PRESENT and null — not omitted, not 0.
+    expect(verifyBody).toHaveProperty('heldPmFeesTotal', null);
+  });
+
+  it('sends the parsed number when the held-fees field is filled', async () => {
+    let verifyBody: Record<string, unknown> | undefined;
+    server.use(
+      http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 })),
+      http.post('/api/onboarding/verification', async ({ request }) => {
+        verifyBody = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json(HELD_REPORT);
+      }),
+    );
+
+    render(withRouter(<VerificationStep />));
+
+    await userEvent.type(screen.getByLabelText('Owner equity total from AppFolio'), '500');
+    await userEvent.type(screen.getByLabelText('Deposit liability total from AppFolio'), '500');
+    await userEvent.type(screen.getByLabelText('Held PM fees total from AppFolio'), '100');
+    await userEvent.click(screen.getByRole('button', { name: /run verification/i }));
+
+    await waitFor(() => expect(verifyBody).toBeDefined());
+    expect(verifyBody).toHaveProperty('heldPmFeesTotal', 100);
+  });
+});

@@ -15,7 +15,13 @@ public sealed record MigrationVerificationData(
     /// <summary>Total deposit liability (credit-normal, cash basis): SUM(credit - debit) for deposit_liability lines.</summary>
     decimal DepositLiabilityTotal,
     /// <summary>Bank book balance per bank account (debit-normal, cash+both lines).</summary>
-    IReadOnlyList<BankBookBalance> BankBookBalances);
+    IReadOnlyList<BankBookBalance> BankBookBalances,
+    /// <summary>
+    /// Held PM fees still sitting inside the TRUST banks (credit-normal, cash+both): SUM(credit - debit)
+    /// over pm_income lines whose bank_account_id belongs to a trust_bank account. Trust-bank-filtered
+    /// on purpose — it mirrors invariant I2's held_pm_fees term, NOT an org-wide pm_income sum (D12).
+    /// </summary>
+    decimal HeldPmFeesTotal);
 
 /// <summary>One bank account's book balance from the posted opening entries.</summary>
 public sealed record BankBookBalance(Guid BankAccountId, string AccountCode, decimal Book);

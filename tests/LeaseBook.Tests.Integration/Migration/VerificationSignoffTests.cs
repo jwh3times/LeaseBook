@@ -329,6 +329,228 @@ public sealed class VerificationSignoffTests(PostgresFixture fixture)
     }
 
     // ──────────────────────────────────────────────────────────────────────────────────────────────
+    // Test 5 (WP-7 Task 13): held-fees variance line appears when the operator ATTESTS a figure
+    // ──────────────────────────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Verification_reports_a_held_fees_variance_line_when_attested()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var setup = await SetupAsync("HeldAttested", ct);
+
+        var (trustBankId, depositBankId) = await ArrangeHeldFeesTiedSetAsync(setup, ct);
+
+        // The operator attests the $100 of held PM fees. The trust bank's book (600) covers owner
+        // equity (500) + held fees (100), the deposit side ties independently, so every line ties.
+        var verBody = new
+        {
+            cutoverDate = CutoverStr,
+            ownerEquityTotal = 500.00m,
+            depositLiabilityTotal = 500.00m,
+            heldPmFeesTotal = 100.00m,
+            bankBookBalances = new[]
+            {
+                new { bankAccountId = trustBankId, expectedBook = 600.00m, accountCode = (string?)null },
+                new { bankAccountId = depositBankId, expectedBook = 500.00m, accountCode = (string?)null },
+            },
+        };
+
+        var verResponse = await setup.Client.PostAsJsonAsync("/api/onboarding/verification", verBody, ct);
+        verResponse.StatusCode.ShouldBe(HttpStatusCode.OK, await verResponse.Content.ReadAsStringAsync(ct));
+        var report = (await verResponse.Content.ReadFromJsonAsync<VerificationReport>(ct))!;
+
+        // The held-fees line is present, labelled, and ties against the trust-filtered journal term.
+        var heldLine = report.Lines.Single(l => l.Key == "held_pm_fees_cash");
+        heldLine.Label.ShouldBe("Held PM Fees (Cash)");
+        heldLine.Expected.ShouldBe(100.00m, "operator attested 100.00");
+        heldLine.Actual.ShouldBe(100.00m, "the trust-filtered journal held-fees term is 100.00");
+        heldLine.Variance.ShouldBe(0m, "expected − actual = 0 when the attestation matches the journal");
+
+        report.IsTied.ShouldBeTrue("held fees attested at the journal figure, everything else ties");
+        report.VarianceTotal.ShouldBe(0m);
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────────────────────────
+    // Test 6 (WP-7 Task 13): no held-fees position, no attestation → no line, sign-off succeeds
+    //         (absence is a first-class state — an absent attestation over a ZERO journal is benign)
+    // ──────────────────────────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Absent_held_fees_with_zero_journal_signs_off()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var setup = await SetupAsync("HeldAbsentZero", ct);
+
+        // A standard tied set with NO held-fees import: the trust-filtered journal held term is 0.
+        await ImportOwnerTenantChainAsync(setup.Client, ct);
+        await PostBalanceAsync(setup.Client, "bank_balances",
+            $"Account ID,Account Name,Book Balance\nB-T,{setup.TrustBankName},500.00\nB-D,{setup.DepositBankName},500.00\n", ct);
+        await PostBalanceAsync(setup.Client, "owner_balances",
+            "Owner ID,Owner Name,Cash Balance,Accrual Balance\nO-1,Tied Owner LLC,500.00,500.00\n", ct);
+        await PostBalanceAsync(setup.Client, "deposit_liabilities",
+            "Tenant ID,Owner ID,Deposit Held\nT-1,O-1,500.00\n", ct);
+
+        var (trustBankId, depositBankId) = await ResolveBankIdsAsync(setup.OrgId, ct);
+
+        // Verify WITHOUT heldPmFeesTotal — the operator supplied no figure (absence ≠ zero).
+        var verBody = new
+        {
+            cutoverDate = CutoverStr,
+            ownerEquityTotal = 500.00m,
+            depositLiabilityTotal = 500.00m,
+            bankBookBalances = new[]
+            {
+                new { bankAccountId = trustBankId, expectedBook = 500.00m, accountCode = (string?)null },
+                new { bankAccountId = depositBankId, expectedBook = 500.00m, accountCode = (string?)null },
+            },
+        };
+
+        var verResponse = await setup.Client.PostAsJsonAsync("/api/onboarding/verification", verBody, ct);
+        verResponse.StatusCode.ShouldBe(HttpStatusCode.OK, await verResponse.Content.ReadAsStringAsync(ct));
+        var report = (await verResponse.Content.ReadFromJsonAsync<VerificationReport>(ct))!;
+
+        // No attestation AND no journal held position → the line is ABSENT (not a zero line).
+        report.Lines.Any(l => l.Key == "held_pm_fees_cash").ShouldBeFalse(
+            "an unattested held-fees figure must NOT emit a variance line");
+        report.IsTied.ShouldBeTrue("the rest of the set ties and there is no held-fees position");
+
+        // Sign-off succeeds: an absent attestation over a zero journal held term is benign.
+        var signoffResponse = await setup.Client.PostAsJsonAsync(
+            $"/api/onboarding/verification/{report.VerificationId}/signoff", new { }, ct);
+        signoffResponse.StatusCode.ShouldBe(HttpStatusCode.OK,
+            await signoffResponse.Content.ReadAsStringAsync(ct));
+        var signoffResult = (await signoffResponse.Content.ReadFromJsonAsync<SignoffResult>(ct))!;
+        signoffResult.SignedOffAt.ShouldNotBe(default);
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────────────────────────
+    // Test 7 (WP-7 Task 13): non-zero journal held position but NO attestation (a pre-WP-7 row) →
+    //         sign-off REFUSES with 409 held_fees_not_attested, and NO side effect is written.
+    //         The set otherwise ties (the bank book covers the held fees), so the ONLY blocker is
+    //         the missing attestation — this is the fiduciary blind spot WP-7 §4/D5 closes.
+    // ──────────────────────────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Absent_held_fees_with_nonzero_journal_refuses_signoff_with_no_side_effect()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var setup = await SetupAsync("HeldAbsentNonzero", ct);
+
+        var (trustBankId, depositBankId) = await ArrangeHeldFeesTiedSetAsync(setup, ct);
+
+        // Verify WITHOUT heldPmFeesTotal, exactly as a pre-WP-7 verification row would have been
+        // recorded. Every attested line ties, so the report reads TIED — the blind spot.
+        var verBody = new
+        {
+            cutoverDate = CutoverStr,
+            ownerEquityTotal = 500.00m,
+            depositLiabilityTotal = 500.00m,
+            bankBookBalances = new[]
+            {
+                new { bankAccountId = trustBankId, expectedBook = 600.00m, accountCode = (string?)null },
+                new { bankAccountId = depositBankId, expectedBook = 500.00m, accountCode = (string?)null },
+            },
+        };
+
+        var verResponse = await setup.Client.PostAsJsonAsync("/api/onboarding/verification", verBody, ct);
+        verResponse.StatusCode.ShouldBe(HttpStatusCode.OK, await verResponse.Content.ReadAsStringAsync(ct));
+        var report = (await verResponse.Content.ReadFromJsonAsync<VerificationReport>(ct))!;
+
+        report.Lines.Any(l => l.Key == "held_pm_fees_cash").ShouldBeFalse(
+            "no attestation → no held-fees line, so the report misleadingly reads tied");
+        report.IsTied.ShouldBeTrue("every attested line ties — the unattested $100 held position is invisible here");
+
+        // Sign-off must re-derive, see the journal's $100 held position with a null attestation, and
+        // REFUSE — before the not_tied gate and before any write.
+        var signoffResponse = await setup.Client.PostAsJsonAsync(
+            $"/api/onboarding/verification/{report.VerificationId}/signoff", new { }, ct);
+        signoffResponse.StatusCode.ShouldBe(HttpStatusCode.Conflict,
+            "an unattested non-zero held-fees position must block sign-off");
+
+        var problemBody = await signoffResponse.Content.ReadAsStringAsync(ct);
+        problemBody.ShouldContain("held_fees_not_attested");
+        problemBody.ShouldContain(
+            "This verification was recorded before held PM fees were tracked. Re-run verification to include them.");
+
+        var problem = (await signoffResponse.Content.ReadFromJsonAsync<ProblemWithCode>(ct))!;
+        problem.Code.ShouldBe("held_fees_not_attested");
+        problem.CorrelationId.ShouldNotBeNullOrWhiteSpace();
+
+        // --- Gate-before-side-effect: NO signed row and NO audit row were written ---
+        var tenant = new TenantContext { OrgId = setup.OrgId };
+        await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
+        var executor = new OrgScopedExecutor(db, tenant);
+
+        await executor.RunAsync(setup.OrgId, async () =>
+        {
+            var auditCount = await db.Set<AuditEvent>()
+                .CountAsync(a => a.EntityType == "migration-signed-off", ct);
+            auditCount.ShouldBe(0,
+                "NO audit_events row should be written when the held-fees attestation gate blocks sign-off");
+
+            var originalRow = await db.Set<MigrationVerification>()
+                .FirstOrDefaultAsync(v => v.Id == report.VerificationId, ct);
+            originalRow.ShouldNotBeNull();
+            originalRow!.SignedOffAt.ShouldBeNull("SignedOffAt must remain null — the gate fired before any write");
+            originalRow.SignedOffBy.ShouldBeNull("SignedOffBy must remain null");
+
+            var signedRowCount = await db.Set<MigrationVerification>()
+                .CountAsync(v => v.SignedOffAt != null, ct);
+            signedRowCount.ShouldBe(0, "no signed verification row should exist when sign-off was blocked");
+        }, ct);
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────────────────────────
+    // Test 8 (WP-7 Task 13): a WRONG held-fees attestation is an ordinary variance (not a tie), and
+    //         sign-off falls through to the standard not_tied gate (409 not_tied).
+    // ──────────────────────────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Wrong_held_fees_figure_is_a_variance_not_a_tie()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var setup = await SetupAsync("HeldWrong", ct);
+
+        var (trustBankId, depositBankId) = await ArrangeHeldFeesTiedSetAsync(setup, ct);
+
+        // The operator attests 80.00 against a journal held term of 100.00 → a -20.00 variance.
+        var verBody = new
+        {
+            cutoverDate = CutoverStr,
+            ownerEquityTotal = 500.00m,
+            depositLiabilityTotal = 500.00m,
+            heldPmFeesTotal = 80.00m,
+            bankBookBalances = new[]
+            {
+                new { bankAccountId = trustBankId, expectedBook = 600.00m, accountCode = (string?)null },
+                new { bankAccountId = depositBankId, expectedBook = 500.00m, accountCode = (string?)null },
+            },
+        };
+
+        var verResponse = await setup.Client.PostAsJsonAsync("/api/onboarding/verification", verBody, ct);
+        verResponse.StatusCode.ShouldBe(HttpStatusCode.OK, await verResponse.Content.ReadAsStringAsync(ct));
+        var report = (await verResponse.Content.ReadFromJsonAsync<VerificationReport>(ct))!;
+
+        var heldLine = report.Lines.Single(l => l.Key == "held_pm_fees_cash");
+        heldLine.Expected.ShouldBe(80.00m);
+        heldLine.Actual.ShouldBe(100.00m);
+        heldLine.Variance.ShouldBe(-20.00m, "expected (80) − actual (100) = -20");
+
+        report.IsTied.ShouldBeFalse("a -20 held-fees variance breaks the tie-out");
+        report.VarianceTotal.ShouldBe(20.00m, "abs(-20) = 20");
+
+        // Sign-off falls through to the ordinary not_tied gate (the attestation is present, so the
+        // held-fees refusal does NOT fire — this is an external mismatch, not a missing attestation).
+        var signoffResponse = await setup.Client.PostAsJsonAsync(
+            $"/api/onboarding/verification/{report.VerificationId}/signoff", new { }, ct);
+        signoffResponse.StatusCode.ShouldBe(HttpStatusCode.Conflict,
+            "a non-zero held-fees variance must block sign-off via the not_tied gate");
+
+        var problem = (await signoffResponse.Content.ReadFromJsonAsync<ProblemWithCode>(ct))!;
+        problem.Code.ShouldBe("not_tied");
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────────────────────────
     // Helpers
     // ──────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -432,6 +654,29 @@ public sealed class VerificationSignoffTests(PostgresFixture fixture)
                              "T-1,UNIT-1,Tied Tenant,2025-01-01,,1000.00,500.00,active\n",
                 filename = "tenants.csv",
             }, ct);
+    }
+
+    /// <summary>
+    /// Arranges a fully-tied cutover set that carries a $100.00 trust-bank held-PM-fees position
+    /// (mirrors BalanceImportTests' <c>Held_fees_import_converts_the_clearing_residual_to_zero</c>):
+    /// the trust bank's book (600) = owner equity (500) + held fees (100); the deposit side ties
+    /// independently (deposit bank 500 = deposit liability 500); the held-fees import zeroes the
+    /// clearing residual in both bases. Returns (trustBankId, depositBankId) for the operator figures.
+    /// </summary>
+    private async Task<(Guid TrustBankId, Guid DepositBankId)> ArrangeHeldFeesTiedSetAsync(
+        TestSetup setup, CancellationToken ct)
+    {
+        await ImportOwnerTenantChainAsync(setup.Client, ct);
+        await PostBalanceAsync(setup.Client, "bank_balances",
+            $"Account ID,Account Name,Book Balance\nB-T,{setup.TrustBankName},600.00\nB-D,{setup.DepositBankName},500.00\n", ct);
+        await PostBalanceAsync(setup.Client, "owner_balances",
+            "Owner ID,Owner Name,Cash Balance,Accrual Balance\nO-1,Tied Owner LLC,500.00,500.00\n", ct);
+        await PostBalanceAsync(setup.Client, "deposit_liabilities",
+            "Tenant ID,Owner ID,Deposit Held\nT-1,O-1,500.00\n", ct);
+        await PostBalanceAsync(setup.Client, "held_pm_fees",
+            $"Account ID,Account Name,Held Fees\nB-T,{setup.TrustBankName},100.00\n", ct);
+
+        return await ResolveBankIdsAsync(setup.OrgId, ct);
     }
 
     private static async Task PostBalanceAsync(HttpClient client, string kind, string csv, CancellationToken ct)
