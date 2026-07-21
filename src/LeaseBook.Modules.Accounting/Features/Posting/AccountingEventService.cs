@@ -70,19 +70,19 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
         if (req.AccountCode == AccountCodes.PmIncome)
         {
             if (req.Basis != EntryBasis.Both)
-                throw new InvalidOpeningPositionException("held_fees_basis_must_be_both",
-                    "A held-fees opening must apply to both accounting bases.");
+                throw new InvalidOpeningPositionException(
+                    InvalidOpeningPositionReason.HeldFeesBasisMustBeBoth);
             if (req.BankAccountId is null)
-                throw new InvalidOpeningPositionException("held_fees_bank_required",
-                    "A held-fees opening must name the trust bank account holding the fees.");
+                throw new InvalidOpeningPositionException(
+                    InvalidOpeningPositionReason.HeldFeesBankRequired);
             if (req.OwnerId is not null)
-                throw new InvalidOpeningPositionException("pm_income_owner_dimension",
-                    "A held-fees opening cannot be attributed to an owner.");
+                throw new InvalidOpeningPositionException(
+                    InvalidOpeningPositionReason.PmIncomeOwnerDimension);
             var isTrustClass = await db.Set<Account>().AsNoTracking()
                 .AnyAsync(a => a.Class == AccountClass.TrustBank && a.BankAccountId == req.BankAccountId, ct);
             if (!isTrustClass)
-                throw new InvalidOpeningPositionException("held_fees_bank_not_trust",
-                    "Held fees can only be imported into a trust bank account, not an operating account.");
+                throw new InvalidOpeningPositionException(
+                    InvalidOpeningPositionReason.HeldFeesBankNotTrust);
         }
 
         // The clearing contra mirrors the real leg's amount on the opposite side, same basis + dims-light

@@ -621,7 +621,66 @@ public sealed class BalanceSupersedeTests(PostgresFixture fixture)
     public async Task Held_fees_shape_violation_mid_supersede_rolls_the_whole_batch_back()
     {
         var ct = TestContext.Current.CancellationToken;
-        var setup = await SetupAsync("ShapeRollback", ct);
+        var (setup, baseRef) = await ArrangeDivergedHeldFeesAsync("ShapeRollback", ct);
+        var (journalBefore, batchesBefore) = await CountsAsync(setup.OrgId, ct);
+
+        // The corrected figure differs, so the engine reverses the live entry and THEN reposts —
+        // the repost trips the guard. The exception must escape rather than becoming a row error.
+        // Fully qualified: an unaliased `using` for Accounting.Contracts would make BankPurpose
+        // ambiguous against Directory.Domain's, which ResolveBankIdsAsync depends on.
+        var ex = await Should.ThrowAsync<LeaseBook.Modules.Accounting.Contracts.InvalidOpeningPositionException>(async () =>
+            await SupersedeInScopeAsync(setup.OrgId, EntityKind.HeldPmFees,
+                $"Account ID,Account Name,Held Fees\nB-TRUST,{setup.TrustBankName},80.00\n", Cutover, ct));
+        ex.Code.ShouldBe("held_fees_bank_not_trust");
+
+        await AssertHeldFeesUntouchedAsync(setup, baseRef, journalBefore, batchesBefore, ct);
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────────────────────────
+    // 15. …and the same abort over the REAL HTTP route: a typed 409, and still no orphan reversal.
+    //     This is the load-bearing half. The rollback lives in OrgContextMiddleware, which only fires
+    //     when the exception LEAVES the endpoint — so catching it in the endpoint to hand-build the
+    //     same 409 would let the middleware commit the reversal on its own. Test 14 cannot see that:
+    //     OrgScopedExecutor rolls back either way.
+    // ──────────────────────────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Http_supersede_route_returns_409_and_writes_nothing_on_a_shape_violation()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (setup, baseRef) = await ArrangeDivergedHeldFeesAsync("HttpShapeRollback", ct);
+        var (journalBefore, batchesBefore) = await CountsAsync(setup.OrgId, ct);
+
+        var response = await setup.Client.PostAsJsonAsync(
+            "/api/onboarding/import-balances/held_pm_fees/supersede",
+            new
+            {
+                csvContent = $"Account ID,Account Name,Held Fees\nB-TRUST,{setup.TrustBankName},80.00\n",
+                cutoverDate = CutoverStr,
+                filename = "held_fees.csv",
+            }, ct);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Conflict,
+            await response.Content.ReadAsStringAsync(ct));
+        var problem = (await response.Content.ReadFromJsonAsync<ProblemWithCode>(ct))!;
+        problem.Code.ShouldBe("held_fees_bank_not_trust");
+        problem.CorrelationId.ShouldNotBeNullOrWhiteSpace(
+            "every error response must carry a correlationId the operator can quote (ADR-025)");
+
+        await AssertHeldFeesUntouchedAsync(setup, baseRef, journalBefore, batchesBefore, ct);
+    }
+
+    /// <summary>
+    /// Arranges a live held-fees position whose bank has since diverged from the chart of accounts:
+    /// the bank keeps its Trust purpose (so the planner still accepts the row) but its chart entry is
+    /// no longer trust_bank-class, which is exactly the corruption the post-time shape guard exists to
+    /// catch. The CHECK constraint on <c>accounts</c> permits the swap because pm_operating_bank also
+    /// carries a bank_account_id. Returns the setup and the held-fees family's base source_ref.
+    /// </summary>
+    private async Task<(TestSetup Setup, string BaseRef)> ArrangeDivergedHeldFeesAsync(
+        string tag, CancellationToken ct)
+    {
+        var setup = await SetupAsync(tag, ct);
         await OnboardingTestHelpers.ImportOwnerTenantChainAsync(setup.Client, ct);
 
         // A clean held-fees position against the properly-provisioned trust bank.
@@ -634,12 +693,7 @@ public sealed class BalanceSupersedeTests(PostgresFixture fixture)
             }, ct);
 
         var (trustBankId, _) = await ResolveBankIdsAsync(setup.OrgId, ct);
-        var baseRef = $"opening:{CutoverStr}:held-fees={trustBankId}";
 
-        // Diverge the reference data: the bank keeps its Trust purpose (so the planner still accepts
-        // the row) but its chart entry is no longer trust_bank-class — exactly the corruption the
-        // post-time shape guard exists to catch. The CHECK constraint on accounts allows this swap
-        // because pm_operating_bank also carries a bank_account_id.
         await ReadAsync(setup.OrgId, async db =>
         {
             await db.Database.ExecuteSqlAsync(
@@ -647,17 +701,16 @@ public sealed class BalanceSupersedeTests(PostgresFixture fixture)
                 ct);
         }, ct);
 
-        var (journalBefore, batchesBefore) = await CountsAsync(setup.OrgId, ct);
+        return (setup, $"opening:{CutoverStr}:held-fees={trustBankId}");
+    }
 
-        // The corrected figure differs, so the engine reverses the live entry and THEN reposts —
-        // the repost trips the guard. The exception must escape rather than becoming a row error.
-        // Fully qualified: an unaliased `using` for Accounting.Contracts would make BankPurpose
-        // ambiguous against Directory.Domain's, which ResolveBankIdsAsync below depends on.
-        var ex = await Should.ThrowAsync<LeaseBook.Modules.Accounting.Contracts.InvalidOpeningPositionException>(async () =>
-            await SupersedeInScopeAsync(setup.OrgId, EntityKind.HeldPmFees,
-                $"Account ID,Account Name,Held Fees\nB-TRUST,{setup.TrustBankName},80.00\n", Cutover, ct));
-        ex.Code.ShouldBe("held_fees_bank_not_trust");
-
+    /// <summary>
+    /// The decisive assertion shared by tests 14 and 15: the aborted supersede wrote nothing, and in
+    /// particular no reversal survived without its corrected revision.
+    /// </summary>
+    private async Task AssertHeldFeesUntouchedAsync(
+        TestSetup setup, string baseRef, int journalBefore, int batchesBefore, CancellationToken ct)
+    {
         var (journalAfter, batchesAfter) = await CountsAsync(setup.OrgId, ct);
         journalAfter.ShouldBe(journalBefore, "the aborted supersede must leave the journal untouched");
         batchesAfter.ShouldBe(batchesBefore, "the aborted supersede must not add an import batch");
@@ -666,7 +719,6 @@ public sealed class BalanceSupersedeTests(PostgresFixture fixture)
         {
             var family = await FamilyEntriesAsync(db, baseRef, ct);
 
-            // The decisive assertion: no orphan reversal survived. The original is still live at 100.
             family.ShouldNotContain(r => r.SourceRef.EndsWith(":void", StringComparison.Ordinal),
                 "a reversal must never commit without its corrected revision");
             var original = family.Single(r => r.SourceRef == baseRef);
