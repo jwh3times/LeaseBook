@@ -2086,6 +2086,61 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/onboarding/import-balances/{kind}/supersede": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    kind: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["BalanceImportRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ImportBatchResult"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/onboarding/import/{kind}": {
         parameters: {
             query?: never;
@@ -3412,11 +3467,26 @@ export interface components {
         ImportBatchResult: {
             /** Format: uuid */
             batchId: string;
+            counts: components["schemas"]["ImportOutcomeCounts"];
             /** Format: int32 */
             errorCount: number | string;
             errors: components["schemas"]["ImportBatchError"][];
             /** Format: int32 */
             rowCount: number | string;
+        };
+        ImportOutcomeCounts: {
+            /** Format: int32 */
+            alreadyPosted: number | string;
+            /** Format: int32 */
+            errors: number | string;
+            /** Format: int32 */
+            posted: number | string;
+            /** Format: int32 */
+            skipped: number | string;
+            /** Format: int32 */
+            superseded: number | string;
+            /** Format: int32 */
+            unchanged: number | string;
         };
         ImportResult: {
             errors: components["schemas"]["RowError"][];
@@ -4182,6 +4252,8 @@ export interface components {
             cutoverDate: null | string;
             /** Format: double */
             depositLiabilityTotal: number | string;
+            /** Format: double */
+            heldPmFeesTotal?: null | number | string;
             /** Format: double */
             ownerEquityTotal: number | string;
         };

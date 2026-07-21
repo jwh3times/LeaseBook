@@ -61,9 +61,29 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
             request.Date, "BalanceForward", null, request.Description, request.SourceRef, lines), ct);
     }
 
-    public Task<Guid> PostOpeningPositionAsync(OpeningPositionRequest req, CancellationToken ct)
+    public async Task<Guid> PostOpeningPositionAsync(OpeningPositionRequest req, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(req);
+
+        // WP-7 §3.1: a pm_income opening must be shaped so the trust equation's held_pm_fees term
+        // reads it — wrong shapes post cleanly, balance (I1-invisible), and corrupt I2 later.
+        if (req.AccountCode == AccountCodes.PmIncome)
+        {
+            if (req.Basis != EntryBasis.Both)
+                throw new InvalidOpeningPositionException(
+                    InvalidOpeningPositionReason.HeldFeesBasisMustBeBoth);
+            if (req.BankAccountId is null)
+                throw new InvalidOpeningPositionException(
+                    InvalidOpeningPositionReason.HeldFeesBankRequired);
+            if (req.OwnerId is not null)
+                throw new InvalidOpeningPositionException(
+                    InvalidOpeningPositionReason.PmIncomeOwnerDimension);
+            var isTrustClass = await db.Set<Account>().AsNoTracking()
+                .AnyAsync(a => a.Class == AccountClass.TrustBank && a.BankAccountId == req.BankAccountId, ct);
+            if (!isTrustClass)
+                throw new InvalidOpeningPositionException(
+                    InvalidOpeningPositionReason.HeldFeesBankNotTrust);
+        }
 
         // The clearing contra mirrors the real leg's amount on the opposite side, same basis + dims-light
         // (clearing carries the bank dim only, for per-account residual reads). Both legs tagged req.Basis.
@@ -74,7 +94,7 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
             AccountCodes.MigrationClearing, req.Credit, req.Debit, req.Basis,
             BankAccountId: req.BankAccountId, Memo: req.Memo);
 
-        return posting.PostAsync(new PostEntryRequest(
+        return await posting.PostAsync(new PostEntryRequest(
             req.Cutover, "OpeningBalance", null, req.Memo ?? "Opening balance", req.SourceRef,
             [realLeg, clearingLeg]), ct);
     }

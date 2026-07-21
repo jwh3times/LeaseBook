@@ -53,7 +53,8 @@ public sealed class VerificationEndpoints : IEndpointModule
                         cutoverDate,
                         body.OwnerEquityTotal,
                         body.DepositLiabilityTotal,
-                        banks);
+                        banks,
+                        body.HeldPmFeesTotal);
 
                     var report = await service.VerifyAsync(request, ct);
                     return TypedResults.Ok(report);
@@ -86,6 +87,14 @@ public sealed class VerificationEndpoints : IEndpointModule
                                 ["clearingAccrual"] = ex.ClearingAccrual,
                             });
                     }
+                    catch (HeldFeesNotAttestedException ex)
+                    {
+                        return ProblemResults.Problem(
+                            httpContext,
+                            code: "held_fees_not_attested",
+                            detail: ex.Message,
+                            status: StatusCodes.Status409Conflict);
+                    }
                     catch (KeyNotFoundException)
                     {
                         return ProblemResults.Problem(
@@ -108,7 +117,11 @@ public sealed record VerificationRequestDto(
     string? CutoverDate,
     decimal OwnerEquityTotal,
     decimal DepositLiabilityTotal,
-    IReadOnlyList<BankBalanceDto>? BankBookBalances);
+    IReadOnlyList<BankBalanceDto>? BankBookBalances,
+    // Nullable (D5): the wizard sends `null` when the operator leaves the held-fees field blank
+    // (UNATTESTED), and a number when they supply one. A missing property binds to null too. Never
+    // coerce absence to 0.00 — the sign-off gate distinguishes "no figure" from "attested 0.00".
+    decimal? HeldPmFeesTotal = null);
 
 /// <summary>One bank account's expected book balance in the operator's closing figures.</summary>
 public sealed record BankBalanceDto(

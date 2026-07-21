@@ -29,6 +29,16 @@ public sealed class AccountingExceptionStatusTests
         (new EntryNotFoundException(Guid.NewGuid()), StatusCodes.Status404NotFound),
         (new DuplicateSourceRefException("ref", Guid.NewGuid()), StatusCodes.Status409Conflict),
         (new NoTrustAccountException(), StatusCodes.Status409Conflict),
+        // One row per held-fees shape reason: each carries its own wire code, and the corrected
+        // re-import route depends on all four landing on 409 (the batch has rolled back by then).
+        (new InvalidOpeningPositionException(InvalidOpeningPositionReason.HeldFeesBasisMustBeBoth),
+            StatusCodes.Status409Conflict),
+        (new InvalidOpeningPositionException(InvalidOpeningPositionReason.HeldFeesBankRequired),
+            StatusCodes.Status409Conflict),
+        (new InvalidOpeningPositionException(InvalidOpeningPositionReason.PmIncomeOwnerDimension),
+            StatusCodes.Status409Conflict),
+        (new InvalidOpeningPositionException(InvalidOpeningPositionReason.HeldFeesBankNotTrust),
+            StatusCodes.Status409Conflict),
     ];
 
     public static TheoryData<int> RowIndexes()

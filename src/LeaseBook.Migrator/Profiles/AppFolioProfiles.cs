@@ -34,6 +34,11 @@ public static class AppFolioProfiles
             new("external_owner_id", ["Owner ID", "Owner Id"], Required: true),
             new("balance", ["Balance Due", "Receivable", "Balance"], Required: true),
         ]),
+        EntityKind.HeldPmFees => new([
+            new("external_bank_id", ["Account ID", "Bank Account", "Account"], Required: true),
+            new("name", ["Account Name", "Name"], Required: true),
+            new("held_amount", ["Held Fees", "Unremitted Fees", "Fees Held", "Amount"], Required: true),
+        ]),
         EntityKind.Owners => new([
             new("external_id", ["Owner ID", "ID"], Required: true),
             new("name", ["Owner Name", "Name"], Required: true),

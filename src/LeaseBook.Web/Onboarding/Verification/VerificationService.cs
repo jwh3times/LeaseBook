@@ -60,6 +60,9 @@ public sealed class VerificationService(
             bankBookBalances = request.BankBookBalances,
             ownerEquityTotal = request.OwnerEquityTotal,
             depositLiabilityTotal = request.DepositLiabilityTotal,
+            // A null attestation serializes as JSON `null` (not omitted). DeserializeExpected reads it
+            // as "unattested" — identical to a pre-WP-7 row where the property is absent entirely (D5).
+            heldPmFeesTotal = request.HeldPmFeesTotal,
         }, JsonOpts);
 
         var actualJson = JsonSerializer.Serialize(new
@@ -74,6 +77,7 @@ public sealed class VerificationService(
                 accountCode = b.AccountCode,
                 book = b.Book,
             }),
+            heldPmFeesTotal = data.HeldPmFeesTotal,
         }, JsonOpts);
 
         var reportSnapshot = BuildReportSnapshot(request.CutoverDate, lines, data, isTied);
@@ -132,7 +136,17 @@ public sealed class VerificationService(
         var expected = DeserializeExpected(verification.ExpectedJson);
         var tieOut = await ComputeTieOutAsync(expected, ct);
 
-        // 3. Gate: if it no longer ties, throw before any write. No side effect on the blocked path.
+        // 3a. D5: a stored expectation that never attested held fees blocks sign-off ONLY when the
+        //     journal actually carries a non-zero trust-side held-fees position. This closes the
+        //     pre-WP-7 blind spot: such a row can read TIED (held fees never entered its variance)
+        //     while $X of fiduciary held fees sits unverified. Fires before the not_tied gate and
+        //     before any write — no side effect on the blocked path. Recovery is one re-verify.
+        if (expected.HeldPmFeesTotal is null && tieOut.Data.HeldPmFeesTotal != 0m)
+        {
+            throw new HeldFeesNotAttestedException(verificationId);
+        }
+
+        // 3b. Gate: if it no longer ties, throw before any write. No side effect on the blocked path.
         if (!tieOut.IsTied)
         {
             throw new MigrationNotTiedException(
@@ -230,7 +244,15 @@ public sealed class VerificationService(
             }
         }
 
-        return new VerificationRequest(cutoverDate, ownerEquity, depositLiability, banks);
+        // Genuinely-optional (D5): TryGetProperty handles pre-WP-7 rows that lack the property, and the
+        // ValueKind == Number guard maps a JSON `null` back to unattested. Both paths converge to null —
+        // NEVER default a missing/null held-fees figure to 0m, which would fabricate an attestation.
+        decimal? heldPmFees = root.TryGetProperty("heldPmFeesTotal", out var heldEl)
+            && heldEl.ValueKind == JsonValueKind.Number
+                ? heldEl.GetDecimal()
+                : null;
+
+        return new VerificationRequest(cutoverDate, ownerEquity, depositLiability, banks, heldPmFees);
     }
 
     // ── Variance computation ──────────────────────────────────────────────────────────────────────
@@ -256,6 +278,18 @@ public sealed class VerificationService(
             request.DepositLiabilityTotal,
             data.DepositLiabilityTotal,
             request.DepositLiabilityTotal - data.DepositLiabilityTotal));
+
+        // Held PM fees: only when the operator attested a figure. Absence is a first-class state
+        // (D5) — fabricating a 0m expectation would invent an attestation at the sign-off gate.
+        if (request.HeldPmFeesTotal is decimal heldExpected)
+        {
+            lines.Add(new VarianceLine(
+                "held_pm_fees_cash",
+                "Held PM Fees (Cash)",
+                heldExpected,
+                data.HeldPmFeesTotal,
+                heldExpected - data.HeldPmFeesTotal));
+        }
 
         // Per-bank book balance: match by BankAccountId
         var importedBankMap = data.BankBookBalances
@@ -330,7 +364,11 @@ public sealed record VerificationRequest(
     DateOnly CutoverDate,
     decimal OwnerEquityTotal,
     decimal DepositLiabilityTotal,
-    IReadOnlyList<OperatorBankBalance> BankBookBalances);
+    IReadOnlyList<OperatorBankBalance> BankBookBalances,
+    // Nullable by design (D5): null means the operator supplied NO held-fees figure (UNATTESTED),
+    // which is NOT the same as attesting 0.00. Absence drives the sign-off refusal gate; a supplied
+    // 0.00 is an ordinary attested figure. Never coerce a missing value to 0m.
+    decimal? HeldPmFeesTotal = null);
 
 /// <summary>One bank account's closing figure from the operator's AppFolio export.</summary>
 public sealed record OperatorBankBalance(

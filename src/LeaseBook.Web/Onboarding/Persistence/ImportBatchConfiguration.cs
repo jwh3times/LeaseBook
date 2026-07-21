@@ -19,13 +19,21 @@ public sealed class ImportBatchConfiguration : IEntityTypeConfiguration<ImportBa
         builder.Property(b => b.ErrorCount).IsRequired();
         builder.Property(b => b.Status).IsRequired();
         builder.Property(b => b.Actor);
+        builder.Property(b => b.SupersedesBatchId);
         builder.Property(b => b.CreatedAt).IsRequired();
 
         builder.HasIndex(b => new { b.OrgId, b.EntityKind, b.Status });
+        builder.HasIndex(b => new { b.OrgId, b.SupersedesBatchId })
+            .HasDatabaseName("ix_import_batches_org_id_supersedes_batch_id");
 
         builder.HasMany<ImportRow>()
             .WithOne()
             .HasForeignKey(r => r.BatchId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasOne<ImportBatch>()
+            .WithMany()
+            .HasForeignKey(b => b.SupersedesBatchId)
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }

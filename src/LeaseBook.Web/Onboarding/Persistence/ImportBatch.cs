@@ -25,7 +25,8 @@ public sealed class ImportBatch : IOrgScoped
         int rowCount,
         int errorCount,
         string status,
-        Guid? actor)
+        Guid? actor,
+        Guid? supersedesBatchId)
     {
         Id = UuidV7.NewId();
         EntityKind = entityKind;
@@ -35,6 +36,7 @@ public sealed class ImportBatch : IOrgScoped
         ErrorCount = errorCount;
         Status = status;
         Actor = actor;
+        SupersedesBatchId = supersedesBatchId;
     }
 
     public Guid Id { get; private set; }
@@ -63,6 +65,14 @@ public sealed class ImportBatch : IOrgScoped
     /// <summary>The user id of the operator who submitted this batch.</summary>
     public Guid? Actor { get; private set; }
 
+    /// <summary>
+    /// Lineage: the batch this one corrects (WP-7 supersede). Recorded on the SUCCESSOR at insert —
+    /// the old row is never touched (append-only; the runtime role has no UPDATE grant, so a
+    /// status flip is structurally impossible — design §0.2). A batch B is superseded iff a row
+    /// exists with SupersedesBatchId = B.Id.
+    /// </summary>
+    public Guid? SupersedesBatchId { get; private set; }
+
     public DateTime CreatedAt { get; private set; }
 
     internal static ImportBatch Create(
@@ -72,6 +82,7 @@ public sealed class ImportBatch : IOrgScoped
         int rowCount,
         int errorCount,
         string status,
-        Guid? actor) =>
-        new(entityKind, mappingProfile, sourceFilename, rowCount, errorCount, status, actor);
+        Guid? actor,
+        Guid? supersedesBatchId = null) =>
+        new(entityKind, mappingProfile, sourceFilename, rowCount, errorCount, status, actor, supersedesBatchId);
 }
