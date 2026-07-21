@@ -44,7 +44,7 @@
     <!-- Telemetry baseline (WP-05): OpenTelemetry tracing + Azure Monitor exporter. The exporter
          is a no-op locally — it only ships spans when APPLICATIONINSIGHTS_CONNECTION_STRING is set. -->
     <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.17.0" />
-    <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.16.0" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.17.0" />
     <PackageVersion Include="Azure.Monitor.OpenTelemetry.Exporter" Version="1.8.2" />
   </ItemGroup>
 
