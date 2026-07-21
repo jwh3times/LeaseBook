@@ -345,6 +345,67 @@ describe('BalanceImportStep — corrected re-import (supersede)', () => {
       await screen.findByText(/no figures differed — nothing was superseded/i),
     ).toBeInTheDocument();
   });
+
+  // Regression: a corrected file that introduces a brand-new position (an owner missing from the
+  // original import) comes back superseded=0 / posted=1. Keying the banner off `superseded` alone
+  // rendered "nothing was superseded" straight after a genuine posting.
+  test('supersede that adds a new position reports it instead of claiming nothing happened', async () => {
+    server.use(
+      http.post('/api/onboarding/import-balances/owner_balances/supersede', () =>
+        HttpResponse.json({
+          batchId: 'b4',
+          rowCount: 3,
+          errorCount: 0,
+          counts: {
+            posted: 1,
+            alreadyPosted: 0,
+            unchanged: 2,
+            superseded: 0,
+            skipped: 0,
+            errors: 0,
+          },
+          errors: [],
+        }),
+      ),
+    );
+    renderBalanceStep();
+    await userEvent.click(screen.getByLabelText('This is a corrected re-import (supersede)'));
+    await uploadCsv(
+      'Owner ID,Owner Name,Cash Balance,Accrual Balance\nO-2,New Owner,300.00,300.00\n',
+    );
+
+    expect(await screen.findByText(/1 added, 2 unchanged/)).toBeInTheDocument();
+    expect(screen.queryByText(/nothing was superseded/i)).not.toBeInTheDocument();
+  });
+
+  // Every non-zero bucket earns a clause — a mixed file must not drop the added/skipped rows.
+  test('supersede banner lists every non-zero outcome bucket', async () => {
+    server.use(
+      http.post('/api/onboarding/import-balances/owner_balances/supersede', () =>
+        HttpResponse.json({
+          batchId: 'b5',
+          rowCount: 6,
+          errorCount: 0,
+          counts: {
+            posted: 1,
+            alreadyPosted: 0,
+            unchanged: 2,
+            superseded: 2,
+            skipped: 1,
+            errors: 0,
+          },
+          errors: [],
+        }),
+      ),
+    );
+    renderBalanceStep();
+    await userEvent.click(screen.getByLabelText('This is a corrected re-import (supersede)'));
+    await uploadCsv('Owner ID,Owner Name,Cash Balance,Accrual Balance\nO-1,X,450.00,450.00\n');
+
+    expect(
+      await screen.findByText(/2 corrected, 1 added, 2 unchanged, 1 skipped/),
+    ).toBeInTheDocument();
+  });
 });
 
 // ─── (b4) BalanceImportStep — banner reflects the mode that produced it ──────

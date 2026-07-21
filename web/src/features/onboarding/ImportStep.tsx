@@ -226,6 +226,35 @@ interface BalanceImportStepProps {
   onContinue?: () => void;
 }
 
+/**
+ * Success-banner text for a corrected re-import. The engine buckets every row exactly once by
+ * precedence (superseded > posted > unchanged > skipped), so keying the banner off `superseded`
+ * alone hid real work: a corrected file that introduces a brand-new position (an owner missing
+ * from the original import) comes back superseded=0 / posted=1 and used to render "No figures
+ * differed — nothing was superseded" straight after a genuine posting.
+ *
+ * `superseded + posted` is the journal-effect test: only when both are zero did nothing actually
+ * happen. Otherwise every non-zero bucket gets its own clause. Fields are coerced because the
+ * counts arrive over the wire and a string "0" is truthy.
+ */
+function supersedeBannerText(counts: ImportOutcomeCounts): string {
+  const superseded = Number(counts.superseded);
+  const posted = Number(counts.posted);
+  const unchanged = Number(counts.unchanged);
+  const skipped = Number(counts.skipped);
+
+  if (superseded === 0 && posted === 0) {
+    return 'No figures differed — nothing was superseded.';
+  }
+
+  const parts: string[] = [];
+  if (superseded > 0) parts.push(`${superseded} corrected`);
+  if (posted > 0) parts.push(`${posted} added`);
+  if (unchanged > 0) parts.push(`${unchanged} unchanged`);
+  if (skipped > 0) parts.push(`${skipped} skipped`);
+  return `${parts.join(', ')}.`;
+}
+
 export function BalanceImportStep({
   title,
   description,
@@ -460,9 +489,7 @@ export function BalanceImportStep({
           <Icon name="check" size={16} />
           <span>
             {resultMode === 'supersede' && counts
-              ? Number(counts.superseded) === 0
-                ? 'No figures differed — nothing was superseded.'
-                : `${Number(counts.superseded)} corrected, ${Number(counts.unchanged)} unchanged.`
+              ? supersedeBannerText(counts)
               : `Imported ${result.rowCount} row${result.rowCount !== 1 ? 's' : ''} successfully.`}
           </span>
         </div>
