@@ -425,9 +425,9 @@ export function BalanceImportStep({
           <Icon name="check" size={16} />
           <span>
             {supersede && counts
-              ? counts.superseded === 0
+              ? Number(counts.superseded) === 0
                 ? 'No figures differed — nothing was superseded.'
-                : `${counts.superseded} corrected, ${counts.unchanged} unchanged.`
+                : `${Number(counts.superseded)} corrected, ${Number(counts.unchanged)} unchanged.`
               : `Imported ${result.rowCount} row${result.rowCount !== 1 ? 's' : ''} successfully.`}
           </span>
         </div>
