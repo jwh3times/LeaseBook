@@ -31,6 +31,11 @@ Read the relevant file under `.claude/agents/` before editing its domain:
 Specialist files provide domain examples and checklists. They may narrow a workflow but may not relax
 an invariant or module boundary from `AGENTS.md`.
 
+`.claude/` is the canonical source for agent and skill instructions. `.codex/agents/*.toml` and
+`.agents/skills/` are generated mirrors for other harnesses — never hand-edit them. After changing a
+file under `.claude/agents/` or `.claude/skills/`, run `node scripts/sync-agent-mirrors.mjs` and commit
+the regenerated mirrors; CI fails the build when they are stale.
+
 ## Claude Code Integration
 
 - The `/ship` skill runs the pre-push documentation-drift check: it invokes `docs-updater` for the

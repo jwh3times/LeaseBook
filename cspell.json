@@ -8,7 +8,8 @@
     "docs/**/*.md",
     "infra/**/*.md",
     ".github/**/*.md",
-    ".claude/**/*.md"
+    ".claude/**/*.md",
+    ".agents/**/*.md"
   ],
   "ignorePaths": [
     "private/**",

@@ -124,10 +124,15 @@ Run `dotnet tool restore` once for `dotnet-ef`.
 
 ## Domain Guidance Files
 
-Claude specialist-agent guidance lives under `.claude/agents/`. Codex cannot assume those agents are
-available as executable subagents, but their instructions are still important project knowledge. Before
-editing one of these domains, read the corresponding file and apply its rules unless a higher-level
-invariant in this file conflicts.
+Specialist-agent guidance is authored under `.claude/agents/`, which is the canonical source. The same
+instructions are mirrored for other harnesses: `.codex/agents/*.toml` for Codex, and `.agents/skills/`
+for the portable skills. Whichever harness you are in, these are project knowledge — before editing one
+of these domains, read the corresponding file and apply its rules unless a higher-level invariant in
+this file conflicts.
+
+**Edit `.claude/` only.** The mirrors are generated; hand-editing one is overwritten on the next sync.
+After changing an agent or skill, run `node scripts/sync-agent-mirrors.mjs` and commit the result. CI
+regenerates and fails the build if a committed mirror is stale.
 
 | Work type                                                               | Read first                               |
 | ----------------------------------------------------------------------- | ---------------------------------------- |
@@ -142,11 +147,12 @@ invariant in this file conflicts.
 Cross-cutting rules, module boundaries, tenancy model, and trust-accounting invariants in this file
 apply to all work. If a domain guidance file conflicts with these invariants, the invariant wins.
 
-Claude's `/ship` skill detects documentation drift for Claude Code sessions: it invokes the
-`docs-updater` agent for the docs it owns and flags private-roadmap WP drift. Codex should not assume
-that skill runs. When source changes affect docs, ports, ADR-worthy decisions, user workflows,
-commands, or business events, check documentation drift manually and update the relevant docs in the
-same change.
+The `/ship` skill detects documentation drift: it invokes the `docs-updater` agent for the docs it owns
+and flags private-roadmap WP drift. It is authored at `.claude/skills/ship/` and mirrored to
+`.agents/skills/ship/` for harnesses that read that tree. It remains session-scoped either way — no
+harness is guaranteed to run it, and CI does not. When source changes affect docs, ports, ADR-worthy
+decisions, user workflows, commands, or business events, check documentation drift manually and update
+the relevant docs in the same change.
 
 ## Architecture
 
