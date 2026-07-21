@@ -7,9 +7,9 @@
  * (c) VerificationStep sign-off button is disabled until isTied is true (and enabled when true).
  */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { http, HttpResponse } from 'msw';
+import { delay, http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { server } from '@/test/mocks/server';
@@ -398,6 +398,64 @@ describe('BalanceImportStep — banner reflects the mode that produced the resul
     const banner = screen.getByRole('status');
     expect(within(banner).getByText(/1 corrected, 2 unchanged/)).toBeInTheDocument();
     expect(within(banner).queryByText(/imported/i)).not.toBeInTheDocument();
+  });
+});
+
+// ─── (b5) BalanceImportStep — stale mutation error/pending state on kind & mode switches ──
+//
+// Regression coverage for the reviewer finding: `mutation` (`useImportBalances(selectedKind)`)
+// and `supersedeMutation` are single shared `useMutation` instances across all four balance
+// kinds — switching `selectedKind` only changes which kind the *next* upload targets; it does not
+// reset either mutation's own isError/error state, and `ApiErrorNotice` reads `activeMutation`
+// live. Two consequences: (1) a failed upload for one kind kept showing its error notice after
+// switching to a different, untouched kind (unambiguous misattribution, no timing required); (2)
+// the supersede checkbox was enabled during isPending, so toggling it mid-flight (or after a
+// failure, without re-uploading) changes which mutation instance the notice reads.
+
+describe('BalanceImportStep — mutation error state resets on kind and mode switches', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '';
+    server.use(http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 })));
+  });
+
+  test('switching balance kind clears a stale error notice', async () => {
+    server.use(
+      http.post('/api/onboarding/import-balances/owner_balances', () =>
+        HttpResponse.json(
+          { code: 'validation_failed', detail: 'The CSV could not be processed.' },
+          { status: 400 },
+        ),
+      ),
+    );
+    renderBalanceStep(); // owner_balances is kinds[0] — selected by default
+    await uploadCsv('Owner ID,Owner Name,Cash Balance,Accrual Balance\nO-1,X,450.00,450.00\n');
+
+    expect(await screen.findByText(/the csv could not be processed/i)).toBeInTheDocument();
+
+    // Switch to a different kind WITHOUT re-uploading — the owner_balances failure must not
+    // carry over and misattribute to deposit_liabilities.
+    await userEvent.click(screen.getByLabelText('Deposit liabilities'));
+
+    expect(screen.queryByText(/the csv could not be processed/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
+  test('supersede checkbox is disabled while a request is pending', async () => {
+    server.use(
+      http.post('/api/onboarding/import-balances/owner_balances', async () => {
+        await delay('infinite');
+        return HttpResponse.json({ batchId: 'b6', rowCount: 1, errorCount: 0, errors: [] });
+      }),
+    );
+    renderBalanceStep();
+
+    const checkbox = screen.getByLabelText('This is a corrected re-import (supersede)');
+    expect(checkbox).toBeEnabled();
+
+    await uploadCsv('Owner ID,Owner Name,Cash Balance,Accrual Balance\nO-1,X,450.00,450.00\n');
+
+    await waitFor(() => expect(checkbox).toBeDisabled());
   });
 });
 

@@ -269,12 +269,20 @@ export function BalanceImportStep({
     // checkbox can't skew which mode this request's result gets attributed to.
     const mode = supersede ? 'supersede' : 'import';
     const csvContent = await file.text();
-    const res = await activeMutation.mutateAsync({
-      csvContent,
-      filename: file.name,
-      cutoverDate,
-      mappingProfile: null,
-    });
+    // `.catch(() => null)`, not a silent swallow: activeMutation's isError/error (read live by
+    // ApiErrorNotice, below) is already updated by react-query before this rejection reaches us.
+    // Without this, a real mutation failure escapes as an unhandled promise rejection — handleFile
+    // is invoked fire-and-forget (`void handleChange(e)` / `void handleDrop(e)`), so nothing else
+    // in the call chain awaits this promise.
+    const res = await activeMutation
+      .mutateAsync({
+        csvContent,
+        filename: file.name,
+        cutoverDate,
+        mappingProfile: null,
+      })
+      .catch(() => null);
+    if (!res) return;
     const errorCount = Number(res.errorCount);
     setResult({ rowCount: Number(res.rowCount), errorCount });
     setErrors(res.errors ?? []);
@@ -330,6 +338,14 @@ export function BalanceImportStep({
                     setSupersede(false);
                     setCounts(null);
                     setResultMode(null);
+                    // `mutation`/`supersedeMutation` are single shared useMutation instances across
+                    // every kind (the mutationFn closes over `selectedKind`, but the observer's own
+                    // isError/error state is NOT keyed by kind). Without resetting both here, a
+                    // failed upload for the previous kind would keep rendering its error notice
+                    // after switching to this kind, since ApiErrorNotice reads activeMutation's
+                    // live isError/error.
+                    mutation.reset();
+                    supersedeMutation.reset();
                   }}
                 />
                 {label}
@@ -361,7 +377,16 @@ export function BalanceImportStep({
           <input
             type="checkbox"
             checked={supersede}
-            onChange={(e) => setSupersede(e.target.checked)}
+            onChange={(e) => {
+              setSupersede(e.target.checked);
+              // Same rationale as the kind-switch reset above: mutation/supersedeMutation are
+              // shared instances, so flipping which one is "active" — without re-uploading — could
+              // otherwise resurface a stale error left over from before the toggle.
+              mutation.reset();
+              supersedeMutation.reset();
+            }}
+            disabled={isPending}
+            aria-disabled={isPending}
             aria-label="This is a corrected re-import (supersede)"
           />
           This is a corrected re-import (supersede)
