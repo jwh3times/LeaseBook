@@ -13,7 +13,7 @@ import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { server } from '@/test/mocks/server';
-import { EntityImportStep } from './ImportStep';
+import { BalanceImportStep, EntityImportStep } from './ImportStep';
 import { OnboardingChecklist } from './OnboardingChecklist';
 import { VerificationStep } from './VerificationStep';
 
@@ -258,6 +258,76 @@ describe('EntityImportStep — explicit "Continue" advancement', () => {
     expect(continueBtn).toBeEnabled();
     await userEvent.click(continueBtn);
     expect(onContinue).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ─── (b3) BalanceImportStep — corrected re-import (supersede) ────────────────
+
+const BALANCE_KINDS: { kind: import('./onboarding').BalanceKind; label: string }[] = [
+  { kind: 'owner_balances', label: 'Owner balances' },
+  { kind: 'deposit_liabilities', label: 'Deposit liabilities' },
+  { kind: 'bank_balances', label: 'Bank balances' },
+  { kind: 'tenant_receivables', label: 'Tenant receivables' },
+];
+
+function renderBalanceStep() {
+  render(
+    withRouter(
+      <BalanceImportStep
+        title="Import balances"
+        description="Upload balance CSVs"
+        kinds={BALANCE_KINDS}
+      />,
+    ),
+  );
+}
+
+async function uploadCsv(csv: string) {
+  const file = new File([csv], 'x.csv', { type: 'text/csv' });
+  const input = screen.getByLabelText('CSV file');
+  await userEvent.upload(input, file);
+}
+
+describe('BalanceImportStep — corrected re-import (supersede)', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '';
+    server.use(http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 })));
+  });
+
+  test('corrected re-import posts to the supersede endpoint and reports outcome counts', async () => {
+    server.use(
+      http.post('/api/onboarding/import-balances/owner_balances/supersede', () =>
+        HttpResponse.json({
+          batchId: 'b2',
+          rowCount: 3,
+          errorCount: 0,
+          counts: { posted: 0, alreadyPosted: 0, unchanged: 2, superseded: 1, skipped: 0, errors: 0 },
+          errors: [],
+        }),
+      ),
+    );
+    renderBalanceStep(); // the file's existing helper that mounts <BalanceImportStep …>
+    await userEvent.click(screen.getByLabelText('This is a corrected re-import (supersede)'));
+    await uploadCsv('Owner ID,Owner Name,Cash Balance,Accrual Balance\nO-1,X,450.00,450.00\n'); // existing upload helper
+    expect(await screen.findByText(/1 corrected, 2 unchanged/)).toBeInTheDocument();
+  });
+
+  test('supersede with no differing figures says so instead of a bare success', async () => {
+    server.use(
+      http.post('/api/onboarding/import-balances/owner_balances/supersede', () =>
+        HttpResponse.json({
+          batchId: 'b3',
+          rowCount: 3,
+          errorCount: 0,
+          counts: { posted: 0, alreadyPosted: 0, unchanged: 3, superseded: 0, skipped: 0, errors: 0 },
+          errors: [],
+        }),
+      ),
+    );
+    renderBalanceStep();
+    await userEvent.click(screen.getByLabelText('This is a corrected re-import (supersede)'));
+    await uploadCsv('Owner ID,Owner Name,Cash Balance,Accrual Balance\nO-1,X,500.00,500.00\n');
+    expect(await screen.findByText(/no figures differed — nothing was superseded/i)).toBeInTheDocument();
   });
 });
 

@@ -4,9 +4,11 @@ import { ApiErrorNotice } from '@/components/ApiErrorNotice';
 import {
   useImportBalances,
   useImportEntities,
+  useSupersedeBalances,
   type BalanceKind,
   type EntityKind,
   type ImportBatchError,
+  type ImportOutcomeCounts,
 } from './onboarding';
 
 // ─── Entity import ────────────────────────────────────────────────────────────
@@ -237,18 +239,26 @@ export function BalanceImportStep({
   const [filename, setFilename] = useState<string | null>(null);
   const [errors, setErrors] = useState<ImportBatchError[]>([]);
   const [result, setResult] = useState<{ rowCount: number; errorCount: number } | null>(null);
+  // Corrected re-import (supersede): operator opts in per-upload when a previously-imported
+  // balance kind needs correcting rather than a first-time import. `counts` holds the per-outcome
+  // breakdown from the last import/supersede response so the success banner can differentiate.
+  const [supersede, setSupersede] = useState(false);
+  const [counts, setCounts] = useState<ImportOutcomeCounts | null>(null);
   // Tracks which balance kinds imported cleanly, so the "Continue" affordance only appears once
   // the operator has imported at least one kind on this step.
   const [importedKinds, setImportedKinds] = useState<Set<BalanceKind>>(new Set());
   const fileRef = useRef<HTMLInputElement>(null);
   const mutation = useImportBalances(selectedKind);
+  const supersedeMutation = useSupersedeBalances(selectedKind);
+  const isPending = mutation.isPending || supersedeMutation.isPending;
 
   async function handleFile(file: File) {
     setFilename(file.name);
     setErrors([]);
     setResult(null);
+    setCounts(null);
     const csvContent = await file.text();
-    const res = await mutation.mutateAsync({
+    const res = await (supersede ? supersedeMutation : mutation).mutateAsync({
       csvContent,
       filename: file.name,
       cutoverDate,
@@ -257,6 +267,7 @@ export function BalanceImportStep({
     const errorCount = Number(res.errorCount);
     setResult({ rowCount: Number(res.rowCount), errorCount });
     setErrors(res.errors ?? []);
+    setCounts(res.counts ?? null);
     if (errorCount === 0) {
       setImportedKinds((prev) => new Set(prev).add(selectedKind));
     }
@@ -295,10 +306,17 @@ export function BalanceImportStep({
                   onChange={() => {
                     setSelectedKind(kind);
                     // Reset the per-import banner/error state so a prior kind's "Imported N rows"
-                    // banner doesn't carry over to the newly-selected kind.
+                    // banner doesn't carry over to the newly-selected kind. Supersede is also
+                    // reset: it's a per-kind, per-upload intent ("I'm correcting this balance
+                    // kind's already-imported figures"), and a kind switch usually means the
+                    // operator is now importing a *different* kind for the first time — leaving
+                    // supersede checked would silently route that first-time import to the
+                    // supersede endpoint, which 409s with nothing_to_supersede.
                     setFilename(null);
                     setResult(null);
                     setErrors([]);
+                    setSupersede(false);
+                    setCounts(null);
                   }}
                 />
                 {label}
@@ -325,6 +343,25 @@ export function BalanceImportStep({
         />
       </div>
 
+      <div className="ob-field">
+        <label className="fs13 row gap8 align-center">
+          <input
+            type="checkbox"
+            checked={supersede}
+            onChange={(e) => setSupersede(e.target.checked)}
+            aria-label="This is a corrected re-import (supersede)"
+          />
+          This is a corrected re-import (supersede)
+        </label>
+        {supersede && (
+          <p className="fs12 muted mt4">
+            Only figures that changed are corrected (reversal + corrected entry). Rows left out of
+            the file are untouched; submit a row with $0.00 to remove its position. Re-run
+            verification afterwards.
+          </p>
+        )}
+      </div>
+
       {/* File input BEFORE (not inside) the dropzone button: nesting <input type="file"> inside
           role="button" triggers axe nested-interactive (WCAG 4.1.2) because AT can focus file
           inputs even with tabIndex=-1/aria-hidden when inside a button context.
@@ -341,7 +378,7 @@ export function BalanceImportStep({
         }}
       />
       <div
-        className={['ob-dropzone', mutation.isPending ? 'ob-dropzone--loading' : '']
+        className={['ob-dropzone', isPending ? 'ob-dropzone--loading' : '']
           .filter(Boolean)
           .join(' ')}
         onDragOver={(e) => e.preventDefault()}
@@ -359,7 +396,7 @@ export function BalanceImportStep({
         tabIndex={0}
         aria-label="Upload CSV file"
       >
-        {mutation.isPending ? (
+        {isPending ? (
           <EmptyState icon="arrowUpRight" title="Importing…" description="Processing your CSV." />
         ) : filename ? (
           <div className="col gap4 align-center">
@@ -376,13 +413,22 @@ export function BalanceImportStep({
         )}
       </div>
 
-      {mutation.isError && <ApiErrorNotice error={mutation.error} fallback="Import failed." />}
+      {(supersede ? supersedeMutation.isError : mutation.isError) && (
+        <ApiErrorNotice
+          error={supersede ? supersedeMutation.error : mutation.error}
+          fallback="Import failed."
+        />
+      )}
 
       {isSuccess && (
         <div className="ob-success-banner" role="status">
           <Icon name="check" size={16} />
           <span>
-            Imported {result.rowCount} row{result.rowCount !== 1 ? 's' : ''} successfully.
+            {supersede && counts
+              ? counts.superseded === 0
+                ? 'No figures differed — nothing was superseded.'
+                : `${counts.superseded} corrected, ${counts.unchanged} unchanged.`
+              : `Imported ${result.rowCount} row${result.rowCount !== 1 ? 's' : ''} successfully.`}
           </span>
         </div>
       )}

@@ -93,6 +93,27 @@ export function useImportBalances(kind: BalanceKind) {
   });
 }
 
+export type ImportOutcomeCounts = components['schemas']['ImportOutcomeCounts'];
+
+/** Corrected re-import (supersede) for an already-imported balance kind. Invalidates status. */
+export function useSupersedeBalances(kind: BalanceKind) {
+  const queryClient = useQueryClient();
+  return useMutation<ImportBatchResult, OnboardingError, BalanceImportRequest>({
+    mutationFn: async (body) => {
+      await primeCsrf();
+      return unwrap(
+        api.POST('/api/onboarding/import-balances/{kind}/supersede', {
+          params: { path: { kind } },
+          body,
+        }),
+      );
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: onboardingStatusKey() });
+    },
+  });
+}
+
 /** Run verification — operator supplies AppFolio closing figures. Invalidates status. */
 export function useVerify() {
   const queryClient = useQueryClient();
