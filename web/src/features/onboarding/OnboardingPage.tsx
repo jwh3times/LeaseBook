@@ -153,6 +153,7 @@ export function OnboardingPage() {
                 { kind: 'deposit_liabilities', label: 'Deposit liabilities' },
                 { kind: 'bank_balances', label: 'Bank balances' },
                 { kind: 'tenant_receivables', label: 'Tenant receivables' },
+                { kind: 'held_pm_fees', label: 'Held PM fees' },
               ]}
               onContinue={goToNextStep}
             />

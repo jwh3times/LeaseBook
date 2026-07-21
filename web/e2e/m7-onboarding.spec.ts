@@ -15,17 +15,28 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Test order (serial — each builds on the previous):
 //   1. Empty dashboard redirects to /onboarding.
 //   2. Entity import: owners → properties → units → tenants_leases.
-//   3. Balance import: owner_balances → deposit_liabilities → bank_balances.
+//   3. Balance import: owner_balances (O-C1 deliberately understated by $50.00) → deposit_liabilities
+//      → bank_balances (Operating Trust raised by $200.00) → held_pm_fees ($200.00, Operating Trust).
 //   4. Non-tying verification: wrong figures → NOT TIED → sign-off button disabled / returns 409.
-//   5. Tied verification: matching figures → TIED / $0.00 variance → sign off succeeds.
-//   6. Post-signoff: dashboard no longer redirects to /onboarding.
+//   5. Corrected re-import (supersede — WP-7 Task 14): the owner_balances CSV is re-uploaded with
+//      O-C1 fixed; banner reads "1 corrected, 1 unchanged" (O-C2's row is untouched).
+//   6. Tied verification: matching figures (owner equity now $8,500.00 again, held fees attested at
+//      $200.00) → TIED / $0.00 variance → sign off succeeds.
+//   7. Post-signoff: dashboard no longer redirects to /onboarding.
 //
-// Fixture tie-out (seed/cutover-fixture/ — verified by check-invariants --org cutover):
-//   Owner equity total (cash + accrual, both same): O-C1 $5,000.00 + O-C2 $3,500.00 = $8,500.00
+// Fixture tie-out (seed/cutover-fixture/ — verified by check-invariants --org cutover, AFTER the
+// correction + held-fees legs below; the deliberately-wrong first owner_balances import is an
+// intermediate state, not the final tie):
+//   Owner equity total (cash + accrual, both same, POST-CORRECTION): O-C1 $5,000.00 + O-C2 $3,500.00
+//     = $8,500.00. (The first owner_balances.csv import understates O-C1 at $4,950.00 — a $50.00
+//     gap — on purpose; owner_balances_corrected.csv supersedes it back to $5,000.00 before the tied
+//     verification step. O-C2 is identical in both files, so its row supersedes as "unchanged".)
 //   Deposit liabilities total: T-C1 $1,500.00 + T-C2 $1,250.00 + T-C3 $1,750.00 = $4,500.00
-//   Operating Trust book balance = $8,500.00 = Σ owner equity ✓
+//   Held PM fees (held_pm_fees.csv, Operating Trust only): $200.00
+//   Operating Trust book balance = $8,700.00 = Σ owner equity ($8,500.00) + held PM fees ($200.00) ✓
 //   Deposit Trust book balance = $4,500.00 = Σ deposit liabilities ✓
-//   MigrationClearing residual: $0.00 cash, $0.00 accrual (cash == accrual, no accrual-delta line) ✓
+//   MigrationClearing residual: $0.00 cash, $0.00 accrual (cash == accrual, no accrual-delta line;
+//   held fees post Basis=Both, so no basis ever carries the raw $200.00/$50.00 alone) ✓
 //
 // Cutover org bank account IDs (stable — set in CutoverSeeder.cs):
 //   Operating Trust:  01923000-0000-7000-8000-0000c7ba0001
@@ -47,10 +58,14 @@ const FIXTURE_DIR = path.join(__dirname, '..', '..', 'seed', 'cutover-fixture');
 const OPER_TRUST_ID = '01923000-0000-7000-8000-0000c7ba0001';
 const DEPOSIT_TRUST_ID = '01923000-0000-7000-8000-0000c7ba0002';
 
-// Tied fixture figures (must match the imported totals for verification to pass).
+// Tied fixture figures (must match the imported totals for verification to pass). OWNER_EQUITY_TOTAL
+// is the POST-CORRECTION figure (the corrected re-import restores O-C1 to its original $5,000.00).
+// OPER_TRUST_BOOK is raised by HELD_PM_FEES_TOTAL over the original $8,500.00 (Task 14, WP-7 §5) so
+// the Operating Trust book still equals owner equity + held fees sitting inside that same account.
 const OWNER_EQUITY_TOTAL = '8500';
 const DEPOSIT_LIABILITY_TOTAL = '4500';
-const OPER_TRUST_BOOK = '8500';
+const HELD_PM_FEES_TOTAL = '200';
+const OPER_TRUST_BOOK = '8700';
 const DEPOSIT_TRUST_BOOK = '4500';
 
 async function login(page: Page) {
@@ -165,13 +180,13 @@ test.describe.serial('M7 onboarding wizard', () => {
     await page.screenshot({ path: 'e2e-results/m7-07-balance-step.png', fullPage: true });
   });
 
-  // ── Step 3: balance import (all three kinds in one session, then Continue) ──
+  // ── Step 3: balance import (all four kinds in one session, then Continue) ───
   //
   // On a fresh login here, entitiesImported=true + balancesImported=false → the wizard
-  // resumes at the balance step. All three balance kinds are imported within ONE session,
+  // resumes at the balance step. All four balance kinds are imported within ONE session,
   // then "Continue →" advances to the verify step.
 
-  test('balance import: owner_balances → deposit_liabilities → bank_balances (each banner), then Continue', async ({
+  test('balance import: owner_balances → deposit_liabilities → bank_balances → held_pm_fees (each banner), then Continue', async ({
     page,
   }) => {
     await login(page);
@@ -197,12 +212,23 @@ test.describe.serial('M7 onboarding wizard', () => {
     await expect(page.getByRole('status')).toContainText(/imported 3 rows/i, { timeout: 15_000 });
     await page.screenshot({ path: 'e2e-results/m7-09-deposit-liabilities.png', fullPage: true });
 
-    // Bank balances (2 rows) — matched by name against the seeded cutover bank accounts.
+    // Bank balances (2 rows) — matched by name against the seeded cutover bank accounts. The
+    // Operating Trust figure (8700.00) is raised $200.00 over owner equity (8500.00) — the held-fees
+    // upload below accounts for exactly that $200.00 still sitting inside the account (WP-7 Task 14).
     await page.getByLabel('Cutover date').fill(CUTOVER_DATE);
     await page.locator('input[type="radio"][value="bank_balances"]').check();
     await uploadFixtureCsv(page, 'bank_balances.csv');
     await expect(page.getByRole('status')).toContainText(/imported 2 rows/i, { timeout: 15_000 });
     await page.screenshot({ path: 'e2e-results/m7-10-bank-balances.png', fullPage: true });
+
+    // Held PM fees (1 row) — WP-7 Task 14: unremitted PM fees still sitting inside the Operating
+    // Trust bank. Names the same trust bank as bank_balances.csv above; the $200.00 here is exactly
+    // the amount that account's book balance was raised by, so the run still ties.
+    await page.getByLabel('Cutover date').fill(CUTOVER_DATE);
+    await page.locator('input[type="radio"][value="held_pm_fees"]').check();
+    await uploadFixtureCsv(page, 'held_pm_fees.csv');
+    await expect(page.getByRole('status')).toContainText(/imported 1 row\b/i, { timeout: 15_000 });
+    await page.screenshot({ path: 'e2e-results/m7-10b-held-fees.png', fullPage: true });
 
     // Continue → verify step.
     await expect(continueBtn).toBeEnabled();
@@ -310,7 +336,53 @@ test.describe.serial('M7 onboarding wizard', () => {
     expect(signoffRes.status).toBe(409);
   });
 
-  // ── Step 5: happy-path tied verification + sign-off ───────────────────────
+  // ── Step 5: corrected re-import (supersede) ───────────────────────────────
+  //
+  // The balance-import step (above) deliberately understated O-C1's owner balance by $50.00. Before
+  // verification can tie, the operator corrects it via the pre-sign-off supersede path (WP-7 Task 5 /
+  // Task 14) rather than a plain re-import. balancesImported is already true (owner_balances posted,
+  // even with the error), so a fresh page load resumes at the verify step (firstIncompleteStep=3);
+  // navigate back to the balance step via the checklist — it is already "reached".
+
+  test('corrected re-import (supersede): fixes the understated owner balance, other row unchanged, then Continue', async ({
+    page,
+  }) => {
+    await login(page);
+    await page.goto('/onboarding');
+    await expect(page.getByRole('heading', { name: /verify & sign off/i })).toBeVisible({
+      timeout: 10_000,
+    });
+
+    // Back to the balance step via the checklist (reached, since balancesImported is already true).
+    await page
+      .getByRole('button', { name: /go to step \d+: import opening balances/i })
+      .click();
+    await expect(page.getByRole('heading', { name: /import opening balances/i })).toBeVisible({
+      timeout: 10_000,
+    });
+
+    // Corrected owner balances (2 rows): O-C1 back to $5,000.00 (was $4,950.00), O-C2 unchanged at
+    // $3,500.00. The cutover date must match the original import exactly, or supersede 409s
+    // (cutover_date_mismatch) — the field defaults to today on this fresh mount, so it must be re-set.
+    await page.getByLabel('Cutover date').fill(CUTOVER_DATE);
+    await page.locator('input[type="radio"][value="owner_balances"]').check();
+    await page.getByLabel('This is a corrected re-import (supersede)').check();
+    await uploadFixtureCsv(page, 'owner_balances_corrected.csv');
+    await expect(page.getByRole('status')).toContainText(/1 corrected, 1 unchanged/i, {
+      timeout: 15_000,
+    });
+    await page.screenshot({ path: 'e2e-results/m7-11b-correction.png', fullPage: true });
+
+    // Continue → verify step (owner equity now ties at $8,500.00 again).
+    const continueBtn = page.getByRole('button', { name: /continue/i });
+    await expect(continueBtn).toBeEnabled();
+    await continueBtn.click();
+    await expect(page.getByRole('heading', { name: /verify & sign off/i })).toBeVisible({
+      timeout: 10_000,
+    });
+  });
+
+  // ── Step 6: happy-path tied verification + sign-off ───────────────────────
 
   test('tied verification: matching figures → TIED / $0.00 clearing residuals → sign off succeeds', async ({
     page,
@@ -322,10 +394,14 @@ test.describe.serial('M7 onboarding wizard', () => {
       timeout: 10_000,
     });
 
-    // Enter matching AppFolio closing figures.
+    // Enter matching AppFolio closing figures. Owner equity is the POST-CORRECTION total (the prior
+    // step superseded O-C1 back to $5,000.00). Held PM fees ($200.00) is the amount imported against
+    // the Operating Trust bank — attesting it (rather than leaving it blank) is what makes the "Held
+    // PM Fees (Cash)" variance line appear and tie, per D5/§3b in VerificationService.
     await page.getByLabel('Cutover date').fill(CUTOVER_DATE);
     await page.getByLabel('Owner equity total from AppFolio').fill(OWNER_EQUITY_TOTAL);
     await page.getByLabel('Deposit liability total from AppFolio').fill(DEPOSIT_LIABILITY_TOTAL);
+    await page.getByLabel('Held PM fees total from AppFolio').fill(HELD_PM_FEES_TOTAL);
 
     // Bank balance rows: row 1 is pre-rendered; add row 2 via the button.
     const bankIdInputs = page.getByLabel(/bank account id/i);
@@ -353,6 +429,15 @@ test.describe.serial('M7 onboarding wizard', () => {
 
     // "Tied" badge (aria-label="Import is tied" on the span in VerificationStep.tsx).
     await expect(page.getByLabel('Import is tied')).toBeVisible({ timeout: 10_000 });
+
+    // Held PM Fees (Cash) line (WP-7 Task 14): appears because heldPmFeesTotal was attested above,
+    // and ties because the $200.00 attested matches the $200.00 imported against Operating Trust.
+    // Each VarianceRow carries its own per-line aria-label ("tied"/"not tied" — VerificationStep.tsx),
+    // scoped to this row so it doesn't match every other tied line in the table. exact: true matters
+    // here — "not tied" contains "tied" as a substring, so a loose match would pass even if untied.
+    const heldFeesRow = page.getByRole('row').filter({ hasText: 'Held PM Fees (Cash)' });
+    await expect(heldFeesRow).toBeVisible({ timeout: 5_000 });
+    await expect(heldFeesRow.getByLabel('tied', { exact: true })).toBeVisible();
 
     // Clearing residuals section: both bases net to zero (MigrationClearing == 0).
     // The <Money colorize> component renders an exact zero as an em-dash with class
@@ -386,7 +471,7 @@ test.describe.serial('M7 onboarding wizard', () => {
     await page.screenshot({ path: 'e2e-results/m7-13-signed-off.png', fullPage: true });
   });
 
-  // ── Step 6: dashboard after sign-off ──────────────────────────────────────
+  // ── Step 7: dashboard after sign-off ──────────────────────────────────────
 
   test('after sign-off: dashboard no longer redirects to /onboarding', async ({ page }) => {
     await login(page);
