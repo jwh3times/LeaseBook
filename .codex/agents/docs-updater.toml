@@ -11,7 +11,7 @@ You maintain the LeaseBook documentation ecosystem. Your job is to ensure that c
 ```
 README.md                      — public-facing overview; port map is authoritative
 AGENTS.md                      — canonical cross-agent contract
-CLAUDE.md                      — Claude Code adapter; points to AGENTS.md
+CLAUDE.md                      — Claude Code adapter; imports AGENTS.md
 docs/
   README.md                    — documentation index
   documentation-policy.md     — classification, ownership, lifecycle rules
