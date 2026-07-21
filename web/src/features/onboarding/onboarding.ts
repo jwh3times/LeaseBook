@@ -20,7 +20,11 @@ export type BankBalanceDto = components['schemas']['BankBalanceDto'];
 
 export type EntityKind = 'owners' | 'properties' | 'units' | 'tenants_leases';
 export type BalanceKind =
-  'owner_balances' | 'deposit_liabilities' | 'bank_balances' | 'tenant_receivables';
+  | 'owner_balances'
+  | 'deposit_liabilities'
+  | 'bank_balances'
+  | 'tenant_receivables'
+  | 'held_pm_fees';
 
 // ─── Query keys ───────────────────────────────────────────────────────────────
 
@@ -82,6 +86,27 @@ export function useImportBalances(kind: BalanceKind) {
       await primeCsrf();
       return unwrap(
         api.POST('/api/onboarding/import-balances/{kind}', {
+          params: { path: { kind } },
+          body,
+        }),
+      );
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: onboardingStatusKey() });
+    },
+  });
+}
+
+export type ImportOutcomeCounts = components['schemas']['ImportOutcomeCounts'];
+
+/** Corrected re-import (supersede) for an already-imported balance kind. Invalidates status. */
+export function useSupersedeBalances(kind: BalanceKind) {
+  const queryClient = useQueryClient();
+  return useMutation<ImportBatchResult, OnboardingError, BalanceImportRequest>({
+    mutationFn: async (body) => {
+      await primeCsrf();
+      return unwrap(
+        api.POST('/api/onboarding/import-balances/{kind}/supersede', {
           params: { path: { kind } },
           body,
         }),

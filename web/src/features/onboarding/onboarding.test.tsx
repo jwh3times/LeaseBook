@@ -7,13 +7,13 @@
  * (c) VerificationStep sign-off button is disabled until isTied is true (and enabled when true).
  */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { http, HttpResponse } from 'msw';
+import { delay, http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { server } from '@/test/mocks/server';
-import { EntityImportStep } from './ImportStep';
+import { BalanceImportStep, EntityImportStep } from './ImportStep';
 import { OnboardingChecklist } from './OnboardingChecklist';
 import { VerificationStep } from './VerificationStep';
 
@@ -261,6 +261,295 @@ describe('EntityImportStep — explicit "Continue" advancement', () => {
   });
 });
 
+// ─── (b3) BalanceImportStep — corrected re-import (supersede) ────────────────
+
+const BALANCE_KINDS: { kind: import('./onboarding').BalanceKind; label: string }[] = [
+  { kind: 'owner_balances', label: 'Owner balances' },
+  { kind: 'deposit_liabilities', label: 'Deposit liabilities' },
+  { kind: 'bank_balances', label: 'Bank balances' },
+  { kind: 'tenant_receivables', label: 'Tenant receivables' },
+];
+
+function renderBalanceStep() {
+  render(
+    withRouter(
+      <BalanceImportStep
+        title="Import balances"
+        description="Upload balance CSVs"
+        kinds={BALANCE_KINDS}
+      />,
+    ),
+  );
+}
+
+async function uploadCsv(csv: string) {
+  const file = new File([csv], 'x.csv', { type: 'text/csv' });
+  const input = screen.getByLabelText('CSV file');
+  await userEvent.upload(input, file);
+}
+
+describe('BalanceImportStep — corrected re-import (supersede)', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '';
+    server.use(http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 })));
+  });
+
+  test('corrected re-import posts to the supersede endpoint and reports outcome counts', async () => {
+    server.use(
+      http.post('/api/onboarding/import-balances/owner_balances/supersede', () =>
+        HttpResponse.json({
+          batchId: 'b2',
+          rowCount: 3,
+          errorCount: 0,
+          counts: {
+            posted: 0,
+            alreadyPosted: 0,
+            unchanged: 2,
+            superseded: 1,
+            skipped: 0,
+            errors: 0,
+          },
+          errors: [],
+        }),
+      ),
+    );
+    renderBalanceStep(); // the file's existing helper that mounts <BalanceImportStep …>
+    await userEvent.click(screen.getByLabelText('This is a corrected re-import (supersede)'));
+    await uploadCsv('Owner ID,Owner Name,Cash Balance,Accrual Balance\nO-1,X,450.00,450.00\n'); // existing upload helper
+    expect(await screen.findByText(/1 corrected, 2 unchanged/)).toBeInTheDocument();
+  });
+
+  test('supersede with no differing figures says so instead of a bare success', async () => {
+    server.use(
+      http.post('/api/onboarding/import-balances/owner_balances/supersede', () =>
+        HttpResponse.json({
+          batchId: 'b3',
+          rowCount: 3,
+          errorCount: 0,
+          counts: {
+            posted: 0,
+            alreadyPosted: 0,
+            unchanged: 3,
+            superseded: 0,
+            skipped: 0,
+            errors: 0,
+          },
+          errors: [],
+        }),
+      ),
+    );
+    renderBalanceStep();
+    await userEvent.click(screen.getByLabelText('This is a corrected re-import (supersede)'));
+    await uploadCsv('Owner ID,Owner Name,Cash Balance,Accrual Balance\nO-1,X,500.00,500.00\n');
+    expect(
+      await screen.findByText(/no figures differed — nothing was superseded/i),
+    ).toBeInTheDocument();
+  });
+
+  // Regression: a corrected file that introduces a brand-new position (an owner missing from the
+  // original import) comes back superseded=0 / posted=1. Keying the banner off `superseded` alone
+  // rendered "nothing was superseded" straight after a genuine posting.
+  test('supersede that adds a new position reports it instead of claiming nothing happened', async () => {
+    server.use(
+      http.post('/api/onboarding/import-balances/owner_balances/supersede', () =>
+        HttpResponse.json({
+          batchId: 'b4',
+          rowCount: 3,
+          errorCount: 0,
+          counts: {
+            posted: 1,
+            alreadyPosted: 0,
+            unchanged: 2,
+            superseded: 0,
+            skipped: 0,
+            errors: 0,
+          },
+          errors: [],
+        }),
+      ),
+    );
+    renderBalanceStep();
+    await userEvent.click(screen.getByLabelText('This is a corrected re-import (supersede)'));
+    await uploadCsv(
+      'Owner ID,Owner Name,Cash Balance,Accrual Balance\nO-2,New Owner,300.00,300.00\n',
+    );
+
+    expect(await screen.findByText(/1 added, 2 unchanged/)).toBeInTheDocument();
+    expect(screen.queryByText(/nothing was superseded/i)).not.toBeInTheDocument();
+  });
+
+  // Every non-zero bucket earns a clause — a mixed file must not drop the added/skipped rows.
+  test('supersede banner lists every non-zero outcome bucket', async () => {
+    server.use(
+      http.post('/api/onboarding/import-balances/owner_balances/supersede', () =>
+        HttpResponse.json({
+          batchId: 'b5',
+          rowCount: 6,
+          errorCount: 0,
+          counts: {
+            posted: 1,
+            alreadyPosted: 0,
+            unchanged: 2,
+            superseded: 2,
+            skipped: 1,
+            errors: 0,
+          },
+          errors: [],
+        }),
+      ),
+    );
+    renderBalanceStep();
+    await userEvent.click(screen.getByLabelText('This is a corrected re-import (supersede)'));
+    await uploadCsv('Owner ID,Owner Name,Cash Balance,Accrual Balance\nO-1,X,450.00,450.00\n');
+
+    expect(
+      await screen.findByText(/2 corrected, 1 added, 2 unchanged, 1 skipped/),
+    ).toBeInTheDocument();
+  });
+});
+
+// ─── (b4) BalanceImportStep — banner reflects the mode that produced it ──────
+//
+// Regression coverage for the reviewer finding: the success banner used to key its content off
+// the LIVE `supersede` checkbox rather than which mode actually produced the displayed
+// result/counts, so toggling the checkbox after a result landed (without re-uploading)
+// instantly relabeled a stale result under the wrong mode.
+
+describe('BalanceImportStep — banner reflects the mode that produced the result', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '';
+    server.use(http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 })));
+  });
+
+  test('plain import success then toggling supersede does not relabel the banner', async () => {
+    server.use(
+      http.post('/api/onboarding/import-balances/owner_balances', () =>
+        HttpResponse.json({
+          batchId: 'b4',
+          rowCount: 3,
+          errorCount: 0,
+          // Nonzero counts on a *plain* import response: ImportBatchResult.counts is populated on
+          // every response, plain or supersede, so a plain import's counts alone can't be trusted
+          // to gate the "corrected" copy — only resultMode can.
+          counts: {
+            posted: 3,
+            alreadyPosted: 0,
+            unchanged: 5,
+            superseded: 4,
+            skipped: 0,
+            errors: 0,
+          },
+          errors: [],
+        }),
+      ),
+    );
+    renderBalanceStep(); // supersede unchecked by default → hits the plain import endpoint
+    await uploadCsv('Owner ID,Owner Name,Cash Balance,Accrual Balance\nO-1,X,450.00,450.00\n');
+    expect(await screen.findByText(/imported 3 rows successfully/i)).toBeInTheDocument();
+
+    // Toggle supersede WITHOUT uploading again.
+    await userEvent.click(screen.getByLabelText('This is a corrected re-import (supersede)'));
+
+    // Scoped to the role="status" banner itself: the checkbox's own always-present label text
+    // ("This is a corrected re-import (supersede)") also contains "corrected", so an unscoped
+    // queryByText(/corrected/i) would false-positive on a "multiple elements found" error rather
+    // than actually asserting on the banner's content.
+    const banner = screen.getByRole('status');
+    expect(within(banner).getByText(/imported 3 rows successfully/i)).toBeInTheDocument();
+    expect(within(banner).queryByText(/corrected/i)).not.toBeInTheDocument();
+  });
+
+  test('supersede success then unchecking does not revert the banner', async () => {
+    server.use(
+      http.post('/api/onboarding/import-balances/owner_balances/supersede', () =>
+        HttpResponse.json({
+          batchId: 'b5',
+          rowCount: 3,
+          errorCount: 0,
+          counts: {
+            posted: 0,
+            alreadyPosted: 0,
+            unchanged: 2,
+            superseded: 1,
+            skipped: 0,
+            errors: 0,
+          },
+          errors: [],
+        }),
+      ),
+    );
+    renderBalanceStep();
+    await userEvent.click(screen.getByLabelText('This is a corrected re-import (supersede)'));
+    await uploadCsv('Owner ID,Owner Name,Cash Balance,Accrual Balance\nO-1,X,450.00,450.00\n');
+    expect(await screen.findByText(/1 corrected, 2 unchanged/)).toBeInTheDocument();
+
+    // Uncheck supersede WITHOUT uploading again.
+    await userEvent.click(screen.getByLabelText('This is a corrected re-import (supersede)'));
+
+    const banner = screen.getByRole('status');
+    expect(within(banner).getByText(/1 corrected, 2 unchanged/)).toBeInTheDocument();
+    expect(within(banner).queryByText(/imported/i)).not.toBeInTheDocument();
+  });
+});
+
+// ─── (b5) BalanceImportStep — stale mutation error/pending state on kind & mode switches ──
+//
+// Regression coverage for the reviewer finding: `mutation` (`useImportBalances(selectedKind)`)
+// and `supersedeMutation` are single shared `useMutation` instances across all four balance
+// kinds — switching `selectedKind` only changes which kind the *next* upload targets; it does not
+// reset either mutation's own isError/error state, and `ApiErrorNotice` reads `activeMutation`
+// live. Two consequences: (1) a failed upload for one kind kept showing its error notice after
+// switching to a different, untouched kind (unambiguous misattribution, no timing required); (2)
+// the supersede checkbox was enabled during isPending, so toggling it mid-flight (or after a
+// failure, without re-uploading) changes which mutation instance the notice reads.
+
+describe('BalanceImportStep — mutation error state resets on kind and mode switches', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '';
+    server.use(http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 })));
+  });
+
+  test('switching balance kind clears a stale error notice', async () => {
+    server.use(
+      http.post('/api/onboarding/import-balances/owner_balances', () =>
+        HttpResponse.json(
+          { code: 'validation_failed', detail: 'The CSV could not be processed.' },
+          { status: 400 },
+        ),
+      ),
+    );
+    renderBalanceStep(); // owner_balances is kinds[0] — selected by default
+    await uploadCsv('Owner ID,Owner Name,Cash Balance,Accrual Balance\nO-1,X,450.00,450.00\n');
+
+    expect(await screen.findByText(/the csv could not be processed/i)).toBeInTheDocument();
+
+    // Switch to a different kind WITHOUT re-uploading — the owner_balances failure must not
+    // carry over and misattribute to deposit_liabilities.
+    await userEvent.click(screen.getByLabelText('Deposit liabilities'));
+
+    expect(screen.queryByText(/the csv could not be processed/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
+  test('supersede checkbox is disabled while a request is pending', async () => {
+    server.use(
+      http.post('/api/onboarding/import-balances/owner_balances', async () => {
+        await delay('infinite');
+        return HttpResponse.json({ batchId: 'b6', rowCount: 1, errorCount: 0, errors: [] });
+      }),
+    );
+    renderBalanceStep();
+
+    const checkbox = screen.getByLabelText('This is a corrected re-import (supersede)');
+    expect(checkbox).toBeEnabled();
+
+    await uploadCsv('Owner ID,Owner Name,Cash Balance,Accrual Balance\nO-1,X,450.00,450.00\n');
+
+    await waitFor(() => expect(checkbox).toBeDisabled());
+  });
+});
+
 // ─── (c) VerificationStep sign-off button ────────────────────────────────────
 
 describe('VerificationStep sign-off button', () => {
@@ -405,5 +694,72 @@ describe('VerificationStep sign-off button', () => {
       await screen.findByText(/correct and re-import before signing off/i),
     ).toBeInTheDocument();
     expect(screen.queryByText(/0193ab7c-dead-beef/)).not.toBeInTheDocument();
+  });
+});
+
+// ─── (d) VerificationStep held-fees attestation field (WP-7 Task 13) ──────────
+//
+// D5 (fiduciary): the held-fees field is a first-class "unattested" input. A BLANK field must send
+// heldPmFeesTotal: null in the request body — absence ≠ zero, so blank must NEVER be coerced to 0.
+// A filled field sends the parsed number. The variance line then renders automatically from
+// report.lines (no bespoke rendering), so these tests assert only the request-body contract.
+
+describe('VerificationStep held-fees attestation field', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  const HELD_REPORT = {
+    verificationId: 'v-held',
+    cutoverDate: '2026-01-31',
+    isTied: true,
+    varianceTotal: 0.0,
+    clearingCash: 0.0,
+    clearingAccrual: 0.0,
+    reportSnapshot: '{}',
+    lines: [],
+  };
+
+  it('sends heldPmFeesTotal: null when the held-fees field is left blank (absence ≠ zero)', async () => {
+    let verifyBody: Record<string, unknown> | undefined;
+    server.use(
+      http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 })),
+      http.post('/api/onboarding/verification', async ({ request }) => {
+        verifyBody = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json(HELD_REPORT);
+      }),
+    );
+
+    render(withRouter(<VerificationStep />));
+
+    await userEvent.type(screen.getByLabelText('Owner equity total from AppFolio'), '500');
+    await userEvent.type(screen.getByLabelText('Deposit liability total from AppFolio'), '500');
+    // Held-fees field deliberately left BLANK.
+    await userEvent.click(screen.getByRole('button', { name: /run verification/i }));
+
+    await waitFor(() => expect(verifyBody).toBeDefined());
+    // The property is PRESENT and null — not omitted, not 0.
+    expect(verifyBody).toHaveProperty('heldPmFeesTotal', null);
+  });
+
+  it('sends the parsed number when the held-fees field is filled', async () => {
+    let verifyBody: Record<string, unknown> | undefined;
+    server.use(
+      http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 })),
+      http.post('/api/onboarding/verification', async ({ request }) => {
+        verifyBody = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json(HELD_REPORT);
+      }),
+    );
+
+    render(withRouter(<VerificationStep />));
+
+    await userEvent.type(screen.getByLabelText('Owner equity total from AppFolio'), '500');
+    await userEvent.type(screen.getByLabelText('Deposit liability total from AppFolio'), '500');
+    await userEvent.type(screen.getByLabelText('Held PM fees total from AppFolio'), '100');
+    await userEvent.click(screen.getByRole('button', { name: /run verification/i }));
+
+    await waitFor(() => expect(verifyBody).toBeDefined());
+    expect(verifyBody).toHaveProperty('heldPmFeesTotal', 100);
   });
 });

@@ -33,9 +33,13 @@ namespace LeaseBook.Web.Seeding;
 ///
 /// <para>
 /// Fixture tie-out (see <c>seed/cutover-fixture/</c>):
-///   Operating Trust book = $8,500.00 = $5,000 (O-C1) + $3,500 (O-C2) = Σ owner equity ✓
+///   Operating Trust book = $8,700.00 = $8,500.00 owner equity ($5,000 O-C1 + $3,500 O-C2) + $200.00
+///   held PM fees (<c>held_pm_fees.csv</c>) ✓
 ///   Deposit Trust book = $4,500.00 = $1,500 + $1,250 + $1,750 = Σ deposit liabilities ✓
 ///   Cash == Accrual (happy path): no accrual-delta line → MigrationClearing nets to $0.00 in both bases.
+///   The e2e correction leg deliberately understates O-C1 at $4,950.00 in <c>owner_balances.csv</c>;
+///   the dedicated correction CSV, <c>owner_balances_corrected.csv</c>, supersedes it back to
+///   $5,000.00 before the tie above is checked.
 /// </para>
 ///
 /// <para>

@@ -78,6 +78,24 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 - **Diagnostics runbook** — `docs/runbooks/diagnostics.md` documents how to turn an on-screen
   correlation reference into an Application Insights query, and lists the stable `LogEvents` ids
   Track B's alert rules will key on.
+- **Pre-sign-off import correction (supersede)** — a cutover operator can now correct an
+  already-posted opening balance before sign-off instead of re-provisioning the whole org.
+  `POST /api/onboarding/import-balances/{kind}/supersede` diffs a corrected file against the live
+  opening positions per `source_ref` family: a changed figure posts a linked reversal (dated at the
+  cutover boundary) plus a corrected revision (`#r{N}`); a position left out of the file is
+  untouched (omission is not removal); a position resubmitted at $0.00 is removed outright. The
+  successor batch records `supersedes_batch_id` for lineage, and after sign-off the endpoint returns
+  409 — corrections become ordinary ledger reversals instead. A correction is all-or-nothing: a
+  position whose corrected figure is rejected at post time rolls the whole batch back (409) rather
+  than leaving that position's reversal committed without its replacement. See ADR-021.
+- **Held-PM-fees opening import** — a fifth balance kind: an un-swept property-management-fee
+  position sitting in a trust or deposit-purpose bank account now imports as a real opening position
+  (a `pm_income` credit plus a `migration_clearing` contra, both bases, bank-dimensioned, no owner
+  dimension — ADR-020 §5) instead of surfacing only as a migration-clearing residual. The migration
+  verification report carries a dedicated **Held PM Fees (Cash)** line, sign-off is refused
+  (`held_fees_not_attested`) until the operator attests to a non-zero position, and the PM-facing
+  management-fee income report excludes opening-balance postings (and their voids) so an imported
+  position never inflates in-period fee income.
 
 ### Changed
 

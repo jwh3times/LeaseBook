@@ -83,12 +83,27 @@ internal sealed class GetMigrationVerificationDataHandler(DbContext db)
             .Select(r => new BankBookBalance(r.BankAccountId, r.AccountCode, r.Book))
             .ToList();
 
+        // ── Held PM fees (credit-normal, cash basis, TRUST BANKS ONLY — mirrors I2's term) ────────
+        // D12: filtered to bank accounts of class 'trust_bank', exactly like invariant I2's held_pm_fees
+        // component (InvariantChecks.cs:65-70). NOT an org-wide pm_income sum — verification compares the
+        // operator's attested held-fees figure against the fiduciary (trust-side) journal position only.
+        var heldRows = await db.Database.SqlQuery<ScalarRow>(
+            $"""
+            SELECT COALESCE(SUM(COALESCE(jl.credit, 0) - COALESCE(jl.debit, 0))
+                    FILTER (WHERE jl.basis IN ('cash', 'both')), 0) AS value
+            FROM journal_lines jl
+            WHERE jl.account_class = 'pm_income'
+              AND jl.bank_account_id IN (SELECT bank_account_id FROM accounts WHERE class = 'trust_bank')
+            """).ToListAsync(ct);
+        var heldTotal = heldRows.Count > 0 ? heldRows[0].Value : 0m;
+
         return new MigrationVerificationData(
             clearingRow.CashNet,
             clearingRow.AccrualNet,
             ownerEquityTotal,
             depositTotal,
-            balances);
+            balances,
+            heldTotal);
     }
 
     // ── Private projection types for SqlQuery ─────────────────────────────────────────────────────

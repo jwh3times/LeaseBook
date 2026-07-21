@@ -108,6 +108,42 @@ completed sign-off.
   production import should go through `PostOpeningPositionAsync`. This distinction is enforced by
   convention, not by the compiler.
 
+## §5 — Held-PM-fees opening position (added by M8 WP-7)
+
+M7 deliberately excluded held PM fees from the import path; a held position surfaced as a
+migration-clearing residual the operator reconciled by hand before sign-off. WP-7 imports it as a
+real position. For a held (un-swept) PM-fee position of `H` in **trust-class** bank `B`
+(negative `H` flips both sides; `H = 0` is skipped):
+
+| Leg    | Account (code)       | Account class        | Side       | Basis  | Dimensions                                                  |
+| ------ | -------------------- | -------------------- | ---------- | ------ | ----------------------------------------------------------- |
+| Real   | `pm_income`          | `pm_income`          | Credit `H` | `both` | `BankAccountId = B`; `OwnerId`/`TenantId`/`PropertyId` null |
+| Contra | `migration_clearing` | `migration_clearing` | Debit `H`  | `both` | `BankAccountId = B` only                                    |
+
+Row added to the §Decision line-construction table:
+
+| Imported position       | Account class | Normal side | Basis tag |
+| ----------------------- | ------------- | ----------- | --------- |
+| PM fees held (un-swept) | `pm_income`   | Credit      | `both`    |
+
+Both tags are load-bearing. **`both`**: the trust equation's `held_pm_fees` term filters
+`basis IN ('cash','both')`; tagged `accrual` the fees vanish from the cash-basis equation and I2
+reports a variance of exactly `H`. **`BankAccountId = B` non-null**: the term is grouped per trust
+bank; a null bank dimension silently drops the fees while the bank's book still carries them.
+`B` must resolve to a `trust_bank`-class account (Trust **or** Deposit purpose); a
+`pm_operating_bank` (Operating purpose) is outside the equation and is rejected. `OwnerId` must be
+null — enforced by the posting service, a DB CHECK, and invariant I3. The shape is guarded at post
+time (`InvalidOpeningPositionException`): both wrong-shape outcomes are I1-invisible and would
+surface only later as an I2 variance.
+
+The guard fires at post time, so where it lands depends on the caller. A plain import records the
+rejection as a row error and continues — its held-fees rows are single-position, so nothing partial
+can commit. A corrected re-import (ADR-021's supersede path) instead lets the rejection abort the
+whole batch: it has already posted the reversal by the time the replacement is rejected, and the two
+must commit together or the live position would be removed with nothing put back. Given the planner
+supplies the basis, bank, and owner dimensions structurally, the only rule a corrected re-import can
+actually trip is the `trust_bank`-class check — a chart-of-accounts divergence, not a fixable row.
+
 ## Revisit trigger
 
 If a future import source (Buildium, Rentec) requires per-position semantics that differ materially
