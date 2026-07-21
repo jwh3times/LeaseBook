@@ -354,9 +354,7 @@ test.describe.serial('M7 onboarding wizard', () => {
     });
 
     // Back to the balance step via the checklist (reached, since balancesImported is already true).
-    await page
-      .getByRole('button', { name: /go to step \d+: import opening balances/i })
-      .click();
+    await page.getByRole('button', { name: /go to step \d+: import opening balances/i }).click();
     await expect(page.getByRole('heading', { name: /import opening balances/i })).toBeVisible({
       timeout: 10_000,
     });

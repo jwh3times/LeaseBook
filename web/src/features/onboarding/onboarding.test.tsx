@@ -301,7 +301,14 @@ describe('BalanceImportStep — corrected re-import (supersede)', () => {
           batchId: 'b2',
           rowCount: 3,
           errorCount: 0,
-          counts: { posted: 0, alreadyPosted: 0, unchanged: 2, superseded: 1, skipped: 0, errors: 0 },
+          counts: {
+            posted: 0,
+            alreadyPosted: 0,
+            unchanged: 2,
+            superseded: 1,
+            skipped: 0,
+            errors: 0,
+          },
           errors: [],
         }),
       ),
@@ -319,7 +326,14 @@ describe('BalanceImportStep — corrected re-import (supersede)', () => {
           batchId: 'b3',
           rowCount: 3,
           errorCount: 0,
-          counts: { posted: 0, alreadyPosted: 0, unchanged: 3, superseded: 0, skipped: 0, errors: 0 },
+          counts: {
+            posted: 0,
+            alreadyPosted: 0,
+            unchanged: 3,
+            superseded: 0,
+            skipped: 0,
+            errors: 0,
+          },
           errors: [],
         }),
       ),
@@ -327,7 +341,9 @@ describe('BalanceImportStep — corrected re-import (supersede)', () => {
     renderBalanceStep();
     await userEvent.click(screen.getByLabelText('This is a corrected re-import (supersede)'));
     await uploadCsv('Owner ID,Owner Name,Cash Balance,Accrual Balance\nO-1,X,500.00,500.00\n');
-    expect(await screen.findByText(/no figures differed — nothing was superseded/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/no figures differed — nothing was superseded/i),
+    ).toBeInTheDocument();
   });
 });
 
@@ -354,7 +370,14 @@ describe('BalanceImportStep — banner reflects the mode that produced the resul
           // Nonzero counts on a *plain* import response: ImportBatchResult.counts is populated on
           // every response, plain or supersede, so a plain import's counts alone can't be trusted
           // to gate the "corrected" copy — only resultMode can.
-          counts: { posted: 3, alreadyPosted: 0, unchanged: 5, superseded: 4, skipped: 0, errors: 0 },
+          counts: {
+            posted: 3,
+            alreadyPosted: 0,
+            unchanged: 5,
+            superseded: 4,
+            skipped: 0,
+            errors: 0,
+          },
           errors: [],
         }),
       ),
@@ -382,7 +405,14 @@ describe('BalanceImportStep — banner reflects the mode that produced the resul
           batchId: 'b5',
           rowCount: 3,
           errorCount: 0,
-          counts: { posted: 0, alreadyPosted: 0, unchanged: 2, superseded: 1, skipped: 0, errors: 0 },
+          counts: {
+            posted: 0,
+            alreadyPosted: 0,
+            unchanged: 2,
+            superseded: 1,
+            skipped: 0,
+            errors: 0,
+          },
           errors: [],
         }),
       ),
