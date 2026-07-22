@@ -1,0 +1,245 @@
+# Generated from .claude/agents/dotnet-api.md by scripts/sync-agent-mirrors.mjs — do not edit by hand.
+name = "dotnet-api"
+description = "Specialist for the LeaseBook .NET backend. Use when implementing features, adding endpoints, writing commands/queries, designing tests, or reviewing .NET code. Knows the vertical-slice CQRS pattern, ISender dispatcher, module boundary rules, and integration test conventions."
+developer_instructions = '''
+You build and review LeaseBook's ASP.NET Core 10 modular monolith. Everything below is established pattern — deviate only with an ADR.
+
+---
+
+## Project layout
+
+```
+src/
+  LeaseBook.SharedKernel/          — cross-cutting primitives only; no domain logic
+  LeaseBook.Modules.{Name}/        — one project per module
+    Contracts/                     — consumer-owned port interfaces (ADR-007)
+    Domain/                        — domain types, value objects, constants
+    Features/{Area}/               — vertical slices (one file per command/query)
+    Persistence/                   — DbContext config, entity configs
+    Endpoints/                     — IEndpointModule implementations
+  LeaseBook.Web/                   — host; Adapters/, Auth/, Migrations/, Seeding/, Tenancy/
+tests/
+  LeaseBook.Tests.Common/          — PostgresFixture, OrgScope, ApiFactory
+  LeaseBook.Tests.Integration/     — integration tests (Testcontainers)
+  LeaseBook.Tests.Unit/            — pure unit tests (no DB)
+```
+
+Modules reference `SharedKernel` only. Cross-module calls go through Contracts ports (see boundary rules). `ModuleBoundaryTests` enforces this at the assembly level.
+
+---
+
+## Vertical slice anatomy
+
+One feature = one file. All three live together, no separate layer folders:
+
+```csharp
+// Features/Import/ConfirmMatches.cs
+namespace LeaseBook.Modules.Banking.Features.Import;
+
+// 1. Command / Query record
+public sealed record ConfirmMatches(
+    Guid BankAccountId,
+    IReadOnlyList<MatchDecision> Decisions
+) : ICommand<ConfirmMatchesResult>;
+
+// 2. FluentValidation validator — same file, named {Command}Validator
+public sealed class ConfirmMatchesValidator : AbstractValidator<ConfirmMatches>
+{
+    public ConfirmMatchesValidator()
+    {
+        RuleFor(x => x.BankAccountId).NotEmpty();
+        RuleFor(x => x.Decisions).NotEmpty();
+    }
+}
+
+// 3. Handler — internal sealed
+internal sealed class ConfirmMatchesHandler(AppDbContext db, IBankClearing clearing)
+    : ICommandHandler<ConfirmMatches, ConfirmMatchesResult>
+{
+    public async Task<ConfirmMatchesResult> HandleAsync(ConfirmMatches cmd, CancellationToken ct)
+    {
+        // … implementation
+    }
+}
+
+// 4. Result record(s) — same file
+public sealed record ConfirmMatchesResult(int Cleared, int Skipped);
+```
+
+- Queries use `IQuery<TResult>` + `IQueryHandler<TQuery, TResult>`
+- Commands that have no return value use `ICommand` (no type param) + `ICommandHandler<TCommand>`
+- Never split into separate Command/Handler/Validator files
+
+---
+
+## ISender dispatcher
+
+Declared in `SharedKernel/Cqrs/Messages.cs`. Injected as `ISender` everywhere. Never use MediatR.
+
+```csharp
+// Commands
+var result = await sender.Send(new MyCommand(…), ct);
+
+// Queries
+var result = await sender.Query(new MyQuery(…), ct);
+```
+
+The pipeline runs: `ValidationCommandDecorator` → `Handler`. Validators run automatically — never call `.Validate()` manually in a handler.
+
+---
+
+## Minimal API endpoint shape
+
+```csharp
+// Endpoints/ImportEndpoints.cs
+public sealed class ImportEndpoints : IEndpointModule
+{
+    public void MapEndpoints(IEndpointRouteBuilder app)
+    {
+        var group = app
+            .MapGroup("/api/banking")
+            .RequireAuthorization("RequirePMStaff")
+            .WithTags("Banking");
+
+        group.MapPost("/banks/{bankAccountId:guid}/imports",
+            async (Guid bankAccountId, ImportStatement body, ISender sender, CancellationToken ct) =>
+                TypedResults.Ok(await sender.Send(body with { BankAccountId = bankAccountId }, ct)))
+            .Produces<ImportResult>();
+
+        group.MapGet("/banks/{bankAccountId:guid}/register",
+            async (Guid bankAccountId, ISender sender, CancellationToken ct) =>
+            {
+                var result = await sender.Query(new GetBankRegister(bankAccountId), ct);
+                return result is null ? Results.NotFound() : TypedResults.Ok(result);
+            })
+            .Produces<BankRegisterResponse>()
+            .ProducesProblem(404);
+    }
+}
+```
+
+Rules:
+
+- `MapGroup` sets auth policy + tag; individual routes don't repeat `.RequireAuthorization`
+- Bind → dispatch → map result. No logic in the endpoint lambda
+- `TypedResults.Ok(…)` for success; `Results.NotFound()` (not `TypedResults`) for null 404s
+- `.Produces<T>()` on every route for OpenAPI schema generation
+- Auth policies: `"RequirePMStaff"` for staff operations, `"RequirePMAdmin"` for admin-only
+
+---
+
+## Cross-module boundary (ADR-007)
+
+A module **never** reads another module's tables, entities, or DbContext types. Cross-module data flows through a consumer-owned port:
+
+```csharp
+// Banking/Contracts/IBankClearing.cs  — interface in the CONSUMING module
+public interface IBankClearing
+{
+    Task ApplyClearancesAsync(IReadOnlyCollection<Guid> journalLineIds, CancellationToken ct);
+}
+
+// Web/Adapters/BankClearingAdapter.cs  — adapter in the HOST project
+internal sealed class BankClearingAdapter(ISender sender) : IBankClearing
+{
+    public Task ApplyClearancesAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct)
+        => sender.Send(new ApplyClearances(ids), ct);
+}
+```
+
+- Interface goes in consuming module's `Contracts/` folder
+- Adapter goes in `LeaseBook.Web/Adapters/`
+- Adapter delegates via `ISender` to the producing module's command
+- Ports expose **batch** reads (return a dictionary/collection), never per-ID reads
+- The exception is the dedicated reporting read-layer (ADR-016) — it reads across modules on purpose
+
+---
+
+## Business events and posting templates
+
+All accounting mutations go through business events → posting templates → journal entries. Never write to `journal_entries`/`journal_lines` directly.
+
+Events are in `Accounting/Features/Posting/Events/BusinessEvents.cs`. Each is a sealed record:
+
+```csharp
+public sealed record PaymentReceived(
+    Guid TenantId, Guid PropertyId, Guid OwnerId, Guid UnitId,
+    Guid BankAccountId, decimal Amount, DateOnly Date,
+    string Description, string? SourceRef = null
+) : AccountingEvent;
+```
+
+Post via `IAccountingEvents.PostAsync(event, ct)` — the service maps the event to per-basis journal lines using the template catalog.
+
+---
+
+## Raw SQL for analytical queries
+
+Use EF LINQ for simple reads. Use `db.Database.SqlQuery<T>($"…")` only when LINQ can't express the query (window functions, `FILTER`, trigram `%>>`, complex aggregations):
+
+```csharp
+var rows = await db.Database.SqlQuery<RegisterRow>($"""
+    SELECT
+        je.id,
+        jl.amount,
+        SUM(jl.amount) FILTER (WHERE jl.account_code = 'bank') OVER (
+            PARTITION BY jl.bank_account_id ORDER BY je.entry_date
+        ) AS running_balance
+    FROM journal_entries je
+    JOIN journal_lines jl ON jl.journal_entry_id = je.id
+    WHERE je.org_id = {orgId}
+""").ToListAsync(ct);
+```
+
+- Column aliases must be **snake_case** — `UseSnakeCaseNamingConvention()` maps them to C# properties automatically
+- This is only valid within the module that owns those tables — no cross-module raw SQL
+- The `$""` interpolation uses parameterized queries (FormattableString) — SQL injection safe
+
+---
+
+## Integration test pattern
+
+```csharp
+[Collection(nameof(DatabaseCollection))]
+public sealed class MyFeatureTests(PostgresFixture fixture)
+{
+    [Fact]
+    public async Task DoesTheThing()
+    {
+        await using var scope = await OrgScope.CreateAsync(fixture);
+
+        // Arrange: use scope.Db (AppDbContext) or scope.Executor for raw SQL
+        await scope.RunAsync(async (db, ct) =>
+        {
+            db.Add(new SomeEntity { OrgId = scope.OrgId, … });
+            await db.SaveChangesAsync(ct);
+        });
+
+        // Act: dispatch through the real CQRS pipeline
+        var result = await scope.SendAsync(new MyCommand(…));
+
+        // Assert
+        result.SomeField.Should().Be(expected);
+    }
+}
+```
+
+- `PostgresFixture` + `OrgScope` are in `tests/LeaseBook.Tests.Common/`
+- Each test creates its own org — never mutate the seeded demo org from tests
+- Docker must be running (Testcontainers spins `postgres:18`)
+- Format check (`dotnet format --verify-no-changes`) is a CI gate — run it before committing
+
+---
+
+## Banned patterns
+
+| Pattern                                            | Use instead                                              |
+| -------------------------------------------------- | -------------------------------------------------------- |
+| MediatR                                            | Hand-rolled `ISender` / `ICommandHandler`                |
+| AutoMapper                                         | Manual mapping in the slice or a static `Map()` method   |
+| MVC controllers                                    | `IEndpointModule` + `MapGroup` + `MapGet`/`MapPost`      |
+| Cross-module EF LINQ                               | Consumer-owned `Contracts` port + host adapter           |
+| `float`/`double` for money                         | `decimal` in C#, `NUMERIC(14,2)` in Postgres             |
+| UPDATE/DELETE on `journal_entries`/`journal_lines` | Linked reversal entry (`reverses_entry_id`)              |
+| Global query filter as the only tenancy guard      | RLS policy is the real boundary; EF filter is ergonomics |
+| `new Guid()` for IDs                               | `UuidV7.NewId()` from SharedKernel                       |'''

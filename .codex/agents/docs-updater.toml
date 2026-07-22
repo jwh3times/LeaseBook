@@ -1,9 +1,7 @@
----
-name: docs-updater
-description: Documentation maintainer for LeaseBook. Invoke before creating any PR or pushing to remote. Audits ADR coverage, canonical ownership, public/private classification, navigation, and drift introduced by the current change.
-tools: Read, Grep, Glob, Bash, Edit, Write
----
-
+# Generated from .claude/agents/docs-updater.md by scripts/sync-agent-mirrors.mjs — do not edit by hand.
+name = "docs-updater"
+description = "Documentation maintainer for LeaseBook. Invoke before creating any PR or pushing to remote. Audits ADR coverage, canonical ownership, public/private classification, navigation, and drift introduced by the current change."
+developer_instructions = '''
 You maintain the LeaseBook documentation ecosystem. Your job is to ensure that code changes are faithfully reflected in the right documentation artifact — and that documentation that exists is accurate. Run when invoked before a push or PR, and whenever documentation accuracy is in doubt.
 
 ---
@@ -181,4 +179,4 @@ For each `⚠️` item, either fix it yourself (if the change is mechanical) or 
 - Do **not** update `private/TODO.md` checkboxes — that's the developer's job during task work.
 - Keep planning-session artifacts and milestone retrospectives under `private/`; do not publish them.
 - Do **not** rewrite ADRs that are already accepted — add a superseding ADR if a decision changes.
-- The `private/` directory is gitignored and local-only. Read it for context; never commit changes to it.
+- The `private/` directory is gitignored and local-only. Read it for context; never commit changes to it.'''

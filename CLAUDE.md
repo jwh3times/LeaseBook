@@ -1,38 +1,21 @@
 # CLAUDE.md
 
-This file adapts the repository's canonical agent contract for Claude Code.
+Claude Code adapter for this repository. `AGENTS.md` is the canonical engineering contract — it owns
+repository state, verification rules, commands, architecture boundaries, trust-accounting and tenancy
+invariants, working conventions, and documentation ownership. It is imported below; if the import does
+not resolve, read [`AGENTS.md`](AGENTS.md) directly before starting. Where this file conflicts with it,
+`AGENTS.md` wins.
 
-## Required Project Guidance
-
-Read and follow [`AGENTS.md`](AGENTS.md) at the start of every task. It owns repository state,
-verification rules, commands, architecture boundaries, trust-accounting and tenancy invariants,
-working conventions, and documentation ownership. If this file or a specialist instruction conflicts
-with `AGENTS.md`, `AGENTS.md` wins.
-
-The gitignored `private/` tree may be absent from a public clone. Follow the public engineering
-contract for ordinary fixes and accepted public work. When milestone scope or acceptance depends on
-unpublished product, customer, security, or compliance decisions, ask the maintainer for the relevant
-private context instead of reconstructing it.
-
-## Specialist Agents
-
-Read the relevant file under `.claude/agents/` before editing its domain:
-
-| Work type                                                                 | Guidance                                 |
-| ------------------------------------------------------------------------- | ---------------------------------------- |
-| .NET features, endpoints, commands/queries, integration tests             | `.claude/agents/dotnet-api.md`           |
-| React components, hooks, design tokens, frontend tests                    | `.claude/agents/react-frontend.md`       |
-| Migrations, RLS policies, schema design, Postgres queries                 | `.claude/agents/postgres-specialist.md`  |
-| Accounting posting logic, journal entries, trust equation changes         | `.claude/agents/trust-accounting.md`     |
-| Pre-merge correctness review                                              | `.claude/agents/code-reviewer.md`        |
-| Azure infrastructure, deploy workflows, Key Vault, managed identity, PITR | `.claude/agents/azure-infrastructure.md` |
-| Documentation drift and ownership                                         | `.claude/agents/docs-updater.md`         |
-
-Specialist files provide domain examples and checklists. They may narrow a workflow but may not relax
-an invariant or module boundary from `AGENTS.md`.
+@AGENTS.md
 
 ## Claude Code Integration
 
+Everything above is the cross-agent contract. This section is the only Claude-specific part.
+
+- The specialist guidance files listed in **Domain Guidance Files** are executable subagents here, each
+  named for its file basename — `dotnet-api`, `react-frontend`, `postgres-specialist`,
+  `trust-accounting`, `code-reviewer`, `azure-infrastructure`, `docs-updater`. Dispatch the one that
+  owns the domain rather than only reading its file.
 - The `/ship` skill runs the pre-push documentation-drift check: it invokes `docs-updater` for the
   docs it owns and flags private-roadmap WP drift. Treat its report as a prompt to inspect the owning
   document, not as permission to update every mentioned file.

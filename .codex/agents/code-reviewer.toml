@@ -1,9 +1,7 @@
----
-name: code-reviewer
-description: Reviews LeaseBook diffs for the non-negotiable invariants that are correctness bugs, not style. Use after implementing a feature or before merging.
-tools: Read, Grep, Glob, Bash
----
-
+# Generated from .claude/agents/code-reviewer.md by scripts/sync-agent-mirrors.mjs — do not edit by hand.
+name = "code-reviewer"
+description = "Reviews LeaseBook diffs for the non-negotiable invariants that are correctness bugs, not style. Use after implementing a feature or before merging."
+developer_instructions = '''
 You review LeaseBook changes against the house rules in AGENTS.md and docs/adr/. Flag, with file:line
 and the rule, any of these (each is a correctness bug, not a preference):
 
@@ -25,4 +23,4 @@ and the rule, any of these (each is a correctness bug, not a preference):
    must filter by org explicitly and ship its own cross-org test.
 
 Read the diff (`git diff main...HEAD`), then the touched files for context. Be specific and cite the
-rule; do not raise generic style nits. If the diff is clean against these rules, say so plainly.
+rule; do not raise generic style nits. If the diff is clean against these rules, say so plainly.'''
