@@ -62,7 +62,7 @@ public sealed class CatalogBalancePropertyTests(PostgresFixture fixture)
 
         // Deposit applications (both variants) — a fresh tenant keeps the held balance clean. The
         // against-charges branch needs an open receivable to apply into (ADR-011 / P51).
-        await PostAsync(scope, new DepositCollected(depTenant, property, owner, big, D(1), scope.DepositBankId, "dep"), ct);
+        await AssertBalancesAsync(scope, new DepositCollected(depTenant, property, owner, big, D(1), scope.DepositBankId, "dep"), ct);
         await PostAsync(scope, new RentCharged(depTenant, property, owner, null, amount, D(1), "dep rent"), ct);
         await AssertBalancesAsync(scope, new DepositApplied(
             depTenant, property, owner, amount, D(28), scope.DepositBankId, scope.TrustBankId, DepositApplication.ToOwnerIncome, "da1"), ct);
@@ -70,16 +70,16 @@ public sealed class CatalogBalancePropertyTests(PostgresFixture fixture)
             depTenant, property, owner, amount, D(28), scope.DepositBankId, scope.TrustBankId, DepositApplication.AgainstCharges, "da2"), ct);
 
         // Prepayment application (a receivable must exist for it to apply into too).
-        await PostAsync(scope, new PrepaymentReceived(preTenant, property, owner, big, D(1), scope.TrustBankId, "pp"), ct);
+        await AssertBalancesAsync(scope, new PrepaymentReceived(preTenant, property, owner, big, D(1), scope.TrustBankId, "pp"), ct);
         await PostAsync(scope, new RentCharged(preTenant, property, owner, null, amount, D(1), "pre rent"), ct);
         await AssertBalancesAsync(scope, new PrepaymentApplied(preTenant, property, owner, amount, D(28), scope.TrustBankId, "pa"), ct);
 
         // Fee then sweep (a fresh owner so this owner's equity is untouched by the draws above).
-        await PostAsync(scope, new ManagementFeeAssessed(feeOwner, property, big, D(27), scope.TrustBankId, "fee"), ct);
+        await AssertBalancesAsync(scope, new ManagementFeeAssessed(feeOwner, property, big, D(27), scope.TrustBankId, "fee"), ct);
         await AssertBalancesAsync(scope, new PMFeesSwept(amount, D(27), scope.TrustBankId, scope.OperatingBankId, "sweep"), ct);
 
         // Contribution then disbursement.
-        await PostAsync(scope, new OwnerContribution(drawOwner, property, big, D(1), scope.TrustBankId, "contrib"), ct);
+        await AssertBalancesAsync(scope, new OwnerContribution(drawOwner, property, big, D(1), scope.TrustBankId, "contrib"), ct);
         await AssertBalancesAsync(scope, new OwnerDisbursed(drawOwner, amount, D(2), scope.TrustBankId, "draw"), ct);
 
         // Fee charges — all three kinds; the subtype must not change the balance property.
@@ -119,6 +119,9 @@ public sealed class CatalogBalancePropertyTests(PostgresFixture fixture)
         Guid id = default;
         await scope.RunAsync(async () => id = await Events(scope).PostAsync(businessEvent, ct), ct);
         var lines = await ReadLinesAsync(scope, id, ct);
+
+        // Guard the guard: an event that emitted no lines would "balance" vacuously (0 == 0).
+        lines.ShouldNotBeEmpty();
 
         foreach (var basis in new[] { EntryBasis.Cash, EntryBasis.Accrual })
         {
