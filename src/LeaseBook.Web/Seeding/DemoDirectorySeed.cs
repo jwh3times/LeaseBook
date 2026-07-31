@@ -213,8 +213,10 @@ internal static class DemoDirectorySeed
             }
         }
 
-        // An active lease per current tenant. t1's term is the focal tenant's (data.jsx); others get a
-        // standard one-year term. Deposit held = one month's rent (t1 matches the prototype's 1,450).
+        // An active lease per current tenant. t1 keeps the focal tenant's start (data.jsx); all terms
+        // end 2027-05-31 (WP-13 step 6: the original 2026-05-31 end predated the journal's June 2026
+        // rent, so every "Active" lease read as expired — directory-only extension, no figure moves).
+        // Deposit held = one month's rent (t1 matches the prototype's 1,450).
         foreach (var tenantId in new[] { DemoIds.T1, DemoIds.T2, DemoIds.T3, DemoIds.T4, DemoIds.T5, DemoIds.T6, DemoIds.T7 })
         {
             var (unitId, rent) = unitByTenant[tenantId];
@@ -225,7 +227,7 @@ internal static class DemoDirectorySeed
                 TenantId = tenantId,
                 UnitId = unitId,
                 StartDate = start,
-                EndDate = new DateOnly(2026, 5, 31),
+                EndDate = new DateOnly(2027, 5, 31),
                 Rent = new Money(rent),
                 DepositRequired = new Money(rent),
                 Status = LeaseStatus.Active,

@@ -1,17 +1,17 @@
 {
-  "_comment": "Demo org dataset ported verbatim from the prototype (data.jsx). The figures are fictional AND reconcile to the cent: owner ending balances, bank book balances, and the tenant ledger are internally consistent. This file is the golden-file fixture the accounting engine is validated against (golden tests arrive in M1). Do NOT casually edit figures — a change here is a deliberate change to the golden tests. In M0 only `pm.company` and `pm.user` are consumed (org + admin); the rest seeds in later milestones as their schemas land.",
+  "_comment": "Demo org dataset ported from the prototype (data.jsx) and trimmed to materialized reality (WP-13 step 6, 2026-07-31): prototype-only narrative the seed never reproduces was removed (a vendor payment, a refund check, the hand-written O1 May statement, the PM-operating clearance split) — those scenarios live in the scenario org (`seed --org scenario`). The remaining figures are fictional AND reconcile to the cent; this file is the golden-file fixture the accounting engine is validated against. Do NOT casually edit figures — a change here is a deliberate change to the golden tests. Only `pm.company` and `pm.user` are consumed by the seeder directly; everything else is duplicated as literals in DemoDirectorySeed/DemoJournalSeed and the golden tests.",
   "pm": {
     "company": "Tarheel Property Group",
     "city": "Asheville, NC",
     "user": { "name": "Renée Calloway", "role": "Broker-in-Charge", "initials": "RC" },
-    "units": 152,
-    "properties": 64,
-    "owners": 23
+    "units": 20,
+    "properties": 6,
+    "owners": 8
   },
   "banks": [
     { "id": "oper", "name": "Operating Trust", "bank": "First Citizens", "mask": "4021", "book": 248930.14, "cleared": 254300.14, "uncleared": 5370.00, "unclearedN": 3, "type": "trust" },
     { "id": "dep", "name": "Security Deposit Trust", "bank": "First Citizens", "mask": "8847", "book": 196450.00, "cleared": 196450.00, "uncleared": 0, "unclearedN": 0, "type": "deposit" },
-    { "id": "mgmt", "name": "PM Operating", "bank": "Wells Fargo", "mask": "1190", "book": 38240.55, "cleared": 37115.30, "uncleared": 1125.25, "unclearedN": 2, "type": "operating" }
+    { "id": "mgmt", "name": "PM Operating", "bank": "Wells Fargo", "mask": "1190", "book": 38240.55, "type": "operating" }
   ],
   "owners": [
     { "id": "o1", "name": "Hargrove Family Trust", "initials": "HF", "units": 6, "properties": 3, "oper": 14820.50, "dep": 8400.00 },
@@ -40,7 +40,7 @@
     "phone": "(828) 555-0148",
     "email": "jcarter@email.com",
     "leaseStart": "Jun 1, 2024",
-    "leaseEnd": "May 31, 2026",
+    "leaseEnd": "May 31, 2027",
     "rent": 1450.00,
     "depositHeld": 1450.00,
     "status": "Current",
@@ -74,35 +74,11 @@
     { "id": "b2", "date": "Jun 3, 2026", "desc": "Deposit — Pryor rent", "prop": "412 Oakmont Ave", "type": "Deposit", "amount": 1380.00, "status": "uncleared" },
     { "id": "b3", "date": "Jun 2, 2026", "desc": "Owner disbursement — Hargrove Family Trust", "prop": "Multiple", "type": "Withdrawal", "amount": -8200.00, "status": "uncleared" },
     { "id": "b4", "date": "May 30, 2026", "desc": "Deposit — Bello rent", "prop": "1029 Charlotte St", "type": "Deposit", "amount": 1620.00, "status": "cleared" },
-    { "id": "b5", "date": "May 29, 2026", "desc": "Vendor — Asheville Plumbing Co.", "prop": "230 Haywood Rd", "type": "Withdrawal", "amount": -340.00, "status": "cleared" },
     { "id": "b6", "date": "May 28, 2026", "desc": "Deposit — Ramsey rent", "prop": "230 Haywood Rd", "type": "Deposit", "amount": 1295.00, "status": "reconciled" },
     { "id": "b7", "date": "May 27, 2026", "desc": "Mgmt fee transfer → PM Operating", "prop": "Multiple", "type": "Withdrawal", "amount": -2840.00, "status": "reconciled" },
     { "id": "b8", "date": "May 26, 2026", "desc": "Deposit — Tate rent", "prop": "1029 Charlotte St", "type": "Deposit", "amount": 1550.00, "status": "reconciled" },
-    { "id": "b9", "date": "May 24, 2026", "desc": "Refund check #1043 — Vasquez overpay", "prop": "55 Westwood Pl", "type": "Withdrawal", "amount": -75.00, "status": "reconciled" },
     { "id": "b10", "date": "May 22, 2026", "desc": "Deposit — Mercer rent", "prop": "88 Riverside Dr", "type": "Deposit", "amount": 2150.00, "status": "reconciled" }
   ],
-  "statement": {
-    "owner": "Hargrove Family Trust",
-    "property": "412 Oakmont Ave",
-    "period": "May 1 – May 31, 2026",
-    "beginning": 12480.50,
-    "income": [
-      { "desc": "Rent collected — #1A Pryor", "amount": 1380.00 },
-      { "desc": "Rent collected — #2B Carter", "amount": 1450.00 },
-      { "desc": "Rent collected — #3A Okonkwo", "amount": 1510.00 },
-      { "desc": "Rent collected — #3B Liu", "amount": 1495.00 }
-    ],
-    "expenses": [
-      { "desc": "Management fee (8% of collected)", "amount": -466.80 },
-      { "desc": "Maintenance — garbage disposal (#2B)", "amount": -85.00 },
-      { "desc": "Landscaping — May", "amount": -180.00 }
-    ],
-    "applied": [
-      { "desc": "Applied security deposit — #1C move-out", "amount": 950.00, "note": "Recognized as income on application" },
-      { "desc": "Tenant credit — maintenance delay (#2B)", "amount": -85.00 }
-    ],
-    "disbursement": -8200.00
-  },
   "kpis": {
     "trustTotal": 483620.69,
     "ownersPayable": 132447.00,
