@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { Icon, type IconName } from '@/design';
 import type { OnboardingStatusResponse } from './onboarding';
 

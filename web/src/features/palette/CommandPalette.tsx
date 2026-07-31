@@ -1,5 +1,5 @@
 import { Fragment, type KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { Icon } from '@/design';
 import { useSearch, type SearchResult } from '@/lib/search';
 import { trackInteraction } from '@/lib/telemetry';

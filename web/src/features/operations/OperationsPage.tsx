@@ -3,7 +3,7 @@
  * Tab selection is the first click; running a report is the second. ≤ 2 clicks to start a run.
  */
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router';
 import { Button } from '@/design';
 import { DisbursementRunScreen } from './DisbursementRunScreen';
 import { LateFeeRunScreen } from './LateFeeRunScreen';

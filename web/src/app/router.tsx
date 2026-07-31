@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react';
-import { createBrowserRouter, Navigate } from 'react-router-dom';
+import { createBrowserRouter, Navigate } from 'react-router';
 import { KitchenSink } from '@/dev/KitchenSink';
 import { LoginPage } from '@/features/auth/LoginPage';
 import { BankingPage } from '@/features/banking/BankingPage';

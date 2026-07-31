@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { api, primeCsrf } from '@/api';
 import { Button, Card, Input } from '@/design';
 import { sessionQueryKey } from './useSession';

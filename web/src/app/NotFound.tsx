@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { Button, EmptyState } from '@/design';
 
 export function NotFound() {

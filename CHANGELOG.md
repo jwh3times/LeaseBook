@@ -154,6 +154,15 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Security
 
+- **Frontend dependency vulnerabilities cleared** — all four high-severity advisories against the web
+  dependency tree are resolved: React Router moved to v8 (the CSRF advisory's only patched line; the
+  `react-router-dom` package no longer exists in v8, so the SPA now depends on `react-router`
+  directly with identical APIs), the `js-yaml` override raised to the patched 4.3 line, and the
+  `brace-expansion` denial-of-service advisories cleared — including a nested copy pinned inside the
+  API-client generator's toolchain, forced onto the patched line via a scoped `minimatch` override
+  (documented in `web/package.json` with its removal trigger). `npm audit` reports zero
+  vulnerabilities; the generated API client was regenerated against a running host and is
+  byte-identical.
 - **Host security hardening** — a defense-in-depth pass on the backend: security response headers and
   a strict Content-Security-Policy on every response (including error responses), production
   host-header filtering, secure cookies outside Development, rate limiting on the authentication

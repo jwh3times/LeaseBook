@@ -1,4 +1,4 @@
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router';
 import { Card, CardHeader, Money, StatCard, Table, type TableColumn } from '@/design';
 import { DetailPage } from '@/components/DetailPage';
 import { num, useOwnerDetail, type OwnerDetail, type PropertyListRow } from '@/lib/directory';
