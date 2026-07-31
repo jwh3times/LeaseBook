@@ -54,6 +54,8 @@ namespace LeaseBook.Web.Seeding;
 /// its sequence is not contractually stable across .NET versions, so the same seed could produce a
 /// different fixture on a different runtime. Entity ids still come from <see cref="UuidV7.NewId"/>
 /// (per repo convention); only the org and the three bank accounts are stable anchors.
+/// Draws are consumed strictly in fixture order — run-preview rows are re-sorted by fixture ordinal
+/// (<see cref="InFixtureOrder"/>) before any draw, never left in database row order.
 /// </para>
 ///
 /// <para>
@@ -110,6 +112,17 @@ public static class LoadSeeder
     /// <summary>The PM's own accumulated (already swept) income at cutover — outside the trust equation.</summary>
     private const decimal OpeningPmOperatingBalance = 18_500.00m;
 
+    /// <summary>
+    /// Golden pin (WP-13 step 0): the org's lifetime <c>pm_income</c> position after the 12-month
+    /// window — the ADR-018 equity-basis management fees (assessed on standing equity, retained
+    /// reserve included, every month) plus the 18,500.00 opening PM-operating position. Sweeps and
+    /// trust transfers net to zero org-wide, so this is exactly fees earned + opening.
+    /// <b>Intended-until-C1:</b> the C1 engagement owns the fee-basis question, so a deliberate
+    /// basis change moves this constant in the same commit — a silent engine change must never move
+    /// it unnoticed.
+    /// </summary>
+    private const decimal ExpectedLifetimePmIncome = 552_342.68m;
+
     public static async Task SeedAsync(IServiceProvider services, CancellationToken ct = default)
     {
         // Refuse to provision the well-known load admin credential in Production (account-takeover risk).
@@ -136,7 +149,9 @@ public static class LoadSeeder
         {
             if (await db.Set<JournalEntry>().AnyAsync(ct))
             {
-                return; // already seeded (idempotent — the journal is the anchor)
+                // Already seeded (idempotent — the journal is the anchor); the pin still holds on re-runs.
+                await VerifyPinnedPmIncomeAsync(db, ct);
+                return;
             }
 
             if (!await db.AuditEvents.AnyAsync(e => e.EntityType == ProvisionAuditEntityType, ct))
@@ -160,6 +175,8 @@ public static class LoadSeeder
             await ProvisionChartOfAccountsAsync(sp, ct);
             await PostOpeningPositionsAsync(sp, fixture, ct);
             await PostTwelveMonthsAsync(sp, db, fixture, rng, ct);
+
+            await VerifyPinnedPmIncomeAsync(db, ct);
         }, ct);
     }
 
@@ -503,6 +520,12 @@ public static class LoadSeeder
 
         var leaseById = fixture.Leases.ToDictionary(l => l.LeaseId);
 
+        // Fixture ordinal is the only stable sort key: entity ids are fresh UUIDv7 values every reseed,
+        // so sorting by id would be deterministic per run but not reproducible across runs.
+        var leaseOrdinal = fixture.Leases
+            .Select((lease, index) => (lease.LeaseId, index))
+            .ToDictionary(x => x.LeaseId, x => x.index);
+
         // Exact per-lease shadow ledger. Every receivable-moving posting in this seeder is either
         // issued here or read back from a run preview, so `owed` stays in lock-step with the engine's
         // own tenant_receivable balance — which is what makes the payment auto-split (P31) and the
@@ -529,7 +552,7 @@ public static class LoadSeeder
             }
 
             // 2. Rent run (bulk-run engine). Proration is the strategy's job for mid-month starts.
-            var rentRows = await ConfirmRunAsync(engine, RunType.Rent, period, ct);
+            var rentRows = InFixtureOrder(await ConfirmRunAsync(engine, RunType.Rent, period, ct), leaseOrdinal);
             foreach (var row in rentRows)
             {
                 owed[row.TargetId] += row.Amount;
@@ -664,7 +687,7 @@ public static class LoadSeeder
             db.ChangeTracker.Clear();
 
             // 6. Late-fee run (bulk-run engine, NC §42-46 clamp) over whoever still owes at month end.
-            var lateFeeRows = await ConfirmRunAsync(engine, RunType.LateFee, period, ct);
+            var lateFeeRows = InFixtureOrder(await ConfirmRunAsync(engine, RunType.LateFee, period, ct), leaseOrdinal);
             foreach (var row in lateFeeRows)
             {
                 owed[row.TargetId] += row.Amount;
@@ -703,6 +726,16 @@ public static class LoadSeeder
     }
 
     /// <summary>
+    /// Re-orders run-preview rows into the fixture's own lease order before any PRNG draw is consumed
+    /// against them. <c>GetActiveLeaseSchedule</c> has no ORDER BY, so preview order is Postgres plan
+    /// order — a plan change would silently reshape which lease receives which draw (WP-13 step 0).
+    /// Throws on an unknown TargetId: every rent/late-fee preview row must be a fixture lease.
+    /// </summary>
+    private static IReadOnlyList<PreviewRow> InFixtureOrder(
+        IReadOnlyList<PreviewRow> rows, IReadOnlyDictionary<Guid, int> leaseOrdinal) =>
+        [.. rows.OrderBy(r => leaseOrdinal[r.TargetId])];
+
+    /// <summary>
     /// Previews a run, selects every eligible row (not already done, not excluded, non-zero), confirms
     /// it, and hands back the rows that were selected so the caller can mirror their effect. Returns an
     /// empty list when the run has nothing to do.
@@ -736,6 +769,35 @@ public static class LoadSeeder
             WHERE account_class = 'pm_income' AND bank_account_id = {OperatingTrustId}
               AND basis IN ('cash', 'both')
             """).ToListAsync(ct)).Single();
+
+    /// <summary>
+    /// The org's lifetime <c>pm_income</c> position across every bank — fees earned plus the opening
+    /// PM-operating position. Same SQL idiom and same ambient-RLS reliance as
+    /// <see cref="HeldPmFeesAsync"/>, so callers must stay inside the org-scoped unit of work.
+    /// </summary>
+    private static async Task<decimal> LifetimePmIncomeAsync(AppDbContext db, CancellationToken ct) =>
+        (await db.Database.SqlQuery<decimal>(
+            $"""
+            SELECT COALESCE(SUM(COALESCE(credit, 0) - COALESCE(debit, 0)), 0) AS "Value"
+            FROM journal_lines
+            WHERE account_class = 'pm_income' AND basis IN ('cash', 'both')
+            """).ToListAsync(ct)).Single();
+
+    /// <summary>
+    /// Asserts the load org's lifetime PM income still equals <see cref="ExpectedLifetimePmIncome"/>.
+    /// </summary>
+    private static async Task VerifyPinnedPmIncomeAsync(AppDbContext db, CancellationToken ct)
+    {
+        var observed = await LifetimePmIncomeAsync(db, ct);
+        if (observed != ExpectedLifetimePmIncome)
+        {
+            throw new InvalidOperationException(
+                $"Load-org PM income pin violated: observed {observed:0.00}, pinned " +
+                $"{ExpectedLifetimePmIncome:0.00}. This figure is intended-until-C1 (ADR-018 " +
+                "equity-basis fees — see the constant's doc comment). A deliberate fee-basis change " +
+                "must move the pin in the same commit; anything else is an engine regression.");
+        }
+    }
 
     /// <summary>
     /// Marks every one of the account's bank lines through <paramref name="monthEnd"/> cleared, then

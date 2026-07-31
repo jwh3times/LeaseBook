@@ -96,6 +96,13 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   (`held_fees_not_attested`) until the operator attests to a non-zero position, and the PM-facing
   management-fee income report excludes opening-balance postings (and their voids) so an imported
   position never inflates in-period fee income.
+- **Complete posting-template balance coverage** — the catalog balance property suite now proves the
+  templates it previously skipped balanced per basis through the real engine: `FeeCharged` (all three
+  fee kinds), `VendorPaid`, `RefundIssued` (both the prepayment and deposit sources), and the three
+  bank-adjustment templates (fee, interest, and the trust→trust transfer). The load org's 12-month
+  PM-income accumulation is pinned in the seeder alongside it (intended-until-C1 — the ADR-018 fee
+  basis), so a deliberate basis change moves the pin in the same commit and a silent engine change
+  fails the seed instead of passing unnoticed.
 
 ### Changed
 
@@ -138,6 +145,12 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   positions.** A void now nets inside the section of the entry it reverses, and opening-balance
   entries dated inside the statement month fold into the beginning balance; the statement tie-out
   remains an independent journal re-check.
+- **`seed --org` is strict** — an unknown or missing fixture name now exits non-zero with a usage
+  message instead of silently seeding the demo org, so a typo'd fixture name fails loudly rather than
+  provisioning the wrong org.
+- **Deterministic load fixture** — `LoadSeeder` consumes PRNG draws in fixture order rather than
+  database row order, so the 300-unit fixture's figures stay reproducible across Postgres plan
+  changes (the run-preview read it drew against has no `ORDER BY`).
 
 ### Security
 
