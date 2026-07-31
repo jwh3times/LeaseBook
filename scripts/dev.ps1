@@ -6,7 +6,7 @@
 #   ./scripts/dev.ps1 reset-db   # wipe the data volume and re-bootstrap from scratch
 #   ./scripts/dev.ps1 psql       # open psql in the container as the migrator role
 #
-#   ./scripts/dev.ps1 app-up     # build + run the WHOLE product in Docker (db→migrate→seed→app:8080)
+#   ./scripts/dev.ps1 app-up     # build + run the WHOLE product in Docker (db→migrate→seed→app on host :8082)
 #   ./scripts/dev.ps1 app-down   # stop the full stack (keep data)
 #   ./scripts/dev.ps1 app-logs   # follow the app container's logs
 
@@ -32,7 +32,7 @@ function Wait-Healthy {
 
 function Get-AppPort {
   if ($env:LEASEBOOK_APP_PORT) { return $env:LEASEBOOK_APP_PORT }
-  return '8080'
+  return '8082'
 }
 
 function Wait-AppHealthy {

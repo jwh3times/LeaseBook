@@ -6,7 +6,7 @@
 #   ./scripts/dev.sh reset-db   # wipe the data volume and re-bootstrap from scratch
 #   ./scripts/dev.sh psql       # open psql in the container as the migrator role
 #
-#   ./scripts/dev.sh app-up     # build + run the WHOLE product in Docker (db→migrate→seed→app:8080)
+#   ./scripts/dev.sh app-up     # build + run the WHOLE product in Docker (db→migrate→seed→app on host :8082)
 #   ./scripts/dev.sh app-down   # stop the full stack (keep data)
 #   ./scripts/dev.sh app-logs   # follow the app container's logs
 set -euo pipefail
@@ -28,7 +28,7 @@ wait_healthy() {
   exit 1
 }
 
-app_port() { echo "${LEASEBOOK_APP_PORT:-8080}"; }
+app_port() { echo "${LEASEBOOK_APP_PORT:-8082}"; }
 
 wait_app_healthy() {
   local port url

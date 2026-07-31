@@ -108,6 +108,12 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Fixed
 
+- **`app-up` health wait polls the right port** — the dev scripts' full-stack health wait defaulted
+  to `http://localhost:8080/api/health` while Compose publishes the app on host port `8082`, so
+  `./scripts/dev.ps1 app-up` (and `dev.sh`) always reported "App did not answer within the timeout"
+  even when the stack came up healthy — misleading exactly when diagnosing a real startup failure.
+  Both scripts now default to `8082`, matching the Compose default and the README port map; the
+  `LEASEBOOK_APP_PORT` override is unchanged.
 - **Modal focus management** — closing a dialog now returns focus to the control that opened it, and
   opening one moves focus to its first field (falling back to a button when the dialog has no field),
   fixing a keyboard focus-order gap (WCAG 2.4.3) surfaced by the new keyboard-only e2e.
