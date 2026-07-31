@@ -102,8 +102,9 @@ following are **correctness bugs, not style issues**, if violated:
   account at all times.
 
 If your change is accounting-adjacent, it **must** keep the invariant, property-based, and golden-file
-suites green, and add coverage at the right altitude. Don't casually edit the demo seed data — its
-figures are golden-file fixtures; if they must change, change the corresponding tests deliberately.
+suites green, and add coverage at the right altitude. Don't casually edit the demo or scenario seed
+data — their figures are golden-file fixtures; if they must change, change the corresponding tests
+deliberately.
 
 ---
 

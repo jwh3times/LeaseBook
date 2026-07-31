@@ -153,6 +153,29 @@ Re-running is idempotent (both steps skip if already seeded).
 not enrolled (enroll on first login). Real environments provision operators by invite; passwords
 never live in the repo.
 
+### The four fixture orgs
+
+`seed --org <name>` is strict: an unknown name is an error, never a silent fall-through. Each
+fixture serves a different job; all are idempotent and coexist in one database without moving each
+other's figures.
+
+| Org        | Command               | Shape & purpose                                                                                                                                     |
+| ---------- | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `demo`     | `seed --org demo`     | The prototype-faithful showcase (20 units, golden-file fixture). Figures are sacred.                                                                |
+| `cutover`  | `seed --org cutover`  | Empty org + banks + chart of accounts — the onboarding-wizard e2e fixture. No journal.                                                              |
+| `load`     | `seed --org load`     | ~300 units / 12 months, PRNG-generated at fixed seed — performance fixture (`perf-probe`).                                                          |
+| `scenario` | `seed --org scenario` | The all-scenario org: 5 owners / 11 units, cutover 2026-02-28 + four months (Mar–Jun 2026) exercising every posting template, workflow, and report. |
+
+The **scenario** org is provisioned post-sign-off through the real migration import path (opening
+positions incl. an accrual≠cash delta, a pre-sign-off supersede, and a held-PM-fees position) and
+posts only through the engine. It seeds four users — two PMAdmin (`admin@scenario.test`, and
+`admin2@scenario.test` with TOTP enrolled on a deterministic committed key) and two PMStaff
+(`staff@scenario.test`, `staff2@scenario.test`) — all with the documented dev passwords in
+`ScenarioSeeder.cs`, so the PMAdmin/PMStaff boundary (reconciliation unlock, settings writes, the
+compliance pack) can be exercised against a running host. March–May are reconciled and locked
+(April was unlocked-with-reason and re-finalized); June is open with uncleared items. Its figures
+are hand-authored tripwires locked by `ScenarioGoldenTests` — treat them as sacred as the demo's.
+
 ## Checking the accounting invariants
 
 The `check-invariants` verb sweeps the core correctness invariants (I1 entries balance per basis,
@@ -164,6 +187,7 @@ $env:ASPNETCORE_ENVIRONMENT = "Development"
 dotnet run --project src/LeaseBook.Web -- check-invariants --all          # every org
 dotnet run --project src/LeaseBook.Web -- check-invariants --org demo     # one org (or a GUID)
 dotnet run --project src/LeaseBook.Web -- check-invariants --org load     # the load fixture
+dotnet run --project src/LeaseBook.Web -- check-invariants --org scenario # the all-scenario fixture
 ```
 
 The accounting property suite (`LeaseBook.Tests.Accounting`) runs random valid event sequences

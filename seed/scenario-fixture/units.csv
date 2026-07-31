@@ -1,0 +1,12 @@
+Unit ID,Property ID,Unit,Market Rent,Status
+U-S01,P-S1,#1A,1450.00,Occupied
+U-S02,P-S1,#1B,1000.00,Occupied
+U-S03,P-S2,#2A,1620.00,Occupied
+U-S04,P-S2,#2B,1400.00,Occupied
+U-S05,P-S3,#3A,1500.00,Occupied
+U-S06,P-S3,#3B,1375.00,Occupied
+U-S07,P-S4,#4A,1250.00,Vacant
+U-S08,P-S4,#4B,1150.00,Vacant
+U-S09,P-S5,#5A,200.00,Occupied
+U-S10,P-S6,#6A,1375.00,Occupied
+U-S11,P-S6,#6B,1300.00,Unavailable

@@ -16,6 +16,19 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Added
 
+- **All-scenario fixture org** — `seed --org scenario` provisions a fourth fixture org that
+  exercises every posting template, workflow, and report at hand-verifiable density: 5 owners /
+  11 units, provisioned post-sign-off through the real migration import path (accrual≠cash opening
+  delta, pre-sign-off supersede, held-PM-fees position) and posted only through the engine across
+  four months — proration, late-fee clamp boundaries, both disbursement exclusion reasons, deposit
+  disposition with refund, prepayment lifecycle, a void/reversal pair, bank adjustments including a
+  trust→trust transfer, statement import across all three match tiers with dedup, reconciliation
+  lock/unlock-with-reason, and all three statement-delivery states. Seeds two PMAdmin (one
+  TOTP-enrolled with a deterministic key) and the first two seeded PMStaff users, making the
+  admin/staff authorization boundary exercisable against a running host. Figures are hand-authored
+  tripwires locked by a new golden suite (`ScenarioGoldenTests`, `ScenarioSeederTests`), including
+  an intended-until-C1 lifetime PM-income pin.
+
 - **Published engineering docs** — the architecture blueprint (`docs/blueprint.md`: tech defaults,
   the multi-tenancy/RLS design, and the trust-accounting data model) and the Definition of Done
   (`CONTRIBUTING.md`) are now committed, so a public clone has the durable engineering references

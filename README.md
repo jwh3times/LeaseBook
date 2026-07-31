@@ -124,7 +124,7 @@ Key design decisions (each recorded as an ADR in [`docs/adr/`](docs/adr)):
 ├─ infra/                   Bicep modules and environment parameters
 ├─ docs/                    architecture, accounting, ADRs, product scope, runbooks, and roadmap
 ├─ scripts/                 local dev helpers (dev.ps1)
-├─ seed/                    demo seed assets
+├─ seed/                    committed fixture-org seed assets (demo, cutover, scenario)
 ├─ Dockerfile              production image (serves the API and built SPA on one port)
 ├─ docker-compose.yml      local Postgres + optional full-product profile
 └─ LeaseBook.slnx          the solution
@@ -208,8 +208,8 @@ Correctness is the product, so the accounting module carries the highest test ri
 - **Invariant tests** assert the trust equation, per-basis balance, deposit-liability non-negativity, and
   management-income isolation on engine-produced data.
 - **Property-based tests** (CsCheck) replay random valid event sequences and check the invariants hold.
-- **Golden-file tests** replay a fixed demo dataset and assert owner balances, tenant ledgers, and bank
-  balances to the cent.
+- **Golden-file tests** replay fixed fixture datasets (the demo and scenario orgs) and assert owner
+  balances, tenant ledgers, and bank balances to the cent.
 - **Integration tests** (Testcontainers + real migrations) exercise the HTTP surface as the RLS-subject
   application role — never bypassing tenancy — including a cross-org isolation pack.
 - **Architecture tests** enforce the module boundaries.

@@ -293,8 +293,8 @@ if (Environment.GetEnvironmentVariable("LEASEBOOK_OPENAPI_BUILD") != "1")
     await RoleSeeder.EnsureRolesAsync(app.Services);
 }
 
-// CLI: `dotnet run --project src/LeaseBook.Web -- seed --org demo|cutover|load` provisions the
-//      named fixture org and exits. --org is required; an unknown value exits non-zero (WP-13
+// CLI: `dotnet run --project src/LeaseBook.Web -- seed --org demo|cutover|load|scenario` provisions
+//      the named fixture org and exits. --org is required; an unknown value exits non-zero (WP-13
 //      step 0) — a typo must never silently seed the wrong org.
 if (args is ["seed", ..])
 {
@@ -309,6 +309,7 @@ if (args is ["seed", ..])
     {
         SeedTarget.Cutover => CutoverSeeder.SeedAsync(app.Services),
         SeedTarget.Load => LoadSeeder.SeedAsync(app.Services),
+        SeedTarget.Scenario => ScenarioSeeder.SeedAsync(app.Services),
         _ => DemoSeeder.SeedAsync(app.Services),
     });
 
