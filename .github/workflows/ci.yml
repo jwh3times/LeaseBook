@@ -132,6 +132,47 @@ jobs:
         env:
           ConnectionStrings__Migrations: Host=localhost;Port=5432;Database=leasebook;Username=leasebook_migrator;Password=dev_migrator_pw
 
+  # The load fixture is deterministic (fixture-order PRNG) and self-verifying: LoadSeeder asserts
+  # the pinned 12-month pm_income accumulation (intended-until-C1, ADR-018) after seeding, so this
+  # job is what turns that pin from a session-scoped guard into a CI gate. Deliberately NOT
+  # path-filtered: a filtered job can never be a required status check (it would hang PRs that
+  # don't trigger it). Runs in parallel with e2e, so it doesn't extend the critical path.
+  load-fixture:
+    name: Load fixture seeds + pin holds
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: dev_postgres_pw
+          POSTGRES_DB: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__Default: Host=localhost;Port=5432;Database=leasebook;Username=leasebook_app;Password=dev_app_pw
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+      - name: Create database + roles (bootstrap.sql)
+        run: psql "host=localhost port=5432 user=postgres dbname=postgres" -v ON_ERROR_STOP=1 -f infra/db/bootstrap.sql
+        env:
+          PGPASSWORD: dev_postgres_pw
+      - run: dotnet tool restore
+      - run: dotnet restore src/LeaseBook.Web
+      - name: Apply migrations as the migrator role
+        run: dotnet ef database update --project src/LeaseBook.Web
+        env:
+          ConnectionStrings__Migrations: Host=localhost;Port=5432;Database=leasebook;Username=leasebook_migrator;Password=dev_migrator_pw
+      - name: Seed the load fixture (app role; the pm_income pin verifies inside the seeder)
+        run: dotnet run --project src/LeaseBook.Web -- seed --org load
+      - name: Check invariants on the load org
+        run: dotnet run --project src/LeaseBook.Web -- check-invariants --org load
+
   e2e:
     name: E2E (Playwright + a11y)
     runs-on: ubuntu-latest

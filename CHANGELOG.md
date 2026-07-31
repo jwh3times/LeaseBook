@@ -102,7 +102,10 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   bank-adjustment templates (fee, interest, and the trust→trust transfer). The load org's 12-month
   PM-income accumulation is pinned in the seeder alongside it (intended-until-C1 — the ADR-018 fee
   basis), so a deliberate basis change moves the pin in the same commit and a silent engine change
-  fails the seed instead of passing unnoticed.
+  fails the seed instead of passing unnoticed. A dedicated CI job now seeds the load fixture on
+  every pull request, so the pin and the fixture's invariants gate merges instead of relying on
+  someone running the seed locally; every event the suite stages is itself balance-asserted, and
+  the suite rejects an empty posting rather than passing vacuously.
 
 ### Changed
 
@@ -145,6 +148,9 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   positions.** A void now nets inside the section of the entry it reverses, and opening-balance
   entries dated inside the statement month fold into the beginning balance; the statement tie-out
   remains an independent journal re-check.
+- **Local docs gate runs clean** — the prettier docs globs no longer reach gitignored
+  `docs/superpowers/` session scratch, so `npm run docs:check` now passes locally exactly where CI
+  enforces it.
 - **`seed --org` is strict** — an unknown or missing fixture name now exits non-zero with a usage
   message instead of silently seeding the demo org, so a typo'd fixture name fails loudly rather than
   provisioning the wrong org.
