@@ -112,6 +112,17 @@ public static class LoadSeeder
     /// <summary>The PM's own accumulated (already swept) income at cutover — outside the trust equation.</summary>
     private const decimal OpeningPmOperatingBalance = 18_500.00m;
 
+    /// <summary>
+    /// Golden pin (WP-13 step 0): the org's lifetime <c>pm_income</c> position after the 12-month
+    /// window — the ADR-018 equity-basis management fees (assessed on standing equity, retained
+    /// reserve included, every month) plus the 18,500.00 opening PM-operating position. Sweeps and
+    /// trust transfers net to zero org-wide, so this is exactly fees earned + opening.
+    /// <b>Intended-until-C1:</b> the C1 engagement owns the fee-basis question, so a deliberate
+    /// basis change moves this constant in the same commit — a silent engine change must never move
+    /// it unnoticed.
+    /// </summary>
+    private const decimal ExpectedLifetimePmIncome = 552_342.68m;
+
     public static async Task SeedAsync(IServiceProvider services, CancellationToken ct = default)
     {
         // Refuse to provision the well-known load admin credential in Production (account-takeover risk).
@@ -138,7 +149,9 @@ public static class LoadSeeder
         {
             if (await db.Set<JournalEntry>().AnyAsync(ct))
             {
-                return; // already seeded (idempotent — the journal is the anchor)
+                // Already seeded (idempotent — the journal is the anchor); the pin still holds on re-runs.
+                await VerifyPinnedPmIncomeAsync(db, ct);
+                return;
             }
 
             if (!await db.AuditEvents.AnyAsync(e => e.EntityType == ProvisionAuditEntityType, ct))
@@ -162,6 +175,8 @@ public static class LoadSeeder
             await ProvisionChartOfAccountsAsync(sp, ct);
             await PostOpeningPositionsAsync(sp, fixture, ct);
             await PostTwelveMonthsAsync(sp, db, fixture, rng, ct);
+
+            await VerifyPinnedPmIncomeAsync(db, ct);
         }, ct);
     }
 
@@ -754,6 +769,35 @@ public static class LoadSeeder
             WHERE account_class = 'pm_income' AND bank_account_id = {OperatingTrustId}
               AND basis IN ('cash', 'both')
             """).ToListAsync(ct)).Single();
+
+    /// <summary>
+    /// The org's lifetime <c>pm_income</c> position across every bank — fees earned plus the opening
+    /// PM-operating position. Same SQL idiom and same ambient-RLS reliance as
+    /// <see cref="HeldPmFeesAsync"/>, so callers must stay inside the org-scoped unit of work.
+    /// </summary>
+    private static async Task<decimal> LifetimePmIncomeAsync(AppDbContext db, CancellationToken ct) =>
+        (await db.Database.SqlQuery<decimal>(
+            $"""
+            SELECT COALESCE(SUM(COALESCE(credit, 0) - COALESCE(debit, 0)), 0) AS "Value"
+            FROM journal_lines
+            WHERE account_class = 'pm_income' AND basis IN ('cash', 'both')
+            """).ToListAsync(ct)).Single();
+
+    /// <summary>
+    /// Asserts the load org's lifetime PM income still equals <see cref="ExpectedLifetimePmIncome"/>.
+    /// </summary>
+    private static async Task VerifyPinnedPmIncomeAsync(AppDbContext db, CancellationToken ct)
+    {
+        var observed = await LifetimePmIncomeAsync(db, ct);
+        if (observed != ExpectedLifetimePmIncome)
+        {
+            throw new InvalidOperationException(
+                $"Load-org PM income pin violated: observed {observed:0.00}, pinned " +
+                $"{ExpectedLifetimePmIncome:0.00}. This figure is intended-until-C1 (ADR-018 " +
+                "equity-basis fees — see the constant's doc comment). A deliberate fee-basis change " +
+                "must move the pin in the same commit; anything else is an engine regression.");
+        }
+    }
 
     /// <summary>
     /// Marks every one of the account's bank lines through <paramref name="monthEnd"/> cleared, then
