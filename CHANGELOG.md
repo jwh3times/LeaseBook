@@ -131,6 +131,13 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Fixed
 
+- **Demo leases no longer read as expired** — all seven demo leases ended 2026-05-31 while still
+  marked `Active` and while the demo journal charges June 2026 rent; their terms now extend to
+  2027-05-31 (directory-only — no golden figure moves). The demo dataset source
+  (`seed/demo-org.json`) was also trimmed to materialized reality: prototype-only narrative the
+  seed never reproduces (a vendor payment, a refund check, the hand-written May owner statement,
+  the PM-operating clearance split, and inflated 152/64/23 header counts) is removed — those
+  scenarios now live in the all-scenario fixture org instead.
 - **`app-up` health wait polls the right port** — the dev scripts' full-stack health wait defaulted
   to `http://localhost:8080/api/health` while Compose publishes the app on host port `8082`, so
   `./scripts/dev.ps1 app-up` (and `dev.sh`) always reported "App did not answer within the timeout"
