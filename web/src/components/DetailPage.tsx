@@ -1,6 +1,6 @@
 import type { UseQueryResult } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { Button, Card, EmptyState } from '@/design';
 import { RecordQuickSwitch } from './RecordQuickSwitch';
 import type { EntityKind } from './recordNav';

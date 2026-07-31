@@ -1,4 +1,4 @@
-import { Navigate, Outlet } from 'react-router-dom';
+import { Navigate, Outlet } from 'react-router';
 import { useSession } from '@/features/auth/useSession';
 
 /** Redirects unauthenticated users to /login; renders the protected tree otherwise. */

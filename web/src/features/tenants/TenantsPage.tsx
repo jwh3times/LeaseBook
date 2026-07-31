@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { Button, Input, Money, Select, type TableColumn } from '@/design';
 import { IndexView } from '@/components/IndexView';
 import { Modal } from '@/components/Modal';
