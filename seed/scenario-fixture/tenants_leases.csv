@@ -1,0 +1,9 @@
+Tenant ID,Unit ID,Tenant Name,Lease Start,Lease End,Rent,Deposit,Status
+T-S1,U-S01,Avery Whitfield,2025-09-01,2026-08-31,1450.00,1200.00,active
+T-S2,U-S02,Rosa Delgado,2025-11-01,2026-10-31,1000.00,1000.00,active
+T-S3,U-S03,Kenji Nakamura,2026-04-16,2027-04-15,1620.00,1620.00,active
+T-S4,U-S04,Priya Raman,2025-06-01,2026-05-15,1400.00,1400.00,active
+T-S5,U-S05,Marcus Vale,2025-10-01,2026-09-30,1500.00,1500.00,active
+T-S6,U-S09,Dean Ashford,2025-12-01,2026-11-30,200.00,0.00,active
+T-S7,U-S06,Lena Osei,2026-06-01,2027-05-31,1375.00,1375.00,active
+T-S8,U-S10,Silas Byrd,2025-08-01,2026-07-31,1375.00,1375.00,active
