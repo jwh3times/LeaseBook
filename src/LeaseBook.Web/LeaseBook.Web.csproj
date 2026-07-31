@@ -44,6 +44,8 @@
   <ItemGroup>
     <!-- The golden demo dataset (WP-09), embedded so the seeder finds it regardless of CWD. -->
     <EmbeddedResource Include="..\..\seed\demo-org.json" Link="Seeding\demo-org.json" />
+    <!-- Scenario-org fixture CSVs (WP-13) — driven through the real M7 import path by ScenarioSeeder. -->
+    <EmbeddedResource Include="..\..\seed\scenario-fixture\*.csv" Link="Seeding\scenario-fixture\%(Filename)%(Extension)" />
   </ItemGroup>
 
   <!-- Composition root: references SharedKernel + every module (host-only rule). -->

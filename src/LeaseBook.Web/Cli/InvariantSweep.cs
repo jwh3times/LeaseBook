@@ -69,9 +69,15 @@ public static class InvariantSweep
                 return [LoadSeeder.LoadOrgId];
             }
 
+            if (string.Equals(value, "scenario", StringComparison.OrdinalIgnoreCase))
+            {
+                return [ScenarioSeeder.ScenarioOrgId];
+            }
+
             return Guid.TryParse(value, out var id)
                 ? [id]
-                : throw new ArgumentException($"--org expects 'demo', 'cutover', 'load', or a GUID, got '{value}'.");
+                : throw new ArgumentException(
+                    $"--org expects 'demo', 'cutover', 'load', 'scenario', or a GUID, got '{value}'.");
         }
 
         await using var scope = services.CreateAsyncScope();

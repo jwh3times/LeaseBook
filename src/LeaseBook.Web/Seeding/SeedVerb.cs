@@ -8,7 +8,7 @@ namespace LeaseBook.Web.Seeding;
 public static class SeedVerb
 {
     public const string Usage =
-        "seed: --org is required and expects 'demo', 'cutover', or 'load' " +
+        "seed: --org is required and expects 'demo', 'cutover', 'load', or 'scenario' " +
         "(e.g. `dotnet run --project src/LeaseBook.Web -- seed --org demo`).";
 
     public static bool TryResolve(string[] args, out SeedTarget target, out string error)
@@ -35,8 +35,11 @@ public static class SeedVerb
             case "load":
                 target = SeedTarget.Load;
                 return true;
+            case "scenario":
+                target = SeedTarget.Scenario;
+                return true;
             default:
-                error = $"seed: unknown --org '{value}' — expected 'demo', 'cutover', or 'load'.";
+                error = $"seed: unknown --org '{value}' — expected 'demo', 'cutover', 'load', or 'scenario'.";
                 return false;
         }
     }
@@ -48,4 +51,5 @@ public enum SeedTarget
     Demo,
     Cutover,
     Load,
+    Scenario,
 }
