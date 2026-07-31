@@ -39,12 +39,17 @@ public sealed class CatalogBalancePropertyTests(PostgresFixture fixture)
         var preTenant = UuidV7.NewId();
         var feeOwner = UuidV7.NewId();
         var drawOwner = UuidV7.NewId();
+        var vendorOwner = UuidV7.NewId();
+        var refundPreTenant = UuidV7.NewId();
+        var refundDepTenant = UuidV7.NewId();
         var big = new Money(50_000_000m); // dwarfs any generated amount so guards always pass
 
         // Seed directory rows for every dimension id these events carry, so the journal-dimension FKs
         // resolve when the engine posts (P38 / ADR-008).
         await EnsureDirectoryAsync(fixture, scope, ct,
-            owners: [owner, feeOwner, drawOwner], tenants: [tenant, depTenant, preTenant], properties: [property]);
+            owners: [owner, feeOwner, drawOwner, vendorOwner],
+            tenants: [tenant, depTenant, preTenant, refundPreTenant, refundDepTenant],
+            properties: [property]);
 
         // Accrual-only charges.
         await AssertBalancesAsync(scope, new RentCharged(tenant, property, owner, null, amount, D(1), "rent"), ct);
@@ -76,6 +81,34 @@ public sealed class CatalogBalancePropertyTests(PostgresFixture fixture)
         // Contribution then disbursement.
         await PostAsync(scope, new OwnerContribution(drawOwner, property, big, D(1), scope.TrustBankId, "contrib"), ct);
         await AssertBalancesAsync(scope, new OwnerDisbursed(drawOwner, amount, D(2), scope.TrustBankId, "draw"), ct);
+
+        // Fee charges — all three kinds; the subtype must not change the balance property.
+        foreach (var kind in new[] { FeeKind.Late, FeeKind.MaintenanceRecharge, FeeKind.Other })
+        {
+            await AssertBalancesAsync(scope, new FeeCharged(
+                tenant, property, owner, null, amount, D(5), kind, $"fee {kind}"), ct);
+        }
+
+        // Vendor payment — the reserve-floor guard needs standing equity, so fund a fresh owner first.
+        await PostAsync(scope, new OwnerContribution(vendorOwner, property, big, D(1), scope.TrustBankId, "vendor fund"), ct);
+        await AssertBalancesAsync(scope, new VendorPaid(
+            vendorOwner, property, amount, D(6), scope.TrustBankId, "Acme Plumbing", "repair"), ct);
+
+        // Refunds — both sources; each needs its liability held first (fresh tenants keep balances clean).
+        await PostAsync(scope, new PrepaymentReceived(refundPreTenant, property, owner, big, D(1), scope.TrustBankId, "rp"), ct);
+        await AssertBalancesAsync(scope, new RefundIssued(
+            refundPreTenant, amount, D(7), scope.TrustBankId, RefundSource.Prepayments, "prepay refund"), ct);
+
+        await PostAsync(scope, new DepositCollected(refundDepTenant, property, owner, big, D(1), scope.DepositBankId, "rd"), ct);
+        await AssertBalancesAsync(scope, new RefundIssued(
+            refundDepTenant, amount, D(7), scope.DepositBankId, RefundSource.Deposits, "deposit refund"), ct);
+
+        // Bank adjustments (ADR-014) — fee, interest, and the trust→trust transfer variant
+        // (BankAdjustmentTemplatesTests covers trust→PM-operating only).
+        await AssertBalancesAsync(scope, new BankFeeCharged(amount, D(8), scope.TrustBankId, "bank fee"), ct);
+        await AssertBalancesAsync(scope, new InterestEarned(amount, D(9), scope.TrustBankId, "interest"), ct);
+        await AssertBalancesAsync(scope, new TrustTransfer(
+            amount, D(10), scope.TrustBankId, scope.DepositBankId, "trust transfer"), ct);
     }
 
     private static async Task PostAsync(OrgScope scope, AccountingEvent businessEvent, CancellationToken ct) =>
