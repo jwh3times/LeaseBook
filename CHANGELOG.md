@@ -16,6 +16,16 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Added
 
+- **Late-fee policy is now editable in the app** — Settings gains a Late fees section for the
+  organization defaults (rent due day, grace days, flat amount or percent-of-rent rate), and any
+  individual lease can override those fields from that tenant's ledger page. Each field is
+  independently either inherited or overridden, so a lease can take a custom grace period while
+  still following the organization's fee amount, and a lease that deviates is flagged on the ledger
+  header. The policy engine already existed and is unchanged; only the surface to configure it was
+  missing, so late-fee terms previously could not be adjusted without a data import. The North
+  Carolina statutory cap (the greater of $15 or 5% of monthly rent) is shown alongside the settings
+  and continues to be applied automatically — it is a legal maximum, not a configurable field.
+
 - **Nightly trust-invariant sweep** — the trust-accounting correctness invariants now run
   automatically as a scheduled job (07:00 UTC daily) across every org, not only when an engineer runs
   the CLI by hand. A violation is logged under a stable event id for alerting and recorded as a
@@ -137,6 +147,17 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   over the canonical cross-agent contract in `AGENTS.md`.
 
 ### Fixed
+
+- **Per-lease late-fee overrides are now validated** — a lease could be saved with a negative late
+  fee, a rent due day outside 1–28, or an unrecognized fee type, none of which the equivalent
+  organization-level settings allowed. The invalid fee type surfaced as a server error rather than a
+  validation message, and the out-of-range numbers were accepted silently and then fed the late-fee
+  run. Both write paths now share one set of rules, and the fee rate is bounded at 100% on each (it
+  was previously bounded below but not above). Inheriting a field — leaving an override unset — stays
+  valid, and an explicit zero remains distinct from inheriting.
+
+- **The organization's late-fee defaults are readable through the API** — they could be written but
+  never read back, so no client could display the policy currently in force.
 
 - **A mistyped `seed --org` now explains itself without a database** — the command validated its
   argument only after connecting, so a typo with no database reachable surfaced as a connection
