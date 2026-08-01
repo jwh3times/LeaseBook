@@ -18,4 +18,16 @@ public static class LogEvents
     /// <summary>A pm_income opening position violated the held-fees shape at post time (WP-7 Task 10 /
     /// ADR-020 §5); the row surfaces as a row error, never a 500.</summary>
     public static readonly EventId HeldFeesShapeRejected = new(1101, nameof(HeldFeesShapeRejected));
+
+    // 1200-1299 = scheduled jobs (WP-11). ADR-025 reserved this taxonomy for the Hangfire sweep
+    // rather than letting a background job invent its own: a job has no HttpContext and therefore no
+    // correlation id, so these ids are the only stable handle an alert rule can key on.
+
+    /// <summary>A trust-accounting invariant (§C.7) failed for one org during the sweep. This is the
+    /// event Track B's B4 alert rule pages on — fiduciary incorrectness, never routine noise.</summary>
+    public static readonly EventId InvariantViolation = new(1200, nameof(InvariantViolation));
+
+    /// <summary>The nightly sweep finished with no violations. Its absence is itself a signal: a
+    /// silent night means the job did not run.</summary>
+    public static readonly EventId InvariantSweepCompleted = new(1201, nameof(InvariantSweepCompleted));
 }

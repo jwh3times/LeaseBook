@@ -1,6 +1,8 @@
 using System.Reflection;
 using System.Threading.RateLimiting;
 using Azure.Monitor.OpenTelemetry.Exporter;
+using Hangfire;
+using Hangfire.PostgreSql;
 using LeaseBook.Modules.Accounting;
 using LeaseBook.Modules.Banking;
 using LeaseBook.Modules.Directory;
@@ -14,6 +16,7 @@ using LeaseBook.Web.Adapters;
 using LeaseBook.Web.Auth;
 using LeaseBook.Web.Cli;
 using LeaseBook.Web.Endpoints;
+using LeaseBook.Web.Jobs;
 using LeaseBook.Web.Persistence;
 using LeaseBook.Web.Reporting;
 using LeaseBook.Web.Security;
@@ -255,6 +258,48 @@ if (!string.IsNullOrWhiteSpace(appInsightsConnection))
         exporter => exporter.ConnectionString = appInsightsConnection));
 }
 
+// The trust-invariant sweep body (§C.7), shared by the `check-invariants` CLI verb and the nightly
+// job. Registered unconditionally: the verb must work with Jobs:Enabled=false, which is every local
+// and CI run. Singleton because it creates one scope per org itself (see the class comment).
+builder.Services.AddSingleton<ISweepRunner, InvariantSweepRunner>();
+
+// Scheduled jobs (ADR-001's first integration, WP-11). Registered ONLY when Jobs:Enabled — false in
+// the base settings so Development, the test host, and the e2e run never grow a background writer
+// competing with fixture state; Production turns it on. The CLI verbs return before app.Run(), so a
+// `seed`/`check-invariants` process never starts a job server either.
+//
+// No dashboard is mounted, deliberately: it is unauthenticated attack surface for a solo operator
+// who reads logs and alerts instead (this reverses ADR-001's stated dashboard rationale — see the
+// amendment there). Storage lives in the app-owned `hangfire` schema from infra/db/bootstrap.sql §5.
+if (builder.Configuration.GetValue<bool>("Jobs:Enabled"))
+{
+    builder.Services.AddHangfire(config => config
+        .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
+        .UseSimpleAssemblyNameTypeSerializer()
+        .UseRecommendedSerializerSettings()
+        .UsePostgreSqlStorage(
+            postgres => postgres.UseNpgsqlConnection(builder.Configuration.GetConnectionString("Default")),
+            new PostgreSqlStorageOptions
+            {
+                // Must match the bootstrap schema. Hangfire installs and upgrades it as
+                // leasebook_app, which owns it — that ownership is why PrepareSchemaIfNecessary
+                // (the package default, kept explicit here) is safe rather than a grant failure.
+                SchemaName = "hangfire",
+                PrepareSchemaIfNecessary = true,
+
+                // Overrides the package default of true. Degraded mode would let the host come up
+                // reporting healthy while the storage sat uninitialized — for a nightly trust
+                // invariant sweep that means silently not running, which is the one failure this
+                // job exists to prevent. Storage is the application database, so if it is
+                // unreachable the host cannot serve traffic anyway; fail loudly and let the
+                // platform restart us.
+                AllowDegradedModeWithoutStorage = false,
+            }));
+
+    builder.Services.AddHangfireServer();
+    builder.Services.AddScoped<InvariantSweepJob>();
+}
+
 var app = builder.Build();
 
 app.UseExceptionHandler();
@@ -284,6 +329,27 @@ app.MapModuleEndpoints(endpointAssemblies);
 // SPA fallback: client-side routes resolve to index.html (served from wwwroot in the container).
 app.MapFallbackToFile("index.html").AllowAnonymous();
 
+// CLI: `dotnet run --project src/LeaseBook.Web -- seed --org demo|cutover|load|scenario` provisions
+//      the named fixture org and exits. --org is required; an unknown value exits non-zero (WP-13
+//      step 0) — a typo must never silently seed the wrong org.
+//
+// Parsed BEFORE the role seeder below because that is this program's first database call: resolving
+// the argument first means a typo'd --org prints the usage message even with no database reachable,
+// instead of failing with an Npgsql connection error (WP-11 step 7, from the PR #126 review). The
+// behavior contract is unchanged — this is ordering only.
+SeedTarget? seedTarget = null;
+if (args is ["seed", ..])
+{
+    if (!SeedVerb.TryResolve(args, out var resolvedTarget, out var seedError))
+    {
+        Console.Error.WriteLine(seedError);
+        Environment.ExitCode = 1;
+        return;
+    }
+
+    seedTarget = resolvedTarget;
+}
+
 // The four fixed roles must exist before sign-in/seeding (idempotent). Skipped during build-time
 // OpenAPI generation (ADR-012): the GetDocument tool runs this program up to app.Run() solely to
 // capture the API surface, with no database available — and this is the only pre-Run database call.
@@ -293,19 +359,9 @@ if (Environment.GetEnvironmentVariable("LEASEBOOK_OPENAPI_BUILD") != "1")
     await RoleSeeder.EnsureRolesAsync(app.Services);
 }
 
-// CLI: `dotnet run --project src/LeaseBook.Web -- seed --org demo|cutover|load|scenario` provisions
-//      the named fixture org and exits. --org is required; an unknown value exits non-zero (WP-13
-//      step 0) — a typo must never silently seed the wrong org.
-if (args is ["seed", ..])
+if (seedTarget is { } target)
 {
-    if (!SeedVerb.TryResolve(args, out var seedTarget, out var seedError))
-    {
-        Console.Error.WriteLine(seedError);
-        Environment.ExitCode = 1;
-        return;
-    }
-
-    await (seedTarget switch
+    await (target switch
     {
         SeedTarget.Cutover => CutoverSeeder.SeedAsync(app.Services),
         SeedTarget.Load => LoadSeeder.SeedAsync(app.Services),
@@ -342,6 +398,19 @@ if (args is ["perf-probe", ..])
 if (Environment.GetEnvironmentVariable("LEASEBOOK_OPENAPI_BUILD") != "1")
 {
     ProductionSecurityGuards.Validate(app.Configuration, app.Environment);
+}
+
+// The nightly trust-invariant sweep (WP-11). Deliberately registered here rather than beside
+// AddHangfire: every CLI verb has already returned above, so a `seed` or `check-invariants` process
+// never writes a schedule row. AddOrUpdate is idempotent and keyed on the job id, so a redeploy that
+// changes the cron updates the existing row instead of accumulating duplicates.
+if (app.Configuration.GetValue<bool>("Jobs:Enabled"))
+{
+    app.Services.GetRequiredService<IRecurringJobManager>().AddOrUpdate<InvariantSweepJob>(
+        InvariantSweepJob.JobId,
+        job => job.RunAsync(CancellationToken.None),
+        InvariantSweepJob.CronUtc,
+        new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
 }
 
 app.Run();

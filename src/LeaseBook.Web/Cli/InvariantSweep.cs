@@ -1,87 +1,80 @@
-using LeaseBook.Modules.Accounting.Contracts;
-using LeaseBook.SharedKernel.Tenancy;
-using LeaseBook.Web.Persistence;
+using LeaseBook.Web.Jobs;
 using LeaseBook.Web.Seeding;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace LeaseBook.Web.Cli;
 
 /// <summary>
-/// The <c>check-invariants</c> CLI verb body (P33): runs the core correctness invariants (I1/I2/I3/I4)
-/// per org inside <see cref="OrgScopedExecutor"/>, printing a violation report and returning a non-zero
-/// exit code on any failure. This is the future nightly sweep — the first scheduled job wires Hangfire
-/// to call it (ADR-006).
+/// The <c>check-invariants</c> CLI verb (P33). Owns only the operator-facing surface — argument
+/// parsing, the console report, and the exit code. The checks themselves live in
+/// <see cref="ISweepRunner"/>, shared with the nightly Hangfire job (WP-11) so the verb an engineer
+/// runs by hand and the job that runs in production can never check different things.
 /// </summary>
 public static class InvariantSweep
 {
     public static async Task<int> RunAsync(IServiceProvider services, string[] args)
     {
-        var orgIds = await ResolveOrgIdsAsync(services, args);
-        if (orgIds.Count == 0)
+        var orgIds = ResolveOrgIds(args);
+
+        var runner = services.GetRequiredService<ISweepRunner>();
+        var result = await runner.RunAsync(orgIds, CancellationToken.None);
+
+        if (result.OrgsChecked == 0)
         {
             Console.WriteLine("check-invariants: no orgs to check.");
             return 0;
         }
 
-        var report = new List<string>();
-        foreach (var orgId in orgIds)
+        if (!result.IsClean)
         {
-            await using var scope = services.CreateAsyncScope();
-            var executor = scope.ServiceProvider.GetRequiredService<OrgScopedExecutor>();
-            var checks = scope.ServiceProvider.GetRequiredService<IInvariantChecks>();
+            Console.Error.WriteLine(
+                $"check-invariants: {result.Violations.Count} violation(s) across {result.OrgsChecked} org(s):");
+            foreach (var violation in result.Violations)
+            {
+                Console.Error.WriteLine($"  [{violation.OrgId:N}] {violation.Invariant}: {violation.Detail}");
+            }
 
-            IReadOnlyList<InvariantViolation> violations = [];
-            await executor.RunAsync(orgId, async () => violations = await checks.CheckCoreAsync(CancellationToken.None));
-            report.AddRange(violations.Select(v => $"[{orgId:N}] {v.Invariant}: {v.Detail}"));
-        }
-
-        if (report.Count > 0)
-        {
-            Console.Error.WriteLine($"check-invariants: {report.Count} violation(s) across {orgIds.Count} org(s):");
-            report.ForEach(line => Console.Error.WriteLine("  " + line));
             return 1;
         }
 
-        Console.WriteLine($"check-invariants: all clean across {orgIds.Count} org(s).");
+        Console.WriteLine($"check-invariants: all clean across {result.OrgsChecked} org(s).");
         return 0;
     }
 
-    // --org demo | --org cutover | --org load | --org <guid> | --all (default).
-    private static async Task<IReadOnlyList<Guid>> ResolveOrgIdsAsync(IServiceProvider services, string[] args)
+    // --org demo | --org cutover | --org load | --org scenario | --org <guid> | --all (default).
+    // Null means "every org" — the same mode the nightly job runs in.
+    private static IReadOnlyList<Guid>? ResolveOrgIds(string[] args)
     {
         var orgFlag = Array.IndexOf(args, "--org");
-        if (orgFlag >= 0 && orgFlag + 1 < args.Length)
+        if (orgFlag < 0 || orgFlag + 1 >= args.Length)
         {
-            var value = args[orgFlag + 1];
-            if (string.Equals(value, "demo", StringComparison.OrdinalIgnoreCase))
-            {
-                return [DemoSeeder.DemoOrgId];
-            }
-
-            if (string.Equals(value, "cutover", StringComparison.OrdinalIgnoreCase))
-            {
-                return [CutoverSeeder.CutoverOrgId];
-            }
-
-            if (string.Equals(value, "load", StringComparison.OrdinalIgnoreCase))
-            {
-                return [LoadSeeder.LoadOrgId];
-            }
-
-            if (string.Equals(value, "scenario", StringComparison.OrdinalIgnoreCase))
-            {
-                return [ScenarioSeeder.ScenarioOrgId];
-            }
-
-            return Guid.TryParse(value, out var id)
-                ? [id]
-                : throw new ArgumentException(
-                    $"--org expects 'demo', 'cutover', 'load', 'scenario', or a GUID, got '{value}'.");
+            return null;
         }
 
-        await using var scope = services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        return await db.Orgs.Select(o => o.Id).ToListAsync();
+        var value = args[orgFlag + 1];
+        if (string.Equals(value, "demo", StringComparison.OrdinalIgnoreCase))
+        {
+            return [DemoSeeder.DemoOrgId];
+        }
+
+        if (string.Equals(value, "cutover", StringComparison.OrdinalIgnoreCase))
+        {
+            return [CutoverSeeder.CutoverOrgId];
+        }
+
+        if (string.Equals(value, "load", StringComparison.OrdinalIgnoreCase))
+        {
+            return [LoadSeeder.LoadOrgId];
+        }
+
+        if (string.Equals(value, "scenario", StringComparison.OrdinalIgnoreCase))
+        {
+            return [ScenarioSeeder.ScenarioOrgId];
+        }
+
+        return Guid.TryParse(value, out var id)
+            ? [id]
+            : throw new ArgumentException(
+                $"--org expects 'demo', 'cutover', 'load', 'scenario', or a GUID, got '{value}'.");
     }
 }
