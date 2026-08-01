@@ -1,5 +1,6 @@
 using FluentValidation;
 using LeaseBook.Modules.Directory.Domain;
+using LeaseBook.Modules.Directory.Features.Shared;
 using LeaseBook.Modules.Directory.Persistence;
 using LeaseBook.SharedKernel;
 using LeaseBook.SharedKernel.Cqrs;
@@ -45,13 +46,14 @@ public sealed class UpdateOrgSettingsValidator : AbstractValidator<UpdateOrgSett
         RuleFor(x => x.State).MaximumLength(50);
         RuleFor(x => x.Zip).MaximumLength(20);
         RuleFor(x => x.Phone).MaximumLength(40);
-        RuleFor(x => x.RentDueDay).InclusiveBetween(1, 28).When(x => x.RentDueDay.HasValue);
-        RuleFor(x => x.LateFeeGraceDays).GreaterThanOrEqualTo(0).When(x => x.LateFeeGraceDays.HasValue);
-        RuleFor(x => x.LateFeeKind)
-            .Must(v => v is null || LateFeeKindConverter.DbValues.Contains(v))
-            .WithMessage($"Late fee kind must be one of: {string.Join(", ", LateFeeKindConverter.DbValues)}.");
-        RuleFor(x => x.LateFeeAmount).GreaterThanOrEqualTo(0m).When(x => x.LateFeeAmount.HasValue);
-        RuleFor(x => x.LateFeeRateBps).GreaterThanOrEqualTo(0).When(x => x.LateFeeRateBps.HasValue);
+        // Late-fee org defaults — the same five rules the per-lease overrides use (WP-6). Shared so
+        // the two write paths cannot drift again; the override path previously had none of them.
+        // Note this tightened LateFeeRateBps, which was bounded below but not above: 0..10000 now.
+        RuleFor(x => x.RentDueDay).RentDueDayValue();
+        RuleFor(x => x.LateFeeGraceDays).LateFeeGraceDaysValue();
+        RuleFor(x => x.LateFeeKind).LateFeeKindValue();
+        RuleFor(x => x.LateFeeAmount).LateFeeAmountValue();
+        RuleFor(x => x.LateFeeRateBps).LateFeeRateBpsValue();
     }
 }
 
