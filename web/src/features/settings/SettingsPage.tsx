@@ -32,6 +32,7 @@ export function SettingsPage() {
       ) : (
         <div className="col gap16">
           <OrgProfileForm initial={settings.data} />
+          <LateFeeForm initial={settings.data} />
           <BankAccountsSection />
           <Card pad>
             <p className="pf-section-title">Management fees</p>
@@ -155,6 +156,157 @@ function OrgProfileForm({ initial }: { initial: OrgSettings }) {
         <div className="row gap12">
           <Button variant="primary" size="sm" onClick={save} disabled={update.isPending}>
             {update.isPending ? 'Saving…' : 'Save changes'}
+          </Button>
+          {saved && (
+            <Badge tone="pos" dot>
+              Saved
+            </Badge>
+          )}
+          {update.isError && <span className="err">Couldn’t save. You may need admin rights.</span>}
+        </div>
+      </form>
+    </Card>
+  );
+}
+
+/**
+ * Org-default late-fee policy (WP-6). These five fields drive the late-fee run for every lease that
+ * has not overridden them; a lease may override any field individually, edited from that tenant's
+ * ledger page (Tenants → tenant → Late fees).
+ *
+ * Rate is entered as a percentage but stored in basis points, matching the M2 fee-config convention.
+ * The NC §42-46 statutory cap is shown as read-only context, deliberately: it is computed per lease
+ * in `LateFeeCalculator` from that lease's rent, so it is neither a stored field nor settable here.
+ * Surfacing it stops the configured fee from reading as the amount that will actually be charged.
+ */
+function LateFeeForm({ initial }: { initial: OrgSettings }) {
+  const update = useUpdateOrgSettings();
+  const [form, setForm] = useState(initial);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => setForm(initial), [initial]);
+
+  function set<K extends keyof OrgSettings>(key: K, value: OrgSettings[K]) {
+    setForm((current) => ({ ...current, [key]: value }));
+    setSaved(false);
+  }
+
+  async function save(event: React.FormEvent) {
+    event.preventDefault();
+    await update.mutateAsync({
+      // The profile fields are replaced unconditionally by the handler (the late-fee fields are
+      // patch-style), so they must be carried through or saving a late fee would blank the org's
+      // legal name, address and phone.
+      legalName: initial.legalName ?? null,
+      address: initial.address ?? null,
+      city: initial.city ?? null,
+      state: initial.state ?? null,
+      zip: initial.zip ?? null,
+      phone: initial.phone ?? null,
+      logoBlobRef: initial.logoBlobRef ?? null,
+      accountingBasis: initial.accountingBasis,
+      moneyNegativeDisplay: initial.moneyNegativeDisplay,
+
+      rentDueDay: Number(form.rentDueDay),
+      lateFeeGraceDays: Number(form.lateFeeGraceDays),
+      lateFeeKind: form.lateFeeKind,
+      lateFeeAmount: Number(form.lateFeeAmount),
+      lateFeeRateBps: Number(form.lateFeeRateBps),
+    });
+    setSaved(true);
+  }
+
+  const isPercent = form.lateFeeKind === 'percent';
+
+  return (
+    <Card>
+      <CardHeader
+        title="Late fees"
+        sub="Org defaults for the late-fee run. Individual leases can override any field."
+      />
+      <form className="pf-pad col gap14" onSubmit={save}>
+        <div className="row gap12 wrap">
+          <div className="pf-formrow" style={{ width: 150 }}>
+            <label htmlFor="lf-due">Rent due day</label>
+            <Input
+              id="lf-due"
+              type="number"
+              min={1}
+              max={28}
+              className="pf-num"
+              value={form.rentDueDay ?? ''}
+              onChange={(e) => set('rentDueDay', Number(e.target.value))}
+            />
+            <span className="t3 fs12">Day of month, 1–28.</span>
+          </div>
+          <div className="pf-formrow" style={{ width: 150 }}>
+            <label htmlFor="lf-grace">Grace days</label>
+            <Input
+              id="lf-grace"
+              type="number"
+              min={0}
+              className="pf-num"
+              value={form.lateFeeGraceDays ?? ''}
+              onChange={(e) => set('lateFeeGraceDays', Number(e.target.value))}
+            />
+            <span className="t3 fs12">Days after the due date before a fee applies.</span>
+          </div>
+        </div>
+
+        <div className="row gap12 wrap">
+          <div className="pf-formrow grow">
+            <label htmlFor="lf-kind">Fee type</label>
+            <Select
+              id="lf-kind"
+              value={form.lateFeeKind}
+              onChange={(e) => set('lateFeeKind', e.target.value)}
+            >
+              <option value="flat">Flat amount</option>
+              <option value="percent">Percent of rent</option>
+            </Select>
+          </div>
+          {isPercent ? (
+            <div className="pf-formrow" style={{ width: 150 }}>
+              <label htmlFor="lf-rate">Rate</label>
+              <Input
+                id="lf-rate"
+                type="number"
+                min={0}
+                max={100}
+                step={0.01}
+                className="pf-num"
+                // Stored in basis points; shown as a percentage.
+                value={(Number(form.lateFeeRateBps ?? 0) / 100).toString()}
+                onChange={(e) => set('lateFeeRateBps', Math.round(Number(e.target.value) * 100))}
+              />
+              <span className="t3 fs12">Percent of monthly rent.</span>
+            </div>
+          ) : (
+            <div className="pf-formrow" style={{ width: 150 }}>
+              <label htmlFor="lf-amount">Flat fee</label>
+              <Input
+                id="lf-amount"
+                type="number"
+                min={0}
+                step={0.01}
+                className="pf-num"
+                value={form.lateFeeAmount ?? ''}
+                onChange={(e) => set('lateFeeAmount', Number(e.target.value))}
+              />
+              <span className="t3 fs12">Charged once per late period.</span>
+            </div>
+          )}
+        </div>
+
+        <p className="t3 fs13">
+          North Carolina caps a residential late fee at the greater of $15.00 or 5% of the monthly
+          rent (NC §42-46). The cap is applied automatically per lease when the run computes a fee,
+          so a configured fee above it is charged at the cap.
+        </p>
+
+        <div className="row gap12">
+          <Button variant="primary" size="sm" onClick={save} disabled={update.isPending}>
+            {update.isPending ? 'Saving…' : 'Save late-fee policy'}
           </Button>
           {saved && (
             <Badge tone="pos" dot>

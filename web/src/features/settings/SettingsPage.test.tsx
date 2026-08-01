@@ -16,6 +16,11 @@ const ORG = {
   zip: null,
   phone: null,
   logoBlobRef: null,
+  rentDueDay: 1,
+  lateFeeGraceDays: 5,
+  lateFeeKind: 'flat',
+  lateFeeAmount: 50,
+  lateFeeRateBps: 500,
 };
 
 const ACTIVE_BANK = {
@@ -118,6 +123,42 @@ describe('SettingsPage', () => {
     );
     // Badge stays Active
     expect(screen.getByText('Active')).toBeInTheDocument();
+  });
+
+  it('shows the rate as a percentage, stores it in basis points, and keeps the org profile', async () => {
+    let saved: Record<string, unknown> | null = null;
+    server.use(
+      http.get('/api/settings/org', () => HttpResponse.json(ORG)),
+      http.get('/api/settings/banks', () => HttpResponse.json([])),
+      http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 })),
+      http.put('/api/settings/org', async ({ request }) => {
+        saved = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({ ...ORG, ...saved });
+      }),
+    );
+
+    renderSettings();
+
+    // Flat is the seeded kind, so the rate input is not on screen until the kind changes.
+    expect(await screen.findByLabelText('Flat fee')).toHaveValue(50);
+    expect(screen.queryByLabelText('Rate')).not.toBeInTheDocument();
+
+    await userEvent.selectOptions(screen.getByLabelText('Fee type'), 'percent');
+
+    // 500 bps must render as 5, not 500 — the bps/percent boundary is the easiest thing to get
+    // wrong here, and getting it wrong overstates every late fee by 100x.
+    expect(screen.getByLabelText('Rate')).toHaveValue(5);
+
+    await userEvent.clear(screen.getByLabelText('Rate'));
+    await userEvent.type(screen.getByLabelText('Rate'), '7.5');
+    await userEvent.click(screen.getByRole('button', { name: /save late-fee policy/i }));
+
+    expect(await screen.findAllByText('Saved')).not.toHaveLength(0);
+    expect(saved).toMatchObject({ lateFeeKind: 'percent', lateFeeRateBps: 750 });
+
+    // The handler replaces the profile fields unconditionally, so a late-fee save that omitted them
+    // would blank the org's legal name and city. They must ride along untouched.
+    expect(saved).toMatchObject({ legalName: 'Tarheel Property Group', city: 'Asheville' });
   });
 
   beforeEach(() => {

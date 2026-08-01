@@ -98,6 +98,28 @@ type CreateTenantBody = components['schemas']['CreateTenant'];
 type CreateOwnerBody = components['schemas']['CreateOwner'];
 type CreatePropertyBody = components['schemas']['CreateProperty'];
 
+type UpdateLeaseBody = components['schemas']['UpdateLease'];
+
+/**
+ * Updates a lease (WP-6). `UpdateLease` replaces every field rather than patching, so callers must
+ * send the lease back whole — the tenant-detail read returns everything needed for that round trip.
+ * Invalidates the tenant detail so the header reflects the new policy immediately.
+ */
+export function useUpdateLease(tenantId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...body }: UpdateLeaseBody & { id: string }) => {
+      await primeCsrf();
+      const { error } = await api.PUT('/api/directory/leases/{id}', {
+        params: { path: { id } },
+        body: body as UpdateLeaseBody,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['tenant', tenantId] }),
+  });
+}
+
 export function useCreateTenant() {
   const qc = useQueryClient();
   return useMutation({
