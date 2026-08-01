@@ -16,6 +16,13 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Added
 
+- **Nightly trust-invariant sweep** — the trust-accounting correctness invariants now run
+  automatically as a scheduled job (07:00 UTC daily) across every org, not only when an engineer runs
+  the CLI by hand. A violation is logged under a stable event id for alerting and recorded as a
+  failed job run. The `check-invariants` command and the nightly job execute the exact same checks,
+  so the two cannot drift apart. Scheduling is off by default and enabled in production, leaving
+  local development and test runs unaffected.
+
 - **All-scenario fixture org** — `seed --org scenario` provisions a fourth fixture org that
   exercises every posting template, workflow, and report at hand-verifiable density: 5 owners /
   11 units, provisioned post-sign-off through the real migration import path (accrual≠cash opening
@@ -130,6 +137,11 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   over the canonical cross-agent contract in `AGENTS.md`.
 
 ### Fixed
+
+- **A mistyped `seed --org` now explains itself without a database** — the command validated its
+  argument only after connecting, so a typo with no database reachable surfaced as a connection
+  error instead of the usage message naming the valid fixture orgs. Validation now happens first.
+  The behavior contract is unchanged: an unknown org still exits non-zero and never seeds.
 
 - **Owner deposit balances now fall when a deposit is disposed** — `DepositApplied` and
   `RefundIssued` debited the security-deposit liability with a tenant dimension but no owner

@@ -49,6 +49,20 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Background job scheduler (ADR-001); first integration is the WP-11 nightly invariant sweep.
+         Storage is the same Postgres instance in its own `hangfire` schema, owned by the RUNTIME
+         role — Hangfire installs and upgrades its own objects, and Postgres allows the ALTER/DROP
+         in those upgrade scripts only to the owner (infra/db/bootstrap.sql §5). -->
+    <PackageVersion Include="Hangfire.AspNetCore" Version="1.8.24" />
+    <PackageVersion Include="Hangfire.PostgreSql" Version="1.21.1" />
+    <!-- Transitive of Hangfire.Core, whose floor is 11.0.1 — a version carrying NU1903 /
+         GHSA-5crp-9r3c-p9vr (DoS via deeply nested objects, fixed in 13.0.1). Transitive pinning
+         (above) forces the resolved version up; without this the audit-as-error gate fails the
+         build. Drop the pin once Hangfire.Core's floor clears 13.0.1. -->
+    <PackageVersion Include="Newtonsoft.Json" Version="13.0.4" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- PDF generation (M5 WP-04): QuestPDF Community license (free under $1M revenue threshold). -->
     <PackageVersion Include="QuestPDF" Version="2026.7.2" />
     <!-- PDF text extraction (test-only, M5 WP-04): PdfPig MIT — used to assert PDF content in tests. -->

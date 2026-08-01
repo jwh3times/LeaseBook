@@ -132,10 +132,14 @@ SECURITY` and an `org_id` isolation policy applied through one migration helper;
   organization context inside a transaction (`set_config('app.org_id', …, is_local => true)`), so the
   setting dies with the transaction and cannot leak across pooled connections. A request with no
   organization context matches no rows — the boundary **fails closed**.
-- **Three least-privilege database roles.** A migrator role owns the schema and runs migrations only;
-  the runtime application role holds data-manipulation rights but is a non-owner, so row-level
-  security binds it; a read-only role serves support and reporting. `PUBLIC` is stripped of schema
-  access.
+- **Three least-privilege database roles.** A migrator role owns the application schema and runs
+  migrations only; the runtime application role holds data-manipulation rights but owns no table
+  holding organization data, so row-level security binds it; a read-only role serves support and
+  reporting. `PUBLIC` is stripped of schema access. The runtime role's one ownership privilege is a
+  separate schema holding background-job scheduling state, which the job library must own in order to
+  install and upgrade its own tables; that schema contains no organization data, no customer records,
+  and no credentials, and the runtime role holds no schema-creation right on the database or on the
+  application schema.
 - **Append-only ledger and audit.** The runtime role has no `UPDATE` or `DELETE` grant on the journal
   and audit tables; corrections are linked reversals, never edits or deletions.
 - **PM income is structurally invisible to owner-facing reads.** Management-fee income cannot appear

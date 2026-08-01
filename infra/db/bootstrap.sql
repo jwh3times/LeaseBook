@@ -44,3 +44,28 @@ ALTER DEFAULT PRIVILEGES FOR ROLE leasebook_migrator IN SCHEMA public
 
 -- Note: IDs are UUIDv7 generated app-side (P6), so sequences are rare; the grant above is
 -- forward-looking and harmless.
+
+-- 5. Hangfire job storage (ADR-001; first use is the WP-11 nightly invariant sweep). Its tables are
+--    global-class scheduler state, not org data: no org_id, no RLS, and out of the schema guard's
+--    reach because that guard only walks nspname = 'public'. Isolating them in their own schema is
+--    what keeps them out of `public` — where a table without org_id fails the guard's allowlist arm.
+--
+--    Owned by the APP role, not the migrator. Hangfire installs and upgrades this schema itself at
+--    runtime (PrepareSchemaIfNecessary), and its upgrade scripts ALTER TABLE / ALTER SEQUENCE /
+--    DROP INDEX their own objects — Postgres requires ownership for those, which DML grants cannot
+--    substitute for. Migrator ownership would therefore break the first version bump. The migrator
+--    is deliberately given nothing here: queue state is never EF-migration territory.
+--
+--    Pre-creating the schema is what lets the app role stay unprivileged everywhere else — it has
+--    no CREATE on the database and none on `public`, so it could not create this schema itself.
+--    CREATE inside `hangfire` is the only DDL privilege the runtime role holds anywhere.
+CREATE SCHEMA hangfire AUTHORIZATION leasebook_app;
+
+-- Read-only support visibility for the ops role — the Hangfire dashboard is deliberately not mounted
+-- in Phase 1, so pgAdmin is the only window onto failed/stuck jobs. Default privileges are scoped to
+-- the granting role and one schema, so this block names leasebook_app (the owner of everything
+-- Hangfire creates) and cannot widen anything in `public`, including the append-only REVOKEs on
+-- journal_entries / journal_lines / audit_events.
+GRANT USAGE ON SCHEMA hangfire TO leasebook_ops;
+ALTER DEFAULT PRIVILEGES FOR ROLE leasebook_app IN SCHEMA hangfire
+  GRANT SELECT ON TABLES TO leasebook_ops;

@@ -28,8 +28,21 @@ locally. This is an idempotent operator step, run once per environment.
      GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO leasebook_app;
    ALTER DEFAULT PRIVILEGES FOR ROLE leasebook_migrator IN SCHEMA public
      GRANT SELECT ON TABLES TO leasebook_ops;
+   -- Hangfire job storage (ADR-001). App-owned, not migrator-owned: Hangfire installs and upgrades
+   -- its own objects at runtime and its upgrade scripts ALTER/DROP them, which Postgres allows only
+   -- to the owner. The app role has no CREATE on the database, so the schema must be pre-created
+   -- here or the app fails at startup.
+   CREATE SCHEMA hangfire AUTHORIZATION leasebook_app;
+   GRANT USAGE ON SCHEMA hangfire TO leasebook_ops;
+   ALTER DEFAULT PRIVILEGES FOR ROLE leasebook_app IN SCHEMA hangfire
+     GRANT SELECT ON TABLES TO leasebook_ops;
    SQL
    ```
+
+   The two `hangfire` statements are the only place the admin acts on behalf of `leasebook_app`
+   rather than `leasebook_migrator`. Both require the admin to hold membership in `leasebook_app`,
+   which `CREATE ROLE` grants the creator implicitly — verify this holds on Flexible Server during
+   B1 rather than assuming it, since the admin login is not a true superuser.
 
 3. Store the three role passwords as Key Vault secrets and the assembled
    `ConnectionStrings__Default` (app) / `ConnectionStrings__Migrations` (migrator) connection

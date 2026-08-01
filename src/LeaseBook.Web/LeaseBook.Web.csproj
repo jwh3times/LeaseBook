@@ -35,6 +35,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Scheduled jobs (ADR-001 / WP-11). Host-only by design: no module references the scheduler —
+         a job body reaches module work through ISender exactly like an endpoint does. -->
+    <PackageReference Include="Hangfire.AspNetCore" />
+    <PackageReference Include="Hangfire.PostgreSql" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Telemetry baseline (WP-05) — the ActivitySource lives in SharedKernel; the host exports it. -->
     <PackageReference Include="OpenTelemetry.Extensions.Hosting" />
     <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" />

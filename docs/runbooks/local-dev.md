@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living runbook; canonical development command reference
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-07-09
+- **Last reviewed:** 2026-07-31
 
 ## Prerequisites
 
@@ -33,6 +33,13 @@ in Key Vault.
 Default privileges are configured so every table the migrator creates automatically grants DML to
 `leasebook_app` and SELECT to `leasebook_ops`. Append-only tables (`audit_events`, `journal_*`)
 additionally revoke UPDATE/DELETE in their migration.
+
+The one exception to migrator-owns-everything is the `hangfire` schema, which `bootstrap.sql`
+pre-creates owned by `leasebook_app`: Hangfire installs and upgrades its own tables at runtime, and
+Postgres allows that only to their owner (ADR-001). It is the single place the runtime role holds
+`CREATE`; it has none on the database or on `public`, and nothing in `hangfire` is org data or
+EF-migration territory. Locally the schema stays empty — job scheduling is gated on `Jobs:Enabled`,
+which is `false` everywhere except production, so no job server starts in dev, tests, or CI.
 
 ## Scripts
 
@@ -181,7 +188,10 @@ are hand-authored tripwires locked by `ScenarioGoldenTests` — treat them as sa
 The `check-invariants` verb sweeps the core correctness invariants (I1 entries balance per basis,
 I2 the trust equation per trust bank, I3 PM-income isolation, I4 deposit liabilities ≥ 0, I7 deposit
 attribution symmetry — a held deposit stays ≥ 0 per owner bucket, not just per tenant) and exits
-non-zero on any violation. It is the body of the future nightly sweep (P33 / ADR-006).
+non-zero on any violation. The verb owns only the operator surface — argument parsing, the console
+report, the exit code — over a core it shares with the nightly sweep job (ADR-001), so what you
+check by hand and what runs in production can never drift apart. With no `--org`, it checks every
+org, which is the mode the nightly job runs in.
 
 ```powershell
 $env:ASPNETCORE_ENVIRONMENT = "Development"

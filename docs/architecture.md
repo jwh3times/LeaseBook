@@ -80,8 +80,10 @@ Insights once deployed. See [ADR-025](adr/ADR-025-error-contract-and-observabili
 PostgreSQL **row-level security is the tenant-isolation boundary** — EF Core global query filters are
 ergonomics layered on top, not the boundary. Org context is set per-transaction with
 `SET LOCAL app.org_id` (never session-level, which would leak across pooled connections); missing
-context fails closed. Three database roles separate concerns: `leasebook_migrator` (schema owner),
-`leasebook_app` (runtime, `FORCE ROW LEVEL SECURITY`), and `leasebook_ops` (read-only). Every
+context fails closed. Three database roles separate concerns: `leasebook_migrator` (owns the `public`
+schema), `leasebook_app` (runtime, `FORCE ROW LEVEL SECURITY`), and `leasebook_ops` (read-only). The
+runtime role holds no DDL privilege in `public` and none on the database; its single exception is the
+`hangfire` job-storage schema it owns, described under Background work below. Every
 org-scoped table is created through the migrations RLS helper (column + `USING`/`WITH CHECK` policy +
 `FORCE` in one call), and a schema-guard test fails CI if any `org_id` table lacks its policy. Portal
 sub-org visibility (an owner sees only their properties) is enforced at the application layer rather
@@ -122,9 +124,20 @@ grant on them, so corrections can only ever be linked reversals.
 ## Background work
 
 Durable background jobs (statement generation/email, the nightly trust-equation sweep, future
-webhook retries) are designed to run on **Hangfire backed by PostgreSQL** — no extra infrastructure.
-Hangfire is **not yet integrated**: its first intended use is the nightly invariant sweep, and the
-Hangfire dashboard is deliberately not mounted in Phase 1 (attack surface).
+webhook retries) run on **Hangfire backed by PostgreSQL** — no extra infrastructure. The first
+integration is the **nightly invariant sweep**: it runs the trust-accounting correctness invariants
+across every org at 07:00 UTC, logging each violation under a stable event id for alerting and
+failing the run so the breach is also durable in job storage. It shares one code path with the
+`check-invariants` CLI verb, so the command an engineer runs and the job that runs nightly can never
+check different things.
+
+Scheduling is config-gated (`Jobs:Enabled`) and **off by default** — enabled in production, so local
+development, tests, and CI never start a job server. Hangfire's storage lives in its own `hangfire`
+schema, owned by the runtime role because Hangfire installs and upgrades its own objects; it is
+pre-created by [`infra/db/bootstrap.sql`](../infra/db/bootstrap.sql). The Hangfire **dashboard is
+deliberately not mounted** (attack surface) — job state is observed through logs, alerts, and the
+`leasebook_ops` read grant.
+
 Redis is deliberately deferred until a concrete need appears. Every job must establish org context
 transactionally before touching data and throw if it is missing. See
 [ADR-001](adr/ADR-001-background-job-scheduler.md) and [ADR-002](adr/ADR-002-defer-redis.md).

@@ -217,9 +217,14 @@ Violating these is a correctness bug, not a style issue.
   `SET`, because pooled connections would leak context.
 - Missing org context fails closed.
 - There are three DB roles:
-  - `leasebook_migrator`: schema owner, migrations only
+  - `leasebook_migrator`: schema owner of `public`, migrations only
   - `leasebook_app`: runtime, RLS-subject via `FORCE ROW LEVEL SECURITY`
   - `leasebook_ops`: read-only
+- One deliberate exception to migrator ownership: the `hangfire` schema is owned by `leasebook_app`,
+  because Hangfire installs and upgrades its own objects and Postgres allows that only to the owner
+  (ADR-001). Pre-created by `infra/db/bootstrap.sql`; it is the runtime role's only `CREATE`
+  privilege anywhere, and it has none on the database or on `public`. Do not "correct" it to
+  migrator ownership — that breaks the first Hangfire version bump. Nothing org-scoped lives there.
 - Every new org-scoped table goes through the migrations RLS helper: column, `USING`/`WITH CHECK`
   policy, and `FORCE ROW LEVEL SECURITY` in one call.
 - A schema guard test fails CI if any `org_id` table lacks its policy.
