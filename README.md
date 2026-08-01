@@ -45,16 +45,16 @@ suite — not by convention. See [`docs/accounting.md`](docs/accounting.md) for 
 
 ## What's implemented
 
-| Area                             | Capability                                                                                                                                                                                                                                                       |
-| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Foundations**                  | Email/password auth with TOTP MFA, role-based authorization, Postgres row-level security as the tenancy boundary, an append-only audit log, a ported design system, and CI.                                                                                      |
-| **Trust accounting engine**      | Double-entry journal with dual-basis (cash/accrual) posting templates per business event, a single write path, linked void/reversal, accounting periods, and a continuously-tested invariant suite.                                                              |
-| **Directory**                    | Owners, properties, units, tenants, and lite leases — lists, detail pages, full-text search, a ⌘K command palette, and a live dashboard with all-owner ending balances.                                                                                          |
-| **Tenant ledger action hub**     | Record a payment or charge in place (≤ 3 interactions), collect/hold/apply deposits and prepayments, void with a linked reversal and a per-entry audit drawer, and a filterable, CSV-exportable running-balance ledger.                                          |
-| **Banking & reconciliation**     | A bank register and clearance layer projected from the immutable journal, reconcile-in-place to $0 with finalize + per-account period lock and an immutable reconciliation report, and CSV statement import with auto-match and de-duplication.                  |
-| **Owner statements & reporting** | Per-owner statements (per property or consolidated) with a structural statement-to-ledger tie-out that blocks issuance on any variance and a computed fiduciary-integrity panel, plus a filterable report catalog rendered to print-grade PDF (QuestPDF) or CSV. |
-| **Bulk operations**              | Preview-confirm-post rent charge, late-fee, and owner disbursement runs — idempotent, reviewable before posting, and recorded as auditable runs.                                                                                                                 |
-| **Migration & onboarding**       | Tolerant AppFolio CSV import with balance-forward opening postings, a hard verification sign-off gate that blocks go-live until imported totals tie, and an import-first onboarding wizard.                                                                      |
+| Area                             | Capability                                                                                                                                                                                                                                                                                                                       |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Foundations**                  | Email/password auth with TOTP MFA, role-based authorization, Postgres row-level security as the tenancy boundary, an append-only audit log, a ported design system, and CI.                                                                                                                                                      |
+| **Trust accounting engine**      | Double-entry journal with dual-basis (cash/accrual) posting templates per business event, a single write path, linked void/reversal, accounting periods, and a continuously-tested invariant suite that also runs as a nightly sweep.                                                                                            |
+| **Directory**                    | Owner, property, and tenant lists and detail pages — with units and lightweight lease records surfaced in context — full-text search, a ⌘K command palette, and a live dashboard with all-owner ending balances.                                                                                                                 |
+| **Tenant ledger action hub**     | Record a payment or charge in place (≤ 3 interactions), collect/hold/apply deposits and prepayments, void with a linked reversal and a per-entry audit drawer, and a filterable, CSV-exportable running-balance ledger.                                                                                                          |
+| **Banking & reconciliation**     | A bank register and clearance layer projected from the immutable journal, reconcile-in-place to $0 with finalize + per-account period lock and an immutable reconciliation report, and CSV statement import with auto-match and de-duplication.                                                                                  |
+| **Owner statements & reporting** | Per-owner statements (per property or consolidated) with a structural statement-to-ledger tie-out that blocks issuance on any variance and a computed fiduciary-integrity panel, a filterable report catalog rendered to print-grade PDF (QuestPDF) or CSV, and a one-click trust compliance pack for a fully reconciled period. |
+| **Bulk operations**              | Preview-confirm-post rent charge, late-fee, and owner disbursement runs — idempotent, reviewable before posting, and recorded as auditable runs.                                                                                                                                                                                 |
+| **Migration & onboarding**       | Tolerant AppFolio CSV import with balance-forward opening postings (including un-swept management fees held in trust), pre-sign-off correction of an already-posted opening figure, a hard verification sign-off gate that blocks go-live until imported totals tie, and an import-first onboarding wizard.                      |
 
 On the roadmap: a compliance and hardening pass toward beta (accessibility, security, performance,
 and live deployment) — followed by online payments, owner/tenant portals, and lease/maintenance
@@ -248,9 +248,11 @@ LeaseBook follows a few firm conventions:
   property-based, and golden-file suites green.
 - Significant decisions are recorded as short ADRs in `docs/adr/`.
 
-CI (GitHub Actions) builds, runs the full test suite against real PostgreSQL, type-checks and builds the
-web app, runs the Playwright e2e suite (including the WCAG 2 AA accessibility gate) in a dedicated `e2e`
-job, builds the container image, and scans for secrets on every push and pull request.
+CI (GitHub Actions) builds, runs the full test suite against real PostgreSQL, applies the migrations to
+a blank database, seeds the performance fixture, type-checks and builds the web app, validates the public
+documentation, runs the Playwright e2e suite (including the WCAG 2 AA accessibility gate) in a dedicated
+`e2e` job, builds the container image and boots the full stack, and scans for secrets on every push and
+pull request.
 
 ---
 

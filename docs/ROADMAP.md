@@ -3,7 +3,7 @@
 - **Audience:** Evaluators, contributors, and maintainers
 - **Status:** Living public direction
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-07-20
+- **Last reviewed:** 2026-08-01
 
 LeaseBook is pre-release software. This page communicates shipped capabilities and broad product
 direction; it is not an implementation plan or a commitment to specific dates. Detailed sequencing,
@@ -26,14 +26,34 @@ Milestones M0-M7 are complete:
 - Migration and onboarding: staged CSV import, opening-balance posting, verification, sign-off, and
   import-first onboarding.
 
-Hardening and beta readiness are in progress. Shipped work includes CI end-to-end coverage, automated
-WCAG 2 AA checks, visual-regression coverage for money-critical states, production safeguards for
-development seed data, CSV formula-injection protection, authored Azure infrastructure, a security
-hardening pass (security headers and CSP, enforced admin MFA, authentication rate limiting,
-encrypted MFA secrets at rest, and production startup configuration guards), and a diagnostic
-observability seam (a uniform API error contract with machine-readable codes and support-reference
-correlation ids, safe user-facing error messages, and application logging wired to Application
-Insights — see the error diagnostics runbook and ADR-025).
+Hardening and beta readiness are in progress. Shipped so far:
+
+- **Quality gates.** End-to-end coverage in CI, automated WCAG 2 AA accessibility checks,
+  visual-regression coverage for money-critical states, and a boot check that starts the released
+  container stack rather than only building the image.
+- **Security.** A hardening pass (security headers and a content-security policy, enforced admin
+  MFA, authentication rate limiting, encrypted MFA secrets at rest, and production startup
+  configuration guards), production safeguards for development seed data, and CSV
+  formula-injection protection.
+- **Diagnostics.** A uniform API error contract with machine-readable codes and support-reference
+  correlation ids, safe user-facing error messages, and application logging wired to Application
+  Insights — see the error diagnostics runbook and ADR-025.
+- **Continuous fiduciary verification.** The trust-accounting invariants now run automatically each
+  night across every organization, sharing a single code path with the on-demand check so the two
+  cannot diverge, and record any violation under a stable event identifier. Scheduling is disabled
+  by default and enabled in production; routing those events to an operator as an alert depends on
+  a deployed environment and is not yet exercised.
+- **Audit support.** A one-click trust compliance pack that bundles the period trust-equation
+  tie-out, the trust-account ledger, the deposit-liability register, finalized reconciliation
+  snapshots, and a money-touching audit extract for a fully reconciled period.
+- **Migration close-outs.** An imported opening balance can be corrected before sign-off through an
+  audited reversal-and-revision path, and un-swept management fees held in a trust account import
+  as a first-class opening position that must be attested before go-live.
+- **Measurement and fixtures.** A documented read-path latency budget measured against a
+  design-scale synthetic organization, and an all-scenario fixture organization that exercises every
+  posting template, workflow, and report under golden-file lock.
+- **Authored Azure infrastructure.** Environment templates and deployment workflows exist; enabling
+  them requires operator-held cloud access.
 
 ## Near-Term Priorities
 
