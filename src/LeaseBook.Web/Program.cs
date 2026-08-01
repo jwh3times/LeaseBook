@@ -36,6 +36,14 @@ QuestPDF.Settings.License = LicenseType.Community;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Build-time OpenAPI generation (ADR-012): the GetDocument tool runs this program up to app.Run()
+// purely to capture the API surface, with no database and no real configuration — and, because it
+// sets no ASPNETCORE_ENVIRONMENT, it resolves as *Production*. Anything that touches a database or
+// requires deploy-supplied config must be skipped when this is set, or the drift gate fails on an
+// exception instead of reporting drift. The flag is set only by the CI schema-drift job; it is unset
+// in every real run (dev, prod, tests).
+var isOpenApiBuild = Environment.GetEnvironmentVariable("LEASEBOOK_OPENAPI_BUILD") == "1";
+
 // Module assemblies the host composes. CQRS handlers/validators are discovered from these; endpoint
 // modules are discovered from these plus the host (which owns the auth/meta endpoints).
 Assembly[] moduleAssemblies =
@@ -271,7 +279,11 @@ builder.Services.AddSingleton<ISweepRunner, InvariantSweepRunner>();
 // No dashboard is mounted, deliberately: it is unauthenticated attack surface for a solo operator
 // who reads logs and alerts instead (this reverses ADR-001's stated dashboard rationale — see the
 // amendment there). Storage lives in the app-owned `hangfire` schema from infra/db/bootstrap.sql §5.
-if (builder.Configuration.GetValue<bool>("Jobs:Enabled"))
+//
+// The OpenAPI carve-out is load-bearing, not defensive: the GetDocument tool runs this program with
+// no ASPNETCORE_ENVIRONMENT, so it resolves as Production — where Jobs:Enabled is true — with no
+// connection string configured, and building the storage would throw before the document is emitted.
+if (!isOpenApiBuild && builder.Configuration.GetValue<bool>("Jobs:Enabled"))
 {
     builder.Services.AddHangfire(config => config
         .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
@@ -351,10 +363,8 @@ if (args is ["seed", ..])
 }
 
 // The four fixed roles must exist before sign-in/seeding (idempotent). Skipped during build-time
-// OpenAPI generation (ADR-012): the GetDocument tool runs this program up to app.Run() solely to
-// capture the API surface, with no database available — and this is the only pre-Run database call.
-// The flag is set only by the CI schema-drift job; it is unset in every real run (dev, prod, tests).
-if (Environment.GetEnvironmentVariable("LEASEBOOK_OPENAPI_BUILD") != "1")
+// OpenAPI generation (ADR-012) — see the isOpenApiBuild note above.
+if (!isOpenApiBuild)
 {
     await RoleSeeder.EnsureRolesAsync(app.Services);
 }
@@ -395,7 +405,7 @@ if (args is ["perf-probe", ..])
 // the Data Protection keyring hasn't been attested durable — a no-op in Development, and skipped
 // for the OpenAPI build (no real config/environment is being started up there, same as RoleSeeder
 // above) and for the CLI paths (which have already returned above and never reach this line).
-if (Environment.GetEnvironmentVariable("LEASEBOOK_OPENAPI_BUILD") != "1")
+if (!isOpenApiBuild)
 {
     ProductionSecurityGuards.Validate(app.Configuration, app.Environment);
 }
@@ -403,8 +413,9 @@ if (Environment.GetEnvironmentVariable("LEASEBOOK_OPENAPI_BUILD") != "1")
 // The nightly trust-invariant sweep (WP-11). Deliberately registered here rather than beside
 // AddHangfire: every CLI verb has already returned above, so a `seed` or `check-invariants` process
 // never writes a schedule row. AddOrUpdate is idempotent and keyed on the job id, so a redeploy that
-// changes the cron updates the existing row instead of accumulating duplicates.
-if (app.Configuration.GetValue<bool>("Jobs:Enabled"))
+// changes the cron updates the existing row instead of accumulating duplicates. Carved out of the
+// OpenAPI build for the same reason as the registration above — this one would reach storage.
+if (!isOpenApiBuild && app.Configuration.GetValue<bool>("Jobs:Enabled"))
 {
     app.Services.GetRequiredService<IRecurringJobManager>().AddOrUpdate<InvariantSweepJob>(
         InvariantSweepJob.JobId,
