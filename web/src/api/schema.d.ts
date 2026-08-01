@@ -3584,10 +3584,19 @@ export interface components {
             accountingBasis: string;
             address: null | string;
             city: null | string;
+            /** Format: double */
+            lateFeeAmount: number | string;
+            /** Format: int32 */
+            lateFeeGraceDays: number | string;
+            lateFeeKind: string;
+            /** Format: int32 */
+            lateFeeRateBps: number | string;
             legalName: null | string;
             logoBlobRef: null | string;
             moneyNegativeDisplay: string;
             phone: null | string;
+            /** Format: int32 */
+            rentDueDay: number | string;
             state: null | string;
             zip: null | string;
         };
@@ -4054,11 +4063,24 @@ export interface components {
             depositRequired: number | string;
             /** Format: date */
             endDate: null | string;
+            /** Format: uuid */
+            id: string;
+            /** Format: double */
+            lateFeeAmountOverride: null | number | string;
+            /** Format: int32 */
+            lateFeeGraceDaysOverride: null | number | string;
+            lateFeeKindOverride: null | string;
+            /** Format: int32 */
+            lateFeeRateBpsOverride: null | number | string;
+            /** Format: int32 */
+            lateFeeRentDueDayOverride: null | number | string;
             /** Format: double */
             rent: number | string;
             /** Format: date */
             startDate: null | string;
             status: string;
+            /** Format: uuid */
+            unitId: string;
         };
         TenantLedgerEntry: {
             /** Format: double */

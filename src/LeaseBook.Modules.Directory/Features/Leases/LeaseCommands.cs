@@ -41,6 +41,15 @@ public sealed class CreateLeaseValidator : AbstractValidator<CreateLease>
         RuleFor(x => x.EndDate).GreaterThanOrEqualTo(x => x.StartDate)
             .When(x => x.StartDate.HasValue && x.EndDate.HasValue)
             .WithMessage("End date must be on or after the start date.");
+
+        // Per-lease late-fee overrides (WP-6). Same rules as the org defaults in UpdateOrgSettings —
+        // these are a write path into money policy and were previously unvalidated, so an unknown
+        // kind threw a 500 out of the converter and a negative fee persisted into the late-fee run.
+        RuleFor(x => x.LateFeeRentDueDayOverride).RentDueDayValue();
+        RuleFor(x => x.LateFeeGraceDaysOverride).LateFeeGraceDaysValue();
+        RuleFor(x => x.LateFeeKindOverride).LateFeeKindValue();
+        RuleFor(x => x.LateFeeAmountOverride).LateFeeAmountValue();
+        RuleFor(x => x.LateFeeRateBpsOverride).LateFeeRateBpsValue();
     }
 }
 
@@ -58,6 +67,15 @@ public sealed class UpdateLeaseValidator : AbstractValidator<UpdateLease>
         RuleFor(x => x.EndDate).GreaterThanOrEqualTo(x => x.StartDate)
             .When(x => x.StartDate.HasValue && x.EndDate.HasValue)
             .WithMessage("End date must be on or after the start date.");
+
+        // Identical to CreateLeaseValidator's — see the note there. The two are kept in lockstep
+        // deliberately: an override settable on update but not create (or vice versa) is the same
+        // asymmetry that let these through in the first place.
+        RuleFor(x => x.LateFeeRentDueDayOverride).RentDueDayValue();
+        RuleFor(x => x.LateFeeGraceDaysOverride).LateFeeGraceDaysValue();
+        RuleFor(x => x.LateFeeKindOverride).LateFeeKindValue();
+        RuleFor(x => x.LateFeeAmountOverride).LateFeeAmountValue();
+        RuleFor(x => x.LateFeeRateBpsOverride).LateFeeRateBpsValue();
     }
 }
 

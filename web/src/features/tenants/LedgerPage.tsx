@@ -7,6 +7,7 @@ import { RecordQuickSwitch } from '@/components/RecordQuickSwitch';
 import { TenantStatusBadge } from '@/components/StatusBadge';
 import { ApplyModal } from './ApplyModal';
 import { AuditDrawer } from './AuditDrawer';
+import { LeaseLateFeeBadge, LeaseLateFeeModal } from './LeaseLateFeeModal';
 import { LedgerComposer } from './LedgerComposer';
 import { LedgerTable } from './LedgerTable';
 import { VoidDialog } from './VoidDialog';
@@ -44,6 +45,7 @@ export function LedgerPage() {
   const detail = useTenantDetail(id);
   const ledger = useTenantLedger(id);
 
+  const [lateFeeOpen, setLateFeeOpen] = useState(false);
   const [flashId, setFlashId] = useState<string | null>(null);
   const [typeFilter, setTypeFilter] = useState('all');
   const [fromDate, setFromDate] = useState('');
@@ -152,6 +154,14 @@ export function LedgerPage() {
                   <span className="row gap6">
                     <Icon name="clock" size={14} />
                     Lease {detail.data.lease.startDate ?? '—'} – {detail.data.lease.endDate ?? '—'}
+                  </span>
+                )}
+                {detail.data.lease && (
+                  <span className="row gap6">
+                    <LeaseLateFeeBadge lease={detail.data.lease} />
+                    <Button variant="ghost" size="sm" onClick={() => setLateFeeOpen(true)}>
+                      Late fees
+                    </Button>
                   </span>
                 )}
                 {detail.data.contact.phone && <span>{detail.data.contact.phone}</span>}
@@ -288,6 +298,13 @@ export function LedgerPage() {
         />
       )}
       {auditEntryId && <AuditDrawer entryId={auditEntryId} onClose={() => setAuditEntryId(null)} />}
+      {lateFeeOpen && detail.data?.lease && (
+        <LeaseLateFeeModal
+          tenantId={id}
+          detail={detail.data}
+          onClose={() => setLateFeeOpen(false)}
+        />
+      )}
     </div>
   );
 }

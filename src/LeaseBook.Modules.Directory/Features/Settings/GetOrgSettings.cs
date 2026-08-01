@@ -19,12 +19,25 @@ public sealed record OrgSettingsResponse(
     string? State,
     string? Zip,
     string? Phone,
-    string? LogoBlobRef)
+    string? LogoBlobRef,
+    // Late-fee org defaults (WP-6). Previously write-only: UpdateOrgSettings accepted all five but
+    // the read side returned none, so no client could show the policy currently in force. Appended
+    // rather than grouped with the profile fields to keep the positional record backward-compatible.
+    int RentDueDay,
+    int LateFeeGraceDays,
+    string LateFeeKind,
+    decimal LateFeeAmount,
+    int LateFeeRateBps)
 {
     public static OrgSettingsResponse From(OrgSettings s) => new(
         AccountingBasisConverter.ToDb(s.AccountingBasis),
         MoneyNegativeDisplayConverter.ToDb(s.MoneyNegativeDisplay),
-        s.LegalName, s.Address, s.City, s.State, s.Zip, s.Phone, s.LogoBlobRef);
+        s.LegalName, s.Address, s.City, s.State, s.Zip, s.Phone, s.LogoBlobRef,
+        s.RentDueDay,
+        s.LateFeeGraceDays,
+        LateFeeKindConverter.ToDb(s.LateFeeKind),
+        s.LateFeeAmount,
+        s.LateFeeRateBps);
 }
 
 internal sealed class GetOrgSettingsHandler(DbContext db) : IQueryHandler<GetOrgSettings, OrgSettingsResponse>

@@ -288,10 +288,16 @@ the period; half-up rounding to the cent. The run is idempotent: re-running a pe
 already-charged leases as "already done" and posts only newly eligible ones — never double-charges.
 
 **Late-fee run.** Selectively charges `FeeCharged(FeeKind.Late)` on delinquent ledgers past the
-grace period. The effective policy is resolved per lease: `lease override ?? org default`, then
-clamped to the **NC G.S. §42-46 statutory ceiling** (the late fee may not exceed the greater of
-$15.00 or 5% of the monthly rent, regardless of the policy configured). Operators review the preview
-and pick which delinquent ledgers to charge before confirming; the run is never silent.
+grace period. The policy is five fields — rent due day, grace days, fee kind (flat or percent), the
+flat amount, and the percent rate. The org defaults are edited under **Settings → Late fees**, and a
+lease may override any one of them from that tenant's ledger page (**Tenants → tenant → Late fees**);
+a field left unset on the lease inherits the org default. The effective policy is therefore resolved
+per lease field by field (`lease override ?? org default`), then clamped to the **NC G.S. §42-46
+statutory ceiling** (the late fee may not exceed the greater of $15.00 or 5% of the monthly rent,
+regardless of the policy configured). That ceiling is not a setting and is not stored anywhere: it is
+computed from each lease's own rent when the run values the fee, so a configured fee above it is
+charged at the cap. Operators review the preview and pick which delinquent ledgers to charge before
+confirming; the run is never silent.
 
 **Owner disbursement run (with folded management fee).** For each owner, posts two events
 atomically: `ManagementFeeAssessed` (equity × effective bps, half-up — ADR-018) followed by
