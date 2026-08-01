@@ -15,7 +15,9 @@ public sealed record InvariantViolation(string Invariant, string Detail);
 public interface IInvariantChecks
 {
     /// <summary>I1: every entry balances per basis. I2: the trust equation holds per trust bank.
-    /// I3: no pm_income line carries an owner. I4: every held deposit/prepayment is ≥ 0.</summary>
+    /// I3: no pm_income line carries an owner. I4: every held deposit/prepayment is ≥ 0.
+    /// I7: held security deposit is ≥ 0 per (tenant, owner) bucket — dimension symmetry between a
+    /// collection and its disposition.</summary>
     Task<IReadOnlyList<InvariantViolation>> CheckCoreAsync(CancellationToken ct);
 
     Task<IReadOnlyList<InvariantViolation>> CheckEntriesBalanceAsync(CancellationToken ct);
@@ -25,4 +27,6 @@ public interface IInvariantChecks
     Task<IReadOnlyList<InvariantViolation>> CheckPmIncomeIsolationAsync(CancellationToken ct);
 
     Task<IReadOnlyList<InvariantViolation>> CheckDepositLiabilitiesNonNegativeAsync(CancellationToken ct);
+
+    Task<IReadOnlyList<InvariantViolation>> CheckDepositAttributionSymmetricAsync(CancellationToken ct);
 }

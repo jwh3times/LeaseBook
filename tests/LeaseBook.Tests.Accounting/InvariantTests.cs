@@ -144,6 +144,111 @@ public sealed class InvariantTests(PostgresFixture fixture)
         cash.ShouldBe(accrual); // receivable settled → bases converge
     }
 
+    [Fact]
+    public async Task Applying_a_deposit_releases_the_owner_attributed_liability_I7()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var scope = await ProvisionedScopeAsync(
+            fixture, ct, owners: [Owner], tenants: [Tenant], properties: [Property]);
+
+        await scope.RunAsync(async () =>
+        {
+            var events = Events(scope);
+            await events.PostAsync(new DepositCollected(
+                Tenant, Property, Owner, new Money(1000m), D(1), scope.DepositBankId, "dep"), ct);
+            await events.PostAsync(new DepositApplied(
+                Tenant, Property, Owner, new Money(1000m), D(28), scope.DepositBankId, scope.TrustBankId,
+                DepositApplication.ToOwnerIncome, "damages"), ct);
+        }, ct);
+
+        // The collection credited the liability with an owner dim; the application must debit it with the
+        // same dim, or the owner's deposit column never comes back down (WP-13 finding §12.11).
+        (await OwnerDeposits(scope, ct)).ShouldBe(0m);
+        (await CheckCoreAsync(scope, ct)).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Refunding_a_deposit_releases_the_owner_attributed_liability_I7()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var scope = await ProvisionedScopeAsync(
+            fixture, ct, owners: [Owner], tenants: [Tenant], properties: [Property]);
+
+        await scope.RunAsync(async () =>
+        {
+            var events = Events(scope);
+            await events.PostAsync(new DepositCollected(
+                Tenant, Property, Owner, new Money(1000m), D(1), scope.DepositBankId, "dep"), ct);
+            await events.PostAsync(new RefundIssued(
+                Tenant, new Money(1000m), D(28), scope.DepositBankId, RefundSource.Deposits, "move-out refund",
+                PropertyId: Property, OwnerId: Owner), ct);
+        }, ct);
+
+        (await OwnerDeposits(scope, ct)).ShouldBe(0m);
+        (await CheckCoreAsync(scope, ct)).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task A_prepayment_refund_stays_owner_undimensioned_I7()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var scope = await ProvisionedScopeAsync(
+            fixture, ct, owners: [Owner], tenants: [Tenant], properties: [Property]);
+
+        Guid refundId = default;
+        await scope.RunAsync(async () =>
+        {
+            var events = Events(scope);
+            await events.PostAsync(new PrepaymentReceived(
+                Tenant, Property, Owner, new Money(400m), D(1), scope.TrustBankId, "prepay"), ct);
+            refundId = await events.PostAsync(new RefundIssued(
+                Tenant, new Money(400m), D(28), scope.TrustBankId, RefundSource.Prepayments, "prepay refund"), ct);
+        }, ct);
+
+        // Prepayments are collected with no owner dim (GetOwnerBalances deliberately drops them), so the
+        // refund must not invent one — symmetry, not blanket attribution.
+        var liability = (await ReadLinesAsync(scope, refundId, ct))
+            .Single(l => l.Code == AccountCodes.TenantPrepayments);
+        liability.OwnerId.ShouldBeNull();
+        liability.TenantId.ShouldBe(Tenant);
+        (await CheckCoreAsync(scope, ct)).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task The_I7_checker_catches_a_disposition_that_drops_the_owner_dimension()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var scope = await ProvisionedScopeAsync(
+            fixture, ct, owners: [Owner], tenants: [Tenant], properties: [Property]);
+
+        await scope.RunAsync(async () =>
+        {
+            var events = Events(scope);
+            await events.PostAsync(new DepositCollected(
+                Tenant, Property, Owner, new Money(1000m), D(1), scope.DepositBankId, "dep"), ct);
+
+            // A caller that omits the deposit refund's owner dims reproduces the pre-fix shape: the
+            // tenant nets to zero (I4 stays clean) while the owner bucket holds +1000 and the
+            // unattributed bucket goes to −1000. I7 is what makes that loud.
+            await events.PostAsync(new RefundIssued(
+                Tenant, new Money(1000m), D(28), scope.DepositBankId, RefundSource.Deposits, "no dims"), ct);
+        }, ct);
+
+        (await Check(scope, c => new InvariantChecks(scope.Db).CheckDepositLiabilitiesNonNegativeAsync(c), ct))
+            .ShouldBeEmpty();
+        var violations = await Check(
+            scope, c => new InvariantChecks(scope.Db).CheckDepositAttributionSymmetricAsync(c), ct);
+        violations.ShouldContain(v => v.Invariant == "I7");
+    }
+
+    private static async Task<decimal> OwnerDeposits(OrgScope scope, CancellationToken ct)
+    {
+        decimal deposits = 0;
+        await scope.RunAsync(async () => deposits =
+            (await new GetOwnerBalancesHandler(scope.Db).Handle(new GetOwnerBalances(), ct)).Totals.Deposits, ct);
+        return deposits;
+    }
+
     private static Task<IReadOnlyList<InvariantViolation>> CheckCoreAsync(OrgScope scope, CancellationToken ct) =>
         Check(scope, c => new InvariantChecks(scope.Db).CheckCoreAsync(c), ct);
 

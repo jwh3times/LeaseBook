@@ -179,7 +179,8 @@ are hand-authored tripwires locked by `ScenarioGoldenTests` — treat them as sa
 ## Checking the accounting invariants
 
 The `check-invariants` verb sweeps the core correctness invariants (I1 entries balance per basis,
-I2 the trust equation per trust bank, I3 PM-income isolation, I4 deposit liabilities ≥ 0) and exits
+I2 the trust equation per trust bank, I3 PM-income isolation, I4 deposit liabilities ≥ 0, I7 deposit
+attribution symmetry — a held deposit stays ≥ 0 per owner bucket, not just per tenant) and exits
 non-zero on any violation. It is the body of the future nightly sweep (P33 / ADR-006).
 
 ```powershell

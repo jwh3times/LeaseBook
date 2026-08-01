@@ -131,6 +131,16 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Fixed
 
+- **Owner deposit balances now fall when a deposit is disposed** — `DepositApplied` and
+  `RefundIssued` debited the security-deposit liability with a tenant dimension but no owner
+  dimension, while `DepositCollected` and the opening-balance import credit it with one. Per-tenant
+  reads (deposit register, tenant ledger) always cleared correctly, but the owner-attributed deposit
+  column — owner balances and the dashboard — never came back down after a move-out, overstating
+  every owner who had ever had a deposit released. Deposit dispositions now carry the owner
+  dimension their collection carried; prepayment refunds carry no owner dimension, matching how
+  prepayments are collected. A new swept invariant (**I7**: a held security deposit stays ≥ 0 per
+  owner bucket, not just per tenant) makes any future dimension asymmetry fail
+  `check-invariants` — the previous shape left every per-tenant invariant clean.
 - **Demo leases no longer read as expired** — all seven demo leases ended 2026-05-31 while still
   marked `Active` and while the demo journal charges June 2026 rent; their terms now extend to
   2027-05-31 (directory-only — no golden figure moves). The demo dataset source
