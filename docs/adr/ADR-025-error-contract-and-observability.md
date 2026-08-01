@@ -295,3 +295,24 @@ dropped:
   in Accounting; both files live in `LeaseBook.Modules.Operations`, outside that guard's reflective
   scope — closing these two instances does not close the leak-guard-coverage gap itself (tracked
   above).
+
+## Addendum (2026-07-31): WP-11 claims the 1200-1299 block
+
+The second revisit trigger above has fired as designed — WP-11's nightly sweep landed and needed its
+own log-event ids — and it asked for an addendum rather than a re-derived taxonomy, so this records
+the outcome instead of adding a standalone ADR.
+
+- **The block.** Scheduled jobs take **1200-1299**, the next hundred-block under the 1100+
+  convention: `InvariantViolation` (1200, `Error`, one per org × invariant) and
+  `InvariantSweepCompleted` (1201, `Information`, the clean-run heartbeat whose absence is the
+  signal that the job did not run). Both are tabulated in
+  [`docs/runbooks/diagnostics.md`](../runbooks/diagnostics.md) alongside the HTTP-surface ids.
+- **Correlation, in the absence of a request.** The obligation above anticipated that a job has no
+  `HttpContext` and therefore no correlation id to stamp. The resolution is that the sweep starts its
+  own `jobs.invariant_sweep` activity and attaches each violation to it as a span event, so the run's
+  trace is the correlation handle. This does not extend the ADR's HTTP-surface contract — a job still
+  has no `Reference` for an operator to quote — it gives the background surface the equivalent
+  engineer-side handle.
+- **A violation is also durable outside the log pipeline.** The job throws on any violation, which
+  records the run as Failed in Hangfire storage. That is deliberate redundancy: the one failure mode
+  this job exists to catch must stay visible even if telemetry export is the thing that is broken.

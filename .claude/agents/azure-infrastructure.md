@@ -135,10 +135,17 @@ ALTER DEFAULT PRIVILEGES FOR ROLE leasebook_migrator IN SCHEMA public
   GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO leasebook_app;
 ALTER DEFAULT PRIVILEGES FOR ROLE leasebook_migrator IN SCHEMA public
   GRANT SELECT ON TABLES TO leasebook_ops;
+-- Hangfire job storage (ADR-001), owned by the APP role: Hangfire installs and upgrades its own
+-- objects at runtime and Postgres allows that only to the owner. The app role has no CREATE on the
+-- database, so this schema must be pre-created here or the app fails at startup.
+CREATE SCHEMA hangfire AUTHORIZATION leasebook_app;
+GRANT USAGE ON SCHEMA hangfire TO leasebook_ops;
+ALTER DEFAULT PRIVILEGES FOR ROLE leasebook_app IN SCHEMA hangfire
+  GRANT SELECT ON TABLES TO leasebook_ops;
 SQL
 ```
 
-See `infra/db/azure-bootstrap.md` for the full procedure. The target end-state (Entra auth / managed-identity-backed roles) requires an ADR when it lands.
+See `infra/db/azure-bootstrap.md` for the full procedure — including the one caveat this snippet cannot carry: the `hangfire` statements act on behalf of `leasebook_app`, which requires the admin to hold membership in that role (implicit from `CREATE ROLE`, but verify it on Flexible Server rather than assuming). The target end-state (Entra auth / managed-identity-backed roles) requires an ADR when it lands.
 
 ---
 
@@ -160,7 +167,7 @@ permissions:
 | Secrets          | `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `MIGRATIONS_CONNECTION_STRING` | Same                                                  |
 | Vars             | `ACR_NAME`, `APP_NAME`, `RESOURCE_GROUP`                                                      | Same                                                  |
 
-Migrations run as `leasebook_migrator` from a one-shot migration job (`dotnet ef database update`) in the workflow — **never at app startup**. The app role (`ConnectionStrings__Default`) has no DDL rights. Both workflows are authored but enablement is deferred until the operator configures OIDC federated credentials.
+Migrations run as `leasebook_migrator` from a one-shot migration job (`dotnet ef database update`) in the workflow — **never at app startup**. The app role (`ConnectionStrings__Default`) has no DDL rights in `public` and none on the database — only inside its own `hangfire` schema (§7). Both workflows are authored but enablement is deferred until the operator configures OIDC federated credentials.
 
 ---
 
@@ -184,16 +191,17 @@ Retention: dev 7 days, prod 35 days. Geo-redundant backup enabled in prod only. 
 
 ## 10. Banned patterns
 
-| Pattern                                                                     | Why banned                                                                                |
-| --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| Committing a real password or connection string                             | Secrets live in Key Vault only; `@secure` params are supplied at deploy time              |
-| Giving a `@secure` parameter a committed default value                      | Defeats the `@secure` decorator; Key Vault is the source of truth                         |
-| Enabling ACR admin user (`adminUserEnabled: true`)                          | Pull access is via managed identity AcrPull; admin credentials are a credential-leak risk |
-| Leaving prod DB publicly reachable                                          | `publicNetworkAccess: 'Disabled'` for prod; VNet integration required                     |
-| Running migrations at app startup                                           | Migrations run as `leasebook_migrator` in the deploy job; the app role has no DDL rights  |
-| Running `az deployment`, `what-if`, role bootstrap, or PITR from this agent | Operator-gated; requires Azure access this agent does not have                            |
-| Deviating from the `lb-<env>-<resource>` / `lb<env>acr` naming convention   | Breaks runbook references, module cross-references, and audit trails                      |
-| Adding a staging environment as a live tier                                 | Staging is deferred (M0.4); `@allowed(['dev','prod'])` enforces this in Bicep             |
+| Pattern                                                                     | Why banned                                                                                           |
+| --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Committing a real password or connection string                             | Secrets live in Key Vault only; `@secure` params are supplied at deploy time                         |
+| Giving a `@secure` parameter a committed default value                      | Defeats the `@secure` decorator; Key Vault is the source of truth                                    |
+| Enabling ACR admin user (`adminUserEnabled: true`)                          | Pull access is via managed identity AcrPull; admin credentials are a credential-leak risk            |
+| Leaving prod DB publicly reachable                                          | `publicNetworkAccess: 'Disabled'` for prod; VNet integration required                                |
+| Running migrations at app startup                                           | Migrations run as `leasebook_migrator` in the deploy job; the app role has no DDL rights in `public` |
+| Making `leasebook_migrator` own the `hangfire` schema                       | Hangfire upgrades its own objects and Postgres requires ownership; app-owned by decision (ADR-001)   |
+| Running `az deployment`, `what-if`, role bootstrap, or PITR from this agent | Operator-gated; requires Azure access this agent does not have                                       |
+| Deviating from the `lb-<env>-<resource>` / `lb<env>acr` naming convention   | Breaks runbook references, module cross-references, and audit trails                                 |
+| Adding a staging environment as a live tier                                 | Staging is deferred (M0.4); `@allowed(['dev','prod'])` enforces this in Bicep                        |
 
 ---
 

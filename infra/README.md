@@ -10,7 +10,9 @@ authoring and `az bicep build` are not.
   (PostgreSQL Flexible Server 18), `vault` (Key Vault, RBAC), `storage` (blobs), `containerapp`
   (managed identity + Container Apps environment + app, with AcrPull / Key Vault Secrets User RBAC).
 - `env/dev.bicepparam`, `env/prod.bicepparam` — per-environment parameters.
-- `db/azure-bootstrap.md` — how the operator creates the three Postgres roles (Bicep can't).
+- `db/azure-bootstrap.md` — how the operator creates the three Postgres roles and the app-owned
+  `hangfire` job-storage schema (Bicep can't). Both are prerequisites, not optional: the app fails at
+  startup if the `hangfire` schema is missing, because the runtime role cannot create it itself.
 
 ## Naming convention
 
