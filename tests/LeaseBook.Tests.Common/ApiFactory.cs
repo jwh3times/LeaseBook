@@ -13,11 +13,26 @@ namespace LeaseBook.Tests.Common;
 /// end-to-end rather than bypassed. Migrations are already applied (as migrator) by the fixture before
 /// this factory is built.
 /// </summary>
-public sealed class ApiFactory(string appConnectionString) : WebApplicationFactory<Program>
+/// <param name="settings">
+/// Optional host-configuration overrides applied before <c>Program</c> reads configuration — the only
+/// way to exercise a code path Program gates on config, such as WP-11's <c>Jobs:Enabled</c>. A test
+/// that enables jobs must also point <c>ConnectionStrings:Default</c> at the container, because
+/// Hangfire resolves its own storage connection from configuration rather than from the DbContext
+/// replaced below, and would otherwise reach for the developer's local database.
+/// </param>
+public sealed class ApiFactory(
+    string appConnectionString,
+    IReadOnlyDictionary<string, string?>? settings = null) : WebApplicationFactory<Program>
 {
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Development");
+
+        foreach (var (key, value) in settings ?? new Dictionary<string, string?>())
+        {
+            builder.UseSetting(key, value);
+        }
+
         builder.ConfigureServices(services =>
         {
             // Point the app's DbContext at the test container (app role) instead of local compose.
