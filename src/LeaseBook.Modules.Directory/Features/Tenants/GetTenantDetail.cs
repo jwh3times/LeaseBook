@@ -16,8 +16,23 @@ public sealed record GetTenantDetail(Guid Id) : IQuery<TenantDetail?>;
 
 public sealed record TenantContact(string? Email, string? Phone);
 
+/// <summary>
+/// The tenant's active lease. Carries <see cref="Id"/> and <see cref="UnitId"/> as well as the
+/// editable fields because <c>UpdateLease</c> replaces the whole lease: a client editing one field
+/// has to send the rest back unchanged, and it can only do that if the read returned them (WP-6).
+/// <para>
+/// The five <c>*Override</c> fields are nullable by design — null means "inherit the org default"
+/// for that field, so null is a meaningful value here and must not be conflated with zero.
+/// </para>
+/// </summary>
 public sealed record TenantLeaseInfo(
-    DateOnly? StartDate, DateOnly? EndDate, decimal Rent, decimal DepositRequired, string Status);
+    Guid Id, Guid UnitId,
+    DateOnly? StartDate, DateOnly? EndDate, decimal Rent, decimal DepositRequired, string Status,
+    int? LateFeeRentDueDayOverride,
+    int? LateFeeGraceDaysOverride,
+    string? LateFeeKindOverride,
+    decimal? LateFeeAmountOverride,
+    int? LateFeeRateBpsOverride);
 
 public sealed record TenantDetail(
     Guid Id, string DisplayName, TenantContact Contact, string Status,
@@ -45,11 +60,18 @@ internal sealed class GetTenantDetailHandler(DbContext db, ITenantFinancials ten
             where l.TenantId == tenant.Id && l.Status == LeaseStatus.Active
             select new
             {
+                LeaseId = l.Id,
+                l.UnitId,
                 l.StartDate,
                 l.EndDate,
                 LeaseRent = l.Rent,
                 l.DepositRequired,
                 l.Status,
+                l.LateFeeRentDueDayOverride,
+                l.LateFeeGraceDaysOverride,
+                l.LateFeeKindOverride,
+                l.LateFeeAmountOverride,
+                l.LateFeeRateBpsOverride,
                 UnitLabel = u.Label,
                 PropertyAddress = p.Address,
                 OwnerId = o.Id,
@@ -62,8 +84,16 @@ internal sealed class GetTenantDetailHandler(DbContext db, ITenantFinancials ten
         TenantLeaseInfo? lease = context is null
             ? null
             : new TenantLeaseInfo(
+                context.LeaseId, context.UnitId,
                 context.StartDate, context.EndDate, context.LeaseRent.Amount, context.DepositRequired.Amount,
-                LeaseStatusConverter.ToDb(context.Status));
+                LeaseStatusConverter.ToDb(context.Status),
+                context.LateFeeRentDueDayOverride,
+                context.LateFeeGraceDaysOverride,
+                context.LateFeeKindOverride is null
+                    ? null
+                    : LateFeeKindConverter.ToDb(context.LateFeeKindOverride.Value),
+                context.LateFeeAmountOverride,
+                context.LateFeeRateBpsOverride);
 
         return new TenantDetail(
             tenant.Id, tenant.DisplayName, new TenantContact(tenant.ContactEmail, tenant.ContactPhone),
