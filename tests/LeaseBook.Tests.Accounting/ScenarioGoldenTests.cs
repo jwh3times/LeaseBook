@@ -66,19 +66,20 @@ public sealed class ScenarioGoldenTests(PostgresFixture fixture)
 
         // Every disbursing owner is swept to exactly its reserve each run.
         //
-        // KNOWN OVERSTATEMENT (WP-13 finding, design note §12.11): the deposits column reads
-        // 5,220.00, not the true 3,820.00 — DepositApplied/RefundIssued debit
-        // security_deposits_held with a tenant dim but NO owner dim (AccountingEventService.cs:213,
-        // :358), while collected/imported credits carry owner. Per-tenant reads clear correctly;
-        // the owner-dimensioned column never decreases after a disposition, so T-S4's fully-
-        // disposed 1,400.00 still shows under O-S1. The journal is append-only, so the template
-        // fix cannot repair history — this literal locks today's OBSERVED behavior and must move
-        // in the same commit as that fix.
-        Of("Harborview Holdings").ShouldBe((500.00m, 5_220.00m));
+        // The deposits column is 3,820.00: five held deposits (1,200 + 1,000 + 1,620) on O-S1's
+        // properties, with T-S4's 1,400.00 fully released at move-out (677.42 applied to charges +
+        // 300.00 to owner income + 422.58 refunded). It read 5,220.00 until the WP-13 §12.11 fix gave
+        // the disposition debits the owner dim their collecting credits carry.
+        Of("Harborview Holdings").ShouldBe((500.00m, 3_820.00m));
         Of("Beacon Ridge LLC").ShouldBe((0.00m, 1_375.00m)); // zero-bps owner, fully disbursed
         Of("Stillwater Properties").ShouldBe((1_052.63m, 0m)); // parked at the floor — never moved
         Of("Meridian Estates").ShouldBe((-250.00m, 0m)); // negative-equity owner — never disbursed
         Of("Cypress Grove Partners").ShouldBe((250.00m, 0m));
+
+        // Tie-out (I7 in golden form): what the owner column attributes must equal what the deposit
+        // trust actually holds. A dimension asymmetry breaks this equality even when every per-tenant
+        // read still clears, which is precisely how §12.11 hid.
+        balances.Totals.Deposits.ShouldBe(5_195.00m);
     }
 
     [Fact]

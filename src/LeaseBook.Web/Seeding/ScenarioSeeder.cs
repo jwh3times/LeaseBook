@@ -172,7 +172,8 @@ public static class ScenarioSeeder
                 sp.GetRequiredService<ISender>(),
                 sp.GetRequiredService<IAccountingEvents>(),
                 sp.GetRequiredService<RunEngine>(),
-                db, ids);
+                db, ids,
+                sp.GetRequiredService<ITenantPostingDimensions>());
 
             await PostMarchAsync(ctx, ct);
             await PostAprilAsync(ctx, ct);
@@ -460,11 +461,21 @@ public static class ScenarioSeeder
     // ─────────────────────────────────────────────────────────────────────────
 
     private sealed record Ctx(
-        ISender Sender, IAccountingEvents Events, RunEngine Engine, AppDbContext Db, DirectoryIds Ids)
+        ISender Sender, IAccountingEvents Events, RunEngine Engine, AppDbContext Db, DirectoryIds Ids,
+        ITenantPostingDimensions Dimensions)
     {
         public Guid Tenant(string name) => Ids.Tenants[name];
 
         public Guid Owner(string name) => Ids.Owners[name];
+
+        /// <summary>
+        /// The owner/property a tenant's postings carry — the same resolution the ledger commands use.
+        /// Needed for the commandless <c>RefundIssued</c> deposit path, whose liability debit must release
+        /// the owner bucket its collection credited (I7).
+        /// </summary>
+        public async Task<TenantPostingDimensions> DimsAsync(Guid tenantId, CancellationToken ct) =>
+            await Dimensions.GetAsync(tenantId, ct)
+            ?? throw new InvalidOperationException($"Scenario seed: tenant {tenantId} has no active lease.");
     }
 
     /// <summary>
@@ -594,9 +605,11 @@ public static class ScenarioSeeder
         await ctx.Sender.Send(new ApplyDeposit(
             tS4, 300.00m, new(2026, 5, 16), DepositTrustId, OperatingTrustId,
             "to-owner-income", "Move-out: carpet damage", "scenario:depapply:damages:t-s4"), ct);
+        var tS4Dims = await ctx.DimsAsync(tS4, ct);
         await ctx.Events.PostAsync(new RefundIssued(
             tS4, new Money(422.58m), new(2026, 5, 18), DepositTrustId, RefundSource.Deposits,
-            "Deposit refund check #2101 — Raman move-out", "scenario:refund:deposit:t-s4"), ct);
+            "Deposit refund check #2101 — Raman move-out", "scenario:refund:deposit:t-s4",
+            tS4Dims.PropertyId, tS4Dims.OwnerId), ct);
 
         // Explicit prepayment collection (distinct from the overpay auto-split path).
         await ctx.Sender.Send(new CollectPrepayment(

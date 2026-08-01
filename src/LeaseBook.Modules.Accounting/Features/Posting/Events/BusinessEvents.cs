@@ -107,6 +107,13 @@ public sealed record VendorPaid(
     string Description, string? SourceRef = null, Money Reserve = default) : AccountingEvent;
 
 /// <summary>A refund of a held prepayment or deposit back to the tenant.</summary>
+/// <remarks>
+/// <paramref name="OwnerId"/>/<paramref name="PropertyId"/> attribute a <see cref="RefundSource.Deposits"/>
+/// refund to the owner whose deposit liability is being released — they must match the collecting credit
+/// or the owner-attributed deposit column never comes back down (I7). Prepayments are collected with no
+/// owner dim, so a <see cref="RefundSource.Prepayments"/> refund leaves both null.
+/// </remarks>
 public sealed record RefundIssued(
     Guid TenantId, Money Amount, DateOnly Date, Guid BankAccountId, RefundSource Source,
-    string Description, string? SourceRef = null) : AccountingEvent;
+    string Description, string? SourceRef = null,
+    Guid? PropertyId = null, Guid? OwnerId = null) : AccountingEvent;

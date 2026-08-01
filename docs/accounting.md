@@ -3,7 +3,7 @@
 - **Audience:** Contributors, operators, and reviewers
 - **Status:** Living accounting guide
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-07-21
+- **Last reviewed:** 2026-07-31
 
 This is the canonical public explanation of the shipped trust-accounting model, written so a
 property manager, bookkeeper, or attorney can evaluate it without reading C#. The Accounting module
@@ -75,6 +75,14 @@ trust bank and a deposit _liability_ — and books **no income at all**. It only
 clears a charge) when it is actually **applied** at move-out, and that recognition is identical in the
 cash and accrual views.
 
+A deposit is also tagged with the **owner** whose property it was collected for, so an owner can see
+the deposit money being held on their behalf next to their operating balance. That tagging is
+**symmetric**: when the deposit is later applied or refunded, the release is booked against the _same_
+owner it was collected under, so the owner's held-deposit figure comes back down as well as up
+(**[ADR-026](adr/ADR-026-deposit-disposition-owner-attribution.md)**). A tenant **prepayment** is
+different — it is money held against that tenant's own future rent, so it carries no owner tag in
+either direction, and a prepayment refund does not invent one.
+
 ## The trust equation (the safety check)
 
 At all times, for every trust bank account:
@@ -85,6 +93,14 @@ In words: every dollar sitting in a trust account is accounted for as belonging 
 to a tenant, or being a fee not yet swept. If this is ever off by a cent, something is wrong. The
 engine tests this continuously, and a `check-invariants` command can verify it for any organization on
 demand.
+
+The same sweep checks the companion rules: every entry balances in each basis, no management-fee
+income line carries an owner's name, no held deposit or prepayment can go negative — and, because a
+deposit is owner-tagged, no _owner's_ held-deposit position can go negative either. That last check is
+what catches a release booked against a different owner than the collection: the tenant's own total
+would still come to zero while the owner's column silently stayed high. The
+[local-development runbook](runbooks/local-dev.md#checking-the-accounting-invariants) lists the full
+sweep.
 
 ## Fixing mistakes
 

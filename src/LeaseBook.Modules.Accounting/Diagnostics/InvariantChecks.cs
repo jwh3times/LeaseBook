@@ -17,6 +17,7 @@ internal sealed class InvariantChecks(DbContext db) : IInvariantChecks
         violations.AddRange(await CheckTrustEquationAsync(ct));
         violations.AddRange(await CheckPmIncomeIsolationAsync(ct));
         violations.AddRange(await CheckDepositLiabilitiesNonNegativeAsync(ct));
+        violations.AddRange(await CheckDepositAttributionSymmetricAsync(ct));
         violations.AddRange(await CheckMigrationClearingBalancedAsync(ct));
         return violations;
     }
@@ -134,11 +135,37 @@ internal sealed class InvariantChecks(DbContext db) : IInvariantChecks
             .ToList();
     }
 
+    // I7: held security deposit is ≥ 0 per (tenant, owner-attribution bucket) — a strengthening of I4 that
+    // catches dimension asymmetry. A disposition that drops the owner dim its collection carried leaves the
+    // tenant's total at zero (I4 clean) but drives the owner-null bucket negative, so the owner-attributed
+    // column never comes down (the WP-13 §12.11 defect). Owner-null-throughout deposits — the demo org's
+    // aggregate unattributed position — never go negative and stay clean.
+    public async Task<IReadOnlyList<InvariantViolation>> CheckDepositAttributionSymmetricAsync(CancellationToken ct)
+    {
+        var rows = await db.Database.SqlQuery<AttributionBucket>(
+            $"""
+            SELECT jl.tenant_id, jl.owner_id, SUM(COALESCE(jl.credit, 0) - COALESCE(jl.debit, 0)) AS held
+            FROM journal_lines jl JOIN accounts a ON a.id = jl.account_id
+            WHERE a.code = 'security_deposits_held' AND jl.basis IN ('cash', 'both')
+            GROUP BY jl.tenant_id, jl.owner_id
+            HAVING SUM(COALESCE(jl.credit, 0) - COALESCE(jl.debit, 0)) < 0
+            """).ToListAsync(ct);
+
+        return rows
+            .Select(r => new InvariantViolation("I7",
+                $"held security deposit for tenant {r.TenantId} under owner "
+                + $"{(r.OwnerId is null ? "(unattributed)" : r.OwnerId.ToString())} is negative ({r.Held:0.00}) "
+                + "— a disposition released a different owner bucket than the collection credited"))
+            .ToList();
+    }
+
     private sealed record UnbalancedEntry(Guid EntryId, string BasisName, decimal SumDebit, decimal SumCredit);
 
     private sealed record EquationVariance(Guid BankAccountId, decimal Variance);
 
     private sealed record NegativeLiability(Guid? TenantId, string Code, decimal Held);
+
+    private sealed record AttributionBucket(Guid? TenantId, Guid? OwnerId, decimal Held);
 
     private sealed record ClearingVariance(string BasisName, decimal Net);
 }

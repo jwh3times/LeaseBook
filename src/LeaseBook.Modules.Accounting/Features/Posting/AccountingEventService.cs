@@ -210,8 +210,10 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
         // identically in both bases (the four/five lines net the physical dep→oper transfer).
         var lines = new List<PostLineRequest>
         {
+            // Owner dim mirrors the collecting credit (DepositCollected / the opening import): without it
+            // the owner-attributed deposit column never comes back down on a disposition (I7).
             new(AccountCodes.SecurityDepositsHeld, e.Amount, null, EntryBasis.Both,
-                TenantId: e.TenantId, BankAccountId: e.DepositBankId),
+                PropertyId: e.PropertyId, OwnerId: e.OwnerId, TenantId: e.TenantId, BankAccountId: e.DepositBankId),
             new(AccountCodes.TrustBank(e.DepositBankId), null, e.Amount, EntryBasis.Both,
                 BankAccountId: e.DepositBankId),
             new(AccountCodes.TrustBank(e.OperatingBankId), e.Amount, null, EntryBasis.Both,
@@ -353,9 +355,16 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
             throw new InsufficientLiabilityException(LiabilityKind.Refund, e.Amount.Amount, held, e.TenantId);
         }
 
+        // Deposits carry an owner dim from collection and must be released against the same one (I7);
+        // prepayments are collected owner-null, so the refund stays owner-null rather than inventing one.
+        var (refundProperty, refundOwner) = e.Source == RefundSource.Deposits
+            ? (e.PropertyId, e.OwnerId)
+            : (null, (Guid?)null);
+
         return await posting.PostAsync(new PostEntryRequest(e.Date, "RefundIssued", subtype, e.Description, e.SourceRef,
             [
                 new(liabilityCode, e.Amount, null, EntryBasis.Both,
+                    PropertyId: refundProperty, OwnerId: refundOwner,
                     TenantId: e.TenantId, BankAccountId: e.BankAccountId),
                 new(AccountCodes.TrustBank(e.BankAccountId), null, e.Amount, EntryBasis.Both,
                     BankAccountId: e.BankAccountId),
