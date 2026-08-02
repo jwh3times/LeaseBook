@@ -20,9 +20,6 @@ jobs:
     environment: prod # required reviewers gate this deployment
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-dotnet@v6
-        with:
-          dotnet-version: '10.0.x'
 
       - name: Azure login (OIDC)
         uses: azure/login@v3
@@ -31,13 +28,76 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Apply EF migrations
+      # Prod's Postgres is VNet-injected and has no public endpoint at all, so migrations cannot run
+      # from a GitHub-hosted runner — there is nothing for it to connect to (ADR-027). They run
+      # instead as a Container Apps Job inside the same environment, on the same VNet as the DB.
+      #
+      # The migrator image is built and pushed here rather than promoted from deploy-dev: dev
+      # currently pushes only the app image. Both are tagged with the same SHA so the schema that
+      # gets applied and the app that runs it are provably the same commit.
+      - name: Build and push the migrator image
         run: |
-          dotnet tool restore
-          dotnet restore src/LeaseBook.Web
-          dotnet ef database update --project src/LeaseBook.Web
+          az acr login --name "$ACR_NAME"
+          IMAGE="$ACR_NAME.azurecr.io/leasebook-migrator:${{ inputs.image_tag }}"
+          docker build --target migrator -t "$IMAGE" .
+          docker push "$IMAGE"
         env:
-          ConnectionStrings__Migrations: ${{ secrets.MIGRATIONS_CONNECTION_STRING }}
+          ACR_NAME: ${{ vars.ACR_NAME }}
+
+      # The job reads ConnectionStrings__Migrations as a Key Vault reference resolved by its own
+      # managed identity, so the migrator credential never enters the workflow environment.
+      #
+      # `az containerapp job start` returns when the START succeeds, NOT when the migration
+      # finishes, so the exit code of that command says nothing about whether the schema applied.
+      # Polling to a terminal state is what makes this step meaningful; without it a failed
+      # migration would look like a successful deploy and the app revision would roll on top of a
+      # half-migrated schema.
+      - name: Run migrations as a Container Apps Job
+        run: |
+          set -euo pipefail
+          IMAGE="$ACR_NAME.azurecr.io/leasebook-migrator:${{ inputs.image_tag }}"
+
+          # Ask for the execution name, but do not depend on the field being populated — fall back
+          # to the most recently started execution for this job.
+          EXECUTION=$(az containerapp job start \
+            --name "$JOB_NAME" --resource-group "$RESOURCE_GROUP" \
+            --image "$IMAGE" \
+            --query 'name' -o tsv 2>/dev/null || true)
+
+          if [ -z "${EXECUTION:-}" ] || [ "$EXECUTION" = "None" ]; then
+            EXECUTION=$(az containerapp job execution list \
+              --name "$JOB_NAME" --resource-group "$RESOURCE_GROUP" \
+              --query 'sort_by([], &properties.startTime)[-1].name' -o tsv)
+          fi
+          echo "Migration execution: $EXECUTION"
+
+          # replicaTimeout on the job is 1800s; poll a little longer so a job the platform itself
+          # timed out is reported by us as a failure rather than as a poll timeout.
+          deadline=$(( SECONDS + 2100 ))
+          while [ $SECONDS -lt $deadline ]; do
+            STATUS=$(az containerapp job execution show \
+              --name "$JOB_NAME" --resource-group "$RESOURCE_GROUP" \
+              --job-execution-name "$EXECUTION" \
+              --query 'properties.status' -o tsv)
+            echo "  status=$STATUS"
+            case "$STATUS" in
+              Succeeded) echo "Migrations applied."; exit 0 ;;
+              Failed|Degraded|Cancelled)
+                echo "::error::Migration execution $EXECUTION ended as $STATUS — the app revision was NOT updated."
+                az containerapp job logs show \
+                  --name "$JOB_NAME" --resource-group "$RESOURCE_GROUP" \
+                  --job-execution-name "$EXECUTION" --tail 200 || true
+                exit 1 ;;
+            esac
+            sleep 15
+          done
+
+          echo "::error::Timed out waiting for migration execution $EXECUTION. Do not re-run blindly — a partially applied migration must be inspected first."
+          exit 1
+        env:
+          JOB_NAME: ${{ vars.MIGRATOR_JOB_NAME }}
+          RESOURCE_GROUP: ${{ vars.RESOURCE_GROUP }}
+          ACR_NAME: ${{ vars.ACR_NAME }}
 
       - name: Update Container App revision
         run: |

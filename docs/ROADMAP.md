@@ -22,7 +22,9 @@ Milestones M0-M7 are complete:
 - Banking and reconciliation: projected bank registers, statement import, matching, reconciliation,
   period locking, and immutable reports.
 - Reporting and operations: owner statements, fiduciary tie-outs, PDF/CSV reports, and bulk rent,
-  late-fee, and owner-disbursement runs.
+  late-fee, and owner-disbursement runs. Late-fee terms are configurable in the app — organization
+  defaults with per-lease overrides — within the North Carolina statutory cap, which is applied
+  automatically and is not a setting.
 - Migration and onboarding: staged CSV import, opening-balance posting, verification, sign-off, and
   import-first onboarding.
 

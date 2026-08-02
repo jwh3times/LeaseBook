@@ -3,7 +3,7 @@
 - **Audience:** Deployment operators and maintainers
 - **Status:** Draft runbook; blocked on the first live restore drill
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-07-09
+- **Last reviewed:** 2026-08-02
 
 Skeleton procedure. Real timings and screenshots are filled in after the first restore drill (M8
 schedules the drill).
@@ -17,6 +17,27 @@ schedules the drill).
 Flexible Server PITR creates a **new** server restored to a chosen timestamp within the backup
 retention window (dev: 7 days, prod: 35 days — see `infra/modules/database.bicep`). The original
 server is untouched, so restore is non-destructive until you cut over.
+
+## Before you start: production is inside a VNet
+
+Production's server is **VNet-injected and has no public endpoint** ([ADR-027](../adr/ADR-027-prod-private-networking-and-migration-job.md)).
+That changes this procedure in four ways, and none of them apply to dev, which stays public and
+firewall-gated:
+
+- **The restored server lands in the same delegated subnet** (`10.40.2.0/27`, delegated to
+  `Microsoft.DBforPostgreSQL/flexibleServers`). That subnet was deliberately sized above its `/28`
+  minimum so a restored HA server can run alongside the original before cutover — check free
+  addresses before restoring, and confirm the exact subnet / private-DNS-zone arguments against the
+  current `az postgres flexible-server restore` reference, because a VNet-injected restore is not
+  the same command shape as a public one.
+- **You cannot verify the restore from a laptop.** Step 3 needs a client with a route into the VNet.
+  How that client is provided is unresolved and is a required output of the first drill.
+- **Do not place a resource lock on the private DNS zone** (`privatelink.postgres.database.azure.com`)
+  at any point. Azure documents that locks there break Postgres HA failover.
+- **Cutover is a Key Vault edit, not a workflow variable edit.** Both `ConnectionStrings__Default`
+  (the app) and `ConnectionStrings__Migrations` (the `<prefix>-migrate` Container Apps Job) are
+  Key Vault references, so updating the secret values repoints both. The app needs a revision
+  restart; the migration job picks the new value up on its next execution.
 
 ## Procedure
 
@@ -32,9 +53,10 @@ server is untouched, so restore is non-destructive until you cut over.
    ```
 
 3. Verify the restored data (connect as `leasebook_ops`, spot-check the trust equation and recent
-   journal entries on the affected org).
-4. Cut over: repoint `ConnectionStrings__Default` / `__Migrations` (Key Vault) at the restored
-   server, restart the Container App revision, confirm `/api/health`.
+   journal entries on the affected org). In production this connection must originate inside the
+   VNet — see the section above.
+4. Cut over: update the `ConnectionStrings__Default` / `__Migrations` Key Vault secrets to point at
+   the restored server, restart the Container App revision, confirm `/api/health`.
 5. Decommission the old server once the restored one is confirmed healthy and reconciled.
 
 ## Notes
@@ -42,5 +64,6 @@ server is untouched, so restore is non-destructive until you cut over.
 - Backups are automatic; retention is configured in Bicep. Geo-redundant backup is enabled in prod.
 - The trust-accounting invariant suite should be run against the restored database before cutover —
   a restore that doesn't reconcile to the cent is not a successful restore.
-- **TODO (first drill):** record actual restore duration, data-loss window observed, and any manual
-  steps discovered.
+- **TODO (first drill):** record actual restore duration, data-loss window observed, the mechanism
+  used to reach the restored production server from inside the VNet, and any manual steps
+  discovered.

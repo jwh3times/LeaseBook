@@ -51,6 +51,7 @@ form, write it, and add a row to the index below. When a decision is replaced, m
 | [024](ADR-024-changelog-cut-policy-gate.md)                          | Enforce the changelog cut policy with a CI gate                                 | Accepted                      | 2026-07-16 |
 | [025](ADR-025-error-contract-and-observability.md)                   | Error contract, correlation ids, and diagnostic logging                         | Accepted                      | 2026-07-19 |
 | [026](ADR-026-deposit-disposition-owner-attribution.md)              | A deposit disposition carries its collection's owner attribution (invariant I7) | Accepted                      | 2026-07-31 |
+| [027](ADR-027-prod-private-networking-and-migration-job.md)          | Production private networking and migrations as a Container Apps Job            | Accepted                      | 2026-08-02 |
 
 ## Status legend
 

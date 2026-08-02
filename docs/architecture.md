@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living architecture guide
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-08-01
+- **Last reviewed:** 2026-08-02
 
 This is the canonical public map of the system **as implemented**. It explains how the pieces fit
 together and links the decisions that shaped them without reproducing every invariant. Accepted
@@ -147,9 +147,19 @@ transactionally before touching data and throw if it is missing. See
 
 The production image serves the SPA and `/api` on the container's port `8080` and runs on Azure
 Container Apps (East US 2), with secrets in Key Vault accessed by managed identity. Infrastructure is
-declared as Bicep modules in [`infra/`](../infra) (see [`infra/README.md`](../infra/README.md));
-migrations run as a separate one-shot job before the app rolls. The full stack runs locally through
-Docker Compose — `./scripts/dev.ps1 app-up` brings up database → migrate → seed → app.
+declared as Bicep modules in [`infra/`](../infra) (see [`infra/README.md`](../infra/README.md)), and
+CI compiles every template on each pull request.
+
+Migrations always run separately from the application, as the `leasebook_migrator` role and **never
+at app startup** — but the two environments reach the database differently. Production's PostgreSQL
+server is VNet-injected and has no public endpoint, so a hosted runner cannot reach it: migrations
+run instead as a one-shot **Container Apps Job** inside the same environment, polled to a terminal
+state before the app revision rolls. Development keeps a public, firewall-gated server and migrates
+from the deploy runner. See
+[ADR-027](adr/ADR-027-prod-private-networking-and-migration-job.md).
+
+The full stack runs locally through Docker Compose — `./scripts/dev.ps1 app-up` brings up
+database → migrate → seed → app.
 
 ## Related documents
 
