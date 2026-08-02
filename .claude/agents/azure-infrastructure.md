@@ -30,18 +30,18 @@ Never run `az deployment`, `what-if`, role bootstrap, or PITR commands — surfa
 
 Two tiers: `dev` and `prod`. Staging is deferred (M0.4) and is not an existing environment.
 
-| Property              | dev                                              | prod                                   |
-| --------------------- | ------------------------------------------------ | -------------------------------------- |
-| DB SKU / tier         | `Standard_B1ms` / Burstable                      | `Standard_D2ds_v5` / GeneralPurpose    |
-| DB version            | 18                                               | 18                                     |
-| DB storage            | 32 GB                                            | 32 GB                                  |
-| Backup retention      | 7 days                                           | 35 days                                |
-| Geo-redundant backup  | `Disabled`                                       | `Enabled`                              |
-| High availability     | `Disabled`                                       | `ZoneRedundant`                        |
-| Public network access | `Enabled` (firewall: AllowAzureServices 0.0.0.0) | `Disabled` (VNet integration required) |
-| Container App scale   | `minReplicas: 0`, `maxReplicas: 2`               | `minReplicas: 1`, `maxReplicas: 5`     |
+| Property             | dev                                              | prod                                |
+| -------------------- | ------------------------------------------------ | ----------------------------------- |
+| DB SKU / tier        | `Standard_B1ms` / Burstable                      | `Standard_D2ds_v5` / GeneralPurpose |
+| DB version           | 18                                               | 18                                  |
+| DB storage           | 32 GB                                            | 32 GB                               |
+| Backup retention     | 7 days                                           | 35 days                             |
+| Geo-redundant backup | `Disabled`                                       | `Enabled`                           |
+| High availability    | `Disabled`                                       | `ZoneRedundant`                     |
+| Network access       | `Enabled` (firewall: AllowAzureServices 0.0.0.0) | VNet-injected — no public endpoint  |
+| Container App scale  | `minReplicas: 0`, `maxReplicas: 2`               | `minReplicas: 1`, `maxReplicas: 5`  |
 
-Prod `publicNetworkAccess: 'Disabled'` requires `network.delegatedSubnetResourceId` + a private DNS zone (VNet integration) so the Container App can reach the DB. Dev stays public + firewall-gated for the CI migration job.
+Prod is **VNet-injected — it has no public endpoint at all**, which is not the same as `publicNetworkAccess: 'Disabled'`. The two are mutually exclusive: per the ARM reference, `publicNetworkAccess` "is only supported for servers that are not integrated into a virtual network which is owned and provided by customer", so setting it alongside `delegatedSubnetResourceId` is rejected by the RP. `database.bicep` switches the whole `network` object rather than adding fields to it (ADR-027). Dev stays public + firewall-gated for the CI migration job.
 
 ---
 
@@ -75,9 +75,10 @@ Prod `publicNetworkAccess: 'Disabled'` requires `network.delegatedSubnetResource
 | `storage`    | `modules/storage.bicep`      | StorageV2, `Standard_LRS`, TLS 1.2, no public blob; containers `statements` + `documents`                              |
 | `database`   | `modules/database.bicep`     | PostgreSQL Flexible Server v18, db name `leasebook`; see env table above                                               |
 | `vault`      | `modules/vault.bicep`        | Key Vault (`standard`/`A`; `enableRbacAuthorization: true`; `enableSoftDelete: true`; `softDeleteRetentionInDays: 90`) |
-| `app`        | `modules/containerapp.bicep` | Container Apps environment + user-assigned identity + app + RBAC                                                       |
+| `network`    | `modules/network.bicep`      | VNet, delegated ACA + Postgres subnets, private DNS zone + VNet link — **prod only** (`enablePrivateNetworking`)       |
+| `app`        | `modules/containerapp.bicep` | Container Apps environment + user-assigned identity + app + migrator job + RBAC                                        |
 
-Wiring order in `main.bicep`: RG → monitoring → registry → storage → database → vault → app. Outputs: `resourceGroup`, `acrLoginServer`, `keyVaultName`, `appFqdn`.
+Wiring order in `main.bicep`: RG → network (conditional) → monitoring → registry → storage → database → vault → app. Networking is declared first because both the database and the Container Apps environment are injected into its subnets and neither can be moved afterwards. Outputs: `resourceGroup`, `acrLoginServer`, `keyVaultName`, `appFqdn`, `migratorJobName`.
 
 ---
 
@@ -159,15 +160,15 @@ permissions:
   contents: read
 ```
 
-| Property         | deploy-dev                                                                                    | deploy-prod                                           |
-| ---------------- | --------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
-| Trigger          | `workflow_run` (CI passes on `main`) + `workflow_dispatch`                                    | `workflow_dispatch` with required `image_tag` input   |
-| Environment gate | `dev`                                                                                         | `prod` (required-reviewers gate)                      |
-| Image            | Built from source, tagged by `github.sha`                                                     | Promotes the `image_tag` already pushed by deploy-dev |
-| Secrets          | `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `MIGRATIONS_CONNECTION_STRING` | Same                                                  |
-| Vars             | `ACR_NAME`, `APP_NAME`, `RESOURCE_GROUP`                                                      | Same                                                  |
+| Property         | deploy-dev                                                                                    | deploy-prod                                                                                                    |
+| ---------------- | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Trigger          | `workflow_run` (CI passes on `main`) + `workflow_dispatch`                                    | `workflow_dispatch` with required `image_tag` input                                                            |
+| Environment gate | `dev`                                                                                         | `prod` (required-reviewers gate)                                                                               |
+| Image            | Built from source, tagged by `github.sha`                                                     | Promotes the app `image_tag` pushed by deploy-dev; also builds and pushes `leasebook-migrator` at the same tag |
+| Secrets          | `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `MIGRATIONS_CONNECTION_STRING` | The three `AZURE_*` only — prod's migrator credential is a Key Vault reference resolved by the job's identity  |
+| Vars             | `ACR_NAME`, `APP_NAME`, `RESOURCE_GROUP`                                                      | Same, plus `MIGRATOR_JOB_NAME` (the `<prefix>-migrate` Container Apps Job)                                     |
 
-Migrations run as `leasebook_migrator` from a one-shot migration job (`dotnet ef database update`) in the workflow — **never at app startup**. The app role (`ConnectionStrings__Default`) has no DDL rights in `public` and none on the database — only inside its own `hangfire` schema (§7). Both workflows are authored but enablement is deferred until the operator configures OIDC federated credentials. `deploy-dev`'s automatic (`workflow_run`) path is guarded on `vars.ACR_NAME` being set, so until the environment is configured it **skips** instead of failing on every merge to `main`; setting that var as part of the same operator step un-mutes it with no code change. A manual `workflow_dispatch` deliberately bypasses the guard and fails loudly if the environment is incomplete.
+Migrations run as `leasebook_migrator`, **never at app startup**. The two environments differ because prod's DB has no public endpoint: **dev** migrates from the workflow runner (`dotnet ef database update`), while **prod** starts the `<prefix>-migrate` Container Apps Job inside the VNet and polls it to a terminal state before updating the app revision (ADR-027). `az containerapp job start` returns on start, not on completion — the poll is what makes a failed migration fail the deploy instead of rolling the app onto a half-migrated schema. `vars.MIGRATOR_JOB_NAME` supplies the job name to `deploy-prod`. The app role (`ConnectionStrings__Default`) has no DDL rights in `public` and none on the database — only inside its own `hangfire` schema (§7). Both workflows are authored but enablement is deferred until the operator configures OIDC federated credentials. `deploy-dev`'s automatic (`workflow_run`) path is guarded on `vars.ACR_NAME` being set, so until the environment is configured it **skips** instead of failing on every merge to `main`; setting that var as part of the same operator step un-mutes it with no code change. A manual `workflow_dispatch` deliberately bypasses the guard and fails loudly if the environment is incomplete.
 
 ---
 
@@ -191,17 +192,17 @@ Retention: dev 7 days, prod 35 days. Geo-redundant backup enabled in prod only. 
 
 ## 10. Banned patterns
 
-| Pattern                                                                     | Why banned                                                                                           |
-| --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| Committing a real password or connection string                             | Secrets live in Key Vault only; `@secure` params are supplied at deploy time                         |
-| Giving a `@secure` parameter a committed default value                      | Defeats the `@secure` decorator; Key Vault is the source of truth                                    |
-| Enabling ACR admin user (`adminUserEnabled: true`)                          | Pull access is via managed identity AcrPull; admin credentials are a credential-leak risk            |
-| Leaving prod DB publicly reachable                                          | `publicNetworkAccess: 'Disabled'` for prod; VNet integration required                                |
-| Running migrations at app startup                                           | Migrations run as `leasebook_migrator` in the deploy job; the app role has no DDL rights in `public` |
-| Making `leasebook_migrator` own the `hangfire` schema                       | Hangfire upgrades its own objects and Postgres requires ownership; app-owned by decision (ADR-001)   |
-| Running `az deployment`, `what-if`, role bootstrap, or PITR from this agent | Operator-gated; requires Azure access this agent does not have                                       |
-| Deviating from the `lb-<env>-<resource>` / `lb<env>acr` naming convention   | Breaks runbook references, module cross-references, and audit trails                                 |
-| Adding a staging environment as a live tier                                 | Staging is deferred (M0.4); `@allowed(['dev','prod'])` enforces this in Bicep                        |
+| Pattern                                                                     | Why banned                                                                                                                  |
+| --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Committing a real password or connection string                             | Secrets live in Key Vault only; `@secure` params are supplied at deploy time                                                |
+| Giving a `@secure` parameter a committed default value                      | Defeats the `@secure` decorator; Key Vault is the source of truth                                                           |
+| Enabling ACR admin user (`adminUserEnabled: true`)                          | Pull access is via managed identity AcrPull; admin credentials are a credential-leak risk                                   |
+| Leaving prod DB publicly reachable                                          | VNet-inject prod (delegated subnet + private DNS zone). Do NOT also set `publicNetworkAccess` — the combination is rejected |
+| Running migrations at app startup                                           | Migrations run as `leasebook_migrator` in the deploy job; the app role has no DDL rights in `public`                        |
+| Making `leasebook_migrator` own the `hangfire` schema                       | Hangfire upgrades its own objects and Postgres requires ownership; app-owned by decision (ADR-001)                          |
+| Running `az deployment`, `what-if`, role bootstrap, or PITR from this agent | Operator-gated; requires Azure access this agent does not have                                                              |
+| Deviating from the `lb-<env>-<resource>` / `lb<env>acr` naming convention   | Breaks runbook references, module cross-references, and audit trails                                                        |
+| Adding a staging environment as a live tier                                 | Staging is deferred (M0.4); `@allowed(['dev','prod'])` enforces this in Bicep                                               |
 
 ---
 

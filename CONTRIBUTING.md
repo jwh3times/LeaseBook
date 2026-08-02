@@ -156,8 +156,14 @@ Before requesting review, confirm:
 
 CI runs the full backend test suite against real PostgreSQL, applies the migrations to a blank database,
 seeds the performance fixture and checks its invariants, validates public documentation, type-checks and
-builds the web app, runs the Playwright e2e suite including the accessibility gate, builds the container
-image and boots the full stack, and scans for secrets on every push and pull request.
+builds the web app, runs the Playwright e2e suite including the accessibility gate, compiles the Bicep
+templates and parameter files, builds the container image and boots the full stack, and scans for secrets
+on every push and pull request.
+
+The `bicep` job proves the infrastructure templates compile — syntax, types, and resource schemas. It
+cannot prove a deployment is correct: overlapping address space, a subnet delegated to the wrong service,
+or an unlinked private DNS zone all compile cleanly and surface only at `az deployment ... what-if`,
+which needs Azure credentials and is operator-gated.
 
 ---
 

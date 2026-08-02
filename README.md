@@ -251,8 +251,8 @@ LeaseBook follows a few firm conventions:
 CI (GitHub Actions) builds, runs the full test suite against real PostgreSQL, applies the migrations to
 a blank database, seeds the performance fixture, type-checks and builds the web app, validates the public
 documentation, runs the Playwright e2e suite (including the WCAG 2 AA accessibility gate) in a dedicated
-`e2e` job, builds the container image and boots the full stack, and scans for secrets on every push and
-pull request.
+`e2e` job, compiles the Bicep infrastructure templates, builds the container image and boots the full
+stack, and scans for secrets on every push and pull request.
 
 ---
 

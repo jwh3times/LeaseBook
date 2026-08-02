@@ -5,11 +5,30 @@ so the three application roles (`leasebook_migrator`, `leasebook_app`, `leaseboo
 created against the server after it is provisioned, the same way `infra/db/bootstrap.sql` does
 locally. This is an idempotent operator step, run once per environment.
 
+## Reaching the server: dev vs prod
+
+Step 2 below connects with `psql` over the server's public FQDN. **That works for dev only.** Dev's
+server is public and firewall-gated, so an operator can connect from a workstation once their IP is
+allowed. Prod's server is VNet-injected and has **no public endpoint at all**
+([ADR-027](../../docs/adr/ADR-027-prod-private-networking-and-migration-job.md)) — the same command
+against `lb-prod-pg.postgres.database.azure.com` has nothing to connect to.
+
+**The prod bootstrap therefore needs a client inside the VNet, and how that client is provided is
+not yet decided.** It is the same unresolved question as verifying a restored server in the
+[restore runbook](../../docs/runbooks/restore.md), and it blocks the first prod deployment — resolve
+it (and record it here) before provisioning prod, not during.
+
+The ordering constraint is real either way: Key Vault is created empty by the same template that
+creates the server, and the migrator job's secret wiring is omitted until `migrationsSecretUri` is
+supplied. So the sequence is provision → bootstrap roles → store secrets → redeploy → run
+migrations, and the first prod deployment succeeds with the job present but un-armed.
+
 ## Steps
 
 1. Provision infrastructure (`az deployment sub create …`, see `infra/README.md`). Note the server
    FQDN (`lb-<env>-pg.postgres.database.azure.com`) and the admin login/password used at deploy.
-2. Connect as the admin and run the role bootstrap. The committed `infra/db/bootstrap.sql` is for
+2. Connect as the admin and run the role bootstrap — in prod, from a client inside the VNet (see
+   above). The committed `infra/db/bootstrap.sql` is for
    **local dev** (it `CREATE DATABASE leasebook` and uses dev passwords); for Azure, the database
    already exists (created by Bicep) and the role passwords come from Key Vault. Run an
    Azure-adapted script that only creates roles + grants + default privileges:
@@ -47,7 +66,12 @@ locally. This is an idempotent operator step, run once per environment.
 3. Store the three role passwords as Key Vault secrets and the assembled
    `ConnectionStrings__Default` (app) / `ConnectionStrings__Migrations` (migrator) connection
    strings (see the secrets contract in `infra/README.md`).
-4. Run migrations as the migrator role (the deploy workflow's one-shot job).
+4. **Prod only:** set `migrationsSecretUri` in `infra/env/prod.bicepparam` to the full secret URI of
+   the migrator connection string just stored, and redeploy. Until this is done the
+   `lb-prod-migrate` job exists but is un-armed and fails at run time on a missing connection
+   string.
+5. Run migrations as the migrator role — in prod the `lb-prod-migrate` Container Apps Job started
+   and polled by `deploy-prod.yml`; in dev the `dotnet ef database update` step in `deploy-dev.yml`.
 
 ## AAD / managed identity (preferred, future)
 
