@@ -245,6 +245,40 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  # Compiles the Bicep templates. `az bicep build` needs no Azure credentials and no subscription,
+  # so this runs on every PR like any other build — the templates were previously verified only by
+  # whoever happened to run the CLI locally, which meant they could rot silently between the day
+  # they were authored and the first real deploy (WP-10).
+  #
+  # Deliberately honest about its ceiling: this proves the templates COMPILE — syntax, types, and
+  # resource schemas. It cannot prove the deployment is correct. Overlapping address spaces, a
+  # subnet delegated to the wrong service, or a private DNS zone that resolves but is not linked all
+  # compile cleanly and only surface at `az deployment ... what-if`, which needs credentials and is
+  # operator-gated. Treat a green check here as "not broken", never as "verified".
+  bicep:
+    name: Bicep templates compile
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build main template
+        run: az bicep build --file infra/main.bicep --stdout > /dev/null
+      - name: Build each module independently
+        # Modules are also compiled on their own so an error in a module that main.bicep does not
+        # yet reference still fails the build rather than waiting to be wired up.
+        run: |
+          for f in infra/modules/*.bicep; do
+            echo "::group::$f"
+            az bicep build --file "$f" --stdout > /dev/null
+            echo "::endgroup::"
+          done
+      - name: Validate parameter files
+        run: |
+          for f in infra/env/*.bicepparam; do
+            echo "::group::$f"
+            az bicep build-params --file "$f" --stdout > /dev/null
+            echo "::endgroup::"
+          done
+
   # Builds the container images *and* proves they actually run. This replaces a build-only job that
   # verified the image compiled but never started it — the gap that let a startup-guard
   # misconfiguration put `app` into a silent restart loop while every check stayed green.
