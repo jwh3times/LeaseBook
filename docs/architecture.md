@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living architecture guide
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-07-20
+- **Last reviewed:** 2026-08-01
 
 This is the canonical public map of the system **as implemented**. It explains how the pieces fit
 together and links the decisions that shaped them without reproducing every invariant. Accepted
@@ -28,7 +28,8 @@ See the README [port map](../README.md#port-map) for every port the project bind
 
 Each bounded context is its own project — `Accounting`, `Directory`, `Banking`, `Reporting`,
 `Operations`, `Payments`, `Migrator` — over a shared `SharedKernel` that holds only cross-cutting
-primitives (money, ids, the CQRS spine, tenancy, result types). A module references `SharedKernel`
+primitives (money, ids, the CQRS spine, tenancy, result types). All of them carry real behavior
+except `Payments`, which remains a scaffolded shell for the online-payments phase. A module references `SharedKernel`
 and nothing else; the architecture tests (`ModuleBoundaryTests`) enforce this absolutely.
 
 A module **never reads another module's tables or types directly**. A cross-module read goes through

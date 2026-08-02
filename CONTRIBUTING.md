@@ -154,8 +154,10 @@ Before requesting review, confirm:
 - [ ] An ADR accompanies any significant design decision.
 - [ ] No secrets, credentials, or confidential planning material are committed (the secrets scan runs in CI).
 
-CI runs the full backend test suite against real PostgreSQL, validates public documentation, type-checks
-and builds the web app, builds the container image, and scans for secrets on every push and pull request.
+CI runs the full backend test suite against real PostgreSQL, applies the migrations to a blank database,
+seeds the performance fixture and checks its invariants, validates public documentation, type-checks and
+builds the web app, runs the Playwright e2e suite including the accessibility gate, builds the container
+image and boots the full stack, and scans for secrets on every push and pull request.
 
 ---
 

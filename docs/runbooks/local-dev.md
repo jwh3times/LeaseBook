@@ -212,8 +212,8 @@ $env:LEASEBOOK_PROPERTY_ITER = "100"; dotnet test tests/LeaseBook.Tests.Accounti
 ## Measuring read-path latency
 
 `seed --org load` provisions a ~300-unit synthetic org, and the `perf-probe` verb measures
-p50/p95/p99 on the tenant ledger, dashboard, and bank register against a **running** host, exiting
-non-zero when p95 misses the 300 ms budget. Seed and start the host first, then probe from a second
+p50/p95/p99 on the four money-critical read paths — tenant ledger, dashboard, bank register, and
+owner statement — against a **running** host, exiting non-zero when p95 misses the 300 ms budget. Seed and start the host first, then probe from a second
 shell:
 
 ```powershell

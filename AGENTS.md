@@ -18,14 +18,30 @@ them directly; do not trust summaries, including this one, for current progress.
 - M0-M7 are complete and merged to `main`: foundations; the trust-accounting engine; Directory; the
   tenant ledger action hub; Banking and Reconciliation; Owner Statements and Reporting; Bulk
   Operations; and the Migration toolkit and import-first onboarding.
-- M8, Hardening, Compliance and Beta Launch, is the current frontier. It is partially shipped:
-  `azure-infrastructure` specialist guidance, CI e2e run plus automated WCAG 2 AA accessibility gate
-  from ADR-022, and visual-regression baselines for money-critical states from ADR-023. Remaining M8
-  work is summarized publicly in `docs/ROADMAP.md`; detailed sequencing lives in
+- M8, Hardening, Compliance and Beta Launch, is the current frontier. Merged so far:
+  - CI e2e run plus the automated WCAG 2 AA accessibility gate (ADR-022), visual-regression
+    baselines for money-critical states (ADR-023), the full-stack boot gate, and the changelog
+    (ADR-024) and public-docs policy gates.
+  - The host security hardening pass, the error-contract and observability seam (ADR-025) with the
+    diagnostics runbook, and the draft compliance set under `docs/compliance/`.
+  - `azure-infrastructure` specialist guidance and the authored Bicep under `infra/`.
+  - The `load` performance fixture with the `perf-probe` harness (`docs/perf.md`), and the trust
+    compliance pack (ADR-016 addendum).
+  - Migration close-outs: the pre-sign-off import supersede path and the held-PM-fees opening
+    balance kind (ADR-020 §5, ADR-021).
+  - Golden-data hardening and the all-scenario fixture org (`seed --org scenario`), plus the
+    deposit-disposition owner-attribution fix and its swept invariant I7 (ADR-026).
+  - The nightly trust-invariant sweep on Hangfire (ADR-001): `0 7 * * *` UTC, config-gated on
+    `Jobs:Enabled` (false everywhere but production), no dashboard mounted, violations logged under
+    stable event ids, and one code path shared with the `check-invariants` verb.
+
+  Remaining M8 work is summarized publicly in `docs/ROADMAP.md`; detailed sequencing lives in
   `private/roadmap.md` and `private/TODO.md`, with `private/TODO.md` canonical where they disagree.
-- Operator-gated remainder is deferred and is not ordinary engineering work: Azure OIDC, ACR,
-  Container App deploy wiring, live Key Vault and managed identity, the first PITR drill, and
-  deployment-dependent telemetry/alerting.
+
+- Operator-gated remainder is deferred and is not ordinary engineering work: Azure OIDC federation,
+  ACR, enabling the authored `deploy-dev`/`deploy-prod` workflows, live Key Vault and managed
+  identity, the first PITR drill, and deployment-dependent telemetry and alerting — including alert
+  delivery for the sweep's violation events.
 - `Accounting`, `Directory`, `Banking`, `Reporting`, `Operations`, and `Migrator` are built.
   `Payments` is the remaining scaffolded shell for Phase 2.
 
