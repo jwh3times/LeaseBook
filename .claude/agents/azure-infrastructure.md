@@ -167,7 +167,7 @@ permissions:
 | Secrets          | `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `MIGRATIONS_CONNECTION_STRING` | Same                                                  |
 | Vars             | `ACR_NAME`, `APP_NAME`, `RESOURCE_GROUP`                                                      | Same                                                  |
 
-Migrations run as `leasebook_migrator` from a one-shot migration job (`dotnet ef database update`) in the workflow — **never at app startup**. The app role (`ConnectionStrings__Default`) has no DDL rights in `public` and none on the database — only inside its own `hangfire` schema (§7). Both workflows are authored but enablement is deferred until the operator configures OIDC federated credentials.
+Migrations run as `leasebook_migrator` from a one-shot migration job (`dotnet ef database update`) in the workflow — **never at app startup**. The app role (`ConnectionStrings__Default`) has no DDL rights in `public` and none on the database — only inside its own `hangfire` schema (§7). Both workflows are authored but enablement is deferred until the operator configures OIDC federated credentials. `deploy-dev`'s automatic (`workflow_run`) path is guarded on `vars.ACR_NAME` being set, so until the environment is configured it **skips** instead of failing on every merge to `main`; setting that var as part of the same operator step un-mutes it with no code change. A manual `workflow_dispatch` deliberately bypasses the guard and fails loudly if the environment is incomplete.
 
 ---
 

@@ -1,8 +1,9 @@
 name: Deploy (dev)
 
 # Runs after CI succeeds on main. Requires the operator to have configured the dev environment's
-# OIDC federated credentials and ACR/Container App vars; until then the Azure login step fails with
-# a clear message (this workflow is authored but its enablement is deferred — see Status Ledger).
+# OIDC federated credentials and ACR/Container App vars (this workflow is authored but its
+# enablement is deferred — see Status Ledger). Until that is done the automatic path SKIPS rather
+# than fails; see the guard on the job below for why, and for how it un-mutes itself.
 on:
   workflow_run:
     workflows: [CI]
@@ -15,8 +16,23 @@ permissions:
   contents: read
 
 jobs:
+  # The automatic (workflow_run) path additionally requires the dev environment to actually be
+  # configured. Until the operator sets ACR_NAME — part of the same B1 step that creates the OIDC
+  # federated credentials — this job is SKIPPED rather than run, because `azure/login` would fail on
+  # every merge to main with "Ensure 'client-id' and 'tenant-id' are supplied". A permanent red X on
+  # every merge is worse than no signal: it trains everyone to ignore CI, and it hides a real deploy
+  # failure when one eventually happens.
+  #
+  # The guard un-mutes itself. Setting ACR_NAME is not optional for a working deploy, so the first
+  # run after the operator configures the environment picks this up with no code change and no one
+  # having to remember this comment exists.
+  #
+  # A MANUAL dispatch deliberately skips the guard: if someone explicitly asks for a deploy, they
+  # want a loud failure telling them what is missing, not silence.
   deploy:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    if: >-
+      ${{ github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && vars.ACR_NAME != '') }}
     runs-on: ubuntu-latest
     environment: dev
     steps:
