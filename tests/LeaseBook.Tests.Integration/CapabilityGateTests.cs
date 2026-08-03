@@ -234,6 +234,52 @@ public sealed class CapabilityGateTests(PostgresFixture fixture)
     }
 
     /// <summary>
+    /// The cold half of the cache-served path, which the primed tests above never reach.
+    /// <c>Snapshot</c> is synchronous by contract, so with nothing cached it has to wait on an async
+    /// refresh — and that wait happens with an ambient transaction already open on the caller's
+    /// <c>DbContext</c>. It completes only because the refresh takes its own scope, its own context
+    /// and its own connection; a refresh that reached for the ambient one would block on a
+    /// transaction its own caller is holding, and hang a request thread rather than fail an
+    /// assertion. Hence the explicit timeout rather than the runner's.
+    /// <para>
+    /// What this does <b>not</b> cover: the <c>Task.Run</c> hop inside <c>Snapshot</c>, which guards
+    /// against a caller that blocks a thread carrying a <c>SynchronizationContext</c>. Reproducing
+    /// that needs a context this suite does not have, and ASP.NET Core has none either — it is
+    /// belt-and-braces for non-request callers, and deliberately left as such.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task Snapshot_resolves_a_cold_key_without_deadlocking_inside_the_ambient_transaction()
+    {
+        var ct = TestContext.Current.CancellationToken;
+
+        await using var host = new ApiFactory(fixture.AppConnectionString);
+        _ = host.CreateClient();
+
+        // Never handed to CapabilityCache before this point, so Snapshot must take the blocking path.
+        var org = await SeedOrgAsync(ct);
+        await GrantEntitlementAsync(host, org, ct);
+
+        using var scope = host.Services.CreateScope();
+        var executor = scope.ServiceProvider.GetRequiredService<OrgScopedExecutor>();
+        var gate = scope.ServiceProvider.GetRequiredService<ICapabilityGate>();
+        var cache = host.Services.GetRequiredService<CapabilityCache>();
+        var coldLoadsBefore = cache.ColdLoads;
+
+        await executor.RunAsync(
+            org,
+            async () =>
+            {
+                var snapshot = await Task.Run(gate.Snapshot, ct).WaitAsync(TimeSpan.FromSeconds(30), ct);
+
+                snapshot.Version.ShouldNotBeNullOrWhiteSpace();
+                cache.ColdLoads.ShouldBe(
+                    coldLoadsBefore + 1, "the key was cold, so this must have been a first-ever load");
+            },
+            ct);
+    }
+
+    /// <summary>
     /// Missing org context throws rather than resolving everything to "off". The silent answer is the
     /// dangerous one: with no context RLS filters entitlements to zero rows, every paid capability
     /// reads as unavailable, and it is indistinguishable from a deliberate revoke — the same rule
