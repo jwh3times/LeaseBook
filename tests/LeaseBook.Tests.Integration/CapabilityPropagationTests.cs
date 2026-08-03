@@ -2,6 +2,7 @@ using LeaseBook.Modules.Capabilities.Caching;
 using LeaseBook.SharedKernel;
 using LeaseBook.Tests.Common;
 using LeaseBook.Tests.Integration.Fixtures;
+using LeaseBook.Web.Adapters;
 using LeaseBook.Web.Tenancy;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;

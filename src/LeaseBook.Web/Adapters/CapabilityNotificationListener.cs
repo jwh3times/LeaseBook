@@ -1,14 +1,19 @@
+using LeaseBook.Modules.Capabilities.Caching;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 using Npgsql;
 
-namespace LeaseBook.Modules.Capabilities.Caching;
+namespace LeaseBook.Web.Adapters;
 
 /// <summary>
 /// Wakes <see cref="CapabilityCache"/> when a capability row changes, by holding a long-lived
 /// <c>LISTEN</c> on <see cref="Channel"/>.
+/// <para>
+/// <b>Host-owned, like the scheduler.</b> This resolves the host's <c>DbContext</c>, reads its
+/// connection string and rewrites pooling, keepalive and application name — composition-root work
+/// over the host's persistence driver, not module logic. <c>Npgsql</c> is the host's driver in the
+/// same sense Hangfire is the host's scheduler, and no module references either. The module owns the
+/// cache it wakes; the mechanics of holding a raw connection live here.
+/// </para>
 /// <para>
 /// <b>It carries the wake-up signal ONLY, and cannot read the tables it is told about.</b> A
 /// <c>LISTEN</c> connection holds no transaction, and <c>SET LOCAL</c> inside a transaction is the

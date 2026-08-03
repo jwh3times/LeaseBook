@@ -9,13 +9,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- The capability listener holds a LISTEN connection outside the EF pool (it must survive for
-         the process's lifetime and carry session state), so it needs the raw driver rather than the
-         EF provider. Not a boundary concern: the module rule is about LeaseBook assemblies. -->
-    <PackageReference Include="Npgsql" />
-  </ItemGroup>
-
-  <ItemGroup>
     <!-- ForceExpireForTesting / ResetForTesting on CapabilityCache: the TTL backstop must be
          provable without a 30-second sleep, and the cold-start path without restarting a host. -->
     <InternalsVisibleTo Include="LeaseBook.Tests.Integration" />

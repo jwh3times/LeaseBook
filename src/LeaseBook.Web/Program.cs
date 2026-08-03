@@ -138,11 +138,21 @@ builder.Services.AddScoped<OrgScopedExecutor>();
 // OrgScopedExecutor, because it opens a transaction on the request/job-scoped DbContext.
 builder.Services.AddScoped<PlatformScopedExecutor>();
 
-// Capability seam (ADR-028): the per-replica cache, its state reader, and the LISTEN/NOTIFY
-// listener. The listener is skipped for the build-time OpenAPI pass, which has no database. The
+// Capability seam (ADR-028): the module contributes the per-replica cache and its state reader. The
 // IPlatformScope port is host-implemented (ADR-007) — the module cannot name PlatformScopedExecutor.
-builder.Services.AddCapabilitiesModule(enableNotificationListener: !isOpenApiBuild);
+builder.Services.AddCapabilitiesModule();
 builder.Services.AddScoped<LeaseBook.Modules.Capabilities.Contracts.IPlatformScope, PlatformScopeAdapter>();
+
+// The LISTEN/NOTIFY listener is host-owned: it holds a raw Npgsql connection outside the EF pool,
+// which is composition-root work over the host's persistence driver (host-only, like the scheduler).
+// Registered by concrete type as well, so diagnostics can read its counters — AddHostedService alone
+// leaves it unresolvable. Carved out of the OpenAPI build for the same reason as Hangfire below:
+// that pass runs with no database and no real configuration.
+if (!isOpenApiBuild)
+{
+    builder.Services.AddSingleton<CapabilityNotificationListener>();
+    builder.Services.AddHostedService(sp => sp.GetRequiredService<CapabilityNotificationListener>());
+}
 
 // Accounting module services (chart-of-accounts provisioning, period lifecycle; the posting engine
 // and event catalog register here in later WPs). They consume the ambient DbContext + ITenantContext.

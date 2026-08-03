@@ -33,7 +33,13 @@ public sealed class CapabilityCache(
     TimeProvider clock,
     ILogger<CapabilityCache> logger)
 {
-    internal static readonly TimeSpan Ttl = TimeSpan.FromSeconds(30);
+    /// <summary>
+    /// The correctness floor: the longest a missed notification can leave this replica stale. Public
+    /// because it is part of the seam's contract — the listener names it when it warns that
+    /// propagation has degraded to the TTL, and callers reasoning about staleness need the number
+    /// rather than a copy of it.
+    /// </summary>
+    public static readonly TimeSpan Ttl = TimeSpan.FromSeconds(30);
 
     private readonly ConcurrentDictionary<CacheKey, Entry> _entries = new();
 
