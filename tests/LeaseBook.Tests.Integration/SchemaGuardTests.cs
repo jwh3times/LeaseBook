@@ -15,7 +15,9 @@ namespace LeaseBook.Tests.Integration;
 public sealed class SchemaGuardTests(PostgresFixture fixture)
 {
     /// <summary>
-    /// Global-class tables: no <c>org_id</c>, no RLS, each justified (§C.3).
+    /// Global-class tables: no <c>org_id</c>, each justified (§C.3). Most carry no RLS either;
+    /// <c>feature_flags</c> is the exception and is additionally asserted via
+    /// <see cref="PlatformOnlyTables"/>.
     /// </summary>
     private static readonly HashSet<string> GlobalTables = new(StringComparer.Ordinal)
     {
@@ -27,6 +29,19 @@ public sealed class SchemaGuardTests(PostgresFixture fixture)
                                  // so a tenant-plane path cannot toggle a flag. The other three
                                  // capability tables DO carry org_id and get real RLS with a platform
                                  // escape — they pass the org-scoped arm above and need no entry here.
+    };
+
+    /// <summary>
+    /// Platform-plane tables (ADR-028): reachable only with <c>app.platform = 'on'</c>. These are
+    /// asserted POSITIVELY rather than exempted — <c>feature_flags</c> has no <c>org_id</c>, so the
+    /// org-scoped arm below never inspects it, and the <see cref="GlobalTables"/> arm checks
+    /// membership only. Without this set a future migration could <c>DISABLE ROW LEVEL SECURITY</c>
+    /// on <c>feature_flags</c> and leave the entire suite green while any tenant could toggle a flag.
+    /// </summary>
+    private static readonly HashSet<string> PlatformOnlyTables = new(StringComparer.Ordinal)
+    {
+        "feature_flags",         // a tenant-plane path must not be able to toggle a deployment flag
+        "platform_audit_events", // the platform audit trail is never visible inside a tenant session
     };
 
     /// <summary>
@@ -55,11 +70,30 @@ public sealed class SchemaGuardTests(PostgresFixture fixture)
             "SELECT tablename FROM pg_policies WHERE schemaname = 'public'", ct);
 
         var failures = new List<string>();
+        var seenPlatformOnly = new HashSet<string>(StringComparer.Ordinal);
         foreach (var (name, rowSecurity, forceRowSecurity) in tables)
         {
             if (IdentityTables.Contains(name))
             {
                 continue; // identity-class — protected by app logic, not RLS
+            }
+
+            // Positive assertion, deliberately outside the org_id branch below: feature_flags has no
+            // org_id and platform_audit_events does, so neither arm alone would cover the pair.
+            if (PlatformOnlyTables.Contains(name))
+            {
+                seenPlatformOnly.Add(name);
+
+                if (!rowSecurity || !forceRowSecurity)
+                {
+                    failures.Add($"{name}: platform-plane but RLS not ENABLEd+FORCEd " +
+                                 $"(relrowsecurity={rowSecurity}, relforcerowsecurity={forceRowSecurity}).");
+                }
+
+                if (!policied.Contains(name))
+                {
+                    failures.Add($"{name}: platform-plane but has no row-level security policy.");
+                }
             }
 
             if (orgScoped.Contains(name))
@@ -80,6 +114,9 @@ public sealed class SchemaGuardTests(PostgresFixture fixture)
                 failures.Add($"{name}: has no org_id and is not in the §C.3 table-class allowlist.");
             }
         }
+
+        // A renamed or dropped platform table must not silently take its assertion with it.
+        seenPlatformOnly.ShouldBe(PlatformOnlyTables, ignoreOrder: true);
 
         failures.ShouldBeEmpty(failures.Count == 0 ? "" : string.Join(Environment.NewLine, failures));
 

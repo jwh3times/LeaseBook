@@ -37,9 +37,23 @@ public static class Rls
     }
 
     /// <summary>
-    /// Org isolation with ONE deliberate escape for platform-plane work (ADR-028). Platform tables
-    /// carry org_id because they are data ABOUT orgs, but the maintainer must read across orgs to
-    /// operate them. The escape is a GUC set by <c>PlatformScopedExecutor</c> and nowhere else.
+    /// Tenant-readable, platform-writable (ADR-028). Platform tables carry org_id because they are
+    /// data ABOUT orgs: a tenant may READ its own entitlements and cohort rows, but only the
+    /// platform plane may WRITE them. The escape is a GUC set by <c>PlatformScopedExecutor</c> and
+    /// nowhere else.
+    /// <para>
+    /// Deliberately TWO policies, not one <c>FOR ALL</c>. A single policy whose WITH CHECK reads
+    /// <c>org_id = my_org OR platform</c> lets a tenant-plane transaction INSERT its own row — i.e.
+    /// self-grant a paid capability. <see cref="RevokeAppendOnly"/> does not close that: it strips
+    /// UPDATE/DELETE, not INSERT. Splitting read from write is what makes writes platform-only.
+    /// </para>
+    /// <para>
+    /// How Postgres resolves the pair: permissive policies OR together within a command, and
+    /// UPDATE/DELETE that read existing rows must additionally satisfy the SELECT policies. So
+    /// SELECT ⇒ org OR platform (tenant reads of its own rows keep working); INSERT ⇒ the write
+    /// policy's WITH CHECK alone, so the tenant plane gets 42501; UPDATE/DELETE ⇒ filtered by the
+    /// write policy's USING, so the tenant plane affects zero rows.
+    /// </para>
     /// <para>
     /// Why an escape rather than no RLS: a path that forgets to open platform scope returns ZERO
     /// rows instead of every org's rows. Visible emptiness beats a silent cross-tenant leak. It also
@@ -51,21 +65,25 @@ public static class Rls
         migrationBuilder.Sql($"""
             ALTER TABLE {table} ENABLE ROW LEVEL SECURITY;
             ALTER TABLE {table} FORCE ROW LEVEL SECURITY;
-            CREATE POLICY {table}_org_isolation ON {table}
-              FOR ALL
+            CREATE POLICY {table}_org_read ON {table}
+              FOR SELECT
               USING (org_id = NULLIF(current_setting('app.org_id', true), '')::uuid
-                     OR current_setting('app.platform', true) = 'on')
-              WITH CHECK (org_id = NULLIF(current_setting('app.org_id', true), '')::uuid
                      OR current_setting('app.platform', true) = 'on');
+            CREATE POLICY {table}_platform_write ON {table}
+              FOR ALL
+              USING (current_setting('app.platform', true) = 'on')
+              WITH CHECK (current_setting('app.platform', true) = 'on');
             GRANT SELECT, INSERT, UPDATE, DELETE ON {table} TO leasebook_app;
             GRANT SELECT ON {table} TO leasebook_ops;
             """);
     }
 
     /// <summary>
-    /// Platform-plane only: no tenant request can read these rows at all, whatever its org context.
-    /// Used for <c>platform_audit_events</c>, whose org_id is nullable (creating a flag is not
-    /// org-specific) and which must never be visible inside a tenant session.
+    /// Platform-plane only: no tenant request can read or write these rows at all, whatever its org
+    /// context. Used for <c>platform_audit_events</c>, which must never be visible inside a tenant
+    /// session, and for <c>feature_flags</c>, so that a flag toggle is barred by the database rather
+    /// than only by application authorization. Applies to org-scoped and global tables alike — it
+    /// never mentions org_id, so it carries no requirement about that column.
     /// </summary>
     public static void EnablePlatformOnlyRls(this MigrationBuilder migrationBuilder, string table)
     {
