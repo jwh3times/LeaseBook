@@ -1,0 +1,80 @@
+using LeaseBook.Modules.Capabilities.Caching;
+using LeaseBook.Modules.Capabilities.Contracts;
+using LeaseBook.Modules.Capabilities.Registry;
+using LeaseBook.Modules.Capabilities.Resolution;
+using LeaseBook.SharedKernel.Tenancy;
+
+namespace LeaseBook.Modules.Capabilities;
+
+/// <summary>
+/// The seam's only implementation (ADR-028). Scoped: it binds the singleton cache and the scoped
+/// state reader to whatever <c>(org, user)</c> the ambient unit of work is running as.
+/// <para>
+/// <b>It deliberately does not take <see cref="IPlatformScope"/>.</b> That port opens a transaction,
+/// and <see cref="ResolveDurableAsync"/> is called from inside one — <c>OrgContextMiddleware</c>
+/// opens a transaction for every authenticated request — so reaching for it would throw
+/// "transaction already started" on the money path. It is not needed either: <c>feature_flags</c> is
+/// tenant-readable, and an org's own <c>entitlements</c> and <c>capability_cohorts</c> rows are
+/// readable under the ambient <c>app.org_id</c> through each table's <c>_org_read</c> policy. A
+/// tenant-plane read of a tenant's own capability state is legitimate and needs no escape.
+/// </para>
+/// <para>
+/// It also does not reimplement resolution. Order lives in <see cref="CapabilityResolver"/> and is
+/// reached through <see cref="CapabilityStateReader"/> on both paths, so the cheap answer and the
+/// durable answer can differ only in <i>when</i> the state was read, never in how it was interpreted.
+/// </para>
+/// </summary>
+internal sealed class CapabilityGate(
+    CapabilityCache cache,
+    CapabilityStateReader reader,
+    ITenantContext tenant,
+    IActorContext actor) : ICapabilityGate
+{
+    public bool IsEnabled(Capability capability)
+    {
+        ArgumentNullException.ThrowIfNull(capability);
+        return Snapshot().IsEnabled(capability);
+    }
+
+    /// <summary>
+    /// Cache-served, and not memoized per scope. The contract is "the current cached set", so a
+    /// long-lived scope (a job, a bulk run) still observes the 30-second TTL rather than pinning one
+    /// answer for its whole life. Callers that need a frozen set freeze it by holding the reference —
+    /// that is what makes <see cref="CapabilitySet"/> a value handed down the call chain instead of an
+    /// ambient service re-asked at each step.
+    /// </summary>
+    /// <remarks>
+    /// <b>On the synchronous signature.</b> The overwhelmingly common case is a fresh cached entry,
+    /// which <see cref="CapabilityCache.TryGetCached"/> answers with no I/O and no blocking at all.
+    /// Only a cold or expired key falls through, and that one blocks a thread on the refresh. The wait
+    /// is pushed onto the thread pool because the refresh's continuations must not be posted back to
+    /// an ambient <c>SynchronizationContext</c> that this very thread is blocking; the refresh also
+    /// runs on its own scope and its own connection, so it can never wait on the ambient transaction
+    /// this call is nested inside. Money paths do not come through here — see
+    /// <see cref="ResolveDurableAsync"/>.
+    /// </remarks>
+    public CapabilitySet Snapshot()
+    {
+        var orgId = RequireOrg();
+
+        return cache.TryGetCached(orgId, actor.UserId, out var cached)
+            ? cached
+            : Task.Run(() => cache.GetAsync(orgId, actor.UserId)).GetAwaiter().GetResult();
+    }
+
+    /// <inheritdoc />
+    public Task<CapabilitySet> ResolveDurableAsync(CancellationToken ct) =>
+        // The three-argument overload: read on the AMBIENT transaction, on the tenant plane. It
+        // asserts that app.org_id matches the org being resolved and throws when it does not, which
+        // is the guard that keeps a mis-scoped call from returning a plausible "not entitled".
+        reader.ReadAsync(RequireOrg(), actor.UserId, ct);
+
+    private Guid RequireOrg() =>
+        tenant.OrgId is { } orgId && orgId != Guid.Empty
+            ? orgId
+            : throw new InvalidOperationException(
+                "Capability resolution requires org context. Resolving without it would read zero " +
+                "entitlement rows and answer 'off' for every paid capability — indistinguishable " +
+                "from a deliberate revoke, and recorded nowhere. Establish context first: HTTP " +
+                "requests get it from OrgContextMiddleware, jobs and the CLI from OrgScopedExecutor.");
+}

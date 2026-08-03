@@ -1,4 +1,5 @@
 using LeaseBook.Modules.Capabilities.Caching;
+using LeaseBook.Modules.Capabilities.Contracts;
 using LeaseBook.Modules.Capabilities.Resolution;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -25,6 +26,10 @@ public static class CapabilitiesModuleServiceCollectionExtensions
         // Singleton: per-replica state. It creates its own scope per refresh — see the lifetime note
         // on the class for why injecting the scoped executor or DbContext here would be a bug.
         services.AddSingleton<CapabilityCache>();
+
+        // Scoped: the seam every caller uses. It binds the singleton cache and the scoped reader to
+        // the ambient (org, user), so it can only live as long as that context does.
+        services.AddScoped<ICapabilityGate, CapabilityGate>();
 
         return services;
     }

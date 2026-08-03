@@ -169,6 +169,15 @@ public sealed class CapabilityCache(
     }
 
     /// <summary>
+    /// The non-blocking half of <see cref="GetAsync"/>: answers only when a usable entry is already
+    /// held, and never performs I/O. It exists so <c>CapabilityGate.Snapshot()</c> — which is
+    /// synchronous by contract, because it sits on UI render paths — can serve the common case
+    /// without blocking a thread at all, falling back to the async path only on a cold or expired key.
+    /// </summary>
+    internal bool TryGetCached(Guid orgId, Guid? userId, out CapabilitySet set) =>
+        TryGetFresh(new CacheKey(orgId, userId), out set);
+
+    /// <summary>
     /// Proves the seam is reachable and marks this replica ready. Returns false rather than throwing
     /// so the caller can retry — see <see cref="IsPopulated"/> for why readiness must not wait on
     /// inbound traffic.

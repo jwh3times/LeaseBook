@@ -138,8 +138,12 @@ builder.Services.AddScoped<OrgScopedExecutor>();
 // OrgScopedExecutor, because it opens a transaction on the request/job-scoped DbContext.
 builder.Services.AddScoped<PlatformScopedExecutor>();
 
-// Capability seam (ADR-028): the module contributes the per-replica cache and its state reader. The
-// IPlatformScope port is host-implemented (ADR-007) — the module cannot name PlatformScopedExecutor.
+// Capability seam (ADR-028): the module contributes ICapabilityGate — the single seam every caller
+// uses — over the per-replica cache and its state reader. Registration order matters here: the gate
+// is scoped and resolves ITenantContext, so it must sit after the tenancy registrations above. The
+// IPlatformScope port is host-implemented (ADR-007) — the module cannot name PlatformScopedExecutor —
+// and the gate deliberately does not consume it, because the money path resolves inside the request
+// transaction that OrgContextMiddleware has already opened.
 builder.Services.AddCapabilitiesModule();
 builder.Services.AddScoped<LeaseBook.Modules.Capabilities.Contracts.IPlatformScope, PlatformScopeAdapter>();
 
