@@ -170,6 +170,30 @@ public sealed class CapabilityPropagationTests(PostgresFixture fixture)
         there.Version.ShouldBe(here.Version);
     }
 
+    /// <summary>
+    /// The readiness deadlock guard (J2). A fresh replica must become ready <b>without any request
+    /// ever touching the cache</b> — sets are keyed per (org, user) and load on demand, so a
+    /// readiness flag meaning "something is cached" would leave a new replica not-ready, therefore
+    /// receiving no traffic, therefore never resolving anything, therefore not-ready forever. Note
+    /// this test deliberately never calls <c>GetAsync</c>: that absence is the whole assertion.
+    /// </summary>
+    [Fact]
+    public async Task A_fresh_host_becomes_ready_without_any_capability_being_resolved()
+    {
+        var ct = TestContext.Current.CancellationToken;
+
+        await using var host = new ApiFactory(fixture.AppConnectionString);
+        _ = host.CreateClient();
+
+        var cache = host.Services.GetRequiredService<CapabilityCache>();
+
+        var ready = await EventuallyAsync(
+            () => Task.FromResult(cache.IsPopulated), TimeSpan.FromSeconds(15), ct);
+
+        ready.ShouldBeTrue("the startup probe must prove reachability without inbound traffic");
+        cache.ColdLoads.ShouldBe(0, "readiness must not depend on any org's set having been loaded");
+    }
+
     private static async Task<bool> EventuallyAsync(
         Func<Task<bool>> probe, TimeSpan timeout, CancellationToken ct)
     {

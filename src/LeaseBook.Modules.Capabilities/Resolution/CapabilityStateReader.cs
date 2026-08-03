@@ -31,12 +31,17 @@ public sealed class CapabilityStateReader(DbContext db)
         ReadAsync(orgId, userId, requirePlatformScope: false, ct);
 
     /// <param name="requirePlatformScope">
-    /// True for out-of-band work that must be running under <c>app.platform</c>. A tenant-plane read
-    /// with no org context does not raise — it silently returns zero rows, which an evaluator would
-    /// map to "no entitlement" and therefore "off", disabling paid features with no error anywhere.
-    /// Asserting the GUC turns that into a throw, mirroring the rule that a background job with
-    /// missing org context fails rather than returning empty.
+    /// True for out-of-band work that must be running under <c>app.platform</c>.
     /// </param>
+    /// <remarks>
+    /// <b>Both planes are asserted, because a wrong-context read is silent on both.</b> Neither a
+    /// missing platform scope nor an <c>app.org_id</c> that differs from <paramref name="orgId"/>
+    /// raises anything: the <c>_org_read</c> policy simply filters both org-scoped queries to zero
+    /// rows, every <c>RequiresGrant</c> capability resolves false, and the caller sees a plausible
+    /// "not entitled" answer with no error recorded anywhere. That is indistinguishable from a
+    /// deliberate revoke. One extra round trip converts it into a throw, mirroring the repo rule that
+    /// a background job with missing org context fails rather than returning empty.
+    /// </remarks>
     public async Task<CapabilitySet> ReadAsync(
         Guid orgId, Guid? userId, bool requirePlatformScope, CancellationToken ct)
     {
@@ -48,10 +53,7 @@ public sealed class CapabilityStateReader(DbContext db)
                 nameof(orgId));
         }
 
-        if (requirePlatformScope)
-        {
-            await AssertPlatformScopeAsync(ct);
-        }
+        await AssertContextAsync(orgId, requirePlatformScope, ct);
 
         // feature_flags has no org_id — a flag is a property of the deployment. Read whole: it holds
         // one row per flagged capability, and rows for names no longer in the registry are ignored
@@ -70,12 +72,21 @@ public sealed class CapabilityStateReader(DbContext db)
         // Guid.CreateVersion7 carries random low bits and ids minted in the same millisecond sort
         // arbitrarily. ux_entitlements_org_capability_effective_at makes an exact tie impossible
         // today; the ordering stays fail-closed regardless of that index.
+        //
+        // `effective_at <= now()` makes a future-dated row PENDING rather than immediately live —
+        // a decision recorded for ADR-028, not an accident. Without it "effective at" would not mean
+        // what it says: a grant written with a future date would take effect on write, and, in the
+        // direction that actually costs someone, a future-dated REVOKE would cut a paying org off
+        // early. now() is transaction start time, so every capability in one resolution sees a
+        // single consistent instant. Task 12's writer inherits this: scheduling is a supported
+        // shape, and nothing needs to defend against it by refusing future dates.
         var entitlements = await db.Database
             .SqlQuery<EntitlementRow>(
                 $"""
                  SELECT DISTINCT ON (capability) capability, granted
                  FROM entitlements
                  WHERE org_id = {orgId}
+                   AND effective_at <= now()
                  ORDER BY capability, effective_at DESC, granted ASC, id DESC
                  """)
             .ToListAsync(ct);
@@ -135,21 +146,68 @@ public sealed class CapabilityStateReader(DbContext db)
             .ToListAsync(ct);
     }
 
-    private async Task AssertPlatformScopeAsync(CancellationToken ct)
+    /// <summary>
+    /// Proves the seam is reachable: platform scope opens, and the flag table answers. Used by the
+    /// readiness probe, which must establish that WITHOUT resolving any particular org — see
+    /// <c>CapabilityCache.IsPopulated</c> for why a set-based warm-up is impossible.
+    /// </summary>
+    public async Task ProbeReachabilityAsync(CancellationToken ct)
     {
-        var scoped = await db.Database
-            .SqlQuery<bool>(
-                $"""SELECT COALESCE(current_setting('app.platform', true) = 'on', false) AS "Value" """)
-            .SingleAsync(ct);
+        // Guid.Empty: the probe has no org to compare against, and no org row can carry it, so
+        // OrgMatches is simply false and ignored. Passing a typed value keeps the parameter's type
+        // unambiguous to Postgres, which a null would not.
+        var context = await ReadContextAsync(Guid.Empty, ct);
+        if (!context.PlatformScope)
+        {
+            throw new InvalidOperationException(PlatformScopeMessage);
+        }
 
-        if (!scoped)
+        // count(*), not a row fetch: it answers on an empty table, which every fresh deployment has.
+        _ = await db.Database
+            .SqlQuery<long>($"""SELECT count(*) AS "Value" FROM feature_flags""")
+            .SingleAsync(ct);
+    }
+
+    /// <summary>
+    /// One round trip for both planes. Correctness needs EITHER platform scope (which sees every
+    /// org) OR an ambient <c>app.org_id</c> equal to the org being resolved; anything else reads zero
+    /// rows and lies quietly.
+    /// </summary>
+    private async Task AssertContextAsync(Guid orgId, bool requirePlatformScope, CancellationToken ct)
+    {
+        var context = await ReadContextAsync(orgId, ct);
+
+        if (requirePlatformScope && !context.PlatformScope)
+        {
+            throw new InvalidOperationException(PlatformScopeMessage);
+        }
+
+        if (!context.PlatformScope && !context.OrgMatches)
         {
             throw new InvalidOperationException(
-                "The capability refresh must run under platform scope. Without it the read returns " +
-                "zero rows instead of raising, and every paid capability would resolve to 'off' with " +
-                "no error recorded anywhere.");
+                $"Capability resolution for org {orgId} ran with neither platform scope nor a matching " +
+                "app.org_id. RLS would filter entitlements and cohorts to zero rows without raising, " +
+                "so every capability requiring a grant would resolve to 'off' and look exactly like a " +
+                "deliberate revoke.");
         }
     }
+
+    private Task<ContextRow> ReadContextAsync(Guid orgId, CancellationToken ct) =>
+        db.Database
+            .SqlQuery<ContextRow>(
+                $"""
+                 SELECT COALESCE(current_setting('app.platform', true) = 'on', false) AS platform_scope,
+                        COALESCE(NULLIF(current_setting('app.org_id', true), '')::uuid = {orgId}, false)
+                            AS org_matches
+                 """)
+            .SingleAsync(ct);
+
+    private const string PlatformScopeMessage =
+        "The capability refresh must run under platform scope. Without it the read returns zero rows " +
+        "instead of raising, and every paid capability would resolve to 'off' with no error recorded " +
+        "anywhere.";
+
+    private sealed record ContextRow(bool PlatformScope, bool OrgMatches);
 
     private sealed record FlagRow(string Name, bool Enabled);
 

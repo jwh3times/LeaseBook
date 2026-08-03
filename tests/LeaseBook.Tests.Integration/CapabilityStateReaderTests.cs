@@ -181,6 +181,122 @@ public sealed class CapabilityStateReaderTests(PostgresFixture fixture)
             ct);
     }
 
+    /// <summary>
+    /// A future-dated row is PENDING, not live (ADR-028). Both directions matter: a grant must not
+    /// take effect on write, and a scheduled REVOKE must not cut a paying org off the moment it is
+    /// recorded. Without the <c>effective_at &lt;= now()</c> filter the second is the expensive one.
+    /// </summary>
+    [Fact]
+    public async Task A_future_dated_row_does_not_take_effect_yet()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var org = await SeedOrgAsync(ct);
+
+        await using var db = fixture.CreateContext(fixture.AppConnectionString);
+        var executor = new PlatformScopedExecutor(db);
+        var reader = new CapabilityStateReader(db);
+
+        await executor.RunAsync(
+            async () =>
+            {
+                await GrantAsync(db, org, granted: true, hoursAgo: 1, ct);
+                await AddCohortAsync(db, org, userId: null, ct);
+
+                // Scheduled for an hour from now: the live answer must still be the grant.
+                await GrantAsync(db, org, granted: false, hoursAgo: -1, ct);
+
+                (await reader.ReadAsync(org, null, requirePlatformScope: true, ct))
+                    .IsEnabled(CapabilityCatalog.ConsolidatedStatements)
+                    .ShouldBeTrue("a revoke dated in the future must not revoke now");
+            },
+            ct);
+    }
+
+    /// <summary>
+    /// The tenant-plane mirror of the platform-scope assertion, on the path Task 6 uses. An
+    /// <c>app.org_id</c> that does not match the org being resolved is not an error to Postgres:
+    /// <c>_org_read</c> filters both org-scoped queries to zero rows, every RequiresGrant capability
+    /// resolves false, and the caller gets a plausible "not entitled" with nothing logged.
+    /// </summary>
+    [Fact]
+    public async Task Reading_with_no_platform_scope_and_no_matching_org_context_throws()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var org = await SeedOrgAsync(ct);
+        var otherOrg = await SeedOrgAsync(ct);
+
+        await using var db = fixture.CreateContext(fixture.AppConnectionString);
+        var reader = new CapabilityStateReader(db);
+
+        // No context at all.
+        var bare = await Should.ThrowAsync<InvalidOperationException>(
+            async () => await reader.ReadAsync(org, null, ct));
+        bare.Message.ShouldContain("app.org_id");
+
+        // Context present, but for a different org — the case a plain "is it set?" check would miss.
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        await db.Database.ExecuteSqlAsync(
+            $"SELECT set_config('app.org_id', {otherOrg.ToString()}, true)", ct);
+
+        var mismatched = await Should.ThrowAsync<InvalidOperationException>(
+            async () => await reader.ReadAsync(org, null, ct));
+        mismatched.Message.ShouldContain("app.org_id");
+
+        await tx.RollbackAsync(ct);
+    }
+
+    /// <summary>
+    /// The positive control for the test above, and the shape Task 6 depends on: with the ambient
+    /// org context matching, resolution works on the tenant plane with no platform escape at all.
+    /// </summary>
+    [Fact]
+    public async Task Reads_its_own_org_on_the_tenant_plane_without_platform_scope()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var org = await SeedOrgAsync(ct);
+
+        await using var db = fixture.CreateContext(fixture.AppConnectionString);
+        var reader = new CapabilityStateReader(db);
+
+        await new PlatformScopedExecutor(db).RunAsync(
+            async () =>
+            {
+                await GrantAsync(db, org, granted: true, hoursAgo: 1, ct);
+                await AddCohortAsync(db, org, userId: null, ct);
+            },
+            ct);
+
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        await db.Database.ExecuteSqlAsync($"SELECT set_config('app.org_id', {org.ToString()}, true)", ct);
+
+        var set = await reader.ReadAsync(org, null, ct);
+
+        set.IsEnabled(CapabilityCatalog.ConsolidatedStatements).ShouldBeTrue(
+            "the tenant plane may read its own entitlement and cohort rows via _org_read");
+
+        await tx.RollbackAsync(ct);
+    }
+
+    /// <summary>
+    /// The readiness path (J2). It must succeed against a deployment with no flag rows at all, which
+    /// is every fresh install — a probe that fetched a row would report the seam unreachable there.
+    /// </summary>
+    [Fact]
+    public async Task Reachability_probe_succeeds_under_platform_scope()
+    {
+        var ct = TestContext.Current.CancellationToken;
+
+        await using var db = fixture.CreateContext(fixture.AppConnectionString);
+        var reader = new CapabilityStateReader(db);
+
+        await new PlatformScopedExecutor(db).RunAsync(() => reader.ProbeReachabilityAsync(ct), ct);
+
+        // And it is a real assertion, not a no-op: outside platform scope it refuses.
+        var ex = await Should.ThrowAsync<InvalidOperationException>(
+            async () => await reader.ProbeReachabilityAsync(ct));
+        ex.Message.ShouldContain("platform scope");
+    }
+
     [Fact]
     public async Task Rejects_an_empty_org_id()
     {

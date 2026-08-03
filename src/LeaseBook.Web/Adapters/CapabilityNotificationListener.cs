@@ -69,7 +69,27 @@ public sealed class CapabilityNotificationListener(
         // Do not hold up host startup: BackgroundService awaits ExecuteAsync up to its first yield.
         await Task.Yield();
 
-        var connectionString = BuildListenConnectionString();
+        // Resolving the connection string is itself fallible — a malformed value makes
+        // NpgsqlConnectionStringBuilder throw, and resolving the DbContext can fail outright. An
+        // escape from ExecuteAsync would STOP THE HOST, because BackgroundServiceExceptionBehavior
+        // defaults to StopHost and nothing here overrides it. That would take the API down over the
+        // one component whose entire premise is that it is optional and the TTL is the correctness
+        // floor. Degrade exactly as the missing-connection-string case does.
+        string? connectionString;
+        try
+        {
+            connectionString = BuildListenConnectionString();
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(
+                ex,
+                "The capability listener could not resolve a connection string; capability changes " +
+                "will propagate on the {Ttl}s TTL only.",
+                CapabilityCache.Ttl.TotalSeconds);
+            return;
+        }
+
         if (string.IsNullOrWhiteSpace(connectionString))
         {
             logger.LogWarning(

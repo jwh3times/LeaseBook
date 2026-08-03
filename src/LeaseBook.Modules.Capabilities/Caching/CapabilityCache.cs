@@ -41,11 +41,21 @@ public sealed class CapabilityCache(
     /// </summary>
     public static readonly TimeSpan Ttl = TimeSpan.FromSeconds(30);
 
+    /// <summary>
+    /// How long a failed refresh suppresses the next attempt for that key. Without it, a database
+    /// outage turns last-known-good into a serialized queue of full connect timeouts: every caller
+    /// takes the lock, waits out the timeout, and hands over — so the Nth caller waits N timeouts for
+    /// a set it already had. Short enough that recovery is still prompt.
+    /// </summary>
+    private static readonly TimeSpan FailureBackoff = TimeSpan.FromSeconds(5);
+
     private readonly ConcurrentDictionary<CacheKey, Entry> _entries = new();
 
-    // One refresh at a time across the whole cache: a NOTIFY invalidates every key at once, and a
-    // stampede of concurrent requests would otherwise each open their own scope and transaction.
-    private readonly SemaphoreSlim _refreshLock = new(1, 1);
+    // Per-KEY refresh locks, not one process-wide lock. A NOTIFY invalidates every key at once, so a
+    // single lock would make a request for org B queue behind a refresh for org A — at the load
+    // fixture's 300 orgs that is a p95 cliff against the budget in docs/perf.md. Growth is bounded by
+    // the same key set _entries already holds, so this adds no new unbounded allocation class.
+    private readonly ConcurrentDictionary<CacheKey, SemaphoreSlim> _refreshLocks = new();
 
     // Bumped by Invalidate(). An entry stamped with an older generation is stale regardless of age,
     // which is how a notification short-circuits the TTL without touching any timestamp.
@@ -56,7 +66,22 @@ public sealed class CapabilityCache(
     private long _ttlRefreshes;
     private long _staleServedAfterFailure;
 
-    /// <summary>False until the first successful load. The readiness probe gates on this.</summary>
+    /// <summary>
+    /// <b>"The seam is reachable", not "some org's set is cached."</b> The readiness probe gates on
+    /// this, and the distinction is the difference between a rolling deploy and an outage: sets are
+    /// keyed per <c>(org, user)</c> and only ever load on demand, so a flag meaning "something is
+    /// cached" would leave a fresh replica not-ready → receiving no traffic → never resolving
+    /// anything → not-ready forever. There is no warm-up that could break the cycle, because there is
+    /// no org to warm up for.
+    /// <para>
+    /// It is therefore set by a startup reachability read under platform scope (see
+    /// <see cref="ProbeAsync"/>), which still enforces the property that actually matters — never
+    /// serve traffic from a seam that cannot reach its data — and by any successful load thereafter.
+    /// It is never cleared: once reachability is proven, a later blip is handled by serving
+    /// last-known-good, and flapping readiness would evict a replica that is still answering
+    /// correctly.
+    /// </para>
+    /// </summary>
     public bool IsPopulated { get; private set; }
 
     /// <summary>First-ever load of a key — neither an expiry nor a notification.</summary>
@@ -89,7 +114,8 @@ public sealed class CapabilityCache(
             return cached;
         }
 
-        await _refreshLock.WaitAsync(ct);
+        var refreshLock = _refreshLocks.GetOrAdd(key, _ => new SemaphoreSlim(1, 1));
+        await refreshLock.WaitAsync(ct);
         try
         {
             // Re-check: another caller may have refreshed this key while we queued.
@@ -98,6 +124,9 @@ public sealed class CapabilityCache(
                 return cached;
             }
 
+            // Read the generation BEFORE the load, so a NOTIFY that lands mid-load leaves the new
+            // entry stamped with the old generation and therefore already stale. Stamping with the
+            // post-load value would swallow that notification entirely.
             var generation = Interlocked.Read(ref _generation);
             _entries.TryGetValue(key, out var stale);
 
@@ -118,8 +147,11 @@ public sealed class CapabilityCache(
             }
             catch (Exception ex) when (stale is not null && ex is not OperationCanceledException)
             {
-                // Last-known-good. The entry keeps its old stamp, so the next call retries rather
-                // than pinning a stale set for a full TTL after the database recovers.
+                // Last-known-good, plus a negative cache. LoadedAt is deliberately NOT restamped —
+                // that would pin a stale set for a full TTL after the database recovered — but the
+                // failure IS stamped, so the next FailureBackoff seconds of callers short-circuit to
+                // stale instead of each paying another connect timeout in turn.
+                _entries[key] = stale with { LastFailureAt = clock.GetUtcNow() };
                 Interlocked.Increment(ref _staleServedAfterFailure);
                 logger.LogError(
                     ex,
@@ -132,12 +164,37 @@ public sealed class CapabilityCache(
         }
         finally
         {
-            _refreshLock.Release();
+            refreshLock.Release();
         }
     }
 
     /// <summary>
-    /// Marks every cached set stale. Called by <see cref="CapabilityNotificationListener"/> on a
+    /// Proves the seam is reachable and marks this replica ready. Returns false rather than throwing
+    /// so the caller can retry — see <see cref="IsPopulated"/> for why readiness must not wait on
+    /// inbound traffic.
+    /// </summary>
+    public async Task<bool> ProbeAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            await using var scope = scopeFactory.CreateAsyncScope();
+            var platform = scope.ServiceProvider.GetRequiredService<IPlatformScope>();
+            var reader = scope.ServiceProvider.GetRequiredService<CapabilityStateReader>();
+
+            await platform.RunAsync(() => reader.ProbeReachabilityAsync(ct), ct);
+
+            IsPopulated = true;
+            return true;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "The capability seam is not reachable yet; this replica stays not-ready.");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Marks every cached set stale. Called by the host's <c>CapabilityNotificationListener</c> on a
     /// <c>NOTIFY</c>, and deliberately lazy: it does not re-read anything, so a burst of notifications
     /// costs one interlocked increment each rather than a query storm across every cached org. The
     /// next <see cref="GetAsync"/> for a key pays for that key and nothing else.
@@ -154,13 +211,14 @@ public sealed class CapabilityCache(
     /// <summary>
     /// Ages every entry past the TTL without waiting 30 seconds. Test-only: it drives the TTL
     /// backstop path specifically, leaving the generation untouched so the resulting refresh is
-    /// attributed to expiry and not to a notification.
+    /// attributed to expiry and not to a notification. Any recorded failure is cleared too, so the
+    /// negative cache cannot swallow the very refresh the test is asking for.
     /// </summary>
     internal void ForceExpireForTesting()
     {
         foreach (var (key, entry) in _entries)
         {
-            _entries[key] = entry with { LoadedAt = DateTimeOffset.MinValue };
+            _entries[key] = entry with { LoadedAt = DateTimeOffset.MinValue, LastFailureAt = null };
         }
     }
 
@@ -173,15 +231,30 @@ public sealed class CapabilityCache(
 
     private bool TryGetFresh(CacheKey key, out CapabilitySet set)
     {
-        if (_entries.TryGetValue(key, out var entry) &&
-            entry.Generation == Interlocked.Read(ref _generation) &&
-            clock.GetUtcNow() - entry.LoadedAt < Ttl)
+        set = null!;
+
+        if (!_entries.TryGetValue(key, out var entry))
+        {
+            return false;
+        }
+
+        var now = clock.GetUtcNow();
+
+        if (entry.Generation == Interlocked.Read(ref _generation) && now - entry.LoadedAt < Ttl)
         {
             set = entry.Set;
             return true;
         }
 
-        set = null!;
+        // Negative cache. The entry IS stale, but a refresh failed within the last FailureBackoff,
+        // so retrying now would only buy another connect timeout — and, because refreshes serialize
+        // per key, every caller behind this one would pay it in turn.
+        if (entry.LastFailureAt is { } failedAt && now - failedAt < FailureBackoff)
+        {
+            set = entry.Set;
+            return true;
+        }
+
         return false;
     }
 
@@ -230,5 +303,14 @@ public sealed class CapabilityCache(
     /// <summary>Null <c>UserId</c> is the no-authenticated-user key (jobs, CLI, the nightly sweep).</summary>
     private readonly record struct CacheKey(Guid OrgId, Guid? UserId);
 
-    private sealed record Entry(CapabilitySet Set, DateTimeOffset LoadedAt, long Generation);
+    /// <param name="LastFailureAt">
+    /// When a refresh for this key last failed, or null. Drives the negative cache — see
+    /// <see cref="FailureBackoff"/>. Cleared implicitly on every successful load, because that path
+    /// constructs a fresh <see cref="Entry"/>.
+    /// </param>
+    private sealed record Entry(
+        CapabilitySet Set,
+        DateTimeOffset LoadedAt,
+        long Generation,
+        DateTimeOffset? LastFailureAt = null);
 }

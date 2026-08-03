@@ -143,15 +143,19 @@ builder.Services.AddScoped<PlatformScopedExecutor>();
 builder.Services.AddCapabilitiesModule();
 builder.Services.AddScoped<LeaseBook.Modules.Capabilities.Contracts.IPlatformScope, PlatformScopeAdapter>();
 
-// The LISTEN/NOTIFY listener is host-owned: it holds a raw Npgsql connection outside the EF pool,
-// which is composition-root work over the host's persistence driver (host-only, like the scheduler).
-// Registered by concrete type as well, so diagnostics can read its counters — AddHostedService alone
-// leaves it unresolvable. Carved out of the OpenAPI build for the same reason as Hangfire below:
-// that pass runs with no database and no real configuration.
+// The seam's two hosted services are host-owned. The LISTEN/NOTIFY listener holds a raw Npgsql
+// connection outside the EF pool — composition-root work over the host's persistence driver, so
+// host-only like the scheduler. The readiness probe proves the seam is reachable at startup, which
+// must not wait on inbound traffic (see CapabilityReadinessProbe for the deadlock it avoids). Both
+// are registered by concrete type as well, so diagnostics and the readiness endpoint can read their
+// counters — AddHostedService alone leaves them unresolvable. Carved out of the OpenAPI build for
+// the same reason as Hangfire below: that pass runs with no database and no real configuration.
 if (!isOpenApiBuild)
 {
     builder.Services.AddSingleton<CapabilityNotificationListener>();
     builder.Services.AddHostedService(sp => sp.GetRequiredService<CapabilityNotificationListener>());
+    builder.Services.AddSingleton<CapabilityReadinessProbe>();
+    builder.Services.AddHostedService(sp => sp.GetRequiredService<CapabilityReadinessProbe>());
 }
 
 // Accounting module services (chart-of-accounts provisioning, period lifecycle; the posting engine
