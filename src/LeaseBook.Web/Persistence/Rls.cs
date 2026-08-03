@@ -36,6 +36,51 @@ public static class Rls
             """);
     }
 
+    /// <summary>
+    /// Org isolation with ONE deliberate escape for platform-plane work (ADR-028). Platform tables
+    /// carry org_id because they are data ABOUT orgs, but the maintainer must read across orgs to
+    /// operate them. The escape is a GUC set by <c>PlatformScopedExecutor</c> and nowhere else.
+    /// <para>
+    /// Why an escape rather than no RLS: a path that forgets to open platform scope returns ZERO
+    /// rows instead of every org's rows. Visible emptiness beats a silent cross-tenant leak. It also
+    /// keeps the table inside SchemaGuardTests' normal org-scoped arm — no new exemption class.
+    /// </para>
+    /// </summary>
+    public static void EnableOrgRlsWithPlatformEscape(this MigrationBuilder migrationBuilder, string table)
+    {
+        migrationBuilder.Sql($"""
+            ALTER TABLE {table} ENABLE ROW LEVEL SECURITY;
+            ALTER TABLE {table} FORCE ROW LEVEL SECURITY;
+            CREATE POLICY {table}_org_isolation ON {table}
+              FOR ALL
+              USING (org_id = NULLIF(current_setting('app.org_id', true), '')::uuid
+                     OR current_setting('app.platform', true) = 'on')
+              WITH CHECK (org_id = NULLIF(current_setting('app.org_id', true), '')::uuid
+                     OR current_setting('app.platform', true) = 'on');
+            GRANT SELECT, INSERT, UPDATE, DELETE ON {table} TO leasebook_app;
+            GRANT SELECT ON {table} TO leasebook_ops;
+            """);
+    }
+
+    /// <summary>
+    /// Platform-plane only: no tenant request can read these rows at all, whatever its org context.
+    /// Used for <c>platform_audit_events</c>, whose org_id is nullable (creating a flag is not
+    /// org-specific) and which must never be visible inside a tenant session.
+    /// </summary>
+    public static void EnablePlatformOnlyRls(this MigrationBuilder migrationBuilder, string table)
+    {
+        migrationBuilder.Sql($"""
+            ALTER TABLE {table} ENABLE ROW LEVEL SECURITY;
+            ALTER TABLE {table} FORCE ROW LEVEL SECURITY;
+            CREATE POLICY {table}_platform_only ON {table}
+              FOR ALL
+              USING (current_setting('app.platform', true) = 'on')
+              WITH CHECK (current_setting('app.platform', true) = 'on');
+            GRANT SELECT, INSERT, UPDATE, DELETE ON {table} TO leasebook_app;
+            GRANT SELECT ON {table} TO leasebook_ops;
+            """);
+    }
+
     public static void RevokeAppendOnly(this MigrationBuilder migrationBuilder, string table)
     {
         migrationBuilder.Sql($"REVOKE UPDATE, DELETE ON {table} FROM leasebook_app, leasebook_ops;");

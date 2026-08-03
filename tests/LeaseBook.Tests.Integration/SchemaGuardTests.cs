@@ -21,6 +21,10 @@ public sealed class SchemaGuardTests(PostgresFixture fixture)
     {
         "orgs",                  // global-class: the org IS the tenant — it has no org_id
         "__EFMigrationsHistory", // EF migration bookkeeping — not org data
+        "feature_flags",         // global-class (ADR-028): a flag is a property of the deployment,
+                                 // not of a tenant. The other three capability tables DO carry
+                                 // org_id and get real RLS with a platform escape — they pass the
+                                 // org-scoped arm above and need no entry here.
     };
 
     /// <summary>
