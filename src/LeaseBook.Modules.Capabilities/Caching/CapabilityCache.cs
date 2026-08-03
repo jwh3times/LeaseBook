@@ -81,8 +81,15 @@ public sealed class CapabilityCache(
     /// last-known-good, and flapping readiness would evict a replica that is still answering
     /// correctly.
     /// </para>
+    /// <para>
+    /// <b>Volatile</b>, because it is written from the readiness probe's background task and read from
+    /// request threads through the health check. Without it the JIT is free to hoist the read, and a
+    /// replica could report not-ready indefinitely after the probe had already succeeded.
+    /// </para>
     /// </summary>
-    public bool IsPopulated { get; private set; }
+    public bool IsPopulated => _isPopulated;
+
+    private volatile bool _isPopulated;
 
     /// <summary>First-ever load of a key — neither an expiry nor a notification.</summary>
     public long ColdLoads => Interlocked.Read(ref _coldLoads);
@@ -140,7 +147,7 @@ public sealed class CapabilityCache(
                 var set = await LoadAsync(orgId, userId, ct);
 
                 _entries[key] = new Entry(set, clock.GetUtcNow(), generation);
-                IsPopulated = true;
+                _isPopulated = true;
                 Count(reason);
 
                 return set;
@@ -183,7 +190,7 @@ public sealed class CapabilityCache(
 
             await platform.RunAsync(() => reader.ProbeReachabilityAsync(ct), ct);
 
-            IsPopulated = true;
+            _isPopulated = true;
             return true;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -226,7 +233,7 @@ public sealed class CapabilityCache(
     internal void ResetForTesting()
     {
         _entries.Clear();
-        IsPopulated = false;
+        _isPopulated = false;
     }
 
     private bool TryGetFresh(CacheKey key, out CapabilitySet set)

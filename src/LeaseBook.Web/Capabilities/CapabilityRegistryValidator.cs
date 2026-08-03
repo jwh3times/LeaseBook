@@ -15,21 +15,32 @@ namespace LeaseBook.Web.Capabilities;
 /// into a boot failure, which is the only signal an unattended deployment can act on.
 /// </para>
 /// <para>
-/// <b>Fail the host, not the request.</b> Same call as the Hangfire storage decision in
-/// <c>Program.cs</c>: the alternative is a replica that comes up reporting healthy while its
-/// configuration means something other than what the operator wrote. Boot loudly and let the platform
-/// hold the previous revision.
+/// <b>An unknown row is inert, so this throws everywhere EXCEPT Production, where it logs and
+/// continues.</b> Resolution is registry-driven — <c>CapabilityStateReader</c> iterates
+/// <c>Capabilities.All</c> and <c>CapabilitySet.From</c> asserts completeness against it — so nothing
+/// ever reads a row whose name is not registered. Drift is a signal, not a correctness hazard, and that
+/// asymmetry decides the policy: a hard failure in Production would make rollback impossible. Deploy N
+/// adds a capability, an operator flips it and creates the row, something unrelated regresses, and the
+/// rollback target is N-1 — whose registry does not name that row. Every N-1 replica would then fail to
+/// start, turning a routine rollback into a manual <c>DELETE</c> against production Postgres. Being
+/// roll-forward-only is a far worse failure mode than a flag that quietly does nothing.
 /// </para>
 /// <para>
-/// <b>Every unknown name, not the first.</b> A rename usually lands as a pair (the new row inserted,
-/// the old one left behind) and a bad deploy can strand several at once. Throwing on the first would
-/// turn one fix into N boot-fix-boot cycles, each costing a full deployment.
+/// Development and CI are where drift is cheap and actionable, so they throw. The operator-typo case is
+/// caught earlier still: the toggle CLI rejects a name that is not in the registry at write time, which
+/// is the point at which the typo can be corrected in one step.
+/// </para>
+/// <para>
+/// <b>Every unknown name, not the first</b> — in both branches. A rename usually lands as a pair (the
+/// new row inserted, the old one left behind) and a bad deploy can strand several at once. Reporting
+/// only the first would turn one fix into N boot-fix-boot cycles, each costing a full deployment.
 /// </para>
 /// </summary>
 public static class CapabilityRegistryValidator
 {
     /// <summary>
-    /// Reads every <c>feature_flags</c> name and throws once if any of them is unknown to the registry.
+    /// Reads every <c>feature_flags</c> name and reports the ones the registry does not know: one throw
+    /// listing all of them outside Production, one logged error listing all of them in Production.
     /// </summary>
     /// <remarks>
     /// <b>No platform scope, deliberately.</b> <c>feature_flags</c> carries the
@@ -41,10 +52,18 @@ public static class CapabilityRegistryValidator
     /// a transaction and the seam's only privilege escape for no gain. The other three platform tables
     /// would need it; this one does not.
     /// </remarks>
-    /// <exception cref="InvalidOperationException">One or more rows name no registered capability.</exception>
-    public static async Task ValidateAsync(IServiceProvider services, CancellationToken ct = default)
+    /// <param name="environment">
+    /// Decides the reaction, not the detection: Production logs, everything else throws. See the class
+    /// remarks for why rollback safety wins over fail-fast here specifically.
+    /// </param>
+    /// <exception cref="InvalidOperationException">
+    /// One or more rows name no registered capability, outside Production.
+    /// </exception>
+    public static async Task ValidateAsync(
+        IServiceProvider services, IHostEnvironment environment, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(environment);
 
         // A scope of our own: this runs from the root provider at startup, where no request or job
         // scope exists to inherit.
@@ -63,10 +82,33 @@ public static class CapabilityRegistryValidator
             return;
         }
 
-        throw new InvalidOperationException(
+        var detail =
             $"feature_flags holds {unknown.Count} row(s) naming no registered capability: " +
             $"{string.Join(", ", unknown)}. The registry (Capabilities.All) is the source of truth for " +
             "what exists; a row it does not name is ignored at resolution time, so the flag would " +
-            "silently do nothing. Add the capability to the registry, or delete the row.");
+            "silently do nothing. Add the capability to the registry, or delete the row.";
+
+        if (!environment.IsProduction())
+        {
+            throw new InvalidOperationException(detail);
+        }
+
+        // Production: report and carry on. The rows are inert, and refusing to boot here would strand
+        // any rollback to a revision whose registry predates them. Logged at Error so it reaches the
+        // same alerting path as the nightly sweep's violations rather than being lost in Information.
+        scope.ServiceProvider
+            .GetRequiredService<ILogger<CapabilityRegistryValidatorMarker>>()
+            .LogError(
+                "Capability registry drift detected at startup; continuing because the rows are inert. {Detail}",
+                detail);
     }
+}
+
+/// <summary>
+/// Log-category anchor for <see cref="CapabilityRegistryValidator"/>, which is static and so cannot be
+/// a generic argument to <see cref="ILogger{TCategoryName}"/>. Named rather than reusing an unrelated
+/// type so the category an operator filters on says what produced the entry.
+/// </summary>
+public sealed class CapabilityRegistryValidatorMarker
+{
 }

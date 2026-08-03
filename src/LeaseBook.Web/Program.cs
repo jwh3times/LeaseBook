@@ -450,7 +450,11 @@ if (!isOpenApiBuild)
     // Placed here for the same reasons as the guard above — after the CLI verbs have returned (a
     // `seed` process must not be blocked by drift in a table it never reads) and outside the OpenAPI
     // build, which has no database at all.
-    await CapabilityRegistryValidator.ValidateAsync(app.Services);
+    //
+    // Unlike the guard above, this one does NOT fail the host in Production: an unregistered row is
+    // inert, and throwing would make a rollback to a revision that predates the capability unbootable.
+    // See CapabilityRegistryValidator for the full argument.
+    await CapabilityRegistryValidator.ValidateAsync(app.Services, app.Environment);
 }
 
 // The nightly trust-invariant sweep (WP-11). Deliberately registered here rather than beside

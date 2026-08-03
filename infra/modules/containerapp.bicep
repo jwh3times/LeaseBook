@@ -155,17 +155,32 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
               secretRef: 'appinsights-connection-string'
             }
           ]
-          // Readiness only, no liveness probe. /api/health/ready is 503 until the capability seam has
-          // been proven reachable (ADR-028): without it a replica that booted while Postgres was
-          // degraded would take traffic and answer every capability question with the registry
-          // defaults — "everything off" — while its siblings answered correctly, so the same request
-          // would succeed or fail depending on which replica served it. Failing readiness removes the
-          // replica from rotation; it does NOT restart it, which is the correct response to a
-          // dependency being down rather than the process being wedged.
+          // Two probes, pointed at deliberately different endpoints.
           //
-          // failureThreshold is deliberately generous. The in-process probe already retries with
-          // capped backoff, and a database that is merely slow to accept connections on a cold
-          // revision must be given time rather than pinned out of rotation. 30 × 5s ≈ 150s.
+          // Readiness → /api/health/ready, which is 503 until the capability seam has been proven
+          // reachable (ADR-028). Without it a replica that booted while Postgres was degraded would
+          // take traffic and answer every capability question with the registry defaults —
+          // "everything off" — while its siblings answered correctly, so the same request would
+          // succeed or fail depending on which replica served it.
+          //
+          // Liveness → /api/health, which is a static response touching no dependency. That
+          // distinction is the whole point: liveness restarts the container, so pointing it at
+          // anything that reads the database would turn a database blip into a restart storm across
+          // every replica at once. Readiness is where a dependency belongs, liveness is where a
+          // wedged process belongs, and the app needs both.
+          //
+          // failureThreshold: 3 on readiness, not the generous value this once carried. A readiness
+          // probe starts out failing and stays not-ready until its FIRST success, so a large
+          // threshold buys nothing on the cold-start path — the in-process CapabilityReadinessProbe
+          // already owns retry there, with capped backoff. What the threshold actually governs is the
+          // ready → not-ready transition after startup, and since IsPopulated is never cleared, the
+          // only way that happens is a hung process or an unresponsive Kestrel. Keeping such a replica
+          // in rotation for minutes is the failure this number decides, so it is small.
+          //
+          // Azure's defaults are added PER TYPE ("if you don't define each type"), so declaring these
+          // two leaves the default TCP startup probe in place rather than removing it. They are also
+          // documented as added by the portal, which is reason enough to declare the ones that matter
+          // explicitly rather than assume an ARM/Bicep deployment inherits them.
           probes: [
             {
               type: 'Readiness'
@@ -176,8 +191,19 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
               initialDelaySeconds: 3
               periodSeconds: 5
               timeoutSeconds: 3
-              failureThreshold: 30
+              failureThreshold: 3
               successThreshold: 1
+            }
+            {
+              type: 'Liveness'
+              httpGet: {
+                path: '/api/health'
+                port: 8080
+              }
+              initialDelaySeconds: 10
+              periodSeconds: 10
+              timeoutSeconds: 3
+              failureThreshold: 3
             }
           ]
         }
