@@ -5,6 +5,7 @@ using Hangfire;
 using Hangfire.PostgreSql;
 using LeaseBook.Modules.Accounting;
 using LeaseBook.Modules.Banking;
+using LeaseBook.Modules.Capabilities;
 using LeaseBook.Modules.Directory;
 using LeaseBook.Modules.Operations;
 using LeaseBook.Modules.Reporting;
@@ -136,6 +137,12 @@ builder.Services.AddScoped<OrgScopedExecutor>();
 // Platform-plane counterpart (ADR-028): the single call site that sets app.platform. Scoped, like
 // OrgScopedExecutor, because it opens a transaction on the request/job-scoped DbContext.
 builder.Services.AddScoped<PlatformScopedExecutor>();
+
+// Capability seam (ADR-028): the per-replica cache, its state reader, and the LISTEN/NOTIFY
+// listener. The listener is skipped for the build-time OpenAPI pass, which has no database. The
+// IPlatformScope port is host-implemented (ADR-007) — the module cannot name PlatformScopedExecutor.
+builder.Services.AddCapabilitiesModule(enableNotificationListener: !isOpenApiBuild);
+builder.Services.AddScoped<LeaseBook.Modules.Capabilities.Contracts.IPlatformScope, PlatformScopeAdapter>();
 
 // Accounting module services (chart-of-accounts provisioning, period lifecycle; the posting engine
 // and event catalog register here in later WPs). They consume the ambient DbContext + ITenantContext.

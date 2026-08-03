@@ -26,6 +26,9 @@
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.10" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.10" />
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+    <!-- The raw driver, referenced directly by the Capabilities module's LISTEN/NOTIFY listener
+         (ADR-028). Pinned to the same version the EF provider resolves transitively. -->
+    <PackageVersion Include="Npgsql" Version="10.0.3" />
     <PackageVersion Include="EFCore.NamingConventions" Version="10.0.1" />
     <!-- ASP.NET Core Identity EF stores (P12). Identity runtime itself is in the shared framework. -->
     <PackageVersion Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.10" />
