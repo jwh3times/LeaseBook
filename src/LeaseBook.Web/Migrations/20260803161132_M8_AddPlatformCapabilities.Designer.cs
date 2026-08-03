@@ -12,8 +12,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace LeaseBook.Web.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260803161132_AddPlatformCapabilities")]
-    partial class AddPlatformCapabilities
+    [Migration("20260803161132_M8_AddPlatformCapabilities")]
+    partial class M8_AddPlatformCapabilities
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)

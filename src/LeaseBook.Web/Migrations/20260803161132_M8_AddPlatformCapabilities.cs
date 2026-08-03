@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace LeaseBook.Web.Migrations
 {
     /// <inheritdoc />
-    public partial class AddPlatformCapabilities : Migration
+    public partial class M8_AddPlatformCapabilities : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -26,10 +26,15 @@ namespace LeaseBook.Web.Migrations
                 },
                 constraints: table => table.PrimaryKey("pk_feature_flags", x => x.name));
 
-            migrationBuilder.Sql("""
-                GRANT SELECT, INSERT, UPDATE, DELETE ON feature_flags TO leasebook_app;
-                GRANT SELECT ON feature_flags TO leasebook_ops;
-                """);
+            //    Platform-only RLS despite having no org_id: every reader of this table goes through
+            //    platform scope (cache refresh, startup registry validation, the CLI), so the database
+            //    — not just application authorization — is what stops a tenant-plane path from
+            //    toggling a flag. This makes the failure mode uniform across all four tables: forget
+            //    platform scope and you get zero rows, visibly, instead of a silent tenant-plane write.
+            //    The helper keeps the app role's full CRUD grant on purpose — the CLI runs as the app
+            //    role, and RLS is the gate here, not the grant. Deliberately NOT append-only:
+            //    a flag is mutable state, unlike entitlements.
+            migrationBuilder.EnablePlatformOnlyRls("feature_flags");
 
             // ── entitlements: APPEND-ONLY grant events. No revoked_at column — a revoked_at implies UPDATE,
             //    which would keep UPDATE on the table and make RevokeAppendOnly impossible, and leaves
