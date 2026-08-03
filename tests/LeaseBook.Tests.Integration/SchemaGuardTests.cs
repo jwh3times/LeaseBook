@@ -25,23 +25,43 @@ public sealed class SchemaGuardTests(PostgresFixture fixture)
         "__EFMigrationsHistory", // EF migration bookkeeping — not org data
         "feature_flags",         // global-class (ADR-028): a flag is a property of the deployment,
                                  // not of a tenant, so it has no org_id and lands in this arm. It is
-                                 // the one entry here that still carries RLS — a platform-only policy,
-                                 // so a tenant-plane path cannot toggle a flag. The other three
+                                 // the one entry here that still carries RLS — its writes are gated on
+                                 // platform scope, so a tenant-plane path cannot toggle a flag, and
+                                 // that is asserted by PlatformWrittenTables below. The other three
                                  // capability tables DO carry org_id and get real RLS with a platform
                                  // escape — they pass the org-scoped arm above and need no entry here.
     };
 
     /// <summary>
-    /// Platform-plane tables (ADR-028): reachable only with <c>app.platform = 'on'</c>. These are
-    /// asserted POSITIVELY rather than exempted — <c>feature_flags</c> has no <c>org_id</c>, so the
-    /// org-scoped arm below never inspects it, and the <see cref="GlobalTables"/> arm checks
-    /// membership only. Without this set a future migration could <c>DISABLE ROW LEVEL SECURITY</c>
-    /// on <c>feature_flags</c> and leave the entire suite green while any tenant could toggle a flag.
+    /// Platform-written tables (ADR-028): every policy that can admit a row must be gated on
+    /// <c>app.platform = 'on'</c>. Asserted POSITIVELY rather than exempted, and asserted on the
+    /// policy <i>predicates</i> rather than on mere policy existence — the org-scoped arm below never
+    /// inspects <c>feature_flags</c> (no <c>org_id</c>), and the <see cref="GlobalTables"/> arm checks
+    /// membership only, so without this a migration could <c>DISABLE ROW LEVEL SECURITY</c> on it and
+    /// leave the suite green while any tenant toggled a flag.
+    /// <para>
+    /// The "every non-null WITH CHECK mentions app.platform" clause is the one that catches the
+    /// write-permissive regression on all four tables at once: an org-equality WITH CHECK lets a
+    /// tenant insert its own <c>granted = true</c> entitlement row and self-grant a paid capability.
+    /// </para>
     /// </summary>
-    private static readonly HashSet<string> PlatformOnlyTables = new(StringComparer.Ordinal)
+    private static readonly HashSet<string> PlatformWrittenTables = new(StringComparer.Ordinal)
     {
         "feature_flags",         // a tenant-plane path must not be able to toggle a deployment flag
-        "platform_audit_events", // the platform audit trail is never visible inside a tenant session
+        "platform_audit_events", // the platform audit trail is written only by the platform plane
+        "entitlements",          // a tenant must not be able to grant itself a paid capability
+        "capability_cohorts",    // nor add itself to a rollout cohort
+    };
+
+    /// <summary>
+    /// The subset whose READS are platform-only too: no policy on these may admit a row without
+    /// platform scope. <c>feature_flags</c> is deliberately NOT here — it is tenant-readable so the
+    /// capability resolver can read a kill switch inside the ambient request transaction (ADR-028) —
+    /// which is exactly why the read gate needs asserting on the table that still has one.
+    /// </summary>
+    private static readonly HashSet<string> PlatformOnlyReadTables = new(StringComparer.Ordinal)
+    {
+        "platform_audit_events", // who granted what to whom is never visible inside a tenant session
     };
 
     /// <summary>
@@ -66,11 +86,12 @@ public sealed class SchemaGuardTests(PostgresFixture fixture)
         var orgScoped = await ReadNamesAsync(conn,
             "SELECT table_name FROM information_schema.columns " +
             "WHERE table_schema = 'public' AND column_name = 'org_id'", ct);
-        var policied = await ReadNamesAsync(conn,
-            "SELECT tablename FROM pg_policies WHERE schemaname = 'public'", ct);
+        var policies = await ReadPoliciesAsync(conn, ct);
+        var policied = policies.Select(p => p.Table).ToHashSet(StringComparer.Ordinal);
 
         var failures = new List<string>();
-        var seenPlatformOnly = new HashSet<string>(StringComparer.Ordinal);
+        var seenPlatformWritten = new HashSet<string>(StringComparer.Ordinal);
+        var seenPlatformOnlyRead = new HashSet<string>(StringComparer.Ordinal);
         foreach (var (name, rowSecurity, forceRowSecurity) in tables)
         {
             if (IdentityTables.Contains(name))
@@ -79,20 +100,45 @@ public sealed class SchemaGuardTests(PostgresFixture fixture)
             }
 
             // Positive assertion, deliberately outside the org_id branch below: feature_flags has no
-            // org_id and platform_audit_events does, so neither arm alone would cover the pair.
-            if (PlatformOnlyTables.Contains(name))
+            // org_id, so neither the org-scoped arm nor the allowlist arm would ever inspect its RLS.
+            if (PlatformWrittenTables.Contains(name))
             {
-                seenPlatformOnly.Add(name);
+                seenPlatformWritten.Add(name);
+                var own = policies.Where(p => p.Table == name).ToList();
 
                 if (!rowSecurity || !forceRowSecurity)
                 {
-                    failures.Add($"{name}: platform-plane but RLS not ENABLEd+FORCEd " +
+                    failures.Add($"{name}: platform-written but RLS not ENABLEd+FORCEd " +
                                  $"(relrowsecurity={rowSecurity}, relforcerowsecurity={forceRowSecurity}).");
                 }
 
-                if (!policied.Contains(name))
+                if (own.Count == 0)
                 {
-                    failures.Add($"{name}: platform-plane but has no row-level security policy.");
+                    failures.Add($"{name}: platform-written but has no row-level security policy.");
+                }
+
+                if (!own.Any(p => GatedOnPlatform(p.WithCheck)))
+                {
+                    failures.Add($"{name}: platform-written but no policy admits rows on app.platform — " +
+                                 "nothing can write it, or the gate was dropped.");
+                }
+
+                foreach (var open in own.Where(p => p.WithCheck is not null && !GatedOnPlatform(p.WithCheck)))
+                {
+                    failures.Add($"{name}: policy {open.Name} admits writes without platform scope " +
+                                 $"(WITH CHECK {open.WithCheck}) — a tenant could write this table.");
+                }
+            }
+
+            if (PlatformOnlyReadTables.Contains(name))
+            {
+                seenPlatformOnlyRead.Add(name);
+
+                foreach (var open in policies.Where(p =>
+                             p.Table == name && p.Qual is not null && !GatedOnPlatform(p.Qual)))
+                {
+                    failures.Add($"{name}: policy {open.Name} admits reads without platform scope " +
+                                 $"(USING {open.Qual}) — this table is never visible in a tenant session.");
                 }
             }
 
@@ -116,12 +162,42 @@ public sealed class SchemaGuardTests(PostgresFixture fixture)
         }
 
         // A renamed or dropped platform table must not silently take its assertion with it.
-        seenPlatformOnly.ShouldBe(PlatformOnlyTables, ignoreOrder: true);
+        seenPlatformWritten.ShouldBe(PlatformWrittenTables, ignoreOrder: true);
+        seenPlatformOnlyRead.ShouldBe(PlatformOnlyReadTables, ignoreOrder: true);
 
         failures.ShouldBeEmpty(failures.Count == 0 ? "" : string.Join(Environment.NewLine, failures));
 
         // Sanity: the guard is actually looking at our schema, not an empty catalog.
         orgScoped.ShouldContain("audit_events");
+    }
+
+    /// <summary>
+    /// Postgres normalizes a policy predicate, so the emitted
+    /// <c>current_setting('app.platform', true) = 'on'</c> comes back as
+    /// <c>(current_setting('app.platform'::text, true) = 'on'::text)</c>. Match the GUC name, which
+    /// survives normalization, rather than the whole expression.
+    /// </summary>
+    private static bool GatedOnPlatform(string? predicate) =>
+        predicate?.Contains("app.platform", StringComparison.Ordinal) == true;
+
+    private static async Task<List<(string Table, string Name, string? Qual, string? WithCheck)>> ReadPoliciesAsync(
+        NpgsqlConnection conn, CancellationToken ct)
+    {
+        await using var cmd = new NpgsqlCommand(
+            "SELECT tablename, policyname, qual, with_check FROM pg_policies WHERE schemaname = 'public'", conn);
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+
+        var result = new List<(string, string, string?, string?)>();
+        while (await reader.ReadAsync(ct))
+        {
+            result.Add((
+                reader.GetString(0),
+                reader.GetString(1),
+                reader.IsDBNull(2) ? null : reader.GetString(2),
+                reader.IsDBNull(3) ? null : reader.GetString(3)));
+        }
+
+        return result;
     }
 
     private static async Task<List<(string Name, bool RowSecurity, bool ForceRowSecurity)>> ReadTablesAsync(

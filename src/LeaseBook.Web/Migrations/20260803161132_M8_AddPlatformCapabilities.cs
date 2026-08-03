@@ -26,15 +26,18 @@ namespace LeaseBook.Web.Migrations
                 },
                 constraints: table => table.PrimaryKey("pk_feature_flags", x => x.name));
 
-            //    Platform-only RLS despite having no org_id: every reader of this table goes through
-            //    platform scope (cache refresh, startup registry validation, the CLI), so the database
-            //    — not just application authorization — is what stops a tenant-plane path from
-            //    toggling a flag. This makes the failure mode uniform across all four tables: forget
-            //    platform scope and you get zero rows, visibly, instead of a silent tenant-plane write.
+            //    Tenant-readable, platform-writable. Reads are ungated on purpose: the capability
+            //    resolver reads flags inside the ambient REQUEST transaction so a money-path kill
+            //    switch takes effect immediately instead of waiting out a cache TTL, and neither way
+            //    of getting platform scope in there is safe — PlatformScopedExecutor opens its own
+            //    transaction (cannot nest), and SET LOCAL app.platform would persist to end of
+            //    transaction and leave the rest of the request with platform scope, defeating org
+            //    isolation on entitlements and capability_cohorts. Flags are deployment config, not
+            //    tenant data; the property worth protecting is that a tenant cannot TOGGLE a flag.
             //    The helper keeps the app role's full CRUD grant on purpose — the CLI runs as the app
-            //    role, and RLS is the gate here, not the grant. Deliberately NOT append-only:
+            //    role, and RLS is the write gate here, not the grant. Deliberately NOT append-only:
             //    a flag is mutable state, unlike entitlements.
-            migrationBuilder.EnablePlatformOnlyRls("feature_flags");
+            migrationBuilder.EnableGlobalReadPlatformWriteRls("feature_flags");
 
             // ── entitlements: APPEND-ONLY grant events. No revoked_at column — a revoked_at implies UPDATE,
             //    which would keep UPDATE on the table and make RevokeAppendOnly impossible, and leaves

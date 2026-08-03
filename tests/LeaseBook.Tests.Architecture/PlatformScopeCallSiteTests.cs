@@ -12,6 +12,12 @@ namespace LeaseBook.Tests.Architecture;
 /// Only <i>setting</i> the GUC is restricted. <c>Rls.cs</c> reads it with <c>current_setting</c> when
 /// it emits the policies, which is the intended and necessary counterpart.
 /// </para>
+/// <para>
+/// Scope is <c>src/**/*.cs</c> AND <c>infra/**/*.sql</c>. The SQL half is not hypothetical: an
+/// <c>ALTER ROLE leasebook_app SET app.platform = 'on'</c> in the bootstrap would open the escape for
+/// every pooled connection in production, and no isolation test would go red — the fixture applies
+/// the same bootstrap, so those tests would still pass with their own SET LOCAL merely redundant.
+/// </para>
 /// </summary>
 public sealed class PlatformScopeCallSiteTests
 {
@@ -23,22 +29,24 @@ public sealed class PlatformScopeCallSiteTests
     public void Only_PlatformScopedExecutor_sets_the_platform_scope_guc()
     {
         var repoRoot = FindRepoRoot();
-        var allowed = Path.Combine("Tenancy", "PlatformScopedExecutor.cs");
+
+        // Pinned to the full relative path, not just the file name: an EndsWith on
+        // "Tenancy/PlatformScopedExecutor.cs" would exempt a same-named file dropped into any
+        // module's Tenancy folder, which is a free bypass of this guard.
+        var allowed = Path.Combine("src", "LeaseBook.Web", "Tenancy", "PlatformScopedExecutor.cs");
         var offenders = new List<string>();
 
-        foreach (var file in Directory.EnumerateFiles(
-                     Path.Combine(repoRoot, "src"), "*.cs", SearchOption.AllDirectories))
+        foreach (var file in EnumerateGuardedFiles(repoRoot))
         {
-            if (file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}") ||
-                file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}") ||
-                file.EndsWith(allowed, StringComparison.Ordinal))
+            if (Path.GetRelativePath(repoRoot, file).Equals(allowed, StringComparison.Ordinal))
             {
                 continue;
             }
 
+            var marker = Path.GetExtension(file).Equals(".sql", StringComparison.OrdinalIgnoreCase) ? "--" : "//";
             foreach (var (line, number) in File.ReadLines(file).Select((l, i) => (l, i + 1)))
             {
-                if (SetsPlatformScope.IsMatch(line))
+                if (SetsPlatformScope.IsMatch(StripLineComment(line, marker)))
                 {
                     offenders.Add($"{Path.GetRelativePath(repoRoot, file)}:{number}: {line.Trim()}");
                 }
@@ -63,6 +71,54 @@ public sealed class PlatformScopeCallSiteTests
         // The third argument is is_local: a session-level SET would leak the escape onto the pooled
         // connection and disable org isolation for the next request to pick that connection up.
         source.ShouldContain("set_config('app.platform', 'on', true)");
+    }
+
+    /// <summary>
+    /// Comments are not call sites. This matters in practice, not in theory: the doc comments on
+    /// <c>Rls.cs</c> and the capabilities migration have to spell out <i>why</i> a SET LOCAL of this
+    /// GUC inside the request transaction is unsafe, and without this the guard fails on its own
+    /// rationale. Only the code left of the line-comment marker is matched, so a commented-out
+    /// statement is ignored (it does nothing) while a real one on the same line is still caught.
+    /// </summary>
+    private static string StripLineComment(string line, string marker)
+    {
+        var at = line.IndexOf(marker, StringComparison.Ordinal);
+        return at < 0 ? line : line[..at];
+    }
+
+    /// <summary>
+    /// Application code AND database bootstrap. SQL is in scope because
+    /// <c>ALTER ROLE leasebook_app SET app.platform = 'on'</c> in <c>infra/db/bootstrap.sql</c> would
+    /// open the escape permanently, for every pooled connection in production — and nothing else in
+    /// the suite would notice, because the test fixture applies that same bootstrap, so the isolation
+    /// tests would keep passing with their own <c>SET LOCAL</c> merely redundant.
+    /// </summary>
+    private static IEnumerable<string> EnumerateGuardedFiles(string repoRoot)
+    {
+        var roots = new (string Dir, string Pattern)[]
+        {
+            (Path.Combine(repoRoot, "src"), "*.cs"),
+            (Path.Combine(repoRoot, "infra"), "*.sql"),
+        };
+
+        foreach (var (dir, pattern) in roots)
+        {
+            if (!Directory.Exists(dir))
+            {
+                continue;
+            }
+
+            foreach (var file in Directory.EnumerateFiles(dir, pattern, SearchOption.AllDirectories))
+            {
+                if (file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}") ||
+                    file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}"))
+                {
+                    continue;
+                }
+
+                yield return file;
+            }
+        }
     }
 
     private static string FindRepoRoot()

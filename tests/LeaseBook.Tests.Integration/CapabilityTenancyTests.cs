@@ -16,9 +16,10 @@ namespace LeaseBook.Tests.Integration;
 /// <see cref="App_role_in_org_a_cannot_see_org_b_entitlement"/> would fail.
 /// <para>
 /// Everything here drives raw SQL on the RLS-subject <b>app role</b> (pitfall E2), except the two
-/// <see cref="PlatformScopedExecutor"/> tests, which are about the executor itself. Every assertion
-/// is scoped to freshly minted org ids so rows left by sibling tests in the shared container cannot
-/// perturb a count.
+/// <see cref="PlatformScopedExecutor"/> tests, which are about the executor itself. Org ids are
+/// freshly minted per test so rows left by siblings in the shared container cannot perturb a count.
+/// Four entitlement tests deliberately count the table <i>unfiltered</i> — that is strictly stronger,
+/// because RLS itself is then what has to reduce the whole shared container to the expected number.
 /// </para>
 /// <para>
 /// The escape is TWO policies per table, not one <c>FOR ALL</c> (see
@@ -281,7 +282,8 @@ public sealed class CapabilityTenancyTests(PostgresFixture fixture)
                 ("id", UuidV7.NewId()), ("org", orgA), ("cap", Capability), ("by", "tenant")));
 
         ex.SqlState.ShouldBe(PostgresErrorCodes.InsufficientPrivilege);
-        ex.MessageText.ShouldContain("row-level security");
+        // Same layer as the entitlements INSERT above: the write policy's WITH CHECK, not the grant.
+        ex.MessageText.ShouldContain("new row violates row-level security policy");
     }
 
     /// <summary>
@@ -324,6 +326,37 @@ public sealed class CapabilityTenancyTests(PostgresFixture fixture)
         (await cmd.ExecuteScalarAsync(ct)).ShouldBe("platform");
     }
 
+    /// <summary>
+    /// The positive control for the test above. <c>capability_cohorts</c> deliberately keeps its
+    /// UPDATE/DELETE grants because membership is mutable — an over-correction that added
+    /// <c>RevokeAppendOnly</c> to it would make every "affects zero rows" assertion pass for entirely
+    /// the wrong reason (42501 from the ACL instead of a policy filter) while breaking cohort
+    /// management for good.
+    /// </summary>
+    [Fact]
+    public async Task Platform_scope_can_update_and_delete_a_capability_cohort()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var orgA = UuidV7.NewId();
+
+        await using var conn = await fixture.OpenAppConnectionAsync(ct);
+        await SeedOrgsAsync(conn, [orgA], ct);
+        var cohortId = await AddCohortAsPlatformAsync(conn, orgA, Capability, addedBy: "platform", ct);
+
+        await using var tx = await conn.BeginTransactionAsync(ct);
+        await SetContextAsync(conn, tx, orgId: null, platform: true, ct);
+
+        var updated = await ExecAsync(conn, tx,
+            "UPDATE capability_cohorts SET added_by = 'ops' WHERE id = @id", ct, ("id", cohortId));
+        updated.ShouldBe(1, "cohort membership is mutable from the platform plane by design");
+
+        var deleted = await ExecAsync(conn, tx,
+            "DELETE FROM capability_cohorts WHERE id = @id", ct, ("id", cohortId));
+        deleted.ShouldBe(1, "removing an org from a rollout cohort is a supported operation");
+
+        await tx.CommitAsync(ct);
+    }
+
     [Fact]
     public async Task App_role_reads_its_own_cohort_row_but_not_another_orgs()
     {
@@ -343,7 +376,7 @@ public sealed class CapabilityTenancyTests(PostgresFixture fixture)
         mine.ShouldBe(1, "a tenant sees its own cohort row and only its own");
     }
 
-    // ── Platform-plane-only tables ──────────────────────────────────────────────────────────────
+    // ── platform_audit_events (platform-only) and feature_flags (tenant-readable) ────────────────
 
     [Fact]
     public async Task Platform_audit_events_are_invisible_inside_a_tenant_session()
@@ -376,8 +409,66 @@ public sealed class CapabilityTenancyTests(PostgresFixture fixture)
         underPlatform.ShouldBe(1);
     }
 
+    /// <summary>
+    /// The platform audit trail is append-only in BOTH planes — the escape does not restore
+    /// UPDATE/DELETE any more than it does on <c>entitlements</c>. A record of who granted what to
+    /// whom is worth nothing if the plane that writes it can also rewrite it.
+    /// </summary>
     [Fact]
-    public async Task Feature_flags_are_invisible_and_untoggleable_inside_a_tenant_session()
+    public async Task Platform_audit_events_are_append_only_in_both_planes()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var orgA = UuidV7.NewId();
+
+        await using var conn = await fixture.OpenAppConnectionAsync(ct);
+        await SeedOrgsAsync(conn, [orgA], ct);
+
+        await using (var seed = await conn.BeginTransactionAsync(ct))
+        {
+            await SetContextAsync(conn, seed, orgId: null, platform: true, ct);
+            await ExecAsync(conn, seed,
+                "INSERT INTO platform_audit_events (id, occurred_at, actor, action, org_id, detail_json) " +
+                "VALUES (@id, now(), 'test', 'entitlement.grant', @org, '{}')", ct,
+                ("id", UuidV7.NewId()), ("org", orgA));
+            await seed.CommitAsync(ct);
+        }
+
+        const string Update = "UPDATE platform_audit_events SET actor = 'tamper'";
+        const string Delete = "DELETE FROM platform_audit_events";
+
+        var tenantUpdate = await ShouldFailAsync(conn, orgId: orgA, platform: false, Update, ct);
+        tenantUpdate.SqlState.ShouldBe(PostgresErrorCodes.InsufficientPrivilege);
+        tenantUpdate.MessageText.ShouldContain("permission denied");
+
+        var tenantDelete = await ShouldFailAsync(conn, orgId: orgA, platform: false, Delete, ct);
+        tenantDelete.SqlState.ShouldBe(PostgresErrorCodes.InsufficientPrivilege);
+        tenantDelete.MessageText.ShouldContain("permission denied");
+
+        var platformUpdate = await ShouldFailAsync(conn, orgId: null, platform: true, Update, ct);
+        platformUpdate.SqlState.ShouldBe(PostgresErrorCodes.InsufficientPrivilege);
+        platformUpdate.MessageText.ShouldContain("permission denied");
+
+        var platformDelete = await ShouldFailAsync(conn, orgId: null, platform: true, Delete, ct);
+        platformDelete.SqlState.ShouldBe(PostgresErrorCodes.InsufficientPrivilege);
+        platformDelete.MessageText.ShouldContain("permission denied");
+    }
+
+    /// <summary>
+    /// <c>feature_flags</c> is the one platform table a tenant session may READ. Reads are ungated on
+    /// purpose: the capability resolver reads a flag inside the ambient request transaction so a
+    /// money-path kill switch takes effect immediately instead of waiting out a cache TTL, and there
+    /// is no safe way to have platform scope in there — <c>PlatformScopedExecutor</c> opens its own
+    /// transaction, and a <c>SET LOCAL</c> would persist to end of transaction and leave the rest of
+    /// the request with platform scope, defeating org isolation on the other two tables.
+    /// <para>
+    /// So the property under test is <b>toggling</b>, not reading. The grant is intentionally retained
+    /// (the CLI runs as the app role), which means the tenant-plane UPDATE/DELETE do not throw — they
+    /// are filtered to zero rows by the write policy. INSERT is the one that raises, because only the
+    /// write policy's WITH CHECK applies to it.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task Feature_flags_are_tenant_readable_but_only_platform_writable()
     {
         var ct = TestContext.Current.CancellationToken;
         var orgA = UuidV7.NewId();
@@ -395,27 +486,77 @@ public sealed class CapabilityTenancyTests(PostgresFixture fixture)
             await seed.CommitAsync(ct);
         }
 
-        var visible = await CountAsync(
+        // Readable inside a tenant session — this is what lets a kill switch be honored in-transaction.
+        var underTenant = await CountAsync(
             conn, "SELECT count(*) FROM feature_flags WHERE name = @name",
             orgId: orgA, platform: false, ct, ("name", flag));
-        visible.ShouldBe(0, "a flag is deployment state — no tenant session may read it");
+        underTenant.ShouldBe(1, "the resolver must be able to read a flag in the request transaction");
 
-        // The grant is intentionally retained (the CLI runs as the app role), so the toggle is stopped
-        // by the policy: zero rows, no error. Assert the flag is still off afterwards.
+        // And with no context at all, since a flag has no org to key on.
+        var withoutContext = await CountAsync(
+            conn, "SELECT count(*) FROM feature_flags WHERE name = @name",
+            orgId: null, platform: false, ct, ("name", flag));
+        withoutContext.ShouldBe(1);
+
+        // Writes: INSERT raises, UPDATE/DELETE are filtered to zero rows.
+        var insert = await ShouldFailAsync(conn, orgId: orgA, platform: false,
+            "INSERT INTO feature_flags (name, enabled, updated_at, updated_by) " +
+            "VALUES ('tenant-planted', true, now(), 'tenant')", ct);
+        insert.SqlState.ShouldBe(PostgresErrorCodes.InsufficientPrivilege);
+        insert.MessageText.ShouldContain("new row violates row-level security policy");
+
         await using (var tamper = await conn.BeginTransactionAsync(ct))
         {
             await SetContextAsync(conn, tamper, orgId: orgA, platform: false, ct);
+
             var toggled = await ExecAsync(conn, tamper,
                 "UPDATE feature_flags SET enabled = true WHERE name = @name", ct, ("name", flag));
             toggled.ShouldBe(0, "RLS, not the grant, is what stops a tenant-plane flag toggle");
+
+            var dropped = await ExecAsync(conn, tamper,
+                "DELETE FROM feature_flags WHERE name = @name", ct, ("name", flag));
+            dropped.ShouldBe(0, "nor may a tenant delete a flag to fall back to its default");
+
             await tamper.CommitAsync(ct);
         }
 
-        await using var check = await conn.BeginTransactionAsync(ct);
-        await SetContextAsync(conn, check, orgId: null, platform: true, ct);
-        await using var cmd = new NpgsqlCommand("SELECT enabled FROM feature_flags WHERE name = @name", conn, check);
-        cmd.Parameters.AddWithValue("name", flag);
-        (await cmd.ExecuteScalarAsync(ct)).ShouldBe(false);
+        (await ReadFlagAsync(conn, flag, ct)).ShouldBe(false, "the flag is still off after both attempts");
+    }
+
+    /// <summary>
+    /// The positive control for the test above: <c>feature_flags</c> deliberately has no
+    /// <c>RevokeAppendOnly</c>, because a flag is mutable state (unlike an entitlement, which is an
+    /// append-only grant event). Without this, adding the revoke would leave every "affects zero rows"
+    /// assertion passing for the wrong reason and break the CLI's toggle for good.
+    /// </summary>
+    [Fact]
+    public async Task Platform_scope_can_toggle_a_feature_flag()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var flag = $"probe-{Guid.NewGuid():N}";
+
+        await using var conn = await fixture.OpenAppConnectionAsync(ct);
+
+        await using (var seed = await conn.BeginTransactionAsync(ct))
+        {
+            await SetContextAsync(conn, seed, orgId: null, platform: true, ct);
+            await ExecAsync(conn, seed,
+                "INSERT INTO feature_flags (name, enabled, updated_at, updated_by) " +
+                "VALUES (@name, false, now(), 'platform')", ct, ("name", flag));
+            await seed.CommitAsync(ct);
+        }
+
+        await using (var toggle = await conn.BeginTransactionAsync(ct))
+        {
+            await SetContextAsync(conn, toggle, orgId: null, platform: true, ct);
+            var updated = await ExecAsync(conn, toggle,
+                "UPDATE feature_flags SET enabled = true, updated_by = 'ops' WHERE name = @name", ct,
+                ("name", flag));
+            updated.ShouldBe(1, "a flag is mutable state — the platform plane must be able to flip it");
+            await toggle.CommitAsync(ct);
+        }
+
+        (await ReadFlagAsync(conn, flag, ct)).ShouldBe(true);
     }
 
     // ── The GUC itself ──────────────────────────────────────────────────────────────────────────
@@ -566,6 +707,19 @@ public sealed class CapabilityTenancyTests(PostgresFixture fixture)
         await SetContextAsync(conn, tx, orgId, platform, ct);
 
         return await Should.ThrowAsync<PostgresException>(async () => await ExecAsync(conn, tx, sql, ct));
+    }
+
+    /// <summary>Reads a flag's current value under platform scope — the plane that can always see it.</summary>
+    private static async Task<bool> ReadFlagAsync(NpgsqlConnection conn, string flag, CancellationToken ct)
+    {
+        await using var tx = await conn.BeginTransactionAsync(ct);
+        await SetContextAsync(conn, tx, orgId: null, platform: true, ct);
+
+        await using var cmd = new NpgsqlCommand("SELECT enabled FROM feature_flags WHERE name = @name", conn, tx);
+        cmd.Parameters.AddWithValue("name", flag);
+        var value = (bool)(await cmd.ExecuteScalarAsync(ct))!;
+        await tx.CommitAsync(ct);
+        return value;
     }
 
     private static async Task<long> CountAsync(
