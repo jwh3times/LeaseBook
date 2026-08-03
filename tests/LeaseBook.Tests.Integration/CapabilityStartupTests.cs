@@ -7,6 +7,7 @@ using LeaseBook.Web.Adapters;
 using LeaseBook.Web.Capabilities;
 using LeaseBook.Web.Endpoints;
 using LeaseBook.Web.Health;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.FileProviders;
@@ -61,7 +62,7 @@ public sealed class CapabilityStartupTests(PostgresFixture fixture)
 
             var error = await Should.ThrowAsync<InvalidOperationException>(
                 async () => await CapabilityRegistryValidator.ValidateAsync(
-                    host.Services, Environment(Environments.Development), ct));
+                    host.Services, HostEnvironment(Environments.Development), ct));
 
             error.Message.ShouldContain("ghost-capability");
 
@@ -99,7 +100,7 @@ public sealed class CapabilityStartupTests(PostgresFixture fixture)
             await WriteFlagAsync("ghost-in-production", ct);
 
             await Should.NotThrowAsync(async () => await CapabilityRegistryValidator.ValidateAsync(
-                host.Services, Environment(Environments.Production), ct));
+                host.Services, HostEnvironment(Environments.Production), ct));
 
             // Silent tolerance would be the worst of both worlds: no boot failure AND no signal.
             captured.Entries.ShouldContain(
@@ -131,12 +132,61 @@ public sealed class CapabilityStartupTests(PostgresFixture fixture)
             await WriteFlagAsync(registered, ct);
 
             await Should.NotThrowAsync(async () => await CapabilityRegistryValidator.ValidateAsync(
-                host.Services, Environment(Environments.Development), ct));
+                host.Services, HostEnvironment(Environments.Development), ct));
         }
         finally
         {
             await DeleteFlagAsync(registered, ct);
         }
+    }
+
+    /// <summary>
+    /// <b>An unreachable database must not stop the host from binding — in any environment.</b> This is
+    /// the premise the whole readiness design rests on: a replica that boots while Postgres is degraded
+    /// is supposed to stay out of rotation rather than serve "everything off". It can only do that if it
+    /// gets far enough to bind. If startup validation threw on a connection failure, the process would
+    /// die before <c>app.Run()</c> and ACA would crash-loop the revision, which no probe tuning can fix.
+    /// <para>
+    /// Both environments are asserted, because the drift branch is environment-dependent and it would be
+    /// easy to make this one accidentally inherit that. Drift and outage are different failures and this
+    /// pins that they get different answers.
+    /// </para>
+    /// </summary>
+    [Theory]
+    [InlineData("Development")]
+    [InlineData("Production")]
+    public async Task An_unreachable_database_does_not_stop_the_host_from_binding(string environmentName)
+    {
+        var ct = TestContext.Current.CancellationToken;
+
+        // Port 1 refuses immediately rather than hanging, and Timeout=1 bounds the case where something
+        // is listening on it. A container that never binds is the failure under test, so this must not
+        // itself be slow.
+        const string Unreachable =
+            "Host=127.0.0.1;Port=1;Database=leasebook;Username=leasebook_app;Password=nope;Timeout=1";
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+
+        // A bare DbContext, which is all the validator resolves. AppDbContext would drag in
+        // ITenantContext and the rest of the host's graph for no benefit here.
+        services.AddDbContext<DbContext>(options => options
+            .UseNpgsql(Unreachable, npgsql => npgsql.SetPostgresVersion(18, 0))
+            .UseSnakeCaseNamingConvention());
+
+        await using var provider = services.BuildServiceProvider();
+
+        var captured = new CapturingLoggerProvider();
+        provider.GetRequiredService<ILoggerFactory>().AddProvider(captured);
+
+        await Should.NotThrowAsync(async () => await CapabilityRegistryValidator.ValidateAsync(
+            provider, HostEnvironment(environmentName), ct));
+
+        // Swallowing without a trace would be its own bug — the boot proceeded with drift unchecked.
+        captured.Entries.ShouldContain(
+            entry => entry.Level == LogLevel.Error
+                && entry.Message.Contains("feature_flags", StringComparison.Ordinal),
+            "riding out the outage must still leave an Error-level record that the check did not run");
     }
 
     /// <summary>
@@ -285,7 +335,7 @@ public sealed class CapabilityStartupTests(PostgresFixture fixture)
             ON CONFLICT (name) DO UPDATE SET enabled = EXCLUDED.enabled, updated_at = EXCLUDED.updated_at
             """,
             name,
-            notify: false,
+            notify: true,
             ct);
 
     /// <summary>
@@ -336,7 +386,12 @@ public sealed class CapabilityStartupTests(PostgresFixture fixture)
     /// option: <c>ProductionSecurityGuards.Validate</c> would reject the test configuration first, so
     /// the test would fail for an unrelated reason.
     /// </summary>
-    private static IHostEnvironment Environment(string environmentName) =>
+    /// <remarks>
+    /// Named <c>HostEnvironment</c>, not <c>Environment</c>: the latter shadows <see cref="Environment"/>
+    /// for every member of this class, which compiles right up until someone reaches for
+    /// <c>Environment.NewLine</c> and gets an incomprehensible error.
+    /// </remarks>
+    private static IHostEnvironment HostEnvironment(string environmentName) =>
         new StubEnvironment { EnvironmentName = environmentName };
 
     private sealed class StubEnvironment : IHostEnvironment

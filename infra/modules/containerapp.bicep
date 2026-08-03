@@ -155,43 +155,67 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
               secretRef: 'appinsights-connection-string'
             }
           ]
-          // Two probes, pointed at deliberately different endpoints.
+          // All three probe types, declared explicitly. Two endpoints, three jobs.
           //
-          // Readiness → /api/health/ready, which is 503 until the capability seam has been proven
-          // reachable (ADR-028). Without it a replica that booted while Postgres was degraded would
-          // take traffic and answer every capability question with the registry defaults —
-          // "everything off" — while its siblings answered correctly, so the same request would
-          // succeed or fail depending on which replica served it.
+          // /api/health/ready is 503 until the capability seam has been proven reachable (ADR-028).
+          // /api/health is a static response that touches no dependency. Which endpoint each probe
+          // uses is the load-bearing decision: liveness RESTARTS the container, so pointing it at
+          // anything that reads the database would turn one database blip into a simultaneous restart
+          // storm across every replica. A dependency belongs behind readiness; a wedged process
+          // belongs behind liveness.
           //
-          // Liveness → /api/health, which is a static response touching no dependency. That
-          // distinction is the whole point: liveness restarts the container, so pointing it at
-          // anything that reads the database would turn a database blip into a restart storm across
-          // every replica at once. Readiness is where a dependency belongs, liveness is where a
-          // wedged process belongs, and the app needs both.
+          // Startup — /api/health, and it must exist rather than be inherited. Program.cs does real
+          // work before app.Run(): the capability registry validation and, in production, Hangfire
+          // storage initialization. Kestrel is not bound during any of it, so a slow database can push
+          // the first successful bind well past liveness's own 10 + 3x10 = 40s budget, and liveness
+          // would kill a container that was merely still booting. A startup probe suspends liveness and
+          // readiness until it passes, which is exactly the guard that gap needs. Azure does document
+          // a default startup probe, but the sentence attributes it to the PORTAL adding defaults "if
+          // you don't define each type" — too thin a guarantee for a Bicep deployment to lean on when
+          // the failure mode is a crash loop. 5 + 10x15 = 155s.
           //
-          // failureThreshold: 3 on readiness, not the generous value this once carried. A readiness
-          // probe starts out failing and stays not-ready until its FIRST success, so a large
-          // threshold buys nothing on the cold-start path — the in-process CapabilityReadinessProbe
-          // already owns retry there, with capped backoff. What the threshold actually governs is the
-          // ready → not-ready transition after startup, and since IsPopulated is never cleared, the
-          // only way that happens is a hung process or an unresponsive Kestrel. Keeping such a replica
-          // in rotation for minutes is the failure this number decides, so it is small.
+          // Readiness — patient, because the dependency is its whole job and it has no other. The
+          // in-process CapabilityReadinessProbe backs off to a 15s ceiling, and against an unreachable
+          // server each attempt first burns Npgsql's own 15s connect timeout, so its attempts land at
+          // roughly 0s, 16s, 33s, 52s. Anything tighter than that gives up before the retry it is
+          // waiting on has even been made. The budget here is 10 + 10x20 = 210s, chosen to clear a
+          // Postgres Flexible Server zone-redundant HA failover (documented at 60-120s) with several
+          // in-process retries left over.
           //
-          // Azure's defaults are added PER TYPE ("if you don't define each type"), so declaring these
-          // two leaves the default TCP startup probe in place rather than removing it. They are also
-          // documented as added by the portal, which is reason enough to declare the ones that matter
-          // explicitly rather than assume an ARM/Bicep deployment inherits them.
+          // Liveness — fast, because its target is unambiguous. IsPopulated is never cleared once set,
+          // so after startup readiness cannot fail for a dependency reason; the only thing left is a
+          // hung process or an unresponsive Kestrel, and there is no reason to be patient about that.
+          // 10 + 3x10 = 40s to a restart.
+          //
+          // Every failureThreshold is <= 10 deliberately. The Microsoft.App/containerApps ARM
+          // reference states: "failureThreshold ... Minimum value is 1. Maximum value is 10." The
+          // resource provider rejects anything larger at deploy time, and `az bicep build` does NOT
+          // catch it — the property is typed `int`, so a template carrying 3000 compiles clean and
+          // fails only against a live subscription. Tolerance is therefore bought with periodSeconds
+          // (max 240), never by raising the threshold. Other ceilings, same source, all respected
+          // here: initialDelaySeconds max 60, timeoutSeconds max 240, successThreshold max 10.
           probes: [
+            {
+              type: 'Startup'
+              httpGet: {
+                path: '/api/health'
+                port: 8080
+              }
+              initialDelaySeconds: 5
+              periodSeconds: 15
+              timeoutSeconds: 3
+              failureThreshold: 10
+            }
             {
               type: 'Readiness'
               httpGet: {
                 path: '/api/health/ready'
                 port: 8080
               }
-              initialDelaySeconds: 3
-              periodSeconds: 5
-              timeoutSeconds: 3
-              failureThreshold: 3
+              initialDelaySeconds: 10
+              periodSeconds: 20
+              timeoutSeconds: 5
+              failureThreshold: 10
               successThreshold: 1
             }
             {
