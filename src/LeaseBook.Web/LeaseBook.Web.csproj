@@ -63,6 +63,7 @@
     <ProjectReference Include="..\LeaseBook.Modules.Accounting\LeaseBook.Modules.Accounting.csproj" />
     <ProjectReference Include="..\LeaseBook.Modules.Directory\LeaseBook.Modules.Directory.csproj" />
     <ProjectReference Include="..\LeaseBook.Modules.Banking\LeaseBook.Modules.Banking.csproj" />
+    <ProjectReference Include="..\LeaseBook.Modules.Capabilities\LeaseBook.Modules.Capabilities.csproj" />
     <ProjectReference Include="..\LeaseBook.Modules.Reporting\LeaseBook.Modules.Reporting.csproj" />
     <ProjectReference Include="..\LeaseBook.Modules.Operations\LeaseBook.Modules.Operations.csproj" />
     <ProjectReference Include="..\LeaseBook.Modules.Payments\LeaseBook.Modules.Payments.csproj" />

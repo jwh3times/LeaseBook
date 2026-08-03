@@ -17,5 +17,6 @@ public static class PersistenceAssemblies
         typeof(Modules.Reporting.ModuleMarker).Assembly,
         typeof(Modules.Operations.ModuleMarker).Assembly,
         typeof(Modules.Payments.ModuleMarker).Assembly,
+        typeof(Modules.Capabilities.ModuleMarker).Assembly,
     ];
 }

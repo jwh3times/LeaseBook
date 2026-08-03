@@ -24,6 +24,7 @@ public sealed class ModuleBoundaryTests
         ("LeaseBook.Modules.Reporting", typeof(Modules.Reporting.ModuleMarker).Assembly),
         ("LeaseBook.Modules.Operations", typeof(Modules.Operations.ModuleMarker).Assembly),
         ("LeaseBook.Modules.Payments", typeof(Modules.Payments.ModuleMarker).Assembly),
+        ("LeaseBook.Modules.Capabilities", typeof(Modules.Capabilities.ModuleMarker).Assembly),
     ];
 
     private static string[] ReferencedNames(Assembly assembly) =>
