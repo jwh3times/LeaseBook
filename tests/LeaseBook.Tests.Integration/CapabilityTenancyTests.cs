@@ -486,41 +486,49 @@ public sealed class CapabilityTenancyTests(PostgresFixture fixture)
             await seed.CommitAsync(ct);
         }
 
-        // Readable inside a tenant session — this is what lets a kill switch be honored in-transaction.
-        var underTenant = await CountAsync(
-            conn, "SELECT count(*) FROM feature_flags WHERE name = @name",
-            orgId: orgA, platform: false, ct, ("name", flag));
-        underTenant.ShouldBe(1, "the resolver must be able to read a flag in the request transaction");
-
-        // And with no context at all, since a flag has no org to key on.
-        var withoutContext = await CountAsync(
-            conn, "SELECT count(*) FROM feature_flags WHERE name = @name",
-            orgId: null, platform: false, ct, ("name", flag));
-        withoutContext.ShouldBe(1);
-
-        // Writes: INSERT raises, UPDATE/DELETE are filtered to zero rows.
-        var insert = await ShouldFailAsync(conn, orgId: orgA, platform: false,
-            "INSERT INTO feature_flags (name, enabled, updated_at, updated_by) " +
-            "VALUES ('tenant-planted', true, now(), 'tenant')", ct);
-        insert.SqlState.ShouldBe(PostgresErrorCodes.InsufficientPrivilege);
-        insert.MessageText.ShouldContain("new row violates row-level security policy");
-
-        await using (var tamper = await conn.BeginTransactionAsync(ct))
+        try
         {
-            await SetContextAsync(conn, tamper, orgId: orgA, platform: false, ct);
+            // Readable inside a tenant session — this is what lets a kill switch be honored in-transaction.
+            var underTenant = await CountAsync(
+                conn, "SELECT count(*) FROM feature_flags WHERE name = @name",
+                orgId: orgA, platform: false, ct, ("name", flag));
+            underTenant.ShouldBe(1, "the resolver must be able to read a flag in the request transaction");
 
-            var toggled = await ExecAsync(conn, tamper,
-                "UPDATE feature_flags SET enabled = true WHERE name = @name", ct, ("name", flag));
-            toggled.ShouldBe(0, "RLS, not the grant, is what stops a tenant-plane flag toggle");
+            // And with no context at all, since a flag has no org to key on. This is also what lets
+            // CapabilityRegistryValidator read the table at startup without opening platform scope.
+            var withoutContext = await CountAsync(
+                conn, "SELECT count(*) FROM feature_flags WHERE name = @name",
+                orgId: null, platform: false, ct, ("name", flag));
+            withoutContext.ShouldBe(1);
 
-            var dropped = await ExecAsync(conn, tamper,
-                "DELETE FROM feature_flags WHERE name = @name", ct, ("name", flag));
-            dropped.ShouldBe(0, "nor may a tenant delete a flag to fall back to its default");
+            // Writes: INSERT raises, UPDATE/DELETE are filtered to zero rows.
+            var insert = await ShouldFailAsync(conn, orgId: orgA, platform: false,
+                "INSERT INTO feature_flags (name, enabled, updated_at, updated_by) " +
+                "VALUES ('tenant-planted', true, now(), 'tenant')", ct);
+            insert.SqlState.ShouldBe(PostgresErrorCodes.InsufficientPrivilege);
+            insert.MessageText.ShouldContain("new row violates row-level security policy");
 
-            await tamper.CommitAsync(ct);
+            await using (var tamper = await conn.BeginTransactionAsync(ct))
+            {
+                await SetContextAsync(conn, tamper, orgId: orgA, platform: false, ct);
+
+                var toggled = await ExecAsync(conn, tamper,
+                    "UPDATE feature_flags SET enabled = true WHERE name = @name", ct, ("name", flag));
+                toggled.ShouldBe(0, "RLS, not the grant, is what stops a tenant-plane flag toggle");
+
+                var dropped = await ExecAsync(conn, tamper,
+                    "DELETE FROM feature_flags WHERE name = @name", ct, ("name", flag));
+                dropped.ShouldBe(0, "nor may a tenant delete a flag to fall back to its default");
+
+                await tamper.CommitAsync(ct);
+            }
+
+            (await ReadFlagAsync(conn, flag, ct)).ShouldBe(false, "the flag is still off after both attempts");
         }
-
-        (await ReadFlagAsync(conn, flag, ct)).ShouldBe(false, "the flag is still off after both attempts");
+        finally
+        {
+            await DeleteFlagAsPlatformAsync(conn, flag, ct);
+        }
     }
 
     /// <summary>
@@ -546,17 +554,24 @@ public sealed class CapabilityTenancyTests(PostgresFixture fixture)
             await seed.CommitAsync(ct);
         }
 
-        await using (var toggle = await conn.BeginTransactionAsync(ct))
+        try
         {
-            await SetContextAsync(conn, toggle, orgId: null, platform: true, ct);
-            var updated = await ExecAsync(conn, toggle,
-                "UPDATE feature_flags SET enabled = true, updated_by = 'ops' WHERE name = @name", ct,
-                ("name", flag));
-            updated.ShouldBe(1, "a flag is mutable state — the platform plane must be able to flip it");
-            await toggle.CommitAsync(ct);
-        }
+            await using (var toggle = await conn.BeginTransactionAsync(ct))
+            {
+                await SetContextAsync(conn, toggle, orgId: null, platform: true, ct);
+                var updated = await ExecAsync(conn, toggle,
+                    "UPDATE feature_flags SET enabled = true, updated_by = 'ops' WHERE name = @name", ct,
+                    ("name", flag));
+                updated.ShouldBe(1, "a flag is mutable state — the platform plane must be able to flip it");
+                await toggle.CommitAsync(ct);
+            }
 
-        (await ReadFlagAsync(conn, flag, ct)).ShouldBe(true);
+            (await ReadFlagAsync(conn, flag, ct)).ShouldBe(true);
+        }
+        finally
+        {
+            await DeleteFlagAsPlatformAsync(conn, flag, ct);
+        }
     }
 
     // ── The GUC itself ──────────────────────────────────────────────────────────────────────────
@@ -707,6 +722,22 @@ public sealed class CapabilityTenancyTests(PostgresFixture fixture)
         await SetContextAsync(conn, tx, orgId, platform, ct);
 
         return await Should.ThrowAsync<PostgresException>(async () => await ExecAsync(conn, tx, sql, ct));
+    }
+
+    /// <summary>
+    /// Restores the shared, global <c>feature_flags</c> table. Mandatory, not tidiness: the probe names
+    /// these tests plant are not in the capability registry, and
+    /// <c>CapabilityRegistryValidator</c> fails host startup on exactly that. A leaked row therefore
+    /// stops every sibling test that boots an <c>ApiFactory</c> — the table has no <c>org_id</c>, so
+    /// minting a fresh org buys no isolation here.
+    /// </summary>
+    private static async Task DeleteFlagAsPlatformAsync(
+        NpgsqlConnection conn, string flag, CancellationToken ct)
+    {
+        await using var tx = await conn.BeginTransactionAsync(ct);
+        await SetContextAsync(conn, tx, orgId: null, platform: true, ct);
+        await ExecAsync(conn, tx, "DELETE FROM feature_flags WHERE name = @name", ct, ("name", flag));
+        await tx.CommitAsync(ct);
     }
 
     /// <summary>Reads a flag's current value under platform scope — the plane that can always see it.</summary>

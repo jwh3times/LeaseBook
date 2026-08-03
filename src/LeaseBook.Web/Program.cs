@@ -15,8 +15,10 @@ using LeaseBook.SharedKernel.Observability;
 using LeaseBook.SharedKernel.Tenancy;
 using LeaseBook.Web.Adapters;
 using LeaseBook.Web.Auth;
+using LeaseBook.Web.Capabilities;
 using LeaseBook.Web.Cli;
 using LeaseBook.Web.Endpoints;
+using LeaseBook.Web.Health;
 using LeaseBook.Web.Jobs;
 using LeaseBook.Web.Persistence;
 using LeaseBook.Web.Reporting;
@@ -160,6 +162,14 @@ if (!isOpenApiBuild)
     builder.Services.AddSingleton<CapabilityReadinessProbe>();
     builder.Services.AddHostedService(sp => sp.GetRequiredService<CapabilityReadinessProbe>());
 }
+
+// Readiness (Task 7): what the probe above establishes, /api/health/ready reports. Registered
+// unconditionally — the check only reads a bool off the singleton cache, so it costs nothing in the
+// OpenAPI build, and MetaEndpoints maps the route in every configuration. Tagged `ready` so liveness
+// (/api/health) and readiness stay separable: an unreachable seam must remove a replica from
+// rotation, never restart it.
+builder.Services.AddHealthChecks()
+    .AddCheck<CapabilityReadinessCheck>(CapabilityReadinessCheck.Name, tags: [CapabilityReadinessCheck.ReadyTag]);
 
 // Accounting module services (chart-of-accounts provisioning, period lifecycle; the posting engine
 // and event catalog register here in later WPs). They consume the ambient DbContext + ITenantContext.
@@ -435,6 +445,12 @@ if (args is ["perf-probe", ..])
 if (!isOpenApiBuild)
 {
     ProductionSecurityGuards.Validate(app.Configuration, app.Environment);
+
+    // Task 7 (ADR-028): every feature_flags row must name a capability the registry knows about.
+    // Placed here for the same reasons as the guard above — after the CLI verbs have returned (a
+    // `seed` process must not be blocked by drift in a table it never reads) and outside the OpenAPI
+    // build, which has no database at all.
+    await CapabilityRegistryValidator.ValidateAsync(app.Services);
 }
 
 // The nightly trust-invariant sweep (WP-11). Deliberately registered here rather than beside
