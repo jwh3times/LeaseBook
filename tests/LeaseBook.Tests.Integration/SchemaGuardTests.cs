@@ -17,7 +17,7 @@ public sealed class SchemaGuardTests(PostgresFixture fixture)
     /// <summary>
     /// Global-class tables: no <c>org_id</c>, each justified (§C.3). Most carry no RLS either;
     /// <c>feature_flags</c> is the exception and is additionally asserted via
-    /// <see cref="PlatformOnlyTables"/>.
+    /// <see cref="ExpectedPlatformPolicies"/>.
     /// </summary>
     private static readonly HashSet<string> GlobalTables = new(StringComparer.Ordinal)
     {
@@ -27,45 +27,84 @@ public sealed class SchemaGuardTests(PostgresFixture fixture)
                                  // not of a tenant, so it has no org_id and lands in this arm. It is
                                  // the one entry here that still carries RLS — its writes are gated on
                                  // platform scope, so a tenant-plane path cannot toggle a flag, and
-                                 // that is asserted by PlatformWrittenTables below. The other three
+                                 // that is asserted by ExpectedPlatformPolicies below. The other three
                                  // capability tables DO carry org_id and get real RLS with a platform
                                  // escape — they pass the org-scoped arm above and need no entry here.
     };
 
-    /// <summary>
-    /// Platform-written tables (ADR-028): every policy that can admit a row must be gated on
-    /// <c>app.platform = 'on'</c>. Asserted POSITIVELY rather than exempted, and asserted on the
-    /// policy <i>predicates</i> rather than on mere policy existence — the org-scoped arm below never
-    /// inspects <c>feature_flags</c> (no <c>org_id</c>), and the <see cref="GlobalTables"/> arm checks
-    /// membership only, so without this a migration could <c>DISABLE ROW LEVEL SECURITY</c> on it and
-    /// leave the suite green while any tenant toggled a flag.
-    /// <para>
-    /// The "every non-null WITH CHECK is a platform gate and nothing else" clause is the one that
-    /// catches the write-permissive regression on all four tables at once: a WITH CHECK that ORs org
-    /// equality in alongside the GUC lets a tenant insert its own <c>granted = true</c> entitlement
-    /// row and self-grant a paid capability. See <see cref="GatedOnPlatform"/> — mentioning the GUC
-    /// is necessary but not sufficient, which is precisely how that shape sneaks through a naive
-    /// substring check.
-    /// </para>
-    /// </summary>
-    private static readonly HashSet<string> PlatformWrittenTables = new(StringComparer.Ordinal)
-    {
-        "feature_flags",         // a tenant-plane path must not be able to toggle a deployment flag
-        "platform_audit_events", // the platform audit trail is written only by the platform plane
-        "entitlements",          // a tenant must not be able to grant itself a paid capability
-        "capability_cohorts",    // nor add itself to a rollout cohort
-    };
+    // The three predicates the capability migration emits, as Postgres normalizes and stores them:
+    // it re-prints the parse tree, so 'app.platform' becomes 'app.platform'::text and so on. These
+    // are compared literally, which is the point — see ExpectedPlatformPolicies.
+    private const string PlatformGate = "(current_setting('app.platform'::text, true) = 'on'::text)";
+
+    private const string OrgOrPlatform =
+        "((org_id = (NULLIF(current_setting('app.org_id'::text, true), ''::text))::uuid) " +
+        "OR (current_setting('app.platform'::text, true) = 'on'::text))";
+
+    private const string Unconditional = "true";
 
     /// <summary>
-    /// The subset whose READS are platform-only too: no policy on these may admit a row without
-    /// platform scope. <c>feature_flags</c> is deliberately NOT here — it is tenant-readable so the
-    /// capability resolver can read a kill switch inside the ambient request transaction (ADR-028) —
-    /// which is exactly why the read gate needs asserting on the table that still has one.
+    /// The exact policy set for every platform table (ADR-028), pinned. Any deviation — an added
+    /// policy, a removed one, a changed command, a changed role list, a changed predicate — fails,
+    /// and the only way to make it pass is to edit this expectation deliberately.
+    /// <para>
+    /// This deliberately inverts the default. Two rounds of heuristics both had blind spots that sat
+    /// one word away from the hole they existed to catch:
+    /// </para>
+    /// <list type="bullet">
+    /// <item>"some policy's WITH CHECK mentions app.platform" passed the write-permissive
+    /// <c>WITH CHECK (org_id = my_org OR platform)</c>, which names the GUC and is still a self-grant
+    /// hole — a tenant satisfies the left branch for its own rows.</item>
+    /// <item>Adding "…and does not mention org_id" fixed only that literal shape. <c>OR true</c>,
+    /// <c>OR current_user = 'leasebook_app'</c> and any helper function are all semantically identical
+    /// holes that never contain the string <c>org_id</c>.</item>
+    /// <item>Filtering to <c>with_check IS NOT NULL</c> skipped the most dangerous shape of all: a
+    /// <c>FOR ALL … USING (true)</c> with no explicit WITH CHECK. Postgres then uses the USING
+    /// expression as the new-row check and reports <c>with_check</c> as NULL, so an unconditional
+    /// write policy was invisible to the check while a sibling policy satisfied the positive arm.
+    /// <c>FOR DELETE … USING (true)</c> is the same story — DELETE has no WITH CHECK at all.</item>
+    /// </list>
+    /// <para>
+    /// Hence <see cref="PolicyPin.EffectiveCheck"/>: for ALL/INSERT/UPDATE the new-row check is
+    /// <c>with_check ?? qual</c>, and for DELETE it is <c>qual</c>. Reading only the column named
+    /// with_check is what let the NULL case through.
+    /// </para>
     /// </summary>
-    private static readonly HashSet<string> PlatformOnlyReadTables = new(StringComparer.Ordinal)
+    private static readonly Dictionary<string, PolicyPin[]> ExpectedPlatformPolicies = new(StringComparer.Ordinal)
     {
-        "platform_audit_events", // who granted what to whom is never visible inside a tenant session
+        // Tenant reads its OWN rows (or platform reads all); every write is platform-only.
+        ["entitlements"] =
+        [
+            new("entitlements_org_read", "SELECT", "{public}", OrgOrPlatform, EffectiveCheck: null),
+            new("entitlements_platform_write", "ALL", "{public}", PlatformGate, PlatformGate),
+        ],
+        ["capability_cohorts"] =
+        [
+            new("capability_cohorts_org_read", "SELECT", "{public}", OrgOrPlatform, EffectiveCheck: null),
+            new("capability_cohorts_platform_write", "ALL", "{public}", PlatformGate, PlatformGate),
+        ],
+
+        // Readable anywhere — the capability resolver reads a kill switch inside the ambient request
+        // transaction, where platform scope is unavailable and unsafe to fake. Writes stay platform-only.
+        ["feature_flags"] =
+        [
+            new("feature_flags_read", "SELECT", "{public}", Unconditional, EffectiveCheck: null),
+            new("feature_flags_platform_write", "ALL", "{public}", PlatformGate, PlatformGate),
+        ],
+
+        // Platform plane both ways: who granted what to whom is never visible in a tenant session.
+        ["platform_audit_events"] =
+        [
+            new("platform_audit_events_platform_only", "ALL", "{public}", PlatformGate, PlatformGate),
+        ],
     };
+
+    /// <param name="Qual">Normalized <c>USING</c>. Null for an INSERT-only policy, which has none.</param>
+    /// <param name="EffectiveCheck">
+    /// The predicate a NEW row must satisfy: <c>with_check ?? qual</c> for ALL/INSERT/UPDATE,
+    /// <c>qual</c> for DELETE, and null for SELECT, which admits no rows.
+    /// </param>
+    private sealed record PolicyPin(string Name, string Command, string Roles, string? Qual, string? EffectiveCheck);
 
     /// <summary>
     /// Identity-class tables (§C.3 / pitfall E6): exempt from RLS even though <c>asp_net_users</c>
@@ -93,8 +132,7 @@ public sealed class SchemaGuardTests(PostgresFixture fixture)
         var policied = policies.Select(p => p.Table).ToHashSet(StringComparer.Ordinal);
 
         var failures = new List<string>();
-        var seenPlatformWritten = new HashSet<string>(StringComparer.Ordinal);
-        var seenPlatformOnlyRead = new HashSet<string>(StringComparer.Ordinal);
+        var seenPlatformTables = new HashSet<string>(StringComparer.Ordinal);
         foreach (var (name, rowSecurity, forceRowSecurity) in tables)
         {
             if (IdentityTables.Contains(name))
@@ -104,44 +142,16 @@ public sealed class SchemaGuardTests(PostgresFixture fixture)
 
             // Positive assertion, deliberately outside the org_id branch below: feature_flags has no
             // org_id, so neither the org-scoped arm nor the allowlist arm would ever inspect its RLS.
-            if (PlatformWrittenTables.Contains(name))
+            // The policy predicates themselves are pinned separately, in
+            // Platform_table_policies_match_their_pinned_definitions.
+            if (ExpectedPlatformPolicies.ContainsKey(name))
             {
-                seenPlatformWritten.Add(name);
-                var own = policies.Where(p => p.Table == name).ToList();
+                seenPlatformTables.Add(name);
 
                 if (!rowSecurity || !forceRowSecurity)
                 {
-                    failures.Add($"{name}: platform-written but RLS not ENABLEd+FORCEd " +
+                    failures.Add($"{name}: platform table but RLS not ENABLEd+FORCEd " +
                                  $"(relrowsecurity={rowSecurity}, relforcerowsecurity={forceRowSecurity}).");
-                }
-
-                if (own.Count == 0)
-                {
-                    failures.Add($"{name}: platform-written but has no row-level security policy.");
-                }
-
-                if (!own.Any(p => GatedOnPlatform(p.WithCheck)))
-                {
-                    failures.Add($"{name}: platform-written but no policy admits rows on app.platform — " +
-                                 "nothing can write it, or the gate was dropped.");
-                }
-
-                foreach (var open in own.Where(p => p.WithCheck is not null && !GatedOnPlatform(p.WithCheck)))
-                {
-                    failures.Add($"{name}: policy {open.Name} admits writes without platform scope " +
-                                 $"(WITH CHECK {open.WithCheck}) — a tenant could write this table.");
-                }
-            }
-
-            if (PlatformOnlyReadTables.Contains(name))
-            {
-                seenPlatformOnlyRead.Add(name);
-
-                foreach (var open in policies.Where(p =>
-                             p.Table == name && p.Qual is not null && !GatedOnPlatform(p.Qual)))
-                {
-                    failures.Add($"{name}: policy {open.Name} admits reads without platform scope " +
-                                 $"(USING {open.Qual}) — this table is never visible in a tenant session.");
                 }
             }
 
@@ -165,8 +175,7 @@ public sealed class SchemaGuardTests(PostgresFixture fixture)
         }
 
         // A renamed or dropped platform table must not silently take its assertion with it.
-        seenPlatformWritten.ShouldBe(PlatformWrittenTables, ignoreOrder: true);
-        seenPlatformOnlyRead.ShouldBe(PlatformOnlyReadTables, ignoreOrder: true);
+        seenPlatformTables.ShouldBe(ExpectedPlatformPolicies.Keys, ignoreOrder: true);
 
         failures.ShouldBeEmpty(failures.Count == 0 ? "" : string.Join(Environment.NewLine, failures));
 
@@ -175,37 +184,98 @@ public sealed class SchemaGuardTests(PostgresFixture fixture)
     }
 
     /// <summary>
-    /// A predicate is a platform gate only if it turns on <c>app.platform</c> and on nothing else.
-    /// The <c>org_id</c> clause is what makes this more than a substring check: the write-permissive
-    /// shape this guard exists to catch is
-    /// <c>WITH CHECK (org_id = my_org OR current_setting('app.platform', ...) = 'on')</c>, which
-    /// mentions the GUC and is still a self-grant hole — a tenant satisfies the left branch for its
-    /// own rows. Mentioning the GUC is necessary but nowhere near sufficient.
-    /// <para>
-    /// Matching is on the GUC name rather than the whole expression because Postgres normalizes what
-    /// it stores: the emitted <c>current_setting('app.platform', true) = 'on'</c> comes back as
-    /// <c>(current_setting('app.platform'::text, true) = 'on'::text)</c>.
-    /// </para>
+    /// The platform tables' policies, pinned exactly (see <see cref="ExpectedPlatformPolicies"/>).
+    /// An unexpected policy fails rather than passing unless it trips a heuristic — that inversion is
+    /// the whole point, because every heuristic tried so far had a blind spot adjacent to the hole it
+    /// was guarding.
     /// </summary>
-    private static bool GatedOnPlatform(string? predicate) =>
-        predicate?.Contains("app.platform", StringComparison.Ordinal) == true &&
-        predicate?.Contains("org_id", StringComparison.Ordinal) == false;
+    [Fact]
+    public async Task Platform_table_policies_match_their_pinned_definitions()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var conn = new NpgsqlConnection(fixture.MigratorConnectionString);
+        await conn.OpenAsync(ct);
 
-    private static async Task<List<(string Table, string Name, string? Qual, string? WithCheck)>> ReadPoliciesAsync(
-        NpgsqlConnection conn, CancellationToken ct)
+        var policies = await ReadPoliciesAsync(conn, ct);
+        var failures = new List<string>();
+
+        foreach (var (table, expected) in ExpectedPlatformPolicies)
+        {
+            var actual = policies
+                .Where(p => p.Table == table)
+                .Select(p => new PolicyPin(p.Name, p.Command, p.Roles, p.Qual, EffectiveCheckOf(p)))
+                .OrderBy(p => p.Name, StringComparer.Ordinal)
+                .ToList();
+
+            foreach (var extra in actual.Where(a => expected.All(e => e.Name != a.Name)))
+            {
+                failures.Add($"{table}: UNEXPECTED policy {Describe(extra)}. If it is intentional, add it " +
+                             "to ExpectedPlatformPolicies and say why in the same change.");
+            }
+
+            foreach (var want in expected)
+            {
+                var got = actual.SingleOrDefault(a => a.Name == want.Name);
+                if (got is null)
+                {
+                    failures.Add($"{table}: MISSING policy {want.Name} — expected {Describe(want)}.");
+                }
+                else if (got != want)
+                {
+                    failures.Add($"{table}: policy {want.Name} DRIFTED.{Environment.NewLine}" +
+                                 $"  expected {Describe(want)}{Environment.NewLine}" +
+                                 $"  actual   {Describe(got)}");
+                }
+            }
+        }
+
+        failures.ShouldBeEmpty(failures.Count == 0 ? "" : Environment.NewLine + string.Join(Environment.NewLine, failures));
+    }
+
+    /// <summary>
+    /// The predicate a NEW row must satisfy. A <c>FOR ALL</c>/<c>FOR UPDATE</c> policy written with
+    /// only <c>USING</c> reuses that expression as its new-row check and reports <c>with_check</c> as
+    /// NULL, so reading the with_check column alone would treat <c>FOR ALL USING (true)</c> as having
+    /// no write rule at all. DELETE admits no new row, so its gate is the <c>USING</c>; SELECT has no
+    /// write path.
+    /// </summary>
+    private static string? EffectiveCheckOf((string Table, string Name, string Command, string Roles, string? Qual, string? WithCheck) policy) =>
+        policy.Command switch
+        {
+            "ALL" or "INSERT" or "UPDATE" => policy.WithCheck ?? policy.Qual,
+            "DELETE" => policy.Qual,
+            _ => null, // SELECT
+        };
+
+    private static string Describe(PolicyPin pin) =>
+        $"[{pin.Command} TO {pin.Roles}] USING {pin.Qual ?? "<none>"} CHECK {pin.EffectiveCheck ?? "<none>"}";
+
+    /// <summary>
+    /// Collapses runs of whitespace so that reformatting the SQL in a migration cannot fail the pin.
+    /// Postgres re-prints predicates from the parse tree, so this is belt-and-braces, but the pin is
+    /// meant to fail on meaning, not on layout.
+    /// </summary>
+    private static string? Normalize(string? sql) =>
+        sql is null ? null : string.Join(' ', sql.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+
+    private static async Task<List<(string Table, string Name, string Command, string Roles, string? Qual, string? WithCheck)>>
+        ReadPoliciesAsync(NpgsqlConnection conn, CancellationToken ct)
     {
         await using var cmd = new NpgsqlCommand(
-            "SELECT tablename, policyname, qual, with_check FROM pg_policies WHERE schemaname = 'public'", conn);
+            "SELECT tablename, policyname, cmd, roles::text, qual, with_check " +
+            "FROM pg_policies WHERE schemaname = 'public'", conn);
         await using var reader = await cmd.ExecuteReaderAsync(ct);
 
-        var result = new List<(string, string, string?, string?)>();
+        var result = new List<(string, string, string, string, string?, string?)>();
         while (await reader.ReadAsync(ct))
         {
             result.Add((
                 reader.GetString(0),
                 reader.GetString(1),
-                reader.IsDBNull(2) ? null : reader.GetString(2),
-                reader.IsDBNull(3) ? null : reader.GetString(3)));
+                reader.GetString(2),
+                reader.GetString(3),
+                Normalize(reader.IsDBNull(4) ? null : reader.GetString(4)),
+                Normalize(reader.IsDBNull(5) ? null : reader.GetString(5))));
         }
 
         return result;

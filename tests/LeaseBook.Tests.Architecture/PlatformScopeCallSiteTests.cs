@@ -75,16 +75,19 @@ public sealed class PlatformScopeCallSiteTests
 
     /// <summary>
     /// Comments are not call sites. This matters in practice, not in theory: the doc comments on
-    /// <c>Rls.cs</c> and the capabilities migration have to spell out <i>why</i> a SET LOCAL of this
-    /// GUC inside the request transaction is unsafe, and without this the guard fails on its own
-    /// rationale. Only the code left of the line-comment marker is matched, so a commented-out
-    /// statement is ignored (it does nothing) while a real one on the same line is still caught.
+    /// <c>Rls.cs</c> and the capabilities migration have to spell out <i>why</i> setting this GUC
+    /// inside the request transaction is unsafe, and without this the guard fails on its own
+    /// rationale.
+    /// <para>
+    /// Only a WHOLE-LINE comment is skipped, never a trailing one. Cutting at the first marker
+    /// anywhere on the line would let a marker inside an earlier string literal blind the guard to
+    /// real code after it — <c>Log("https://wiki/x"); db.ExecuteSqlRaw("SET LOCAL app.platform …");</c>
+    /// would be silently skipped on the <c>//</c> in the URL. Whole-line matching covers every false
+    /// positive actually hit and removes that bypass entirely.
+    /// </para>
     /// </summary>
-    private static string StripLineComment(string line, string marker)
-    {
-        var at = line.IndexOf(marker, StringComparison.Ordinal);
-        return at < 0 ? line : line[..at];
-    }
+    private static string StripLineComment(string line, string marker) =>
+        line.TrimStart().StartsWith(marker, StringComparison.Ordinal) ? "" : line;
 
     /// <summary>
     /// Application code AND database bootstrap. SQL is in scope because
