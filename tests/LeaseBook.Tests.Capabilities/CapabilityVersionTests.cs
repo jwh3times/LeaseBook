@@ -17,14 +17,56 @@ public sealed class CapabilityVersionTests
         CapabilityCatalog.All.ToDictionary(c => c.Name, _ => value, StringComparer.Ordinal);
 
     /// <summary>
-    /// The cross-host half. A cache-load timestamp or a per-host counter would fail here, and the
-    /// consequence in production is a confirm rejected on every request that happened to land on a
-    /// different replica than its preview.
+    /// <b>No ambient clock.</b> The delay is load-bearing, not padding: two back-to-back calls prove
+    /// almost nothing, because <c>DateTimeOffset.UtcNow</c> advances in ~15.6ms steps on Windows, so
+    /// a clock-derived version would very likely return the same value twice and this test would pass
+    /// against exactly the derivation it exists to forbid. 100ms clears that granularity with room to
+    /// spare.
+    /// <para>
+    /// The cross-<i>host</i> half of the property is
+    /// <c>CapabilityPropagationTests.Two_hosts_resolving_the_same_state_agree_on_the_version</c>; this
+    /// is the cross-<i>time</i> half. Both matter, because Task 10 compares a preview's token against
+    /// a confirm's, and the two can differ in either dimension.
+    /// </para>
     /// </summary>
     [Fact]
-    public void Identical_sets_produce_identical_versions()
+    public async Task Identical_sets_produce_identical_versions_across_time()
     {
-        CapabilityVersion.Compute(Complete()).ShouldBe(CapabilityVersion.Compute(Complete()));
+        var first = CapabilityVersion.Compute(Complete());
+
+        await Task.Delay(100, TestContext.Current.CancellationToken);
+
+        CapabilityVersion.Compute(Complete()).ShouldBe(first);
+    }
+
+    /// <summary>
+    /// <b>No hidden counter</b>, asserted without depending on timing at all. A per-call or per-host
+    /// counter folded into the digest would drift between the first and third computation even though
+    /// their inputs are identical — and unlike the clock case, no delay is needed to expose it.
+    /// </summary>
+    [Fact]
+    public void Interleaving_a_different_set_does_not_perturb_the_version()
+    {
+        var before = CapabilityVersion.Compute(Complete());
+        _ = CapabilityVersion.Compute(Complete(value: false));
+
+        CapabilityVersion.Compute(Complete()).ShouldBe(before);
+    }
+
+    /// <summary>
+    /// The encoding must be injective: <c>{"a=1\nb": true}</c> and <c>{"a": true, "b": true}</c> are
+    /// different sets, and without length-prefixed fields they serialize to identical bytes — two
+    /// different sets sharing a version, which is the direction that lets a confirm post under
+    /// capabilities the preview never saw. Unreachable through the registry, but Compute is public
+    /// and its doc promises the property for any dictionary.
+    /// </summary>
+    [Fact]
+    public void Separator_bearing_keys_do_not_collide()
+    {
+        var single = new Dictionary<string, bool>(StringComparer.Ordinal) { ["a=1\nb"] = true };
+        var pair = new Dictionary<string, bool>(StringComparer.Ordinal) { ["a"] = true, ["b"] = true };
+
+        CapabilityVersion.Compute(single).ShouldNotBe(CapabilityVersion.Compute(pair));
     }
 
     /// <summary>Insertion order is not part of the set's identity, so it must not reach the digest.</summary>

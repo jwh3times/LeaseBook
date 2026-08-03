@@ -45,13 +45,12 @@ public static class CapabilityVersion
     /// The source-code registry's shape, hashed once per process. Ordered by name so the digest does
     /// not depend on declaration order in <see cref="CapabilityCatalog.All"/>.
     /// </summary>
-    private static readonly string RegistryShape = string.Join(
-        ";",
+    private static readonly string RegistryShape = string.Concat(
         CapabilityCatalog.All
             .OrderBy(c => c.Name, StringComparer.Ordinal)
             .Select(c => string.Create(
                 CultureInfo.InvariantCulture,
-                $"{c.Name}:{Flag(c.RequiresGrant)}{Flag(c.DefaultEnabled)}{Flag(c.IsMoneyPath)}{Flag(c.IsFixture)}")));
+                $"{Delimited(c.Name)}:{Flag(c.RequiresGrant)}{Flag(c.DefaultEnabled)}{Flag(c.IsMoneyPath)}{Flag(c.IsFixture)};")));
 
     /// <summary>
     /// Hashes the ordered <c>(name, value)</c> pairs of a resolved set plus the registry shape.
@@ -65,11 +64,11 @@ public static class CapabilityVersion
 
         var canonical = new StringBuilder()
             .Append(Scheme).Append('\n')
-            .Append(RegistryShape).Append('\n');
+            .Append(Delimited(RegistryShape)).Append('\n');
 
         foreach (var pair in values.OrderBy(v => v.Key, StringComparer.Ordinal))
         {
-            canonical.Append(pair.Key).Append('=').Append(Flag(pair.Value)).Append('\n');
+            canonical.Append(Delimited(pair.Key)).Append('=').Append(Flag(pair.Value)).Append('\n');
         }
 
         var digest = SHA256.HashData(Encoding.UTF8.GetBytes(canonical.ToString()));
@@ -80,4 +79,19 @@ public static class CapabilityVersion
     }
 
     private static char Flag(bool value) => value ? '1' : '0';
+
+    /// <summary>
+    /// Length-prefixes a variable-length field, making the encoding <b>injective</b>.
+    /// <para>
+    /// Without this, the separators are ambiguous whenever a key can contain one: the single entry
+    /// <c>{"a=1\nb": true}</c> and the pair <c>{"a": true, "b": true}</c> both encode to the bytes
+    /// <c>a=1\nb=1\n</c>, so two different sets would share a version — precisely the failure
+    /// <see cref="Compute"/> promises cannot happen. Unreachable through the registry today, but
+    /// <see cref="Compute"/> is public and takes an arbitrary dictionary, so the guarantee has to
+    /// hold for its actual input domain rather than for the inputs we expect. Rejecting the
+    /// characters instead would trade a silent collision for a throw on data that is otherwise fine.
+    /// </para>
+    /// </summary>
+    private static string Delimited(string field) =>
+        string.Create(CultureInfo.InvariantCulture, $"{field.Length}:{field}");
 }
