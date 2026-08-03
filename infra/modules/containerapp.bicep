@@ -155,6 +155,31 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
               secretRef: 'appinsights-connection-string'
             }
           ]
+          // Readiness only, no liveness probe. /api/health/ready is 503 until the capability seam has
+          // been proven reachable (ADR-028): without it a replica that booted while Postgres was
+          // degraded would take traffic and answer every capability question with the registry
+          // defaults — "everything off" — while its siblings answered correctly, so the same request
+          // would succeed or fail depending on which replica served it. Failing readiness removes the
+          // replica from rotation; it does NOT restart it, which is the correct response to a
+          // dependency being down rather than the process being wedged.
+          //
+          // failureThreshold is deliberately generous. The in-process probe already retries with
+          // capped backoff, and a database that is merely slow to accept connections on a cold
+          // revision must be given time rather than pinned out of rotation. 30 × 5s ≈ 150s.
+          probes: [
+            {
+              type: 'Readiness'
+              httpGet: {
+                path: '/api/health/ready'
+                port: 8080
+              }
+              initialDelaySeconds: 3
+              periodSeconds: 5
+              timeoutSeconds: 3
+              failureThreshold: 30
+              successThreshold: 1
+            }
+          ]
         }
       ]
       scale: {
