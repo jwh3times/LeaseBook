@@ -133,6 +133,9 @@ builder.Services.AddScoped<ActorContext>();
 builder.Services.AddScoped<IActorContext>(sp => sp.GetRequiredService<ActorContext>());
 builder.Services.AddScoped<DbContext>(sp => sp.GetRequiredService<AppDbContext>());
 builder.Services.AddScoped<OrgScopedExecutor>();
+// Platform-plane counterpart (ADR-028): the single call site that sets app.platform. Scoped, like
+// OrgScopedExecutor, because it opens a transaction on the request/job-scoped DbContext.
+builder.Services.AddScoped<PlatformScopedExecutor>();
 
 // Accounting module services (chart-of-accounts provisioning, period lifecycle; the posting engine
 // and event catalog register here in later WPs). They consume the ambient DbContext + ITenantContext.
