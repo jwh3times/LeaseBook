@@ -40,9 +40,12 @@ public sealed class SchemaGuardTests(PostgresFixture fixture)
     /// membership only, so without this a migration could <c>DISABLE ROW LEVEL SECURITY</c> on it and
     /// leave the suite green while any tenant toggled a flag.
     /// <para>
-    /// The "every non-null WITH CHECK mentions app.platform" clause is the one that catches the
-    /// write-permissive regression on all four tables at once: an org-equality WITH CHECK lets a
-    /// tenant insert its own <c>granted = true</c> entitlement row and self-grant a paid capability.
+    /// The "every non-null WITH CHECK is a platform gate and nothing else" clause is the one that
+    /// catches the write-permissive regression on all four tables at once: a WITH CHECK that ORs org
+    /// equality in alongside the GUC lets a tenant insert its own <c>granted = true</c> entitlement
+    /// row and self-grant a paid capability. See <see cref="GatedOnPlatform"/> — mentioning the GUC
+    /// is necessary but not sufficient, which is precisely how that shape sneaks through a naive
+    /// substring check.
     /// </para>
     /// </summary>
     private static readonly HashSet<string> PlatformWrittenTables = new(StringComparer.Ordinal)
@@ -172,13 +175,21 @@ public sealed class SchemaGuardTests(PostgresFixture fixture)
     }
 
     /// <summary>
-    /// Postgres normalizes a policy predicate, so the emitted
-    /// <c>current_setting('app.platform', true) = 'on'</c> comes back as
-    /// <c>(current_setting('app.platform'::text, true) = 'on'::text)</c>. Match the GUC name, which
-    /// survives normalization, rather than the whole expression.
+    /// A predicate is a platform gate only if it turns on <c>app.platform</c> and on nothing else.
+    /// The <c>org_id</c> clause is what makes this more than a substring check: the write-permissive
+    /// shape this guard exists to catch is
+    /// <c>WITH CHECK (org_id = my_org OR current_setting('app.platform', ...) = 'on')</c>, which
+    /// mentions the GUC and is still a self-grant hole — a tenant satisfies the left branch for its
+    /// own rows. Mentioning the GUC is necessary but nowhere near sufficient.
+    /// <para>
+    /// Matching is on the GUC name rather than the whole expression because Postgres normalizes what
+    /// it stores: the emitted <c>current_setting('app.platform', true) = 'on'</c> comes back as
+    /// <c>(current_setting('app.platform'::text, true) = 'on'::text)</c>.
+    /// </para>
     /// </summary>
     private static bool GatedOnPlatform(string? predicate) =>
-        predicate?.Contains("app.platform", StringComparison.Ordinal) == true;
+        predicate?.Contains("app.platform", StringComparison.Ordinal) == true &&
+        predicate?.Contains("org_id", StringComparison.Ordinal) == false;
 
     private static async Task<List<(string Table, string Name, string? Qual, string? WithCheck)>> ReadPoliciesAsync(
         NpgsqlConnection conn, CancellationToken ct)
