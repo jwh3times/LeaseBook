@@ -22,6 +22,7 @@
     <ProjectReference Include="..\..\src\LeaseBook.Modules.Accounting\LeaseBook.Modules.Accounting.csproj" />
     <ProjectReference Include="..\..\src\LeaseBook.Modules.Directory\LeaseBook.Modules.Directory.csproj" />
     <ProjectReference Include="..\..\src\LeaseBook.Modules.Banking\LeaseBook.Modules.Banking.csproj" />
+    <ProjectReference Include="..\..\src\LeaseBook.Modules.Capabilities\LeaseBook.Modules.Capabilities.csproj" />
     <ProjectReference Include="..\..\src\LeaseBook.Modules.Reporting\LeaseBook.Modules.Reporting.csproj" />
     <ProjectReference Include="..\..\src\LeaseBook.Modules.Operations\LeaseBook.Modules.Operations.csproj" />
     <ProjectReference Include="..\..\src\LeaseBook.Modules.Payments\LeaseBook.Modules.Payments.csproj" />
