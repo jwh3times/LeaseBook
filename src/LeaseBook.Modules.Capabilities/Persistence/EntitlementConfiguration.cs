@@ -29,7 +29,15 @@ public sealed class EntitlementConfiguration : IEntityTypeConfiguration<Entitlem
         builder.Property(e => e.EffectiveAt).IsRequired();
         builder.Property(e => e.Actor).IsRequired();
 
-        // Serves the resolver's "latest row per (org, capability)" read.
-        builder.HasIndex(e => new { e.OrgId, e.Capability, e.EffectiveAt });
+        // Serves the resolver's "latest row per (org, capability)" read AND makes that read
+        // well-defined: two grant events for the same org and capability at the same instant are
+        // meaningless, and the resolver would have to break the tie arbitrarily. UNIQUE rejects the
+        // second one at write time instead. Id is NOT a usable fallback tie-break — see Entitlement.Id.
+        //
+        // This replaces the non-unique index the table was created with rather than sitting beside
+        // it: the column list is identical, so a unique btree serves every read the plain one did.
+        builder.HasIndex(e => new { e.OrgId, e.Capability, e.EffectiveAt })
+            .IsUnique()
+            .HasDatabaseName("ux_entitlements_org_capability_effective_at");
     }
 }

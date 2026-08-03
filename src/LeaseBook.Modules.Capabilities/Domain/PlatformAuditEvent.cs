@@ -1,3 +1,5 @@
+using LeaseBook.SharedKernel;
+
 namespace LeaseBook.Modules.Capabilities.Domain;
 
 /// <summary>
@@ -13,7 +15,8 @@ namespace LeaseBook.Modules.Capabilities.Domain;
 /// </summary>
 public sealed class PlatformAuditEvent
 {
-    public Guid Id { get; set; }
+    /// <summary>App-generated UUIDv7 (P6) — never a database default.</summary>
+    public Guid Id { get; set; } = UuidV7.NewId();
 
     public DateTime OccurredAt { get; set; }
 

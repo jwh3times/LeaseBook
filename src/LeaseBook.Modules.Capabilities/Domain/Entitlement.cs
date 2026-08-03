@@ -1,3 +1,5 @@
+using LeaseBook.SharedKernel;
+
 namespace LeaseBook.Modules.Capabilities.Domain;
 
 /// <summary>
@@ -15,7 +17,14 @@ namespace LeaseBook.Modules.Capabilities.Domain;
 /// </summary>
 public sealed class Entitlement
 {
-    public Guid Id { get; set; }
+    /// <summary>
+    /// App-generated UUIDv7 (P6), like every other key in the system — never a database default.
+    /// Note it is <b>not</b> a usable tie-break for two grants at the same instant:
+    /// <c>Guid.CreateVersion7</c> carries a millisecond timestamp with random low bits and no
+    /// monotonic counter, so ids minted in the same millisecond sort arbitrarily. The unique index
+    /// <c>ux_entitlements_org_capability_effective_at</c> is what makes that tie impossible.
+    /// </summary>
+    public Guid Id { get; set; } = UuidV7.NewId();
 
     public Guid OrgId { get; set; }
 

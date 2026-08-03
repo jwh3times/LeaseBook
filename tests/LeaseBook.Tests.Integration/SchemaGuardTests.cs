@@ -99,6 +99,62 @@ public sealed class SchemaGuardTests(PostgresFixture fixture)
         ],
     };
 
+    /// <summary>
+    /// The platform tables' foreign keys, pinned by their full Postgres definition (ADR-028).
+    /// <para>
+    /// These two are the ONLY foreign keys to <c>orgs</c> in the entire migration history, so nothing
+    /// else in the suite would notice their loss — and the EF model cannot notice either. <c>Org</c>
+    /// lives in the host, so a module's entity configuration cannot name it, and the host was
+    /// deliberately not made to configure a module's entity (see
+    /// <c>M8_ReconcileCapabilitiesModelSnapshot</c>). The consequence is that neither the model nor
+    /// the snapshot knows these constraints exist, which means EF's differ will never emit an
+    /// operation about them — including when it should. This pin is the compensating control.
+    /// </para>
+    /// <para>
+    /// <c>platform_audit_events.org_id</c> is deliberately absent: it carries NO foreign key, because
+    /// deleting an org must not delete the record of what was done to it. An entry appearing here for
+    /// that table would be a regression, and the "unexpected" arm catches it.
+    /// </para>
+    /// </summary>
+    private static readonly Dictionary<string, (string Name, string Definition)[]> ExpectedPlatformForeignKeys =
+        new(StringComparer.Ordinal)
+        {
+            ["entitlements"] =
+            [
+                ("fk_entitlements_orgs_org_id",
+                 "FOREIGN KEY (org_id) REFERENCES orgs(id) ON DELETE CASCADE"),
+            ],
+            ["capability_cohorts"] =
+            [
+                ("fk_capability_cohorts_orgs_org_id",
+                 "FOREIGN KEY (org_id) REFERENCES orgs(id) ON DELETE CASCADE"),
+            ],
+            ["feature_flags"] = [],
+            ["platform_audit_events"] = [],
+        };
+
+    /// <summary>
+    /// UNIQUE indexes on the platform tables, pinned. Unlike a plain index these carry semantics:
+    /// <c>ux_entitlements_org_capability_effective_at</c> is what makes "the latest entitlement row
+    /// per (org, capability)" a well-defined read, by making the tie impossible rather than ranking
+    /// it — see <c>M8_AddEntitlementGrantUniqueness</c>. Dropping it would not fail a single query;
+    /// it would just make the resolver's answer depend on physical row order.
+    /// <para>
+    /// Non-unique indexes are performance, not correctness, and are deliberately not pinned.
+    /// </para>
+    /// </summary>
+    private static readonly Dictionary<string, (string Name, string Columns)[]> ExpectedPlatformUniqueIndexes =
+        new(StringComparer.Ordinal)
+        {
+            ["entitlements"] =
+            [
+                ("ux_entitlements_org_capability_effective_at", "org_id, capability, effective_at"),
+            ],
+            ["capability_cohorts"] = [],
+            ["feature_flags"] = [],
+            ["platform_audit_events"] = [],
+        };
+
     /// <param name="Qual">Normalized <c>USING</c>. Null for an INSERT-only policy, which has none.</param>
     /// <param name="EffectiveCheck">
     /// The predicate a NEW row must satisfy: <c>with_check ?? qual</c> for ALL/INSERT/UPDATE,
@@ -230,6 +286,145 @@ public sealed class SchemaGuardTests(PostgresFixture fixture)
         }
 
         failures.ShouldBeEmpty(failures.Count == 0 ? "" : Environment.NewLine + string.Join(Environment.NewLine, failures));
+    }
+
+    /// <summary>
+    /// The platform tables' foreign keys, pinned exactly (see
+    /// <see cref="ExpectedPlatformForeignKeys"/>). Both directions matter: a missing FK means an
+    /// entitlement can name an org that does not exist, and an unexpected one on
+    /// <c>platform_audit_events</c> would silently make the platform audit trail deletable by
+    /// deleting an org.
+    /// </summary>
+    [Fact]
+    public async Task Platform_table_foreign_keys_match_their_pinned_definitions()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var conn = new NpgsqlConnection(fixture.MigratorConnectionString);
+        await conn.OpenAsync(ct);
+
+        var actual = await ReadForeignKeysAsync(conn, ct);
+        var failures = new List<string>();
+
+        foreach (var (table, expected) in ExpectedPlatformForeignKeys)
+        {
+            var got = actual.Where(f => f.Table == table).ToList();
+
+            foreach (var extra in got.Where(g => expected.All(e => e.Name != g.Name)))
+            {
+                failures.Add($"{table}: UNEXPECTED foreign key {extra.Name} — {extra.Definition}. " +
+                             "If it is intentional, add it to ExpectedPlatformForeignKeys and say why.");
+            }
+
+            foreach (var (name, definition) in expected)
+            {
+                var match = got.Where(g => g.Name == name).Select(g => g.Definition).SingleOrDefault();
+                if (match is null)
+                {
+                    failures.Add($"{table}: MISSING foreign key {name} — expected {definition}. " +
+                                 "These are the only FKs to orgs in the whole migration history, and " +
+                                 "the EF model does not carry them, so nothing else would catch this.");
+                }
+                else if (!string.Equals(match, definition, StringComparison.Ordinal))
+                {
+                    failures.Add($"{table}: foreign key {name} DRIFTED.{Environment.NewLine}" +
+                                 $"  expected {definition}{Environment.NewLine}" +
+                                 $"  actual   {match}");
+                }
+            }
+        }
+
+        failures.ShouldBeEmpty(failures.Count == 0 ? "" : Environment.NewLine + string.Join(Environment.NewLine, failures));
+    }
+
+    /// <summary>
+    /// The platform tables' UNIQUE indexes, pinned (see <see cref="ExpectedPlatformUniqueIndexes"/>).
+    /// Primary-key indexes are excluded — they are pinned implicitly by the table's key.
+    /// </summary>
+    [Fact]
+    public async Task Platform_table_unique_indexes_match_their_pinned_definitions()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var conn = new NpgsqlConnection(fixture.MigratorConnectionString);
+        await conn.OpenAsync(ct);
+
+        var actual = await ReadUniqueIndexesAsync(conn, ct);
+        var failures = new List<string>();
+
+        foreach (var (table, expected) in ExpectedPlatformUniqueIndexes)
+        {
+            var got = actual.Where(i => i.Table == table).ToList();
+
+            foreach (var extra in got.Where(g => expected.All(e => e.Name != g.Name)))
+            {
+                failures.Add($"{table}: UNEXPECTED unique index {extra.Name} ({extra.Columns}). " +
+                             "A new uniqueness rule changes which writes are legal — add it to " +
+                             "ExpectedPlatformUniqueIndexes and say why.");
+            }
+
+            foreach (var (name, columns) in expected)
+            {
+                var match = got.Where(g => g.Name == name).Select(g => g.Columns).SingleOrDefault();
+                if (match is null)
+                {
+                    failures.Add($"{table}: MISSING unique index {name} on ({columns}). Dropping it " +
+                                 "fails no query — it just makes the 'latest row' read depend on " +
+                                 "physical row order (M8_AddEntitlementGrantUniqueness).");
+                }
+                else if (!string.Equals(match, columns, StringComparison.Ordinal))
+                {
+                    failures.Add($"{table}: unique index {name} DRIFTED.{Environment.NewLine}" +
+                                 $"  expected ({columns}){Environment.NewLine}" +
+                                 $"  actual   ({match})");
+                }
+            }
+        }
+
+        failures.ShouldBeEmpty(failures.Count == 0 ? "" : Environment.NewLine + string.Join(Environment.NewLine, failures));
+    }
+
+    private static async Task<List<(string Table, string Name, string Definition)>> ReadForeignKeysAsync(
+        NpgsqlConnection conn, CancellationToken ct)
+    {
+        await using var cmd = new NpgsqlCommand(
+            "SELECT c.conrelid::regclass::text, c.conname, pg_get_constraintdef(c.oid) " +
+            "FROM pg_constraint c JOIN pg_namespace n ON n.oid = c.connamespace " +
+            "WHERE n.nspname = 'public' AND c.contype = 'f'", conn);
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+
+        var result = new List<(string, string, string)>();
+        while (await reader.ReadAsync(ct))
+        {
+            result.Add((reader.GetString(0), reader.GetString(1), Normalize(reader.GetString(2))!));
+        }
+
+        return result;
+    }
+
+    private static async Task<List<(string Table, string Name, string Columns)>> ReadUniqueIndexesAsync(
+        NpgsqlConnection conn, CancellationToken ct)
+    {
+        await using var cmd = new NpgsqlCommand(
+            """
+            SELECT t.relname,
+                   i.relname,
+                   (SELECT string_agg(a.attname, ', ' ORDER BY k.ord)
+                      FROM unnest(ix.indkey) WITH ORDINALITY AS k(attnum, ord)
+                      JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = k.attnum)
+            FROM pg_index ix
+            JOIN pg_class i ON i.oid = ix.indexrelid
+            JOIN pg_class t ON t.oid = ix.indrelid
+            JOIN pg_namespace n ON n.oid = t.relnamespace
+            WHERE n.nspname = 'public' AND ix.indisunique AND NOT ix.indisprimary
+            """, conn);
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+
+        var result = new List<(string, string, string)>();
+        while (await reader.ReadAsync(ct))
+        {
+            result.Add((reader.GetString(0), reader.GetString(1), reader.GetString(2)));
+        }
+
+        return result;
     }
 
     /// <summary>
