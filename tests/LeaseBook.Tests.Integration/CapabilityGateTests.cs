@@ -101,12 +101,13 @@ public sealed class CapabilityGateTests(PostgresFixture fixture)
 
     /// <summary>
     /// The inverse pin, and the reason it matters: making the cheap path durable would put a database
-    /// round trip on every UI read. <c>Snapshot</c> and <c>IsEnabled</c> must answer from cache — here
-    /// with the old value — while <c>ResolveDurableAsync</c>, in the same scope and the same
-    /// transaction, answers with the new one.
+    /// round trip on every UI read. <c>GetCachedAsync</c> must answer from cache — here with the old
+    /// value — while <c>ResolveDurableAsync</c>, in the same scope and the same transaction, answers
+    /// with the new one. Without this a future "simplification" could collapse the two paths into one
+    /// durable read and no test would object.
     /// </summary>
     [Fact]
-    public async Task Snapshot_and_IsEnabled_are_cache_served_while_the_durable_read_is_not()
+    public async Task The_cached_read_stays_stale_while_the_durable_read_does_not()
     {
         var ct = TestContext.Current.CancellationToken;
 
@@ -131,10 +132,11 @@ public sealed class CapabilityGateTests(PostgresFixture fixture)
                 org,
                 async () =>
                 {
-                    gate.IsEnabled(CapabilityCatalog.ConsolidatedStatements).ShouldBeFalse(
-                        "IsEnabled is the 30s cache-served path — it must not query the database");
-                    gate.Snapshot().IsEnabled(CapabilityCatalog.ConsolidatedStatements).ShouldBeFalse(
-                        "Snapshot is the same cache-served set, handed out to be frozen by the caller");
+                    (await gate.GetCachedAsync(ct))
+                        .IsEnabled(CapabilityCatalog.ConsolidatedStatements)
+                        .ShouldBeFalse(
+                            "GetCachedAsync is the 30s cache-served path — an unexpired, unnotified " +
+                            "entry must be served as-is rather than re-read");
 
                     (await gate.ResolveDurableAsync(ct))
                         .IsEnabled(CapabilityCatalog.ConsolidatedStatements)
@@ -234,29 +236,23 @@ public sealed class CapabilityGateTests(PostgresFixture fixture)
     }
 
     /// <summary>
-    /// The cold half of the cache-served path, which the primed tests above never reach.
-    /// <c>Snapshot</c> is synchronous by contract, so with nothing cached it has to wait on an async
-    /// refresh — and that wait happens with an ambient transaction already open on the caller's
-    /// <c>DbContext</c>. It completes only because the refresh takes its own scope, its own context
-    /// and its own connection; a refresh that reached for the ambient one would block on a
-    /// transaction its own caller is holding, and hang a request thread rather than fail an
-    /// assertion. Hence the explicit timeout rather than the runner's.
-    /// <para>
-    /// What this does <b>not</b> cover: the <c>Task.Run</c> hop inside <c>Snapshot</c>, which guards
-    /// against a caller that blocks a thread carrying a <c>SynchronizationContext</c>. Reproducing
-    /// that needs a context this suite does not have, and ASP.NET Core has none either — it is
-    /// belt-and-braces for non-request callers, and deliberately left as such.
-    /// </para>
+    /// The cold half of the cache-served path, which the primed tests above never reach: on a miss
+    /// <c>GetCachedAsync</c> refreshes, and it does so with an ambient transaction already open on
+    /// the caller's <c>DbContext</c> — so the refresh needs a <b>second</b> pooled connection while
+    /// the caller still holds the first. It completes only because the refresh takes its own scope,
+    /// its own context and its own connection. A refresh that reached for the ambient one would wait
+    /// on a transaction its own caller is holding, which hangs rather than failing an assertion,
+    /// hence the explicit timeout rather than the runner's.
     /// </summary>
     [Fact]
-    public async Task Snapshot_resolves_a_cold_key_without_deadlocking_inside_the_ambient_transaction()
+    public async Task The_cached_read_loads_a_cold_key_inside_the_ambient_transaction()
     {
         var ct = TestContext.Current.CancellationToken;
 
         await using var host = new ApiFactory(fixture.AppConnectionString);
         _ = host.CreateClient();
 
-        // Never handed to CapabilityCache before this point, so Snapshot must take the blocking path.
+        // Never handed to CapabilityCache before this point, so this key can only be a cold load.
         var org = await SeedOrgAsync(ct);
         await GrantEntitlementAsync(host, org, ct);
 
@@ -270,9 +266,9 @@ public sealed class CapabilityGateTests(PostgresFixture fixture)
             org,
             async () =>
             {
-                var snapshot = await Task.Run(gate.Snapshot, ct).WaitAsync(TimeSpan.FromSeconds(30), ct);
+                var cached = await gate.GetCachedAsync(ct).WaitAsync(TimeSpan.FromSeconds(30), ct);
 
-                snapshot.Version.ShouldNotBeNullOrWhiteSpace();
+                cached.Version.ShouldNotBeNullOrWhiteSpace();
                 cache.ColdLoads.ShouldBe(
                     coldLoadsBefore + 1, "the key was cold, so this must have been a first-ever load");
             },
@@ -280,13 +276,19 @@ public sealed class CapabilityGateTests(PostgresFixture fixture)
     }
 
     /// <summary>
-    /// Missing org context throws rather than resolving everything to "off". The silent answer is the
+    /// Missing org context fails rather than resolving everything to "off". The silent answer is the
     /// dangerous one: with no context RLS filters entitlements to zero rows, every paid capability
     /// reads as unavailable, and it is indistinguishable from a deliberate revoke — the same rule
     /// background jobs follow.
+    /// <para>
+    /// It also pins <b>how</b> it fails. Both members are invoked here without a <c>try</c> and
+    /// before any <c>await</c>, so a member that threw synchronously instead of returning a faulted
+    /// task would fail this test on the call itself. That distinction is invisible under a bare await
+    /// and load-bearing the moment a caller composes these with <c>Task.WhenAll</c>.
+    /// </para>
     /// </summary>
     [Fact]
-    public async Task Resolving_with_no_org_context_throws_rather_than_answering_off()
+    public async Task Resolving_with_no_org_context_faults_rather_than_answering_off()
     {
         var ct = TestContext.Current.CancellationToken;
 
@@ -296,11 +298,12 @@ public sealed class CapabilityGateTests(PostgresFixture fixture)
         using var scope = host.Services.CreateScope();
         var gate = scope.ServiceProvider.GetRequiredService<ICapabilityGate>();
 
-        var durable = await Should.ThrowAsync<InvalidOperationException>(
-            async () => await gate.ResolveDurableAsync(ct));
-        durable.Message.ShouldContain("org context");
+        var durable = gate.ResolveDurableAsync(ct);
+        var cached = gate.GetCachedAsync(ct);
 
-        Should.Throw<InvalidOperationException>(() => gate.Snapshot())
+        (await Should.ThrowAsync<InvalidOperationException>(async () => await durable))
+            .Message.ShouldContain("org context");
+        (await Should.ThrowAsync<InvalidOperationException>(async () => await cached))
             .Message.ShouldContain("org context");
     }
 

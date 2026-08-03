@@ -1,6 +1,5 @@
 using LeaseBook.Modules.Capabilities.Caching;
 using LeaseBook.Modules.Capabilities.Contracts;
-using LeaseBook.Modules.Capabilities.Registry;
 using LeaseBook.Modules.Capabilities.Resolution;
 using LeaseBook.SharedKernel.Tenancy;
 
@@ -30,44 +29,28 @@ internal sealed class CapabilityGate(
     ITenantContext tenant,
     IActorContext actor) : ICapabilityGate
 {
-    public bool IsEnabled(Capability capability)
-    {
-        ArgumentNullException.ThrowIfNull(capability);
-        return Snapshot().IsEnabled(capability);
-    }
-
-    /// <summary>
-    /// Cache-served, and not memoized per scope. The contract is "the current cached set", so a
-    /// long-lived scope (a job, a bulk run) still observes the 30-second TTL rather than pinning one
-    /// answer for its whole life. Callers that need a frozen set freeze it by holding the reference —
-    /// that is what makes <see cref="CapabilitySet"/> a value handed down the call chain instead of an
-    /// ambient service re-asked at each step.
-    /// </summary>
+    /// <inheritdoc />
     /// <remarks>
-    /// <b>On the synchronous signature.</b> The overwhelmingly common case is a fresh cached entry,
-    /// which <see cref="CapabilityCache.TryGetCached"/> answers with no I/O and no blocking at all.
-    /// Only a cold or expired key falls through, and that one blocks a thread on the refresh. The wait
-    /// is pushed onto the thread pool because the refresh's continuations must not be posted back to
-    /// an ambient <c>SynchronizationContext</c> that this very thread is blocking; the refresh also
-    /// runs on its own scope and its own connection, so it can never wait on the ambient transaction
-    /// this call is nested inside. Money paths do not come through here — see
-    /// <see cref="ResolveDurableAsync"/>.
+    /// Not memoized per scope. The contract is "the current cached set", so a long-lived scope (a
+    /// job, a bulk run) still observes the 30-second TTL rather than pinning one answer for its whole
+    /// life. Callers that need a frozen set freeze it by holding the reference — that is what makes
+    /// <see cref="CapabilitySet"/> a value handed down the call chain instead of an ambient service
+    /// re-asked at each step.
     /// </remarks>
-    public CapabilitySet Snapshot()
-    {
-        var orgId = RequireOrg();
-
-        return cache.TryGetCached(orgId, actor.UserId, out var cached)
-            ? cached
-            : Task.Run(() => cache.GetAsync(orgId, actor.UserId)).GetAwaiter().GetResult();
-    }
+    public async Task<CapabilitySet> GetCachedAsync(CancellationToken ct) =>
+        await cache.GetAsync(RequireOrg(), actor.UserId, ct);
 
     /// <inheritdoc />
-    public Task<CapabilitySet> ResolveDurableAsync(CancellationToken ct) =>
+    public async Task<CapabilitySet> ResolveDurableAsync(CancellationToken ct) =>
         // The three-argument overload: read on the AMBIENT transaction, on the tenant plane. It
         // asserts that app.org_id matches the org being resolved and throws when it does not, which
         // is the guard that keeps a mis-scoped call from returning a plausible "not entitled".
-        reader.ReadAsync(RequireOrg(), actor.UserId, ct);
+        await reader.ReadAsync(RequireOrg(), actor.UserId, ct);
+
+    // Both members are `async` rather than expression-bodied pass-throughs purely so that a missing
+    // org context FAULTS the returned task instead of throwing before the task is handed back. The
+    // difference is invisible under a bare await and load-bearing under Task.WhenAll — which is how
+    // a run engine composing several of these would call them.
 
     private Guid RequireOrg() =>
         tenant.OrgId is { } orgId && orgId != Guid.Empty
