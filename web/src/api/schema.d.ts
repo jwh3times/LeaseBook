@@ -3319,6 +3319,7 @@ export interface components {
             code: string;
         };
         ConfirmRunRequest: {
+            capabilitiesVersion: null | string;
             /** Format: int32 */
             month: number | string;
             selectedTargetIds: string[];
@@ -3937,6 +3938,7 @@ export interface components {
             runs: components["schemas"]["BulkRunSpa"][];
         };
         RunPreviewSpaResponse: {
+            capabilitiesVersion: string;
             exceptions: string[];
             /** Format: int32 */
             month: number | string;

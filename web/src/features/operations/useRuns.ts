@@ -71,28 +71,43 @@ async function unwrap<T>(
   throw toRunError(error, response.status);
 }
 
+/** The 409 the server raises when the capability set moved between preview and confirm. */
+export const CAPABILITIES_CHANGED = 'capabilities_changed';
+
 /**
  * Confirm a run for the given type, period, and selected target ids.
  * Invalidates run history on success.
+ *
+ * `capabilitiesVersion` is the opaque token the preview handed back, echoed verbatim. The server
+ * compares it against what it resolves itself and rejects a mismatch with 409 — the caller only
+ * carries the value, it never interprets it.
  */
 export function useConfirmRun(type: RunType) {
   const queryClient = useQueryClient();
   return useMutation<
     RunResultSpaResponse,
     RunError,
-    { year: number; month: number; selectedTargetIds: string[] }
+    { year: number; month: number; selectedTargetIds: string[]; capabilitiesVersion: string }
   >({
-    mutationFn: async ({ year, month, selectedTargetIds }) => {
+    mutationFn: async ({ year, month, selectedTargetIds, capabilitiesVersion }) => {
       await primeCsrf();
       return unwrap(
         api.POST('/api/operations/runs/{type}/confirm', {
           params: { path: { type } },
-          body: { year, month, selectedTargetIds },
+          body: { year, month, selectedTargetIds, capabilitiesVersion },
         }),
       );
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: runHistoryKey() });
+    },
+    onError: (error, { year, month }) => {
+      // A stale token means the amounts on screen are no longer what would post, so the preview
+      // itself is the thing that is wrong — refetch it here rather than in each screen, or the
+      // operator's only recourse would be to re-click Confirm with the same stale token forever.
+      if (error.code === CAPABILITIES_CHANGED) {
+        void queryClient.invalidateQueries({ queryKey: runPreviewKey(type, year, month) });
+      }
     },
   });
 }
