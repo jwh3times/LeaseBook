@@ -4,6 +4,9 @@ using LeaseBook.Tests.Common;
 using LeaseBook.Tests.Integration.Fixtures;
 using LeaseBook.Web.Adapters;
 using LeaseBook.Web.Capabilities;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.Hosting;
 using Npgsql;
 using Shouldly;
 using CapabilityCatalog = LeaseBook.Modules.Capabilities.Registry.Capabilities;
@@ -470,6 +473,99 @@ public sealed class CapabilitiesCommandTests(PostgresFixture fixture)
             .ShouldBeTrue("the process identity is kept alongside the operator, never replaced by it");
 
         CapabilitiesCommand.BuildActor("   ").ShouldBe(process, "a blank value is not an attribution");
+    }
+
+    /// <summary>
+    /// The convention above is only worth anything if something enforces it. Outside Development a
+    /// mutating subcommand with no operator is REFUSED rather than recorded against process identity:
+    /// <c>platform_audit_events</c> is append-only in both planes, so a row written with no accountable
+    /// party stays that way forever. Refusing costs one re-run.
+    /// <para>
+    /// <c>list</c> is exempt in every environment, and that exemption is the load-bearing half — an
+    /// operator diagnosing an incident must always be able to READ capability state. A guard that could
+    /// block the read path is the one way this could make an outage worse.
+    /// </para>
+    /// </summary>
+    [Theory]
+    // Development: process identity IS a person (an engineer's shell), so nothing is required.
+    [InlineData(CapabilitiesActionKind.FlagDisable, true, null, false)]
+    [InlineData(CapabilitiesActionKind.Grant, true, null, false)]
+    // Elsewhere: every mutating kind needs a named operator.
+    [InlineData(CapabilitiesActionKind.FlagEnable, false, null, true)]
+    [InlineData(CapabilitiesActionKind.FlagDisable, false, "", true)]
+    [InlineData(CapabilitiesActionKind.FlagDisable, false, "   ", true)]
+    [InlineData(CapabilitiesActionKind.Grant, false, null, true)]
+    [InlineData(CapabilitiesActionKind.Revoke, false, null, true)]
+    [InlineData(CapabilitiesActionKind.CohortAdd, false, null, true)]
+    [InlineData(CapabilitiesActionKind.CohortRemove, false, null, true)]
+    [InlineData(CapabilitiesActionKind.FlagDisable, false, "ops-jane", false)]
+    // Reading is never refused, in any environment, with or without an operator.
+    [InlineData(CapabilitiesActionKind.List, false, null, false)]
+    [InlineData(CapabilitiesActionKind.List, true, null, false)]
+    public void An_unattributed_mutation_is_refused_outside_development(
+        CapabilitiesActionKind kind, bool isDevelopment, string? configuredOperator, bool refused)
+    {
+        var refusal = CapabilitiesCommand.AttributionRefusal(kind, isDevelopment, configuredOperator);
+
+        (refusal is not null).ShouldBe(refused, $"{kind} / dev={isDevelopment} / operator={configuredOperator ?? "(unset)"}");
+
+        if (refusal is not null)
+        {
+            refusal.ShouldContain(CapabilitiesCommand.OperatorVariable);
+            refusal.ShouldContain(
+                "nothing was written",
+                Case.Sensitive,
+                "the operator has to know the state of the system, not just that the command failed");
+        }
+    }
+
+    /// <summary>
+    /// The refusal fires before anything is resolved from the container or opened against the database.
+    /// Asserted by driving it through a provider that holds an <see cref="IHostEnvironment"/> and
+    /// NOTHING else: if the guard were placed after the scope, this would throw resolving
+    /// <c>DbContext</c> instead of returning the message.
+    /// <para>
+    /// That ordering is the point. The capabilities job's connection string is a Key Vault reference,
+    /// so reaching the database at all is the expensive, failure-prone part of an invocation; a command
+    /// that cannot be attributed should cost an operator a message, not a timeout.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task An_unattributed_mutation_is_refused_before_any_service_or_database_work()
+    {
+        var services = new ServiceCollection()
+            .AddSingleton<IHostEnvironment>(new StubEnvironment { EnvironmentName = Environments.Production })
+            .BuildServiceProvider();
+
+        var originalError = Console.Error;
+        var errors = new StringWriter();
+
+        try
+        {
+            Console.SetError(errors);
+            var exit = await CapabilitiesCommand.RunAsync(services, ["capabilities", "flag", "disable", Capability]);
+
+            exit.ShouldBe(1);
+        }
+        finally
+        {
+            Console.SetError(originalError);
+        }
+
+        errors.ToString().ShouldContain(CapabilitiesCommand.OperatorVariable);
+        (await ReadFlagAsync(Capability, TestContext.Current.CancellationToken))
+            .ShouldBeNull("a refused command writes nothing at all");
+    }
+
+    private sealed class StubEnvironment : IHostEnvironment
+    {
+        public string EnvironmentName { get; set; } = Environments.Development;
+
+        public string ApplicationName { get; set; } = "LeaseBook.Tests";
+
+        public string ContentRootPath { get; set; } = AppContext.BaseDirectory;
+
+        public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
     }
 
     /// <summary>

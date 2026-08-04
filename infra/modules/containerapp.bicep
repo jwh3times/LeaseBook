@@ -448,18 +448,36 @@ resource capabilitiesJob 'Microsoft.App/jobs@2024-03-01' = {
             cpu: json('0.5')
             memory: '1Gi'
           }
-          // No `args` here, deliberately: `az containerapp job start --args` supplies them per
-          // execution, so ONE job definition serves every subcommand — list, flag enable/disable,
-          // grant, revoke, cohort add/remove. A job per verb would multiply the resource, the RBAC
-          // surface and the runbook by seven for no gain. The image sets ENTRYPOINT and no CMD, so
-          // per-execution args become the CMD and are appended to `dotnet LeaseBook.Web.dll`.
+          // `az containerapp job start --args` supplies the real subcommand per execution, so ONE
+          // job definition serves all seven — list, flag enable/disable, grant, revoke, cohort
+          // add/remove. A job per verb would multiply the resource, the RBAC surface and the runbook
+          // by seven for no gain. The image sets ENTRYPOINT and no CMD, so args become the CMD and are
+          // appended to `dotnet LeaseBook.Web.dll`.
           //
-          // LEASEBOOK_OPERATOR is likewise per-execution and is NOT defaulted here. It names the human
-          // or system accountable for the change, and every row this verb writes is append-only — a
-          // baked-in value would be a permanent, plausible-looking lie in the platform audit trail,
-          // which is worse than none. Its absence is not silent either: outside Development the verb
-          // REFUSES every mutating subcommand when it is unset (CapabilitiesCommand), because process
-          // identity in this container is an ephemeral pod name that attributes a change to nobody.
+          // The default below is `capabilities list` rather than nothing, and that matters: a bare
+          // `az containerapp job start` sends no execution template at all, so the container runs the
+          // image's entrypoint with these args. With none, that is the ASP.NET host — a web server
+          // booted inside a job, serving nobody, until replicaTimeout kills it 600s later. With them,
+          // the same bare invocation prints the capability table and exits 0, which is exactly the
+          // smoke test an operator wants first. `list` writes nothing and needs no operator identity.
+          args: [
+            'capabilities'
+            'list'
+          ]
+          // LEASEBOOK_OPERATOR is per-execution and is deliberately NOT defaulted here. It names the
+          // human or system accountable for the change, and every row this verb writes is append-only
+          // — a baked-in value would be a permanent, plausible-looking lie in the platform audit
+          // trail, which is worse than none. Its absence is not silent either: outside Development the
+          // verb REFUSES every mutating subcommand when it is unset (CapabilitiesCommand), because
+          // process identity here is an ephemeral pod name that attributes a change to nobody.
+          //
+          // CAUTION for whoever writes the next invocation: `az containerapp job start` does NOT merge
+          // with this template. Its implementation builds a fresh single-container JobExecutionTemplate
+          // from the flags you passed and POSTs it as-is (verified by reading the CLI's own
+          // `start_containerappsjob`), so `--env-vars` REPLACES this array rather than adding to it,
+          // and an omitted `--container-name` defaults to the JOB name, not to 'capabilities'. The
+          // runbook therefore passes the container name, the image and the COMPLETE env every time.
+          // See docs/runbooks/diagnostics.md.
           env: concat(
             operatorFacingLogging,
             haveDefaultSecret

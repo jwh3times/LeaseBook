@@ -61,15 +61,26 @@ public static class CapabilitiesCommand
 
         var ct = CancellationToken.None;
 
+        // Read ONCE per invocation, then threaded through every row this command writes. The value is
+        // an environment read; taking it separately for the state row and its audit row would let the
+        // two disagree, and both are append-only, so a mismatch could never be corrected afterwards.
+        var configuredOperator = Environment.GetEnvironmentVariable(OperatorVariable);
+
+        // BEFORE the scope and before any database work: a refused invocation should cost nothing and
+        // touch nothing. Resolved from the root provider, where IHostEnvironment is a singleton.
+        var environment = services.GetRequiredService<IHostEnvironment>();
+        if (AttributionRefusal(action.Kind, environment.IsDevelopment(), configuredOperator) is { } gap)
+        {
+            Console.Error.WriteLine(gap);
+            return 1;
+        }
+
         // A scope of our own: this runs from the root provider, where no request or job scope exists.
         await using var scope = services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<DbContext>();
         var executor = scope.ServiceProvider.GetRequiredService<PlatformScopedExecutor>();
 
-        // Read ONCE per invocation, then threaded through every row this command writes. The value is
-        // an environment read; taking it separately for the state row and its audit row would let the
-        // two disagree, and both are append-only, so a mismatch could never be corrected afterwards.
-        var actor = Actor;
+        var actor = BuildActor(configuredOperator);
 
         try
         {
@@ -133,7 +144,8 @@ public static class CapabilitiesCommand
     /// system on the hook; the process identity is still appended, because the two answer different
     /// questions — who decided, versus where it ran from. These rows are append-only, so nothing
     /// written under the weaker convention can ever be corrected; that is why the variable exists from
-    /// the first write rather than being added once someone notices.
+    /// the first write rather than being added once someone notices — and why, outside Development,
+    /// <see cref="AttributionRefusal"/> refuses the mutation instead of falling back to it.
     /// </para>
     /// <para>
     /// Recomputed per read rather than cached in a static, so a value exported after process start
@@ -141,6 +153,53 @@ public static class CapabilitiesCommand
     /// </para>
     /// </summary>
     public static string Actor => BuildActor(Environment.GetEnvironmentVariable(OperatorVariable));
+
+    /// <summary>
+    /// Refuses a MUTATING invocation that would be recorded against nobody, or returns null when the
+    /// write may proceed.
+    /// <para>
+    /// <b>This is the difference between wiring <see cref="OperatorVariable"/> and relying on someone
+    /// to remember it.</b> Unset, <see cref="BuildActor"/> falls back to process identity — which is a
+    /// real answer in a developer's shell and no answer at all in the capabilities ACA job, where it
+    /// is a container user with no passwd entry at an ephemeral pod name. Because every row this verb
+    /// writes is append-only in both planes, an unattributed row is not a small defect to tidy up
+    /// later: it is permanent. Refusing costs the operator one re-run; accepting costs the audit trail
+    /// a row that can never be corrected.
+    /// </para>
+    /// <para>
+    /// <b>Gated on Development rather than on a container check</b>, because the question is not "am I
+    /// in a container" but "is process identity a person". In Development it is — an engineer's own
+    /// shell, machine and username — so requiring the variable there would be ceremony with no
+    /// attribution gained, and would make every local invocation and every test set an env var.
+    /// Everywhere else it is not, so the variable is the only thing that can answer "who decided".
+    /// </para>
+    /// <para>
+    /// <see cref="CapabilitiesActionKind.List"/> is exempt because it writes nothing — including no
+    /// audit row. An operator diagnosing an incident must always be able to READ capability state,
+    /// and making the read path refusable would be the one way this guard could make an outage worse.
+    /// </para>
+    /// </summary>
+    public static string? AttributionRefusal(
+        CapabilitiesActionKind kind, bool isDevelopment, string? configuredOperator)
+    {
+        if (kind == CapabilitiesActionKind.List
+            || isDevelopment
+            || !string.IsNullOrWhiteSpace(configuredOperator))
+        {
+            return null;
+        }
+
+        return
+            $"capabilities: refusing to apply this change because {OperatorVariable} is not set, and " +
+            "nothing was written. Outside Development there is no person behind this process, so the " +
+            $"actor would be recorded as '{BuildActor(null)}' — which attributes the change to nobody " +
+            "— and platform_audit_events is append-only in both planes, so that row could never be " +
+            "corrected. Name the accountable party and re-run; in production that is the " +
+            $"--env-vars leg of the capabilities job, e.g. `--env-vars \"{OperatorVariable}=ops-jane\" " +
+            "...` (see docs/runbooks/diagnostics.md for the full invocation — the CLI REPLACES the " +
+            "job's env rather than adding to it, so the other variables have to be repeated). " +
+            "`capabilities list` needs none of this: it writes nothing.";
+    }
 
     /// <summary>The pure half of <see cref="Actor"/>, so the convention is testable without env state.</summary>
     public static string BuildActor(string? configuredOperator)
