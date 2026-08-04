@@ -43,6 +43,15 @@ jobs:
       # Generated EF migrations are excluded from the format gate (the ef generator owns their style).
       - run: dotnet format --verify-no-changes --exclude src/LeaseBook.Web/Migrations
       - run: dotnet build -c Release --no-restore
+      # EF model-vs-migrations drift. This is a load-bearing gate, not a nicety: the platform
+      # capability tables were reconciled with an empty-Up migration
+      # (M8_ReconcileCapabilitiesModelSnapshot) rather than ExcludeFromMigrations(), and the ONLY
+      # reason that was the better choice is that drift detection stays live for them. Until this
+      # step existed it ran only when somebody typed it, which is not detection. Needs no database —
+      # it compares the model to the last migration's snapshot — and reuses the Release build above.
+      - run: dotnet tool restore
+      - name: Verify no EF model changes are missing a migration
+        run: dotnet ef migrations has-pending-model-changes --project src/LeaseBook.Web --no-build --configuration Release
       # Runs unit, architecture, and Testcontainers-backed integration tests (Docker is on the runner).
       # The schema guard + tenant-isolation pack run here against a fresh Postgres 18 container.
       - run: dotnet test -c Release --no-build

@@ -145,7 +145,15 @@ public sealed class OperationsEndpoints : IEndpointModule
                         result.Excluded,
                         result.Total));
                 })
-            .Produces<RunResultSpaResponse>();
+            .Produces<RunResultSpaResponse>()
+            // Declared because the SPA BRANCHES on the 409's code (useRuns.ts distinguishes
+            // capabilities_changed, which refetches the preview, from
+            // capabilities_changed_since_prior_run, which must not) — a wire code the client depends on
+            // has no business being absent from the generated contract. The 400 covers
+            // unknown_run_type, invalid_period and capabilities_version_required; all four codes are
+            // carried in the ProblemDetails body, which is why one declaration per status is enough.
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status409Conflict);
 
         // GET /api/operations/runs — run history, most-recent-first, scoped to the request org (RLS).
         // Operations reads its OWN bulk_runs table — within-module, allowed (ADR-007).

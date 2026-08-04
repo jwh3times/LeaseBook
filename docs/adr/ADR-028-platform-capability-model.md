@@ -219,6 +219,21 @@ since `run_type` is the second column of the existing one. That trigger is mecha
 per this repository's preference for enforcement over discipline it should become a CI gate rather
 than a line in this document.
 
+**A second scope limit, in the other axis: the compared state is per USER, not per deployment.** The
+resolved set is keyed `(organization, user)` and user-level cohort rows participate in it, so two staff
+users in one organization can produce a different money-path state for the same period with no operator
+action and no state change anywhere — one of them is simply in a cohort. The guard would then reject the
+second user's confirm, `RegistryMoved` would be false (the names match), and the operator would be
+offered the "restore the earlier feature state" remedy for a difference no feature state can explain.
+It is unreachable today only because the CLI refuses `IsFixture` capabilities for `cohort add` and the
+fixture is the only money-path entry — a check that exists for a different reason, which is not a
+guarantee.
+
+**Recommended direction, not taken here: money-path capabilities should not resolve per user** —
+ignore user-level cohort rows when `IsMoneyPath` is true, so a money-path state is a property of the
+organization and the deployment, which is what the guard already assumes it is. That is a change to the
+resolution order in §2 and deserves its own decision rather than being folded into a guard fix.
+
 One residual, deliberately accepted: prior runs recorded before this shipped carry no capability
 state and are skipped, so for each (organization, run type, period) that already held a run, the first
 confirm after deployment is unguarded. The window closes after one run and cannot be reopened.
@@ -264,7 +279,13 @@ defensible — the same users already confirm the run itself — but it is a fid
 decision, recorded here as an explicit ruling rather than left as an inherited default.
 
 **Un-mute trigger, rather than an open-ended deferral:** the first non-fixture money-path capability
-ships either an override affordance in the SPA or a recorded reason it does not.
+ships either an override affordance in the SPA or a recorded reason it does not — **and settles §10's
+per-user limit in the same change**, because the moment a real money-path capability exists, one
+`cohort add` naming a user makes two staff members in one organization disagree about the same period,
+and the 409 they get suggests a remedy that cannot apply. Whichever way it is settled (excluding
+user-level cohorts from money-path resolution, or refusing user-level cohorts on a money-path
+capability at write time), it must be settled before the capability that makes it reachable ships,
+not after.
 
 ### 13. Money-path capabilities expire after 90 days, and extending one is recorded here
 
