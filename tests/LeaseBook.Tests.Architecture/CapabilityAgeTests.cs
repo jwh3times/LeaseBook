@@ -16,10 +16,11 @@ namespace LeaseBook.Tests.Architecture;
 /// empty Testcontainers database and pass vacuously forever.
 /// </para>
 /// <para>
-/// <b>Every environment-shaped failure here SKIPS, loudly, rather than failing.</b> Shallow clones,
-/// exported archives and images have no usable history, and a gate that fails CI because history is
-/// missing is disabled by the first person it inconveniences — after which it protects nothing. A
-/// skipped test still prints its reason in the run; a silent green pass would not.
+/// <b>An environment that cannot answer skips locally and FAILS in CI</b> — see
+/// <see cref="SkipUnlessCi"/>. Shallow clones, exported archives and images have no usable history,
+/// and a gate that fails an engineer's ordinary test run is disabled by the first person it
+/// inconveniences; but in GitHub Actions the same condition means the workflow stopped arming the
+/// gate, and a skip there is a green build that checked nothing.
 /// </para>
 /// </summary>
 public sealed class CapabilityAgeTests
@@ -35,7 +36,8 @@ public sealed class CapabilityAgeTests
         var report = await CapabilityAge.ResolveAsync(TestContext.Current.CancellationToken);
         if (!report.IsAvailable)
         {
-            SkipLoudly($"capability age gate NOT ARMED: {report.UnavailableReason}");
+            SkipUnlessCi($"capability age gate NOT ARMED: {report.UnavailableReason}");
+            return;
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -47,8 +49,9 @@ public sealed class CapabilityAgeTests
             if (!report.IntroducedAt.TryGetValue(capability.Name, out var introduced))
             {
                 // A brand-new entry, uncommitted or on a branch this checkout cannot see. Not a
-                // failure — but collected, so the reason a capability escaped the check is visible
-                // rather than being an empty `continue`.
+                // failure. Collected only to be named in the assertion message below, which Shouldly
+                // renders on failure alone — so this annotates a stale-capability failure ("and these
+                // others were not even checked"); it is not a standalone signal.
                 unknown.Add(capability.Name);
                 continue;
             }
@@ -90,7 +93,7 @@ public sealed class CapabilityAgeTests
         var repoRoot = CapabilityAge.FindRepoRoot();
         if (repoRoot is null)
         {
-            SkipLoudly("capability age probe NOT ARMED: no source tree above the test assembly.");
+            SkipUnlessCi("capability age probe NOT ARMED: no source tree above the test assembly.");
             return;
         }
 
@@ -105,7 +108,7 @@ public sealed class CapabilityAgeTests
         var report = await CapabilityAge.ResolveAsync(TestContext.Current.CancellationToken);
         if (!report.IsAvailable)
         {
-            SkipLoudly($"capability age probe NOT ARMED: {report.UnavailableReason}");
+            SkipUnlessCi($"capability age probe NOT ARMED: {report.UnavailableReason}");
             return;
         }
 
@@ -152,20 +155,47 @@ public sealed class CapabilityAgeTests
     }
 
     /// <summary>
-    /// Skips rather than fails, with the reason on the test result.
+    /// Skips locally; FAILS in CI.
     /// <para>
-    /// <b>The visible signal at default verbosity is the <c>[SKIP]</c> line naming the test</b>, which
-    /// is why these test names read as claims ("no money-path capability exceeds the policy window"):
-    /// <c>[SKIP] No_money_path_capability_exceeds_the_policy_window</c> in a CI log says the gate did
-    /// not run. The reason itself only surfaces under
-    /// <c>--logger "console;verbosity=detailed"</c> or in the TRX — verified, including that neither
-    /// <c>Console.Error</c> (xunit v3 captures it and shows it only for failures) nor the raw stderr
-    /// handle (vstest swallows the test host's) gets through at default verbosity. Since the reporting
-    /// side cannot be made louder from in here, the prevention side is where the work went: CI pins
-    /// <c>fetch-depth: 0</c>, so the ordinary CI run is armed rather than skipped.
+    /// <b>A skip cannot be made loud enough to rely on.</b> At <c>dotnet test</c> default verbosity —
+    /// what CI runs — the runner prints the <c>[SKIP]</c> line naming the test but not the reason, and
+    /// neither <c>Console.Error</c> (xunit v3 captures it and surfaces it only for failures) nor the
+    /// raw stderr handle (vstest swallows the test host's) gets through; both were tried and printed
+    /// nothing. A disarmed gate is therefore a green build with <c>Skipped: 2</c> that nobody reads.
+    /// </para>
+    /// <para>
+    /// <b>So CI is not allowed to skip.</b> GitHub Actions guarantees a source tree, git on PATH, and
+    /// whatever history the workflow asked for. "Unavailable" there is never an environment
+    /// limitation — it means the workflow stopped arming the gate, which is a defect in the workflow
+    /// and belongs in a red build.
+    /// </para>
+    /// <para>
+    /// <b>Why this rather than a test asserting <c>fetch-depth: 0</c> in <c>ci.yml</c>.</b> That would
+    /// guard a literal, not the invariant: another job already sets <c>fetch-depth: 0</c>, so the
+    /// natural "the file contains the string" check passes even after the backend job's line is
+    /// deleted — it would have been born broken. Binding it to the right job needs a YAML parse plus a
+    /// pinned job name, and still only asserts a proxy that a job rename, a matrix split, a
+    /// reusable-workflow refactor, or a self-hosted runner that clones shallow would leave green. An
+    /// environment variable read at run time is immune to all of it, and to the shallow clone itself.
+    /// </para>
+    /// <para>
+    /// The local skip is kept deliberately: an image build, an exported archive or a shallow local
+    /// clone genuinely cannot answer, and a gate that fails an engineer's ordinary test run is the
+    /// kind that gets deleted by the first person it inconveniences.
     /// </para>
     /// </summary>
-    private static void SkipLoudly(string reason) => Assert.Skip(reason);
+    private static void SkipUnlessCi(string reason)
+    {
+        if (string.Equals(
+                Environment.GetEnvironmentVariable("GITHUB_ACTIONS"), "true", StringComparison.Ordinal))
+        {
+            Assert.Fail(
+                reason + " In CI this is not an environment limitation: the checkout stopped " +
+                "providing history. Restore `fetch-depth: 0` on the backend job (ci.yml).");
+        }
+
+        Assert.Skip(reason);
+    }
 
     /// <summary>
     /// The registry's own fixture must stay exempt-able: if <c>money-path-fixture</c> ever lost
