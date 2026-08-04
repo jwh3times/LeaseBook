@@ -91,4 +91,45 @@ public sealed class RunCapabilitiesTests
 
         Should.Throw<ArgumentOutOfRangeException>(() => inconsistent.MoneyPathState());
     }
+
+    /// <summary>
+    /// The retirement case, which the cross-run guard has to tell apart from an ordinary flip. A
+    /// capability REMOVED from the registry cannot be restored by any operator action — there is no
+    /// flag left to write — so the rejection has to point at deliberate acknowledgement instead of at
+    /// a switch that no longer exists.
+    /// </summary>
+    [Fact]
+    public void A_recorded_state_naming_a_retired_capability_is_detected()
+    {
+        Resolved.NamesRetiredCapability(["beta=off", "retired-thing=on"]).ShouldBeTrue();
+    }
+
+    /// <summary>
+    /// And the ordinary flip is NOT reported as a retirement, whichever way the value moved: the
+    /// names still resolve, only the values differ.
+    /// </summary>
+    [Fact]
+    public void A_recorded_state_naming_only_live_capabilities_is_not_a_retirement()
+    {
+        Resolved.NamesRetiredCapability(["beta=on", "gamma=off"]).ShouldBeFalse();
+        Resolved.NamesRetiredCapability([]).ShouldBeFalse();
+    }
+
+    /// <summary>
+    /// Decoding is the exact inverse of the encoder, which appends "=on" / "=off": the name is
+    /// everything before the LAST separator, because the value can never contain one while a name
+    /// conceivably could. Splitting on the first would truncate such a name to a prefix that resolves
+    /// nowhere, misreporting every ordinary flip as a retirement and sending operators after an
+    /// acknowledgement when a restore was available. This test found exactly that bug.
+    /// </summary>
+    [Fact]
+    public void The_recorded_name_is_everything_before_the_last_separator()
+    {
+        var odd = Resolved with
+        {
+            MoneyPathNames = new HashSet<string>(StringComparer.Ordinal) { "a=b" },
+        };
+
+        odd.NamesRetiredCapability(["a=b=on"]).ShouldBeFalse();
+    }
 }

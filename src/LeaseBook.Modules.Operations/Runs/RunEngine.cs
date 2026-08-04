@@ -1,4 +1,3 @@
-using System.Text.Json;
 using LeaseBook.Modules.Operations.Contracts;
 using LeaseBook.Modules.Operations.Domain;
 using LeaseBook.SharedKernel.Observability;
@@ -193,7 +192,14 @@ public sealed class RunEngine(
 
         if (overrodePriorState && !acknowledgeCapabilityChange)
         {
-            throw new CapabilitiesChangedSincePriorRunException();
+            // Same conflict, same wire code, two different remedies. A capability RETIRED from the
+            // registry between the runs cannot be put back by any operator action, so the message
+            // must not offer a restore the operator would then go hunting for. Retired names are
+            // still compared, not ignored: posting under a live gate and posting after that gate was
+            // deleted are two behaviours, and the difference is real.
+            throw capabilities.NamesRetiredCapability(priorMoneyPathState!)
+                ? CapabilitiesChangedSincePriorRunException.CapabilityRetired()
+                : CapabilitiesChangedSincePriorRunException.StateMoved();
         }
 
         activity?.SetTag("capability_change_acknowledged", overrodePriorState);
@@ -228,27 +234,22 @@ public sealed class RunEngine(
         // which set it ran under: `capabilities` is the version token the cross-run consistency check
         // compares, and `capabilitiesEnabled` is the human-readable half, since the version is an
         // opaque hash that nobody can read a state back out of.
-        var summary = new
-        {
+        //
+        // A NAMED record, not an anonymous object: capabilitiesMoneyPath is read back by the guard
+        // above, whose "a field-less run must predate the field" reasoning holds only while EVERY
+        // committed BulkRun writes it. RunSummary has no optional member, so a future writer that
+        // omits it does not compile. See RunSummary for the full argument.
+        var summary = new RunSummary(
             posted,
             skipped,
             excluded,
             total,
-            capabilities = capabilities.Version,
-            capabilitiesEnabled = capabilities.EnabledNames(),
-
-            // What the NEXT run for this period compares itself against. Written by every run, so
-            // the chain is unbroken from here on; a run committed before this field existed is
-            // skipped rather than assumed — see ReadPriorMoneyPathStateAsync.
-            capabilitiesMoneyPath = moneyPathState,
-
-            // Always present, so "the override was not used" is a recorded fact rather than the
-            // absence of one; and with it the state that was overridden, so an auditor can see what
-            // the two halves of the period were computed under without replaying run history.
-            capabilityChangeAcknowledged = overrodePriorState,
-            capabilityChangeFrom = overrodePriorState ? priorMoneyPathState : null,
-        };
-        run.SetSummaryJson(JsonSerializer.Serialize(summary));
+            Capabilities: capabilities.Version,
+            CapabilitiesEnabled: capabilities.EnabledNames(),
+            CapabilitiesMoneyPath: moneyPathState,
+            CapabilityChangeAcknowledged: overrodePriorState,
+            CapabilityChangeFrom: overrodePriorState ? priorMoneyPathState : null);
+        run.SetSummaryJson(summary.ToJson());
 
         // Now add everything to the change tracker for a single atomic save.
         db.Set<BulkRun>().Add(run);
@@ -310,19 +311,9 @@ public sealed class RunEngine(
             .Select(r => r.SummaryJson)
             .FirstOrDefaultAsync(ct);
 
-        if (summaryJson is null)
-        {
-            return null;
-        }
-
-        using var parsed = JsonDocument.Parse(summaryJson);
-        if (!parsed.RootElement.TryGetProperty("capabilitiesMoneyPath", out var recorded) ||
-            recorded.ValueKind != JsonValueKind.Array)
-        {
-            return null;
-        }
-
-        return recorded.EnumerateArray().Select(e => e.GetString() ?? string.Empty).ToArray();
+        // Parsed by RunSummary, which also writes it: one type owns both sides of the property name,
+        // so a rename cannot move only the writer and silently turn every comparison into a skip.
+        return summaryJson is null ? null : RunSummary.ReadMoneyPathState(summaryJson);
     }
 
     private IRunStrategy ResolveStrategy(RunType runType) =>

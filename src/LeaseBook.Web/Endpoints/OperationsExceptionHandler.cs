@@ -37,27 +37,29 @@ public sealed class OperationsExceptionHandler(
 
         // Both capability conflicts are 409s, and the default arm keeps a future Operations error
         // from falling through to the terminal handler's uncoded 500 while someone forgets an arm.
-        var (status, eventId, message) = domain.Code switch
+        // The event id is what separates them for alerting: 1300 is worth acting on only as a rate,
+        // 1301 one at a time.
+        var (status, eventId) = domain.Code switch
         {
-            CapabilitiesChangedException.ErrorCode => (
-                StatusCodes.Status409Conflict,
-                LogEvents.CapabilityVersionConflict,
-                "Run confirm rejected: the capability set changed between preview and confirm."),
-            CapabilitiesChangedSincePriorRunException.ErrorCode => (
-                StatusCodes.Status409Conflict,
-                LogEvents.CapabilityCrossRunConflict,
-                "Run confirm rejected: an earlier run for this period recorded a different " +
-                "money-path capability state."),
-            _ => (
-                StatusCodes.Status409Conflict,
-                LogEvents.DomainRejection,
-                "Operations domain rejection."),
+            CapabilitiesChangedException.ErrorCode =>
+                (StatusCodes.Status409Conflict, LogEvents.CapabilityVersionConflict),
+            CapabilitiesChangedSincePriorRunException.ErrorCode =>
+                (StatusCodes.Status409Conflict, LogEvents.CapabilityCrossRunConflict),
+            _ => (StatusCodes.Status409Conflict, LogEvents.DomainRejection),
         };
 
-        // No version token or money-path state in the log line. Both are internal identifiers, and
-        // the run's own telemetry span already carries the resolved version for the engineer side;
-        // this log correlates to it through the correlation id ProblemResults attaches.
-        logger.LogWarning(eventId, "{Message} Code: {Code}, status: {Status}.", message, domain.Code, status);
+        // A CONSTANT template with the varying parts as parameters, matching
+        // AccountingExceptionHandler: every log aggregation in this repo groups on the template, and
+        // interpolating the description into a placeholder would give 1300 and 1301 no stable
+        // template to group by at all.
+        //
+        // No version token or money-path state in it either. Both are internal identifiers, and the
+        // run's own telemetry span already carries the resolved version for the engineer side; this
+        // log correlates to it through the correlation id ProblemResults attaches.
+        logger.LogWarning(
+            eventId,
+            "Operations rejection {Code} mapped to {Status} for {ExceptionType}",
+            domain.Code, status, domain.GetType().Name);
 
         await ProblemResults.Problem(
                 httpContext,

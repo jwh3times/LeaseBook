@@ -98,6 +98,43 @@ public sealed record RunCapabilities(
             .Order(StringComparer.Ordinal)
             .Select(name => $"{name}={(IsEnabled(name) ? "on" : "off")}")
             .ToArray();
+
+    /// <summary>
+    /// True when <paramref name="recordedState"/> — a money-path state read off an earlier run — names
+    /// a capability this set no longer resolves. That means the capability was RETIRED from the
+    /// registry between the two runs.
+    /// <para>
+    /// <b>Why the two cases must be told apart.</b> Retirement makes every prior run in every period
+    /// disagree with the new state at once, and the ordinary remedy — put the capability back the way
+    /// it was — is impossible: no <c>feature_flags</c> write can reproduce the state of a capability
+    /// the registry no longer defines. Only a deliberate acknowledgement can clear it, and an error
+    /// message that told the operator to restore something unrestorable would send them looking for a
+    /// switch that does not exist.
+    /// </para>
+    /// <para>
+    /// Retired names are NOT filtered out of the comparison itself. A run that posted while a gate was
+    /// live and a run that posted after the gate was deleted really are two behaviours, so the
+    /// difference is real and belongs on the screen; what changes is only which remedy is offered.
+    /// </para>
+    /// <para>
+    /// Answered from <see cref="MoneyPathNames"/> rather than from a registry lookup, because
+    /// Operations must not reference the Capabilities module — the port already carries exactly the
+    /// names the current registry marks money-path, which is the same question.
+    /// </para>
+    /// </summary>
+    public bool NamesRetiredCapability(IReadOnlyList<string> recordedState)
+    {
+        ArgumentNullException.ThrowIfNull(recordedState);
+
+        // Entries are "name=on" / "name=off". Decode on the LAST separator, which is the exact
+        // inverse of the encoder: the VALUE can never contain '=', while a name conceivably could,
+        // and splitting on the first one would truncate such a name to a prefix that resolves
+        // nowhere — reporting every ordinary flip as a retirement and sending the operator after an
+        // acknowledgement when a restore was available.
+        return recordedState
+            .Select(entry => entry.LastIndexOf('=') is var i && i >= 0 ? entry[..i] : entry)
+            .Any(name => !MoneyPathNames.Contains(name));
+    }
 }
 
 /// <summary>

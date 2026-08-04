@@ -31,18 +31,39 @@ public sealed class CapabilitiesChangedSincePriorRunException : OperationsDomain
     /// </summary>
     public const string ErrorCode = "capabilities_changed_since_prior_run";
 
-    private const string DefaultMessage =
+    /// <summary>
+    /// The ordinary case: a money-path capability the registry still defines resolved differently for
+    /// the two runs. Both remedies are open — put the feature state back, or acknowledge deliberately.
+    /// </summary>
+    private const string StateMovedMessage =
         "An earlier run for this period was posted while a different set of features was in effect, " +
-        "so continuing would compute one period two ways. Re-run it deliberately if that is what you " +
-        "intend, or restore the earlier feature state first.";
+        "so continuing would compute one period two ways. Restore the earlier feature state, or " +
+        "re-run it deliberately if computing the period this way is what you intend.";
 
-    public CapabilitiesChangedSincePriorRunException()
-        : base(ErrorCode, DefaultMessage)
-    {
-    }
+    /// <summary>
+    /// The retirement case, which needs its own words. A capability REMOVED from the registry cannot
+    /// be put back by any operator action — there is no flag left to write — so offering "restore the
+    /// earlier feature state" would send them looking for a switch that no longer exists. Deliberate
+    /// acknowledgement is the only route, and the message says so.
+    /// </summary>
+    private const string RetiredMessage =
+        "An earlier run for this period was posted while a feature that no longer exists was in " +
+        "effect, so continuing would compute one period two ways. That earlier state cannot be " +
+        "restored — the feature has been removed — so this run has to be confirmed deliberately if " +
+        "computing the period this way is what you intend.";
 
-    public CapabilitiesChangedSincePriorRunException(string message)
+    private CapabilitiesChangedSincePriorRunException(string message)
         : base(ErrorCode, message)
     {
     }
+
+    /// <summary>A live money-path capability resolved differently than it did for the prior run.</summary>
+    public static CapabilitiesChangedSincePriorRunException StateMoved() => new(StateMovedMessage);
+
+    /// <summary>
+    /// The prior run recorded a money-path capability the registry no longer defines. Same wire code,
+    /// because it is the same conflict and clients branch on the code; different message, because the
+    /// remedies genuinely differ.
+    /// </summary>
+    public static CapabilitiesChangedSincePriorRunException CapabilityRetired() => new(RetiredMessage);
 }
