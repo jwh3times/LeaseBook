@@ -179,6 +179,13 @@ This mirrors the existing Hangfire degraded-mode decision (ADR-001): a dependenc
 reachable should hold a replica out of rotation rather than crash it, and readiness is tuned for
 patience while liveness is tuned for speed.
 
+**Delivered only for the degraded-but-reachable case, and stated as such.** Role seeding is this
+process's first database call and runs before the readiness machinery, so a replica booting against an
+_unreachable_ database still dies there and never binds a port. Closing that needs two coupled changes
+— the same "is the server reachable" guard on role seeding, and readiness tracking role-seeding
+success as its own gate, since a replica with no roles must not pass readiness — which is a
+boot-sequence decision, not a patch. Until it is made, do not read the readiness gate as covering a database outage at boot.
+
 ### 10. The cross-run period guard, and the limit of its scope
 
 A bulk run records the money-path subset of the capability set it ran under. A later confirm for the

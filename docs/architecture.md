@@ -176,10 +176,12 @@ CI compiles every template on each pull request.
 
 Container probes are split by intent. `/api/health` is **liveness** — the process is up, and it touches
 no dependency. `/api/health/ready` is **readiness**: it stays unavailable until a startup probe has
-proven the capability seam readable, so a replica that boots while the database is degraded is held
-out of rotation and retried rather than serving traffic it cannot answer. Readiness is tuned for
-patience and liveness for speed; a separate startup probe covers the pre-bind work (role seeding,
-registry validation, job wiring) that happens before the host binds a port.
+proven the capability seam readable, so a replica that boots while the database is degraded but
+_reachable_ is held out of rotation and retried rather than serving traffic it cannot answer. A
+database that is unreachable at boot still fails earlier, in role seeding, before readiness can hold
+anything — see [ADR-028](adr/ADR-028-platform-capability-model.md). Readiness is tuned for patience
+and liveness for speed; a separate startup probe covers the pre-bind work (role seeding, registry
+validation, job wiring) that happens before the host binds a port.
 
 Migrations always run separately from the application, as the `leasebook_migrator` role and **never
 at app startup** — but the two environments reach the database differently. Production's PostgreSQL
