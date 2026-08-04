@@ -16,13 +16,19 @@ namespace LeaseBook.Web.Capabilities;
 /// <c>platform_audit_events</c> row in the SAME transaction, so the platform audit trail exists from
 /// the first write rather than being retrofitted later.
 /// <para>
+/// <b>It is also the only READ surface for three of the four tables</b>, which is why
+/// <see cref="ListAsync"/> reports entitlement and cohort state and not just flags: an operator told
+/// to go and check whether a grant landed must have something that can answer that.
+/// </para>
+/// <para>
 /// <b>Everything mutating runs inside <see cref="PlatformScopedExecutor"/>.</b> It is the single call
 /// site that sets <c>app.platform</c> (<c>PlatformScopeCallSiteTests</c> enforces exactly one), and
 /// without it the writes here do not fail loudly in any uniform way: an INSERT raises 42501, but an
 /// UPDATE or DELETE on <c>feature_flags</c> is filtered by the write policy's USING and simply
-/// affects <b>zero rows</b>. That silence is why the EF write path is used for the flag toggle — EF
-/// turns a zero-row UPDATE into <see cref="DbUpdateConcurrencyException"/> — and why any raw
-/// statement here would have to assert its own affected-row count.
+/// affects <b>zero rows</b>. That silence is why the EF write path is used for the flag toggle and the
+/// cohort removal — EF turns a zero-row UPDATE or DELETE into
+/// <see cref="DbUpdateConcurrencyException"/> — and why any raw statement here would have to assert
+/// its own affected-row count.
 /// </para>
 /// <para>
 /// <b><c>NOTIFY</c> is issued inside that same transaction.</b> Postgres queues notifications and
@@ -33,6 +39,12 @@ namespace LeaseBook.Web.Capabilities;
 /// </summary>
 public static class CapabilitiesCommand
 {
+    /// <summary>
+    /// Environment variable naming the human or system accountable for a change. See
+    /// <see cref="Actor"/>.
+    /// </summary>
+    public const string OperatorVariable = "LEASEBOOK_OPERATOR";
+
     /// <summary>
     /// Runs one invocation and returns the process exit code: 0 on success, 1 on any parse or write
     /// failure.
@@ -52,18 +64,29 @@ public static class CapabilitiesCommand
         // A scope of our own: this runs from the root provider, where no request or job scope exists.
         await using var scope = services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<DbContext>();
+        var executor = scope.ServiceProvider.GetRequiredService<PlatformScopedExecutor>();
 
         if (action.Kind == CapabilitiesActionKind.List)
         {
-            await ListAsync(db, action, ct);
+            await executor.RunAsync(() => ListAsync(db, action, ct), ct);
             return 0;
         }
 
-        var executor = scope.ServiceProvider.GetRequiredService<PlatformScopedExecutor>();
-
         try
         {
-            await executor.RunAsync(() => ApplyAsync(db, action, ct), ct);
+            var applied = default(DateTime);
+            await executor.RunAsync(async () => applied = await ApplyAsync(db, action, ct), ct);
+
+            // Printed AFTER the transaction commits, never inside it. A success line followed by a
+            // commit-time stack trace would tell the operator the opposite of what happened.
+            Console.WriteLine(Summarize(action, applied));
+        }
+        catch (CapabilitiesRefusalException refusal)
+        {
+            // A deliberate in-transaction refusal (nothing to remove). Throwing is what rolled the
+            // transaction back, so no state row and no audit row survive.
+            Console.Error.WriteLine(refusal.Message);
+            return 1;
         }
         catch (Exception ex) when (Describe(ex) is { } message)
         {
@@ -80,33 +103,59 @@ public static class CapabilitiesCommand
     /// The operator identity recorded on every row this verb writes.
     /// <para>
     /// <b>Not a user id, deliberately.</b> This process runs as <c>leasebook_app</c> with no
-    /// authenticated principal — locally it is an engineer's shell, in production it is the
-    /// capabilities ACA job (ADR-027) — so there is no <c>asp_net_users</c> row to point at and
-    /// inventing one would put a fiction in an append-only audit trail. Recorded instead is what is
-    /// actually true: this verb, that OS user, that machine. Whether a platform admin eventually
-    /// lives in <c>asp_net_users</c> under a new role or in a separate store is Project 2's question;
-    /// the <c>cli:</c> prefix is what lets those rows be told apart afterwards.
+    /// authenticated principal — locally an engineer's shell, in production the capabilities ACA job
+    /// (ADR-027) — so there is no <c>asp_net_users</c> row to point at, and inventing one would put a
+    /// fiction in an append-only audit trail. Whether a platform admin eventually lives in
+    /// <c>asp_net_users</c> under a new role or in a separate store is Project 2's question.
+    /// </para>
+    /// <para>
+    /// <b><see cref="OperatorVariable"/> is what makes production rows attributable.</b> Process
+    /// identity alone degrades to <c>cli:root@&lt;ephemeral-container-id&gt;</c> for every row the ACA
+    /// job writes, which attributes a change to nobody. The job sets the variable to the human or
+    /// system on the hook; the process identity is still appended, because the two answer different
+    /// questions — who decided, versus where it ran from. These rows are append-only, so nothing
+    /// written under the weaker convention can ever be corrected; that is why the variable exists from
+    /// the first write rather than being added once someone notices.
+    /// </para>
+    /// <para>
+    /// Recomputed per read rather than cached in a static, so a value exported after process start
+    /// still applies and no test needs a static reset.
     /// </para>
     /// </summary>
-    public static string Actor { get; } = BuildActor();
+    public static string Actor => BuildActor(Environment.GetEnvironmentVariable(OperatorVariable));
 
-    private static string BuildActor()
+    /// <summary>The pure half of <see cref="Actor"/>, so the convention is testable without env state.</summary>
+    public static string BuildActor(string? configuredOperator)
     {
         static string OrUnknown(string value) => string.IsNullOrWhiteSpace(value) ? "unknown" : value.Trim();
 
-        return $"cli:{OrUnknown(Environment.UserName)}@{OrUnknown(Environment.MachineName)}";
+        var process = $"cli:{OrUnknown(Environment.UserName)}@{OrUnknown(Environment.MachineName)}";
+
+        return string.IsNullOrWhiteSpace(configuredOperator)
+            ? process
+            : $"operator:{configuredOperator.Trim()} ({process})";
     }
 
     // ── Read ────────────────────────────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Prints the registry joined to its stored flag state.
+    /// Prints the registry joined to its stored state: the flag, plus how many orgs hold a live
+    /// entitlement and how many cohort rules exist. With <c>--org</c> it adds that tenant's own
+    /// entitlement and cohort state.
     /// <para>
-    /// <b>No platform scope, and no audit row.</b> <c>feature_flags</c> carries
-    /// <c>feature_flags_read — FOR SELECT USING (true)</c>, so a context-free read returns every row;
-    /// opening the seam's only privilege escape to read a table that needs no escape would be
-    /// gratuitous. <c>CapabilityRegistryValidator</c> reads it the same way for the same reason. And
-    /// a read changes nothing, so there is nothing for the audit trail to record.
+    /// <b>Platform-scoped, and it has to be.</b> <c>feature_flags</c> alone would not need it
+    /// (<c>feature_flags_read</c> is <c>FOR SELECT USING (true)</c>, which is why
+    /// <c>CapabilityRegistryValidator</c> reads it bare), but <c>entitlements</c> and
+    /// <c>capability_cohorts</c> are visible across orgs only under <c>app.platform</c> — without it
+    /// their <c>_org_read</c> policy filters to zero rows and this listing would report "nobody is
+    /// entitled to anything" with no error anywhere. Writing no audit row is correct: a read changes
+    /// nothing.
+    /// </para>
+    /// <para>
+    /// Entitlement state is the LATEST event per <c>(org, capability)</c>, ordered exactly as
+    /// <c>CapabilityStateReader</c> orders it — <c>effective_at DESC, granted ASC, id DESC</c>, under
+    /// <c>effective_at &lt;= now()</c> — so the listing and the resolver can never disagree about what
+    /// is live. A future-dated row is pending in both.
     /// </para>
     /// </summary>
     private static async Task ListAsync(DbContext db, CapabilitiesAction action, CancellationToken ct)
@@ -114,7 +163,31 @@ public static class CapabilitiesCommand
         var flags = await db.Set<FeatureFlag>().AsNoTracking().ToDictionaryAsync(
             f => f.Name, StringComparer.Ordinal, ct);
 
-        Console.WriteLine($"{"CAPABILITY",-26} {"FLAG",-9} {"DEFAULT",-8} {"GRANT",-6} {"MONEY",-7} UPDATED");
+        var entitled = (await db.Database
+            .SqlQuery<CapabilityCount>(
+                $"""
+                 SELECT capability, count(*) AS count
+                 FROM (
+                     SELECT DISTINCT ON (org_id, capability) capability, granted
+                     FROM entitlements
+                     WHERE effective_at <= now()
+                     ORDER BY org_id, capability, effective_at DESC, granted ASC, id DESC
+                 ) latest
+                 WHERE granted
+                 GROUP BY capability
+                 """)
+            .ToListAsync(ct))
+            .ToDictionary(r => r.Capability, r => r.Count, StringComparer.Ordinal);
+
+        var cohorts = (await db.Database
+            .SqlQuery<CapabilityCount>(
+                $"SELECT capability, count(*) AS count FROM capability_cohorts GROUP BY capability")
+            .ToListAsync(ct))
+            .ToDictionary(r => r.Capability, r => r.Count, StringComparer.Ordinal);
+
+        Console.WriteLine(
+            $"{"CAPABILITY",-26} {"FLAG",-9} {"DEFAULT",-8} {"GRANT",-6} {"MONEY",-7} " +
+            $"{"ENTITLED",-9} {"COHORTS",-8} UPDATED");
 
         foreach (var capability in CapabilityCatalog.All.OrderBy(c => c.Name, StringComparer.Ordinal))
         {
@@ -131,7 +204,14 @@ public static class CapabilitiesCommand
             Console.WriteLine(
                 $"{capability.Name,-26} {state,-9} " +
                 $"{(capability.DefaultEnabled ? "on" : "off"),-8} " +
-                $"{(capability.RequiresGrant ? "yes" : "no"),-6} {money,-7} {updated}");
+                $"{(capability.RequiresGrant ? "yes" : "no"),-6} {money,-7} " +
+                $"{entitled.GetValueOrDefault(capability.Name),-9} " +
+                $"{cohorts.GetValueOrDefault(capability.Name),-8} {updated}");
+        }
+
+        if (action.OrgId is { } orgId)
+        {
+            await ListForOrgAsync(db, orgId, ct);
         }
 
         if (action.Stale)
@@ -147,13 +227,64 @@ public static class CapabilitiesCommand
         }
     }
 
+    /// <summary>
+    /// One tenant's own state. This is the view the entitlement-collision message sends an operator
+    /// to: it answers "did the earlier grant land, and when", which the flag table cannot.
+    /// </summary>
+    private static async Task ListForOrgAsync(DbContext db, Guid orgId, CancellationToken ct)
+    {
+        var entitlements = (await db.Database
+            .SqlQuery<OrgEntitlementRow>(
+                $"""
+                 SELECT DISTINCT ON (capability) capability, granted, effective_at, actor
+                 FROM entitlements
+                 WHERE org_id = {orgId}
+                   AND effective_at <= now()
+                 ORDER BY capability, effective_at DESC, granted ASC, id DESC
+                 """)
+            .ToListAsync(ct))
+            .ToDictionary(r => r.Capability, StringComparer.Ordinal);
+
+        var rules = await db.Database
+            .SqlQuery<OrgCohortRow>(
+                $"""
+                 SELECT capability, user_id
+                 FROM capability_cohorts
+                 WHERE org_id = {orgId}
+                 ORDER BY capability, user_id NULLS FIRST
+                 """)
+            .ToListAsync(ct);
+
+        Console.WriteLine();
+        Console.WriteLine($"org {orgId}:");
+
+        foreach (var capability in CapabilityCatalog.All.OrderBy(c => c.Name, StringComparer.Ordinal))
+        {
+            var entitlement = entitlements.GetValueOrDefault(capability.Name) is { } row
+                ? $"{(row.Granted ? "granted" : "revoked")} {row.EffectiveAt.ToUniversalTime():u} by {row.Actor}"
+                : "(no entitlement event)";
+
+            var mine = rules
+                .Where(r => string.Equals(r.Capability, capability.Name, StringComparison.Ordinal))
+                .ToList();
+            var cohort = mine.Count == 0
+                ? "none"
+                : string.Join(", ", mine.Select(r => r.UserId is { } user ? $"user {user}" : "org-wide"));
+
+            Console.WriteLine($"  {capability.Name,-26} entitlement: {entitlement}");
+            Console.WriteLine($"  {string.Empty,-26} cohort:      {cohort}");
+        }
+    }
+
     // ── Writes ──────────────────────────────────────────────────────────────────────────────────
 
     /// <summary>
     /// The body of one platform-scoped transaction: read what is being replaced, write the state row,
     /// write the audit row, then <c>NOTIFY</c>. All four steps commit or roll back together.
     /// </summary>
-    private static async Task ApplyAsync(DbContext db, CapabilitiesAction action, CancellationToken ct)
+    /// <returns>The transaction timestamp every row it wrote carries.</returns>
+    private static async Task<DateTime> ApplyAsync(
+        DbContext db, CapabilitiesAction action, CancellationToken ct)
     {
         var capability = action.Capability!;
 
@@ -171,6 +302,7 @@ public static class CapabilitiesCommand
             CapabilitiesActionKind.Grant or CapabilitiesActionKind.Revoke =>
                 WriteEntitlement(db, action, now),
             CapabilitiesActionKind.CohortAdd => WriteCohort(db, action, now),
+            CapabilitiesActionKind.CohortRemove => await RemoveCohortAsync(db, action, ct),
             _ => throw new InvalidOperationException($"Unhandled action kind {action.Kind}."),
         };
 
@@ -188,14 +320,15 @@ public static class CapabilitiesCommand
         // ONE SaveChanges for the state row and its audit row: they are the same fact, and EF sends
         // them in one batch inside the executor's transaction. A failure on either — the entitlements
         // uniqueness index, the FK to orgs — takes both down, which is the atomicity the audit trail
-        // is worth nothing without.
+        // is worth nothing without. CapabilitiesCommandTests asserts the two rows share an xmin,
+        // which is the evidence that discriminates same-transaction from write-then-audit-separately.
         await db.SaveChangesAsync(ct);
 
         // Inside the transaction. See the class remarks.
         await db.Database.ExecuteSqlAsync(
             $"SELECT pg_notify({CapabilityNotificationListener.Channel}, {capability})", ct);
 
-        Console.WriteLine(Summarize(action, now));
+        return now;
     }
 
     /// <summary>
@@ -219,6 +352,7 @@ public static class CapabilitiesCommand
     {
         var enabled = action.Kind == CapabilitiesActionKind.FlagEnable;
         var name = action.Capability!;
+        var actor = Actor;
 
         var flag = await db.Set<FeatureFlag>().SingleOrDefaultAsync(f => f.Name == name, ct);
         bool? previous = flag?.Enabled;
@@ -230,14 +364,14 @@ public static class CapabilitiesCommand
                 Name = name,
                 Enabled = enabled,
                 UpdatedAt = now,
-                UpdatedBy = Actor,
+                UpdatedBy = actor,
             });
         }
         else
         {
             flag.Enabled = enabled;
             flag.UpdatedAt = now;
-            flag.UpdatedBy = Actor;
+            flag.UpdatedBy = actor;
         }
 
         return (
@@ -303,6 +437,66 @@ public static class CapabilitiesCommand
             }));
     }
 
+    /// <summary>
+    /// The exact inverse of <see cref="WriteCohort"/>: it removes the rule an <c>add</c> with the same
+    /// arguments would have created — the org-wide rule (<c>user_id IS NULL</c>) when no
+    /// <c>--user</c> was given, that user's rule when one was.
+    /// <para>
+    /// <b>This exists because <c>capability_cohorts</c> is the one platform table with no natural
+    /// inverse and no uniqueness constraint.</b> Without it the CLI could create state it could
+    /// neither show nor undo: a fat-fingered <c>cohort add</c> would silently duplicate and stay
+    /// there. The table deliberately keeps its UPDATE/DELETE grants (membership is mutable by design,
+    /// unlike entitlements), so this is an ordinary delete rather than a compensating event.
+    /// </para>
+    /// <para>
+    /// EF loads the rows and deletes them by key, so a delete filtered to zero rows by RLS raises
+    /// <see cref="DbUpdateConcurrencyException"/> instead of succeeding silently — the same reason the
+    /// flag toggle avoids raw SQL. A request matching NOTHING is refused before anything is written,
+    /// because the likely cause is a mistyped org, and "removed 0 rules" reported as success is how an
+    /// operator concludes a cohort is gone when it is not.
+    /// </para>
+    /// </summary>
+    private static async Task<(string Action, string Detail)> RemoveCohortAsync(
+        DbContext db, CapabilitiesAction action, CancellationToken ct)
+    {
+        var capability = action.Capability!;
+        var orgId = action.OrgId!.Value;
+
+        var query = db.Set<CapabilityCohort>()
+            .Where(c => c.Capability == capability && c.OrgId == orgId);
+
+        // Two branches rather than `c.UserId == action.UserId`: with a null parameter that comparison
+        // translates to `user_id = NULL`, which matches nothing, so a bare --org would silently remove
+        // no rows instead of the org-wide rule it named.
+        query = action.UserId is { } user
+            ? query.Where(c => c.UserId == user)
+            : query.Where(c => c.UserId == null);
+
+        var rows = await query.ToListAsync(ct);
+        if (rows.Count == 0)
+        {
+            var scope = action.UserId is { } named
+                ? $"user {named} in org {orgId}"
+                : $"org {orgId} (org-wide)";
+
+            throw new CapabilitiesRefusalException(
+                $"capabilities: no '{capability}' cohort rule exists for {scope}, so nothing was " +
+                "removed and nothing was recorded. `cohort remove` is the exact inverse of `cohort " +
+                "add`: without --user it targets the org-wide rule only. Run " +
+                $"`capabilities list --org {orgId}` to see the rules that do exist.");
+        }
+
+        db.RemoveRange(rows);
+
+        return (
+            "cohort.remove",
+            Json(new Dictionary<string, object?>
+            {
+                ["user_id"] = action.UserId?.ToString(),
+                ["removed"] = rows.Count,
+            }));
+    }
+
     // ── Reporting ───────────────────────────────────────────────────────────────────────────────
 
     private static string Summarize(CapabilitiesAction action, DateTime now)
@@ -325,6 +519,9 @@ public static class CapabilitiesCommand
             CapabilitiesActionKind.CohortAdd => action.UserId is { } user
                 ? $"capabilities: added user {user} in org {org} to the '{capability}' cohort."
                 : $"capabilities: added org {org} to the '{capability}' cohort.",
+            CapabilitiesActionKind.CohortRemove => action.UserId is { } removed
+                ? $"capabilities: removed user {removed} in org {org} from the '{capability}' cohort."
+                : $"capabilities: removed org {org}'s org-wide '{capability}' cohort rule.",
             _ => $"capabilities: {action.Kind} applied.",
         };
     }
@@ -336,7 +533,21 @@ public static class CapabilitiesCommand
     /// </summary>
     private static string? Describe(Exception exception)
     {
-        var postgres = Unwrap(exception);
+        // Checked BEFORE the Postgres unwrap, because a zero-row UPDATE/DELETE produces no server
+        // error at all — there is nothing underneath to match on. This is the W3 case (RLS filtering
+        // a write to zero rows, silently) surfacing as the one exception EF raises for it. Relying on
+        // the batch's audit INSERT to raise 42501 first would be relying on EF's statement ordering.
+        if (Find<DbUpdateConcurrencyException>(exception) is not null)
+        {
+            return
+                "capabilities: the write matched no rows and was rolled back. On the platform tables " +
+                "that means RLS filtered it out rather than rejecting it — an UPDATE or DELETE without " +
+                "app.platform succeeds affecting zero rows instead of raising, which is exactly the " +
+                "silence EF turns into this error. Nothing was written, including the audit row. If " +
+                "this reproduces, the platform escape is not opening (PlatformScopedExecutor).";
+        }
+
+        var postgres = Find<PostgresException>(exception);
         if (postgres is null)
         {
             return null;
@@ -347,14 +558,16 @@ public static class CapabilitiesCommand
             // 23505 on the entitlements uniqueness index: two grant events for one (org, capability)
             // at the same instant. `id` is NOT a usable tie-break (UUIDv7's low bits are random), so
             // the resolver could not order them — the index rejects the second rather than leaving
-            // "current state" undefined. In practice this is a double-invocation; re-run it.
+            // "current state" undefined. In practice this is a double-invocation, and the remedy names
+            // the per-org listing because the flag table cannot answer whether the first one landed.
             PostgresErrorCodes.UniqueViolation
                 when postgres.ConstraintName == "ux_entitlements_org_capability_effective_at" =>
                 "capabilities: an entitlement event for this org and capability already exists at this " +
                 "exact instant, so this one was rejected and nothing was written. Two events at one " +
                 "timestamp have no defined order, which would leave current entitlement state " +
-                "ambiguous. This is almost always a command run twice — check `capabilities list` and " +
-                "re-run if it really is a second change.",
+                "ambiguous. This is almost always a command run twice — run " +
+                "`capabilities list --org <id>` to see whether the earlier one landed, and re-run only " +
+                "if it really is a second change.",
 
             PostgresErrorCodes.ForeignKeyViolation =>
                 "capabilities: that org does not exist. Entitlements and cohort rules reference `orgs`, " +
@@ -375,13 +588,13 @@ public static class CapabilitiesCommand
     /// <see cref="InvalidOperationException"/>), so the chain is walked rather than the top frame
     /// matched — the same trap <c>CapabilityRegistryValidator.IsUnreachable</c> documents.
     /// </summary>
-    private static PostgresException? Unwrap(Exception exception)
+    private static T? Find<T>(Exception exception) where T : Exception
     {
         for (var current = exception; current is not null; current = current.InnerException)
         {
-            if (current is PostgresException postgres)
+            if (current is T match)
             {
-                return postgres;
+                return match;
             }
         }
 
@@ -389,4 +602,16 @@ public static class CapabilitiesCommand
     }
 
     private static string Json(Dictionary<string, object?> detail) => JsonSerializer.Serialize(detail);
+
+    /// <summary>
+    /// A refusal decided inside the transaction, after a read the parser could not perform. Throwing
+    /// is what rolls the transaction back, so a refused command leaves no state row and no audit row.
+    /// </summary>
+    private sealed class CapabilitiesRefusalException(string message) : Exception(message);
+
+    private sealed record CapabilityCount(string Capability, long Count);
+
+    private sealed record OrgEntitlementRow(string Capability, bool Granted, DateTime EffectiveAt, string Actor);
+
+    private sealed record OrgCohortRow(string Capability, Guid? UserId);
 }

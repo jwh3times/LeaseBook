@@ -1,3 +1,4 @@
+using LeaseBook.Modules.Capabilities.Registry;
 using LeaseBook.Web.Seeding;
 using CapabilityCatalog = LeaseBook.Modules.Capabilities.Registry.Capabilities;
 
@@ -12,6 +13,7 @@ public enum CapabilitiesActionKind
     Grant,
     Revoke,
     CohortAdd,
+    CohortRemove,
 }
 
 /// <summary>
@@ -46,9 +48,10 @@ public sealed record CapabilitiesAction(
 public static class CapabilitiesVerb
 {
     public const string Usage =
-        "capabilities: expected one of `list [--stale]`, `flag enable|disable <name>`, " +
-        "`grant <capability> --org <id|demo>`, `revoke <capability> --org <id|demo>`, or " +
-        "`cohort add <capability> --org <id|demo> [--user <id>]` " +
+        "capabilities: expected one of `list [--org <id|demo>] [--stale]`, " +
+        "`flag enable|disable <name>`, `grant <capability> --org <id|demo>`, " +
+        "`revoke <capability> --org <id|demo>`, or " +
+        "`cohort add|remove <capability> --org <id|demo> [--user <id>]` " +
         "(e.g. `dotnet run --project src/LeaseBook.Web -- capabilities list`).";
 
     /// <summary>
@@ -81,17 +84,23 @@ public static class CapabilitiesVerb
 
     // ── Subcommands ─────────────────────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// <c>--org</c> is optional here and narrows the listing to one tenant's entitlement and cohort
+    /// state. Without it the listing is deployment-wide and reports counts. It is optional rather than
+    /// required because the common question ("what exists, and what is flagged on?") is not
+    /// org-specific — but the per-org form is what makes the entitlement-collision remedy answerable.
+    /// </summary>
     private static bool TryList(string[] args, out CapabilitiesAction action, out string error)
     {
         action = new CapabilitiesAction(CapabilitiesActionKind.List);
 
-        if (!TryReadOptions(args, start: 2, allowOrg: false, allowUser: false, allowStale: true,
-                out _, out _, out var stale, out error))
+        if (!TryReadOptions(args, start: 2, allowOrg: true, allowUser: false, allowStale: true,
+                out var orgId, out _, out var stale, out error))
         {
             return false;
         }
 
-        action = action with { Stale = stale };
+        action = action with { OrgId = orgId, Stale = stale };
         return true;
     }
 
@@ -175,20 +184,38 @@ public static class CapabilitiesVerb
         return true;
     }
 
+    /// <summary>
+    /// <c>add</c> and <c>remove</c> are exact inverses, deliberately: <c>remove</c> targets the one
+    /// rule <c>add</c> with the same arguments would have created — the org-wide rule when no
+    /// <c>--user</c> is given, that user's rule when one is. Anything looser (say, "remove every rule
+    /// for this org") would make a bare <c>--org</c> silently destroy user-level rules the operator
+    /// never mentioned.
+    /// </summary>
     private static bool TryCohort(string[] args, out CapabilitiesAction action, out string error)
     {
-        if (args.Length < 3 || !string.Equals(args[2], "add", StringComparison.OrdinalIgnoreCase))
+        var kind = args.Length < 3
+            ? null
+            : args[2].ToLowerInvariant() switch
+            {
+                "add" => CapabilitiesActionKind.CohortAdd,
+                "remove" => CapabilitiesActionKind.CohortRemove,
+                _ => (CapabilitiesActionKind?)null,
+            };
+
+        if (kind is not { } cohortKind)
         {
             var got = args.Length < 3 ? "nothing" : $"'{args[2]}'";
             return Fail(
-                $"capabilities: `cohort` expects `add`, got {got}. Removing a cohort rule is not exposed " +
-                "on the CLI yet. " + Usage,
+                $"capabilities: `cohort` expects `add` or `remove`, got {got}. {Usage}",
                 out action, out error);
         }
 
+        var noun = cohortKind == CapabilitiesActionKind.CohortAdd ? "add" : "remove";
+
         if (args.Length < 4)
         {
-            return Fail($"capabilities: `cohort add` expects a capability name. {Usage}", out action, out error);
+            return Fail(
+                $"capabilities: `cohort {noun}` expects a capability name. {Usage}", out action, out error);
         }
 
         if (!TryCapability(args[3], out var capability, out error))
@@ -207,12 +234,12 @@ public static class CapabilitiesVerb
         if (orgId is not { } org)
         {
             return Fail(
-                "capabilities: `cohort add` requires --org <id|demo>. A cohort rule always carries an " +
-                "org: asp_net_users is RLS-exempt, so a bare --user could not be validated against one.",
+                $"capabilities: `cohort {noun}` requires --org <id|demo>. A cohort rule always carries " +
+                "an org: asp_net_users is RLS-exempt, so a bare --user could not be validated against one.",
                 out action, out error);
         }
 
-        action = new CapabilitiesAction(CapabilitiesActionKind.CohortAdd, capability, org, userId);
+        action = new CapabilitiesAction(cohortKind, capability, org, userId);
         return true;
     }
 
@@ -239,7 +266,7 @@ public static class CapabilitiesVerb
 
         if (entry.IsFixture)
         {
-            error = FixtureRefusal(value);
+            error = FixtureRefusal(entry);
             return false;
         }
 
@@ -251,20 +278,42 @@ public static class CapabilitiesVerb
     /// Why a fixture capability is unreachable from the CLI, spelled out because the refusal looks
     /// arbitrary otherwise: the name IS in the registry, so a naive registry check passes it.
     /// <para>
-    /// <c>money-path-fixture</c> gates no production code path — nothing reads it, by design — but it
-    /// is <c>IsMoneyPath: true</c>, and the run engine's cross-run guard compares the money-path
-    /// SUBSET of each org's resolved set. Moving it would therefore invalidate every in-flight period
-    /// across every org at once, returning 409 on confirm, with a remedy (re-preview) the operator has
-    /// to walk every affected tenant through. Tests move it by writing the row directly, which is the
-    /// only place that blast radius is contained.
+    /// The guard keys on <see cref="Capability.IsFixture"/> alone, so the message must too. The
+    /// money-path clause is conditional on <see cref="Capability.IsMoneyPath"/>: they are independent
+    /// axes, and a future non-money-path fixture refused with "it IS a money-path capability" would be
+    /// given a false reason — the only reason it ever gets.
+    /// </para>
+    /// <para>
+    /// For <c>money-path-fixture</c>, which is both, the clause is the whole argument. It gates no
+    /// production code path — nothing reads it, by design — but the run engine's cross-run guard
+    /// compares the money-path SUBSET of each org's resolved set. Moving it would invalidate every
+    /// in-flight period across every org at once, returning 409 on confirm, with a remedy (re-preview)
+    /// the operator has to walk every affected tenant through.
+    /// </para>
+    /// <para>
+    /// <b>The refusal is symmetric, and that has a consequence worth stating.</b> Disabling a fixture
+    /// moves the money-path subset exactly as much as enabling it, so <c>flag disable</c> is refused
+    /// too — which means there is <b>no CLI remedy in either direction</b>. Under ADR-027 private
+    /// networking there is no psql either, so if a fixture flag ever went live in production the fix
+    /// is a redeploy with the registry changed. That is the correct trade: an operator able to "undo"
+    /// it would still be issuing the fleet-wide 409 the guard exists to prevent.
     /// </para>
     /// </summary>
-    private static string FixtureRefusal(string value) =>
-        $"capabilities: '{value}' is a test fixture (Capability.IsFixture) and cannot be changed from " +
-        "the CLI. It gates no production code path, but it IS a money-path capability, so moving it " +
-        "would change the money-path subset of every org's resolved set and make every in-flight bulk " +
-        "run conflict on confirm (409) fleet-wide — with a remedy no operator can reasonably execute. " +
-        "Fixtures move only in tests, which write the row directly.";
+    private static string FixtureRefusal(Capability entry)
+    {
+        var moneyPath = entry.IsMoneyPath
+            ? "It gates no production code path, but it IS a money-path capability, so moving it — in " +
+              "either direction — would change the money-path subset of every org's resolved set and " +
+              "make every in-flight bulk run conflict on confirm (409) fleet-wide, with a remedy no " +
+              "operator can reasonably execute. "
+            : "It exists to exercise the capability mechanism itself and gates no production code path. ";
+
+        return $"capabilities: '{entry.Name}' is a test fixture (Capability.IsFixture) and cannot be " +
+               "changed from the CLI. " + moneyPath +
+               "Fixtures move only in tests, which write the row directly; there is deliberately no " +
+               "CLI remedy in either direction, so a fixture flag that somehow went live is fixed by a " +
+               "redeploy with the registry changed.";
+    }
 
     /// <summary>
     /// Reads the named options that follow the positional part of a subcommand. Every token must be

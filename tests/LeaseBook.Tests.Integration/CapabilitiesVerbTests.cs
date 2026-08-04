@@ -68,6 +68,31 @@ public sealed class CapabilitiesVerbTests
         CapabilitiesVerb.TryResolve(
             ["capabilities", "cohort", "add", name, "--org", org], out _, out var cohort).ShouldBeFalse();
         cohort.ShouldContain("fixture");
+
+        CapabilitiesVerb.TryResolve(
+            ["capabilities", "cohort", "remove", name, "--org", org], out _, out var removal).ShouldBeFalse();
+        removal.ShouldContain("fixture");
+    }
+
+    /// <summary>
+    /// The refusal message must explain the refusal the guard actually performs. The guard keys on
+    /// <c>IsFixture</c>; the money-path clause is conditional on <c>IsMoneyPath</c>, because they are
+    /// independent axes and a future non-money-path fixture refused with "it IS a money-path
+    /// capability" would be handed the one reason it gets, falsely.
+    /// </summary>
+    [Fact]
+    public void The_fixture_refusal_explains_the_money_path_blast_radius_only_when_it_applies()
+    {
+        CapabilityCatalog.MoneyPathFixture.IsMoneyPath.ShouldBeTrue("guards the premise of this test");
+
+        CapabilitiesVerb.TryResolve(
+            ["capabilities", "flag", "enable", CapabilityCatalog.MoneyPathFixture.Name],
+            out _, out var error).ShouldBeFalse();
+
+        error.ShouldContain("money-path");
+        error.ShouldContain("409");
+        // The symmetry consequence: refused in both directions, so there is no CLI undo at all.
+        error.ShouldContain("either direction");
     }
 
     // ── Shapes that must resolve ────────────────────────────────────────────────────────────────
@@ -163,6 +188,37 @@ public sealed class CapabilitiesVerbTests
         action.UserId.ShouldBeNull();
     }
 
+    /// <summary>
+    /// <c>remove</c> takes exactly the arguments <c>add</c> takes, because it is the exact inverse —
+    /// without it the CLI could create cohort state it could not undo.
+    /// </summary>
+    [Fact]
+    public void Cohort_remove_mirrors_cohort_add()
+    {
+        CapabilitiesVerb.TryResolve(
+            ["capabilities", "cohort", "remove", Known, "--org", "demo"], out var orgWide, out _)
+            .ShouldBeTrue();
+        orgWide.Kind.ShouldBe(CapabilitiesActionKind.CohortRemove);
+        orgWide.UserId.ShouldBeNull();
+
+        CapabilitiesVerb.TryResolve(
+            ["capabilities", "cohort", "remove", Known, "--org", "demo",
+             "--user", "22222222-2222-2222-2222-222222222222"],
+            out var scoped, out _).ShouldBeTrue();
+        scoped.UserId.ShouldNotBeNull();
+    }
+
+    [Fact]
+    public void List_accepts_an_optional_org()
+    {
+        CapabilitiesVerb.TryResolve(
+            ["capabilities", "list", "--org", "demo", "--stale"], out var action, out _).ShouldBeTrue();
+
+        action.Kind.ShouldBe(CapabilitiesActionKind.List);
+        action.OrgId.ShouldBe(DemoSeeder.DemoOrgId);
+        action.Stale.ShouldBeTrue();
+    }
+
     // ── Strictness ──────────────────────────────────────────────────────────────────────────────
 
     [Fact]
@@ -214,8 +270,9 @@ public sealed class CapabilitiesVerbTests
     public void Unknown_cohort_action_fails()
     {
         CapabilitiesVerb.TryResolve(
-            ["capabilities", "cohort", "remove", Known, "--org", "demo"], out _, out var error).ShouldBeFalse();
+            ["capabilities", "cohort", "purge", Known, "--org", "demo"], out _, out var error).ShouldBeFalse();
         error.ShouldContain("add");
+        error.ShouldContain("remove");
     }
 
     [Fact]

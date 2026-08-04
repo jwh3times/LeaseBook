@@ -169,10 +169,53 @@ public sealed class CapabilitiesCommandTests(PostgresFixture fixture)
     }
 
     /// <summary>
-    /// The atomicity proof. The FK to <c>orgs</c> rejects the entitlement, so the whole
-    /// platform-scoped transaction rolls back — and the audit row, added in the same
-    /// <c>SaveChanges</c>, goes with it. An audit trail that can outlive the write it describes (or
-    /// vice versa) is worse than none.
+    /// <b>The atomicity proof that discriminates.</b> Every row Postgres stores carries <c>xmin</c>,
+    /// the id of the transaction that inserted it, so two rows written in one transaction have equal
+    /// <c>xmin</c> and rows written in two transactions cannot. That is a direct observation of the
+    /// property, not a proxy for it.
+    /// <para>
+    /// The rollback test below is necessary but NOT sufficient on its own: the FK fires on the
+    /// entitlement INSERT, which precedes the audit write under "one transaction" and under
+    /// "state first, audit separately" alike, so its emptiness carries no discriminating
+    /// information. The failure mode that separates the two designs — state row present, audit row
+    /// absent — is what <c>xmin</c> equality rules out. Verified by splitting the audit write into a
+    /// second <c>PlatformScopedExecutor.RunAsync</c> in a scratch edit and watching this go red.
+    /// </para>
+    /// <para>
+    /// The timestamp equality is the weaker, secondary signal: both rows carry the single
+    /// <c>SELECT now()</c> the transaction opened with, so it also documents that decision.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task The_state_row_and_its_audit_row_are_written_by_one_transaction()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var org = UuidV7.NewId();
+        await SeedOrgAsync(org, ct);
+
+        (await RunAsync(["capabilities", "grant", Capability, "--org", org.ToString()])).Exit.ShouldBe(0);
+
+        var (stateXmin, stateAt) = await ReadRowIdentityAsync(
+            "SELECT xmin::text, effective_at FROM entitlements WHERE org_id = @org", org, ct);
+        var (auditXmin, auditAt) = await ReadRowIdentityAsync(
+            "SELECT xmin::text, occurred_at FROM platform_audit_events WHERE org_id = @org", org, ct);
+
+        auditXmin.ShouldBe(
+            stateXmin,
+            "the entitlement and its audit row must be inserted by the SAME Postgres transaction — " +
+            "equal xmin is the only evidence that rules out 'state committed, audit written after'");
+
+        auditAt.ShouldBe(
+            stateAt,
+            "both carry the single SELECT now() the transaction opened with (transaction start time)");
+    }
+
+    /// <summary>
+    /// The rollback half. The FK to <c>orgs</c> rejects the entitlement, so the whole platform-scoped
+    /// transaction rolls back and the audit row, added in the same <c>SaveChanges</c>, goes with it.
+    /// Read
+    /// <see cref="The_state_row_and_its_audit_row_are_written_by_one_transaction"/> for why this test
+    /// alone would not establish atomicity.
     /// </summary>
     [Fact]
     public async Task A_rejected_write_leaves_neither_a_state_row_nor_an_audit_row()
@@ -217,6 +260,79 @@ public sealed class CapabilitiesCommandTests(PostgresFixture fixture)
             .GetProperty("user_id").GetString().ShouldBe(user.ToString());
     }
 
+    /// <summary>
+    /// <c>remove</c> is the exact inverse of <c>add</c>, which is what stops the CLI creating state it
+    /// cannot undo. <c>capability_cohorts</c> keeps its UPDATE/DELETE grants on purpose (membership is
+    /// mutable, unlike an entitlement), so this is an ordinary delete rather than a compensating event.
+    /// </summary>
+    [Fact]
+    public async Task Cohort_remove_deletes_the_rule_and_records_the_removal()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var org = UuidV7.NewId();
+        await SeedOrgAsync(org, ct);
+
+        (await RunAsync(["capabilities", "cohort", "add", Capability, "--org", org.ToString()]))
+            .Exit.ShouldBe(0);
+
+        var (exit, output, _) = await RunAsync(
+            ["capabilities", "cohort", "remove", Capability, "--org", org.ToString()]);
+
+        exit.ShouldBe(0);
+        output.ShouldContain("removed");
+        (await ReadCohortsAsync(org, ct)).ShouldBeEmpty();
+
+        var audits = await ReadAuditsForOrgAsync(org, ct);
+        audits.Select(a => a.Action).ShouldBe(["cohort.add", "cohort.remove"]);
+        JsonDocument.Parse(audits[^1].Detail).RootElement.GetProperty("removed").GetInt32().ShouldBe(1);
+    }
+
+    /// <summary>
+    /// Without <c>--user</c>, <c>remove</c> targets the org-wide rule ONLY. Anything looser would let a
+    /// bare <c>--org</c> silently destroy user-level rules the operator never named.
+    /// </summary>
+    [Fact]
+    public async Task Cohort_remove_without_a_user_leaves_user_level_rules_alone()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var org = UuidV7.NewId();
+        var user = UuidV7.NewId();
+        await SeedOrgAsync(org, ct);
+
+        (await RunAsync(["capabilities", "cohort", "add", Capability, "--org", org.ToString()]))
+            .Exit.ShouldBe(0);
+        (await RunAsync(
+            ["capabilities", "cohort", "add", Capability, "--org", org.ToString(), "--user", user.ToString()]))
+            .Exit.ShouldBe(0);
+
+        (await RunAsync(["capabilities", "cohort", "remove", Capability, "--org", org.ToString()]))
+            .Exit.ShouldBe(0);
+
+        var remaining = await ReadCohortsAsync(org, ct);
+        remaining.Count.ShouldBe(1);
+        remaining[0].UserId.ShouldBe(user, "only the org-wide rule was named, so only it was removed");
+    }
+
+    /// <summary>
+    /// A removal matching nothing is refused rather than reported as a successful no-op: the likely
+    /// cause is a mistyped org, and "removed 0 rules" is how an operator concludes a cohort is gone
+    /// when it is not. Refused inside the transaction, so it writes no audit row either.
+    /// </summary>
+    [Fact]
+    public async Task Cohort_remove_matching_nothing_is_refused_and_records_nothing()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var org = UuidV7.NewId();
+        await SeedOrgAsync(org, ct);
+
+        var (exit, _, errors) = await RunAsync(
+            ["capabilities", "cohort", "remove", Capability, "--org", org.ToString()]);
+
+        exit.ShouldBe(1);
+        errors.ShouldContain("no '" + Capability + "' cohort rule exists");
+        (await ReadAuditsForOrgAsync(org, ct)).ShouldBeEmpty();
+    }
+
     // ── Refusals write nothing at all ───────────────────────────────────────────────────────────
 
     /// <summary>
@@ -258,7 +374,7 @@ public sealed class CapabilitiesCommandTests(PostgresFixture fixture)
     // ── List ────────────────────────────────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task List_prints_every_registry_capability_and_needs_no_platform_scope()
+    public async Task List_prints_every_registry_capability()
     {
         var (exit, output, _) = await RunAsync(["capabilities", "list"]);
 
@@ -267,6 +383,62 @@ public sealed class CapabilitiesCommandTests(PostgresFixture fixture)
         {
             output.ShouldContain(capability.Name);
         }
+
+        output.ShouldContain("ENTITLED");
+        output.ShouldContain("COHORTS");
+    }
+
+    /// <summary>
+    /// The listing must be able to answer the question the entitlement-collision message sends an
+    /// operator to ask: did the earlier grant land? A flags-only listing could not, which is why this
+    /// asserts on the entitlement and cohort state of a specific org rather than on the header row.
+    /// <para>
+    /// It also pins that the listing runs under platform scope: <c>entitlements</c> and
+    /// <c>capability_cohorts</c> are cross-org readable only under <c>app.platform</c>, and without it
+    /// this would print "(no entitlement event)" for a row that exists, with no error anywhere.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task List_for_an_org_reports_entitlement_and_cohort_state()
+    {
+        var org = UuidV7.NewId();
+        await SeedOrgAsync(org, TestContext.Current.CancellationToken);
+
+        (await RunAsync(["capabilities", "grant", Capability, "--org", org.ToString()])).Exit.ShouldBe(0);
+        (await RunAsync(["capabilities", "cohort", "add", Capability, "--org", org.ToString()]))
+            .Exit.ShouldBe(0);
+
+        var (exit, output, _) = await RunAsync(["capabilities", "list", "--org", org.ToString()]);
+
+        exit.ShouldBe(0);
+        output.ShouldContain(org.ToString());
+        output.ShouldContain("granted");
+        output.ShouldContain("org-wide");
+        // The fixture has no entitlement for this org: absence is stated, never left blank.
+        output.ShouldContain("(no entitlement event)");
+    }
+
+    // ── The actor convention ────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Without <see cref="CapabilitiesCommand.OperatorVariable"/> the actor is process identity, which
+    /// in the ACA job degrades to <c>cli:root@&lt;ephemeral-container-id&gt;</c> — honest, but it
+    /// attributes a change to nobody. With it, the accountable party is named AND the process is still
+    /// recorded, because "who decided" and "where did it run" are different questions. These rows are
+    /// append-only, so the convention has to be right from the first write.
+    /// </summary>
+    [Fact]
+    public void The_actor_names_the_operator_when_one_is_configured()
+    {
+        var process = CapabilitiesCommand.BuildActor(null);
+        process.ShouldStartWith("cli:");
+
+        var attributed = CapabilitiesCommand.BuildActor("  ops-jane  ");
+        attributed.ShouldStartWith("operator:ops-jane");
+        attributed.Contains(process, StringComparison.Ordinal)
+            .ShouldBeTrue("the process identity is kept alongside the operator, never replaced by it");
+
+        CapabilitiesCommand.BuildActor("   ").ShouldBe(process, "a blank value is not an attribution");
     }
 
     /// <summary>
@@ -412,6 +584,29 @@ public sealed class CapabilitiesCommandTests(PostgresFixture fixture)
 
         await tx.CommitAsync(ct);
         return rows;
+    }
+
+    /// <summary>
+    /// Reads a row's inserting transaction id and its timestamp. <c>xmin</c> is a system column every
+    /// heap row carries, so two rows written by one transaction share it and rows written by two
+    /// cannot — which is what makes the atomicity assertion an observation rather than a proxy.
+    /// </summary>
+    private async Task<(string Xmin, DateTime At)> ReadRowIdentityAsync(
+        string sql, Guid orgId, CancellationToken ct)
+    {
+        await using var conn = await fixture.OpenAppConnectionAsync(ct);
+        await using var tx = await conn.BeginTransactionAsync(ct);
+        await PlatformScopeAsync(conn, tx, ct);
+
+        await using var cmd = new NpgsqlCommand(sql, conn, tx);
+        cmd.Parameters.AddWithValue("org", orgId);
+
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        (await reader.ReadAsync(ct)).ShouldBeTrue($"expected exactly one row from: {sql}");
+        var row = (reader.GetString(0), reader.GetDateTime(1));
+        (await reader.ReadAsync(ct)).ShouldBeFalse($"expected exactly one row from: {sql}");
+
+        return row;
     }
 
     private async Task<List<(bool Granted, string Actor)>> ReadEntitlementsAsync(
