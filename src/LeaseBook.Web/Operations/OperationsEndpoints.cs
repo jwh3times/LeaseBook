@@ -89,7 +89,7 @@ public sealed class OperationsEndpoints : IEndpointModule
             .Produces<RunPreviewSpaResponse>();
 
         // POST /api/operations/runs/{type}/confirm
-        // Body: { year, month, selectedTargetIds, capabilitiesVersion }
+        // Body: { year, month, selectedTargetIds, capabilitiesVersion, acknowledgeCapabilityChange? }
         group.MapPost("/runs/{type}/confirm",
                 async (string type, ConfirmRunRequest body, RunEngine engine, HttpContext httpContext,
                     CancellationToken ct) =>
@@ -132,7 +132,8 @@ public sealed class OperationsEndpoints : IEndpointModule
                     // against the one set it resolves at entry. The endpoint only carries the value:
                     // re-resolving here to compare would break the single-resolve freeze.
                     var result = await engine.ConfirmAsync(
-                        runType, period, body.SelectedTargetIds, body.CapabilitiesVersion, ct);
+                        runType, period, body.SelectedTargetIds, body.CapabilitiesVersion,
+                        body.AcknowledgeCapabilityChange, ct);
 
                     return Results.Ok(new RunResultSpaResponse(
                         result.RunId,
@@ -229,11 +230,19 @@ public sealed class OperationsEndpoints : IEndpointModule
 /// it. Modelling it as non-nullable would surface an old client as an unhelpful framework-level bind
 /// failure instead.
 /// </param>
+/// <param name="AcknowledgeCapabilityChange">
+/// The operator's explicit acknowledgement that an earlier run for this period was posted under a
+/// different money-path capability state (ADR-028). Defaults to false when the field is omitted, so
+/// the safe answer is the one an old or careless client gives: it can only cause a rejection, never
+/// suppress one. Applies to the CROSS-RUN guard only — there is no override for a stale preview
+/// token, because re-previewing costs nothing and is always the right answer to that one.
+/// </param>
 public sealed record ConfirmRunRequest(
     int Year,
     int Month,
     IReadOnlyList<Guid> SelectedTargetIds,
-    string? CapabilitiesVersion);
+    string? CapabilitiesVersion,
+    bool AcknowledgeCapabilityChange = false);
 
 /// <summary>One preview row as the SPA expects.</summary>
 public sealed record PreviewRowSpa(

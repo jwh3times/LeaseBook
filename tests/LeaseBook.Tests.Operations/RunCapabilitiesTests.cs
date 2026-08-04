@@ -18,7 +18,8 @@ public sealed class RunCapabilitiesTests
             ["beta"] = false,
             ["gamma"] = true,
         },
-        "v1");
+        "v1",
+        new HashSet<string>(StringComparer.Ordinal) { "beta", "gamma" });
 
     [Fact]
     public void A_resolved_capability_answers_its_resolved_value()
@@ -61,5 +62,33 @@ public sealed class RunCapabilitiesTests
     public void Enabled_names_are_the_on_entries_in_ordinal_order()
     {
         Resolved.EnabledNames().ShouldBe(["alpha", "gamma"]);
+    }
+
+    /// <summary>
+    /// What the cross-run period guard compares. Only the money-path entries, BOTH values, in
+    /// ordinal order — a run recording only the "on" ones could not tell "a new money-path gate
+    /// exists and resolved off" from "nothing changed", and those are different periods.
+    /// </summary>
+    [Fact]
+    public void Money_path_state_carries_both_values_for_money_path_names_only()
+    {
+        Resolved.MoneyPathState().ShouldBe(["beta=off", "gamma=on"]);
+    }
+
+    /// <summary>
+    /// The money-path view is DERIVED from the one resolved map, never carried alongside it, so it
+    /// cannot drift from the set the run actually posts under. A name outside the map is the same
+    /// bug <see cref="An_unresolved_name_throws_rather_than_reading_as_off"/> pins, and gets the same
+    /// loud answer rather than a quiet "off" in the recorded state.
+    /// </summary>
+    [Fact]
+    public void A_money_path_name_outside_the_resolved_map_throws()
+    {
+        var inconsistent = Resolved with
+        {
+            MoneyPathNames = new HashSet<string>(StringComparer.Ordinal) { "delta" },
+        };
+
+        Should.Throw<ArgumentOutOfRangeException>(() => inconsistent.MoneyPathState());
     }
 }

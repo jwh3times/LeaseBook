@@ -755,8 +755,11 @@ public static class LoadSeeder
 
         // Echo the preview's token: the seeder confirms exactly what it previewed, so it takes the
         // same guard a real operator does rather than opting out with null.
+        // No acknowledgement: the seeder flips no capability between its runs, so the cross-run guard
+        // has nothing to reject. If it ever did, a seeder silently overriding it would be the bug.
         await engine.ConfirmAsync(
-            runType, period, selected.Select(r => r.TargetId).ToList(), preview.CapabilitiesVersion, ct);
+            runType, period, selected.Select(r => r.TargetId).ToList(), preview.CapabilitiesVersion,
+            acknowledgeCapabilityChange: false, ct);
         return selected;
     }
 

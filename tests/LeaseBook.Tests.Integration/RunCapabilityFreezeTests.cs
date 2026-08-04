@@ -125,7 +125,7 @@ public sealed class RunCapabilityFreezeTests(PostgresFixture fixture)
                     // token here would make the run 409 before the freeze could be observed at all.
                     result = await engine.ConfirmAsync(
                         RunType.Rent, new RunPeriod(2026, 6), Targets,
-                        expectedCapabilitiesVersion: null, ct);
+                        expectedCapabilitiesVersion: null, acknowledgeCapabilityChange: false, ct);
                 },
                 ct);
 
@@ -183,7 +183,7 @@ public sealed class RunCapabilityFreezeTests(PostgresFixture fixture)
                 org,
                 async () => result = await engine.ConfirmAsync(
                     RunType.Rent, new RunPeriod(2026, 7), Targets,
-                    expectedCapabilitiesVersion: null, ct),
+                    expectedCapabilitiesVersion: null, acknowledgeCapabilityChange: false, ct),
                 ct);
 
             var summary = await ReadSummaryJsonAsync(org, result!.RunId, ct);

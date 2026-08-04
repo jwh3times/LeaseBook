@@ -8,8 +8,8 @@ namespace LeaseBook.Modules.Operations.Runs;
 /// <b>Typed, not a bare <c>InvalidOperationException</c>.</b> ADR-025's terminal handler suppresses
 /// an untyped message entirely and returns an uncoded 500, which would turn a recoverable
 /// "re-preview and try again" into an opaque failure — the same reclassification that ADR-025 made
-/// for <c>no_trust_account</c>. The host maps this type to 409 with the <c>capabilities_changed</c>
-/// code through <c>ProblemResults</c>.
+/// for <c>no_trust_account</c>. The host maps <see cref="OperationsDomainException.Code"/> to 409
+/// through <c>ProblemResults</c>.
 /// </para>
 /// <para>
 /// <b>The message carries no diagnostic detail on purpose.</b> Neither version token appears in it.
@@ -18,24 +18,22 @@ namespace LeaseBook.Modules.Operations.Runs;
 /// for the engineer side, and the log line the handler writes carries the correlation id.
 /// </para>
 /// </summary>
-public sealed class CapabilitiesChangedException : Exception
+public sealed class CapabilitiesChangedException : OperationsDomainException
 {
+    /// <summary>The stable wire code. The SPA branches on exactly this value to re-fetch its preview.</summary>
+    public const string ErrorCode = "capabilities_changed";
+
     private const string DefaultMessage =
         "The features available to this account changed while you were reviewing this run, so the " +
         "amounts shown may no longer be what would post. Reload the preview and confirm again.";
 
     public CapabilitiesChangedException()
-        : base(DefaultMessage)
+        : base(ErrorCode, DefaultMessage)
     {
     }
 
     public CapabilitiesChangedException(string message)
-        : base(message)
-    {
-    }
-
-    public CapabilitiesChangedException(string message, Exception innerException)
-        : base(message, innerException)
+        : base(ErrorCode, message)
     {
     }
 }

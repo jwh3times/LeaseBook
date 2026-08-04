@@ -39,4 +39,11 @@ public static class LogEvents
     /// and recoverable — the operator re-previews. A SUSTAINED rate of these is the signal worth acting
     /// on: it means something is flipping capabilities under live operators, or replicas disagree.</summary>
     public static readonly EventId CapabilityVersionConflict = new(1300, nameof(CapabilityVersionConflict));
+
+    /// <summary>A run confirm was rejected because an earlier committed run for the same period ran under
+    /// a different money-path capability state. Distinct from 1300 because the remedy is different: a
+    /// re-preview cannot clear it, and clearing it is a deliberate human decision. ANY of these is worth
+    /// reading — unlike 1300, where only a sustained rate is — because each one names a period that two
+    /// capability states were about to touch.</summary>
+    public static readonly EventId CapabilityCrossRunConflict = new(1301, nameof(CapabilityCrossRunConflict));
 }

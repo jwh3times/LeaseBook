@@ -26,7 +26,25 @@ namespace LeaseBook.Modules.Operations.Contracts;
 /// committed run states which capability state it ran under, and used by the preview/confirm
 /// concurrency check.
 /// </param>
-public sealed record RunCapabilities(IReadOnlyDictionary<string, bool> Values, string Version)
+/// <param name="MoneyPathNames">
+/// The names, out of <paramref name="Values"/>, that the registry marks as money-path. Names rather
+/// than a second resolved map on purpose: <see cref="MoneyPathState"/> reads their values back out of
+/// the one frozen <paramref name="Values"/> map, so the money-path view cannot drift from the set the
+/// run actually posts under. A parallel map could.
+/// <para>
+/// <b>Why the cross-run guard compares this and not <paramref name="Version"/>.</b> The version is a
+/// digest of the WHOLE resolved set plus the shape of the source-code registry, so it moves when a
+/// deploy adds an unrelated capability or an org is granted a paid one. Comparing it across runs
+/// would reject the re-run that ADR-019 §2 makes the designed recovery path — on a change that
+/// provably cannot reach a posting path — and train operators to acknowledge every conflict by
+/// reflex. Only a money-path capability can make one period compute two ways, so only money-path
+/// state is compared.
+/// </para>
+/// </param>
+public sealed record RunCapabilities(
+    IReadOnlyDictionary<string, bool> Values,
+    string Version,
+    IReadOnlySet<string> MoneyPathNames)
 {
     /// <summary>
     /// Answers for a resolved capability, and THROWS for anything else rather than answering "off".
@@ -53,6 +71,33 @@ public sealed record RunCapabilities(IReadOnlyDictionary<string, bool> Values, s
     /// <summary>Names that resolved to "on", ordered, for recording in a run summary.</summary>
     public IReadOnlyList<string> EnabledNames() =>
         Values.Where(kv => kv.Value).Select(kv => kv.Key).Order(StringComparer.Ordinal).ToArray();
+
+    /// <summary>
+    /// The money-path capabilities and their resolved values, as ordered <c>name=on</c> /
+    /// <c>name=off</c> entries. This is what a committed run records in <c>summary_json</c> and what
+    /// the cross-run period guard compares against a prior run for the same period.
+    /// <para>
+    /// <b>Readable entries, not a hash.</b> The comparison is between two runs that may be weeks and
+    /// a deploy apart, and its rejection asks a human to make a money decision. "off → on for
+    /// <c>x</c>" is a decidable question; "digest A ≠ digest B" is not, and nothing can recover the
+    /// state from a digest after the fact.
+    /// </para>
+    /// <para>
+    /// <b>BOTH values, not the enabled subset.</b> A newly-added money-path capability that resolves
+    /// off must still make the state differ from a prior run that predates it — the set of gates
+    /// consulted moved, even though nothing turned on. Recording only the "on" names would make the
+    /// two states compare equal and the guard silently miss it.
+    /// </para>
+    /// <para>
+    /// Compared element-wise, never as a joined string, so the encoding needs no delimiter escaping:
+    /// names are unique, so an ordered list of pairs is already injective.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<string> MoneyPathState() =>
+        MoneyPathNames
+            .Order(StringComparer.Ordinal)
+            .Select(name => $"{name}={(IsEnabled(name) ? "on" : "off")}")
+            .ToArray();
 }
 
 /// <summary>

@@ -41,6 +41,14 @@ internal sealed class CapabilitySnapshotAdapter(ICapabilityGate gate) : ICapabil
         var values = CapabilityCatalog.All.ToFrozenDictionary(
             c => c.Name, resolved.IsEnabled, StringComparer.Ordinal);
 
-        return new RunCapabilities(values, resolved.Version);
+        // Which of those are money-path is a property of the REGISTRY, and the registry lives on this
+        // side of the boundary. Operations gets the names, not the Capability records: it needs to
+        // know which entries of the map above the cross-run guard compares, and nothing more. Passing
+        // the records themselves would put a capability type into a module that must not have one.
+        var moneyPath = CapabilityCatalog.MoneyPath
+            .Select(c => c.Name)
+            .ToFrozenSet(StringComparer.Ordinal);
+
+        return new RunCapabilities(values, resolved.Version, moneyPath);
     }
 }

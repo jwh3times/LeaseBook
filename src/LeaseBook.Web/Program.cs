@@ -67,10 +67,12 @@ builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<ValidationExceptionHandler>();
 // Typed accounting domain errors → §C.5 ProblemDetails (422/409). Wired now so M3's write path inherits it.
 builder.Services.AddExceptionHandler<AccountingExceptionHandler>();
-// A run confirmed against a capability set that moved after its preview → 409 capabilities_changed
-// (ADR-028). Typed so it does not fall through to the terminal handler's uncoded 500, which would
-// turn a "re-preview and try again" into an opaque failure.
-builder.Services.AddExceptionHandler<CapabilitiesChangedExceptionHandler>();
+// Typed Operations run-pipeline errors → 409 ProblemDetails, keyed on the code the exception
+// carries (ADR-028): capabilities_changed for a preview whose set moved, and
+// capabilities_changed_since_prior_run for a period an earlier run computed under a different
+// money-path state. Typed so neither falls through to the terminal handler's uncoded 500, which
+// would turn a recoverable rejection into an opaque failure.
+builder.Services.AddExceptionHandler<OperationsExceptionHandler>();
 // Terminal handler — MUST stay last. Handlers run in registration order; this one claims
 // everything the typed handlers decline, so nothing reaches the framework default (a bodyless
 // 500 with no log).

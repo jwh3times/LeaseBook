@@ -36,7 +36,7 @@ public sealed class RunEngineTests(PostgresFixture fixture)
         {
             result = await engine.ConfirmAsync(
                 RunType.Rent, new RunPeriod(2026, 6), [_t1, _t2],
-                expectedCapabilitiesVersion: null, ct);
+                expectedCapabilitiesVersion: null, acknowledgeCapabilityChange: false, ct);
         }, ct);
 
         // Assert counts returned
@@ -125,7 +125,9 @@ public sealed class RunEngineTests(PostgresFixture fixture)
 
         await scope.RunAsync(async () =>
         {
-            await engine.ConfirmAsync(RunType.Rent, new RunPeriod(2026, 6), [_t1, _t2], "v1.steady", ct);
+            await engine.ConfirmAsync(
+                RunType.Rent, new RunPeriod(2026, 6), [_t1, _t2], "v1.steady",
+                acknowledgeCapabilityChange: false, ct);
         }, ct);
 
         snapshot.Resolves.ShouldBe(1, "one confirm, one resolve — the token is compared, not re-read");
@@ -152,7 +154,8 @@ public sealed class RunEngineTests(PostgresFixture fixture)
         {
             thrown = await Should.ThrowAsync<CapabilitiesChangedException>(
                 async () => await engine.ConfirmAsync(
-                    RunType.Rent, new RunPeriod(2026, 6), [_t1, _t2], "v1.stale", ct));
+                    RunType.Rent, new RunPeriod(2026, 6), [_t1, _t2], "v1.stale",
+                    acknowledgeCapabilityChange: false, ct));
         }, ct);
 
         thrown.ShouldNotBeNull();
@@ -250,7 +253,8 @@ file sealed class StubCapabilitySnapshot : ICapabilitySnapshot
         // that pretended to resolve anything would be lying about completeness. NoOpStrategy asks it
         // nothing.
         Task.FromResult(new RunCapabilities(
-            new Dictionary<string, bool>(StringComparer.Ordinal), "stub"));
+            new Dictionary<string, bool>(StringComparer.Ordinal), "stub",
+            new HashSet<string>(StringComparer.Ordinal)));
 }
 
 /// <summary>
@@ -266,6 +270,7 @@ file sealed class CountingCapabilitySnapshot(string version) : ICapabilitySnapsh
     {
         Resolves++;
         return Task.FromResult(new RunCapabilities(
-            new Dictionary<string, bool>(StringComparer.Ordinal), version));
+            new Dictionary<string, bool>(StringComparer.Ordinal), version,
+            new HashSet<string>(StringComparer.Ordinal)));
     }
 }
