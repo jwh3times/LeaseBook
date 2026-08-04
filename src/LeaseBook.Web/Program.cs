@@ -67,6 +67,10 @@ builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<ValidationExceptionHandler>();
 // Typed accounting domain errors → §C.5 ProblemDetails (422/409). Wired now so M3's write path inherits it.
 builder.Services.AddExceptionHandler<AccountingExceptionHandler>();
+// A run confirmed against a capability set that moved after its preview → 409 capabilities_changed
+// (ADR-028). Typed so it does not fall through to the terminal handler's uncoded 500, which would
+// turn a "re-preview and try again" into an opaque failure.
+builder.Services.AddExceptionHandler<CapabilitiesChangedExceptionHandler>();
 // Terminal handler — MUST stay last. Handlers run in registration order; this one claims
 // everything the typed handlers decline, so nothing reaches the framework default (a bodyless
 // 500 with no log).

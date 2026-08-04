@@ -120,7 +120,12 @@ public sealed class RunCapabilityFreezeTests(PostgresFixture fixture)
                         .IsEnabled(CapabilityCatalog.ConsolidatedStatements)
                         .ShouldBeFalse("the cache must still be stale at the moment of the confirm");
 
-                    result = await engine.ConfirmAsync(RunType.Rent, new RunPeriod(2026, 6), Targets, ct);
+                    // No echoed token: this suite is about the freeze WITHIN one confirm, and the
+                    // flips above are exactly what the preview/confirm guard rejects. Passing a
+                    // token here would make the run 409 before the freeze could be observed at all.
+                    result = await engine.ConfirmAsync(
+                        RunType.Rent, new RunPeriod(2026, 6), Targets,
+                        expectedCapabilitiesVersion: null, ct);
                 },
                 ct);
 
@@ -177,7 +182,8 @@ public sealed class RunCapabilityFreezeTests(PostgresFixture fixture)
             await executor.RunAsync(
                 org,
                 async () => result = await engine.ConfirmAsync(
-                    RunType.Rent, new RunPeriod(2026, 7), Targets, ct),
+                    RunType.Rent, new RunPeriod(2026, 7), Targets,
+                    expectedCapabilitiesVersion: null, ct),
                 ct);
 
             var summary = await ReadSummaryJsonAsync(org, result!.RunId, ct);

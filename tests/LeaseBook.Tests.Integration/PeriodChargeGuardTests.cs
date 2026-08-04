@@ -64,7 +64,10 @@ public sealed class PeriodChargeGuardTests(PostgresFixture fixture)
         RunResult? result = null;
         await RunAsync(ctx.OrgId, async (engine, _) =>
         {
-            result = await engine.ConfirmAsync(RunType.Rent, Period, [ctx.LeaseId], ct);
+            // The preview above ran in its own transaction; echo the token it produced anyway —
+            // nothing flipped in between, so this also asserts the happy path does not 409.
+            result = await engine.ConfirmAsync(
+                RunType.Rent, Period, [ctx.LeaseId], preview!.CapabilitiesVersion, ct);
         }, ct);
 
         result.ShouldNotBeNull();
@@ -151,7 +154,8 @@ public sealed class PeriodChargeGuardTests(PostgresFixture fixture)
         RunResult? confirmResult = null;
         await RunAsync(ctx.OrgId, async (engine, _) =>
         {
-            confirmResult = await engine.ConfirmAsync(RunType.LateFee, Period, [ctx.LeaseId], ct);
+            confirmResult = await engine.ConfirmAsync(
+                RunType.LateFee, Period, [ctx.LeaseId], preview!.CapabilitiesVersion, ct);
         }, ct);
 
         confirmResult.ShouldNotBeNull();

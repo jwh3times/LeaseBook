@@ -30,4 +30,13 @@ public static class LogEvents
     /// <summary>The nightly sweep finished with no violations. Its absence is itself a signal: a
     /// silent night means the job did not run.</summary>
     public static readonly EventId InvariantSweepCompleted = new(1201, nameof(InvariantSweepCompleted));
+
+    // 1300-1399 = platform capabilities (ADR-028). Its own block rather than an extension of the
+    // 1100 import block or the 1200 job block, per the 1100+ convention: a capability event can
+    // originate on the HTTP surface or in a job, so it belongs to neither.
+
+    /// <summary>A run confirm was rejected because the capability set moved after its preview. Expected
+    /// and recoverable — the operator re-previews. A SUSTAINED rate of these is the signal worth acting
+    /// on: it means something is flipping capabilities under live operators, or replicas disagree.</summary>
+    public static readonly EventId CapabilityVersionConflict = new(1300, nameof(CapabilityVersionConflict));
 }

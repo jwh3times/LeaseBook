@@ -69,7 +69,8 @@ public sealed class DisbursementRunTests(PostgresFixture fixture)
                 .Where(r => r.ExcludedReason == null)
                 .Select(r => r.TargetId)
                 .ToList();
-            result = await engine.ConfirmAsync(RunType.Disbursement, Period, targets, ct);
+            result = await engine.ConfirmAsync(
+                RunType.Disbursement, Period, targets, preview.CapabilitiesVersion, ct);
         }, ct);
 
         result.ShouldNotBeNull();
@@ -102,7 +103,9 @@ public sealed class DisbursementRunTests(PostgresFixture fixture)
         RunResult? result = null;
         await RunAsync(ctx.OrgId, async (engine, _) =>
         {
-            result = await engine.ConfirmAsync(RunType.Disbursement, Period, [ctx.OwnerId], ct);
+            // No preview in this transaction to honour — this confirm is deliberately made cold.
+            result = await engine.ConfirmAsync(
+                RunType.Disbursement, Period, [ctx.OwnerId], expectedCapabilitiesVersion: null, ct);
         }, ct);
 
         result.ShouldNotBeNull();
@@ -124,7 +127,8 @@ public sealed class DisbursementRunTests(PostgresFixture fixture)
                 .Where(r => r.ExcludedReason == null)
                 .Select(r => r.TargetId)
                 .ToList();
-            await engine.ConfirmAsync(RunType.Disbursement, Period, targets, ct);
+            await engine.ConfirmAsync(
+                RunType.Disbursement, Period, targets, preview.CapabilitiesVersion, ct);
         }, ct);
 
         TrustEquationResponse? equation = null;
@@ -157,14 +161,16 @@ public sealed class DisbursementRunTests(PostgresFixture fixture)
                 .Where(r => r.ExcludedReason == null)
                 .Select(r => r.TargetId)
                 .ToList();
-            await engine.ConfirmAsync(RunType.Disbursement, Period, targets, ct);
+            await engine.ConfirmAsync(
+                RunType.Disbursement, Period, targets, preview.CapabilitiesVersion, ct);
         }, ct);
 
         // Second confirm on same targets — must produce no new posts.
         RunResult? secondResult = null;
         await RunAsync(ctx.OrgId, async (engine, _) =>
         {
-            secondResult = await engine.ConfirmAsync(RunType.Disbursement, Period, targets, ct);
+            secondResult = await engine.ConfirmAsync(
+                RunType.Disbursement, Period, targets, expectedCapabilitiesVersion: null, ct);
         }, ct);
 
         secondResult.ShouldNotBeNull();
@@ -191,7 +197,8 @@ public sealed class DisbursementRunTests(PostgresFixture fixture)
         RunResult? thirdResult = null;
         await RunAsync(ctx.OrgId, async (engine, _) =>
         {
-            thirdResult = await engine.ConfirmAsync(RunType.Disbursement, Period, targets, ct);
+            thirdResult = await engine.ConfirmAsync(
+                RunType.Disbursement, Period, targets, expectedCapabilitiesVersion: null, ct);
         }, ct);
 
         thirdResult.ShouldNotBeNull();

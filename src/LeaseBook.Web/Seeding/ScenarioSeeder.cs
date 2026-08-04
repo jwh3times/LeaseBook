@@ -850,7 +850,10 @@ public static class ScenarioSeeder
         var selected = preview.Rows.Where(r => !r.AlreadyDone).ToList();
         if (selected.Count > 0)
         {
-            await ctx.Engine.ConfirmAsync(runType, period, selected.Select(r => r.TargetId).ToList(), ct);
+            // Echo the preview's token: the seeder confirms exactly what it previewed, so it takes
+            // the same guard a real operator does rather than opting out with null.
+            await ctx.Engine.ConfirmAsync(
+                runType, period, selected.Select(r => r.TargetId).ToList(), preview.CapabilitiesVersion, ct);
         }
 
         ctx.Db.ChangeTracker.Clear();

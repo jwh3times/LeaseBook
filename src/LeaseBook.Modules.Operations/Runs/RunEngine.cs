@@ -29,6 +29,15 @@ namespace LeaseBook.Modules.Operations.Runs;
 /// an event posts.
 /// </para>
 /// <para>
+/// <b>The preview → confirm window.</b> The freeze above makes one confirm internally consistent; it
+/// says nothing about the gap before it. <c>PreviewAsync</c> stamps the resolved version onto the
+/// <see cref="RunPreview"/>, the confirm echoes it back, and <c>ConfirmAsync</c> compares it against
+/// the set it resolves itself — optimistic concurrency, the same shape as an ETag. The operator
+/// selected target <i>ids</i>, but the <i>amounts</i> they approved were the preview's, so a set that
+/// moved in between makes the confirm a different operation from the one they authorized. Nothing
+/// about the preview is persisted to support this: the token is derived from state, not stored.
+/// </para>
+/// <para>
 /// <b>Audit:</b> <c>AppDbContext.SaveChangesAsync</c> automatically writes one <c>audit_events</c>
 /// row per entity insert (including the <see cref="BulkRun"/> header), satisfying the "one audit row
 /// per committed run" requirement without any explicit audit write here.
@@ -46,12 +55,29 @@ public sealed class RunEngine(
 
     /// <summary>
     /// Returns a preview of what would be posted for the given <paramref name="period"/>. Delegates
-    /// entirely to the strategy; no mutations occur.
+    /// the rows entirely to the strategy; no mutations occur, and nothing about the preview is
+    /// persisted — the version token below is derived, not stored, so there is no preview row, no
+    /// table and no migration behind it.
+    /// <para>
+    /// <b>The capability set is resolved BEFORE the strategy computes rows, not after.</b> Both
+    /// instants are inside the caller's ambient transaction, and READ COMMITTED means a flip
+    /// committed by another connection is visible partway through. Resolving first means a flip
+    /// during the row computation leaves the operator holding a token that no longer matches, so the
+    /// confirm is rejected; resolving afterwards would stamp the post-flip version onto pre-flip
+    /// rows and let exactly that change pass unnoticed.
+    /// </para>
     /// </summary>
-    public Task<RunPreview> PreviewAsync(RunType runType, RunPeriod period, CancellationToken ct)
+    public async Task<RunPreview> PreviewAsync(RunType runType, RunPeriod period, CancellationToken ct)
     {
         var strategy = ResolveStrategy(runType);
-        return strategy.PreviewAsync(period, ct);
+
+        // Same port, same derivation, as the confirm below. Deliberately NOT the cached member: a
+        // token served from a 30-second cache would disagree with the confirm's durable read for up
+        // to that long after any flip, rejecting confirms for a change that had already settled.
+        var capabilities = await capabilitySnapshot.ResolveDurableAsync(ct);
+        var preview = await strategy.PreviewAsync(period, ct);
+
+        return preview with { CapabilitiesVersion = capabilities.Version };
     }
 
     /// <summary>
@@ -60,10 +86,28 @@ public sealed class RunEngine(
     /// rows, emits a telemetry span, and returns a <see cref="RunResult"/>.
     /// Must be called inside the ambient org-scoped transaction.
     /// </summary>
+    /// <param name="expectedCapabilitiesVersion">
+    /// The <see cref="RunPreview.CapabilitiesVersion"/> the operator was shown, echoed back —
+    /// optimistic concurrency in the shape of an ETag. The comparison happens HERE, server-side,
+    /// against the set this method resolves itself; the caller only carries the value.
+    /// <para>
+    /// <c>null</c> means "there is no preview to honour" and skips the comparison. That is for
+    /// in-process callers that confirm without having shown anyone a preview (seed/fixture paths, a
+    /// re-confirm in a fresh transaction). It is not an escape hatch on the HTTP surface: the
+    /// endpoint rejects a request that omits the token, so a client cannot opt out of the check by
+    /// leaving a field off. The parameter has no default precisely so that every call site has to
+    /// state which of the two it is.
+    /// </para>
+    /// </param>
+    /// <exception cref="CapabilitiesChangedException">
+    /// <paramref name="expectedCapabilitiesVersion"/> is non-null and differs from the set resolved
+    /// at entry.
+    /// </exception>
     public async Task<RunResult> ConfirmAsync(
         RunType runType,
         RunPeriod period,
         IReadOnlyList<Guid> selectedTargetIds,
+        string? expectedCapabilitiesVersion,
         CancellationToken ct)
     {
         using var activity = LeaseBookTelemetry.Source.StartActivity($"BulkRun.{runType}");
@@ -89,6 +133,19 @@ public sealed class RunEngine(
         // taken there would predate the confirm the operator actually asked for.
         var capabilities = await capabilitySnapshot.ResolveDurableAsync(ct);
         activity?.SetTag("capabilities_version", capabilities.Version);
+
+        // Close the preview → confirm window, against the ONE set resolved above. No second resolve:
+        // the freeze is that confirm reads the capability state exactly once, and a comparison that
+        // re-read it would both break that and compare a value against itself.
+        //
+        // Ordinal, because the token is an opaque digest — a culture-sensitive comparison on a
+        // Base64Url string is meaningless at best. Before the strategy runs, so a rejection posts
+        // nothing at all rather than part of a run.
+        if (expectedCapabilitiesVersion is not null &&
+            !string.Equals(expectedCapabilitiesVersion, capabilities.Version, StringComparison.Ordinal))
+        {
+            throw new CapabilitiesChangedException();
+        }
 
         // Let the strategy do its work — posting under the ambient transaction, and under this one
         // frozen set. Passed explicitly rather than looked up: see IRunStrategy.ConfirmAsync.

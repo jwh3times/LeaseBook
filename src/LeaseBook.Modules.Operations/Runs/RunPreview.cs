@@ -39,7 +39,21 @@ public sealed record RunPreview(
     RunType RunType,
     RunPeriod Period,
     IReadOnlyList<PreviewRow> Rows,
-    IReadOnlyList<string> Exceptions);
+    IReadOnlyList<string> Exceptions)
+{
+    /// <summary>
+    /// The opaque capability-version token the operator's confirm must echo back (ADR-028). A
+    /// strategy never sets this — it is a property of the ENGINE's resolution, not of the row
+    /// computation — so <see cref="RunEngine.PreviewAsync"/> stamps it on the way out.
+    /// <para>
+    /// The default is empty rather than a sentinel that means "skip the check", and that direction
+    /// is deliberate: an engine path that forgot to stamp it yields a token that matches nothing, so
+    /// the confirm is REJECTED rather than silently unguarded. A wrongly-rejected confirm costs a
+    /// re-preview; a silently-unguarded one costs the guarantee this token exists for.
+    /// </para>
+    /// </summary>
+    public string CapabilitiesVersion { get; init; } = string.Empty;
+}
 
 /// <summary>
 /// The result returned by <see cref="RunEngine.ConfirmAsync"/> — the persisted run's id plus the

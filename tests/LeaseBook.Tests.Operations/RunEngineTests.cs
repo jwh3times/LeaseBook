@@ -34,7 +34,9 @@ public sealed class RunEngineTests(PostgresFixture fixture)
         RunResult? result = null;
         await scope.RunAsync(async () =>
         {
-            result = await engine.ConfirmAsync(RunType.Rent, new RunPeriod(2026, 6), [_t1, _t2], ct);
+            result = await engine.ConfirmAsync(
+                RunType.Rent, new RunPeriod(2026, 6), [_t1, _t2],
+                expectedCapabilitiesVersion: null, ct);
         }, ct);
 
         // Assert counts returned
@@ -82,14 +84,94 @@ public sealed class RunEngineTests(PostgresFixture fixture)
         preview.Rows.Count.ShouldBe(2);
     }
 
+    /// <summary>
+    /// The preview hands the operator the token its confirm must echo. Without this the token would
+    /// have to come from somewhere else, and the two sides could diverge in derivation.
+    /// </summary>
+    [Fact]
+    public async Task Preview_stamps_the_resolved_capability_version()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var scope = await OrgScope.CreateAsync(fixture, ct);
+        await using var _ = scope;
+
+        var snapshot = new CountingCapabilitySnapshot("v1.first");
+        var engine = BuildEngine(scope, new NoOpStrategy(targets: [_t1]), snapshot);
+
+        RunPreview? preview = null;
+        await scope.RunAsync(async () =>
+        {
+            preview = await engine.PreviewAsync(RunType.Rent, new RunPeriod(2026, 6), ct);
+        }, ct);
+
+        preview.ShouldNotBeNull();
+        preview!.CapabilitiesVersion.ShouldBe("v1.first");
+    }
+
+    /// <summary>
+    /// The freeze, restated as an arithmetic fact: adding the preview/confirm comparison must not add
+    /// a resolve. A second read inside <c>ConfirmAsync</c> would compare a value against itself and
+    /// leave the run deciding items under a set nobody pinned.
+    /// </summary>
+    [Fact]
+    public async Task Confirm_resolves_the_capability_set_exactly_once_even_with_a_token_to_compare()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var scope = await OrgScope.CreateAsync(fixture, ct);
+        await using var _ = scope;
+
+        var snapshot = new CountingCapabilitySnapshot("v1.steady");
+        var engine = BuildEngine(scope, new NoOpStrategy(targets: [_t1, _t2]), snapshot);
+
+        await scope.RunAsync(async () =>
+        {
+            await engine.ConfirmAsync(RunType.Rent, new RunPeriod(2026, 6), [_t1, _t2], "v1.steady", ct);
+        }, ct);
+
+        snapshot.Resolves.ShouldBe(1, "one confirm, one resolve — the token is compared, not re-read");
+    }
+
+    /// <summary>
+    /// A mismatch rejects, and rejects BEFORE the strategy runs. The strategy-untouched assertion is
+    /// the load-bearing half: a guard that threw after the posting loop would leave a half-posted run
+    /// behind, which is worse than no guard.
+    /// </summary>
+    [Fact]
+    public async Task Confirm_with_a_stale_token_throws_before_the_strategy_runs()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var scope = await OrgScope.CreateAsync(fixture, ct);
+        await using var _ = scope;
+
+        var snapshot = new CountingCapabilitySnapshot("v1.current");
+        var strategy = new NoOpStrategy(targets: [_t1, _t2]);
+        var engine = BuildEngine(scope, strategy, snapshot);
+
+        CapabilitiesChangedException? thrown = null;
+        await scope.RunAsync(async () =>
+        {
+            thrown = await Should.ThrowAsync<CapabilitiesChangedException>(
+                async () => await engine.ConfirmAsync(
+                    RunType.Rent, new RunPeriod(2026, 6), [_t1, _t2], "v1.stale", ct));
+        }, ct);
+
+        thrown.ShouldNotBeNull();
+        strategy.Confirms.ShouldBe(0, "a rejected confirm must post nothing at all");
+
+        // Neither opaque digest may reach the operator — ADR-025's error-content rule.
+        thrown!.Message.ShouldNotContain("v1.");
+    }
+
     // ── helpers ──────────────────────────────────────────────────────────────
 
-    private static RunEngine BuildEngine(OrgScope scope, IRunStrategy strategy)
+    private static RunEngine BuildEngine(
+        OrgScope scope, IRunStrategy strategy, ICapabilitySnapshot? snapshot = null)
     {
         var strategies = new[] { strategy };
         var posting = new NoOpBatchPosting();
         return new RunEngine(
-            scope.Db, strategies, posting, TimeProvider.System, new StubCapabilitySnapshot());
+            scope.Db, strategies, posting, TimeProvider.System,
+            snapshot ?? new StubCapabilitySnapshot());
     }
 }
 
@@ -102,6 +184,9 @@ public sealed class RunEngineTests(PostgresFixture fixture)
 file sealed class NoOpStrategy(Guid[] targets) : IRunStrategy
 {
     public RunType RunType => RunType.Rent;
+
+    /// <summary>How many times the engine reached the strategy — 0 proves a rejection came first.</summary>
+    public int Confirms { get; private set; }
 
     public Task<RunPreview> PreviewAsync(RunPeriod period, CancellationToken ct)
     {
@@ -123,6 +208,7 @@ file sealed class NoOpStrategy(Guid[] targets) : IRunStrategy
         BulkRun run, IReadOnlyList<Guid> selectedTargetIds, IBatchPosting posting,
         RunCapabilities capabilities, CancellationToken ct)
     {
+        Confirms++;
         IReadOnlyList<BulkRunItem> items = selectedTargetIds
             .Select(id => BulkRunItem.Create(run.Id, RunTargetKind.Lease, id, RunItemStatus.Posted, 0m, null, run.CreatedAt))
             .ToList();
@@ -165,4 +251,21 @@ file sealed class StubCapabilitySnapshot : ICapabilitySnapshot
         // nothing.
         Task.FromResult(new RunCapabilities(
             new Dictionary<string, bool>(StringComparer.Ordinal), "stub"));
+}
+
+/// <summary>
+/// The same stub, but it counts. The preview/confirm guard is the kind of change that quietly turns
+/// one resolve into two — the comparison needs a "current" value, and the obvious way to get one is
+/// to read it again — so the count is asserted rather than reasoned about.
+/// </summary>
+file sealed class CountingCapabilitySnapshot(string version) : ICapabilitySnapshot
+{
+    public int Resolves { get; private set; }
+
+    public Task<RunCapabilities> ResolveDurableAsync(CancellationToken ct)
+    {
+        Resolves++;
+        return Task.FromResult(new RunCapabilities(
+            new Dictionary<string, bool>(StringComparer.Ordinal), version));
+    }
 }

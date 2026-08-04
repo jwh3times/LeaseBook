@@ -753,7 +753,10 @@ public static class LoadSeeder
             return [];
         }
 
-        await engine.ConfirmAsync(runType, period, selected.Select(r => r.TargetId).ToList(), ct);
+        // Echo the preview's token: the seeder confirms exactly what it previewed, so it takes the
+        // same guard a real operator does rather than opting out with null.
+        await engine.ConfirmAsync(
+            runType, period, selected.Select(r => r.TargetId).ToList(), preview.CapabilitiesVersion, ct);
         return selected;
     }
 
