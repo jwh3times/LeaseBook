@@ -72,15 +72,43 @@ explicit code).
 `RunEngine.ConfirmAsync` runs inside the ambient org-scoped transaction. It:
 
 1. Creates a `BulkRun` header (unseeded summary).
-2. Calls `strategy.ConfirmAsync(run, selectedIds, posting, ct)` — the strategy owns the
-   per-item posting loop and exception handling.
-3. Aggregates item counts and patches `summary_json` on the header (pre-save, still in Added
-   state — no UPDATE needed).
-4. Calls `SaveChangesAsync` once, persisting the run + all items atomically.
+2. Resolves the capability set once, at confirm entry, through the `ICapabilitySnapshot` port
+   (amended 2026-08-03 — see below).
+3. Calls `strategy.ConfirmAsync(run, selectedIds, posting, capabilities, ct)` — the strategy owns
+   the per-item posting loop and exception handling.
+4. Aggregates item counts and patches `summary_json` on the header (pre-save, still in Added
+   state — no UPDATE needed), recording the capability version alongside the counts.
+5. Calls `SaveChangesAsync` once, persisting the run + all items atomically.
 
 Strategies are expected to catch `DuplicateSourceRefException` (→ `Skipped`) and
 `AccountPeriodLockedException` or `PeriodClosedException` (→ `Excluded`) per item; no unhandled
 posting exception should escape. The no-op test strategy (WP-1) never triggers these.
+
+### 4a. Capability snapshot (amendment, 2026-08-03 — ADR-028)
+
+`IRunStrategy.ConfirmAsync` takes a `RunCapabilities` parameter. The engine resolves it **once, at
+`ConfirmAsync` entry**, inside the ambient transaction and not from cache, and hands the same value
+to the strategy for the whole run. One run therefore decides every item under one capability set even
+if an operator flips a flag while it is in flight, and `summary_json` records the version it ran
+under.
+
+Two properties this fixes, neither of which the pre-amendment shape had:
+
+- It is a **parameter, not an ambient lookup**. Today the freeze would hold either way, because
+  confirm runs inside one request transaction — but only incidentally, which is the problem the
+  revisit trigger below names.
+- Capabilities are **reachability-only**. A capability may gate whether a posting path runs at all
+  (endpoint, command, or strategy selection); it may never change the lines or amounts an existing
+  business event produces. Money-affecting parameters live in `OrgSettings`. Concretely: no value
+  read off `RunCapabilities` may become an argument to an Accounting command, business event, or
+  posting-template input.
+
+`RunCapabilities` and its `ICapabilitySnapshot` port are declared by Operations (ADR-007), not by
+`SharedKernel` and not by the Capabilities module: every module depends on `SharedKernel` and
+Accounting is a posting path, so a capability type there would be reachable from posting code with
+every reference-graph architecture test still green. The host adapter maps the resolved
+`CapabilitySet` into the Operations view on the ambient RLS transaction, opening no scope,
+transaction or second connection.
 
 ### 5. Audit seam
 
@@ -108,3 +136,13 @@ Reopen the `SourceRef` key convention if a run type appears whose targets cannot
 one-transaction confirm path if per-item posting volume at real scale makes a single atomic
 run a lock-contention or timeout problem (then consider chunked confirms with a run-level
 resume, recorded as a new ADR).
+
+**Any chunked-confirm design must carry the capability snapshot across chunk boundaries.** A chunk
+boundary is a new transaction, so the current guarantee — the whole confirm runs inside one request
+transaction — does not survive chunking, and the freeze would evaporate silently: a resume that
+re-resolved per chunk would post the tail of a run under capabilities the head never saw, and the
+run's own `summary_json` would still claim a single version. The snapshot resolved at the first
+chunk's confirm entry must be persisted with the run's resume state and re-supplied to every later
+chunk; a chunk that cannot be given that exact set must fail rather than resolve its own. Note that
+a "flip mid-run" test that only exercises the first chunk passes regardless, so the coverage has to
+move with the design.

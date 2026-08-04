@@ -17,6 +17,26 @@ namespace LeaseBook.Web.Jobs;
 /// <c>app.org_id</c> with <c>SET LOCAL</c>, so reusing one scope across orgs would mean reusing one
 /// transaction and one org context.
 /// </para>
+/// <para>
+/// <b>Capability snapshots: at the outermost unit of work, never inside this loop (ADR-028).</b>
+/// Nothing here gates on a capability today, and that is why no resolve appears below — not an
+/// oversight. The rule for when one is needed: the sweep is ONE logical unit of work spanning many
+/// per-org transactions, so a flag flipped between org 3 and org 4 would split a single night's
+/// sweep across two behaviours, with nothing in the result saying which orgs got which. A resolve
+/// placed inside the loop cannot detect that; it is what causes it.
+/// </para>
+/// <para>
+/// A single sweep-wide <c>CapabilitySet</c> is not obtainable from the seam as it stands, and that
+/// is a real constraint rather than a missing convenience: entitlements are per-org rows and
+/// <c>ICapabilityGate</c> resolves against the ambient <c>app.org_id</c>, so one set cannot speak
+/// for many orgs. Whoever adds the first sweep-level gate has to decide deliberately which of the
+/// two it is — a deployment-wide kill switch, which belongs in a resolve taken once before the loop
+/// and passed in explicitly (and needs a flag-plane read that does not exist yet), or a per-org
+/// entitlement, which belongs inside each org's own unit of work and must then be recorded per org
+/// in the result so a split sweep is legible. Do not resolve per org and treat the answer as though
+/// it governed the sweep. <c>SweepCapabilityFreezeTests</c> fails the moment this file mentions the
+/// seam, so that decision cannot be made silently.
+/// </para>
 /// </summary>
 public sealed class InvariantSweepRunner(
     IServiceProvider services,
