@@ -30,7 +30,11 @@ jobs:
           # does not merely hide that history — it MISREPRESENTS it: with a single grafted commit the
           # pickaxe finds only that commit, so every capability reports an age near zero and the gate
           # passes with a clean bill of health it never earned. The probe detects the shallow case and
-          # skips loudly instead, so without this the gate would simply never run in CI.
+          # refuses to report an age at all.
+          #
+          # Deleting this line does not disarm the gate quietly: the test reads GITHUB_ACTIONS and
+          # FAILS, rather than skipping, whenever it cannot read history under Actions. This comment
+          # documents the invariant; the guard is in the test.
           fetch-depth: 0
       - uses: actions/setup-dotnet@v6
         with:

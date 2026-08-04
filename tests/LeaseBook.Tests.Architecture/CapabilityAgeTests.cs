@@ -189,9 +189,19 @@ public sealed class CapabilityAgeTests
         if (string.Equals(
                 Environment.GetEnvironmentVariable("GITHUB_ACTIONS"), "true", StringComparison.Ordinal))
         {
+            // The remedy names the INVARIANT, not today's most likely cause. This guard also fires on
+            // "no source tree" and "no git binary", and a container job or a slimmer runner image is
+            // exactly the situation where someone is told to restore a checkout depth that has nothing
+            // to do with their failure — and reaches for a skip instead. The anti-skip sentence is here,
+            // in the runtime message, because nobody reading a CI log ever sees an XML doc comment.
             Assert.Fail(
-                reason + " In CI this is not an environment limitation: the checkout stopped " +
-                "providing history. Restore `fetch-depth: 0` on the backend job (ci.yml).");
+                reason + " In CI this is never an environment limitation: the job stopped providing " +
+                "git plus full history. The usual cause is a missing `fetch-depth: 0` on the backend " +
+                "job (ci.yml); it can also be a runner image or container job with no git binary, or a " +
+                "checkout that no longer includes the source tree. Do NOT fix this by skipping — that " +
+                "restores the green-build-that-checked-nothing hole this test exists to close. Fix the " +
+                "job's checkout depth or runner image, or move the invariant deliberately and record " +
+                "it in ADR-028.");
         }
 
         Assert.Skip(reason);
