@@ -35,7 +35,7 @@ public sealed class CapabilityAgeTests
         var report = await CapabilityAge.ResolveAsync(TestContext.Current.CancellationToken);
         if (!report.IsAvailable)
         {
-            Assert.Skip($"capability age gate NOT ARMED: {report.UnavailableReason}");
+            SkipLoudly($"capability age gate NOT ARMED: {report.UnavailableReason}");
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -90,7 +90,7 @@ public sealed class CapabilityAgeTests
         var repoRoot = CapabilityAge.FindRepoRoot();
         if (repoRoot is null)
         {
-            Assert.Skip("no source tree above the test assembly — nothing to probe.");
+            SkipLoudly("capability age probe NOT ARMED: no source tree above the test assembly.");
             return;
         }
 
@@ -105,7 +105,7 @@ public sealed class CapabilityAgeTests
         var report = await CapabilityAge.ResolveAsync(TestContext.Current.CancellationToken);
         if (!report.IsAvailable)
         {
-            Assert.Skip($"git history unavailable: {report.UnavailableReason}");
+            SkipLoudly($"capability age probe NOT ARMED: {report.UnavailableReason}");
             return;
         }
 
@@ -150,6 +150,22 @@ public sealed class CapabilityAgeTests
         CapabilityAge.IsStale(fixture, old, now).ShouldBeFalse("Capability.IsFixture is exempt, permanently");
         CapabilityAge.IsStale(ordinary, old, now).ShouldBeFalse("only money-path capabilities are on a clock");
     }
+
+    /// <summary>
+    /// Skips rather than fails, with the reason on the test result.
+    /// <para>
+    /// <b>The visible signal at default verbosity is the <c>[SKIP]</c> line naming the test</b>, which
+    /// is why these test names read as claims ("no money-path capability exceeds the policy window"):
+    /// <c>[SKIP] No_money_path_capability_exceeds_the_policy_window</c> in a CI log says the gate did
+    /// not run. The reason itself only surfaces under
+    /// <c>--logger "console;verbosity=detailed"</c> or in the TRX — verified, including that neither
+    /// <c>Console.Error</c> (xunit v3 captures it and shows it only for failures) nor the raw stderr
+    /// handle (vstest swallows the test host's) gets through at default verbosity. Since the reporting
+    /// side cannot be made louder from in here, the prevention side is where the work went: CI pins
+    /// <c>fetch-depth: 0</c>, so the ordinary CI run is armed rather than skipped.
+    /// </para>
+    /// </summary>
+    private static void SkipLoudly(string reason) => Assert.Skip(reason);
 
     /// <summary>
     /// The registry's own fixture must stay exempt-able: if <c>money-path-fixture</c> ever lost
