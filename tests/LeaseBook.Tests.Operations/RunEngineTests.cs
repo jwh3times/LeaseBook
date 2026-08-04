@@ -159,5 +159,10 @@ file sealed class NoOpBatchPosting : IBatchPosting
 file sealed class StubCapabilitySnapshot : ICapabilitySnapshot
 {
     public Task<RunCapabilities> ResolveDurableAsync(CancellationToken ct) =>
-        Task.FromResult(new RunCapabilities(new HashSet<string>(StringComparer.Ordinal), "stub"));
+        // Deliberately empty: this project cannot see the registry (Operations must not reference the
+        // Capabilities module), and RunCapabilities.IsEnabled throws on an unknown name, so a stub
+        // that pretended to resolve anything would be lying about completeness. NoOpStrategy asks it
+        // nothing.
+        Task.FromResult(new RunCapabilities(
+            new Dictionary<string, bool>(StringComparer.Ordinal), "stub"));
 }

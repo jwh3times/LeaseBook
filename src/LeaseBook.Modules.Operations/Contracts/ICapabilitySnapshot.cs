@@ -14,15 +14,45 @@ namespace LeaseBook.Modules.Operations.Contracts;
 /// may become an argument to an Accounting command, business event, or posting-template input.
 /// </para>
 /// </summary>
-/// <param name="Enabled">Names of the capabilities that resolved to "on" for this unit of work.</param>
+/// <param name="Values">
+/// The COMPLETE resolved map, one entry per capability in the registry — not the enabled subset. The
+/// producing type asserts that completeness and explains why: an absent entry read as "off" is
+/// indistinguishable from a deployment-wide kill switch, and effectively undiagnosable in production.
+/// Projecting down to enabled-names-only here would throw that guarantee away one hop later, on the
+/// money path, which is the worst place to lose it.
+/// </param>
 /// <param name="Version">
 /// The opaque version token of the resolved set. Recorded in <c>bulk_runs.summary_json</c> so a
 /// committed run states which capability state it ran under, and used by the preview/confirm
 /// concurrency check.
 /// </param>
-public sealed record RunCapabilities(IReadOnlySet<string> Enabled, string Version)
+public sealed record RunCapabilities(IReadOnlyDictionary<string, bool> Values, string Version)
 {
-    public bool IsEnabled(string capabilityName) => Enabled.Contains(capabilityName);
+    /// <summary>
+    /// Answers for a resolved capability, and THROWS for anything else rather than answering "off".
+    /// <para>
+    /// A typo'd, renamed or retired name is a bug in the calling code, not a state. Answering false
+    /// would mean a money-path gate silently closes: charges quietly do not post, every downstream
+    /// figure is internally consistent, and nothing anywhere records that a gate was consulted with a
+    /// name that no longer exists. Throwing turns a silent fiduciary failure into a loud one, which
+    /// on this path is strictly the better direction.
+    /// </para>
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="capabilityName"/> is not in the resolved set.
+    /// </exception>
+    public bool IsEnabled(string capabilityName) =>
+        Values.TryGetValue(capabilityName, out var enabled)
+            ? enabled
+            : throw new ArgumentOutOfRangeException(
+                nameof(capabilityName), capabilityName,
+                "Not a resolved capability. A silent false here would be indistinguishable from a " +
+                "kill switch. Capability names come from the registry; a literal that no longer " +
+                "resolves is a bug, not an 'off'.");
+
+    /// <summary>Names that resolved to "on", ordered, for recording in a run summary.</summary>
+    public IReadOnlyList<string> EnabledNames() =>
+        Values.Where(kv => kv.Value).Select(kv => kv.Key).Order(StringComparer.Ordinal).ToArray();
 }
 
 /// <summary>

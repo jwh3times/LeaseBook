@@ -231,6 +231,14 @@ public sealed class RunCapabilityFreezeTests(PostgresFixture fixture)
                 resolved.Version.ShouldNotBeNullOrWhiteSpace();
                 db.Database.CurrentTransaction.ShouldBe(
                     before, "the adapter must join the ambient transaction, not open its own");
+
+                // The completeness guarantee has to survive the module hop. CapabilitySet asserts it
+                // resolves every capability in the registry; if the adapter projected that down to
+                // enabled-names-only, an unknown name would read as a silent "off" on the money path
+                // instead of throwing — the exact hazard the producing type refuses to permit.
+                resolved.Values.Keys.Order(StringComparer.Ordinal).ShouldBe(
+                    CapabilityCatalog.All.Select(c => c.Name).Order(StringComparer.Ordinal),
+                    "the adapter must carry the complete resolved map, not the enabled subset");
             },
             ct);
     }
@@ -427,7 +435,10 @@ file sealed class RecordingStrategy(Guid[] targets, Func<Task>? afterFirstItem =
 
         foreach (var targetId in selectedTargetIds)
         {
-            var enabled = capabilities.IsEnabled("consolidated-statements");
+            // The catalog, not a literal. Under the throwing IsEnabled a stale literal is an
+            // exception rather than a quiet false, and this suite is the one place that must
+            // not have its own copy of the string it pivots on.
+            var enabled = capabilities.IsEnabled(CapabilityCatalog.ConsolidatedStatements.Name);
             _observed.Add((enabled, capabilities.Version));
 
             items.Add(BulkRunItem.Create(

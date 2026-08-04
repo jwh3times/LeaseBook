@@ -127,7 +127,7 @@ public sealed class RunEngine(
             excluded,
             total,
             capabilities = capabilities.Version,
-            capabilitiesEnabled = capabilities.Enabled.Order(StringComparer.Ordinal).ToArray(),
+            capabilitiesEnabled = capabilities.EnabledNames(),
         };
         run.SetSummaryJson(JsonSerializer.Serialize(summary));
 

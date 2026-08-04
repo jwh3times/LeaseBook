@@ -16,6 +16,16 @@ namespace LeaseBook.Tests.Architecture;
 /// asking future authors not to do that is not enforcement; this is.
 /// </para>
 /// <para>
+/// <b>Scope, stated so it is not mistaken for more than it is.</b> This scans one file. A per-org
+/// resolve introduced in the Hangfire job wrapper, in a scope decorator, or in
+/// <c>OrgScopedExecutor</c> itself would split a sweep just as effectively and would not be caught
+/// here. The gap is narrow rather than open — a rename or move of the scanned file fails this suite
+/// red with a <see cref="FileNotFoundException"/> rather than passing vacuously — and widening the
+/// scan to every file that could host a per-org loop would be a guess at a list, which is a worse
+/// gate than a precise one with its limits written down. Anyone adding a capability read to the
+/// sweep's surrounding machinery has to hold the same rule by reading it here.
+/// </para>
+/// <para>
 /// <b>This is a deliberate stop sign, not a permanent ban.</b> When the sweep genuinely needs a
 /// capability, the author changes this test in the same commit — and by then has to state which kind
 /// of gate it is (a deployment-wide kill switch resolved once before the loop, or a per-org

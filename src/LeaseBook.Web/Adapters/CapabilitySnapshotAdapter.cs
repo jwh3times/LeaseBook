@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using LeaseBook.Modules.Capabilities.Contracts;
 using LeaseBook.Modules.Operations.Contracts;
 using CapabilityCatalog = LeaseBook.Modules.Capabilities.Registry.Capabilities;
@@ -28,13 +29,18 @@ internal sealed class CapabilitySnapshotAdapter(ICapabilityGate gate) : ICapabil
     {
         var resolved = await gate.ResolveDurableAsync(ct);
 
-        // Registry-driven, so the enabled set is complete by construction: CapabilitySet asserts it
-        // resolves every capability in the catalog, and IsEnabled is the only way to read one out.
-        var enabled = CapabilityCatalog.All
-            .Where(resolved.IsEnabled)
-            .Select(c => c.Name)
-            .ToHashSet(StringComparer.Ordinal);
+        // The COMPLETE map, not the enabled subset. CapabilitySet asserts it resolves every
+        // capability in the catalog, so enumerating the catalog here preserves that guarantee across
+        // the hop instead of discarding it: RunCapabilities.IsEnabled can then throw on an unknown
+        // name rather than answering a silent "off" that a money-path gate cannot tell from a kill
+        // switch.
+        //
+        // Frozen, like the type it is mapped from. IReadOnlyDictionary is a view, not a guarantee:
+        // handing a strategy a Dictionary behind that interface would let a cast mutate the "frozen"
+        // set mid-run, which is precisely the thing the parameter exists to prevent.
+        var values = CapabilityCatalog.All.ToFrozenDictionary(
+            c => c.Name, resolved.IsEnabled, StringComparer.Ordinal);
 
-        return new RunCapabilities(enabled, resolved.Version);
+        return new RunCapabilities(values, resolved.Version);
     }
 }
