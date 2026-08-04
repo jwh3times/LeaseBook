@@ -74,7 +74,9 @@ public sealed class LateFeeRunTests(PostgresFixture fixture)
             var preview = await engine.PreviewAsync(RunType.LateFee, Period, ct);
             preview.Rows.Count.ShouldBeGreaterThan(0, "at least one delinquent lease expected");
             var targets = preview.Rows.Select(r => r.TargetId).ToList();
-            result = await engine.ConfirmAsync(RunType.LateFee, Period, targets, ct);
+            result = await engine.ConfirmAsync(
+                RunType.LateFee, Period, targets, preview.CapabilitiesVersion,
+                acknowledgeCapabilityChange: false, ct);
         }, ct);
 
         result.ShouldNotBeNull();
@@ -109,7 +111,10 @@ public sealed class LateFeeRunTests(PostgresFixture fixture)
         RunResult? result = null;
         await RunAsync(ctx.OrgId, async (engine, _) =>
         {
-            result = await engine.ConfirmAsync(RunType.LateFee, Period, selected, ct);
+            // Previewed in an earlier transaction, so there is no live token to honour here.
+            result = await engine.ConfirmAsync(
+                RunType.LateFee, Period, selected, expectedCapabilitiesVersion: null,
+                acknowledgeCapabilityChange: false, ct);
         }, ct);
 
         result.ShouldNotBeNull();
@@ -142,7 +147,9 @@ public sealed class LateFeeRunTests(PostgresFixture fixture)
             var preview = await engine.PreviewAsync(RunType.LateFee, Period, ct);
             preview.Rows.Count.ShouldBeGreaterThan(0);
             var targets = preview.Rows.Select(r => r.TargetId).ToList();
-            result = await engine.ConfirmAsync(RunType.LateFee, Period, targets, ct);
+            result = await engine.ConfirmAsync(
+                RunType.LateFee, Period, targets, preview.CapabilitiesVersion,
+                acknowledgeCapabilityChange: false, ct);
         }, ct);
 
         result.ShouldNotBeNull();
@@ -171,7 +178,9 @@ public sealed class LateFeeRunTests(PostgresFixture fixture)
         {
             var preview = await engine.PreviewAsync(RunType.LateFee, Period, ct);
             var targets = preview.Rows.Select(r => r.TargetId).ToList();
-            await engine.ConfirmAsync(RunType.LateFee, Period, targets, ct);
+            await engine.ConfirmAsync(
+                RunType.LateFee, Period, targets, preview.CapabilitiesVersion,
+                acknowledgeCapabilityChange: false, ct);
         }, ct);
 
         TrustEquationResponse? equation = null;
@@ -206,14 +215,18 @@ public sealed class LateFeeRunTests(PostgresFixture fixture)
         {
             var preview = await engine.PreviewAsync(RunType.LateFee, Period, ct);
             targets = preview.Rows.Select(r => r.TargetId).ToList();
-            await engine.ConfirmAsync(RunType.LateFee, Period, targets, ct);
+            await engine.ConfirmAsync(
+                RunType.LateFee, Period, targets, preview.CapabilitiesVersion,
+                acknowledgeCapabilityChange: false, ct);
         }, ct);
 
         // Second confirm on same targets — must be Skipped.
         RunResult? secondResult = null;
         await RunAsync(ctx.OrgId, async (engine, _) =>
         {
-            secondResult = await engine.ConfirmAsync(RunType.LateFee, Period, targets, ct);
+            secondResult = await engine.ConfirmAsync(
+                RunType.LateFee, Period, targets, expectedCapabilitiesVersion: null,
+                acknowledgeCapabilityChange: false, ct);
         }, ct);
 
         secondResult.ShouldNotBeNull();
@@ -420,7 +433,9 @@ public sealed class LateFeeRunTests(PostgresFixture fixture)
                 return;
             }
             var targets = preview.Rows.Select(r => r.TargetId).ToList();
-            result = await engine.ConfirmAsync(RunType.LateFee, Period, targets, ct);
+            result = await engine.ConfirmAsync(
+                RunType.LateFee, Period, targets, preview.CapabilitiesVersion,
+                acknowledgeCapabilityChange: false, ct);
         }, ct);
 
         result.ShouldNotBeNull();

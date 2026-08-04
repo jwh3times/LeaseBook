@@ -14,6 +14,7 @@ public static class OperationsModuleServiceCollectionExtensions
     public static IServiceCollection AddOperationsModule(this IServiceCollection services)
     {
         // Core run engine: resolves strategies keyed by RunType.
+        services.AddScoped<IRunPeriodLock, RunPeriodLock>();
         services.AddScoped<RunEngine>();
 
         // WP-2: Rent charge run + proration (ADR-017 / ADR-019).

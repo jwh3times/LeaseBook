@@ -2426,6 +2426,24 @@ export interface paths {
                         "application/json": components["schemas"]["RunResultSpaResponse"];
                     };
                 };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
             };
         };
         delete?: never;
@@ -3319,6 +3337,9 @@ export interface components {
             code: string;
         };
         ConfirmRunRequest: {
+            /** @default false */
+            acknowledgeCapabilityChange: boolean;
+            capabilitiesVersion: null | string;
             /** Format: int32 */
             month: number | string;
             selectedTargetIds: string[];
@@ -3937,6 +3958,7 @@ export interface components {
             runs: components["schemas"]["BulkRunSpa"][];
         };
         RunPreviewSpaResponse: {
+            capabilitiesVersion: string;
             exceptions: string[];
             /** Format: int32 */
             month: number | string;

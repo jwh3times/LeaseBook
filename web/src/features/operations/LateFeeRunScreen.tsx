@@ -51,9 +51,16 @@ export function LateFeeRunScreen() {
   };
 
   const handleConfirm = () => {
+    if (!preview.data) return;
     trackInteraction('latefee-run-confirm', 2, true);
     confirm.mutate(
-      { year: period.year, month: period.month, selectedTargetIds: Array.from(selected) },
+      {
+        year: period.year,
+        month: period.month,
+        selectedTargetIds: Array.from(selected),
+        // Echoed verbatim from the preview whose amounts are on screen — the server compares it.
+        capabilitiesVersion: preview.data.capabilitiesVersion,
+      },
       {
         onSuccess: (data) => {
           setResult(data);

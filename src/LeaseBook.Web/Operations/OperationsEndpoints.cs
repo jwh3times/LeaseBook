@@ -83,12 +83,13 @@ public sealed class OperationsEndpoints : IEndpointModule
                         period.Year,
                         period.Month,
                         rows,
-                        preview.Exceptions));
+                        preview.Exceptions,
+                        preview.CapabilitiesVersion));
                 })
             .Produces<RunPreviewSpaResponse>();
 
         // POST /api/operations/runs/{type}/confirm
-        // Body: { year, month, selectedTargetIds }
+        // Body: { year, month, selectedTargetIds, capabilitiesVersion, acknowledgeCapabilityChange? }
         group.MapPost("/runs/{type}/confirm",
                 async (string type, ConfirmRunRequest body, RunEngine engine, HttpContext httpContext,
                     CancellationToken ct) =>
@@ -111,8 +112,28 @@ public sealed class OperationsEndpoints : IEndpointModule
                             status: StatusCodes.Status400BadRequest);
                     }
 
+                    // An absent token is a client that never previewed, or one built against the
+                    // pre-guard contract — rejected rather than waved through, or the check would be
+                    // opt-out by omission. A distinct code from capabilities_changed on purpose:
+                    // "your client is out of date" and "the platform state moved" have different
+                    // fixes, and the SPA re-previews on only one of them.
+                    if (string.IsNullOrWhiteSpace(body.CapabilitiesVersion))
+                    {
+                        return ProblemResults.Problem(
+                            httpContext,
+                            code: "capabilities_version_required",
+                            detail: "This run must be confirmed from a preview. Reload the preview and try again.",
+                            status: StatusCodes.Status400BadRequest);
+                    }
+
                     var period = new RunPeriod(body.Year, body.Month);
-                    var result = await engine.ConfirmAsync(runType, period, body.SelectedTargetIds, ct);
+
+                    // The comparison itself is the engine's, inside the ambient transaction and
+                    // against the one set it resolves at entry. The endpoint only carries the value:
+                    // re-resolving here to compare would break the single-resolve freeze.
+                    var result = await engine.ConfirmAsync(
+                        runType, period, body.SelectedTargetIds, body.CapabilitiesVersion,
+                        body.AcknowledgeCapabilityChange, ct);
 
                     return Results.Ok(new RunResultSpaResponse(
                         result.RunId,
@@ -124,7 +145,15 @@ public sealed class OperationsEndpoints : IEndpointModule
                         result.Excluded,
                         result.Total));
                 })
-            .Produces<RunResultSpaResponse>();
+            .Produces<RunResultSpaResponse>()
+            // Declared because the SPA BRANCHES on the 409's code (useRuns.ts distinguishes
+            // capabilities_changed, which refetches the preview, from
+            // capabilities_changed_since_prior_run, which must not) — a wire code the client depends on
+            // has no business being absent from the generated contract. The 400 covers
+            // unknown_run_type, invalid_period and capabilities_version_required; all four codes are
+            // carried in the ProblemDetails body, which is why one declaration per status is enough.
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status409Conflict);
 
         // GET /api/operations/runs — run history, most-recent-first, scoped to the request org (RLS).
         // Operations reads its OWN bulk_runs table — within-module, allowed (ADR-007).
@@ -203,10 +232,25 @@ public sealed class OperationsEndpoints : IEndpointModule
 // ─── SPA-shaped request / response records ────────────────────────────────────
 
 /// <summary>Body for POST /api/operations/runs/{type}/confirm.</summary>
+/// <param name="CapabilitiesVersion">
+/// The token from the preview this confirm came from (ADR-028). Nullable in the CONTRACT only so an
+/// omitted field deserializes to null and can be answered with a clear 400 — the endpoint requires
+/// it. Modelling it as non-nullable would surface an old client as an unhelpful framework-level bind
+/// failure instead.
+/// </param>
+/// <param name="AcknowledgeCapabilityChange">
+/// The operator's explicit acknowledgement that an earlier run for this period was posted under a
+/// different money-path capability state (ADR-028). Defaults to false when the field is omitted, so
+/// the safe answer is the one an old or careless client gives: it can only cause a rejection, never
+/// suppress one. Applies to the CROSS-RUN guard only — there is no override for a stale preview
+/// token, because re-previewing costs nothing and is always the right answer to that one.
+/// </param>
 public sealed record ConfirmRunRequest(
     int Year,
     int Month,
-    IReadOnlyList<Guid> SelectedTargetIds);
+    IReadOnlyList<Guid> SelectedTargetIds,
+    string? CapabilitiesVersion,
+    bool AcknowledgeCapabilityChange = false);
 
 /// <summary>One preview row as the SPA expects.</summary>
 public sealed record PreviewRowSpa(
@@ -227,7 +271,8 @@ public sealed record RunPreviewSpaResponse(
     int Year,
     int Month,
     IReadOnlyList<PreviewRowSpa> Rows,
-    IReadOnlyList<string> Exceptions);
+    IReadOnlyList<string> Exceptions,
+    string CapabilitiesVersion);
 
 /// <summary>
 /// SPA shape for POST /api/operations/runs/{type}/confirm.

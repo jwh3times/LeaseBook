@@ -850,7 +850,13 @@ public static class ScenarioSeeder
         var selected = preview.Rows.Where(r => !r.AlreadyDone).ToList();
         if (selected.Count > 0)
         {
-            await ctx.Engine.ConfirmAsync(runType, period, selected.Select(r => r.TargetId).ToList(), ct);
+            // Echo the preview's token: the seeder confirms exactly what it previewed, so it takes
+            // the same guard a real operator does rather than opting out with null.
+            // No acknowledgement: the seeder flips no capability between its runs, so the cross-run
+            // guard has nothing to reject. If it ever did, silently overriding it would be the bug.
+            await ctx.Engine.ConfirmAsync(
+                runType, period, selected.Select(r => r.TargetId).ToList(), preview.CapabilitiesVersion,
+                acknowledgeCapabilityChange: false, ct);
         }
 
         ctx.Db.ChangeTracker.Clear();

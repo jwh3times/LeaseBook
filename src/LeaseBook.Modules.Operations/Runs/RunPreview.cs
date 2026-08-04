@@ -39,7 +39,35 @@ public sealed record RunPreview(
     RunType RunType,
     RunPeriod Period,
     IReadOnlyList<PreviewRow> Rows,
-    IReadOnlyList<string> Exceptions);
+    IReadOnlyList<string> Exceptions)
+{
+    /// <summary>
+    /// The opaque capability-version token the operator's confirm must echo back (ADR-028). A
+    /// strategy never sets this — it is a property of the ENGINE's resolution, not of the row
+    /// computation — so <see cref="RunEngine.PreviewAsync"/> stamps it on the way out.
+    /// <para>
+    /// The default is empty rather than a sentinel meaning "skip the check", and that direction is
+    /// deliberate: an engine path that forgot to stamp it yields a token that matches nothing, so a
+    /// confirm carrying it is REJECTED rather than silently unguarded.
+    /// </para>
+    /// <para>
+    /// <b>What that rejection actually is, in each of the two paths.</b> Over HTTP an unstamped token
+    /// never reaches the engine: <c>POST /runs/{type}/confirm</c> rejects a blank
+    /// <c>capabilitiesVersion</c> with <b>400 <c>capabilities_version_required</c></b>. That is a
+    /// client-contract violation, not a state change, and the SPA does not recover from it — it
+    /// branches on <c>capabilities_changed</c> only, so it will not re-preview and the operator is
+    /// shown a message that reloading cannot clear. In process, a caller passing the empty string
+    /// reaches the version comparison and gets <c>CapabilitiesChangedException</c>, because empty
+    /// equals no resolved version; passing <c>null</c> is the documented way to say "there is no
+    /// preview to honour" and skips the comparison entirely.
+    /// </para>
+    /// <para>
+    /// Both are the safe direction — nothing posts — but neither is a cheap re-preview, so a forgotten
+    /// stamp is a bug to fix in the engine, not a cost to absorb at the keyboard.
+    /// </para>
+    /// </summary>
+    public string CapabilitiesVersion { get; init; } = string.Empty;
+}
 
 /// <summary>
 /// The result returned by <see cref="RunEngine.ConfirmAsync"/> — the persisted run's id plus the

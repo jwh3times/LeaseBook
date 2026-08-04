@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\LeaseBook.SharedKernel\LeaseBook.SharedKernel.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- ForceExpireForTesting / ResetForTesting on CapabilityCache: the TTL backstop must be
+         provable without a 30-second sleep, and the cold-start path without restarting a host. -->
+    <InternalsVisibleTo Include="LeaseBook.Tests.Integration" />
+    <InternalsVisibleTo Include="LeaseBook.Tests.Capabilities" />
+  </ItemGroup>
+
+</Project>

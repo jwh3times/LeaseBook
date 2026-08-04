@@ -43,14 +43,22 @@ param acaSubnetPrefix = '10.40.0.0/23'
 // 10.40.2.0 - 10.40.2.31; 10.40.2.32 - 10.40.3.255 is left free for future private endpoints.
 param postgresSubnetPrefix = '10.40.2.0/27'
 
-// --- Migration job ----------------------------------------------------------------------------
-// The deploy workflow overrides migratorImageTag with the promoted git SHA. 'latest' is only a
-// placeholder for a manual template deploy.
+// --- Jobs -------------------------------------------------------------------------------------
+// The deploy workflow overrides both tags with the promoted git SHA. 'latest' is only a placeholder
+// for a manual template deploy. appImageTag is shared by the container app and the capabilities job
+// (ADR-028) on purpose: the capability registry is source code, so an operator tool built from a
+// different commit knows a different set of capabilities than the app it is being used to control.
 param migratorImageTag = 'latest'
+param appImageTag = 'latest'
 
-// Empty on the first deployment: Key Vault is created empty by this template and the Postgres roles
-// do not exist until the operator runs infra/db/azure-bootstrap.md. Once the migrator connection
-// string is stored, set this to its full secret URI (e.g.
-// 'https://lb-prod-kv.vault.azure.net/secrets/connectionstrings-migrations') and redeploy; the job
-// picks it up with no code change.
+// Both empty on the first deployment: Key Vault is created empty by this template and the Postgres
+// roles do not exist until the operator runs infra/db/azure-bootstrap.md. Once each connection string
+// is stored, set these to their full secret URIs (e.g.
+// 'https://lb-prod-kv.vault.azure.net/secrets/connectionstrings-migrations') and redeploy; the jobs
+// pick them up with no code change.
+//
+// They are DIFFERENT credentials and must stay so: migrations run as leasebook_migrator (DDL on
+// public), the capabilities job as leasebook_app (DML on the four platform tables, under RLS's
+// platform escape). Pointing both at one secret would hand an operator tool schema-owner rights.
 param migrationsSecretUri = ''
+param defaultSecretUri = ''

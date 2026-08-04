@@ -21,6 +21,13 @@
     </PackageReference>
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Test-only reset hooks on replica state (RoleSeedingState.ResetForTesting), mirroring the
+         Capabilities module. A readiness gate that can only ever answer 200 is not a gate, and the
+         only way to observe the 503 branch on a live host is to put that state back to cold. -->
+    <InternalsVisibleTo Include="LeaseBook.Tests.Integration" />
+  </ItemGroup>
+
   <PropertyGroup>
     <OpenApiGenerateDocumentsOnBuild Condition="'$(OpenApiGenerateDocumentsOnBuild)' == ''">false</OpenApiGenerateDocumentsOnBuild>
     <OpenApiDocumentsDirectory>$(BaseIntermediateOutputPath)openapi</OpenApiDocumentsDirectory>
@@ -63,6 +70,7 @@
     <ProjectReference Include="..\LeaseBook.Modules.Accounting\LeaseBook.Modules.Accounting.csproj" />
     <ProjectReference Include="..\LeaseBook.Modules.Directory\LeaseBook.Modules.Directory.csproj" />
     <ProjectReference Include="..\LeaseBook.Modules.Banking\LeaseBook.Modules.Banking.csproj" />
+    <ProjectReference Include="..\LeaseBook.Modules.Capabilities\LeaseBook.Modules.Capabilities.csproj" />
     <ProjectReference Include="..\LeaseBook.Modules.Reporting\LeaseBook.Modules.Reporting.csproj" />
     <ProjectReference Include="..\LeaseBook.Modules.Operations\LeaseBook.Modules.Operations.csproj" />
     <ProjectReference Include="..\LeaseBook.Modules.Payments\LeaseBook.Modules.Payments.csproj" />

@@ -3,6 +3,7 @@
     <Project Path="src/LeaseBook.Migrator/LeaseBook.Migrator.csproj" />
     <Project Path="src/LeaseBook.Modules.Accounting/LeaseBook.Modules.Accounting.csproj" />
     <Project Path="src/LeaseBook.Modules.Banking/LeaseBook.Modules.Banking.csproj" />
+    <Project Path="src/LeaseBook.Modules.Capabilities/LeaseBook.Modules.Capabilities.csproj" />
     <Project Path="src/LeaseBook.Modules.Directory/LeaseBook.Modules.Directory.csproj" />
     <Project Path="src/LeaseBook.Modules.Operations/LeaseBook.Modules.Operations.csproj" />
     <Project Path="src/LeaseBook.Modules.Payments/LeaseBook.Modules.Payments.csproj" />
@@ -15,6 +16,7 @@
     <Project Path="tests/LeaseBook.Tests.Migrator/LeaseBook.Tests.Migrator.csproj" />
     <Project Path="tests/LeaseBook.Tests.Architecture/LeaseBook.Tests.Architecture.csproj" />
     <Project Path="tests/LeaseBook.Tests.Banking/LeaseBook.Tests.Banking.csproj" />
+    <Project Path="tests/LeaseBook.Tests.Capabilities/LeaseBook.Tests.Capabilities.csproj" />
     <Project Path="tests/LeaseBook.Tests.Common/LeaseBook.Tests.Common.csproj" />
     <Project Path="tests/LeaseBook.Tests.Integration/LeaseBook.Tests.Integration.csproj" />
     <Project Path="tests/LeaseBook.Tests.Operations/LeaseBook.Tests.Operations.csproj" />

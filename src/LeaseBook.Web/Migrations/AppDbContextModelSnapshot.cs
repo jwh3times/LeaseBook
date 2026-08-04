@@ -587,6 +587,152 @@ namespace LeaseBook.Web.Migrations
                         });
                 });
 
+            modelBuilder.Entity("LeaseBook.Modules.Capabilities.Domain.CapabilityCohort", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("AddedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("added_at");
+
+                    b.Property<string>("AddedBy")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("added_by");
+
+                    b.Property<string>("Capability")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("capability");
+
+                    b.Property<Guid>("OrgId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("org_id");
+
+                    b.Property<Guid?>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_capability_cohorts");
+
+                    b.HasIndex("Capability", "OrgId")
+                        .HasDatabaseName("ix_capability_cohorts_capability_org_id");
+
+                    b.ToTable("capability_cohorts", (string)null);
+                });
+
+            modelBuilder.Entity("LeaseBook.Modules.Capabilities.Domain.Entitlement", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Actor")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("actor");
+
+                    b.Property<string>("Capability")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("capability");
+
+                    b.Property<DateTime>("EffectiveAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("effective_at");
+
+                    b.Property<bool>("Granted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("granted");
+
+                    b.Property<Guid>("OrgId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("org_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_entitlements");
+
+                    b.HasIndex("OrgId", "Capability", "EffectiveAt")
+                        .IsUnique()
+                        .HasDatabaseName("ux_entitlements_org_capability_effective_at");
+
+                    b.ToTable("entitlements", (string)null);
+                });
+
+            modelBuilder.Entity("LeaseBook.Modules.Capabilities.Domain.FeatureFlag", b =>
+                {
+                    b.Property<string>("Name")
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text")
+                        .HasColumnName("description");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("boolean")
+                        .HasColumnName("enabled");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Name")
+                        .HasName("pk_feature_flags");
+
+                    b.ToTable("feature_flags", (string)null);
+                });
+
+            modelBuilder.Entity("LeaseBook.Modules.Capabilities.Domain.PlatformAuditEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("action");
+
+                    b.Property<string>("Actor")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("actor");
+
+                    b.Property<string>("Capability")
+                        .HasColumnType("text")
+                        .HasColumnName("capability");
+
+                    b.Property<string>("DetailJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("detail_json");
+
+                    b.Property<DateTime>("OccurredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("occurred_at");
+
+                    b.Property<Guid?>("OrgId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("org_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_platform_audit_events");
+
+                    b.ToTable("platform_audit_events", (string)null);
+                });
+
             modelBuilder.Entity("LeaseBook.Modules.Directory.Domain.BankAccount", b =>
                 {
                     b.Property<Guid>("Id")

@@ -1,0 +1,61 @@
+# Execution template for the lb-<env>-capabilities Container Apps Job (ADR-028).
+#
+# EDIT ONLY THE `args:` LIST AND THE LEASEBOOK_OPERATOR VALUE. Everything else is pinned by
+# CapabilitiesJobTemplateTests, which checks this file against infra/modules/containerapp.bicep.
+#
+#   RG=lb-prod-rg
+#   IMAGE=$(az containerapp show --name lb-prod-app --resource-group "$RG" \
+#     --query 'properties.template.containers[0].image' -o tsv)
+#   sed "s|IMAGE_PLACEHOLDER|$IMAGE|" infra/jobs/capabilities-exec.yaml > /tmp/exec.yaml
+#   # ...edit /tmp/exec.yaml: set args, set LEASEBOOK_OPERATOR...
+#   az containerapp job start --name lb-prod-capabilities --resource-group "$RG" --yaml /tmp/exec.yaml
+#
+# WHY THIS FILE EXISTS RATHER THAN A SNIPPET TO RETYPE. `az containerapp job start --yaml`
+# deserializes into an msrest model that matches every key CASE-SENSITIVELY and DISCARDS anything it
+# does not recognise, with no error and no warning. `secretRef` binds; `secretref`, `secret_ref` and
+# `SecretRef` are all silently dropped, and so is `Name` for `name`. A dropped `secretRef` produces an
+# environment variable with no value, and the container then fails exactly the way it fails when the
+# Key Vault secret has not been wired yet — so the natural next move is to go and debug Key Vault RBAC
+# instead of this file. Copying it beats retyping it.
+#
+# `az containerapp job start` does NOT merge with the job's deployed template: it sends what you give
+# it. Every field below is therefore required, not optional — an omitted `env` leaves the container
+# with no connection string, an omitted `name` does not match the template's container (which also
+# breaks `job logs show --container`), and omitted `resources` leaves no resources block.
+containers:
+  - name: capabilities
+    image: IMAGE_PLACEHOLDER
+    # The subcommand. One list entry per token — `--org` and `--stale` are ordinary entries here,
+    # which is the whole reason this form is used instead of the `--args` flag (argparse treats any
+    # dash-prefixed token as an option and rejects the command outright).
+    #
+    # Examples:
+    #   capabilities, flag, disable, <name>                     kill switch
+    #   capabilities, flag, enable, <name>                      restore
+    #   capabilities, grant, <name>, --org, <org-id>            entitle one tenant
+    #   capabilities, revoke, <name>, --org, <org-id>           withdraw
+    #   capabilities, cohort, add, <name>, --org, <org-id>      cohort, org-wide
+    #   capabilities, cohort, remove, <name>, --org, <org-id>, --user, <user-id>
+    #   capabilities, list, --org, <org-id>                     read one tenant
+    args:
+      - capabilities
+      - list
+    env:
+      # Who is accountable. Ships EMPTY on purpose: outside Development the verb refuses every
+      # mutating subcommand when this is blank, so forgetting to fill it in is a refusal rather than
+      # an audit row attributed to nobody. platform_audit_events is append-only — a placeholder value
+      # left in by accident could never be corrected. `list` does not need it.
+      - name: LEASEBOOK_OPERATOR
+        value: ""
+      - name: ConnectionStrings__Default
+        secretRef: connectionstrings-default
+      # This container's stdout is read by a human, so EF's two loudest categories are off: without
+      # them a wall of SQL precedes the output, and a DbUpdateException stack lands above the verb's
+      # own explanation of the same failure.
+      - name: Logging__LogLevel__Microsoft.EntityFrameworkCore.Database.Command
+        value: "None"
+      - name: Logging__LogLevel__Microsoft.EntityFrameworkCore.Update
+        value: "None"
+    resources:
+      cpu: 0.5
+      memory: 1Gi

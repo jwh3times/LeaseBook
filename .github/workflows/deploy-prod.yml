@@ -57,17 +57,68 @@ jobs:
           set -euo pipefail
           IMAGE="$ACR_NAME.azurecr.io/leasebook-migrator:${{ inputs.image_tag }}"
 
-          # Ask for the execution name, but do not depend on the field being populated — fall back
-          # to the most recently started execution for this job.
+          # Every container field is passed, not just --image, and that is load-bearing.
+          # `az containerapp job start` does NOT merge with the job's template: passing ANY container
+          # flag makes it build a fresh single-container execution template out of exactly the flags
+          # given and POST that. So `--image` alone produced an execution container that
+          #   * was named after the JOB (`lb-prod-migrate`), not after the template container
+          #     (`migrate`) — the CLI defaults the name to the job when --container-name is omitted;
+          #   * carried NO env at all, so no ConnectionStrings__Migrations, so every prod migration
+          #     would have started with no connection string;
+          #   * carried no resources block.
+          # The container name also has to be right for the log dump on the failure path below to
+          # find anything: `job logs show --container` matches the EXECUTION's container name.
+          # Snapshot the executions that already exist. The fallback below selects by DIFFERENCE
+          # against this list, never by "most recent" — see the failure it prevents, below.
+          az containerapp job execution list \
+            --name "$JOB_NAME" --resource-group "$RESOURCE_GROUP" \
+            --query '[].name' -o tsv > /tmp/executions-before.txt
+
+          # The start's EXIT STATUS is captured separately from the name it prints, and a failure is
+          # fatal here. Previously `|| true` swallowed it, and the fallback then picked the most
+          # recently started execution — which on every deploy after the first is a *previous*,
+          # already-Succeeded one. The step would report "Migrations applied.", exit 0 with no
+          # migration having run, and the next step would roll the app revision onto an unmigrated
+          # schema. That is precisely the outcome this whole job exists to make impossible, and the
+          # start now has more ways to fail than it used to (bad cpu/memory pair, unresolvable secret
+          # ref, container-name mismatch), so the swallow had to go.
+          set +e
           EXECUTION=$(az containerapp job start \
             --name "$JOB_NAME" --resource-group "$RESOURCE_GROUP" \
+            --container-name migrate \
             --image "$IMAGE" \
-            --query 'name' -o tsv 2>/dev/null || true)
+            --env-vars "ConnectionStrings__Migrations=secretref:connectionstrings-migrations" \
+            --cpu 0.5 --memory 1.0Gi \
+            --query 'name' -o tsv 2>/tmp/job-start.err)
+          START_RC=$?
+          set -e
+
+          if [ "$START_RC" -ne 0 ]; then
+            cat /tmp/job-start.err >&2 || true
+            # Deliberately does NOT claim "no migration ran". az can fail after the POST succeeded —
+            # a network drop or a timeout reading the response — so an execution may be in flight.
+            # Same caution as the guard below: the safe next step is to look, not to re-run.
+            echo "::error::Could not start the migration job (az exited $START_RC); the app revision was NOT updated. An execution may still have been created — check \`az containerapp job execution list\` before re-running."
+            exit 1
+          fi
+
+          # A successful start that did not populate the name field is still tolerated — but only by
+          # finding an execution that did not exist a moment ago, so a stale one can never be adopted.
+          if [ -z "${EXECUTION:-}" ] || [ "$EXECUTION" = "None" ]; then
+            az containerapp job execution list \
+              --name "$JOB_NAME" --resource-group "$RESOURCE_GROUP" \
+              --query '[].name' -o tsv > /tmp/executions-after.txt
+            # `head -n 1` takes az's list order, which is not documented as time-ordered. Two new
+            # executions can only appear if something else started this job concurrently, which for a
+            # manual-trigger migrator job means a second deploy is in flight — a situation no
+            # tie-break here would make safe. Polling either one to a terminal state is still the
+            # right move; the deploy is the thing that needs serializing, not this selection.
+            EXECUTION=$(grep -Fxv -f /tmp/executions-before.txt /tmp/executions-after.txt | head -n 1 || true)
+          fi
 
           if [ -z "${EXECUTION:-}" ] || [ "$EXECUTION" = "None" ]; then
-            EXECUTION=$(az containerapp job execution list \
-              --name "$JOB_NAME" --resource-group "$RESOURCE_GROUP" \
-              --query 'sort_by([], &properties.startTime)[-1].name' -o tsv)
+            echo "::error::The migration job reported a successful start but no new execution appeared. Do not re-run blindly — inspect the job's executions first; a migration may be in flight."
+            exit 1
           fi
           echo "Migration execution: $EXECUTION"
 
@@ -84,9 +135,19 @@ jobs:
               Succeeded) echo "Migrations applied."; exit 0 ;;
               Failed|Degraded|Cancelled)
                 echo "::error::Migration execution $EXECUTION ended as $STATUS — the app revision was NOT updated."
+                # `job logs show` takes --execution (NOT --job-execution-name, which belongs to
+                # `job execution show` above) and REQUIRES --container. Both were wrong here, and the
+                # `|| true` hid it: the one command whose whole job is to explain a failed migration
+                # was itself failing on argument parsing, leaving an operator with the ::error:: line
+                # and nothing else. `|| true` is kept — a missing log must not mask the real failure —
+                # but it is now covering only a genuinely absent log.
+                #
+                # `--container migrate` is correct only because the start above passes
+                # `--container-name migrate`. Drop that flag and the execution's container is named
+                # after the job, and this returns nothing again.
                 az containerapp job logs show \
                   --name "$JOB_NAME" --resource-group "$RESOURCE_GROUP" \
-                  --job-execution-name "$EXECUTION" --tail 200 || true
+                  --execution "$EXECUTION" --container migrate --tail 200 || true
                 exit 1 ;;
             esac
             sleep 15
@@ -98,6 +159,10 @@ jobs:
           JOB_NAME: ${{ vars.MIGRATOR_JOB_NAME }}
           RESOURCE_GROUP: ${{ vars.RESOURCE_GROUP }}
           ACR_NAME: ${{ vars.ACR_NAME }}
+          # `containerapp job logs` lives in the preview `containerapp` CLI extension, unlike
+          # `job start` / `job execution` which are core. A runner is non-interactive, so leave no
+          # room for a prompt on the failure path.
+          AZURE_EXTENSION_USE_DYNAMIC_INSTALL: yes_without_prompt
 
       - name: Update Container App revision
         run: |

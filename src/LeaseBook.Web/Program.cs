@@ -5,6 +5,7 @@ using Hangfire;
 using Hangfire.PostgreSql;
 using LeaseBook.Modules.Accounting;
 using LeaseBook.Modules.Banking;
+using LeaseBook.Modules.Capabilities;
 using LeaseBook.Modules.Directory;
 using LeaseBook.Modules.Operations;
 using LeaseBook.Modules.Reporting;
@@ -14,8 +15,10 @@ using LeaseBook.SharedKernel.Observability;
 using LeaseBook.SharedKernel.Tenancy;
 using LeaseBook.Web.Adapters;
 using LeaseBook.Web.Auth;
+using LeaseBook.Web.Capabilities;
 using LeaseBook.Web.Cli;
 using LeaseBook.Web.Endpoints;
+using LeaseBook.Web.Health;
 using LeaseBook.Web.Jobs;
 using LeaseBook.Web.Persistence;
 using LeaseBook.Web.Reporting;
@@ -44,6 +47,23 @@ var builder = WebApplication.CreateBuilder(args);
 // in every real run (dev, prod, tests).
 var isOpenApiBuild = Environment.GetEnvironmentVariable("LEASEBOOK_OPENAPI_BUILD") == "1";
 
+// CLI verbs are foreground operator tools whose contract is the message they print. EF logs a failed
+// command and a failed SaveChanges at Error *before* rethrowing, so an operator running `capabilities`
+// against a bad row sees a full stack trace and then, underneath it, the friendly explanation that was
+// written for them — and reads the stack trace as the answer. That is worst during an incident, which
+// is when this verb is used.
+//
+// Fixed here, at the composition root, rather than in any verb's catch block: every verb that touches
+// EF has the same noisy-then-friendly shape, so a local suppression would paper over one call site and
+// leave the rest. Nothing is lost — the exception still carries the Postgres message, and whichever
+// path survives (a friendly print, or the runtime's own unhandled-exception output) still shows it.
+// The web host is untouched: it keeps full EF logging, which ADR-025's diagnostics depend on.
+if (args is ["seed", ..] or ["check-invariants", ..] or ["capabilities", ..] or ["perf-probe", ..])
+{
+    builder.Logging.AddFilter("Microsoft.EntityFrameworkCore.Database.Command", LogLevel.None);
+    builder.Logging.AddFilter("Microsoft.EntityFrameworkCore.Update", LogLevel.None);
+}
+
 // Module assemblies the host composes. CQRS handlers/validators are discovered from these; endpoint
 // modules are discovered from these plus the host (which owns the auth/meta endpoints).
 Assembly[] moduleAssemblies =
@@ -64,6 +84,12 @@ builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<ValidationExceptionHandler>();
 // Typed accounting domain errors → §C.5 ProblemDetails (422/409). Wired now so M3's write path inherits it.
 builder.Services.AddExceptionHandler<AccountingExceptionHandler>();
+// Typed Operations run-pipeline errors → 409 ProblemDetails, keyed on the code the exception
+// carries (ADR-028): capabilities_changed for a preview whose set moved, and
+// capabilities_changed_since_prior_run for a period an earlier run computed under a different
+// money-path state. Typed so neither falls through to the terminal handler's uncoded 500, which
+// would turn a recoverable rejection into an opaque failure.
+builder.Services.AddExceptionHandler<OperationsExceptionHandler>();
 // Terminal handler — MUST stay last. Handlers run in registration order; this one claims
 // everything the typed handlers decline, so nothing reaches the framework default (a bodyless
 // 500 with no log).
@@ -133,6 +159,57 @@ builder.Services.AddScoped<ActorContext>();
 builder.Services.AddScoped<IActorContext>(sp => sp.GetRequiredService<ActorContext>());
 builder.Services.AddScoped<DbContext>(sp => sp.GetRequiredService<AppDbContext>());
 builder.Services.AddScoped<OrgScopedExecutor>();
+// Platform-plane counterpart (ADR-028): the single call site that sets app.platform. Scoped, like
+// OrgScopedExecutor, because it opens a transaction on the request/job-scoped DbContext.
+builder.Services.AddScoped<PlatformScopedExecutor>();
+
+// Capability seam (ADR-028): the module contributes ICapabilityGate — the single seam every caller
+// uses — over the per-replica cache and its state reader. The IPlatformScope port is host-implemented
+// (ADR-007), since the module cannot name PlatformScopedExecutor; the gate deliberately does not
+// consume it, because the money path resolves inside the request transaction that OrgContextMiddleware
+// has already opened.
+builder.Services.AddCapabilitiesModule();
+builder.Services.AddScoped<LeaseBook.Modules.Capabilities.Contracts.IPlatformScope, PlatformScopeAdapter>();
+
+// The seam's two hosted services are host-owned. The LISTEN/NOTIFY listener holds a raw Npgsql
+// connection outside the EF pool — composition-root work over the host's persistence driver, so
+// host-only like the scheduler. The readiness probe proves the seam is reachable at startup, which
+// must not wait on inbound traffic (see CapabilityReadinessProbe for the deadlock it avoids). Both
+// are registered by concrete type as well, so diagnostics and the readiness endpoint can read their
+// counters — AddHostedService alone leaves them unresolvable. Carved out of the OpenAPI build for
+// the same reason as Hangfire below: that pass runs with no database and no real configuration.
+if (!isOpenApiBuild)
+{
+    builder.Services.AddSingleton<CapabilityNotificationListener>();
+    builder.Services.AddHostedService(sp => sp.GetRequiredService<CapabilityNotificationListener>());
+    builder.Services.AddSingleton<CapabilityReadinessProbe>();
+    builder.Services.AddHostedService(sp => sp.GetRequiredService<CapabilityReadinessProbe>());
+
+    // The role-seeding half of the same gate (ADR-028 §9). Registered on the same terms and for the
+    // same reason: it retries the one boot-time database write the host cannot serve traffic without,
+    // and against a reachable database it finds the work already done by the synchronous call below
+    // and exits immediately.
+    builder.Services.AddHostedService(sp => sp.GetRequiredService<RoleSeedingProbe>());
+}
+
+// Not inside the carve-out above: the synchronous role-seeding call below marks this even when no
+// hosted service runs, and the readiness check resolves it unconditionally.
+builder.Services.AddSingleton<RoleSeedingState>();
+builder.Services.AddSingleton<RoleSeedingProbe>();
+
+// Readiness (Task 7): what the probes above establish, /api/health/ready reports. Registered
+// unconditionally — each check only reads a bool off a singleton, so they cost nothing in the OpenAPI
+// build, and MetaEndpoints maps the route in every configuration. Tagged `ready` so liveness
+// (/api/health) and readiness stay separable: an unreachable seam must remove a replica from
+// rotation, never restart it.
+//
+// TWO checks, not one, and both are load-bearing. The seam being reachable says nothing about whether
+// the four fixed roles exist — seeding happens once at boot, reachability is proven continuously — so
+// a replica that rode out a database outage at boot would otherwise report healthy with no roles and
+// fail every authenticated request. The endpoint reports the worst of the two.
+builder.Services.AddHealthChecks()
+    .AddCheck<CapabilityReadinessCheck>(CapabilityReadinessCheck.Name, tags: [CapabilityReadinessCheck.ReadyTag])
+    .AddCheck<RoleSeedingReadinessCheck>(RoleSeedingReadinessCheck.Name, tags: [CapabilityReadinessCheck.ReadyTag]);
 
 // Accounting module services (chart-of-accounts provisioning, period lifecycle; the posting engine
 // and event catalog register here in later WPs). They consume the ambient DbContext + ITenantContext.
@@ -182,8 +259,11 @@ builder.Services.AddScoped<IStatementDelivery, LocalStatementDelivery>();
 //   IBatchPosting — write-direction: translates run intents into IAccountingEvents.PostAsync calls.
 //   ILeaseScheduleData — read-direction: dispatches Directory's GetActiveLeaseSchedule via ISender.
 //   IPostedSourceRefs — read-direction: dispatches Accounting's GetExistingSourceRefs via ISender.
+//   ICapabilitySnapshot — read-direction: maps ICapabilityGate's durable resolve into Operations'
+//     own RunCapabilities view, on the ambient transaction (ADR-028).
 builder.Services.AddOperationsModule();
 builder.Services.AddScoped<LeaseBook.Modules.Operations.Contracts.IBatchPosting, BatchPostingAdapter>();
+builder.Services.AddScoped<LeaseBook.Modules.Operations.Contracts.ICapabilitySnapshot, CapabilitySnapshotAdapter>();
 builder.Services.AddScoped<LeaseBook.Modules.Operations.Contracts.ILeaseScheduleData, LeaseScheduleDataAdapter>();
 builder.Services.AddScoped<LeaseBook.Modules.Operations.Contracts.IPostedSourceRefs, PostedSourceRefsAdapter>();
 // WP-3: Late-fee run ports — policy resolution and delinquency signal (ADR-007 / WP-3).
@@ -362,11 +442,57 @@ if (args is ["seed", ..])
     seedTarget = resolvedTarget;
 }
 
+// Checked BEFORE RoleSeeder, which is this process's first database call and would otherwise fail
+// first with an Npgsql "connection string has not been initialized" — true, and useless.
+//
+// The capabilities ACA job is the one caller that can arrive here with no connection string for a
+// reason that is not "the secret is not wired yet", and the two are INDISTINGUISHABLE at the point of
+// failure: `az containerapp job start --yaml` deserializes the execution template with a matcher that
+// is case-sensitive and silently discards what it does not recognise, so a single mis-cased key drops
+// the whole entry. An operator who does not know that goes and debugs Key Vault RBAC — and
+// infra/README.md tells them an empty defaultSecretUri is a normal pre-bootstrap state, which makes
+// the wrong branch the plausible one. Name the cheaper suspect first.
+if (!isOpenApiBuild
+    && args is ["capabilities", ..]
+    && string.IsNullOrWhiteSpace(app.Configuration.GetConnectionString("Default")))
+{
+    Console.Error.WriteLine(
+        "capabilities: ConnectionStrings__Default is not set, so this process cannot reach the " +
+        "database. Two causes look identical here, so check them in this order:\n" +
+        "1. If this execution was started with `--yaml`, a mis-cased key in the execution template " +
+        "was DROPPED SILENTLY. `secretRef` is the only spelling that binds — `secretref`, " +
+        "`secret_ref` and `SecretRef` are all discarded without an error, and so is `Name` for " +
+        "`name`. Diff your file against infra/jobs/capabilities-exec.yaml.\n" +
+        "2. Only then: the Key Vault secret may genuinely not be wired yet — defaultSecretUri is " +
+        "empty until the operator has bootstrapped the Postgres roles and stored the app connection " +
+        "string (infra/db/azure-bootstrap.md).");
+    Environment.ExitCode = 1;
+    return;
+}
+
 // The four fixed roles must exist before sign-in/seeding (idempotent). Skipped during build-time
 // OpenAPI generation (ADR-012) — see the isOpenApiBuild note above.
-if (!isOpenApiBuild)
+//
+// Try, not Ensure: an UNREACHABLE database is reported rather than thrown, so the host still binds a
+// port. Without that, a replica coming up during a database outage died right here — before Kestrel
+// bound and before any probe could observe it — and ACA crash-looped the revision, which is the one
+// failure no probe tuning can recover from. Every other fault (a missing table, a revoked grant, a
+// role that could not be created) still throws, because those are deployment defects whose answer is
+// a fix, not a wait.
+//
+// Skipping the seeding is only safe because readiness gates on the result: RoleSeedingState stays
+// false, RoleSeedingReadinessCheck reports 503, and RoleSeedingProbe keeps retrying once app.Run()
+// starts the hosted services. Swallowing the failure WITHOUT that gate would be worse than the crash
+// loop it replaces — a role-less replica would pass the capability readiness check the moment the
+// seam became reachable and enter rotation unable to authenticate anyone.
+//
+// The CLI verbs below are unaffected by the softening. The four seeders each call EnsureRolesAsync
+// (the throwing entry point) themselves, so `seed` still seeds roles against a reachable database and
+// still fails loudly against an unreachable one; `check-invariants`, `capabilities` and `perf-probe`
+// need no roles at all.
+if (!isOpenApiBuild && await RoleSeeder.TryEnsureRolesAsync(app.Services))
 {
-    await RoleSeeder.EnsureRolesAsync(app.Services);
+    app.Services.GetRequiredService<RoleSeedingState>().MarkSeeded();
 }
 
 if (seedTarget is { } target)
@@ -390,6 +516,21 @@ if (args is ["check-invariants", ..])
     return;
 }
 
+// CLI: `dotnet run --project src/LeaseBook.Web -- capabilities <subcommand>` (ADR-028) reads and
+//      mutates platform capability state — the only write surface there is, deliberately: no
+//      endpoint and no UI. Every mutation writes a platform_audit_events row in the same
+//      transaction. In production this verb is reached through the capabilities ACA job, because the
+//      VNet-injected database has no public endpoint (ADR-027).
+//
+// Placed with the other verbs, i.e. BEFORE the production guards and the registry validator below.
+// The validator in particular must not gate this process: an operator's most likely reason to run
+// `capabilities` at all is to correct the very drift that validator reports.
+if (args is ["capabilities", ..])
+{
+    Environment.ExitCode = await CapabilitiesCommand.RunAsync(app.Services, args);
+    return;
+}
+
 // CLI: `dotnet run --project src/LeaseBook.Web -- perf-probe [--base-url <url>] [--n <count>]
 //      [--warmup <count>] [--budget-ms <ms>]` measures p50/p95/p99 on the three money-critical read
 // paths against the load fixture and exits non-zero when p95 misses the budget (WP-9).
@@ -408,6 +549,16 @@ if (args is ["perf-probe", ..])
 if (!isOpenApiBuild)
 {
     ProductionSecurityGuards.Validate(app.Configuration, app.Environment);
+
+    // Task 7 (ADR-028): every feature_flags row must name a capability the registry knows about.
+    // Placed here for the same reasons as the guard above — after the CLI verbs have returned (a
+    // `seed` process must not be blocked by drift in a table it never reads) and outside the OpenAPI
+    // build, which has no database at all.
+    //
+    // Unlike the guard above, this one does NOT fail the host in Production: an unregistered row is
+    // inert, and throwing would make a rollback to a revision that predates the capability unbootable.
+    // See CapabilityRegistryValidator for the full argument.
+    await CapabilityRegistryValidator.ValidateAsync(app.Services, app.Environment);
 }
 
 // The nightly trust-invariant sweep (WP-11). Deliberately registered here rather than beside

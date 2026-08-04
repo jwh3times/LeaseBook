@@ -16,6 +16,47 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Added
 
+- **Capability control in production** — feature flags, per-organization entitlements and cohort
+  rules can now be changed in a running production environment without a deployment or a restart,
+  through a manual-trigger job that runs the same application image from inside the private network
+  the database sits on. Turning a capability off reaches live traffic in seconds rather than waiting
+  for a release. Every change records the person accountable for it in an append-only platform audit
+  trail, and a change that names nobody is refused outright rather than recorded against an anonymous
+  process — those records can never be corrected afterwards. Reading capability state is never
+  refused, so it stays available while an incident is being diagnosed.
+
+  Whether a capability is on is answered from two independent sources — an operations toggle and a
+  per-organization entitlement — so an emergency shutoff can never be mistaken for a customer losing
+  something they pay for, and a rollout can never hand out a paid capability by accident. Capabilities
+  decide only whether a path is reachable; they never change an amount an accounting event produces.
+  See [ADR-028](docs/adr/ADR-028-platform-capability-model.md).
+
+  New operator command: `capabilities` (`list`, `flag enable|disable|clear`, `grant`, `revoke`,
+  `cohort add|remove`) — the only surface that writes this state; there is deliberately no endpoint
+  and no screen for it. Documented in the
+  [local-development runbook](docs/runbooks/local-dev.md#capability-state) and, for production, the
+  [diagnostics runbook](docs/runbooks/diagnostics.md).
+
+- **Bulk runs are protected against a capability changing underneath them** — a rent, late-fee or
+  disbursement run now decides every item under one capability state, fixed when the run is confirmed,
+  so a toggle flipped while a run is in flight cannot make its last item behave differently from its
+  first. Two new conflict responses (both HTTP 409) guard the edges: `capabilities_changed` when the
+  preview on screen was built under a state that has since moved — the screen reloads its preview by
+  itself — and `capabilities_changed_since_prior_run` when an earlier run for the same period ran
+  under a different state, which asks for a human decision rather than resolving itself. Concurrent
+  confirms for the same org, run type and period are serialized before either state read, so two
+  first runs cannot both observe an empty history and bypass that comparison. Confirming a
+  run accepts a new `acknowledgeCapabilityChange` field for that decision, and each run records the
+  state it ran under.
+
+- **Separate readiness and liveness health checks** — `/api/health/ready` reports whether a replica
+  should take traffic and stays unavailable until it has proven both that it can read capability state
+  and that its sign-in roles are in place, while `/api/health` remains the simple liveness answer. A
+  replica that starts while the database is slow, degraded, or completely unreachable is now held out
+  of rotation and retried in the background until it is genuinely able to serve, rather than either
+  crashing on startup or serving traffic it cannot answer. A configuration or permission problem that
+  the database itself reports still fails the start immediately, because waiting would not fix it.
+
 - **Late-fee policy is now editable in the app** — Settings gains a Late fees section for the
   organization defaults (rent due day, grace days, flat amount or percent-of-rent rate), and any
   individual lease can override those fields from that tenant's ledger page. Each field is

@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living runbook; canonical development command reference
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-07-31
+- **Last reviewed:** 2026-08-04
 
 ## Prerequisites
 
@@ -208,6 +208,43 @@ through the real engine. Its iteration count is the `LEASEBOOK_PROPERTY_ITER` en
 ```powershell
 $env:LEASEBOOK_PROPERTY_ITER = "100"; dotnet test tests/LeaseBook.Tests.Accounting/LeaseBook.Tests.Accounting.csproj
 ```
+
+## Capability state
+
+The `capabilities` verb reads and writes platform capability state — feature flags, per-org
+entitlements, and cohort membership. It is the **only** write surface for that state: there is no
+endpoint and no screen, deliberately (ADR-028). Locally it runs like any other verb; in production it
+runs as a Container Apps job, which the [diagnostics runbook](diagnostics.md) covers.
+
+```powershell
+$env:ASPNETCORE_ENVIRONMENT = "Development"
+dotnet run --project src/LeaseBook.Web -- capabilities list                        # all flags
+dotnet run --project src/LeaseBook.Web -- capabilities list --org demo             # + entitlements/cohorts
+dotnet run --project src/LeaseBook.Web -- capabilities list --stale                # + age vs the 90-day window
+dotnet run --project src/LeaseBook.Web -- capabilities flag enable  <capability>
+dotnet run --project src/LeaseBook.Web -- capabilities flag disable <capability>
+dotnet run --project src/LeaseBook.Web -- capabilities flag clear   <capability>  # remove override; restore cohort/default
+dotnet run --project src/LeaseBook.Web -- capabilities grant  <capability> --org demo
+dotnet run --project src/LeaseBook.Web -- capabilities revoke <capability> --org demo
+dotnet run --project src/LeaseBook.Web -- capabilities cohort add    <capability> --org demo [--user <id>]
+dotnet run --project src/LeaseBook.Web -- capabilities cohort remove <capability> --org demo [--user <id>]
+```
+
+Notes that bite:
+
+- The capability name is validated against the **registry** (`Capabilities.All`), which is source
+  code. A name the registry does not know is rejected at parse time — a row naming an unregistered
+  capability would be inert, so the typo would look like a successful write and a feature that never
+  turns on.
+- Every mutation writes a `platform_audit_events` row in the same transaction, attributed to
+  `LEASEBOOK_OPERATOR`. Outside Development, a mutation with that variable unset is **refused**;
+  locally it falls back so the inner loop is not blocked.
+- Test-fixture capabilities are refused by every mutating subcommand, `cohort` included.
+- `flag disable` is an explicit kill and beats cohorts; `flag clear` removes that override so cohort
+  state and then the registry default apply again.
+- A user-level cohort add succeeds only when the user exists in the explicitly named org. Removal
+  remains available for stale rules after a user has been deleted.
+- `list` never mutates and is never refused.
 
 ## Measuring read-path latency
 

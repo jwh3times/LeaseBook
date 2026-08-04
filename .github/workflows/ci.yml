@@ -24,6 +24,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          # Full history, for CapabilityAgeTests (ADR-028). It dates each money-path capability from
+          # git history and fails the build on one past the policy window. The default fetch-depth: 1
+          # does not merely hide that history — it MISREPRESENTS it: with a single grafted commit the
+          # pickaxe finds only that commit, so every capability reports an age near zero and the gate
+          # passes with a clean bill of health it never earned. The probe detects the shallow case and
+          # refuses to report an age at all.
+          #
+          # Deleting this line does not disarm the gate quietly: the test reads GITHUB_ACTIONS and
+          # FAILS, rather than skipping, whenever it cannot read history under Actions. This comment
+          # documents the invariant; the guard is in the test.
+          fetch-depth: 0
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
@@ -31,6 +43,15 @@ jobs:
       # Generated EF migrations are excluded from the format gate (the ef generator owns their style).
       - run: dotnet format --verify-no-changes --exclude src/LeaseBook.Web/Migrations
       - run: dotnet build -c Release --no-restore
+      # EF model-vs-migrations drift. This is a load-bearing gate, not a nicety: the platform
+      # capability tables were reconciled with an empty-Up migration
+      # (M8_ReconcileCapabilitiesModelSnapshot) rather than ExcludeFromMigrations(), and the ONLY
+      # reason that was the better choice is that drift detection stays live for them. Until this
+      # step existed it ran only when somebody typed it, which is not detection. Needs no database —
+      # it compares the model to the last migration's snapshot — and reuses the Release build above.
+      - run: dotnet tool restore
+      - name: Verify no EF model changes are missing a migration
+        run: dotnet ef migrations has-pending-model-changes --project src/LeaseBook.Web --no-build --configuration Release
       # Runs unit, architecture, and Testcontainers-backed integration tests (Docker is on the runner).
       # The schema guard + tenant-isolation pack run here against a fresh Postgres 18 container.
       - run: dotnet test -c Release --no-build

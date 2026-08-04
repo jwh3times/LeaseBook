@@ -89,7 +89,9 @@ public sealed class OperationsRunsTests(PostgresFixture fixture)
         {
             var preview = await engine.PreviewAsync(RunType.Rent, Period, ct);
             var targets = preview.Rows.Select(r => r.TargetId).ToList();
-            result = await engine.ConfirmAsync(RunType.Rent, Period, targets, ct);
+            result = await engine.ConfirmAsync(
+                RunType.Rent, Period, targets, preview.CapabilitiesVersion,
+                acknowledgeCapabilityChange: false, ct);
         }, ct);
 
         result.ShouldNotBeNull();
@@ -111,14 +113,18 @@ public sealed class OperationsRunsTests(PostgresFixture fixture)
         {
             var preview = await engine.PreviewAsync(RunType.Rent, Period, ct);
             targets = preview.Rows.Select(r => r.TargetId).ToList();
-            await engine.ConfirmAsync(RunType.Rent, Period, targets, ct);
+            await engine.ConfirmAsync(
+                RunType.Rent, Period, targets, preview.CapabilitiesVersion,
+                acknowledgeCapabilityChange: false, ct);
         }, ct);
 
         // Second confirm on the same targets — all must be Skipped.
         RunResult? secondResult = null;
         await RunAsync(ctx.OrgId, async (engine, _) =>
         {
-            secondResult = await engine.ConfirmAsync(RunType.Rent, Period, targets, ct);
+            secondResult = await engine.ConfirmAsync(
+                RunType.Rent, Period, targets, expectedCapabilitiesVersion: null,
+                acknowledgeCapabilityChange: false, ct);
         }, ct);
 
         secondResult.ShouldNotBeNull();
@@ -138,7 +144,9 @@ public sealed class OperationsRunsTests(PostgresFixture fixture)
         {
             var preview = await engine.PreviewAsync(RunType.Rent, Period, ct);
             var targets = preview.Rows.Select(r => r.TargetId).ToList();
-            await engine.ConfirmAsync(RunType.Rent, Period, targets, ct);
+            await engine.ConfirmAsync(
+                RunType.Rent, Period, targets, preview.CapabilitiesVersion,
+                acknowledgeCapabilityChange: false, ct);
         }, ct);
 
         // Second preview — all rows should be flagged AlreadyDone.
@@ -163,7 +171,9 @@ public sealed class OperationsRunsTests(PostgresFixture fixture)
         {
             var preview = await engine.PreviewAsync(RunType.Rent, Period, ct);
             var targets = preview.Rows.Select(r => r.TargetId).ToList();
-            await engine.ConfirmAsync(RunType.Rent, Period, targets, ct);
+            await engine.ConfirmAsync(
+                RunType.Rent, Period, targets, preview.CapabilitiesVersion,
+                acknowledgeCapabilityChange: false, ct);
         }, ct);
 
         // Trust equation must hold.
@@ -216,7 +226,9 @@ public sealed class OperationsRunsTests(PostgresFixture fixture)
         {
             var preview = await engine.PreviewAsync(RunType.Rent, Period, ct);
             var targets = preview.Rows.Select(r => r.TargetId).ToList();
-            result = await engine.ConfirmAsync(RunType.Rent, Period, targets, ct);
+            result = await engine.ConfirmAsync(
+                RunType.Rent, Period, targets, preview.CapabilitiesVersion,
+                acknowledgeCapabilityChange: false, ct);
         }, ct);
 
         // Assert: all items Excluded, none thrown, BulkRun still recorded (result non-null).

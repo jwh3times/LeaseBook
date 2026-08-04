@@ -31,7 +31,13 @@ export function RentRunScreen() {
     trackInteraction('rent-run-confirm', 2, true);
 
     confirm.mutate(
-      { year: period.year, month: period.month, selectedTargetIds: eligible },
+      {
+        year: period.year,
+        month: period.month,
+        selectedTargetIds: eligible,
+        // Echoed verbatim from the preview whose amounts are on screen — the server compares it.
+        capabilitiesVersion: preview.data.capabilitiesVersion,
+      },
       {
         onSuccess: (data) => {
           setResult(data);

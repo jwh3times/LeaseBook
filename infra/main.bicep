@@ -32,8 +32,14 @@ param postgresSubnetPrefix string = '10.40.2.0/27'
 @description('Tag of the leasebook-migrator image the migration job runs. Pinned to the promoted git SHA by the deploy workflow.')
 param migratorImageTag string = 'latest'
 
+@description('Tag of the leasebook (app) image, shared by the container app and the capabilities job (ADR-028). Pinned to the promoted git SHA by the deploy workflow.')
+param appImageTag string = 'latest'
+
 @description('Key Vault secret URI for the leasebook_migrator connection string. Empty until the operator has bootstrapped the Postgres roles and stored it — see infra/db/azure-bootstrap.md.')
 param migrationsSecretUri string = ''
+
+@description('Key Vault secret URI for the leasebook_app connection string, consumed by the capabilities job (ADR-028). Empty until the operator has bootstrapped the Postgres roles and stored it — see infra/db/azure-bootstrap.md.')
+param defaultSecretUri string = ''
 
 // Naming convention: lb-<env>-<resource> (see infra/README.md).
 var prefix = 'lb-${env}'
@@ -112,7 +118,9 @@ module app 'modules/containerapp.bicep' = {
     logAnalyticsWorkspaceId: monitoring.outputs.logAnalyticsWorkspaceId
     infrastructureSubnetId: enablePrivateNetworking ? network!.outputs.acaSubnetId : ''
     migratorImageTag: migratorImageTag
+    appImageTag: appImageTag
     migrationsSecretUri: migrationsSecretUri
+    defaultSecretUri: defaultSecretUri
   }
 }
 
@@ -121,3 +129,4 @@ output acrLoginServer string = registry.outputs.loginServer
 output keyVaultName string = vault.outputs.name
 output appFqdn string = app.outputs.fqdn
 output migratorJobName string = app.outputs.migratorJobName
+output capabilitiesJobName string = app.outputs.capabilitiesJobName

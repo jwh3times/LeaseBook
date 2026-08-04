@@ -20,9 +20,10 @@ Two facts shaped the fix:
   In testing it produced a document **byte-identical in content** to the live `:5080` document —
   only the _order_ of paths differed (build-time enumeration vs. live `EndpointDataSource` order).
 - **The generator runs the app's startup up to `app.Run()`.** Its `GetDocument` tool executes
-  `Program.Main`, which reaches the startup role-seeding (`RoleSeeder.EnsureRolesAsync`) — a database
-  call — before `app.Run()`. With no database it fails. Requiring a fully-migrated Postgres just to
-  emit static API metadata would be disproportionate.
+  `Program.Main`. At the time of this decision, that reached the throwing startup role-seeding entry
+  point (`RoleSeeder.EnsureRolesAsync`) — a database call — before `app.Run()`, so it failed with no
+  database. Requiring a fully-migrated Postgres just to emit static API metadata would be
+  disproportionate.
 
 Separately, the TypeScript 6 major (Dependabot PR #9) is **blocked** because `openapi-typescript`
 (latest 7.13.0) peer-caps at `typescript: "^5.x"`; no published release admits TS 6, and forcing it
@@ -39,10 +40,12 @@ differs from the committed copy.** Concretely:
   the inner loop, the backend build, and the container build stay fast and DB-free; only the drift
   job opts in with `-p:OpenApiGenerateDocumentsOnBuild=true`. The document lands under `obj/`
   (gitignored), never the project root.
-- **Startup guard.** The one pre-`Run()` database call (`RoleSeeder.EnsureRolesAsync`) is skipped when
-  `LEASEBOOK_OPENAPI_BUILD=1`. That flag is set **only** by the drift job; it is unset in every real
-  run (dev, prod, integration tests), so their behavior is unchanged. This keeps generation fully
-  DB-free.
+- **Startup guard.** Every pre-`Run()` database call is skipped when `LEASEBOOK_OPENAPI_BUILD=1` —
+  originally just role seeding (now `RoleSeeder.TryEnsureRolesAsync`), since joined by the capability
+  registry validation and the capability hosted services added in
+  [ADR-028](ADR-028-platform-capability-model.md). That flag is set **only** by the drift job; it is
+  unset in every real run (dev, prod, integration tests), so their behavior is unchanged. This keeps
+  generation fully DB-free.
 - **Canonical ordering.** Both `api:generate` and the gate pass `--alphabetize` to
   `openapi-typescript`, which sorts paths/types deterministically. This removes endpoint-ordering as a
   source of false drift (build-time order ≠ live order) and makes the committed file source-order

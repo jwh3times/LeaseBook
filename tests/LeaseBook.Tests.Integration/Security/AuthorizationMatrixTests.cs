@@ -18,6 +18,10 @@ public sealed class AuthorizationMatrixTests(PostgresFixture fixture)
     private static readonly HashSet<string> AnonymousAllowlist = new(StringComparer.OrdinalIgnoreCase)
     {
         "/api/health",
+        // Readiness (ADR-028). Anonymous for the same reason /api/health is: the container platform's
+        // probe carries no credentials. It leaks nothing beyond "this replica can reach its database",
+        // which the liveness endpoint's existence already implies.
+        "/api/health/ready",
         "/api/auth/csrf",
         "/api/auth/login",
         "/api/auth/mfa",

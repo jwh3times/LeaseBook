@@ -34,7 +34,9 @@ public sealed class RunEngineTests(PostgresFixture fixture)
         RunResult? result = null;
         await scope.RunAsync(async () =>
         {
-            result = await engine.ConfirmAsync(RunType.Rent, new RunPeriod(2026, 6), [_t1, _t2], ct);
+            result = await engine.ConfirmAsync(
+                RunType.Rent, new RunPeriod(2026, 6), [_t1, _t2],
+                expectedCapabilitiesVersion: null, acknowledgeCapabilityChange: false, ct);
         }, ct);
 
         // Assert counts returned
@@ -82,13 +84,122 @@ public sealed class RunEngineTests(PostgresFixture fixture)
         preview.Rows.Count.ShouldBe(2);
     }
 
+    /// <summary>
+    /// The preview hands the operator the token its confirm must echo. Without this the token would
+    /// have to come from somewhere else, and the two sides could diverge in derivation.
+    /// </summary>
+    [Fact]
+    public async Task Preview_stamps_the_resolved_capability_version()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var scope = await OrgScope.CreateAsync(fixture, ct);
+        await using var _ = scope;
+
+        var snapshot = new CountingCapabilitySnapshot("v1.first");
+        var engine = BuildEngine(scope, new NoOpStrategy(targets: [_t1]), snapshot);
+
+        RunPreview? preview = null;
+        await scope.RunAsync(async () =>
+        {
+            preview = await engine.PreviewAsync(RunType.Rent, new RunPeriod(2026, 6), ct);
+        }, ct);
+
+        preview.ShouldNotBeNull();
+        preview!.CapabilitiesVersion.ShouldBe("v1.first");
+    }
+
+    /// <summary>
+    /// The freeze, restated as an arithmetic fact: adding the preview/confirm comparison must not add
+    /// a resolve. A second read inside <c>ConfirmAsync</c> would compare a value against itself and
+    /// leave the run deciding items under a set nobody pinned.
+    /// </summary>
+    [Fact]
+    public async Task Confirm_resolves_the_capability_set_exactly_once_even_with_a_token_to_compare()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var scope = await OrgScope.CreateAsync(fixture, ct);
+        await using var _ = scope;
+
+        var snapshot = new CountingCapabilitySnapshot("v1.steady");
+        var engine = BuildEngine(scope, new NoOpStrategy(targets: [_t1, _t2]), snapshot);
+
+        await scope.RunAsync(async () =>
+        {
+            await engine.ConfirmAsync(
+                RunType.Rent, new RunPeriod(2026, 6), [_t1, _t2], "v1.steady",
+                acknowledgeCapabilityChange: false, ct);
+        }, ct);
+
+        snapshot.Resolves.ShouldBe(1, "one confirm, one resolve — the token is compared, not re-read");
+    }
+
+    [Fact]
+    public async Task Confirm_acquires_the_period_lock_before_resolving_capabilities()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var scope = await OrgScope.CreateAsync(fixture, ct);
+        await using var _ = scope;
+        var period = new RunPeriod(2026, 6);
+        var periodLock = new RecordingRunPeriodLock();
+        var snapshot = new LockAssertingCapabilitySnapshot(periodLock);
+        var engine = BuildEngine(scope, new NoOpStrategy(targets: [_t1]), snapshot, periodLock);
+
+        await scope.RunAsync(
+            async () => await engine.ConfirmAsync(
+                RunType.Rent, period, [_t1], expectedCapabilitiesVersion: null,
+                acknowledgeCapabilityChange: false, ct),
+            ct);
+
+        periodLock.Acquisitions.ShouldBe([(RunType.Rent, period)]);
+        snapshot.Resolves.ShouldBe(1);
+    }
+
+    /// <summary>
+    /// A mismatch rejects, and rejects BEFORE the strategy runs. The strategy-untouched assertion is
+    /// the load-bearing half: a guard that threw after the posting loop would leave a half-posted run
+    /// behind, which is worse than no guard.
+    /// </summary>
+    [Fact]
+    public async Task Confirm_with_a_stale_token_throws_before_the_strategy_runs()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var scope = await OrgScope.CreateAsync(fixture, ct);
+        await using var _ = scope;
+
+        var snapshot = new CountingCapabilitySnapshot("v1.current");
+        var strategy = new NoOpStrategy(targets: [_t1, _t2]);
+        var engine = BuildEngine(scope, strategy, snapshot);
+
+        CapabilitiesChangedException? thrown = null;
+        await scope.RunAsync(async () =>
+        {
+            thrown = await Should.ThrowAsync<CapabilitiesChangedException>(
+                async () => await engine.ConfirmAsync(
+                    RunType.Rent, new RunPeriod(2026, 6), [_t1, _t2], "v1.stale",
+                    acknowledgeCapabilityChange: false, ct));
+        }, ct);
+
+        thrown.ShouldNotBeNull();
+        strategy.Confirms.ShouldBe(0, "a rejected confirm must post nothing at all");
+
+        // Neither opaque digest may reach the operator — ADR-025's error-content rule.
+        thrown!.Message.ShouldNotContain("v1.");
+    }
+
     // ── helpers ──────────────────────────────────────────────────────────────
 
-    private static RunEngine BuildEngine(OrgScope scope, IRunStrategy strategy)
+    private static RunEngine BuildEngine(
+        OrgScope scope,
+        IRunStrategy strategy,
+        ICapabilitySnapshot? snapshot = null,
+        IRunPeriodLock? periodLock = null)
     {
         var strategies = new[] { strategy };
         var posting = new NoOpBatchPosting();
-        return new RunEngine(scope.Db, strategies, posting, TimeProvider.System);
+        return new RunEngine(
+            scope.Db, strategies, posting, TimeProvider.System,
+            periodLock ?? new RunPeriodLock(scope.Db),
+            snapshot ?? new StubCapabilitySnapshot());
     }
 }
 
@@ -101,6 +212,9 @@ public sealed class RunEngineTests(PostgresFixture fixture)
 file sealed class NoOpStrategy(Guid[] targets) : IRunStrategy
 {
     public RunType RunType => RunType.Rent;
+
+    /// <summary>How many times the engine reached the strategy — 0 proves a rejection came first.</summary>
+    public int Confirms { get; private set; }
 
     public Task<RunPreview> PreviewAsync(RunPeriod period, CancellationToken ct)
     {
@@ -119,8 +233,10 @@ file sealed class NoOpStrategy(Guid[] targets) : IRunStrategy
     }
 
     public Task<IReadOnlyList<BulkRunItem>> ConfirmAsync(
-        BulkRun run, IReadOnlyList<Guid> selectedTargetIds, IBatchPosting posting, CancellationToken ct)
+        BulkRun run, IReadOnlyList<Guid> selectedTargetIds, IBatchPosting posting,
+        RunCapabilities capabilities, CancellationToken ct)
     {
+        Confirms++;
         IReadOnlyList<BulkRunItem> items = selectedTargetIds
             .Select(id => BulkRunItem.Create(run.Id, RunTargetKind.Lease, id, RunItemStatus.Posted, 0m, null, run.CreatedAt))
             .ToList();
@@ -146,4 +262,65 @@ file sealed class NoOpBatchPosting : IBatchPosting
         IReadOnlyList<DisbursementIntent> intents, CancellationToken ct) =>
         Task.FromResult<IReadOnlyDictionary<Guid, DisbursementPostingResult>>(
             new Dictionary<Guid, DisbursementPostingResult>());
+}
+
+/// <summary>
+/// A stub <see cref="ICapabilitySnapshot"/>. This project has no host and no Capabilities module
+/// reference by design — the port lives in Operations precisely so the module is testable without
+/// one. The freeze itself is proven against the real gate in
+/// <c>LeaseBook.Tests.Integration.RunCapabilityFreezeTests</c>.
+/// </summary>
+file sealed class StubCapabilitySnapshot : ICapabilitySnapshot
+{
+    public Task<RunCapabilities> ResolveDurableAsync(CancellationToken ct) =>
+        // Deliberately empty: this project cannot see the registry (Operations must not reference the
+        // Capabilities module), and RunCapabilities.IsEnabled throws on an unknown name, so a stub
+        // that pretended to resolve anything would be lying about completeness. NoOpStrategy asks it
+        // nothing.
+        Task.FromResult(new RunCapabilities(
+            new Dictionary<string, bool>(StringComparer.Ordinal), "stub",
+            new HashSet<string>(StringComparer.Ordinal)));
+}
+
+/// <summary>
+/// The same stub, but it counts. The preview/confirm guard is the kind of change that quietly turns
+/// one resolve into two — the comparison needs a "current" value, and the obvious way to get one is
+/// to read it again — so the count is asserted rather than reasoned about.
+/// </summary>
+file sealed class CountingCapabilitySnapshot(string version) : ICapabilitySnapshot
+{
+    public int Resolves { get; private set; }
+
+    public Task<RunCapabilities> ResolveDurableAsync(CancellationToken ct)
+    {
+        Resolves++;
+        return Task.FromResult(new RunCapabilities(
+            new Dictionary<string, bool>(StringComparer.Ordinal), version,
+            new HashSet<string>(StringComparer.Ordinal)));
+    }
+}
+
+file sealed class RecordingRunPeriodLock : IRunPeriodLock
+{
+    public List<(RunType RunType, RunPeriod Period)> Acquisitions { get; } = [];
+
+    public Task AcquireAsync(RunType runType, RunPeriod period, CancellationToken ct)
+    {
+        Acquisitions.Add((runType, period));
+        return Task.CompletedTask;
+    }
+}
+
+file sealed class LockAssertingCapabilitySnapshot(RecordingRunPeriodLock periodLock) : ICapabilitySnapshot
+{
+    public int Resolves { get; private set; }
+
+    public Task<RunCapabilities> ResolveDurableAsync(CancellationToken ct)
+    {
+        periodLock.Acquisitions.Count.ShouldBe(1, "the period lock must be held before durable resolution");
+        Resolves++;
+        return Task.FromResult(new RunCapabilities(
+            new Dictionary<string, bool>(StringComparer.Ordinal), "locked",
+            new HashSet<string>(StringComparer.Ordinal)));
+    }
 }
