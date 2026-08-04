@@ -29,6 +29,11 @@ public sealed class CapabilityAgeTests
     /// The gate. It has nothing to fire on today — the only money-path capability is the fixture, which
     /// is exempt — and that is correct rather than a gap: it arms itself the moment a real one is added,
     /// with no action required from whoever adds it.
+    /// <para>
+    /// It has TWO failure conditions, and the second one is the less obvious: a capability past the
+    /// window, and a capability whose age CI could not read at all. The latter is a failure because an
+    /// unreadable age is exactly what a clock reset looks like from the outside.
+    /// </para>
     /// </summary>
     [Fact]
     public async Task No_money_path_capability_exceeds_the_policy_window()
@@ -48,10 +53,9 @@ public sealed class CapabilityAgeTests
         {
             if (!report.IntroducedAt.TryGetValue(capability.Name, out var introduced))
             {
-                // A brand-new entry, uncommitted or on a branch this checkout cannot see. Not a
-                // failure. Collected only to be named in the assertion message below, which Shouldly
-                // renders on failure alone — so this annotates a stale-capability failure ("and these
-                // others were not even checked"); it is not a standalone signal.
+                // LOCALLY: a brand-new entry, uncommitted or on a branch this checkout cannot see.
+                // Not a failure, and named in the stale message below only as an annotation.
+                // IN CI: a failure in its own right — see the assertion after this loop.
                 unknown.Add(capability.Name);
                 continue;
             }
@@ -68,6 +72,34 @@ public sealed class CapabilityAgeTests
             "capability and its gate, or record the extension in ADR-028. Past the " +
             $"{(int)CapabilityAge.PolicyWindow.TotalDays}-day window: {string.Join(", ", stale)}" +
             (unknown.Count == 0 ? "" : $" (no history yet for: {string.Join(", ", unknown)})"));
+
+        // "Age unreadable" is not a pass. Without this the unknown list is interpolated ONLY into the
+        // message above, which Shouldly renders on FAILURE ALONE — so with `stale` empty, a real
+        // money-path capability whose clock cannot be read passed silently, and the vacuity guard
+        // below could not see it (it asserts that at LEAST ONE capability resolved, and
+        // consolidated-statements resolves forever). The CLI already prints
+        // "UNKNOWN (age unreadable — not a pass)" for this row, so treating it as a pass here was the
+        // operator-vs-CI contradiction CapabilityAge's shared implementation exists to prevent.
+        //
+        // CI only, for the same reason SkipUnlessCi hard-fails there at report level: GitHub Actions
+        // checks out the MERGE ref, so a capability added by this very PR DOES resolve, and an
+        // unresolvable name means the probe has lost sight of its subject — a rename (which resets the
+        // clock to zero), or the rename-plus->50%-rewrite case ADR-028 lists as an accepted
+        // limitation. Locally an uncommitted entry legitimately has no history, so it stays a
+        // non-event and this test never fails an engineer's ordinary run.
+        if (unknown.Count > 0 && IsCi)
+        {
+            Assert.Fail(
+                "money-path capabilities with UNREADABLE age, which is not a pass: " +
+                $"{string.Join(", ", unknown)}. In CI every registry entry resolves — Actions checks " +
+                "out the merge ref — so this means the age probe can no longer find the capability's " +
+                "history and its 90-day clock has silently restarted. The usual cause is renaming the " +
+                "capability's Name string (the identity the probe searches for), or moving the " +
+                "registry with a large rewrite in the same commit. Rename back and retire the " +
+                "capability on its original clock, or record the reset deliberately in ADR-028 §13. " +
+                "Do NOT fix this by exempting the entry: Capability.IsFixture is for the permanent " +
+                "test fixture only.");
+        }
     }
 
     /// <summary>
@@ -83,8 +115,16 @@ public sealed class CapabilityAgeTests
     /// The "at least one" assertion is deliberately not "all". A capability added in the working tree
     /// and not yet committed legitimately has no history, and failing the local test run of the very PR
     /// that introduces a capability would be the same kind of nuisance-failure that gets gates deleted.
-    /// In practice the pathspec is either right (all resolve) or wrong (none do), so one is enough to
-    /// discriminate.
+    /// </para>
+    /// <para>
+    /// <b>"At least one" is therefore NOT sufficient on its own, and the missing half lives in the gate
+    /// above.</b> This guard catches the wholesale case — the pathspec is wrong and NOTHING resolves.
+    /// It structurally cannot catch the per-capability case, because
+    /// <c>consolidated-statements</c> resolves forever and satisfies it single-handed; a money-path
+    /// capability renamed (or moved with a &gt;50% rewrite) would go unknown while this stayed green.
+    /// That case is the unreadable-age assertion in
+    /// <see cref="No_money_path_capability_exceeds_the_policy_window"/>, which fails in CI on any
+    /// unresolvable money-path name. The two together cover both shapes; neither covers both alone.
     /// </para>
     /// </summary>
     [Fact]
@@ -186,8 +226,7 @@ public sealed class CapabilityAgeTests
     /// </summary>
     private static void SkipUnlessCi(string reason)
     {
-        if (string.Equals(
-                Environment.GetEnvironmentVariable("GITHUB_ACTIONS"), "true", StringComparison.Ordinal))
+        if (IsCi)
         {
             // The remedy names the INVARIANT, not today's most likely cause. This guard also fires on
             // "no source tree" and "no git binary", and a container job or a slimmer runner image is
@@ -206,6 +245,15 @@ public sealed class CapabilityAgeTests
 
         Assert.Skip(reason);
     }
+
+    /// <summary>
+    /// The environment discriminator shared by <see cref="SkipUnlessCi"/> and the unreadable-age
+    /// assertion, so both answer "is this an environment that is ALLOWED not to know?" the same way.
+    /// Two spellings of the same question would drift apart, and the pair only works because they
+    /// agree.
+    /// </summary>
+    private static bool IsCi => string.Equals(
+        Environment.GetEnvironmentVariable("GITHUB_ACTIONS"), "true", StringComparison.Ordinal);
 
     /// <summary>
     /// The registry's own fixture must stay exempt-able: if <c>money-path-fixture</c> ever lost
