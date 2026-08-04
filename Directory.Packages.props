@@ -83,7 +83,7 @@
     <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.10" />
     <!-- Property-based testing (P29): framework-agnostic, runs under xUnit v3/MTP. FsCheck rejected
          (immature xunit-v3 adapter). The accounting harness (WP-07/WP-08) leans on this. -->
-    <PackageVersion Include="CsCheck" Version="4.7.0" />
+    <PackageVersion Include="CsCheck" Version="4.8.0" />
   </ItemGroup>
 
 </Project>
