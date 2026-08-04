@@ -33,7 +33,9 @@ source code, and they may gate reachability only — never money.**
 
 `ICapabilityGate` answers one question. Behind it sit three tables — `feature_flags` (deployment-wide
 ops toggles), `entitlements` (per-organization grants), and `capability_cohorts` (per-organization or
-per-user beta membership) — plus the registry default. Nothing outside the module reads those tables.
+per-user beta membership) — plus the registry default. No feature module reads those tables; the
+host's `capabilities` CLI verb and its startup registry validator do, through the shared
+`AppDbContext` (§15 Q2).
 
 ### 2. Resolution order
 
@@ -79,10 +81,12 @@ Money-affecting _parameters_ belong in `OrgSettings`: organization-scoped, RLS-e
 through `IOrgScoped`, seeded, and golden-pinned. Capabilities have none of those properties, and
 adding them would make capabilities a second, weaker settings store on the fiduciary path.
 
-Architecture tests enforce what a reference graph can see: `Accounting` may not reference the
-Capabilities module, no capability-shaped type may be declared in `SharedKernel` (which every module
-references), and no source scan of Accounting may reach the seam reflectively. The value-crossing
-half is not mechanically checkable — see _Accepted limitations_.
+Four architecture tests enforce what a reference graph can see: `Accounting` may not reference the
+Capabilities module; no capability-shaped type may be declared in `SharedKernel` (which every module
+references); **no capability-shaped type may be declared in `Accounting` either**, which closes the
+locally-cloned-type route a reference-graph reader would assume is still open; and no source scan of
+Accounting may reach the seam reflectively. The value-crossing half is not mechanically checkable —
+see _Accepted limitations_.
 
 **Withdrawn during design: a rule requiring golden-file coverage of every capability in both states.**
 It was unenforceable and would have been mistaken for a guarantee. Under the reachability-only rule
@@ -113,6 +117,13 @@ sometimes read across organizations. They keep `org_id` and RLS, with two polici
 build on a second call site anywhere in `src/` or `infra/`. It is never set inside a request
 transaction: `SET LOCAL` persists to the end of that transaction and would leave the remainder of the
 request running with organization isolation disabled.
+
+**That single-call-site property is held by a source scan, not by a database privilege.** No parameter
+ACL is granted in the role bootstrap, so the runtime role is capable of setting the GUC itself; what
+stops a second call site is a test reading `src/**/*.cs` and `infra/**/*.sql`. It is the same class of
+gate, with the same limits, as the money-path scans in _Accepted limitations_ below — sound against
+drift, not a privilege boundary. Anything that would change that assessment belongs in the security
+review, not here.
 
 Reads on the money path therefore need no escape at all. `feature_flags` is readable from the tenant
 plane by design — a tenant must not be able to _toggle_ a flag; reading one reveals nothing that the
@@ -364,6 +375,10 @@ and when, which §6 exists to preserve. It also contradicts the reasoning that g
 `platform_audit_events.org_id` no foreign key at all. The current behavior is pinned by a schema-guard
 test, so changing it must be deliberate, but the question of which behavior is right is **open** and
 should be settled before the first production organization deletion.
+
+(`fk_capability_cohorts_orgs_org_id` is `ON DELETE CASCADE` and pinned too, and a reader of the pin
+will see both. Only the entitlements one is in question: cohort rows are mutable membership, not
+history, so cascading them away with the organization is the right behavior.)
 
 ### Nothing here is deployment-verified
 

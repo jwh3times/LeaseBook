@@ -34,6 +34,14 @@ them directly; do not trust summaries, including this one, for current progress.
   - The nightly trust-invariant sweep on Hangfire (ADR-001): `0 7 * * *` UTC, config-gated on
     `Jobs:Enabled` (false everywhere but production), no dashboard mounted, violations logged under
     stable event ids, and one code path shared with the `check-invariants` verb.
+  - Prod private networking: a VNet-injected Postgres server with no public endpoint, and prod
+    migrations as a one-shot Container Apps job polled to a terminal state (ADR-027).
+  - The platform capability seam (ADR-028): feature flags plus per-org entitlements and cohorts behind
+    one gate, resolved over a source-code registry, gating reachability only and never money. Its
+    write surface is the `capabilities` CLI verb — no endpoint, no UI — which production reaches
+    through a manual-trigger Container Apps job. Bulk runs freeze their capability set at confirm
+    entry, and `/api/health/ready` splits readiness from liveness. Nothing in it is
+    deployment-validated; Azure stays operator-gated.
 
   Remaining M8 work is summarized publicly in `docs/ROADMAP.md`; detailed sequencing lives in
   `private/roadmap.md` and `private/TODO.md`, with `private/TODO.md` canonical where they disagree.
@@ -253,17 +261,23 @@ Violating these is a correctness bug, not a style issue.
 - Every new org-scoped table goes through the migrations RLS helper: column, `USING`/`WITH CHECK`
   policy, and `FORCE ROW LEVEL SECURITY` in one call.
 - A schema guard test fails CI if any `org_id` table lacks its policy.
-- One deliberate exception to org-only policies: the four platform capability tables carry an RLS
-  **platform escape** keyed on `SET LOCAL app.platform` (ADR-028) — an escape rather than no RLS,
-  because forgetting it yields zero rows instead of every org's rows. `app.platform` is set in exactly
-  one place, never inside a request transaction, and an architecture test fails the build on a second
-  call site. Do not "correct" these tables to a plain org policy or to no RLS.
+- One deliberate exception to org-only policies: the four platform capability tables are gated on
+  `SET LOCAL app.platform` (ADR-028), in three different shapes. `entitlements` and
+  `capability_cohorts` keep `org_id` and an org read policy **plus** a platform escape — an escape
+  rather than no RLS, because forgetting it yields zero rows instead of every org's rows.
+  `feature_flags` is globally readable (`USING (true)`) and platform-write-only: it is deployment
+  config, and the property worth protecting is that a tenant cannot _toggle_ a flag. Only
+  `platform_audit_events` is platform-only in both directions. `app.platform` is set in exactly one
+  place, never inside a request transaction, and an architecture test scanning `src/`/`infra/` fails
+  the build on a second call site. Do not "correct" any of these to a plain org policy or to no RLS.
 - Background jobs must establish org context explicitly and throw when it is missing.
-- Reads of the platform tables must assert their own scope and throw when it is missing. RLS filters
-  rather than raises, so a scope-less read returns zero rows with no error — and "no row" is a
-  meaningful value here (use the default / not entitled / not in the cohort), so the empty read renders
-  as a coherent wrong answer. The same applies to writes: an `UPDATE`/`DELETE` off the tracked-entity
-  path must assert an affected-row count.
+- Any read of `entitlements`, `capability_cohorts`, or `platform_audit_events` that needs rows beyond
+  the ambient org must assert platform scope and throw when it is missing. RLS filters rather than
+  raises, so a scope-less read returns zero rows with no error — and "no row" is a meaningful value
+  here (use the default / not entitled / not in the cohort), so the empty read renders as a coherent
+  wrong answer rather than a failure. The same applies to writes on all four tables: an
+  `UPDATE`/`DELETE` off the tracked-entity path must assert an affected-row count, because RLS filters
+  those to zero rows silently too.
 
 ### UX Contract
 
