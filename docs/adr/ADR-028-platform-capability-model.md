@@ -175,11 +175,14 @@ once and every caller misses simultaneously. That is why the cached member is as
 synchronous one would let a flip drive concurrent callers into connection-pool exhaustion, each
 holding one connection and none able to obtain a second.
 
-### 9. Readiness is its own probe, and it means "the seam is reachable"
+### 9. Readiness is its own probe, with two independent preconditions
 
 `/api/health/ready` is a readiness endpoint distinct from `/api/health` (liveness). It reports
-unhealthy until a startup probe has proven the capability seam readable, and the container declares
-startup, readiness, and liveness probes explicitly.
+unhealthy until **both** of its preconditions hold, and the container declares startup, readiness, and
+liveness probes explicitly:
+
+- `capability-seam` — a startup probe has proven the capability seam readable.
+- `role-seeding` — the four fixed roles exist on this replica.
 
 `IsPopulated` deliberately means **the seam is reachable**, proven by a probe that runs independent of
 inbound traffic — not "some organization's set is cached". The latter would deadlock: a fresh replica
@@ -190,12 +193,36 @@ This mirrors the existing Hangfire degraded-mode decision (ADR-001): a dependenc
 reachable should hold a replica out of rotation rather than crash it, and readiness is tuned for
 patience while liveness is tuned for speed.
 
-**Delivered only for the degraded-but-reachable case, and stated as such.** Role seeding is this
-process's first database call and runs before the readiness machinery, so a replica booting against an
-_unreachable_ database still dies there and never binds a port. Closing that needs two coupled changes
-— the same "is the server reachable" guard on role seeding, and readiness tracking role-seeding
-success as its own gate, since a replica with no roles must not pass readiness — which is a
-boot-sequence decision, not a patch. Until it is made, do not read the readiness gate as covering a database outage at boot.
+**The unreachable-at-boot case is covered too, and it took two coupled changes.** Role seeding is this
+process's first database call. It ran unguarded, so a replica booting against an _unreachable_
+database died there and never bound a port — one call before the registry validator that already
+tolerated the same outage — and the platform crash-looped the revision, which no probe tuning can
+recover from. Both halves of the fix are required and neither is safe alone:
+
+1. **The guard.** Startup role seeding now rides out an unreachable server: it logs, continues, and
+   the host binds. The "is the server reachable" test is the same chain-walking helper the registry
+   validator uses, shared rather than reimplemented, because the obvious version of the filter never
+   fires — EF wraps the provider failure in an `InvalidOperationException` and Identity adds a
+   `DbUpdateException` on top. `PostgresException` is tested before its `NpgsqlException` base and
+   returns "reachable", so a missing table or a revoked grant still fails the boot loudly. Only an
+   outage is ridden out.
+2. **The gate.** Readiness tracks role seeding as its own check. Doing (1) alone would have been
+   strictly worse than the crash loop it replaces: the four roles are a precondition for sign-in and
+   for every role-based policy, and seam reachability says nothing about them, so a replica that
+   swallowed the seeding failure would go healthy the moment the seam came back and enter rotation
+   unable to authenticate anyone — a silent partial outage in place of a loud one. A background probe
+   retries seeding with capped backoff until it succeeds, so a replica that came up during an outage
+   still converges instead of staying useless for its whole life.
+
+The ordinary boot is unchanged: seeding still happens synchronously before the host binds, so the
+retry probe finds the work done and exits immediately. The CLI verbs are unaffected — the four seeders
+each call the throwing entry point themselves, so `seed` still fails loudly against a database it
+cannot reach, and no other verb needs roles.
+
+The limit that remains is the honest one: readiness holds a replica out of rotation, it never restarts
+it. An outage lasting past the readiness budget (10 + 10×20 = 210s) leaves the replica out of rotation
+and still retrying, which is intended. The work itself is never the constraint — four existence checks
+and at most four inserts.
 
 ### 10. The cross-run period guard, and the limit of its scope
 

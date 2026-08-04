@@ -48,9 +48,12 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   state it ran under.
 
 - **Separate readiness and liveness health checks** — `/api/health/ready` reports whether a replica
-  should take traffic and stays unavailable until it has proven it can read capability state, while
-  `/api/health` remains the simple liveness answer. A replica that starts while the database is slow
-  or degraded is now held out of rotation and retried, rather than serving traffic it cannot answer.
+  should take traffic and stays unavailable until it has proven both that it can read capability state
+  and that its sign-in roles are in place, while `/api/health` remains the simple liveness answer. A
+  replica that starts while the database is slow, degraded, or completely unreachable is now held out
+  of rotation and retried in the background until it is genuinely able to serve, rather than either
+  crashing on startup or serving traffic it cannot answer. A configuration or permission problem that
+  the database itself reports still fails the start immediately, because waiting would not fix it.
 
 - **Late-fee policy is now editable in the app** — Settings gains a Late fees section for the
   organization defaults (rent due day, grace days, flat amount or percent-of-rent rate), and any

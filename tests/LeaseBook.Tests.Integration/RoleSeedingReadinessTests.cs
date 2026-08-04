@@ -61,9 +61,14 @@ public sealed class RoleSeedingReadinessTests(PostgresFixture fixture)
         // as a state at all. Liveness deliberately touches no dependency.
         (await client.GetAsync("/api/health", ct)).StatusCode.ShouldBe(HttpStatusCode.OK);
 
-        (await client.GetAsync(MetaEndpoints.ReadinessPath, ct)).StatusCode.ShouldBe(
+        var readiness = await client.GetAsync(MetaEndpoints.ReadinessPath, ct);
+        readiness.StatusCode.ShouldBe(
             HttpStatusCode.ServiceUnavailable,
             "a replica with no roles must take no traffic");
+
+        // The body says WHICH precondition failed. Two independent reasons behind one status code is
+        // an operator's problem during a rolling deploy, not a design detail.
+        (await readiness.Content.ReadAsStringAsync(ct)).ShouldContain(RoleSeedingReadinessCheck.Name);
 
         // Which precondition is missing, not just that one is. If role seeding were left out of the
         // readiness predicate this assertion is the one that fails, and it fails on the name.

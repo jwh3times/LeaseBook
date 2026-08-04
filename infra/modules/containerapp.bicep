@@ -188,7 +188,11 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
           ]
           // All three probe types, declared explicitly. Two endpoints, three jobs.
           //
-          // /api/health/ready is 503 until the capability seam has been proven reachable (ADR-028).
+          // /api/health/ready is 503 until BOTH of its preconditions hold (ADR-028 §9): the capability
+          // seam has been proven reachable, and the four fixed roles have been seeded. Two checks, not
+          // one, because they are independent — the seam can be reachable while a replica that booted
+          // during a database outage still has no roles, and such a replica would accept traffic it
+          // cannot authenticate.
           // /api/health is a static response that touches no dependency. Which endpoint each probe
           // uses is the load-bearing decision: liveness RESTARTS the container, so pointing it at
           // anything that reads the database would turn one database blip into a simultaneous restart
@@ -196,27 +200,39 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
           // belongs behind liveness.
           //
           // Startup — /api/health, and it must exist rather than be inherited. Program.cs does real
-          // work before app.Run(): the capability registry validation and, in production, Hangfire
-          // storage initialization. Kestrel is not bound during any of it, so a slow database can push
-          // the first successful bind well past liveness's own 10 + 3x10 = 40s budget, and liveness
-          // would kill a container that was merely still booting. A startup probe suspends liveness and
-          // readiness until it passes, which is exactly the guard that gap needs. Azure does document
-          // a default startup probe, but the sentence attributes it to the PORTAL adding defaults "if
-          // you don't define each type" — too thin a guarantee for a Bicep deployment to lean on when
-          // the failure mode is a crash loop. 5 + 10x15 = 155s.
+          // work before app.Run(): role seeding, the capability registry validation and, in production,
+          // Hangfire storage initialization. Kestrel is not bound during any of it, so a slow database
+          // can push the first successful bind well past liveness's own 10 + 3x10 = 40s budget, and
+          // liveness would kill a container that was merely still booting. A startup probe suspends
+          // liveness and readiness until it passes, which is exactly the guard that gap needs. Azure
+          // does document a default startup probe, but the sentence attributes it to the PORTAL adding
+          // defaults "if you don't define each type" — too thin a guarantee for a Bicep deployment to
+          // lean on when the failure mode is a crash loop. 5 + 10x15 = 155s.
           //
-          // Readiness — patient, because the dependency is its whole job and it has no other. The
-          // in-process CapabilityReadinessProbe backs off to a 15s ceiling, and against an unreachable
-          // server each attempt first burns Npgsql's own 15s connect timeout, so its attempts land at
-          // roughly 0s, 16s, 33s, 52s. Anything tighter than that gives up before the retry it is
-          // waiting on has even been made. The budget here is 10 + 10x20 = 210s, chosen to clear a
-          // Postgres Flexible Server zone-redundant HA failover (documented at 60-120s) with several
-          // in-process retries left over.
+          // Note this budget covers a database that is SLOW, not one that is unreachable. Neither role
+          // seeding nor registry validation kills the process on an unreachable server any more
+          // (ADR-028 §9) — both log, continue, and let readiness hold the replica out. What is left
+          // before the bind is bounded work against a server that is answering.
           //
-          // Liveness — fast, because its target is unambiguous. IsPopulated is never cleared once set,
-          // so after startup readiness cannot fail for a dependency reason; the only thing left is a
-          // hung process or an unresponsive Kestrel, and there is no reason to be patient about that.
-          // 10 + 3x10 = 40s to a restart.
+          // Readiness — patient, because the dependency is its whole job and it has no other. Both
+          // in-process probes (CapabilityReadinessProbe, RoleSeedingProbe) back off to the same 15s
+          // ceiling, and against an unreachable server each attempt first burns Npgsql's own 15s
+          // connect timeout, so their attempts land at roughly 0s, 16s, 33s, 52s. Anything tighter than
+          // that gives up before the retry it is waiting on has even been made. The budget here is
+          // 10 + 10x20 = 210s, chosen to clear a Postgres Flexible Server zone-redundant HA failover
+          // (documented at 60-120s) with several in-process retries left over.
+          //
+          // The work itself is never the constraint: role seeding is four existence checks and at most
+          // four inserts, sub-second against a server that answers. The 210s is spent waiting for the
+          // OUTAGE to end, exactly as it is for the capability seam. An outage longer than that drops
+          // the replica out of rotation and leaves it there, retrying — which is the intended outcome,
+          // and is why readiness must never be the probe that restarts anything.
+          //
+          // Liveness — fast, because its target is unambiguous. Neither readiness precondition is ever
+          // cleared once set (IsPopulated, RoleSeedingState.IsSeeded), so after startup readiness
+          // cannot fail for a dependency reason; the only thing left is a hung process or an
+          // unresponsive Kestrel, and there is no reason to be patient about that. 10 + 3x10 = 40s to a
+          // restart.
           //
           // Every failureThreshold is <= 10 deliberately. The Microsoft.App/containerApps ARM
           // reference states: "failureThreshold ... Minimum value is 1. Maximum value is 10." The

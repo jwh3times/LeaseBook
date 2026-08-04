@@ -39,10 +39,12 @@ differs from the committed copy.** Concretely:
   the inner loop, the backend build, and the container build stay fast and DB-free; only the drift
   job opts in with `-p:OpenApiGenerateDocumentsOnBuild=true`. The document lands under `obj/`
   (gitignored), never the project root.
-- **Startup guard.** The one pre-`Run()` database call (`RoleSeeder.EnsureRolesAsync`) is skipped when
-  `LEASEBOOK_OPENAPI_BUILD=1`. That flag is set **only** by the drift job; it is unset in every real
-  run (dev, prod, integration tests), so their behavior is unchanged. This keeps generation fully
-  DB-free.
+- **Startup guard.** Every pre-`Run()` database call is skipped when `LEASEBOOK_OPENAPI_BUILD=1` —
+  originally just role seeding (now `RoleSeeder.TryEnsureRolesAsync`), since joined by the capability
+  registry validation and the capability hosted services added in
+  [ADR-028](ADR-028-platform-capability-model.md). That flag is set **only** by the drift job; it is
+  unset in every real run (dev, prod, integration tests), so their behavior is unchanged. This keeps
+  generation fully DB-free.
 - **Canonical ordering.** Both `api:generate` and the gate pass `--alphabetize` to
   `openapi-typescript`, which sorts paths/types deterministically. This removes endpoint-ordering as a
   source of false drift (build-time order ≠ live order) and makes the committed file source-order

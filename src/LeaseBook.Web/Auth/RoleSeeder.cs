@@ -109,9 +109,11 @@ public static class RoleSeeder
             await using var scope = services.CreateAsyncScope();
             scope.ServiceProvider.GetRequiredService<ILogger<RoleSeederMarker>>().LogError(
                 ex,
-                "Could not reach the database to seed the {RoleCount} fixed roles; continuing so the host " +
-                "binds. This replica reports NOT READY and takes no traffic until seeding succeeds, and " +
-                "RoleSeedingProbe keeps retrying.",
+                "Could not reach the database to seed the {RoleCount} fixed roles; continuing rather than " +
+                "failing here, so a web host still binds a port. A web host reports NOT READY at " +
+                "/api/health/ready and takes no traffic until RoleSeedingProbe's retries succeed. A CLI " +
+                "verb has no readiness gate and simply carries on: `seed` reseeds roles itself and will " +
+                "fail on this same outage, and no other verb needs them.",
                 Roles.All.Length);
 
             return false;

@@ -71,11 +71,12 @@ public static class CapabilitiesCommand
         // attempts role seeding before dispatching any verb — but do NOT read that as proof the
         // connection works: that call is TryEnsureRolesAsync, which reports an unreachable server and
         // continues so the host can bind. So this verb may well be the first thing to actually reach
-        // the database, and the first place an outage surfaces. That is fine and intended: it fails at
-        // its own work, with this command's own error handling, rather than behind a role seeder the
-        // operator never asked to run. The guarantee being made here is about writes, not about the
-        // process touching nothing. Resolved from the root provider, where IHostEnvironment is a
-        // singleton.
+        // the database, and the first place an outage surfaces. Verified: `capabilities list` against a
+        // dead endpoint now dies with an unhandled NpgsqlException from executor.RunAsync below rather
+        // than from the role seeder — a different frame, the same loud non-zero exit, and deliberately
+        // NOT summarized (see the catch filter: only operator-actionable rejections are). The guarantee
+        // being made here is about writes, not about the process touching nothing. Resolved from the
+        // root provider, where IHostEnvironment is a singleton.
         var environment = services.GetRequiredService<IHostEnvironment>();
         if (AttributionRefusal(action.Kind, environment.IsDevelopment(), configuredOperator) is { } gap)
         {
