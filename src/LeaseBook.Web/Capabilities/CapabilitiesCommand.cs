@@ -178,6 +178,13 @@ public static class CapabilitiesCommand
     /// audit row. An operator diagnosing an incident must always be able to READ capability state,
     /// and making the read path refusable would be the one way this guard could make an outage worse.
     /// </para>
+    /// <para>
+    /// <b>To exercise this locally, pass <c>--no-launch-profile</c>.</b> <c>dotnet run</c> otherwise
+    /// applies <c>Properties/launchSettings.json</c>, which pins <c>ASPNETCORE_ENVIRONMENT</c> to
+    /// Development and silently overrides the variable you set on the command line — so the guard
+    /// looks broken when it is not. The published container carries no launch profile, so nothing in
+    /// Azure is affected.
+    /// </para>
     /// </summary>
     public static string? AttributionRefusal(
         CapabilitiesActionKind kind, bool isDevelopment, string? configuredOperator)
