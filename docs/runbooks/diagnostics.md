@@ -219,6 +219,113 @@ ORDER BY created_at DESC;
 A run committed before this field existed records no `capabilitiesMoneyPath`, and the guard skips it
 rather than inventing a state for it — so the first run of a period after the upgrade never conflicts.
 
+## Changing a capability in production
+
+Everything above that says "put the money-path capability back the way it was", "restore the earlier
+state", or "turn the flag off" needs a way to actually do it. There is exactly one, and it is not a
+console: capability state is written only by the `capabilities` CLI verb, and prod's Postgres is
+VNet-injected with no public endpoint ([ADR-027](../adr/ADR-027-prod-private-networking-and-migration-job.md)),
+so nothing outside the Container Apps environment can reach it. The verb therefore runs as a
+manual-trigger Container Apps Job, `lb-<env>-capabilities`, in the same way prod migrations do.
+
+Locally and in any environment whose database you can reach, run the verb directly instead — the job
+exists for the network boundary, not for the verb:
+
+```bash
+dotnet run --project src/LeaseBook.Web -- capabilities list
+```
+
+### The invocation
+
+Four things have to be passed every time, and each one is load-bearing:
+
+```bash
+RG=lb-prod-rg
+JOB=lb-prod-capabilities
+
+# 1. The image the RUNNING app is on — read from the app, never assumed from the job.
+IMAGE=$(az containerapp show --name lb-prod-app --resource-group "$RG" \
+  --query 'properties.template.containers[0].image' -o tsv)
+
+# 2-4. Container name, complete env, and the subcommand as separate space-separated args.
+az containerapp job start --name "$JOB" --resource-group "$RG" \
+  --container-name capabilities \
+  --image "$IMAGE" \
+  --env-vars "LEASEBOOK_OPERATOR=ops-jane" \
+             "ConnectionStrings__Default=secretref:connectionstrings-default" \
+             "Logging__LogLevel__Microsoft.EntityFrameworkCore.Database.Command=None" \
+             "Logging__LogLevel__Microsoft.EntityFrameworkCore.Update=None" \
+  --args "capabilities" "flag" "disable" "consolidated-statements"
+```
+
+- **`--image` from the running app.** The capability registry is source code, so which capabilities
+  exist is a property of the build. A job execution on a different image knows a different set than
+  the replicas you are trying to control — it can refuse a name they have, or accept one they do not.
+  Nothing re-pins the job's own template after a deploy, so read the app and pass what it is running.
+- **`--container-name capabilities`.** Omitted, the CLI names the execution's container after the
+  **job** (`lb-prod-capabilities`), which does not match the template's container.
+- **The complete `--env-vars`.** `az containerapp job start` does **not** merge with the job's
+  template: it builds a fresh single-container execution template out of the flags you passed and
+  sends that. So `--env-vars` replaces the container's environment rather than adding to it, and
+  omitting the connection string leaves the container with none. Repeat all four.
+- **Space-separated `--args`.** One shell argument per CLI token. A single comma-joined string
+  arrives as one argv element and the verb rejects it as an unknown subcommand.
+
+`LEASEBOOK_OPERATOR` names the person or system accountable for the change. It is **required** for
+every mutating subcommand outside Development — the verb refuses without it, before touching the
+database. That is not ceremony: `platform_audit_events` is append-only in both planes, this container
+has no human identity of its own, and a row recorded against nobody can never be corrected. `list`
+does not need it and is never refused; an operator must always be able to read state.
+
+A bare `az containerapp job start --name "$JOB" --resource-group "$RG"` with no flags at all runs the
+template as deployed, whose default args are `capabilities list`. That is the smoke test — it proves
+image pull, Key Vault resolution and database reachability in one read-only execution.
+
+### Reading the result
+
+`az containerapp job start` returns when the execution **starts**, not when it finishes, so its exit
+code says nothing about whether the change applied.
+
+```bash
+EXEC=$(az containerapp job execution list --name "$JOB" --resource-group "$RG" \
+  --query 'sort_by([], &properties.startTime)[-1].name' -o tsv)
+
+az containerapp job execution show --name "$JOB" --resource-group "$RG" \
+  --job-execution-name "$EXEC" --query 'properties.status' -o tsv
+
+az containerapp job logs show --name "$JOB" --resource-group "$RG" \
+  --execution "$EXEC" --container capabilities --tail 200
+```
+
+Note the parameter names differ between the two: `job execution show` takes `--job-execution-name`,
+`job logs show` takes `--execution` and requires `--container`. `job logs` also comes from the
+preview `containerapp` CLI extension, while `job start` and `job execution` are core.
+
+**A timed-out or failed execution is not evidence that nothing was written.** The job's
+`replicaTimeout` is a wall-clock deadline over image pull, host boot and the transaction, so it can
+fire after the transaction committed. `grant` and `revoke` append events rather than setting state, so
+re-running one is not idempotent — it writes a second event. Always read before you re-run:
+
+```bash
+az containerapp job start --name "$JOB" --resource-group "$RG" \
+  --container-name capabilities --image "$IMAGE" \
+  --env-vars "ConnectionStrings__Default=secretref:connectionstrings-default" \
+             "Logging__LogLevel__Microsoft.EntityFrameworkCore.Database.Command=None" \
+             "Logging__LogLevel__Microsoft.EntityFrameworkCore.Update=None" \
+  --args "capabilities" "list" "--org" "<org-id>"
+```
+
+### What a flag flip does and does not reach
+
+A flag write commits and issues `NOTIFY` in the same transaction, so running replicas normally drop
+their cached value within a second — a kill switch does not wait for a deploy or a restart. Do not
+treat that as the guarantee, though: the 30-second per-replica cache TTL is the correctness floor and
+`NOTIFY` is only a latency optimization, so a replica whose listener has dropped still converges, just
+by the slower route. **Wait out the TTL before concluding a flip did not take.** It does **not** reach
+a bulk run already in flight: the run engine freezes
+its capability set at preview and rejects a confirm whose set has moved, which is the 1300 above.
+Flipping a money-path capability mid-rollout is what produces that burst.
+
 ## Production caution: Npgsql `Include Error Detail`
 
 Keep `Include Error Detail=true` **out of** production and staging Npgsql connection strings.

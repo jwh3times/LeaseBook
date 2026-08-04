@@ -84,9 +84,15 @@ jobs:
               Succeeded) echo "Migrations applied."; exit 0 ;;
               Failed|Degraded|Cancelled)
                 echo "::error::Migration execution $EXECUTION ended as $STATUS — the app revision was NOT updated."
+                # `job logs show` takes --execution (NOT --job-execution-name, which belongs to
+                # `job execution show` above) and REQUIRES --container. Both were wrong here, and the
+                # `|| true` hid it: the one command whose whole job is to explain a failed migration
+                # was itself failing on argument parsing, leaving an operator with the ::error:: line
+                # and nothing else. `|| true` is kept — a missing log must not mask the real failure —
+                # but it is now covering only a genuinely absent log.
                 az containerapp job logs show \
                   --name "$JOB_NAME" --resource-group "$RESOURCE_GROUP" \
-                  --job-execution-name "$EXECUTION" --tail 200 || true
+                  --execution "$EXECUTION" --container migrate --tail 200 || true
                 exit 1 ;;
             esac
             sleep 15
@@ -98,6 +104,10 @@ jobs:
           JOB_NAME: ${{ vars.MIGRATOR_JOB_NAME }}
           RESOURCE_GROUP: ${{ vars.RESOURCE_GROUP }}
           ACR_NAME: ${{ vars.ACR_NAME }}
+          # `containerapp job logs` lives in the preview `containerapp` CLI extension, unlike
+          # `job start` / `job execution` which are core. A runner is non-interactive, so leave no
+          # room for a prompt on the failure path.
+          AZURE_EXTENSION_USE_DYNAMIC_INSTALL: yes_without_prompt
 
       - name: Update Container App revision
         run: |

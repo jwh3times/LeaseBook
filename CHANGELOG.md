@@ -16,6 +16,15 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Added
 
+- **Capability control in production** — feature flags, per-organization entitlements and cohort
+  rules can now be changed in a running production environment without a deployment or a restart,
+  through a manual-trigger job that runs the same application image from inside the private network
+  the database sits on. Turning a capability off reaches live traffic in seconds rather than waiting
+  for a release. Every change records the person accountable for it in an append-only platform audit
+  trail, and a change that names nobody is refused outright rather than recorded against an anonymous
+  process — those records can never be corrected afterwards. Reading capability state is never
+  refused, so it stays available while an incident is being diagnosed.
+
 - **Late-fee policy is now editable in the app** — Settings gains a Late fees section for the
   organization defaults (rent due day, grace days, flat amount or percent-of-rent rate), and any
   individual lease can override those fields from that tenant's ledger page. Each field is

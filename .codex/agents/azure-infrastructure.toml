@@ -73,9 +73,9 @@ Prod is **VNet-injected — it has no public endpoint at all**, which is not the
 | `database`   | `modules/database.bicep`     | PostgreSQL Flexible Server v18, db name `leasebook`; see env table above                                               |
 | `vault`      | `modules/vault.bicep`        | Key Vault (`standard`/`A`; `enableRbacAuthorization: true`; `enableSoftDelete: true`; `softDeleteRetentionInDays: 90`) |
 | `network`    | `modules/network.bicep`      | VNet, delegated ACA + Postgres subnets, private DNS zone + VNet link — **prod only** (`enablePrivateNetworking`)       |
-| `app`        | `modules/containerapp.bicep` | Container Apps environment + user-assigned identity + app + migrator job + RBAC                                        |
+| `app`        | `modules/containerapp.bicep` | Container Apps environment + user-assigned identity + app + migrator job + capabilities job + RBAC                     |
 
-Wiring order in `main.bicep`: RG → network (conditional) → monitoring → registry → storage → database → vault → app. Networking is declared first because both the database and the Container Apps environment are injected into its subnets and neither can be moved afterwards. Outputs: `resourceGroup`, `acrLoginServer`, `keyVaultName`, `appFqdn`, `migratorJobName`.
+Wiring order in `main.bicep`: RG → network (conditional) → monitoring → registry → storage → database → vault → app. Networking is declared first because both the database and the Container Apps environment are injected into its subnets and neither can be moved afterwards. Outputs: `resourceGroup`, `acrLoginServer`, `keyVaultName`, `appFqdn`, `migratorJobName`, `capabilitiesJobName`.
 
 ---
 
@@ -106,13 +106,16 @@ Container App ingress: `external: true`, `targetPort: 8080`, `transport: 'auto'`
 
 The two `ConnectionStrings__*` variables are supplied to the Container App from Key Vault via the managed identity; `APPLICATIONINSIGHTS_CONNECTION_STRING` comes from the App Insights module output, wired as a container-app secret (not a Key Vault reference). Real role passwords live in Key Vault only; `infra/db/bootstrap.sql` is dev-only.
 
-| Env var                                 | Source                                             | Consumer                                              |
-| --------------------------------------- | -------------------------------------------------- | ----------------------------------------------------- |
-| `ConnectionStrings__Default`            | Key Vault secret (app role connection string)      | Running app (`leasebook_app` role, RLS-subject)       |
-| `ConnectionStrings__Migrations`         | Key Vault secret (migrator role connection string) | Deploy migration job only (`leasebook_migrator` role) |
-| `APPLICATIONINSIGHTS_CONNECTION_STRING` | App Insights module output                         | Telemetry exporter                                    |
+| Env var                                 | Source                                                                 | Consumer                                                                           |
+| --------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `ConnectionStrings__Default`            | Key Vault secret (app role connection string)                          | Running app (`leasebook_app` role, RLS-subject) **and** the capabilities job       |
+| `ConnectionStrings__Migrations`         | Key Vault secret (migrator role connection string)                     | Deploy migration job only (`leasebook_migrator` role)                              |
+| `APPLICATIONINSIGHTS_CONNECTION_STRING` | App Insights module output                                             | Telemetry exporter                                                                 |
+| `LEASEBOOK_OPERATOR`                    | Supplied per job execution — never Key Vault, never a template default | Capabilities job: names the accountable party on every `platform_audit_events` row |
 
-Never commit a real password. The `.bicepparam` files source the admin password from `readEnvironmentVariable('LEASEBOOK_PG_ADMIN_PASSWORD', '')` — supply it at deploy time.
+The two connection strings are different credentials and must stay so: the migrator job holds schema-owner rights on `public`; the capabilities job holds only the app role's DML under the RLS platform escape. One secret for both would hand an operator tool DDL.
+
+Never commit a real password. The `.bicepparam` files source the admin password from `readEnvironmentVariable('LEASEBOOK_PG_ADMIN_PASSWORD', '')` — supply it at deploy time. `migrationsSecretUri` and `defaultSecretUri` are both empty by default and are supplied once the operator has bootstrapped the Postgres roles and stored each secret; until then the jobs exist un-armed.
 
 ---
 
@@ -169,6 +172,36 @@ Migrations run as `leasebook_migrator`, **never at app startup**. The two enviro
 
 ---
 
+## 8a. The capabilities job (ADR-028)
+
+Same network boundary as migrations, second job. Capability state — flags, entitlements, cohorts — is written only by the `capabilities` CLI verb (no endpoint, no UI, deliberately), and that verb runs in the app process. Prod's database has no public endpoint, so `lb-<env>-capabilities` is a **manual-trigger Container Apps Job** in the same environment. Without it there is no kill switch in production.
+
+| Property         | migrator job                    | capabilities job                      |
+| ---------------- | ------------------------------- | ------------------------------------- |
+| Name             | `lb-<env>-migrate`              | `lb-<env>-capabilities`               |
+| Image            | `leasebook-migrator:<tag>`      | `leasebook:<tag>` — the **app** image |
+| Role             | `leasebook_migrator` (DDL)      | `leasebook_app` (DML on four tables)  |
+| Secret           | `ConnectionStrings__Migrations` | `ConnectionStrings__Default`          |
+| `replicaTimeout` | 1800                            | 600                                   |
+| Started by       | `deploy-prod.yml` + poll        | an operator, by hand                  |
+
+It runs the app image because the capability registry is **source code**: a job on a different build knows a different set of capabilities than the app it controls. `appImageTag` is shared by the app and this job in the template for that reason. `replicaRetryLimit: 0` — `grant`/`revoke` append events, so a silent retry writes a second one into an append-only table.
+
+One definition serves all seven subcommands (`--args` per execution). Default args are `capabilities list`, so a bare start is a read-only smoke test rather than an ASP.NET host booted inside a job. **Never give it a schedule or event trigger.**
+
+Three CLI facts the runbook depends on, verified by reading `az` itself, not the docs:
+
+- `az containerapp job start` does **not** merge with the job template. It builds a fresh single-container execution template from the flags passed and POSTs it, so `--env-vars` **replaces** the container's environment. Pass the complete set every time.
+- An omitted `--container-name` defaults to the **job** name, not the template's container name.
+- `--args` takes space-separated shell arguments. A comma-joined string arrives as one argv element.
+- `job logs show` takes `--execution` and **requires** `--container`; `job execution show` takes `--job-execution-name`. `job logs` is a preview extension; `job start` / `job execution` are core.
+
+`LEASEBOOK_OPERATOR` is per-execution and never defaulted. Outside Development the verb refuses every mutating subcommand without it — `platform_audit_events` is append-only in both planes and the container has no human identity, so an unattributed row is permanent. `list` is never refused.
+
+Full invocation: `docs/runbooks/diagnostics.md`.
+
+---
+
 ## 9. PITR and restore
 
 Flexible Server PITR creates a **new** server at the chosen UTC timestamp. The original server is untouched until deliberate cutover.
@@ -189,17 +222,19 @@ Retention: dev 7 days, prod 35 days. Geo-redundant backup enabled in prod only. 
 
 ## 10. Banned patterns
 
-| Pattern                                                                     | Why banned                                                                                                                  |
-| --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| Committing a real password or connection string                             | Secrets live in Key Vault only; `@secure` params are supplied at deploy time                                                |
-| Giving a `@secure` parameter a committed default value                      | Defeats the `@secure` decorator; Key Vault is the source of truth                                                           |
-| Enabling ACR admin user (`adminUserEnabled: true`)                          | Pull access is via managed identity AcrPull; admin credentials are a credential-leak risk                                   |
-| Leaving prod DB publicly reachable                                          | VNet-inject prod (delegated subnet + private DNS zone). Do NOT also set `publicNetworkAccess` — the combination is rejected |
-| Running migrations at app startup                                           | Migrations run as `leasebook_migrator` in the deploy job; the app role has no DDL rights in `public`                        |
-| Making `leasebook_migrator` own the `hangfire` schema                       | Hangfire upgrades its own objects and Postgres requires ownership; app-owned by decision (ADR-001)                          |
-| Running `az deployment`, `what-if`, role bootstrap, or PITR from this agent | Operator-gated; requires Azure access this agent does not have                                                              |
-| Deviating from the `lb-<env>-<resource>` / `lb<env>acr` naming convention   | Breaks runbook references, module cross-references, and audit trails                                                        |
-| Adding a staging environment as a live tier                                 | Staging is deferred (M0.4); `@allowed(['dev','prod'])` enforces this in Bicep                                               |
+| Pattern                                                                                                        | Why banned                                                                                                                  |
+| -------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Committing a real password or connection string                                                                | Secrets live in Key Vault only; `@secure` params are supplied at deploy time                                                |
+| Giving a `@secure` parameter a committed default value                                                         | Defeats the `@secure` decorator; Key Vault is the source of truth                                                           |
+| Enabling ACR admin user (`adminUserEnabled: true`)                                                             | Pull access is via managed identity AcrPull; admin credentials are a credential-leak risk                                   |
+| Leaving prod DB publicly reachable                                                                             | VNet-inject prod (delegated subnet + private DNS zone). Do NOT also set `publicNetworkAccess` — the combination is rejected |
+| Running migrations at app startup                                                                              | Migrations run as `leasebook_migrator` in the deploy job; the app role has no DDL rights in `public`                        |
+| Making `leasebook_migrator` own the `hangfire` schema                                                          | Hangfire upgrades its own objects and Postgres requires ownership; app-owned by decision (ADR-001)                          |
+| Running `az deployment`, `what-if`, role bootstrap, or PITR from this agent                                    | Operator-gated; requires Azure access this agent does not have                                                              |
+| Deviating from the `lb-<env>-<resource>` / `lb<env>acr` naming convention                                      | Breaks runbook references, module cross-references, and audit trails                                                        |
+| Adding a staging environment as a live tier                                                                    | Staging is deferred (M0.4); `@allowed(['dev','prod'])` enforces this in Bicep                                               |
+| Giving the capabilities job a schedule or event trigger, the migrator image, or the migrator connection string | It is an operator decision, not a timer; the verb needs DML on four tables, never DDL (ADR-028)                             |
+| Treating a compiling template as a validated one                                                               | `az bicep build` does not range-check ARM integers and only _warns_ on an unknown property — exit code 0 either way         |
 
 ---
 
