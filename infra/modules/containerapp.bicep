@@ -448,11 +448,16 @@ resource capabilitiesJob 'Microsoft.App/jobs@2024-03-01' = {
             cpu: json('0.5')
             memory: '1Gi'
           }
-          // `az containerapp job start --args` supplies the real subcommand per execution, so ONE
-          // job definition serves all seven — list, flag enable/disable, grant, revoke, cohort
-          // add/remove. A job per verb would multiply the resource, the RBAC surface and the runbook
-          // by seven for no gain. The image sets ENTRYPOINT and no CMD, so args become the CMD and are
-          // appended to `dotnet LeaseBook.Web.dll`.
+          // The subcommand is supplied per execution, so ONE job definition serves all seven — list,
+          // flag enable/disable, grant, revoke, cohort add/remove. A job per verb would multiply the
+          // resource, the RBAC surface and the runbook by seven for no gain. The image sets ENTRYPOINT
+          // and no CMD, so args become the CMD and are appended to `dotnet LeaseBook.Web.dll`.
+          //
+          // Per execution means `--yaml infra/jobs/capabilities-exec.yaml`, NOT `--args`. The `--args`
+          // flag is an argparse nargs='*' list, and argparse classifies any unknown token starting with
+          // '-' as an option, so `--args "capabilities" "list" "--org" "demo"` exits 2 with
+          // `unrecognized arguments: --org demo`. `--org` is required by grant, revoke, cohort add and
+          // cohort remove, so the flag form can only ever reach `list` (bare) and `flag enable|disable`.
           //
           // The default below is `capabilities list` rather than nothing, and that matters: a bare
           // `az containerapp job start` sends no execution template at all, so the container runs the
@@ -472,12 +477,13 @@ resource capabilitiesJob 'Microsoft.App/jobs@2024-03-01' = {
           // process identity here is an ephemeral pod name that attributes a change to nobody.
           //
           // CAUTION for whoever writes the next invocation: `az containerapp job start` does NOT merge
-          // with this template. Its implementation builds a fresh single-container JobExecutionTemplate
-          // from the flags you passed and POSTs it as-is (verified by reading the CLI's own
-          // `start_containerappsjob`), so `--env-vars` REPLACES this array rather than adding to it,
-          // and an omitted `--container-name` defaults to the JOB name, not to 'capabilities'. The
-          // runbook therefore passes the container name, the image and the COMPLETE env every time.
-          // See docs/runbooks/diagnostics.md.
+          // with this template. It sends the execution template it is given, so anything omitted is
+          // simply ABSENT from that execution — env, container name, resources. Do not hand-build one:
+          // copy infra/jobs/capabilities-exec.yaml, which mirrors this container and is pinned against
+          // it by CapabilitiesJobTemplateTests. The YAML deserializer matches keys case-sensitively and
+          // DISCARDS what it does not recognise without an error, so `secretref` or `SecretRef` for
+          // `secretRef` yields an env var with no value — a symptom identical to the Key Vault secret
+          // not being wired yet. See docs/runbooks/diagnostics.md.
           env: concat(
             operatorFacingLogging,
             haveDefaultSecret

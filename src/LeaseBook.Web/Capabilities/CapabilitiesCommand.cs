@@ -205,10 +205,15 @@ public static class CapabilitiesCommand
             "nothing was written. Outside Development there is no person behind this process, so the " +
             $"actor would be recorded as '{BuildActor(null)}' — which attributes the change to nobody " +
             "— and platform_audit_events is append-only in both planes, so that row could never be " +
-            "corrected. Name the accountable party and re-run; in production that is the " +
-            $"--env-vars leg of the capabilities job, e.g. `--env-vars \"{OperatorVariable}=ops-jane\" " +
-            "...` (see docs/runbooks/diagnostics.md for the full invocation — the CLI REPLACES the " +
-            "job's env rather than adding to it, so the other variables have to be repeated). " +
+            "corrected. Name the accountable party and re-run.\n" +
+            "In production: edit the copy of infra/jobs/capabilities-exec.yaml you started this with, " +
+            $"set the {OperatorVariable} entry's `value:` to your name, and re-run " +
+            "`az containerapp job start ... --yaml <file>`. That file ships the variable EMPTY on " +
+            "purpose, so this refusal is what a forgotten edit looks like rather than an audit row " +
+            "attributed to nobody.\n" +
+            "Do not reach for the `--env-vars` flag instead: `--args` cannot carry a dash-prefixed " +
+            "token, so the flag form cannot express `--org` at all and this command would exit 2 " +
+            "before it ever ran. docs/runbooks/diagnostics.md has the full procedure. " +
             "`capabilities list` needs none of this: it writes nothing.";
     }
 

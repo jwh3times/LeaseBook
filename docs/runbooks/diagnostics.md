@@ -262,41 +262,36 @@ JOB=lb-prod-capabilities
 IMAGE=$(az containerapp show --name lb-prod-app --resource-group "$RG" \
   --query 'properties.template.containers[0].image' -o tsv)
 
-cat > exec.yaml <<YAML
-containers:
-  - name: capabilities
-    image: $IMAGE
-    args:
-      - capabilities
-      - flag
-      - disable
-      - consolidated-statements
-    env:
-      - name: LEASEBOOK_OPERATOR
-        value: ops-jane
-      - name: ConnectionStrings__Default
-        secretRef: connectionstrings-default
-      - name: Logging__LogLevel__Microsoft.EntityFrameworkCore.Database.Command
-        value: "None"
-      - name: Logging__LogLevel__Microsoft.EntityFrameworkCore.Update
-        value: "None"
-    resources:
-      cpu: 0.5
-      memory: 1Gi
-YAML
+sed "s|IMAGE_PLACEHOLDER|$IMAGE|" infra/jobs/capabilities-exec.yaml > /tmp/exec.yaml
 
-az containerapp job start --name "$JOB" --resource-group "$RG" --yaml exec.yaml
+# Now edit /tmp/exec.yaml: set the `args:` list, and set LEASEBOOK_OPERATOR's `value:` to your name.
+# It ships blank on purpose, so an unedited copy is refused rather than recorded against nobody.
+
+az containerapp job start --name "$JOB" --resource-group "$RG" --yaml /tmp/exec.yaml
 ```
 
-Change only the `args:` list to run a different subcommand — everything else is fixed. Examples:
+**Do not hand-write that YAML.** It is committed at
+[`infra/jobs/capabilities-exec.yaml`](../../infra/jobs/capabilities-exec.yaml) and pinned against the
+Bicep by `CapabilitiesJobTemplateTests`, which checks the container name, every environment variable,
+the `secretRef` spelling, and that the `args:` list is something the verb actually accepts. Copying it
+is not laziness — see below.
 
-| Intent             | `args:`                                                 |
-| ------------------ | ------------------------------------------------------- |
-| Kill switch        | `capabilities`, `flag`, `disable`, `<name>`             |
-| Re-enable          | `capabilities`, `flag`, `enable`, `<name>`              |
-| Entitle one tenant | `capabilities`, `grant`, `<name>`, `--org`, `<org-id>`  |
-| Withdraw           | `capabilities`, `revoke`, `<name>`, `--org`, `<org-id>` |
-| Read one tenant    | `capabilities`, `list`, `--org`, `<org-id>`             |
+Change only the `args:` list to run a different subcommand. Examples:
+
+| Intent             | `args:`                                                                               |
+| ------------------ | ------------------------------------------------------------------------------------- |
+| Kill switch        | `capabilities`, `flag`, `disable`, `<name>`                                           |
+| Re-enable          | `capabilities`, `flag`, `enable`, `<name>`                                            |
+| Entitle one tenant | `capabilities`, `grant`, `<name>`, `--org`, `<org-id>`                                |
+| Withdraw           | `capabilities`, `revoke`, `<name>`, `--org`, `<org-id>`                               |
+| Cohort, whole org  | `capabilities`, `cohort`, `add`, `<name>`, `--org`, `<org-id>`                        |
+| Cohort, one user   | `capabilities`, `cohort`, `add`, `<name>`, `--org`, `<org-id>`, `--user`, `<user-id>` |
+| Undo a cohort rule | `capabilities`, `cohort`, `remove`, `<name>`, `--org`, `<org-id>`                     |
+| Read one tenant    | `capabilities`, `list`, `--org`, `<org-id>`                                           |
+
+`cohort remove` is the exact inverse of `cohort add`: without `--user` it targets the org-wide rule
+only, so the two invocations have to match token for token or the removal silently matches nothing
+(the verb refuses in that case rather than reporting "removed 0").
 
 Why every field is present rather than only the ones you are changing: `az containerapp job start`
 does **not** merge with the job's template. It sends the execution template as given, so anything
@@ -305,13 +300,35 @@ string, an omitted `name` does not match the template's container, and omitted `
 resources block. The template in the deployment is the default for a _bare_ start, not a base to
 inherit from.
 
-Two sharp edges in the YAML itself:
+### Why the file is copied rather than retyped
 
-- **Keys are the wire names, and a misspelling is silent.** `secretRef`, not `secret_ref` — a
-  misspelled key deserializes into `additionalProperties` with no error, producing an env var with no
-  value at all. If a run behaves as though a variable were unset, suspect the YAML before the app.
-- **Quote `"None"`.** Unquoted `None` is fine in YAML (it is the string `None`, which is what the
-  .NET log level parser wants), but quoting removes any doubt.
+The execution template is deserialized by a matcher that compares every key **case-sensitively** and
+**discards anything it does not recognise, with no error and no warning.** Confirmed against the CLI's
+own deserializer:
+
+| Written       | Result        |
+| ------------- | ------------- |
+| `secretRef:`  | binds         |
+| `secretref:`  | **discarded** |
+| `secret_ref:` | **discarded** |
+| `SecretRef:`  | **discarded** |
+| `name:`       | binds         |
+| `Name:`       | **discarded** |
+| `value:`      | binds         |
+| `Value:`      | **discarded** |
+
+So "use the wire names" is not a rule anyone can apply from memory. And `secretref` is the _likely_
+typo rather than an exotic one: the `--env-vars` flag form spells it `secretref:` in lower case, and
+`deploy-prod.yml` uses exactly that spelling for the migrator.
+
+The consequence is the dangerous part. A dropped `secretRef` leaves an environment variable with no
+value, so the container starts and then dies on a missing connection string — **which is precisely how
+it dies when `defaultSecretUri` has not been wired yet**, a state `infra/README.md` describes as normal
+before the role bootstrap. The plausible diagnosis is therefore the wrong one, and the operator goes to
+debug Key Vault RBAC. The verb now names the YAML ahead of Key Vault when it hits this, but the copied
+file and its test are what stop you getting there.
+
+(Only `containers` at the top level raises rather than being dropped, because the code indexes it.)
 
 `LEASEBOOK_OPERATOR` names the person or system accountable for the change. It is **required** for
 every mutating subcommand outside Development — the verb refuses without it, before touching the
@@ -360,6 +377,10 @@ re-issuing the same YAML with `args:` changed to `capabilities`, `list`, `--org`
 `capabilities list --stale` appends the capability age report. Age is derived from **git history**, and
 the container image carries none, so from this job every row reports `UNKNOWN` and the report says so
 before printing anything. It parses and runs — it is simply not informative here.
+
+It is not expensive, just useless: `CapabilityAge.ResolveAsync` short-circuits in `FindRepoRoot()`
+before spawning any git subprocess, so running it from the job costs nothing rather than 15s per
+capability.
 
 The enforcing gate is `CapabilityAgeTests` in CI, which calls the same `CapabilityAge.IsStale`. Run
 `--stale` from a checkout when you want the answer:

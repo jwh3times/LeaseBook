@@ -408,6 +408,34 @@ if (args is ["seed", ..])
     seedTarget = resolvedTarget;
 }
 
+// Checked BEFORE RoleSeeder, which is this process's first database call and would otherwise fail
+// first with an Npgsql "connection string has not been initialized" — true, and useless.
+//
+// The capabilities ACA job is the one caller that can arrive here with no connection string for a
+// reason that is not "the secret is not wired yet", and the two are INDISTINGUISHABLE at the point of
+// failure: `az containerapp job start --yaml` deserializes the execution template with a matcher that
+// is case-sensitive and silently discards what it does not recognise, so a single mis-cased key drops
+// the whole entry. An operator who does not know that goes and debugs Key Vault RBAC — and
+// infra/README.md tells them an empty defaultSecretUri is a normal pre-bootstrap state, which makes
+// the wrong branch the plausible one. Name the cheaper suspect first.
+if (!isOpenApiBuild
+    && args is ["capabilities", ..]
+    && string.IsNullOrWhiteSpace(app.Configuration.GetConnectionString("Default")))
+{
+    Console.Error.WriteLine(
+        "capabilities: ConnectionStrings__Default is not set, so this process cannot reach the " +
+        "database. Two causes look identical here, so check them in this order:\n" +
+        "1. If this execution was started with `--yaml`, a mis-cased key in the execution template " +
+        "was DROPPED SILENTLY. `secretRef` is the only spelling that binds — `secretref`, " +
+        "`secret_ref` and `SecretRef` are all discarded without an error, and so is `Name` for " +
+        "`name`. Diff your file against infra/jobs/capabilities-exec.yaml.\n" +
+        "2. Only then: the Key Vault secret may genuinely not be wired yet — defaultSecretUri is " +
+        "empty until the operator has bootstrapped the Postgres roles and stored the app connection " +
+        "string (infra/db/azure-bootstrap.md).");
+    Environment.ExitCode = 1;
+    return;
+}
+
 // The four fixed roles must exist before sign-in/seeding (idempotent). Skipped during build-time
 // OpenAPI generation (ADR-012) — see the isOpenApiBuild note above.
 if (!isOpenApiBuild)

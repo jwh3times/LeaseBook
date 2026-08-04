@@ -68,18 +68,49 @@ jobs:
           #   * carried no resources block.
           # The container name also has to be right for the log dump on the failure path below to
           # find anything: `job logs show --container` matches the EXECUTION's container name.
+          # Snapshot the executions that already exist. The fallback below selects by DIFFERENCE
+          # against this list, never by "most recent" — see the failure it prevents, below.
+          az containerapp job execution list \
+            --name "$JOB_NAME" --resource-group "$RESOURCE_GROUP" \
+            --query '[].name' -o tsv > /tmp/executions-before.txt
+
+          # The start's EXIT STATUS is captured separately from the name it prints, and a failure is
+          # fatal here. Previously `|| true` swallowed it, and the fallback then picked the most
+          # recently started execution — which on every deploy after the first is a *previous*,
+          # already-Succeeded one. The step would report "Migrations applied.", exit 0 with no
+          # migration having run, and the next step would roll the app revision onto an unmigrated
+          # schema. That is precisely the outcome this whole job exists to make impossible, and the
+          # start now has more ways to fail than it used to (bad cpu/memory pair, unresolvable secret
+          # ref, container-name mismatch), so the swallow had to go.
+          set +e
           EXECUTION=$(az containerapp job start \
             --name "$JOB_NAME" --resource-group "$RESOURCE_GROUP" \
             --container-name migrate \
             --image "$IMAGE" \
             --env-vars "ConnectionStrings__Migrations=secretref:connectionstrings-migrations" \
             --cpu 0.5 --memory 1.0Gi \
-            --query 'name' -o tsv 2>/dev/null || true)
+            --query 'name' -o tsv 2>/tmp/job-start.err)
+          START_RC=$?
+          set -e
+
+          if [ "$START_RC" -ne 0 ]; then
+            cat /tmp/job-start.err >&2 || true
+            echo "::error::Could not start the migration job (az exited $START_RC). No migration ran and the app revision was NOT updated."
+            exit 1
+          fi
+
+          # A successful start that did not populate the name field is still tolerated — but only by
+          # finding an execution that did not exist a moment ago, so a stale one can never be adopted.
+          if [ -z "${EXECUTION:-}" ] || [ "$EXECUTION" = "None" ]; then
+            az containerapp job execution list \
+              --name "$JOB_NAME" --resource-group "$RESOURCE_GROUP" \
+              --query '[].name' -o tsv > /tmp/executions-after.txt
+            EXECUTION=$(grep -Fxv -f /tmp/executions-before.txt /tmp/executions-after.txt | head -n 1 || true)
+          fi
 
           if [ -z "${EXECUTION:-}" ] || [ "$EXECUTION" = "None" ]; then
-            EXECUTION=$(az containerapp job execution list \
-              --name "$JOB_NAME" --resource-group "$RESOURCE_GROUP" \
-              --query 'sort_by([], &properties.startTime)[-1].name' -o tsv)
+            echo "::error::The migration job reported a successful start but no new execution appeared. Do not re-run blindly — inspect the job's executions first; a migration may be in flight."
+            exit 1
           fi
           echo "Migration execution: $EXECUTION"
 
