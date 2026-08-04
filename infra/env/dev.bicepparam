@@ -13,9 +13,16 @@ param postgresAdminPassword = readEnvironmentVariable('LEASEBOOK_PG_ADMIN_PASSWO
 // network.bicep is not deployed at all when this is false.
 param enablePrivateNetworking = false
 
-// The migrator job is created in both environments so the prod migration path gets rehearsed here
-// first, but dev's deploy workflow still migrates from the runner. These stay at their defaults:
-// nothing pushes a leasebook-migrator image or stores a migrator secret for dev yet, so the job
-// exists un-armed and is never started.
+// Both jobs are created in both environments so the prod paths get rehearsed here first, but dev's
+// deploy workflow still migrates from the runner. These stay at their defaults: nothing pushes a
+// leasebook-migrator image or stores either secret for dev yet, so the jobs exist un-armed and are
+// never started.
+//
+// The capabilities job (ADR-028) is worth arming in dev even though dev's Postgres IS publicly
+// reachable and a laptop can run the verb directly: dev is where the prod invocation gets rehearsed,
+// and an operator's first use of a kill switch should not be its first execution ever. Set
+// defaultSecretUri once the dev app-role connection string is in dev's Key Vault.
 param migratorImageTag = 'latest'
+param appImageTag = 'latest'
 param migrationsSecretUri = ''
+param defaultSecretUri = ''

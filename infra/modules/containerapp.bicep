@@ -1,4 +1,5 @@
-// User-assigned managed identity + Container Apps environment + the app + the one-shot migrator job.
+// User-assigned managed identity + Container Apps environment + the app + two manual-trigger jobs:
+// the one-shot migrator (ADR-027) and the operator capabilities job (ADR-028).
 // The identity pulls from ACR (AcrPull) and reads secrets from Key Vault (Key Vault Secrets User).
 // Dev scales to zero.
 param prefix string
@@ -19,14 +20,44 @@ param infrastructureSubnetId string = ''
 @description('Tag of the leasebook-migrator image the migration job runs. The deploy workflow pins this to the git SHA it promoted.')
 param migratorImageTag string = 'latest'
 
+@description('Tag of the leasebook (app) image. Used by BOTH the container app and the capabilities job, deliberately: the capability registry is source code, so a job built from a different commit knows a different set of capabilities than the app it is being used to control. The deploy workflow pins both to the promoted git SHA.')
+param appImageTag string = 'latest'
+
 @description('Full Key Vault secret URI holding the leasebook_migrator connection string, e.g. https://lb-prod-kv.vault.azure.net/secrets/connectionstrings-migrations. Empty until the operator has bootstrapped the Postgres roles and stored the secret — see infra/db/azure-bootstrap.md.')
 param migrationsSecretUri string = ''
+
+@description('Full Key Vault secret URI holding the leasebook_app connection string, e.g. https://lb-prod-kv.vault.azure.net/secrets/connectionstrings-default. Consumed by the capabilities job (ADR-028), which runs the app image as the app role. Empty until the operator has bootstrapped the Postgres roles and stored the secret — see infra/db/azure-bootstrap.md.')
+param defaultSecretUri string = ''
 
 var isProd = env == 'prod'
 var acrPullRoleId = '7f951dda-4ed3-4680-a7ca-43fe172d538d'
 var keyVaultSecretsUserRoleId = '4633458b-17de-408a-b874-0445c86b69e6'
 var usePrivateNetworking = !empty(infrastructureSubnetId)
 var haveMigrationsSecret = !empty(migrationsSecretUri)
+var haveDefaultSecret = !empty(defaultSecretUri)
+
+// The capabilities job is the one container in this template whose STDOUT is read by a human rather
+// than scraped by a machine, so EF's two loudest logging categories are turned off for it alone.
+//
+//   Database.Command — logs every statement at Information ("Executed DbCommand ...") and the failing
+//     statement at Error. `capabilities list` would print a wall of SQL above its own table.
+//   Update — logs the whole DbUpdateException stack at Error from SaveChanges, which lands ABOVE the
+//     verb's own friendly explanation of the same failure and buries it.
+//
+// This suppresses ILogger output only. An exception the verb does not recognize still propagates out
+// of Main and is printed by the runtime with its full stack (CapabilitiesCommand.Describe returns null
+// for anything unrecognized, deliberately), so nothing unexpected is hidden by this — only the
+// duplicate narration of failures the verb has already explained better.
+var operatorFacingLogging = [
+  {
+    name: 'Logging__LogLevel__Microsoft.EntityFrameworkCore.Database.Command'
+    value: 'None'
+  }
+  {
+    name: 'Logging__LogLevel__Microsoft.EntityFrameworkCore.Update'
+    value: 'None'
+  }
+]
 
 resource identity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
   name: '${prefix}-id'
@@ -144,7 +175,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
       containers: [
         {
           name: 'web'
-          image: '${acrLoginServer}/leasebook:latest'
+          image: '${acrLoginServer}/leasebook:${appImageTag}'
           resources: {
             cpu: json('0.5')
             memory: '1Gi'
@@ -318,8 +349,145 @@ resource migratorJob 'Microsoft.App/jobs@2024-03-01' = {
       ]
     }
   }
+  // Same ordering argument as the capabilities job below, and it bites hardest here: deploy-prod
+  // starts this job immediately after the deployment returns, so it is the tightest race in the
+  // template. A job execution that cannot pull or cannot resolve its secret FAILS — unlike a container
+  // app revision, whose image pull the platform retries until it goes healthy.
+  dependsOn: [
+    acrPull
+    keyVaultSecretsUser
+  ]
+}
+
+// Manual-trigger job for platform capability operations (ADR-028). Flags, entitlements and cohorts
+// are controlled by a CLI verb that lives inside the APP image, and prod's database is VNet-injected
+// with no public endpoint (ADR-027) — there is no shell into that network and nothing for a runner to
+// connect to. So, exactly like migrations, the only route to the database is from inside the
+// Container Apps environment. Without this job "roll out and roll back without a deploy" is not
+// delivered, and a kill switch that cannot be reached in production is not a kill switch.
+//
+// Three things differ from migratorJob, and each is deliberate:
+//
+//  1. It runs the APP image, not the migrator image. The verb is `LeaseBook.Web`'s, and the capability
+//     registry is source code — a job built from a different commit would know a different set of
+//     capabilities than the app it is being used to control, which is how you disable a flag that the
+//     running replicas have never heard of.
+//  2. It runs as leasebook_app (ConnectionStrings__Default), not leasebook_migrator. The verb needs
+//     DML on four tables, not DDL, and the app role is what the RLS platform-escape policies are
+//     written against. Handing this job the migrator credential would over-privilege an operator tool
+//     AND change the role the writes land under.
+//  3. It carries no schedule. A capability flip is an operator decision, taken during an incident or a
+//     rollout; nothing about it should ever happen on a timer.
+resource capabilitiesJob 'Microsoft.App/jobs@2024-03-01' = {
+  name: '${prefix}-capabilities'
+  location: location
+  identity: {
+    type: 'UserAssigned'
+    userAssignedIdentities: {
+      '${identity.id}': {}
+    }
+  }
+  properties: {
+    environmentId: environment.id
+    ...(usePrivateNetworking ? { workloadProfileName: 'Consumption' } : {})
+    configuration: {
+      // Manual only. There is no scheduleTriggerConfig and no eventTriggerConfig here, and there must
+      // not be: this job's whole purpose is to apply a decision a human has already made.
+      triggerType: 'Manual'
+      manualTriggerConfig: {
+        parallelism: 1
+        replicaCompletionCount: 1
+      }
+      // Ten minutes, and the budget is mostly NOT the write. The work itself is a single-row
+      // transaction — a capability operation that takes minutes is wrong — but replicaTimeout is a
+      // wall-clock kill deadline over image pull + host boot + the transaction. This program's own
+      // documented cold-start budget is 155s (see the startup probe above), and a first pull of the
+      // app image on a cold node is tens of seconds more, so the 300s that "single-row write" suggests
+      // would leave under a minute of margin and could kill an operator's kill switch mid-boot.
+      //
+      // A timeout is therefore NOT evidence that the write did not happen: it can land after commit
+      // and before the process exits. `capabilities list` is the only way to find out, and the runbook
+      // says so — entitlements are append-only, so a blind re-run appends a second event rather than
+      // being idempotent.
+      replicaTimeout: 600
+      // No automatic retry, same reasoning as the migrator and then some: `grant`/`revoke` APPEND
+      // events, so a silent retry writes a second one into an append-only table that can never be
+      // corrected. An operator reads the output and decides.
+      replicaRetryLimit: 0
+      registries: [
+        {
+          server: acrLoginServer
+          identity: identity.id
+        }
+      ]
+      // The app connection string is a Key Vault reference resolved by the same user-assigned identity
+      // the app itself uses (Key Vault Secrets User, granted above), so no credential enters this
+      // template or any workflow. OPTIONAL for the same reason as the migrator's: Key Vault is created
+      // empty by this deployment and the Postgres roles do not exist until the operator bootstraps
+      // them, so a hard-wired reference would fail the very first `az deployment sub create`. Until the
+      // URI is supplied the job exists un-armed and fails loudly at run time on a missing connection
+      // string; supplying it later is a redeploy, not a code change.
+      ...(haveDefaultSecret
+        ? {
+            secrets: [
+              {
+                name: 'connectionstrings-default'
+                keyVaultUrl: defaultSecretUri
+                identity: identity.id
+              }
+            ]
+          }
+        : {})
+    }
+    template: {
+      containers: [
+        {
+          name: 'capabilities'
+          image: '${acrLoginServer}/leasebook:${appImageTag}'
+          resources: {
+            cpu: json('0.5')
+            memory: '1Gi'
+          }
+          // No `args` here, deliberately: `az containerapp job start --args` supplies them per
+          // execution, so ONE job definition serves every subcommand — list, flag enable/disable,
+          // grant, revoke, cohort add/remove. A job per verb would multiply the resource, the RBAC
+          // surface and the runbook by seven for no gain. The image sets ENTRYPOINT and no CMD, so
+          // per-execution args become the CMD and are appended to `dotnet LeaseBook.Web.dll`.
+          //
+          // LEASEBOOK_OPERATOR is likewise per-execution and is NOT defaulted here. It names the human
+          // or system accountable for the change, and every row this verb writes is append-only — a
+          // baked-in value would be a permanent, plausible-looking lie in the platform audit trail,
+          // which is worse than none. Its absence is not silent either: outside Development the verb
+          // REFUSES every mutating subcommand when it is unset (CapabilitiesCommand), because process
+          // identity in this container is an ephemeral pod name that attributes a change to nobody.
+          env: concat(
+            operatorFacingLogging,
+            haveDefaultSecret
+              ? [
+                  {
+                    name: 'ConnectionStrings__Default'
+                    secretRef: 'connectionstrings-default'
+                  }
+                ]
+              : []
+          )
+        }
+      ]
+    }
+  }
+  // Neither role assignment is reachable through a property reference, so ARM would otherwise be free
+  // to create this job before either exists. Its first execution needs BOTH: AcrPull to pull the app
+  // image, Key Vault Secrets User to resolve the connection-string reference. Ordering them is not a
+  // guarantee — ARM having created a role assignment is not the same as Entra having propagated it,
+  // which can lag by minutes — but it removes the half of the race that is ours to remove. A pull or
+  // secret failure on a first execution shortly after deployment is the other half; wait and re-run.
+  dependsOn: [
+    acrPull
+    keyVaultSecretsUser
+  ]
 }
 
 output fqdn string = containerApp.properties.configuration.ingress.fqdn
 output identityClientId string = identity.properties.clientId
 output migratorJobName string = migratorJob.name
+output capabilitiesJobName string = capabilitiesJob.name
