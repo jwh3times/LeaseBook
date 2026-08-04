@@ -47,6 +47,23 @@ var builder = WebApplication.CreateBuilder(args);
 // in every real run (dev, prod, tests).
 var isOpenApiBuild = Environment.GetEnvironmentVariable("LEASEBOOK_OPENAPI_BUILD") == "1";
 
+// CLI verbs are foreground operator tools whose contract is the message they print. EF logs a failed
+// command and a failed SaveChanges at Error *before* rethrowing, so an operator running `capabilities`
+// against a bad row sees a full stack trace and then, underneath it, the friendly explanation that was
+// written for them — and reads the stack trace as the answer. That is worst during an incident, which
+// is when this verb is used.
+//
+// Fixed here, at the composition root, rather than in any verb's catch block: every verb that touches
+// EF has the same noisy-then-friendly shape, so a local suppression would paper over one call site and
+// leave the rest. Nothing is lost — the exception still carries the Postgres message, and whichever
+// path survives (a friendly print, or the runtime's own unhandled-exception output) still shows it.
+// The web host is untouched: it keeps full EF logging, which ADR-025's diagnostics depend on.
+if (args is ["seed", ..] or ["check-invariants", ..] or ["capabilities", ..] or ["perf-probe", ..])
+{
+    builder.Logging.AddFilter("Microsoft.EntityFrameworkCore.Database.Command", LogLevel.None);
+    builder.Logging.AddFilter("Microsoft.EntityFrameworkCore.Update", LogLevel.None);
+}
+
 // Module assemblies the host composes. CQRS handlers/validators are discovered from these; endpoint
 // modules are discovered from these plus the host (which owns the auth/meta endpoints).
 Assembly[] moduleAssemblies =
