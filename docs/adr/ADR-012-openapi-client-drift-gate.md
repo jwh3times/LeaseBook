@@ -20,9 +20,10 @@ Two facts shaped the fix:
   In testing it produced a document **byte-identical in content** to the live `:5080` document —
   only the _order_ of paths differed (build-time enumeration vs. live `EndpointDataSource` order).
 - **The generator runs the app's startup up to `app.Run()`.** Its `GetDocument` tool executes
-  `Program.Main`, which reaches the startup role-seeding (`RoleSeeder.EnsureRolesAsync`) — a database
-  call — before `app.Run()`. With no database it fails. Requiring a fully-migrated Postgres just to
-  emit static API metadata would be disproportionate.
+  `Program.Main`. At the time of this decision, that reached the throwing startup role-seeding entry
+  point (`RoleSeeder.EnsureRolesAsync`) — a database call — before `app.Run()`, so it failed with no
+  database. Requiring a fully-migrated Postgres just to emit static API metadata would be
+  disproportionate.
 
 Separately, the TypeScript 6 major (Dependabot PR #9) is **blocked** because `openapi-typescript`
 (latest 7.13.0) peer-caps at `typescript: "^5.x"`; no published release admits TS 6, and forcing it
