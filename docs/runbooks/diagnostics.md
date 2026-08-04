@@ -235,41 +235,83 @@ exists for the network boundary, not for the verb:
 dotnet run --project src/LeaseBook.Web -- capabilities list
 ```
 
-### The invocation
+### The invocation — always `--yaml`
 
-Four things have to be passed every time, and each one is load-bearing:
+**Do not use the `--args` / `--env-vars` flags for this job.** `--args` is an argparse `nargs='*'`
+list, and argparse classifies any unknown token beginning with `-` as an option, so the list stops at
+the first one. `--org` is required by `grant`, `revoke`, `cohort add` and `cohort remove`, and is
+optional on `list`; `--stale` is optional on `list`. All of them break:
+
+```console
+$ az containerapp job start --name lb-prod-capabilities --resource-group lb-prod-rg \
+    --args "capabilities" "list" "--org" "demo"
+ERROR: unrecognized arguments: --org demo
+```
+
+`--org=demo` fails the same way, and quoting the whole thing into one string is worse: it arrives as a
+single argv element, the verb does not match it, and the container boots the ASP.NET host instead of
+running a command. The `--yaml` form takes an execution template verbatim and is the only form that
+carries every subcommand, so it is the only one documented here — one form, uniformly correct, rather
+than a short one that silently misbehaves on exactly the arguments you need in an incident.
 
 ```bash
 RG=lb-prod-rg
 JOB=lb-prod-capabilities
 
-# 1. The image the RUNNING app is on — read from the app, never assumed from the job.
+# The image the RUNNING app is on — read from the app, never assumed from the job.
 IMAGE=$(az containerapp show --name lb-prod-app --resource-group "$RG" \
   --query 'properties.template.containers[0].image' -o tsv)
 
-# 2-4. Container name, complete env, and the subcommand as separate space-separated args.
-az containerapp job start --name "$JOB" --resource-group "$RG" \
-  --container-name capabilities \
-  --image "$IMAGE" \
-  --env-vars "LEASEBOOK_OPERATOR=ops-jane" \
-             "ConnectionStrings__Default=secretref:connectionstrings-default" \
-             "Logging__LogLevel__Microsoft.EntityFrameworkCore.Database.Command=None" \
-             "Logging__LogLevel__Microsoft.EntityFrameworkCore.Update=None" \
-  --args "capabilities" "flag" "disable" "consolidated-statements"
+cat > exec.yaml <<YAML
+containers:
+  - name: capabilities
+    image: $IMAGE
+    args:
+      - capabilities
+      - flag
+      - disable
+      - consolidated-statements
+    env:
+      - name: LEASEBOOK_OPERATOR
+        value: ops-jane
+      - name: ConnectionStrings__Default
+        secretRef: connectionstrings-default
+      - name: Logging__LogLevel__Microsoft.EntityFrameworkCore.Database.Command
+        value: "None"
+      - name: Logging__LogLevel__Microsoft.EntityFrameworkCore.Update
+        value: "None"
+    resources:
+      cpu: 0.5
+      memory: 1Gi
+YAML
+
+az containerapp job start --name "$JOB" --resource-group "$RG" --yaml exec.yaml
 ```
 
-- **`--image` from the running app.** The capability registry is source code, so which capabilities
-  exist is a property of the build. A job execution on a different image knows a different set than
-  the replicas you are trying to control — it can refuse a name they have, or accept one they do not.
-  Nothing re-pins the job's own template after a deploy, so read the app and pass what it is running.
-- **`--container-name capabilities`.** Omitted, the CLI names the execution's container after the
-  **job** (`lb-prod-capabilities`), which does not match the template's container.
-- **The complete `--env-vars`.** `az containerapp job start` does **not** merge with the job's
-  template: it builds a fresh single-container execution template out of the flags you passed and
-  sends that. So `--env-vars` replaces the container's environment rather than adding to it, and
-  omitting the connection string leaves the container with none. Repeat all four.
-- **Space-separated `--args`.** One shell argument per CLI token. A single comma-joined string
-  arrives as one argv element and the verb rejects it as an unknown subcommand.
+Change only the `args:` list to run a different subcommand — everything else is fixed. Examples:
+
+| Intent             | `args:`                                                 |
+| ------------------ | ------------------------------------------------------- |
+| Kill switch        | `capabilities`, `flag`, `disable`, `<name>`             |
+| Re-enable          | `capabilities`, `flag`, `enable`, `<name>`              |
+| Entitle one tenant | `capabilities`, `grant`, `<name>`, `--org`, `<org-id>`  |
+| Withdraw           | `capabilities`, `revoke`, `<name>`, `--org`, `<org-id>` |
+| Read one tenant    | `capabilities`, `list`, `--org`, `<org-id>`             |
+
+Why every field is present rather than only the ones you are changing: `az containerapp job start`
+does **not** merge with the job's template. It sends the execution template as given, so anything
+omitted is simply absent from the execution — an omitted `env` leaves the container with no connection
+string, an omitted `name` does not match the template's container, and omitted `resources` leaves no
+resources block. The template in the deployment is the default for a _bare_ start, not a base to
+inherit from.
+
+Two sharp edges in the YAML itself:
+
+- **Keys are the wire names, and a misspelling is silent.** `secretRef`, not `secret_ref` — a
+  misspelled key deserializes into `additionalProperties` with no error, producing an env var with no
+  value at all. If a run behaves as though a variable were unset, suspect the YAML before the app.
+- **Quote `"None"`.** Unquoted `None` is fine in YAML (it is the string `None`, which is what the
+  .NET log level parser wants), but quoting removes any doubt.
 
 `LEASEBOOK_OPERATOR` names the person or system accountable for the change. It is **required** for
 every mutating subcommand outside Development — the verb refuses without it, before touching the
@@ -298,21 +340,32 @@ az containerapp job logs show --name "$JOB" --resource-group "$RG" \
 ```
 
 Note the parameter names differ between the two: `job execution show` takes `--job-execution-name`,
-`job logs show` takes `--execution` and requires `--container`. `job logs` also comes from the
-preview `containerapp` CLI extension, while `job start` and `job execution` are core.
+`job logs show` takes `--execution` and requires `--container`. `--container capabilities` matches
+because the YAML above names the container `capabilities`; an execution started without a name would
+be named after the job and this would return nothing.
+
+`job logs` comes from the **preview** `containerapp` CLI extension, while `job start` and
+`job execution` are core. On a non-interactive shell there is no tty to accept the install prompt, so
+set `AZURE_EXTENSION_USE_DYNAMIC_INSTALL=yes_without_prompt` (or pre-install the extension) before
+reaching for logs from CI or a script.
 
 **A timed-out or failed execution is not evidence that nothing was written.** The job's
 `replicaTimeout` is a wall-clock deadline over image pull, host boot and the transaction, so it can
 fire after the transaction committed. `grant` and `revoke` append events rather than setting state, so
-re-running one is not idempotent — it writes a second event. Always read before you re-run:
+re-running one is not idempotent — it writes a second event. Always read before you re-run, by
+re-issuing the same YAML with `args:` changed to `capabilities`, `list`, `--org`, `<org-id>`.
+
+### `list --stale` is not a production command
+
+`capabilities list --stale` appends the capability age report. Age is derived from **git history**, and
+the container image carries none, so from this job every row reports `UNKNOWN` and the report says so
+before printing anything. It parses and runs — it is simply not informative here.
+
+The enforcing gate is `CapabilityAgeTests` in CI, which calls the same `CapabilityAge.IsStale`. Run
+`--stale` from a checkout when you want the answer:
 
 ```bash
-az containerapp job start --name "$JOB" --resource-group "$RG" \
-  --container-name capabilities --image "$IMAGE" \
-  --env-vars "ConnectionStrings__Default=secretref:connectionstrings-default" \
-             "Logging__LogLevel__Microsoft.EntityFrameworkCore.Database.Command=None" \
-             "Logging__LogLevel__Microsoft.EntityFrameworkCore.Update=None" \
-  --args "capabilities" "list" "--org" "<org-id>"
+dotnet run --project src/LeaseBook.Web -- capabilities list --stale
 ```
 
 ### What a flag flip does and does not reach

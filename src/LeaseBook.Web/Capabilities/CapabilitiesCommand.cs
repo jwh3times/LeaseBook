@@ -66,8 +66,12 @@ public static class CapabilitiesCommand
         // two disagree, and both are append-only, so a mismatch could never be corrected afterwards.
         var configuredOperator = Environment.GetEnvironmentVariable(OperatorVariable);
 
-        // BEFORE the scope and before any database work: a refused invocation should cost nothing and
-        // touch nothing. Resolved from the root provider, where IHostEnvironment is a singleton.
+        // BEFORE the scope and before any of THIS command's database work, so a refusal writes nothing
+        // and opens no transaction. It is not the first database call the PROCESS makes: Program.cs
+        // runs RoleSeeder.EnsureRolesAsync before dispatching any verb, so the connection has already
+        // been proven by the time we get here. That ordering is pre-existing and deliberate elsewhere;
+        // the guarantee being made here is about writes, not about the process touching nothing.
+        // Resolved from the root provider, where IHostEnvironment is a singleton.
         var environment = services.GetRequiredService<IHostEnvironment>();
         if (AttributionRefusal(action.Kind, environment.IsDevelopment(), configuredOperator) is { } gap)
         {

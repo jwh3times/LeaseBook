@@ -190,14 +190,15 @@ Same network boundary as migrations, second job. Capability state — flags, ent
 
 It runs the app image because the capability registry is **source code**: a job on a different build knows a different set of capabilities than the app it controls. `appImageTag` is shared by the app and this job in the template for that reason. `replicaRetryLimit: 0` — `grant`/`revoke` append events, so a silent retry writes a second one into an append-only table.
 
-One definition serves all seven subcommands (`--args` per execution). Default args are `capabilities list`, so a bare start is a read-only smoke test rather than an ASP.NET host booted inside a job. **Never give it a schedule or event trigger.**
+One definition serves all seven subcommands, but **only via `--yaml`** (see below). Default args are `capabilities list`, so a bare start is a read-only smoke test rather than an ASP.NET host booted inside a job. **Never give it a schedule or event trigger.**
 
-Three CLI facts the runbook depends on, verified by reading `az` itself, not the docs:
+CLI facts the runbook depends on, each verified by executing `az`, not by reading docs:
 
-- `az containerapp job start` does **not** merge with the job template. It builds a fresh single-container execution template from the flags passed and POSTs it, so `--env-vars` **replaces** the container's environment. Pass the complete set every time.
-- An omitted `--container-name` defaults to the **job** name, not the template's container name.
-- `--args` takes space-separated shell arguments. A comma-joined string arrives as one argv element.
-- `job logs show` takes `--execution` and **requires** `--container`; `job execution show` takes `--job-execution-name`. `job logs` is a preview extension; `job start` / `job execution` are core.
+- **`--args` cannot carry a dash-prefixed token.** It is argparse `nargs='*'`, and argparse classifies any unknown `-`-leading token as an option: `--args "capabilities" "list" "--org" "demo"` exits 2 with `unrecognized arguments: --org demo`. `--org=demo` fails identically; one joined string arrives as a single argv element and the verb never matches it. Since `--org` is required by `grant`, `revoke`, `cohort add` and `cohort remove`, **the flag form reaches only `list` (bare) and `flag enable|disable`.** Use the `--yaml` execution-template form for everything; it carries args verbatim. Do **not** "fix" this by adding a dash-free alias to the verb — that bends the local CLI contract around a cloud CLI's parser and would need its own ADR.
+- `az containerapp job start` does **not** merge with the job template. It builds a fresh single-container execution template from what you passed and POSTs it, so anything omitted is absent from the execution — env, container name, resources. Send the complete container spec every time. (`az containerapp job update` is the opposite: it merges, which is why it has `--set-env-vars` vs `--replace-env-vars`.)
+- An omitted container name defaults to the **job** name, not the template's container name — which also breaks `job logs show --container` for that execution.
+- YAML keys are wire names (`secretRef`, not `secret_ref`); a misspelling is swallowed into `additionalProperties` with **no error**, producing an env var with no value.
+- `job logs show` takes `--execution` and **requires** `--container`; `job execution show` takes `--job-execution-name`. `job logs` is a preview extension while `job start` / `job execution` are core, so non-interactive callers need `AZURE_EXTENSION_USE_DYNAMIC_INSTALL=yes_without_prompt` — there is no tty to accept the prompt.
 
 `LEASEBOOK_OPERATOR` is per-execution and never defaulted. Outside Development the verb refuses every mutating subcommand without it — `platform_audit_events` is append-only in both planes and the container has no human identity, so an unattributed row is permanent. `list` is never refused.
 

@@ -520,14 +520,14 @@ public sealed class CapabilitiesCommandTests(PostgresFixture fixture)
     }
 
     /// <summary>
-    /// The refusal fires before anything is resolved from the container or opened against the database.
-    /// Asserted by driving it through a provider that holds an <see cref="IHostEnvironment"/> and
-    /// NOTHING else: if the guard were placed after the scope, this would throw resolving
-    /// <c>DbContext</c> instead of returning the message.
+    /// The refusal fires before <see cref="CapabilitiesCommand.RunAsync"/> resolves anything from the
+    /// container or opens a transaction. Asserted by driving it through a provider that holds an
+    /// <see cref="IHostEnvironment"/> and NOTHING else: if the guard were placed after the scope, this
+    /// would throw resolving <c>DbContext</c> instead of returning the message.
     /// <para>
-    /// That ordering is the point. The capabilities job's connection string is a Key Vault reference,
-    /// so reaching the database at all is the expensive, failure-prone part of an invocation; a command
-    /// that cannot be attributed should cost an operator a message, not a timeout.
+    /// Scoped to this method, not to the process: <c>Program.cs</c> runs <c>RoleSeeder</c> before
+    /// dispatching any verb, so a real CLI process has already talked to the database by the time it
+    /// gets here. What is pinned is that a refusal performs no write and opens no unit of work.
     /// </para>
     /// </summary>
     [Fact]

@@ -57,11 +57,23 @@ jobs:
           set -euo pipefail
           IMAGE="$ACR_NAME.azurecr.io/leasebook-migrator:${{ inputs.image_tag }}"
 
-          # Ask for the execution name, but do not depend on the field being populated — fall back
-          # to the most recently started execution for this job.
+          # Every container field is passed, not just --image, and that is load-bearing.
+          # `az containerapp job start` does NOT merge with the job's template: passing ANY container
+          # flag makes it build a fresh single-container execution template out of exactly the flags
+          # given and POST that. So `--image` alone produced an execution container that
+          #   * was named after the JOB (`lb-prod-migrate`), not after the template container
+          #     (`migrate`) — the CLI defaults the name to the job when --container-name is omitted;
+          #   * carried NO env at all, so no ConnectionStrings__Migrations, so every prod migration
+          #     would have started with no connection string;
+          #   * carried no resources block.
+          # The container name also has to be right for the log dump on the failure path below to
+          # find anything: `job logs show --container` matches the EXECUTION's container name.
           EXECUTION=$(az containerapp job start \
             --name "$JOB_NAME" --resource-group "$RESOURCE_GROUP" \
+            --container-name migrate \
             --image "$IMAGE" \
+            --env-vars "ConnectionStrings__Migrations=secretref:connectionstrings-migrations" \
+            --cpu 0.5 --memory 1.0Gi \
             --query 'name' -o tsv 2>/dev/null || true)
 
           if [ -z "${EXECUTION:-}" ] || [ "$EXECUTION" = "None" ]; then
@@ -90,6 +102,10 @@ jobs:
                 # was itself failing on argument parsing, leaving an operator with the ::error:: line
                 # and nothing else. `|| true` is kept — a missing log must not mask the real failure —
                 # but it is now covering only a genuinely absent log.
+                #
+                # `--container migrate` is correct only because the start above passes
+                # `--container-name migrate`. Drop that flag and the execution's container is named
+                # after the job, and this returns nothing again.
                 az containerapp job logs show \
                   --name "$JOB_NAME" --resource-group "$RESOURCE_GROUP" \
                   --execution "$EXECUTION" --container migrate --tail 200 || true
