@@ -134,18 +134,49 @@ public sealed class CapabilitiesJobTemplateTests
                 "without an error, so `secretref`/`secret_ref`/`SecretRef` all yield an env var with " +
                 "no value — and that is indistinguishable from an unwired Key Vault secret.");
 
-        // Comment lines are stripped first: the file documents these near-misses by name, and a test
-        // that tripped over its own explanation would be its own false positive.
-        var significant = string.Join(
-            '\n', yaml.Split('\n').Where(line => !line.TrimStart().StartsWith('#')));
-
-        foreach (var nearMiss in (string[])["secretref:", "secret_ref:", "SecretRef:", "Name:"])
+        foreach (var nearMiss in (string[])["secretref:", "secret_ref:", "SecretRef:", "Name:", "Value:"])
         {
-            significant.ShouldNotContain(
+            Significant(yaml).ShouldNotContain(
                 nearMiss,
                 Case.Sensitive,
                 $"`{nearMiss}` is silently discarded by the execution-template deserializer");
         }
+    }
+
+    /// <summary>
+    /// Every structural key is present in the exact casing the deserializer binds.
+    /// <para>
+    /// <b><c>Env:</c> is the reason this test exists separately from the env-name check.</b> That check
+    /// reads indentation, not structure, so it still finds the variables underneath a mis-cased
+    /// <c>Env:</c> — while the deserializer drops the entire array and sends a container with no
+    /// environment at all. Same misdiagnosis as a dropped <c>secretRef</c>, and wider.
+    /// </para>
+    /// <para>
+    /// <c>Containers:</c> is worse and is why the top level is asserted too: the CLI emits an empty
+    /// <c>{}</c> envelope, and what the resource provider does with that is unverified. If it starts
+    /// the job on its deployed default template, a <c>flag disable</c> becomes a read-only listing that
+    /// exits 0 — a mutation that silently did not happen.
+    /// </para>
+    /// <para>
+    /// Verified case by case against the CLI's own deserializer: every one of these is discarded in
+    /// silence, and none of them errors.
+    /// </para>
+    /// </summary>
+    [Theory]
+    [InlineData("^containers:$", "Containers")]
+    [InlineData(@"^  - name: \S+$", "the container name")]
+    [InlineData("^    image: .+$", "the image")]
+    [InlineData("^    args:$", "args")]
+    [InlineData("^    env:$", "env")]
+    [InlineData("^    resources:$", "resources")]
+    public void Every_structural_key_is_spelled_the_only_way_that_binds(string pattern, string what)
+    {
+        Regex.IsMatch(Significant(ReadRepoFile(ExecTemplatePath)), pattern, RegexOptions.Multiline)
+            .ShouldBeTrue(
+                $"{ExecTemplatePath} must declare {what} matching /{pattern}/. The execution-template " +
+                "deserializer matches keys case-sensitively and DISCARDS what it does not recognise " +
+                "without an error, so a capitalised key here removes that whole section from the " +
+                "execution rather than failing the command.");
     }
 
     /// <summary>
@@ -157,7 +188,16 @@ public sealed class CapabilitiesJobTemplateTests
     [Fact]
     public void A_forgotten_operator_edit_is_refused_rather_than_recorded()
     {
-        var shipped = EnvValue(ReadRepoFile(ExecTemplatePath), CapabilitiesCommand.OperatorVariable);
+        // The match is asserted BEFORE its value is used. A regex that stopped matching would return
+        // "" — which refuses, so this test would keep passing while asserting nothing about the file.
+        // That is the exact shape of a gate that is believed rather than armed.
+        var entry = EnvValueMatch(ReadRepoFile(ExecTemplatePath), CapabilitiesCommand.OperatorVariable);
+
+        entry.Success.ShouldBeTrue(
+            $"{ExecTemplatePath} must declare `- name: {CapabilitiesCommand.OperatorVariable}` " +
+            "followed by a `value:` line; this test cannot say anything about a file it failed to read");
+
+        var shipped = entry.Groups[1].Value;
 
         CapabilitiesCommand.AttributionRefusal(
                 CapabilitiesActionKind.FlagDisable, isDevelopment: false, configuredOperator: shipped)
@@ -242,11 +282,20 @@ public sealed class CapabilitiesJobTemplateTests
 
     /// <summary>
     /// The <c>value:</c> that follows a given <c>- name:</c>. Matches <c>value</c> only in that exact
-    /// casing, because that is the only casing the CLI's deserializer binds.
+    /// casing, because that is the only casing the CLI's deserializer binds. Returns the
+    /// <see cref="Match"/> rather than the string so callers must check <c>Success</c> — a miss and a
+    /// deliberately blank value are both the empty string, and only one of them is the file being right.
     /// </summary>
-    private static string EnvValue(string yaml, string name) =>
+    private static Match EnvValueMatch(string yaml, string name) =>
         Regex.Match(yaml, $@"^      - name: {Regex.Escape(name)}\r?\n        value: ""?([^""\r\n]*)""?$",
-            RegexOptions.Multiline).Groups[1].Value;
+            RegexOptions.Multiline);
+
+    /// <summary>
+    /// The file with comment lines removed. The template documents its own near-miss spellings by name,
+    /// and a check that tripped over that explanation would be its own false positive.
+    /// </summary>
+    private static string Significant(string yaml) =>
+        string.Join('\n', yaml.Split('\n').Where(line => !line.TrimStart().StartsWith('#')));
 
     private static List<string> Args(string yaml)
     {

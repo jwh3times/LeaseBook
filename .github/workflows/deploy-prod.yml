@@ -95,7 +95,10 @@ jobs:
 
           if [ "$START_RC" -ne 0 ]; then
             cat /tmp/job-start.err >&2 || true
-            echo "::error::Could not start the migration job (az exited $START_RC). No migration ran and the app revision was NOT updated."
+            # Deliberately does NOT claim "no migration ran". az can fail after the POST succeeded —
+            # a network drop or a timeout reading the response — so an execution may be in flight.
+            # Same caution as the guard below: the safe next step is to look, not to re-run.
+            echo "::error::Could not start the migration job (az exited $START_RC); the app revision was NOT updated. An execution may still have been created — check \`az containerapp job execution list\` before re-running."
             exit 1
           fi
 
@@ -105,6 +108,11 @@ jobs:
             az containerapp job execution list \
               --name "$JOB_NAME" --resource-group "$RESOURCE_GROUP" \
               --query '[].name' -o tsv > /tmp/executions-after.txt
+            # `head -n 1` takes az's list order, which is not documented as time-ordered. Two new
+            # executions can only appear if something else started this job concurrently, which for a
+            # manual-trigger migrator job means a second deploy is in flight — a situation no
+            # tie-break here would make safe. Polling either one to a terminal state is still the
+            # right move; the deploy is the thing that needs serializing, not this selection.
             EXECUTION=$(grep -Fxv -f /tmp/executions-before.txt /tmp/executions-after.txt | head -n 1 || true)
           fi
 

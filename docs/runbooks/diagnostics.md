@@ -267,8 +267,15 @@ sed "s|IMAGE_PLACEHOLDER|$IMAGE|" infra/jobs/capabilities-exec.yaml > /tmp/exec.
 # Now edit /tmp/exec.yaml: set the `args:` list, and set LEASEBOOK_OPERATOR's `value:` to your name.
 # It ships blank on purpose, so an unedited copy is refused rather than recorded against nobody.
 
-az containerapp job start --name "$JOB" --resource-group "$RG" --yaml /tmp/exec.yaml
+# Keep the execution name the start hands back — it is the only reliable way to identify YOUR run.
+EXEC=$(az containerapp job start --name "$JOB" --resource-group "$RG" \
+  --yaml /tmp/exec.yaml --query 'name' -o tsv)
 ```
+
+This needs a **repository checkout at the commit the running app was built from** — not just `az`. The
+YAML is pinned to that commit's Bicep, and the capability registry is source code, so a checkout of a
+different commit can name capabilities the running replicas do not have (and vice versa). `$IMAGE`
+above ends in the git SHA the deploy promoted; check that out.
 
 **Do not hand-write that YAML.** It is committed at
 [`infra/jobs/capabilities-exec.yaml`](../../infra/jobs/capabilities-exec.yaml) and pinned against the
@@ -306,29 +313,36 @@ The execution template is deserialized by a matcher that compares every key **ca
 **discards anything it does not recognise, with no error and no warning.** Confirmed against the CLI's
 own deserializer:
 
-| Written       | Result        |
-| ------------- | ------------- |
-| `secretRef:`  | binds         |
-| `secretref:`  | **discarded** |
-| `secret_ref:` | **discarded** |
-| `SecretRef:`  | **discarded** |
-| `name:`       | binds         |
-| `Name:`       | **discarded** |
-| `value:`      | binds         |
-| `Value:`      | **discarded** |
+| Written       | Written wrong                             | What is lost                                          |
+| ------------- | ----------------------------------------- | ----------------------------------------------------- |
+| `containers:` | `Containers:`                             | **everything** — an empty `{}` envelope is sent       |
+| `env:`        | `Env:`                                    | **the whole environment**, container otherwise intact |
+| `args:`       | `Args:`                                   | the subcommand                                        |
+| `image:`      | `Image:`                                  | the image                                             |
+| `resources:`  | `Resources:`                              | the resources block                                   |
+| `name:`       | `Name:`                                   | that entry's name                                     |
+| `value:`      | `Value:`                                  | that variable's value                                 |
+| `secretRef:`  | `secretref:`, `secret_ref:`, `SecretRef:` | that variable's secret reference                      |
 
-So "use the wire names" is not a rule anyone can apply from memory. And `secretref` is the _likely_
-typo rather than an exotic one: the `--env-vars` flag form spells it `secretref:` in lower case, and
+Every one of those was confirmed against the CLI's own deserializer, and **not one of them errors**. So
+"use the wire names" is not a rule anyone can apply from memory. `secretref` is the _likely_ typo rather
+than an exotic one, too: the `--env-vars` flag form spells it `secretref:` in lower case, and
 `deploy-prod.yml` uses exactly that spelling for the migrator.
 
-The consequence is the dangerous part. A dropped `secretRef` leaves an environment variable with no
-value, so the container starts and then dies on a missing connection string — **which is precisely how
-it dies when `defaultSecretUri` has not been wired yet**, a state `infra/README.md` describes as normal
-before the role bootstrap. The plausible diagnosis is therefore the wrong one, and the operator goes to
-debug Key Vault RBAC. The verb now names the YAML ahead of Key Vault when it hits this, but the copied
-file and its test are what stop you getting there.
+Two of these are worse than the rest.
 
-(Only `containers` at the top level raises rather than being dropped, because the code indexes it.)
+A dropped `secretRef` or `env` leaves the container with no connection string, so it starts and then
+dies — **which is precisely how it dies when `defaultSecretUri` has not been wired yet**, a state
+`infra/README.md` describes as normal before the role bootstrap. The plausible diagnosis is therefore
+the wrong one, and the operator goes to debug Key Vault RBAC. The verb now names the YAML ahead of Key
+Vault when it hits this, but the copied file and its test are what stop you getting there.
+
+A dropped `containers` is worse still and is **not yet fully understood**: the CLI POSTs an empty
+`{}` execution template, and what the resource provider does with that is unverified. If it rejects it,
+you get an error. If it instead starts the job on its **deployed default template**, the execution runs
+`capabilities list` — so a `flag disable` would print a capability table, exit 0, and change nothing.
+Until that is settled on a real deployment, treat "the output looks like a listing I did not ask for"
+as a suspected mis-cased `containers:`, not as a successful run.
 
 `LEASEBOOK_OPERATOR` names the person or system accountable for the change. It is **required** for
 every mutating subcommand outside Development — the verb refuses without it, before touching the
@@ -345,16 +359,21 @@ image pull, Key Vault resolution and database reachability in one read-only exec
 `az containerapp job start` returns when the execution **starts**, not when it finishes, so its exit
 code says nothing about whether the change applied.
 
-```bash
-EXEC=$(az containerapp job execution list --name "$JOB" --resource-group "$RG" \
-  --query 'sort_by([], &properties.startTime)[-1].name' -o tsv)
+Use the `$EXEC` the start handed back. Do **not** reach for
+`sort_by([], &properties.startTime)[-1]` — "the most recent execution" is a previous one whenever the
+start failed or has not registered yet, and reading a stale `Succeeded` here is how you conclude a
+change landed when it did not, and then append a second event re-running it.
 
+```bash
 az containerapp job execution show --name "$JOB" --resource-group "$RG" \
   --job-execution-name "$EXEC" --query 'properties.status' -o tsv
 
 az containerapp job logs show --name "$JOB" --resource-group "$RG" \
   --execution "$EXEC" --container capabilities --tail 200
 ```
+
+If `$EXEC` comes back empty, the start did not take — do not fall back to listing executions and
+picking the newest. Fix the start and re-run, or list executions and identify yours by inspection.
 
 Note the parameter names differ between the two: `job execution show` takes `--job-execution-name`,
 `job logs show` takes `--execution` and requires `--container`. `--container capabilities` matches

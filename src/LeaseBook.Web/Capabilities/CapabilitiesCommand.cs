@@ -211,9 +211,11 @@ public static class CapabilitiesCommand
             "`az containerapp job start ... --yaml <file>`. That file ships the variable EMPTY on " +
             "purpose, so this refusal is what a forgotten edit looks like rather than an audit row " +
             "attributed to nobody.\n" +
-            "Do not reach for the `--env-vars` flag instead: `--args` cannot carry a dash-prefixed " +
-            "token, so the flag form cannot express `--org` at all and this command would exit 2 " +
-            "before it ever ran. docs/runbooks/diagnostics.md has the full procedure. " +
+            "Do not rebuild the invocation out of `--env-vars`/`--args` flags instead. That form does " +
+            "not merge with the job's template — it sends only what you pass — so it has to restate " +
+            "the container name, image, every variable and the resources block, and it cannot express " +
+            "a dash-prefixed argument at all (`--org`, `--stale`), which rules out grant, revoke and " +
+            "cohort outright. docs/runbooks/diagnostics.md has the full procedure. " +
             "`capabilities list` needs none of this: it writes nothing.";
     }
 
