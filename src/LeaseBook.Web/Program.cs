@@ -436,6 +436,21 @@ if (args is ["check-invariants", ..])
     return;
 }
 
+// CLI: `dotnet run --project src/LeaseBook.Web -- capabilities <subcommand>` (ADR-028) reads and
+//      mutates platform capability state — the only write surface there is, deliberately: no
+//      endpoint and no UI. Every mutation writes a platform_audit_events row in the same
+//      transaction. In production this verb is reached through the capabilities ACA job, because the
+//      VNet-injected database has no public endpoint (ADR-027).
+//
+// Placed with the other verbs, i.e. BEFORE the production guards and the registry validator below.
+// The validator in particular must not gate this process: an operator's most likely reason to run
+// `capabilities` at all is to correct the very drift that validator reports.
+if (args is ["capabilities", ..])
+{
+    Environment.ExitCode = await CapabilitiesCommand.RunAsync(app.Services, args);
+    return;
+}
+
 // CLI: `dotnet run --project src/LeaseBook.Web -- perf-probe [--base-url <url>] [--n <count>]
 //      [--warmup <count>] [--budget-ms <ms>]` measures p50/p95/p99 on the three money-critical read
 // paths against the load fixture and exits non-zero when p95 misses the budget (WP-9).
