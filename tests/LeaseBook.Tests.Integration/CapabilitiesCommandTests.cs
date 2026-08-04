@@ -170,9 +170,17 @@ public sealed class CapabilitiesCommandTests(PostgresFixture fixture)
 
     /// <summary>
     /// <b>The atomicity proof that discriminates.</b> Every row Postgres stores carries <c>xmin</c>,
-    /// the id of the transaction that inserted it, so two rows written in one transaction have equal
-    /// <c>xmin</c> and rows written in two transactions cannot. That is a direct observation of the
-    /// property, not a proxy for it.
+    /// the id of the (sub)transaction that inserted it. Rows written by two different transactions can
+    /// never share it, which is the property being relied on here.
+    /// <para>
+    /// <b>What this actually asserts is slightly stronger than "same transaction", deliberately.</b>
+    /// <c>xmin</c> holds the SUBtransaction xid for rows inserted inside a savepoint, and EF opens a
+    /// savepoint per <c>SaveChanges</c> when a transaction is already open — so a refactor that kept
+    /// one transaction but split the write across two <c>SaveChanges</c> calls would also turn this
+    /// red. That is the right direction to err: it is stricter than advertised and can never be a
+    /// false green. The shipped path writes both rows in a single <c>SaveChanges</c>, so they share
+    /// one subxid.
+    /// </para>
     /// <para>
     /// The rollback test below is necessary but NOT sufficient on its own: the FK fires on the
     /// entitlement INSERT, which precedes the audit write under "one transaction" and under
@@ -182,8 +190,10 @@ public sealed class CapabilitiesCommandTests(PostgresFixture fixture)
     /// second <c>PlatformScopedExecutor.RunAsync</c> in a scratch edit and watching this go red.
     /// </para>
     /// <para>
-    /// The timestamp equality is the weaker, secondary signal: both rows carry the single
-    /// <c>SELECT now()</c> the transaction opened with, so it also documents that decision.
+    /// The timestamp equality proves something different and weaker, and is kept for that: both rows
+    /// carry the single <c>SELECT now()</c> the transaction opened with. It is NOT atomicity evidence
+    /// — it stayed green under the split above, because the deferred audit row reused the same
+    /// captured value.
     /// </para>
     /// </summary>
     [Fact]
@@ -418,6 +428,27 @@ public sealed class CapabilitiesCommandTests(PostgresFixture fixture)
         output.ShouldContain("(no entitlement event)");
     }
 
+    /// <summary>
+    /// The read path validates the org for the same reason the write path gets an FK: this listing is
+    /// the remedy the entitlement-collision message names, and a mistyped id would print
+    /// "(no entitlement event)" for every capability — indistinguishable from "the grant did not
+    /// land", which is exactly the question the operator was sent here to answer. Answering it
+    /// confidently and wrongly is how a grant that succeeded gets issued a second time.
+    /// </summary>
+    [Fact]
+    public async Task List_for_an_org_that_does_not_exist_says_so_rather_than_reporting_nothing()
+    {
+        var ghost = UuidV7.NewId(); // never inserted into orgs
+
+        var (exit, output, errors) = await RunAsync(["capabilities", "list", "--org", ghost.ToString()]);
+
+        exit.ShouldBe(1);
+        errors.ShouldContain(ghost.ToString());
+        errors.ShouldContain("does not exist");
+        output.Contains("(no entitlement event)", StringComparison.Ordinal)
+            .ShouldBeFalse("an absent org must never be reported as an org with no entitlements");
+    }
+
     // ── The actor convention ────────────────────────────────────────────────────────────────────
 
     /// <summary>
@@ -587,9 +618,9 @@ public sealed class CapabilitiesCommandTests(PostgresFixture fixture)
     }
 
     /// <summary>
-    /// Reads a row's inserting transaction id and its timestamp. <c>xmin</c> is a system column every
-    /// heap row carries, so two rows written by one transaction share it and rows written by two
-    /// cannot — which is what makes the atomicity assertion an observation rather than a proxy.
+    /// Reads a row's inserting (sub)transaction id and its timestamp. <c>xmin</c> is a system column
+    /// every heap row carries, and rows written by two different transactions can never share it —
+    /// which is what makes the atomicity assertion an observation rather than a proxy.
     /// </summary>
     private async Task<(string Xmin, DateTime At)> ReadRowIdentityAsync(
         string sql, Guid orgId, CancellationToken ct)
@@ -598,14 +629,20 @@ public sealed class CapabilitiesCommandTests(PostgresFixture fixture)
         await using var tx = await conn.BeginTransactionAsync(ct);
         await PlatformScopeAsync(conn, tx, ct);
 
-        await using var cmd = new NpgsqlCommand(sql, conn, tx);
-        cmd.Parameters.AddWithValue("org", orgId);
+        (string Xmin, DateTime At) row;
+        await using (var cmd = new NpgsqlCommand(sql, conn, tx))
+        {
+            cmd.Parameters.AddWithValue("org", orgId);
 
-        await using var reader = await cmd.ExecuteReaderAsync(ct);
-        (await reader.ReadAsync(ct)).ShouldBeTrue($"expected exactly one row from: {sql}");
-        var row = (reader.GetString(0), reader.GetDateTime(1));
-        (await reader.ReadAsync(ct)).ShouldBeFalse($"expected exactly one row from: {sql}");
+            await using var reader = await cmd.ExecuteReaderAsync(ct);
+            (await reader.ReadAsync(ct)).ShouldBeTrue($"expected exactly one row from: {sql}");
+            row = (reader.GetString(0), reader.GetDateTime(1));
+            (await reader.ReadAsync(ct)).ShouldBeFalse($"expected exactly one row from: {sql}");
+        }
 
+        // Committed like every sibling helper. Read-only, so it changes nothing — but a helper that
+        // silently leaves its transaction open is the kind of inconsistency the next one copies.
+        await tx.CommitAsync(ct);
         return row;
     }
 

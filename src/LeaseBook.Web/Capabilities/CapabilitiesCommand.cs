@@ -66,25 +66,33 @@ public static class CapabilitiesCommand
         var db = scope.ServiceProvider.GetRequiredService<DbContext>();
         var executor = scope.ServiceProvider.GetRequiredService<PlatformScopedExecutor>();
 
-        if (action.Kind == CapabilitiesActionKind.List)
-        {
-            await executor.RunAsync(() => ListAsync(db, action, ct), ct);
-            return 0;
-        }
+        // Read ONCE per invocation, then threaded through every row this command writes. The value is
+        // an environment read; taking it separately for the state row and its audit row would let the
+        // two disagree, and both are append-only, so a mismatch could never be corrected afterwards.
+        var actor = Actor;
 
         try
         {
+            // Inside the try like every other path: `list` reads entitlements and capability_cohorts,
+            // which are platform-gated, so a 42501 here deserves the same explanation a write gets
+            // rather than a raw stack. It was outside while the listing read only feature_flags.
+            if (action.Kind == CapabilitiesActionKind.List)
+            {
+                await executor.RunAsync(() => ListAsync(db, action, ct), ct);
+                return 0;
+            }
+
             var applied = default(DateTime);
-            await executor.RunAsync(async () => applied = await ApplyAsync(db, action, ct), ct);
+            await executor.RunAsync(async () => applied = await ApplyAsync(db, action, actor, ct), ct);
 
             // Printed AFTER the transaction commits, never inside it. A success line followed by a
             // commit-time stack trace would tell the operator the opposite of what happened.
-            Console.WriteLine(Summarize(action, applied));
+            Console.WriteLine(Summarize(action, applied, actor));
         }
         catch (CapabilitiesRefusalException refusal)
         {
-            // A deliberate in-transaction refusal (nothing to remove). Throwing is what rolled the
-            // transaction back, so no state row and no audit row survive.
+            // A deliberate in-transaction refusal: nothing to remove, or an org that does not exist.
+            // Throwing is what rolled the transaction back, so no state row and no audit row survive.
             Console.Error.WriteLine(refusal.Message);
             return 1;
         }
@@ -160,6 +168,13 @@ public static class CapabilitiesCommand
     /// </summary>
     private static async Task ListAsync(DbContext db, CapabilitiesAction action, CancellationToken ct)
     {
+        // Before anything is printed, so a bad --org fails cleanly instead of emitting a valid
+        // deployment-wide table and then erroring — see AssertOrgExistsAsync for why it is checked.
+        if (action.OrgId is { } target)
+        {
+            await AssertOrgExistsAsync(db, target, ct);
+        }
+
         var flags = await db.Set<FeatureFlag>().AsNoTracking().ToDictionaryAsync(
             f => f.Name, StringComparer.Ordinal, ct);
 
@@ -276,15 +291,52 @@ public static class CapabilitiesCommand
         }
     }
 
+    /// <summary>
+    /// Refuses a listing for an org that is not there.
+    /// <para>
+    /// <b>This is the read path's version of the FK the write paths get for free.</b> A capability
+    /// with no rows for a real org prints "(no entitlement event)" — which is also exactly what a
+    /// MISTYPED org id would print, for every capability at once. Since this listing is the remedy the
+    /// entitlement-collision message names, a confidently wrong answer here would reopen the very loop
+    /// that remedy closes: the operator reads "the grant did not land" and re-issues a grant that in
+    /// fact succeeded. Wording mirrors the FK-violation branch in <see cref="Describe"/> on purpose,
+    /// so the same mistake reads the same way whichever verb surfaced it.
+    /// </para>
+    /// <para>
+    /// <c>orgs</c> is global-class — no <c>org_id</c>, no RLS, the org IS the tenant — so this read
+    /// needs no context of its own and cannot itself return a misleading empty.
+    /// </para>
+    /// </summary>
+    private static async Task AssertOrgExistsAsync(DbContext db, Guid orgId, CancellationToken ct)
+    {
+        var exists = await db.Database
+            .SqlQuery<int>($"""SELECT 1 AS "Value" FROM orgs WHERE id = {orgId}""")
+            .AnyAsync(ct);
+
+        if (!exists)
+        {
+            throw new CapabilitiesRefusalException(
+                $"capabilities: org {orgId} does not exist, so there is nothing to list for it. An org " +
+                "with no capability rows and an org that is not there both look like " +
+                "'(no entitlement event)', and reporting the second as the first is how a grant that " +
+                "landed gets issued twice. Pass a real tenant id, or one of 'demo', 'cutover', 'load', " +
+                "or 'scenario'.");
+        }
+    }
+
     // ── Writes ──────────────────────────────────────────────────────────────────────────────────
 
     /// <summary>
     /// The body of one platform-scoped transaction: read what is being replaced, write the state row,
     /// write the audit row, then <c>NOTIFY</c>. All four steps commit or roll back together.
     /// </summary>
+    /// <param name="actor">
+    /// Read once by the caller and threaded through, so the state row and its audit row carry the
+    /// same identity structurally rather than by both happening to read the environment.
+    /// </param>
     /// <returns>The transaction timestamp every row it wrote carries.</returns>
     private static async Task<DateTime> ApplyAsync(
-        DbContext db, CapabilitiesAction action, CancellationToken ct)
+        DbContext db, CapabilitiesAction action, string actor, CancellationToken ct)
     {
         var capability = action.Capability!;
 
@@ -298,10 +350,10 @@ public static class CapabilitiesCommand
         var (auditAction, detail) = action.Kind switch
         {
             CapabilitiesActionKind.FlagEnable or CapabilitiesActionKind.FlagDisable =>
-                await WriteFlagAsync(db, action, now, ct),
+                await WriteFlagAsync(db, action, now, actor, ct),
             CapabilitiesActionKind.Grant or CapabilitiesActionKind.Revoke =>
-                WriteEntitlement(db, action, now),
-            CapabilitiesActionKind.CohortAdd => WriteCohort(db, action, now),
+                WriteEntitlement(db, action, now, actor),
+            CapabilitiesActionKind.CohortAdd => WriteCohort(db, action, now, actor),
             CapabilitiesActionKind.CohortRemove => await RemoveCohortAsync(db, action, ct),
             _ => throw new InvalidOperationException($"Unhandled action kind {action.Kind}."),
         };
@@ -310,7 +362,7 @@ public static class CapabilitiesCommand
         {
             Id = UuidV7.NewId(),
             OccurredAt = now,
-            Actor = Actor,
+            Actor = actor,
             Action = auditAction,
             Capability = capability,
             OrgId = action.OrgId,
@@ -348,11 +400,10 @@ public static class CapabilitiesCommand
     /// </para>
     /// </summary>
     private static async Task<(string Action, string Detail)> WriteFlagAsync(
-        DbContext db, CapabilitiesAction action, DateTime now, CancellationToken ct)
+        DbContext db, CapabilitiesAction action, DateTime now, string actor, CancellationToken ct)
     {
         var enabled = action.Kind == CapabilitiesActionKind.FlagEnable;
         var name = action.Capability!;
-        var actor = Actor;
 
         var flag = await db.Set<FeatureFlag>().SingleOrDefaultAsync(f => f.Name == name, ct);
         bool? previous = flag?.Enabled;
@@ -393,7 +444,7 @@ public static class CapabilitiesCommand
     /// trail records what an operator DID, not the diff it happened to produce.
     /// </summary>
     private static (string Action, string Detail) WriteEntitlement(
-        DbContext db, CapabilitiesAction action, DateTime now)
+        DbContext db, CapabilitiesAction action, DateTime now, string actor)
     {
         var granted = action.Kind == CapabilitiesActionKind.Grant;
 
@@ -404,7 +455,7 @@ public static class CapabilitiesCommand
             Capability = action.Capability!,
             Granted = granted,
             EffectiveAt = now,
-            Actor = Actor,
+            Actor = actor,
         });
 
         return (
@@ -417,7 +468,7 @@ public static class CapabilitiesCommand
     }
 
     private static (string Action, string Detail) WriteCohort(
-        DbContext db, CapabilitiesAction action, DateTime now)
+        DbContext db, CapabilitiesAction action, DateTime now, string actor)
     {
         db.Add(new CapabilityCohort
         {
@@ -426,7 +477,7 @@ public static class CapabilitiesCommand
             OrgId = action.OrgId!.Value,
             UserId = action.UserId,
             AddedAt = now,
-            AddedBy = Actor,
+            AddedBy = actor,
         });
 
         return (
@@ -499,7 +550,7 @@ public static class CapabilitiesCommand
 
     // ── Reporting ───────────────────────────────────────────────────────────────────────────────
 
-    private static string Summarize(CapabilitiesAction action, DateTime now)
+    private static string Summarize(CapabilitiesAction action, DateTime now, string actor)
     {
         var capability = action.Capability;
         var org = action.OrgId;
@@ -507,9 +558,9 @@ public static class CapabilitiesCommand
         return action.Kind switch
         {
             CapabilitiesActionKind.FlagEnable =>
-                $"capabilities: flag '{capability}' is now ENABLED deployment-wide (by {Actor}).",
+                $"capabilities: flag '{capability}' is now ENABLED deployment-wide (by {actor}).",
             CapabilitiesActionKind.FlagDisable =>
-                $"capabilities: flag '{capability}' is now KILLED deployment-wide (by {Actor}). An " +
+                $"capabilities: flag '{capability}' is now KILLED deployment-wide (by {actor}). An " +
                 "explicit kill beats a cohort match; deleting the row would restore the registry default.",
             CapabilitiesActionKind.Grant =>
                 $"capabilities: granted '{capability}' to org {org} effective {now.ToUniversalTime():u}.",
