@@ -3319,6 +3319,8 @@ export interface components {
             code: string;
         };
         ConfirmRunRequest: {
+            /** @default false */
+            acknowledgeCapabilityChange: boolean;
             capabilitiesVersion: null | string;
             /** Format: int32 */
             month: number | string;

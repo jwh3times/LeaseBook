@@ -72,6 +72,9 @@ describe('RentRunScreen capability version token', () => {
     await waitFor(() => expect(body).toBeDefined());
     // Verbatim: the client carries the value, it never derives or interprets it.
     expect(body!['capabilitiesVersion']).toBe(PREVIEW.capabilitiesVersion);
+    // Overriding the cross-run period guard is a money decision with no affordance on this
+    // screen, so the client states false rather than leaving it to a server-side default.
+    expect(body!['acknowledgeCapabilityChange']).toBe(false);
   });
 
   it('surfaces a capabilities_changed 409 and refetches the preview', async () => {
@@ -109,5 +112,40 @@ describe('RentRunScreen capability version token', () => {
     // And the stale preview is refetched, so re-clicking Confirm cannot resubmit the same dead
     // token forever.
     await waitFor(() => expect(previews).toBe(2));
+  });
+
+  it('surfaces a capabilities_changed_since_prior_run 409 WITHOUT refetching the preview', async () => {
+    let previews = 0;
+    server.use(
+      http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 })),
+      http.get('/api/operations/runs/rent/preview', () => {
+        previews += 1;
+        return HttpResponse.json(PREVIEW);
+      }),
+      http.post('/api/operations/runs/rent/confirm', () =>
+        HttpResponse.json(
+          {
+            code: 'capabilities_changed_since_prior_run',
+            detail:
+              'An earlier run for this period was posted while a different set of features was in effect.',
+            correlationId: 'abc124',
+          },
+          { status: 409 },
+        ),
+      ),
+    );
+
+    renderScreen();
+
+    const confirmBtn = await screen.findByRole('button', { name: /post 1 charge/i });
+    await waitFor(() => expect(previews).toBe(1));
+    await userEvent.click(confirmBtn);
+
+    expect(await screen.findByText(/an earlier run for this period/i)).toBeInTheDocument();
+
+    // No refetch. The code starts with 'capabilities_changed', so a prefix match here would
+    // spin the preview forever against a conflict no fresh preview can clear.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(previews).toBe(1);
   });
 });

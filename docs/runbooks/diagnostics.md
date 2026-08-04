@@ -140,6 +140,49 @@ Two causes look identical in the log and are separated by asking when the last d
 A steady trickle matching neither pattern is the one to investigate: it points at a capability whose
 resolution is not stable for a fixed database state.
 
+## Diagnosing a cross-run period conflict (1301)
+
+Distinct from 1300, and read differently. A bulk run records the money-path capability state it ran
+under in `bulk_runs.summary_json`, and a later run for the same org, run type and period is rejected
+with a 409 `capabilities_changed_since_prior_run` when its own state disagrees. This exists because a
+period is routinely built by more than one run: `source_ref` uniqueness makes a re-run the designed
+recovery path, so run 1 can post part of a period under one capability state and run 2 the rest under
+another.
+
+```kusto
+traces
+| where customDimensions.EventId == 1301
+```
+
+**Every one of these is worth reading**, unlike 1300, where only a sustained rate is. Each names a
+period that two different money-path capability states were about to touch. And re-previewing does
+not clear it: a fresh preview cannot change what an already committed run recorded.
+
+Only two things clear it, and both are decisions rather than retries:
+
+- **Restore the earlier state.** Put the money-path capability back the way it was for the run that
+  already posted, and the next confirm agrees with it.
+- **Acknowledge deliberately.** The confirm accepts `acknowledgeCapabilityChange: true`, which is
+  recorded in the new run's `summary_json` as `capabilityChangeAcknowledged`, together with the state
+  it overrode in `capabilityChangeFrom`. That is the audit trail for a period computed two ways on
+  purpose; there is no way to override this guard without leaving it.
+
+To see what actually differs, read the two runs rather than the log — the log deliberately carries no
+capability state:
+
+```sql
+SELECT created_at,
+       summary_json -> 'capabilitiesMoneyPath'   AS money_path,
+       summary_json -> 'capabilityChangeAcknowledged' AS acknowledged
+FROM bulk_runs
+WHERE org_id = :org_id AND run_type = :run_type
+  AND period_year = :year AND period_month = :month
+ORDER BY created_at DESC;
+```
+
+A run committed before this field existed records no `capabilitiesMoneyPath`, and the guard skips it
+rather than inventing a state for it — so the first run of a period after the upgrade never conflicts.
+
 ## Production caution: Npgsql `Include Error Detail`
 
 Keep `Include Error Detail=true` **out of** production and staging Npgsql connection strings.
