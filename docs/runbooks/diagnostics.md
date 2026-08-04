@@ -3,7 +3,7 @@
 - **Audience:** Operators and maintainers
 - **Status:** Living runbook; canonical error-diagnosis reference
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-07-31
+- **Last reviewed:** 2026-08-03
 
 How to turn the reference an operator sees on screen into the full server-side detail in
 Application Insights. See [ADR-025](../adr/ADR-025-error-contract-and-observability.md) for the
@@ -61,21 +61,22 @@ This returns, in order, everything logged for that one request:
 structured log this contract produces. Track B's B4 alert rules key on these ids, so a query can
 filter on `customDimensions.EventId` (or the trace message) instead of matching text:
 
-| Id   | Name                      | Level       | Meaning                                                                                                                                                 |
-| ---- | ------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1000 | `UnhandledException`      | Error       | The terminal handler caught an exception no typed handler claimed. Always has the exception.                                                            |
-| 1001 | `DomainRejection`         | Warning     | A typed accounting domain rule declined the request (a 404/409/422) — expected, not a defect.                                                           |
-| 1002 | `ValidationRejection`     | Warning     | A command/query or auth DTO failed FluentValidation — a 400.                                                                                            |
-| 1003 | `ImportRowFailed`         | Error       | One row of a migration import failed after parsing; the batch continued. Has the exception.                                                             |
-| 1100 | `SupersedeReversalRace`   | Information | The corrected re-import (supersede) path found the entry already reversed by a racing request; it converges on success anyway — expected, not a defect. |
-| 1101 | `HeldFeesShapeRejected`   | Warning     | A balance-import row's pm_income opening violated the held-fees shape at post time — never a 500. What follows depends on the caller; see below.        |
-| 1200 | `InvariantViolation`      | Error       | The nightly sweep found a trust-accounting invariant violated for one org. Fiduciary incorrectness — never routine noise; see below.                    |
-| 1201 | `InvariantSweepCompleted` | Information | The nightly sweep finished with no violations. Its **absence** is itself a signal: a silent night means the job did not run.                            |
+| Id   | Name                        | Level       | Meaning                                                                                                                                                         |
+| ---- | --------------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1000 | `UnhandledException`        | Error       | The terminal handler caught an exception no typed handler claimed. Always has the exception.                                                                    |
+| 1001 | `DomainRejection`           | Warning     | A typed accounting domain rule declined the request (a 404/409/422) — expected, not a defect.                                                                   |
+| 1002 | `ValidationRejection`       | Warning     | A command/query or auth DTO failed FluentValidation — a 400.                                                                                                    |
+| 1003 | `ImportRowFailed`           | Error       | One row of a migration import failed after parsing; the batch continued. Has the exception.                                                                     |
+| 1100 | `SupersedeReversalRace`     | Information | The corrected re-import (supersede) path found the entry already reversed by a racing request; it converges on success anyway — expected, not a defect.         |
+| 1101 | `HeldFeesShapeRejected`     | Warning     | A balance-import row's pm_income opening violated the held-fees shape at post time — never a 500. What follows depends on the caller; see below.                |
+| 1200 | `InvariantViolation`        | Error       | The nightly sweep found a trust-accounting invariant violated for one org. Fiduciary incorrectness — never routine noise; see below.                            |
+| 1201 | `InvariantSweepCompleted`   | Information | The nightly sweep finished with no violations. Its **absence** is itself a signal: a silent night means the job did not run.                                    |
+| 1300 | `CapabilityVersionConflict` | Warning     | A bulk-run confirm was rejected (409) because the capability set moved after its preview. Expected and recoverable; a sustained rate is the signal — see below. |
 
 1000-1099 is reserved for host/error plumbing; 1100-1199 is the import-supersede/held-fees domain
 (WP-7 — the first block claimed under ADR-025's 1100+ convention); 1200-1299 is scheduled jobs
-(WP-11). Later domain areas take the next hundred-block (1300+, 1400+, …) as they add their own
-structured events.
+(WP-11); 1300-1399 is platform capabilities. Later domain areas take the next hundred-block (1400+,
+1500+, …) as they add their own structured events.
 
 A `HeldFeesShapeRejected` (1101) means different things on the two import routes, which matters when
 you are reading it after an operator report. On a plain balance import the row is recorded as an
@@ -109,6 +110,35 @@ A run with violations is additionally recorded as **Failed** in Hangfire's job s
 readable without the log pipeline. The Hangfire dashboard is deliberately not mounted
 ([ADR-001](../adr/ADR-001-background-job-scheduler.md)), so that read is a `leasebook_ops` query
 against the `hangfire` schema.
+
+## Diagnosing a capability-version conflict (1300)
+
+A bulk run's confirm echoes back the capability-version token its preview handed out, and the server
+compares it against the set it resolves at confirm entry. A mismatch is answered with a 409
+`capabilities_changed`; the operator reloads the preview and confirms again, and nothing is posted.
+
+One of these is not an incident — it is the guard working. What is worth acting on is a **rate**:
+
+```kusto
+traces
+| where customDimensions.EventId == 1300
+| summarize count() by bin(timestamp, 5m)
+```
+
+Two causes look identical in the log and are separated by asking when the last deploy was.
+
+- **Something is flipping capabilities under live operators.** Expect a burst that starts at a known
+  flag or entitlement change and stops after it. The conflicts are correct; the change is what wants
+  scheduling differently.
+- **Replicas disagree.** The token covers the shape of the source-code capability registry as well as
+  the resolved values, so during a rolling deploy that changed the registry, two replicas produce
+  different tokens for identical database state. Every preview/confirm pair that spans the two builds
+  is rejected. That is the safe direction — the alternative is a confirm posting under a set the
+  preview never saw — and it clears on its own once the rollout finishes. A burst that begins at a
+  deploy and ends when it completes needs no action.
+
+A steady trickle matching neither pattern is the one to investigate: it points at a capability whose
+resolution is not stable for a fixed database state.
 
 ## Production caution: Npgsql `Include Error Detail`
 
