@@ -24,6 +24,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          # Full history, for CapabilityAgeTests (ADR-028). It dates each money-path capability from
+          # git history and fails the build on one past the policy window. The default fetch-depth: 1
+          # does not merely hide that history — it MISREPRESENTS it: with a single grafted commit the
+          # pickaxe finds only that commit, so every capability reports an age near zero and the gate
+          # passes with a clean bill of health it never earned. The probe detects the shallow case and
+          # skips loudly instead, so without this the gate would simply never run in CI.
+          fetch-depth: 0
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'

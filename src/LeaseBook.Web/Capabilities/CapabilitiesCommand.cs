@@ -149,7 +149,8 @@ public static class CapabilitiesCommand
     /// <summary>
     /// Prints the registry joined to its stored state: the flag, plus how many orgs hold a live
     /// entitlement and how many cohort rules exist. With <c>--org</c> it adds that tenant's own
-    /// entitlement and cohort state.
+    /// entitlement and cohort state; with <c>--stale</c> it appends the age report
+    /// (<see cref="ReportAgeAsync"/>).
     /// <para>
     /// <b>Platform-scoped, and it has to be.</b> <c>feature_flags</c> alone would not need it
     /// (<c>feature_flags_read</c> is <c>FOR SELECT USING (true)</c>, which is why
@@ -231,14 +232,98 @@ public static class CapabilitiesCommand
 
         if (action.Stale)
         {
-            // Parsed here so Task 13 adds behavior rather than grammar, but reported as unavailable
-            // rather than silently ignored — an operator must never read an empty stale report as
-            // "nothing is stale".
-            Console.WriteLine();
+            await ReportAgeAsync(ct);
+        }
+    }
+
+    /// <summary>
+    /// The age half of the listing (ADR-028): when each capability entered the registry, how old it is,
+    /// and whether a money-path one has outlived <see cref="CapabilityAge.PolicyWindow"/>.
+    /// <para>
+    /// <b>The same verdict CI enforces, from the same code.</b> <c>CapabilityAgeTests</c> fails the
+    /// build on exactly what this prints as STALE — both call <see cref="CapabilityAge.IsStale"/> — so
+    /// an operator can never be told "within window" by the tool that CI is about to contradict.
+    /// </para>
+    /// <para>
+    /// <b>Age comes from git history, so it is UNKNOWN wherever the source tree or history is not.</b>
+    /// That includes the production ACA job (ADR-027), which runs from an image. The unavailable case is
+    /// stated in full, at the top, before any row is printed: a staleness report that renders an empty
+    /// or dashed column reads as "nothing is stale", which is the one conclusion this must never invite.
+    /// </para>
+    /// </summary>
+    private static async Task ReportAgeAsync(CancellationToken ct)
+    {
+        var report = await CapabilityAge.ResolveAsync(ct);
+        var now = DateTimeOffset.UtcNow;
+        var window = (int)CapabilityAge.PolicyWindow.TotalDays;
+
+        Console.WriteLine();
+        Console.WriteLine($"capability age (money-path policy window: {window} days):");
+
+        if (!report.IsAvailable)
+        {
             Console.WriteLine(
-                "capabilities: --stale is parsed but age reporting is not available yet (it arrives " +
-                "with the money-path age gate). Treat this listing as complete and the staleness " +
-                "column as unknown.");
+                $"  UNKNOWN — {report.UnavailableReason} Nothing below is a staleness verdict; read " +
+                "every age as unknown rather than as fresh.");
+        }
+
+        Console.WriteLine($"  {"CAPABILITY",-26} {"INTRODUCED",-12} {"AGE",-9} POLICY");
+
+        var stale = new List<string>();
+
+        foreach (var capability in CapabilityCatalog.All.OrderBy(c => c.Name, StringComparer.Ordinal))
+        {
+            var introduced = report.IntroducedAt.TryGetValue(capability.Name, out var when)
+                ? (DateTimeOffset?)when
+                : null;
+
+            var age = introduced is { } at ? $"{(now - at).Days}d" : "unknown";
+            var date = introduced is { } start
+                ? start.ToUniversalTime().ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
+                : "unknown";
+
+            string policy;
+            if (!capability.IsMoneyPath)
+            {
+                policy = "n/a (not money-path)";
+            }
+            else if (capability.IsFixture)
+            {
+                // The exemption is stated on the row rather than left blank: a money-path entry showing
+                // no verdict at all is indistinguishable from a gate that failed to evaluate it.
+                policy = "exempt (Capability.IsFixture)";
+            }
+            else if (introduced is not { } known)
+            {
+                policy = "UNKNOWN (age unreadable — not a pass)";
+            }
+            else if (CapabilityAge.IsStale(capability, known, now))
+            {
+                policy = $"STALE — past {window} days";
+                stale.Add($"{capability.Name} ({(now - known).Days} days old)");
+            }
+            else
+            {
+                policy = $"ok ({window - (now - known).Days}d left)";
+            }
+
+            Console.WriteLine($"  {capability.Name,-26} {date,-12} {age,-9} {policy}");
+        }
+
+        Console.WriteLine();
+
+        if (stale.Count > 0)
+        {
+            Console.WriteLine(
+                $"capabilities: {stale.Count} money-path capability(ies) past the {window}-day window: " +
+                string.Join(", ", stale) + ". These are short-lived by policy — each one is standing " +
+                "risk on the books. Delete the capability and its gate, or record the extension in " +
+                "ADR-028. CI fails on this (CapabilityAgeTests).");
+        }
+        else if (report.IsAvailable)
+        {
+            Console.WriteLine(
+                $"capabilities: no money-path capability is past the {window}-day window.");
         }
     }
 

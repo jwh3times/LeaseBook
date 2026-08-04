@@ -473,16 +473,40 @@ public sealed class CapabilitiesCommandTests(PostgresFixture fixture)
     }
 
     /// <summary>
-    /// <c>--stale</c> parses today so Task 13 adds behavior rather than grammar. Until then it says so
-    /// out loud: an operator must never read an empty staleness report as "nothing is stale".
+    /// <c>--stale</c> appends the age report (Task 13): one row per registry capability with when it
+    /// entered the registry and whether a money-path one has outlived the policy window.
+    /// <para>
+    /// The assertions are on the SHAPE, not on a date, because age comes from git history and this
+    /// suite has to pass in an environment without it — an image build, an exported archive, a shallow
+    /// clone. What is pinned is exactly what must hold in both cases: every capability is listed, and
+    /// the fixture's exemption is stated on its row rather than left blank. A money-path row with no
+    /// verdict at all is indistinguishable from a gate that failed to evaluate it.
+    /// </para>
     /// </summary>
     [Fact]
-    public async Task List_stale_parses_and_says_the_age_report_is_not_available_yet()
+    public async Task List_stale_reports_capability_age_and_states_the_fixture_exemption()
     {
         var (exit, output, _) = await RunAsync(["capabilities", "list", "--stale"]);
 
         exit.ShouldBe(0);
-        output.ShouldContain("--stale");
+        output.ShouldContain("capability age");
+        output.ShouldContain("INTRODUCED");
+
+        foreach (var capability in CapabilityCatalog.All)
+        {
+            output.ShouldContain(capability.Name);
+        }
+
+        // The permanent money-path fixture must never be reported as either stale or silently fine.
+        output.ShouldContain("exempt (Capability.IsFixture)");
+
+        // Whichever branch this environment took, the report must have said which: a staleness report
+        // that renders unknown ages as blanks reads as "nothing is stale", the one conclusion it must
+        // never invite.
+        var stated = output.Contains("UNKNOWN —", StringComparison.Ordinal)
+            || output.Contains("no money-path capability is past", StringComparison.Ordinal)
+            || output.Contains("past the", StringComparison.Ordinal);
+        stated.ShouldBeTrue("the report states either a verdict or why it has none: " + output);
     }
 
     // ── Harness ─────────────────────────────────────────────────────────────────────────────────
