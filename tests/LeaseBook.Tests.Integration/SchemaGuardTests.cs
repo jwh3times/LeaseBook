@@ -115,6 +115,16 @@ public sealed class SchemaGuardTests(PostgresFixture fixture)
     /// deleting an org must not delete the record of what was done to it. An entry appearing here for
     /// that table would be a regression, and the "unexpected" arm catches it.
     /// </para>
+    /// <para>
+    /// <b>The two delete actions differ on purpose, and the pin is where that is visible.</b>
+    /// <c>entitlements</c> is <c>RESTRICT</c> (<c>M8_RestrictOrgDeleteOnEntitlements</c>): grant rows
+    /// are append-only EVENTS, so deleting an org must not erase the record of what it was entitled to
+    /// — the same reasoning that gave <c>platform_audit_events</c> no foreign key at all.
+    /// <c>capability_cohorts</c> stays <c>CASCADE</c>: cohort rows are mutable MEMBERSHIP, not history,
+    /// and membership in a deleted org is meaningless. Making them consistent with each other would
+    /// mean either resurrecting the history-destroying cascade or leaving dead membership rows behind
+    /// a failed delete; the asymmetry is the correct answer, not an oversight.
+    /// </para>
     /// </summary>
     private static readonly Dictionary<string, (string Name, string Definition)[]> ExpectedPlatformForeignKeys =
         new(StringComparer.Ordinal)
@@ -122,7 +132,7 @@ public sealed class SchemaGuardTests(PostgresFixture fixture)
             ["entitlements"] =
             [
                 ("fk_entitlements_orgs_org_id",
-                 "FOREIGN KEY (org_id) REFERENCES orgs(id) ON DELETE CASCADE"),
+                 "FOREIGN KEY (org_id) REFERENCES orgs(id) ON DELETE RESTRICT"),
             ],
             ["capability_cohorts"] =
             [

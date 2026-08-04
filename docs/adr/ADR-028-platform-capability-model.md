@@ -368,17 +368,23 @@ These are limits, not covered ground:
   difference is a value crossing rather than a type crossing. A call-site allowlist for money-path
   capabilities is the available machine-checkable form of §4 if it is ever needed.
 
-### Open decision: `fk_entitlements_orgs_org_id` is `ON DELETE CASCADE`
+### Deleting an organization is refused while it has grant history
 
-Deleting an organization destroys its append-only grant history — the record of what it was entitled to
-and when, which §6 exists to preserve. It also contradicts the reasoning that gave
-`platform_audit_events.org_id` no foreign key at all. The current behavior is pinned by a schema-guard
-test, so changing it must be deliberate, but the question of which behavior is right is **open** and
-should be settled before the first production organization deletion.
+`fk_entitlements_orgs_org_id` is `ON DELETE RESTRICT` (`M8_RestrictOrgDeleteOnEntitlements`). It
+shipped as `ON DELETE CASCADE`, which meant one `DELETE FROM orgs` erased every entitlement event for
+that organization — the append-only record of what it was entitled to and when, which §6 exists to
+preserve, and which contradicted the reasoning that gave `platform_audit_events.org_id` no foreign key
+at all. `RESTRICT` fails the deletion loudly instead. That is the right failure: an organization with
+grant history is not a row to delete casually, and whoever needs to delete one now has to decide what
+happens to the history rather than having it decided silently.
 
-(`fk_capability_cohorts_orgs_org_id` is `ON DELETE CASCADE` and pinned too, and a reader of the pin
-will see both. Only the entitlements one is in question: cohort rows are mutable membership, not
-history, so cascading them away with the organization is the right behavior.)
+**`fk_capability_cohorts_orgs_org_id` stays `ON DELETE CASCADE`, and the asymmetry is deliberate.**
+Cohort rows are mutable membership — current targeting state, freely added and removed, carrying no
+history of its own, since the record of who changed a cohort lives in `platform_audit_events` and no
+organization deletion can touch it. Membership in a deleted organization is meaningless; a grant event
+is a record, and a record is not membership. Both delete actions are pinned by
+`SchemaGuardTests.ExpectedPlatformForeignKeys`, with the reason for the difference stated there, so
+neither can drift and "making them consistent" cannot pass as a tidy-up.
 
 ### Nothing here is deployment-verified
 
@@ -406,5 +412,7 @@ Reopen when any of these becomes observable:
 - **A capability is proposed that must change an amount rather than reachability** — that is a request
   to move a parameter into `OrgSettings`, not to relax §4. If §4 is ever relaxed, it needs a superseding
   ADR, not an amendment.
-- **An organization is deleted, or is about to be** — settle the `ON DELETE CASCADE` question above
-  first.
+- **An organization is deleted, or is about to be** — the delete is now REFUSED while the organization
+  has entitlement rows (`ON DELETE RESTRICT`, above). Decide what happens to the grant history before
+  reaching for a cascade: archiving it elsewhere and a deliberate delete are both defensible; silently
+  destroying it is what this replaced.
