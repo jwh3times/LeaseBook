@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living decision index
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-07-31
+- **Last reviewed:** 2026-08-03
 
 An **Architecture Decision Record** captures a single significant or non-obvious engineering
 decision — the context that forced it, the choice made, and the consequences accepted — so it can be
@@ -43,7 +43,7 @@ form, write it, and add a row to the index below. When a decision is replaced, m
 | [016](ADR-016-reporting-read-layer.md)                               | Reporting read layer — Approach C: Accounting owns the statement engine         | Accepted                      | 2026-06-22 |
 | [017](ADR-017-rent-proration.md)                                     | Rent proration method                                                           | Accepted                      | 2026-06-23 |
 | [018](ADR-018-management-fee-rounding.md)                            | Management-fee rounding for the owner disbursement run                          | Accepted                      | 2026-06-23 |
-| [019](ADR-019-bulk-run-engine-and-batch-posting.md)                  | Bulk run engine and batch posting                                               | Accepted                      | 2026-06-23 |
+| [019](ADR-019-bulk-run-engine-and-batch-posting.md)                  | Bulk run engine and batch posting                                               | Accepted (amended by ADR-028) | 2026-06-23 |
 | [020](ADR-020-opening-balance-posting.md)                            | Balance-forward opening-balance posting model                                   | Accepted                      | 2026-06-23 |
 | [021](ADR-021-migration-toolkit.md)                                  | Migration toolkit architecture & verification gate                              | Accepted                      | 2026-06-23 |
 | [022](ADR-022-e2e-in-ci-and-a11y-gate.md)                            | e2e in CI + automated accessibility gate                                        | Accepted                      | 2026-06-30 |
@@ -52,6 +52,7 @@ form, write it, and add a row to the index below. When a decision is replaced, m
 | [025](ADR-025-error-contract-and-observability.md)                   | Error contract, correlation ids, and diagnostic logging                         | Accepted                      | 2026-07-19 |
 | [026](ADR-026-deposit-disposition-owner-attribution.md)              | A deposit disposition carries its collection's owner attribution (invariant I7) | Accepted                      | 2026-07-31 |
 | [027](ADR-027-prod-private-networking-and-migration-job.md)          | Production private networking and migrations as a Container Apps Job            | Accepted                      | 2026-08-02 |
+| [028](ADR-028-platform-capability-model.md)                          | Platform capability model — feature flags, entitlements, and the money rule     | Accepted                      | 2026-08-03 |
 
 ## Status legend
 

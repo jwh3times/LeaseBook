@@ -25,6 +25,34 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   process — those records can never be corrected afterwards. Reading capability state is never
   refused, so it stays available while an incident is being diagnosed.
 
+  Whether a capability is on is answered from two independent sources — an operations toggle and a
+  per-organization entitlement — so an emergency shutoff can never be mistaken for a customer losing
+  something they pay for, and a rollout can never hand out a paid capability by accident. Capabilities
+  decide only whether a path is reachable; they never change an amount an accounting event produces.
+  See [ADR-028](docs/adr/ADR-028-platform-capability-model.md).
+
+  New operator command: `capabilities` (`list`, `flag enable|disable`, `grant`, `revoke`,
+  `cohort add|remove`) — the only surface that writes this state; there is deliberately no endpoint
+  and no screen for it. Documented in the
+  [local-development runbook](docs/runbooks/local-dev.md#capability-state) and, for production, the
+  [diagnostics runbook](docs/runbooks/diagnostics.md).
+
+- **Bulk runs are protected against a capability changing underneath them** — a rent, late-fee or
+  disbursement run now decides every item under one capability state, fixed when the run is confirmed,
+  so a toggle flipped while a run is in flight cannot make its last item behave differently from its
+  first. Two new conflict responses (both HTTP 409) guard the edges: `capabilities_changed` when the
+  preview on screen was built under a state that has since moved — the screen reloads its preview by
+  itself — and `capabilities_changed_since_prior_run` when an earlier run for the same period ran
+  under a different state, which asks for a human decision rather than resolving itself. Confirming a
+  run accepts a new `acknowledgeCapabilityChange` field for that decision, and each run records the
+  state it ran under.
+
+- **Separate readiness and liveness health checks** — `/api/health/ready` reports whether a replica
+  should take traffic and stays unavailable until it has proven it can read capability state, while
+  `/api/health` remains the simple liveness answer. A replica that starts while the database is
+  degraded is now held out of rotation and retried instead of either serving traffic it cannot answer
+  or being restarted in a loop.
+
 - **Late-fee policy is now editable in the app** — Settings gains a Late fees section for the
   organization defaults (rent due day, grace days, flat amount or percent-of-rent rate), and any
   individual lease can override those fields from that tenant's ledger page. Each field is

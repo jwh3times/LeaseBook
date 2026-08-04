@@ -42,8 +42,8 @@ them directly; do not trust summaries, including this one, for current progress.
   ACR, enabling the authored `deploy-dev`/`deploy-prod` workflows, live Key Vault and managed
   identity, the first PITR drill, and deployment-dependent telemetry and alerting — including alert
   delivery for the sweep's violation events.
-- `Accounting`, `Directory`, `Banking`, `Reporting`, `Operations`, and `Migrator` are built.
-  `Payments` is the remaining scaffolded shell for Phase 2.
+- `Accounting`, `Directory`, `Banking`, `Reporting`, `Operations`, `Capabilities`, and `Migrator` are
+  built. `Payments` is the remaining scaffolded shell for Phase 2.
 
 The `private/` directory is gitignored, confidential, and local-only. It may be absent in a public
 clone. It holds:
@@ -112,6 +112,10 @@ Run `dotnet tool restore` once for `dotnet-ef`.
 - Check all org invariants: `$env:ASPNETCORE_ENVIRONMENT='Development'; dotnet run --project src/LeaseBook.Web -- check-invariants --all`
 - Seed the 300-unit load fixture: `$env:ASPNETCORE_ENVIRONMENT='Development'; dotnet run --project src/LeaseBook.Web -- seed --org load`
 - Seed the all-scenario org (every template/workflow/report, golden-locked): `$env:ASPNETCORE_ENVIRONMENT='Development'; dotnet run --project src/LeaseBook.Web -- seed --org scenario`
+- Read/write platform capability state (flags, entitlements, cohorts — the only write surface; ADR-028):
+  `$env:ASPNETCORE_ENVIRONMENT='Development'; dotnet run --project src/LeaseBook.Web -- capabilities list [--org demo] [--stale]`
+  (also `flag enable|disable <name>`, `grant|revoke <name> --org <id|demo>`,
+  `cohort add|remove <name> --org <id|demo> [--user <id>]`; `docs/runbooks/local-dev.md` owns the detail)
 - Measure read-path p95 against a running host: `$env:ASPNETCORE_ENVIRONMENT='Development'; dotnet run --project src/LeaseBook.Web -- perf-probe`
   (needs the load fixture seeded and the host already running; `docs/perf.md` owns the method and the
   recorded numbers)
@@ -178,8 +182,8 @@ the historical pre-M0 baseline; accepted ADRs and implemented behavior supersede
 evolved. The patterns below are established and test-enforced in built modules and bind future modules.
 
 - Modular monolith: ASP.NET Core host plus one project per module: `Accounting`, `Directory`,
-  `Banking`, `Reporting`, `Operations`, `Payments`, `SharedKernel`, and `Migrator`. Modules reference
-  `SharedKernel` only, enforced by `ModuleBoundaryTests`.
+  `Banking`, `Reporting`, `Operations`, `Capabilities`, `Payments`, `SharedKernel`, and `Migrator`.
+  Modules reference `SharedKernel` only, enforced by `ModuleBoundaryTests`.
 - Cross-module calls go through `Contracts` ports so modules stay extractable. A feature module must
   never read another module's tables or data directly: no cross-module SQL, no cross-module LINQ, and
   no referencing another module's entity types.
@@ -225,6 +229,11 @@ Violating these is a correctness bug, not a style issue.
   bank book balance = owner equity + deposit liabilities + held PM fees.
 - Money is `decimal` in C# and `NUMERIC(14,2)` in Postgres. Never use `float` or `double` for money.
 - Reconciliation finalize locks the accounting period. Postings into locked periods are rejected.
+- Capabilities gate **reachability only** (ADR-028). A capability may decide whether a posting path
+  runs at all; it may never change the lines or amounts a business event produces. No capability-derived
+  value may become an argument to an Accounting command, business event, or posting-template input.
+  Money-affecting parameters belong in `OrgSettings`. A multi-step run resolves the capability set
+  once and passes it explicitly; it never re-asks mid-run.
 
 ### Multi-Tenancy
 
@@ -244,7 +253,17 @@ Violating these is a correctness bug, not a style issue.
 - Every new org-scoped table goes through the migrations RLS helper: column, `USING`/`WITH CHECK`
   policy, and `FORCE ROW LEVEL SECURITY` in one call.
 - A schema guard test fails CI if any `org_id` table lacks its policy.
+- One deliberate exception to org-only policies: the four platform capability tables carry an RLS
+  **platform escape** keyed on `SET LOCAL app.platform` (ADR-028) — an escape rather than no RLS,
+  because forgetting it yields zero rows instead of every org's rows. `app.platform` is set in exactly
+  one place, never inside a request transaction, and an architecture test fails the build on a second
+  call site. Do not "correct" these tables to a plain org policy or to no RLS.
 - Background jobs must establish org context explicitly and throw when it is missing.
+- Reads of the platform tables must assert their own scope and throw when it is missing. RLS filters
+  rather than raises, so a scope-less read returns zero rows with no error — and "no row" is a
+  meaningful value here (use the default / not entitled / not in the cohort), so the empty read renders
+  as a coherent wrong answer. The same applies to writes: an `UPDATE`/`DELETE` off the tracked-entity
+  path must assert an affected-row count.
 
 ### UX Contract
 

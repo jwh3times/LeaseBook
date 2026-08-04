@@ -75,6 +75,7 @@ ASP.NET Core host (LeaseBook.Web)
 ├─ Modules.Banking       register, import, reconciliation
 ├─ Modules.Reporting     statement engine, report catalog, PDF/CSV
 ├─ Modules.Operations    bulk runs: rent, late fees, disbursements
+├─ Modules.Capabilities  feature flags, entitlements, cohorts
 ├─ Modules.Payments      Stripe Connect, webhooks                       (roadmap)
 ├─ Modules.Migrator      data-import toolkit
 └─ SharedKernel          Money, ids, CQRS spine, tenancy, result types

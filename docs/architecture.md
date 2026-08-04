@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living architecture guide
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-08-02
+- **Last reviewed:** 2026-08-03
 
 This is the canonical public map of the system **as implemented**. It explains how the pieces fit
 together and links the decisions that shaped them without reproducing every invariant. Accepted
@@ -27,9 +27,10 @@ See the README [port map](../README.md#port-map) for every port the project bind
 ## Modules and boundaries
 
 Each bounded context is its own project — `Accounting`, `Directory`, `Banking`, `Reporting`,
-`Operations`, `Payments`, `Migrator` — over a shared `SharedKernel` that holds only cross-cutting
-primitives (money, ids, the CQRS spine, tenancy, result types). All of them carry real behavior
-except `Payments`, which remains a scaffolded shell for the online-payments phase. A module references `SharedKernel`
+`Operations`, `Capabilities`, `Payments`, `Migrator` — over a shared `SharedKernel` that holds only
+cross-cutting primitives (money, ids, the CQRS spine, tenancy, result types). All of them carry real
+behavior except `Payments`, which remains a scaffolded shell for the online-payments phase. A module
+references `SharedKernel`
 and nothing else; the architecture tests (`ModuleBoundaryTests`) enforce this absolutely.
 
 A module **never reads another module's tables or types directly**. A cross-module read goes through
@@ -52,6 +53,29 @@ rigor in the codebase — invariant, property-based, and golden-file suites. See
 [`accounting.md`](accounting.md) for the plain-English model and
 [ADR-006](adr/ADR-006-posting-template-catalog.md) /
 [ADR-008](adr/ADR-008-journal-dimension-fks-and-aggregates.md) for the engine decisions.
+
+## The capability seam
+
+Whether a behavior is available is answered by one seam (`ICapabilityGate`) over two independent
+sources: **feature flags**, which are deployment-wide operations toggles, and **entitlements**, which
+are per-organization grants, with per-organization/per-user **cohorts** for betas. Entitlement gates
+first, so a rollout can never hand out a paid capability, and an explicit flag kill beats a cohort, so
+an emergency shutoff is not silently a customer downgrade. The catalog of what exists is **source
+code**, never rows — the database stores state only.
+
+Capabilities gate **reachability**, never money: a capability may decide whether a posting path runs
+at all, but never what an accounting event produces. Money-affecting parameters live in `OrgSettings`.
+Architecture tests keep the seam out of `Accounting` and out of `SharedKernel`, and a bulk run freezes
+its capability set once at confirm entry so one run cannot straddle a toggle. Cheap reads are served
+from a short-lived in-process cache invalidated by a Postgres `NOTIFY`; money-path reads bypass it and
+resolve inside the ambient transaction. The platform tables use an RLS platform escape rather than no
+RLS, so a forgotten scope returns zero rows rather than another organization's. See
+[ADR-028](adr/ADR-028-platform-capability-model.md).
+
+There is deliberately no endpoint and no screen that writes this state: the `capabilities` CLI verb is
+the only write surface, and in production it runs as a manual-trigger Container Apps job inside the
+private network, recording an append-only audit row — naming the accountable operator — for every
+change.
 
 ## Request flow (CQRS pipeline)
 
@@ -149,6 +173,13 @@ The production image serves the SPA and `/api` on the container's port `8080` an
 Container Apps (East US 2), with secrets in Key Vault accessed by managed identity. Infrastructure is
 declared as Bicep modules in [`infra/`](../infra) (see [`infra/README.md`](../infra/README.md)), and
 CI compiles every template on each pull request.
+
+Container probes are split by intent. `/api/health` is **liveness** — the process is up, and it touches
+no dependency. `/api/health/ready` is **readiness**: it stays unavailable until a startup probe has
+proven the capability seam readable, so a replica that boots while the database is degraded is held
+out of rotation and retried rather than serving traffic it cannot answer. Readiness is tuned for
+patience and liveness for speed; a separate startup probe covers the pre-bind work (role seeding,
+registry validation, job wiring) that happens before the host binds a port.
 
 Migrations always run separately from the application, as the `leasebook_migrator` role and **never
 at app startup** — but the two environments reach the database differently. Production's PostgreSQL

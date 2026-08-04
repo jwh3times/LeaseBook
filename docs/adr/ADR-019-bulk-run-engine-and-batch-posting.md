@@ -3,6 +3,9 @@
 - **Status:** Accepted
 - **Date:** 2026-06-23
 - **Milestone:** M6 (plan-local WP-1 — not a `docs/ROADMAP.md` WP id)
+- **Amended by:** [ADR-028](ADR-028-platform-capability-model.md) — adds the capability snapshot the
+  run engine freezes at confirm entry (§4a below) and the chunked-confirm constraint in the revisit
+  trigger
 
 ## Context
 
