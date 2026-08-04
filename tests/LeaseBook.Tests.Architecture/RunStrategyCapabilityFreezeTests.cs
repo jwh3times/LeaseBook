@@ -10,8 +10,13 @@ namespace LeaseBook.Tests.Architecture;
 /// and never mentions the parameter again — so a capability difference can only prevent a run (both
 /// guards reject ABOVE the strategy call), never alter what one produces.
 /// <para>
-/// <b>Why this is worth a test rather than a comment.</b> That property is the whole distance
-/// between "reachability" and "amount", and nothing else asserts it. No reference-graph test can:
+/// <b>Why this is worth a test rather than a comment.</b> That property is the STRATEGY HALF of the
+/// distance between "reachability" and "amount", and nothing else asserts it — not the whole
+/// distance. <c>RunEngine</c> holds the resolved set and hands it to the strategy, so an edit that
+/// derived a value THERE and passed it in through <c>selectedTargetIds</c> or the <c>BulkRun</c>
+/// would break the same rule with every strategy still discarding its parameter, and this pin would
+/// stay green. ADR-028 already records value crossing as not mechanically checkable; this closes the
+/// half that is. No reference-graph test can close either:
 /// the violation is a VALUE crossing, not a type crossing — a strategy reading a bool off
 /// <c>capabilities</c> and passing a different amount into a business event references no capability
 /// type anywhere near Accounting, so <see cref="MoneyPathBoundaryTests"/> and
@@ -28,11 +33,33 @@ namespace LeaseBook.Tests.Architecture;
 /// </para>
 /// <para>
 /// <b>Scope, stated so it is not mistaken for more than it is.</b> This checks the ARGUMENT is
-/// unread. A strategy that injected a capability port through its constructor, or reached one
-/// through another collaborator, would violate the same rule and is not caught here — that route is
-/// covered separately by <see cref="IRunStrategy"/>'s "do not inject the snapshot port" instruction,
-/// which is prose. The narrow check is kept narrow on purpose: a wider textual scan over strategy
-/// files would fire on the explanatory comments the rule itself asks authors to write.
+/// unread, in the files it finds. Three holes, all left open deliberately:
+/// </para>
+/// <para>
+/// <b>1. A capability reached other than through the argument.</b> A strategy that injected a
+/// capability port through its constructor, or reached one through another collaborator, would
+/// violate the same rule and is not caught — that route is covered only by
+/// <see cref="IRunStrategy"/>'s "do not inject the snapshot port" instruction, which is prose. The
+/// text scan is kept narrow on purpose: widening it over strategy files would fire on the
+/// explanatory comments the rule itself asks authors to write.
+/// </para>
+/// <para>
+/// <b>2. A strategy outside this assembly is never DISCOVERED, and the vacuity guard cannot see
+/// it.</b> Discovery is <c>typeof(IRunStrategy).Assembly</c>, so an implementation living in the host
+/// or in a future module is not scanned at all — and
+/// <see cref="The_scan_finds_every_strategy_source_file"/> would still pass, because it asserts only
+/// that the three known names are present and that the count has not shrunk. <b>Read that guard as
+/// "these three files are scanned", never as "every strategy is scanned."</b> This hole is different
+/// in KIND from the first: it defeats discovery, not the text scan, so no tightening of the regex
+/// reaches it. Closing it needs an assembly scan across every loaded module — a different test with
+/// a different failure mode — and is parked with this ruling rather than improvised here.
+/// </para>
+/// <para>
+/// <b>3. A partial-class split hides the rest of a type.</b> The scan reads exactly
+/// <c>{TypeName}.cs</c>, so <c>File.Exists</c> passing is evidence that ONE file was read, not that
+/// the whole type was: a <c>partial</c> strategy with its <c>ConfirmAsync</c> in a second file would
+/// be checked against a file that never mentions the parameter, and the discard assertion would fail
+/// loudly — but a second file containing a READ would go unseen.
 /// </para>
 /// </summary>
 public sealed class RunStrategyCapabilityFreezeTests
@@ -41,10 +68,11 @@ public sealed class RunStrategyCapabilityFreezeTests
         Path.Combine("src", "LeaseBook.Modules.Operations", "Runs");
 
     /// <summary>
-    /// The strategies that exist today. Discovery is by reflection so a fourth one is covered the
-    /// moment it is written, but these three are named so a discovery that silently returns nothing —
-    /// a renamed interface, a moved assembly, a scan that quietly matched zero types — fails instead
-    /// of passing over an empty set.
+    /// The strategies that exist today. Discovery is by reflection, so a fourth one <b>in this
+    /// assembly</b> is covered the moment it is written — one anywhere else is not covered at all
+    /// (hole 2 above). These three are named so a discovery that silently returns nothing — a renamed
+    /// interface, a moved assembly, a scan that quietly matched zero types — fails instead of passing
+    /// over an empty set.
     /// </summary>
     private static readonly string[] KnownStrategies =
         [nameof(RentRunStrategy), nameof(LateFeeRunStrategy), nameof(DisbursementRunStrategy)];
@@ -108,6 +136,16 @@ public sealed class RunStrategyCapabilityFreezeTests
     /// pass over nothing at all, which is the failure mode this branch has hit repeatedly. So the set
     /// is asserted to contain the three known strategies AND every discovered type is asserted to
     /// have a readable source file.
+    /// <para>
+    /// <b>The method name overstates what this can prove, so read it against holes 2 and 3 in the
+    /// class summary.</b> "Every" means every strategy DISCOVERED IN THIS ASSEMBLY: an implementation
+    /// in the host or a future module is invisible to <c>typeof(IRunStrategy).Assembly</c> and this
+    /// guard passes without it, and <c>File.Exists</c> proves one file was found rather than that the
+    /// whole (possibly <c>partial</c>) type was read. Both are parked deliberately — closing the first
+    /// needs a cross-module assembly scan, which is a different test — and are written down here
+    /// because a guard trusted for more than it does is the exact shape this branch has corrected
+    /// repeatedly.
+    /// </para>
     /// </summary>
     [Fact]
     public void The_scan_finds_every_strategy_source_file()
