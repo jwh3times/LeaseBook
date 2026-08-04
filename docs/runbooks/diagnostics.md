@@ -160,32 +160,41 @@ not clear it: a fresh preview cannot change what an already committed run record
 
 Only two things clear it, and both are decisions rather than retries:
 
-- **Restore the earlier state — available only while the capability still exists.** Put the money-path
-  capability back the way it was for the run that already posted, and the next confirm agrees with it.
-  This is not available in the retirement case below, and the error message says so when that is what
-  happened.
+- **Restore the earlier state — available only when the same capabilities exist in both releases.**
+  Put the money-path capability back the way it was for the run that already posted, and the next
+  confirm agrees with it. This is unavailable whenever the _set_ of money-path capabilities changed
+  between the two runs; the error message says which case you are in.
 - **Acknowledge deliberately.** The confirm accepts `acknowledgeCapabilityChange: true`, which is
   recorded in the new run's `summary_json` as `capabilityChangeAcknowledged`, together with the state
   it overrode in `capabilityChangeFrom`. That is the audit trail for a period computed two ways on
   purpose; there is no way to override this guard without leaving it.
 
-### The retirement case: removing a money-path capability is period-breaking
+### Adding or removing a money-path capability is period-breaking
 
-Deleting a money-path capability from the registry is not a cleanup. Every run already committed
-recorded that capability in its `capabilitiesMoneyPath`; the new deployment records a state without
-it; the two differ. So **every `(org, run type, period)` that already has a run will 409 on its next
-run, fleet-wide, from the moment the deployment lands** — and the restore remedy above is impossible,
-because no `feature_flags` write can reproduce the state of a capability the registry no longer
-defines. The comparison deliberately does not ignore retired names: a run that posted while a gate was
-live and a run that posted after the gate was deleted are two behaviours, and that difference is real.
+`capabilitiesMoneyPath` lists every money-path capability the **registry** defines, with its resolved
+value. The registry is source code, so changing which capabilities exist changes that list for every
+org at once — with no `feature_flags` row moving, and with no operator action able to put it back.
+Both directions do it:
 
-The rejection message distinguishes the case — it points at deliberate confirmation and does not offer
-a restore — so an operator reading "that earlier state cannot be restored" is looking at a retirement,
-not at a flag someone flipped.
+- **Adding one.** Prior runs recorded `["a=off"]`; the new release records `["a=off","b=off"]`. They
+  differ. No flag write removes `b` from the list.
+- **Removing one.** Prior runs recorded `["a=off"]`; the new release records `[]`. They differ. No
+  flag write resurrects `a`.
 
-Retire a money-path capability one of these two ways:
+So **every `(org, run type, period)` that already has a run will 409 on its next run, fleet-wide,
+from the moment such a deployment lands.** Addition is the commoner case and is no gentler than
+removal.
 
-1. **Between periods, with the periods closed.** Land the removal when every open period's runs are
+The comparison deliberately does not ignore names that exist on only one side: a run that posted while
+a gate was live and a run that posted before it existed — or after it was deleted — are two behaviours,
+and that difference is real. What changes is the message: when the set of names moved, the rejection
+says the earlier state _cannot_ be restored and points at deliberate confirmation. If you are reading
+"that earlier state cannot be restored", you are looking at a release that changed which capabilities
+exist, not at a flag someone flipped.
+
+Add or remove a money-path capability one of these two ways:
+
+1. **Between periods, with the periods closed.** Land the change when every open period's runs are
    done. Nothing 409s, because the next run for those periods is the first one.
 2. **With a planned acknowledgement sweep.** If open periods will be re-run, the operators owning them
    must expect the conflict and confirm with `acknowledgeCapabilityChange: true`. Every such run is

@@ -192,13 +192,17 @@ public sealed class RunEngine(
 
         if (overrodePriorState && !acknowledgeCapabilityChange)
         {
-            // Same conflict, same wire code, two different remedies. A capability RETIRED from the
-            // registry between the runs cannot be put back by any operator action, so the message
-            // must not offer a restore the operator would then go hunting for. Retired names are
-            // still compared, not ignored: posting under a live gate and posting after that gate was
-            // deleted are two behaviours, and the difference is real.
-            throw capabilities.NamesRetiredCapability(priorMoneyPathState!)
-                ? CapabilitiesChangedSincePriorRunException.CapabilityRetired()
+            // Same conflict, same wire code, two different remedies. When the REGISTRY's set of
+            // money-path names moved between the runs — a capability added or removed — the earlier
+            // state cannot be restored by any operator action, because those names come from source
+            // code and not from feature_flags. The message must not then offer a restore the operator
+            // would go hunting for. Either direction counts: an addition is as period-breaking as a
+            // removal, and is the commoner deploy.
+            //
+            // Neither direction is filtered out of the comparison itself: posting while a gate was
+            // live and posting before it existed are two behaviours, and the difference is real.
+            throw capabilities.RegistryMoved(priorMoneyPathState!)
+                ? CapabilitiesChangedSincePriorRunException.RegistryMoved()
                 : CapabilitiesChangedSincePriorRunException.StateMoved();
         }
 

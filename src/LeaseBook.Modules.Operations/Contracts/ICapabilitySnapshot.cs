@@ -100,21 +100,29 @@ public sealed record RunCapabilities(
             .ToArray();
 
     /// <summary>
-    /// True when <paramref name="recordedState"/> — a money-path state read off an earlier run — names
-    /// a capability this set no longer resolves. That means the capability was RETIRED from the
-    /// registry between the two runs.
+    /// True when the set of money-path capability NAMES has changed between the run that recorded
+    /// <paramref name="recordedState"/> and this one — in either direction. A capability was added to
+    /// the registry, or removed from it, or both.
     /// <para>
-    /// <b>Why the two cases must be told apart.</b> Retirement makes every prior run in every period
-    /// disagree with the new state at once, and the ordinary remedy — put the capability back the way
-    /// it was — is impossible: no <c>feature_flags</c> write can reproduce the state of a capability
-    /// the registry no longer defines. Only a deliberate acknowledgement can clear it, and an error
-    /// message that told the operator to restore something unrestorable would send them looking for a
-    /// switch that does not exist.
+    /// <b>Why this case needs its own message.</b> The names come from the REGISTRY, which is source
+    /// code, not from <c>feature_flags</c>. So when the set of names moves, the earlier state cannot
+    /// be reproduced by any operator action: there is no switch that deletes a capability the release
+    /// added, and none that resurrects one it removed. The ordinary remedy — put the feature state
+    /// back the way it was — is unavailable, and offering it would send the operator hunting for a
+    /// control that does not exist. Only a deliberate acknowledgement clears it.
     /// </para>
     /// <para>
-    /// Retired names are NOT filtered out of the comparison itself. A run that posted while a gate was
-    /// live and a run that posted after the gate was deleted really are two behaviours, so the
-    /// difference is real and belongs on the screen; what changes is only which remedy is offered.
+    /// <b>Symmetric on purpose.</b> ADDITION is the commoner deploy and is exactly as period-breaking
+    /// as removal: a prior run's <c>["a=off"]</c> and a new <c>["a=off", "b=off"]</c> differ, and no
+    /// flag write can take <c>b</c> off the list. An asymmetric predicate that answered only for
+    /// removal would hand every addition the impossible remedy — the same failure this exists to
+    /// prevent, in the mirror direction.
+    /// </para>
+    /// <para>
+    /// The comparison itself does NOT filter these names out. A run that posted while a gate was live
+    /// and a run that posted before that gate existed (or after it was deleted) really are two
+    /// behaviours, so the difference is real and belongs on the screen. What changes is only which
+    /// remedy the message offers.
     /// </para>
     /// <para>
     /// Answered from <see cref="MoneyPathNames"/> rather than from a registry lookup, because
@@ -122,19 +130,33 @@ public sealed record RunCapabilities(
     /// names the current registry marks money-path, which is the same question.
     /// </para>
     /// </summary>
-    public bool NamesRetiredCapability(IReadOnlyList<string> recordedState)
+    public bool RegistryMoved(IReadOnlyList<string> recordedState)
     {
         ArgumentNullException.ThrowIfNull(recordedState);
 
-        // Entries are "name=on" / "name=off". Decode on the LAST separator, which is the exact
-        // inverse of the encoder: the VALUE can never contain '=', while a name conceivably could,
-        // and splitting on the first one would truncate such a name to a prefix that resolves
-        // nowhere — reporting every ordinary flip as a retirement and sending the operator after an
-        // acknowledgement when a restore was available.
-        return recordedState
-            .Select(entry => entry.LastIndexOf('=') is var i && i >= 0 ? entry[..i] : entry)
-            .Any(name => !MoneyPathNames.Contains(name));
+        // Set equality, not a one-way membership scan: an added name is as much a registry move as a
+        // removed one, and only SetEquals sees both. It runs under MoneyPathNames' own comparer,
+        // which the host builds ordinal.
+        var recordedNames = recordedState.Select(RecordedName).ToHashSet(StringComparer.Ordinal);
+
+        return !MoneyPathNames.SetEquals(recordedNames);
     }
+
+    /// <summary>
+    /// Decodes the name out of a <c>name=on</c> / <c>name=off</c> entry, on the LAST separator — the
+    /// exact inverse of the encoder in <see cref="MoneyPathState"/>, since the value can never contain
+    /// '=' while a name could in principle.
+    /// <para>
+    /// Unreachable today: registry names are kebab-case, pinned by
+    /// <c>CapabilityRegistryTests.Names_are_unique_and_kebab_case</c>, so first-split and last-split
+    /// agree for every name that exists. Written as the true inverse anyway because it costs nothing
+    /// and stays correct if that ever changes. Even under a name containing '=' the blast radius would
+    /// be one of two error MESSAGES: the guard compares whole entries with SequenceEqual, so its
+    /// decision, the recorded state and every posted amount are untouched either way.
+    /// </para>
+    /// </summary>
+    private static string RecordedName(string entry) =>
+        entry.LastIndexOf('=') is var i && i >= 0 ? entry[..i] : entry;
 }
 
 /// <summary>

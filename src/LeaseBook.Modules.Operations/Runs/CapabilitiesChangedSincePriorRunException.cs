@@ -41,15 +41,16 @@ public sealed class CapabilitiesChangedSincePriorRunException : OperationsDomain
         "re-run it deliberately if computing the period this way is what you intend.";
 
     /// <summary>
-    /// The retirement case, which needs its own words. A capability REMOVED from the registry cannot
-    /// be put back by any operator action — there is no flag left to write — so offering "restore the
-    /// earlier feature state" would send them looking for a switch that no longer exists. Deliberate
-    /// acknowledgement is the only route, and the message says so.
+    /// The registry-moved case, which needs its own words in BOTH directions. The money-path names
+    /// come from source code, not from <c>feature_flags</c>: no operator action deletes a capability
+    /// this release added, and none resurrects one it removed. Offering "restore the earlier feature
+    /// state" would send them hunting for a control that does not exist, so this message offers only
+    /// the route that works.
     /// </summary>
-    private const string RetiredMessage =
-        "An earlier run for this period was posted while a feature that no longer exists was in " +
-        "effect, so continuing would compute one period two ways. That earlier state cannot be " +
-        "restored — the feature has been removed — so this run has to be confirmed deliberately if " +
+    private const string RegistryMovedMessage =
+        "An earlier run for this period was posted when a different set of features existed, so " +
+        "continuing would compute one period two ways. That earlier state cannot be restored — which " +
+        "features exist changed with this release — so this run has to be confirmed deliberately if " +
         "computing the period this way is what you intend.";
 
     private CapabilitiesChangedSincePriorRunException(string message)
@@ -61,9 +62,9 @@ public sealed class CapabilitiesChangedSincePriorRunException : OperationsDomain
     public static CapabilitiesChangedSincePriorRunException StateMoved() => new(StateMovedMessage);
 
     /// <summary>
-    /// The prior run recorded a money-path capability the registry no longer defines. Same wire code,
-    /// because it is the same conflict and clients branch on the code; different message, because the
-    /// remedies genuinely differ.
+    /// The set of money-path capabilities the registry defines changed between the two runs — one was
+    /// added, removed, or both. Same wire code, because it is the same conflict and clients branch on
+    /// the code; different message, because only one of the two remedies is actually available.
     /// </summary>
-    public static CapabilitiesChangedSincePriorRunException CapabilityRetired() => new(RetiredMessage);
+    public static CapabilitiesChangedSincePriorRunException RegistryMoved() => new(RegistryMovedMessage);
 }
