@@ -20,6 +20,15 @@ namespace LeaseBook.Modules.Operations.Runs;
 /// should escape.
 /// </para>
 /// <para>
+/// <b>Capability freeze:</b> <c>ConfirmAsync</c> resolves the capability set exactly once, at its own
+/// entry, and hands it to the strategy as a parameter. One run therefore decides every item under one
+/// set even if an operator flips a flag mid-run. The freeze holds today partly because confirm runs
+/// inside a single request transaction; it is carried by the signature so that a future chunked
+/// confirm (ADR-019's revisit trigger) cannot lose it silently at a chunk boundary. A capability may
+/// gate whether a posting path is reachable and nothing else — it must never become an input to what
+/// an event posts.
+/// </para>
+/// <para>
 /// <b>Audit:</b> <c>AppDbContext.SaveChangesAsync</c> automatically writes one <c>audit_events</c>
 /// row per entity insert (including the <see cref="BulkRun"/> header), satisfying the "one audit row
 /// per committed run" requirement without any explicit audit write here.
@@ -29,7 +38,8 @@ public sealed class RunEngine(
     DbContext db,
     IEnumerable<IRunStrategy> strategies,
     IBatchPosting posting,
-    TimeProvider clock)
+    TimeProvider clock,
+    ICapabilitySnapshot capabilitySnapshot)
 {
     private readonly IReadOnlyDictionary<RunType, IRunStrategy> _strategies =
         strategies.ToDictionary(s => s.RunType);
@@ -69,8 +79,20 @@ public sealed class RunEngine(
         // AppDbContext is used for both, so adding here would enqueue it for the next save).
         var run = BulkRun.Create(runType, period.Year, period.Month, "{}", clock.GetUtcNow().UtcDateTime);
 
-        // Let the strategy do its work — posting under the ambient transaction.
-        var items = await strategy.ConfirmAsync(run, selectedTargetIds, posting, ct);
+        // Resolve ONCE, inside the ambient transaction, and freeze for the whole run. Not
+        // cache-served: a money-path kill switch must be effective immediately, and a strictly
+        // consistent read here makes the freeze trivially correct, because it happens in the same
+        // transaction as the posts it governs.
+        //
+        // The resolve is at CONFIRM ENTRY, not at transaction start. Those are different instants:
+        // OrgContextMiddleware opens the transaction before the endpoint handler runs, so a snapshot
+        // taken there would predate the confirm the operator actually asked for.
+        var capabilities = await capabilitySnapshot.ResolveDurableAsync(ct);
+        activity?.SetTag("capabilities_version", capabilities.Version);
+
+        // Let the strategy do its work — posting under the ambient transaction, and under this one
+        // frozen set. Passed explicitly rather than looked up: see IRunStrategy.ConfirmAsync.
+        var items = await strategy.ConfirmAsync(run, selectedTargetIds, posting, capabilities, ct);
 
         // Compute summary, patch onto run, then add to the change tracker for a single save.
         int posted = 0, skipped = 0, excluded = 0;
@@ -92,8 +114,21 @@ public sealed class RunEngine(
             }
         }
 
-        // Patch the summary JSON before the first save (SetSummaryJson is only valid in Added state).
-        var summary = new { posted, skipped, excluded, total };
+        // Patch the summary JSON before the first save (SetSummaryJson is only valid in Added state,
+        // and RevokeAppendOnly("bulk_runs") removes UPDATE entirely, so a later patch is impossible
+        // rather than merely awkward). The capability state goes in here so a committed run states
+        // which set it ran under: `capabilities` is the version token the cross-run consistency check
+        // compares, and `capabilitiesEnabled` is the human-readable half, since the version is an
+        // opaque hash that nobody can read a state back out of.
+        var summary = new
+        {
+            posted,
+            skipped,
+            excluded,
+            total,
+            capabilities = capabilities.Version,
+            capabilitiesEnabled = capabilities.Enabled.Order(StringComparer.Ordinal).ToArray(),
+        };
         run.SetSummaryJson(JsonSerializer.Serialize(summary));
 
         // Now add everything to the change tracker for a single atomic save.

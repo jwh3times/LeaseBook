@@ -102,8 +102,14 @@ public sealed class RentRunStrategy(
         BulkRun run,
         IReadOnlyList<Guid> selectedTargetIds,
         IBatchPosting posting,
+        RunCapabilities capabilities,
         CancellationToken ct)
     {
+        // Frozen at RunEngine.ConfirmAsync entry and unused here: no capability gates this run type
+        // yet. When one does, it may only decide whether a target is posted at all — never an amount,
+        // a date, or any other input to the business event.
+        _ = capabilities;
+
         var period = new RunPeriod(run.PeriodYear, run.PeriodMonth);
         var selectedSet = new HashSet<Guid>(selectedTargetIds);
 

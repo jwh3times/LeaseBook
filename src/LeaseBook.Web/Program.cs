@@ -219,8 +219,11 @@ builder.Services.AddScoped<IStatementDelivery, LocalStatementDelivery>();
 //   IBatchPosting — write-direction: translates run intents into IAccountingEvents.PostAsync calls.
 //   ILeaseScheduleData — read-direction: dispatches Directory's GetActiveLeaseSchedule via ISender.
 //   IPostedSourceRefs — read-direction: dispatches Accounting's GetExistingSourceRefs via ISender.
+//   ICapabilitySnapshot — read-direction: maps ICapabilityGate's durable resolve into Operations'
+//     own RunCapabilities view, on the ambient transaction (ADR-028).
 builder.Services.AddOperationsModule();
 builder.Services.AddScoped<LeaseBook.Modules.Operations.Contracts.IBatchPosting, BatchPostingAdapter>();
+builder.Services.AddScoped<LeaseBook.Modules.Operations.Contracts.ICapabilitySnapshot, CapabilitySnapshotAdapter>();
 builder.Services.AddScoped<LeaseBook.Modules.Operations.Contracts.ILeaseScheduleData, LeaseScheduleDataAdapter>();
 builder.Services.AddScoped<LeaseBook.Modules.Operations.Contracts.IPostedSourceRefs, PostedSourceRefsAdapter>();
 // WP-3: Late-fee run ports — policy resolution and delinquency signal (ADR-007 / WP-3).

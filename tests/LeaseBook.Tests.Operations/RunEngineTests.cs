@@ -88,7 +88,8 @@ public sealed class RunEngineTests(PostgresFixture fixture)
     {
         var strategies = new[] { strategy };
         var posting = new NoOpBatchPosting();
-        return new RunEngine(scope.Db, strategies, posting, TimeProvider.System);
+        return new RunEngine(
+            scope.Db, strategies, posting, TimeProvider.System, new StubCapabilitySnapshot());
     }
 }
 
@@ -119,7 +120,8 @@ file sealed class NoOpStrategy(Guid[] targets) : IRunStrategy
     }
 
     public Task<IReadOnlyList<BulkRunItem>> ConfirmAsync(
-        BulkRun run, IReadOnlyList<Guid> selectedTargetIds, IBatchPosting posting, CancellationToken ct)
+        BulkRun run, IReadOnlyList<Guid> selectedTargetIds, IBatchPosting posting,
+        RunCapabilities capabilities, CancellationToken ct)
     {
         IReadOnlyList<BulkRunItem> items = selectedTargetIds
             .Select(id => BulkRunItem.Create(run.Id, RunTargetKind.Lease, id, RunItemStatus.Posted, 0m, null, run.CreatedAt))
@@ -146,4 +148,16 @@ file sealed class NoOpBatchPosting : IBatchPosting
         IReadOnlyList<DisbursementIntent> intents, CancellationToken ct) =>
         Task.FromResult<IReadOnlyDictionary<Guid, DisbursementPostingResult>>(
             new Dictionary<Guid, DisbursementPostingResult>());
+}
+
+/// <summary>
+/// A stub <see cref="ICapabilitySnapshot"/>. This project has no host and no Capabilities module
+/// reference by design — the port lives in Operations precisely so the module is testable without
+/// one. The freeze itself is proven against the real gate in
+/// <c>LeaseBook.Tests.Integration.RunCapabilityFreezeTests</c>.
+/// </summary>
+file sealed class StubCapabilitySnapshot : ICapabilitySnapshot
+{
+    public Task<RunCapabilities> ResolveDurableAsync(CancellationToken ct) =>
+        Task.FromResult(new RunCapabilities(new HashSet<string>(StringComparer.Ordinal), "stub"));
 }
