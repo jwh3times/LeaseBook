@@ -122,7 +122,7 @@ Run `dotnet tool restore` once for `dotnet-ef`.
 - Seed the all-scenario org (every template/workflow/report, golden-locked): `$env:ASPNETCORE_ENVIRONMENT='Development'; dotnet run --project src/LeaseBook.Web -- seed --org scenario`
 - Read/write platform capability state (flags, entitlements, cohorts — the only write surface; ADR-028):
   `$env:ASPNETCORE_ENVIRONMENT='Development'; dotnet run --project src/LeaseBook.Web -- capabilities list [--org demo] [--stale]`
-  (also `flag enable|disable <name>`, `grant|revoke <name> --org <id|demo>`,
+  (also `flag enable|disable|clear <name>`, `grant|revoke <name> --org <id|demo>`,
   `cohort add|remove <name> --org <id|demo> [--user <id>]`; `docs/runbooks/local-dev.md` owns the detail)
 - Measure read-path p95 against a running host: `$env:ASPNETCORE_ENVIRONMENT='Development'; dotnet run --project src/LeaseBook.Web -- perf-probe`
   (needs the load fixture seeded and the host already running; `docs/perf.md` owns the method and the

@@ -3,6 +3,7 @@ using System.Text.Json;
 using LeaseBook.Modules.Capabilities.Domain;
 using LeaseBook.SharedKernel;
 using LeaseBook.Web.Adapters;
+using LeaseBook.Web.Auth;
 using LeaseBook.Web.Tenancy;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -528,9 +529,10 @@ public static class CapabilitiesCommand
         {
             CapabilitiesActionKind.FlagEnable or CapabilitiesActionKind.FlagDisable =>
                 await WriteFlagAsync(db, action, now, actor, ct),
+            CapabilitiesActionKind.FlagClear => await ClearFlagAsync(db, action, ct),
             CapabilitiesActionKind.Grant or CapabilitiesActionKind.Revoke =>
                 WriteEntitlement(db, action, now, actor),
-            CapabilitiesActionKind.CohortAdd => WriteCohort(db, action, now, actor),
+            CapabilitiesActionKind.CohortAdd => await WriteCohortAsync(db, action, now, actor, ct),
             CapabilitiesActionKind.CohortRemove => await RemoveCohortAsync(db, action, ct),
             _ => throw new InvalidOperationException($"Unhandled action kind {action.Kind}."),
         };
@@ -614,6 +616,35 @@ public static class CapabilitiesCommand
     }
 
     /// <summary>
+    /// Removes the explicit deployment-wide override so resolution falls through to cohort state and
+    /// then the registry default. A missing row is refused: reporting a no-op as success would tell an
+    /// operator the override was removed when a typo or stale diagnosis actually matched nothing.
+    /// </summary>
+    private static async Task<(string Action, string Detail)> ClearFlagAsync(
+        DbContext db, CapabilitiesAction action, CancellationToken ct)
+    {
+        var name = action.Capability!;
+        var flag = await db.Set<FeatureFlag>().SingleOrDefaultAsync(f => f.Name == name, ct);
+
+        if (flag is null)
+        {
+            throw new CapabilitiesRefusalException(
+                $"capabilities: no explicit flag override exists for '{name}', so nothing was cleared " +
+                "and nothing was recorded. Resolution is already using cohort state and the registry default.");
+        }
+
+        var previous = flag.Enabled;
+        db.Remove(flag);
+
+        return (
+            "flag.clear",
+            Json(new Dictionary<string, object?>
+            {
+                ["previous"] = previous,
+            }));
+    }
+
+    /// <summary>
     /// Appends one grant EVENT. There is no <c>revoked_at</c> to update: a revoke is a new row with
     /// <c>granted = false</c>, and current state is the latest row per <c>(org, capability)</c>. The
     /// table has no UPDATE or DELETE grant in either plane, so an append is the only shape available
@@ -644,14 +675,33 @@ public static class CapabilitiesCommand
             }));
     }
 
-    private static (string Action, string Detail) WriteCohort(
-        DbContext db, CapabilitiesAction action, DateTime now, string actor)
+    private static async Task<(string Action, string Detail)> WriteCohortAsync(
+        DbContext db, CapabilitiesAction action, DateTime now, string actor, CancellationToken ct)
     {
+        var orgId = action.OrgId!.Value;
+
+        if (action.UserId is { } userId)
+        {
+            // Identity soft spot: asp_net_users intentionally has no RLS because login happens before
+            // org context exists. Both columns are therefore load-bearing here; an id-only lookup
+            // would authorize a user from another tenant into this org's cohort.
+            var belongsToOrg = await db.Set<AppUser>()
+                .AnyAsync(user => user.Id == userId && user.OrgId == orgId, ct);
+
+            if (!belongsToOrg)
+            {
+                throw new CapabilitiesRefusalException(
+                    $"capabilities: user {userId} does not exist in org {orgId}, so no cohort rule " +
+                    "and no audit event were written. asp_net_users is RLS-exempt; cohort adds must " +
+                    "validate the user against the explicitly named org.");
+            }
+        }
+
         db.Add(new CapabilityCohort
         {
             Id = UuidV7.NewId(),
             Capability = action.Capability!,
-            OrgId = action.OrgId!.Value,
+            OrgId = orgId,
             UserId = action.UserId,
             AddedAt = now,
             AddedBy = actor,
@@ -666,7 +716,7 @@ public static class CapabilitiesCommand
     }
 
     /// <summary>
-    /// The exact inverse of <see cref="WriteCohort"/>: it removes the rule an <c>add</c> with the same
+    /// The exact inverse of <see cref="WriteCohortAsync"/>: it removes the rule an <c>add</c> with the same
     /// arguments would have created — the org-wide rule (<c>user_id IS NULL</c>) when no
     /// <c>--user</c> was given, that user's rule when one was.
     /// <para>
@@ -738,7 +788,10 @@ public static class CapabilitiesCommand
                 $"capabilities: flag '{capability}' is now ENABLED deployment-wide (by {actor}).",
             CapabilitiesActionKind.FlagDisable =>
                 $"capabilities: flag '{capability}' is now KILLED deployment-wide (by {actor}). An " +
-                "explicit kill beats a cohort match; deleting the row would restore the registry default.",
+                "explicit kill beats a cohort match; `flag clear` restores cohort/default resolution.",
+            CapabilitiesActionKind.FlagClear =>
+                $"capabilities: flag override for '{capability}' is CLEARED deployment-wide (by {actor}); " +
+                "resolution now falls through to cohort state and the registry default.",
             CapabilitiesActionKind.Grant =>
                 $"capabilities: granted '{capability}' to org {org} effective {now.ToUniversalTime():u}.",
             CapabilitiesActionKind.Revoke =>

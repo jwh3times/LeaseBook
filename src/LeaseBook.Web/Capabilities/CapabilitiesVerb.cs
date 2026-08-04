@@ -10,6 +10,7 @@ public enum CapabilitiesActionKind
     List,
     FlagEnable,
     FlagDisable,
+    FlagClear,
     Grant,
     Revoke,
     CohortAdd,
@@ -49,7 +50,7 @@ public static class CapabilitiesVerb
 {
     public const string Usage =
         "capabilities: expected one of `list [--org <id|demo>] [--stale]`, " +
-        "`flag enable|disable <name>`, `grant <capability> --org <id|demo>`, " +
+        "`flag enable|disable|clear <name>`, `grant <capability> --org <id|demo>`, " +
         "`revoke <capability> --org <id|demo>`, or " +
         "`cohort add|remove <capability> --org <id|demo> [--user <id>]` " +
         "(e.g. `dotnet run --project src/LeaseBook.Web -- capabilities list`).";
@@ -108,20 +109,21 @@ public static class CapabilitiesVerb
     {
         if (args.Length < 3)
         {
-            return Fail($"capabilities: `flag` expects `enable` or `disable`. {Usage}", out action, out error);
+            return Fail($"capabilities: `flag` expects `enable`, `disable`, or `clear`. {Usage}", out action, out error);
         }
 
         var kind = args[2].ToLowerInvariant() switch
         {
             "enable" => CapabilitiesActionKind.FlagEnable,
             "disable" => CapabilitiesActionKind.FlagDisable,
+            "clear" => CapabilitiesActionKind.FlagClear,
             _ => (CapabilitiesActionKind?)null,
         };
 
         if (kind is not { } flagKind)
         {
             return Fail(
-                $"capabilities: unknown flag action '{args[2]}' — expected 'enable' or 'disable'.",
+                $"capabilities: unknown flag action '{args[2]}' — expected 'enable', 'disable', or 'clear'.",
                 out action, out error);
         }
 

@@ -37,8 +37,16 @@ internal sealed class CapabilityGate(
     /// <see cref="CapabilitySet"/> a value handed down the call chain instead of an ambient service
     /// re-asked at each step.
     /// </remarks>
-    public async Task<CapabilitySet> GetCachedAsync(CancellationToken ct) =>
-        await cache.GetAsync(RequireOrg(), actor.UserId, ct);
+    public async Task<CapabilitySet> GetCachedAsync(CancellationToken ct)
+    {
+        var orgId = RequireOrg();
+
+        return await cache.GetAsync(
+            orgId,
+            actor.UserId,
+            token => reader.ReadAsync(orgId, actor.UserId, token),
+            ct);
+    }
 
     /// <inheritdoc />
     public async Task<CapabilitySet> ResolveDurableAsync(CancellationToken ct) =>

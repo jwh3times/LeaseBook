@@ -8,6 +8,7 @@ using LeaseBook.Modules.Directory.Features.Properties;
 using LeaseBook.Modules.Directory.Features.Tenants;
 using LeaseBook.Modules.Directory.Features.Units;
 using LeaseBook.Modules.Operations.Domain;
+using LeaseBook.Modules.Operations.Runs;
 using LeaseBook.SharedKernel;
 using LeaseBook.SharedKernel.Cqrs;
 using LeaseBook.SharedKernel.Tenancy;
@@ -64,6 +65,68 @@ public sealed class RunCapabilityPeriodTests(PostgresFixture fixture)
     /// on.
     /// </summary>
     private static readonly string Capability = CapabilityCatalog.MoneyPathFixture.Name;
+
+    [Fact]
+    public async Task Same_period_lock_serializes_two_real_transactions_without_blocking_another_period()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var org = UuidV7.NewId();
+        var period = new RunPeriod(2026, 10);
+
+        await using var firstScope = fixture.Api.Services.CreateAsyncScope();
+        await using var secondScope = fixture.Api.Services.CreateAsyncScope();
+        await using var otherPeriodScope = fixture.Api.Services.CreateAsyncScope();
+
+        var firstExecutor = firstScope.ServiceProvider.GetRequiredService<OrgScopedExecutor>();
+        var secondExecutor = secondScope.ServiceProvider.GetRequiredService<OrgScopedExecutor>();
+        var otherExecutor = otherPeriodScope.ServiceProvider.GetRequiredService<OrgScopedExecutor>();
+        var firstLock = new RunPeriodLock(firstScope.ServiceProvider.GetRequiredService<DbContext>());
+        var secondLock = new RunPeriodLock(secondScope.ServiceProvider.GetRequiredService<DbContext>());
+        var otherLock = new RunPeriodLock(otherPeriodScope.ServiceProvider.GetRequiredService<DbContext>());
+
+        var firstAcquired = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseFirst = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var secondAcquired = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var first = firstExecutor.RunAsync(
+            org,
+            async () =>
+            {
+                await firstLock.AcquireAsync(RunType.Rent, period, ct);
+                firstAcquired.SetResult();
+                await releaseFirst.Task.WaitAsync(ct);
+            },
+            ct);
+
+        await firstAcquired.Task.WaitAsync(TimeSpan.FromSeconds(5), ct);
+
+        var second = secondExecutor.RunAsync(
+            org,
+            async () =>
+            {
+                await secondLock.AcquireAsync(RunType.Rent, period, ct);
+                secondAcquired.SetResult();
+            },
+            ct);
+
+        try
+        {
+            await Should.ThrowAsync<TimeoutException>(
+                async () => await secondAcquired.Task.WaitAsync(TimeSpan.FromMilliseconds(500)));
+
+            await otherExecutor.RunAsync(
+                org,
+                async () => await otherLock.AcquireAsync(RunType.Rent, new RunPeriod(2026, 11), ct),
+                ct).WaitAsync(TimeSpan.FromSeconds(5), ct);
+        }
+        finally
+        {
+            releaseFirst.TrySetResult();
+        }
+
+        await Task.WhenAll(first, second).WaitAsync(TimeSpan.FromSeconds(5), ct);
+        secondAcquired.Task.IsCompletedSuccessfully.ShouldBeTrue();
+    }
 
     /// <summary>
     /// The whole point of the task. The flip is a real capability change, not a fabricated summary

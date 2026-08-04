@@ -133,6 +133,27 @@ public sealed class RunEngineTests(PostgresFixture fixture)
         snapshot.Resolves.ShouldBe(1, "one confirm, one resolve — the token is compared, not re-read");
     }
 
+    [Fact]
+    public async Task Confirm_acquires_the_period_lock_before_resolving_capabilities()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var scope = await OrgScope.CreateAsync(fixture, ct);
+        await using var _ = scope;
+        var period = new RunPeriod(2026, 6);
+        var periodLock = new RecordingRunPeriodLock();
+        var snapshot = new LockAssertingCapabilitySnapshot(periodLock);
+        var engine = BuildEngine(scope, new NoOpStrategy(targets: [_t1]), snapshot, periodLock);
+
+        await scope.RunAsync(
+            async () => await engine.ConfirmAsync(
+                RunType.Rent, period, [_t1], expectedCapabilitiesVersion: null,
+                acknowledgeCapabilityChange: false, ct),
+            ct);
+
+        periodLock.Acquisitions.ShouldBe([(RunType.Rent, period)]);
+        snapshot.Resolves.ShouldBe(1);
+    }
+
     /// <summary>
     /// A mismatch rejects, and rejects BEFORE the strategy runs. The strategy-untouched assertion is
     /// the load-bearing half: a guard that threw after the posting loop would leave a half-posted run
@@ -168,12 +189,16 @@ public sealed class RunEngineTests(PostgresFixture fixture)
     // ── helpers ──────────────────────────────────────────────────────────────
 
     private static RunEngine BuildEngine(
-        OrgScope scope, IRunStrategy strategy, ICapabilitySnapshot? snapshot = null)
+        OrgScope scope,
+        IRunStrategy strategy,
+        ICapabilitySnapshot? snapshot = null,
+        IRunPeriodLock? periodLock = null)
     {
         var strategies = new[] { strategy };
         var posting = new NoOpBatchPosting();
         return new RunEngine(
             scope.Db, strategies, posting, TimeProvider.System,
+            periodLock ?? new RunPeriodLock(scope.Db),
             snapshot ?? new StubCapabilitySnapshot());
     }
 }
@@ -271,6 +296,31 @@ file sealed class CountingCapabilitySnapshot(string version) : ICapabilitySnapsh
         Resolves++;
         return Task.FromResult(new RunCapabilities(
             new Dictionary<string, bool>(StringComparer.Ordinal), version,
+            new HashSet<string>(StringComparer.Ordinal)));
+    }
+}
+
+file sealed class RecordingRunPeriodLock : IRunPeriodLock
+{
+    public List<(RunType RunType, RunPeriod Period)> Acquisitions { get; } = [];
+
+    public Task AcquireAsync(RunType runType, RunPeriod period, CancellationToken ct)
+    {
+        Acquisitions.Add((runType, period));
+        return Task.CompletedTask;
+    }
+}
+
+file sealed class LockAssertingCapabilitySnapshot(RecordingRunPeriodLock periodLock) : ICapabilitySnapshot
+{
+    public int Resolves { get; private set; }
+
+    public Task<RunCapabilities> ResolveDurableAsync(CancellationToken ct)
+    {
+        periodLock.Acquisitions.Count.ShouldBe(1, "the period lock must be held before durable resolution");
+        Resolves++;
+        return Task.FromResult(new RunCapabilities(
+            new Dictionary<string, bool>(StringComparer.Ordinal), "locked",
             new HashSet<string>(StringComparer.Ordinal)));
     }
 }

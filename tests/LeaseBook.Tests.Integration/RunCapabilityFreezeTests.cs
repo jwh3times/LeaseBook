@@ -93,7 +93,8 @@ public sealed class RunCapabilityFreezeTests(PostgresFixture fixture)
                 });
 
             var engine = new RunEngine(
-                db, [strategy], new NoOpBatchPosting(), TimeProvider.System, snapshot);
+                db, [strategy], new NoOpBatchPosting(), TimeProvider.System,
+                new RunPeriodLock(db), snapshot);
 
             RunResult? result = null;
             await executor.RunAsync(
@@ -174,7 +175,8 @@ public sealed class RunCapabilityFreezeTests(PostgresFixture fixture)
 
             var strategy = new RecordingStrategy(Targets);
             var engine = new RunEngine(
-                db, [strategy], new NoOpBatchPosting(), TimeProvider.System, snapshot);
+                db, [strategy], new NoOpBatchPosting(), TimeProvider.System,
+                new RunPeriodLock(db), snapshot);
 
             await WriteFlagAsync(enabled: true, ct);
 

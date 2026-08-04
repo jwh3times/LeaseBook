@@ -269,6 +269,22 @@ public sealed class RoleSeedingReadinessTests(PostgresFixture fixture)
         await Task.CompletedTask;
     }
 
+    [Fact]
+    public void An_outer_connectivity_exception_cannot_hide_an_inner_server_rejection()
+    {
+        var rejection = new NpgsqlException(
+            "The connection failed after Postgres returned an error.",
+            new PostgresException(
+                "permission denied for table asp_net_roles",
+                "ERROR",
+                "ERROR",
+                "42501"));
+
+        DatabaseReachability.IsUnreachable(rejection).ShouldBeFalse(
+            "a server-side rejection anywhere in the chain proves Postgres was reachable and must win " +
+            "over an outer NpgsqlException");
+    }
+
     private static async Task<HealthReport> ReadinessReportAsync(
         WebApplicationFactory<Program> host, CancellationToken ct) =>
         await host.Services.GetRequiredService<HealthCheckService>().CheckHealthAsync(

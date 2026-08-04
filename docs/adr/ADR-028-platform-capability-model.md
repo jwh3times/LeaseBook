@@ -171,9 +171,12 @@ Redis stays deferred anyway, and not by pointing at ADR-002 as though it endorse
 
 The honest downside: each host holds one additional non-pooled connection for its listener, and
 invalidation bumps a single replica-wide generation, so one flag flip expires every cached key at
-once and every caller misses simultaneously. That is why the cached member is asynchronous — a
-synchronous one would let a flip drive concurrent callers into connection-pool exhaustion, each
-holding one connection and none able to obtain a second.
+once and every caller misses simultaneously. A request-path miss therefore reads on the caller's
+ambient organization transaction and connection; it must not open a second pooled connection while
+the request still holds the first, because enough simultaneous misses could otherwise exhaust the
+pool with every caller waiting for itself. Out-of-band callers that do not own an organization
+transaction (readiness and host infrastructure) use a separate platform-scoped loader. The cached
+member remains asynchronous because either miss still performs database I/O.
 
 ### 9. Readiness is its own probe, with two independent preconditions
 
@@ -232,6 +235,13 @@ same (organization, run type, period) whose money-path state differs is rejected
 separate guard rejects a confirm whose preview was resolved under a different capability version
 (`capabilities_changed`, 409); the preview-token check runs first, because that one the SPA can
 recover from automatically.
+
+Confirmation is serialized for that same key with a PostgreSQL transaction advisory lock, acquired
+before the durable capability read and before the prior-run query. READ COMMITTED alone cannot protect
+the first run: two concurrent transactions can both observe no prior row and commit disjoint targets
+under different states. The advisory lock makes the second transaction wait until the first commits,
+then its prior-run read must see the state just recorded. A hash collision only serializes unrelated
+runs; it cannot let related runs overlap.
 
 **The scope limit, stated in the guard's own terms: one `run_type`, one capability state per period —
 _not_ one period, one capability state.** A rent run and a late-fee run in the same period may run
@@ -335,7 +345,7 @@ this gate exists to close.
 
 ### 14. The write surface is a CLI verb, and `LEASEBOOK_OPERATOR` is a deployment requirement
 
-`capabilities` (list, flag enable/disable, grant, revoke, cohort add/remove) is the only write surface:
+`capabilities` (list, flag enable/disable/clear, grant, revoke, cohort add/remove) is the only write surface:
 no endpoint, no UI. In production it is reached through a manual-trigger Container Apps Job running the
 **app** image as the **app** role — the registry is source code, so a job built from a different commit
 knows a different set of capabilities than the application it is being used to control. The job carries
@@ -353,6 +363,12 @@ never be refused, because reading it is what an operator does first during an in
 
 Fixture capabilities are refused by every mutating subcommand, including cohort membership — a cohort
 row turns a capability on as effectively as a flag does.
+
+`flag clear` deletes the explicit deployment-wide override, restoring fall-through to cohort state and
+the registry default. It is distinct from `flag disable`: explicit false is the kill step and beats a
+cohort. Clearing a missing row is refused rather than reported as a successful no-op. User-level
+`cohort add` explicitly verifies both user id and organization id because `asp_net_users` is deliberately
+RLS-exempt; `cohort remove` remains able to delete stale rules even after a user disappears.
 
 ### 15. Q1, Q2, Q3
 

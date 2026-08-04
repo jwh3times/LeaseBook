@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living runbook; canonical development command reference
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-08-03
+- **Last reviewed:** 2026-08-04
 
 ## Prerequisites
 
@@ -223,6 +223,7 @@ dotnet run --project src/LeaseBook.Web -- capabilities list --org demo          
 dotnet run --project src/LeaseBook.Web -- capabilities list --stale                # + age vs the 90-day window
 dotnet run --project src/LeaseBook.Web -- capabilities flag enable  <capability>
 dotnet run --project src/LeaseBook.Web -- capabilities flag disable <capability>
+dotnet run --project src/LeaseBook.Web -- capabilities flag clear   <capability>  # remove override; restore cohort/default
 dotnet run --project src/LeaseBook.Web -- capabilities grant  <capability> --org demo
 dotnet run --project src/LeaseBook.Web -- capabilities revoke <capability> --org demo
 dotnet run --project src/LeaseBook.Web -- capabilities cohort add    <capability> --org demo [--user <id>]
@@ -239,6 +240,10 @@ Notes that bite:
   `LEASEBOOK_OPERATOR`. Outside Development, a mutation with that variable unset is **refused**;
   locally it falls back so the inner loop is not blocked.
 - Test-fixture capabilities are refused by every mutating subcommand, `cohort` included.
+- `flag disable` is an explicit kill and beats cohorts; `flag clear` removes that override so cohort
+  state and then the registry default apply again.
+- A user-level cohort add succeeds only when the user exists in the explicitly named org. Removal
+  remains available for stale rules after a user has been deleted.
 - `list` never mutates and is never refused.
 
 ## Measuring read-path latency

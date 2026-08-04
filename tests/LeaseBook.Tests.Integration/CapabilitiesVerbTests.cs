@@ -42,6 +42,7 @@ public sealed class CapabilitiesVerbTests
     [Theory]
     [InlineData("capabilities", "flag", "enable")]
     [InlineData("capabilities", "flag", "disable")]
+    [InlineData("capabilities", "flag", "clear")]
     public void The_money_path_fixture_is_refused_on_every_verb(string verb, string noun, string action)
     {
         var fixtureName = CapabilityCatalog.MoneyPathFixture.Name;
@@ -115,6 +116,16 @@ public sealed class CapabilitiesVerbTests
             ["capabilities", "flag", "disable", Known], out var action, out _).ShouldBeTrue();
 
         action.Kind.ShouldBe(CapabilitiesActionKind.FlagDisable);
+    }
+
+    [Fact]
+    public void Flag_clear_resolves()
+    {
+        CapabilitiesVerb.TryResolve(
+            ["capabilities", "flag", "clear", Known], out var action, out _).ShouldBeTrue();
+
+        action.Kind.ShouldBe(CapabilitiesActionKind.FlagClear);
+        action.Capability.ShouldBe(Known);
     }
 
     [Fact]

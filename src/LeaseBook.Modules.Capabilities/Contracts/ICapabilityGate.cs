@@ -29,12 +29,10 @@ public interface ICapabilityGate
     /// <para>
     /// <b>Asynchronous even though a cache hit needs no I/O</b>, because a miss needs a great deal of
     /// it. <c>Invalidate()</c> bumps one replica-wide generation, so a single <c>NOTIFY</c> makes
-    /// every cached key stale at once and every caller misses simultaneously. Each refresh takes a
-    /// second pooled connection while its caller's ambient transaction still holds the first, so a
-    /// synchronous version of this member would let one flag flip drive concurrent callers into pool
-    /// exhaustion — each holding one connection, none able to obtain the second — and turn a
-    /// latency optimization into an outage. The token is honoured throughout, so a client
-    /// disconnecting during that window stops paying for the refresh.
+    /// every cached key stale at once and every caller misses simultaneously. A request-path refresh
+    /// reads on its caller's ambient transaction, so it does not need a second pooled connection while
+    /// the first is held. The member remains asynchronous because the miss still performs database I/O;
+    /// the token is honoured throughout, so a disconnect stops paying for that refresh.
     /// </para>
     /// </summary>
     /// <exception cref="InvalidOperationException">There is no ambient org context.</exception>

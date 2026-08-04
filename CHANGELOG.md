@@ -31,7 +31,7 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   decide only whether a path is reachable; they never change an amount an accounting event produces.
   See [ADR-028](docs/adr/ADR-028-platform-capability-model.md).
 
-  New operator command: `capabilities` (`list`, `flag enable|disable`, `grant`, `revoke`,
+  New operator command: `capabilities` (`list`, `flag enable|disable|clear`, `grant`, `revoke`,
   `cohort add|remove`) — the only surface that writes this state; there is deliberately no endpoint
   and no screen for it. Documented in the
   [local-development runbook](docs/runbooks/local-dev.md#capability-state) and, for production, the
@@ -43,7 +43,9 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   first. Two new conflict responses (both HTTP 409) guard the edges: `capabilities_changed` when the
   preview on screen was built under a state that has since moved — the screen reloads its preview by
   itself — and `capabilities_changed_since_prior_run` when an earlier run for the same period ran
-  under a different state, which asks for a human decision rather than resolving itself. Confirming a
+  under a different state, which asks for a human decision rather than resolving itself. Concurrent
+  confirms for the same org, run type and period are serialized before either state read, so two
+  first runs cannot both observe an empty history and bypass that comparison. Confirming a
   run accepts a new `acknowledgeCapabilityChange` field for that decision, and each run records the
   state it ran under.
 

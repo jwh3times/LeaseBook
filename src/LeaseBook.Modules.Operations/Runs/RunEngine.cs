@@ -58,6 +58,7 @@ public sealed class RunEngine(
     IEnumerable<IRunStrategy> strategies,
     IBatchPosting posting,
     TimeProvider clock,
+    IRunPeriodLock periodLock,
     ICapabilitySnapshot capabilitySnapshot)
 {
     private readonly IReadOnlyDictionary<RunType, IRunStrategy> _strategies =
@@ -142,6 +143,13 @@ public sealed class RunEngine(
         activity?.SetTag("selected_count", selectedTargetIds.Count);
 
         var strategy = ResolveStrategy(runType);
+
+        // READ COMMITTED does not protect an absent prior-run row: two confirms can both observe
+        // "none", resolve different capability state, and commit disjoint targets for one period.
+        // Take the transaction advisory lock before either the durable capability read or the prior
+        // run query. The second transaction then resumes only after the first run is committed and
+        // visible, so it must compare against that frozen money-path state.
+        await periodLock.AcquireAsync(runType, period, ct);
 
         // Create the run header — NOT yet added to the change tracker. We add it after the strategy
         // finishes so that any intermediate db.SaveChangesAsync calls inside posting (PostingService

@@ -32,8 +32,8 @@ public static class DatabaseReachability
     /// <see cref="Microsoft.EntityFrameworkCore.DbUpdateException"/> around the provider failure), and
     /// the walk handles it for the same reason.
     /// <para>
-    /// <see cref="PostgresException"/> is checked BEFORE its <see cref="NpgsqlException"/> base and
-    /// returns false: a server-side error such as a missing table or a revoked grant means the
+    /// A <see cref="PostgresException"/> anywhere in the chain takes precedence over every connectivity
+    /// wrapper around it: a server-side error such as a missing table or a revoked grant means the
     /// connection worked perfectly and the deployment is broken. That must keep surfacing rather than
     /// being ridden out as an outage — for role seeding especially, where riding it out would leave a
     /// replica not-ready forever instead of failing loudly on a bad grant.
@@ -41,6 +41,8 @@ public static class DatabaseReachability
     /// </remarks>
     public static bool IsUnreachable(Exception exception)
     {
+        var sawConnectivityFailure = false;
+
         for (var current = exception; current is not null; current = current.InnerException)
         {
             switch (current)
@@ -48,10 +50,11 @@ public static class DatabaseReachability
                 case PostgresException:
                     return false;
                 case NpgsqlException or SocketException or TimeoutException:
-                    return true;
+                    sawConnectivityFailure = true;
+                    break;
             }
         }
 
-        return false;
+        return sawConnectivityFailure;
     }
 }

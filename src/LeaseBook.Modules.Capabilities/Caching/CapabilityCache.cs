@@ -15,10 +15,11 @@ namespace LeaseBook.Modules.Capabilities.Caching;
 /// separately.
 /// </para>
 /// <para>
-/// <b>Lifetime.</b> Singleton — this is per-replica state. It therefore takes
-/// <see cref="IServiceScopeFactory"/> and opens a scope per refresh rather than holding
-/// <see cref="IPlatformScope"/> or a <c>DbContext</c>, either of which would be a captive scoped
-/// dependency: validation would reject it, or worse, it would quietly reuse a disposed context.
+/// <b>Lifetime.</b> Singleton — this is per-replica state. Out-of-band callers use the
+/// <see cref="IServiceScopeFactory"/> platform loader; request callers supply a scoped ambient loader
+/// through <c>CapabilityGate</c>. The singleton never holds <see cref="IPlatformScope"/> or a
+/// <c>DbContext</c>, either of which would be a captive scoped dependency: validation would reject it,
+/// or worse, it would quietly reuse a disposed context.
 /// </para>
 /// <para>
 /// <b>Failure policy.</b> After a successful load for a key, a failing refresh serves last-known-good
@@ -110,10 +111,27 @@ public sealed class CapabilityCache(
 
     /// <summary>
     /// The resolved set for this <c>(org, user)</c>, refreshing when the cached entry has expired or
-    /// been invalidated.
+    /// been invalidated. This out-of-band form opens a platform-scoped read and is intended for
+    /// callers that do not already own an org transaction (readiness, propagation tests, and host
+    /// infrastructure). Request code goes through <c>CapabilityGate</c>, which supplies its ambient
+    /// loader to the overload below so a cache miss cannot consume a second pooled connection.
     /// </summary>
-    public async Task<CapabilitySet> GetAsync(Guid orgId, Guid? userId, CancellationToken ct = default)
+    public Task<CapabilitySet> GetAsync(Guid orgId, Guid? userId, CancellationToken ct = default) =>
+        GetAsync(orgId, userId, token => LoadAsync(orgId, userId, token), ct);
+
+    /// <summary>
+    /// Resolves through the shared cache while letting a scoped caller perform a miss/refresh on its
+    /// existing transaction. The delegate is used only after both freshness checks, under the
+    /// per-key refresh lock; cache hits never touch it.
+    /// </summary>
+    internal async Task<CapabilitySet> GetAsync(
+        Guid orgId,
+        Guid? userId,
+        Func<CancellationToken, Task<CapabilitySet>> loader,
+        CancellationToken ct)
     {
+        ArgumentNullException.ThrowIfNull(loader);
+
         var key = new CacheKey(orgId, userId);
 
         if (TryGetFresh(key, out var cached))
@@ -144,7 +162,7 @@ public sealed class CapabilityCache(
 
             try
             {
-                var set = await LoadAsync(orgId, userId, ct);
+                var set = await loader(ct);
 
                 _entries[key] = new Entry(set, clock.GetUtcNow(), generation);
                 _isPopulated = true;
@@ -266,8 +284,8 @@ public sealed class CapabilityCache(
     }
 
     /// <summary>
-    /// One scope, one platform-scoped transaction, one read. The scope is created per refresh —
-    /// see the lifetime note on the class.
+    /// The out-of-band loader: one scope, one platform-scoped transaction, one read. Request-path
+    /// refreshes supply their ambient loader instead — see the lifetime note on the class.
     /// </summary>
     private async Task<CapabilitySet> LoadAsync(Guid orgId, Guid? userId, CancellationToken ct)
     {

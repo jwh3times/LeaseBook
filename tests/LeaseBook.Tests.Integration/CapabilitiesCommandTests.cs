@@ -3,6 +3,7 @@ using LeaseBook.SharedKernel;
 using LeaseBook.Tests.Common;
 using LeaseBook.Tests.Integration.Fixtures;
 using LeaseBook.Web.Adapters;
+using LeaseBook.Web.Auth;
 using LeaseBook.Web.Capabilities;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
@@ -98,6 +99,60 @@ public sealed class CapabilitiesCommandTests(PostgresFixture fixture)
         {
             await DeleteFlagAsync(Capability, ct);
         }
+    }
+
+    [Fact]
+    public async Task Flag_clear_deletes_the_override_audits_the_previous_value_and_notifies()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var received = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        try
+        {
+            (await RunAsync(["capabilities", "flag", "disable", Capability])).Exit.ShouldBe(0);
+            var since = await NowAsync(ct);
+
+            await using var listener = await fixture.OpenAppConnectionAsync(ct);
+            listener.Notification += (_, args) => received.TrySetResult(args.Payload);
+            await using (var listen = new NpgsqlCommand(
+                $"LISTEN {CapabilityNotificationListener.Channel}", listener))
+            {
+                await listen.ExecuteNonQueryAsync(ct);
+            }
+
+            var (exit, output, _) = await RunAsync(["capabilities", "flag", "clear", Capability]);
+
+            exit.ShouldBe(0);
+            output.ShouldContain("CLEARED");
+
+            (await listener.WaitAsync(TimeSpan.FromSeconds(20), ct)).ShouldBeTrue();
+            (await received.Task).ShouldBe(Capability);
+            (await ReadFlagAsync(Capability, ct)).ShouldBeNull(
+                "absence restores cohort/registry resolution; explicit false does not");
+
+            var audits = await ReadAuditsAsync("flag.clear", Capability, since, ct);
+            audits.Count.ShouldBe(1);
+            var detail = JsonDocument.Parse(audits[0].Detail).RootElement;
+            detail.GetProperty("previous").GetBoolean().ShouldBeFalse();
+        }
+        finally
+        {
+            await DeleteFlagAsync(Capability, ct);
+        }
+    }
+
+    [Fact]
+    public async Task Flag_clear_matching_nothing_is_refused_and_records_nothing()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await DeleteFlagAsync(Capability, ct);
+        var since = await NowAsync(ct);
+
+        var (exit, _, error) = await RunAsync(["capabilities", "flag", "clear", Capability]);
+
+        exit.ShouldBe(1);
+        error.ShouldContain("no explicit flag override");
+        (await ReadAuditsAsync("flag.clear", Capability, since, ct)).ShouldBeEmpty();
     }
 
     /// <summary>
@@ -255,6 +310,7 @@ public sealed class CapabilitiesCommandTests(PostgresFixture fixture)
         var org = UuidV7.NewId();
         var user = UuidV7.NewId();
         await SeedOrgAsync(org, ct);
+        await SeedUserAsync(user, org, ct);
 
         var (exit, _, _) = await RunAsync(
             ["capabilities", "cohort", "add", Capability, "--org", org.ToString(), "--user", user.ToString()]);
@@ -311,6 +367,7 @@ public sealed class CapabilitiesCommandTests(PostgresFixture fixture)
         var org = UuidV7.NewId();
         var user = UuidV7.NewId();
         await SeedOrgAsync(org, ct);
+        await SeedUserAsync(user, org, ct);
 
         (await RunAsync(["capabilities", "cohort", "add", Capability, "--org", org.ToString()]))
             .Exit.ShouldBe(0);
@@ -324,6 +381,45 @@ public sealed class CapabilitiesCommandTests(PostgresFixture fixture)
         var remaining = await ReadCohortsAsync(org, ct);
         remaining.Count.ShouldBe(1);
         remaining[0].UserId.ShouldBe(user, "only the org-wide rule was named, so only it was removed");
+    }
+
+    [Fact]
+    public async Task Cohort_add_refuses_a_user_that_does_not_exist_and_writes_nothing()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var org = UuidV7.NewId();
+        var missingUser = UuidV7.NewId();
+        await SeedOrgAsync(org, ct);
+
+        var (exit, _, errors) = await RunAsync(
+            ["capabilities", "cohort", "add", Capability, "--org", org.ToString(),
+             "--user", missingUser.ToString()]);
+
+        exit.ShouldBe(1);
+        errors.ShouldContain("does not exist in org");
+        (await ReadCohortsAsync(org, ct)).ShouldBeEmpty();
+        (await ReadAuditsForOrgAsync(org, ct)).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Cohort_add_refuses_a_user_from_another_org_and_writes_nothing()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var requestedOrg = UuidV7.NewId();
+        var usersOrg = UuidV7.NewId();
+        var user = UuidV7.NewId();
+        await SeedOrgAsync(requestedOrg, ct);
+        await SeedOrgAsync(usersOrg, ct);
+        await SeedUserAsync(user, usersOrg, ct);
+
+        var (exit, _, errors) = await RunAsync(
+            ["capabilities", "cohort", "add", Capability, "--org", requestedOrg.ToString(),
+             "--user", user.ToString()]);
+
+        exit.ShouldBe(1);
+        errors.ShouldContain("does not exist in org");
+        (await ReadCohortsAsync(requestedOrg, ct)).ShouldBeEmpty();
+        (await ReadAuditsForOrgAsync(requestedOrg, ct)).ShouldBeEmpty();
     }
 
     /// <summary>
@@ -493,6 +589,7 @@ public sealed class CapabilitiesCommandTests(PostgresFixture fixture)
     // Elsewhere: every mutating kind needs a named operator.
     [InlineData(CapabilitiesActionKind.FlagEnable, false, null, true)]
     [InlineData(CapabilitiesActionKind.FlagDisable, false, "", true)]
+    [InlineData(CapabilitiesActionKind.FlagClear, false, null, true)]
     [InlineData(CapabilitiesActionKind.FlagDisable, false, "   ", true)]
     [InlineData(CapabilitiesActionKind.Grant, false, null, true)]
     [InlineData(CapabilitiesActionKind.Revoke, false, null, true)]
@@ -646,6 +743,23 @@ public sealed class CapabilitiesCommandTests(PostgresFixture fixture)
             "INSERT INTO orgs (id, name, created_at) VALUES (@id, 'capabilities-cli-test', now())", conn);
         cmd.Parameters.AddWithValue("id", orgId);
         await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    private async Task SeedUserAsync(Guid userId, Guid orgId, CancellationToken ct)
+    {
+        await using var db = fixture.CreateContext(fixture.MigratorConnectionString);
+        db.Add(new AppUser
+        {
+            Id = userId,
+            OrgId = orgId,
+            UserName = $"{userId}@capability.test",
+            NormalizedUserName = $"{userId}@CAPABILITY.TEST",
+            Email = $"{userId}@capability.test",
+            NormalizedEmail = $"{userId}@CAPABILITY.TEST",
+            SecurityStamp = userId.ToString(),
+            ConcurrencyStamp = userId.ToString(),
+        });
+        await db.SaveChangesAsync(ct);
     }
 
     /// <summary>Null when no row exists — which resolves as the registry default, not as a kill.</summary>

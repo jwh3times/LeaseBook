@@ -3,7 +3,7 @@
 - **Audience:** Operators and maintainers
 - **Status:** Living runbook; canonical error-diagnosis reference
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-08-03
+- **Last reviewed:** 2026-08-04
 
 How to turn the reference an operator sees on screen into the full server-side detail in
 Application Insights. See [ADR-025](../adr/ADR-025-error-contract-and-observability.md) for the
@@ -285,20 +285,26 @@ is not laziness — see below.
 
 Change only the `args:` list to run a different subcommand. Examples:
 
-| Intent             | `args:`                                                                               |
-| ------------------ | ------------------------------------------------------------------------------------- |
-| Kill switch        | `capabilities`, `flag`, `disable`, `<name>`                                           |
-| Re-enable          | `capabilities`, `flag`, `enable`, `<name>`                                            |
-| Entitle one tenant | `capabilities`, `grant`, `<name>`, `--org`, `<org-id>`                                |
-| Withdraw           | `capabilities`, `revoke`, `<name>`, `--org`, `<org-id>`                               |
-| Cohort, whole org  | `capabilities`, `cohort`, `add`, `<name>`, `--org`, `<org-id>`                        |
-| Cohort, one user   | `capabilities`, `cohort`, `add`, `<name>`, `--org`, `<org-id>`, `--user`, `<user-id>` |
-| Undo a cohort rule | `capabilities`, `cohort`, `remove`, `<name>`, `--org`, `<org-id>`                     |
-| Read one tenant    | `capabilities`, `list`, `--org`, `<org-id>`                                           |
+| Intent                 | `args:`                                                                               |
+| ---------------------- | ------------------------------------------------------------------------------------- |
+| Kill switch            | `capabilities`, `flag`, `disable`, `<name>`                                           |
+| Re-enable              | `capabilities`, `flag`, `enable`, `<name>`                                            |
+| Restore cohort/default | `capabilities`, `flag`, `clear`, `<name>`                                             |
+| Entitle one tenant     | `capabilities`, `grant`, `<name>`, `--org`, `<org-id>`                                |
+| Withdraw               | `capabilities`, `revoke`, `<name>`, `--org`, `<org-id>`                               |
+| Cohort, whole org      | `capabilities`, `cohort`, `add`, `<name>`, `--org`, `<org-id>`                        |
+| Cohort, one user       | `capabilities`, `cohort`, `add`, `<name>`, `--org`, `<org-id>`, `--user`, `<user-id>` |
+| Undo a cohort rule     | `capabilities`, `cohort`, `remove`, `<name>`, `--org`, `<org-id>`                     |
+| Read one tenant        | `capabilities`, `list`, `--org`, `<org-id>`                                           |
 
 `cohort remove` is the exact inverse of `cohort add`: without `--user` it targets the org-wide rule
 only, so the two invocations have to match token for token or the removal silently matches nothing
 (the verb refuses in that case rather than reporting "removed 0").
+
+`flag disable` and `flag clear` are not synonyms. Disable writes an explicit false override, which
+beats every cohort. Clear deletes that override, so resolution falls through to cohort membership and
+then the registry default; it refuses if no override row exists. A user-level cohort add also refuses
+unless that user belongs to the `--org` supplied on the same command.
 
 Why every field is present rather than only the ones you are changing: `az containerapp job start`
 does **not** merge with the job's template. It sends the execution template as given, so anything

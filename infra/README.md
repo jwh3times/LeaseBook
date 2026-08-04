@@ -135,7 +135,7 @@ is therefore shared by the container app and this job in the template — but no
 after a `deploy-prod` revision update, so the runbook reads the image off the running app instead of
 trusting the template.
 
-One job definition serves all seven subcommands, but **only through the `--yaml` execution-template
+One job definition serves all eight subcommands, but **only through the `--yaml` execution-template
 form**. The `--args` flag is an argparse `nargs='*'` list and argparse treats any unknown token
 starting with `-` as an option, so `--args "capabilities" "list" "--org" "demo"` exits 2 with
 `unrecognized arguments: --org demo`. `--org` is required by `grant`, `revoke`, `cohort add` and

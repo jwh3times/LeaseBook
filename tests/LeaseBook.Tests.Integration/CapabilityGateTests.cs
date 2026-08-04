@@ -237,19 +237,22 @@ public sealed class CapabilityGateTests(PostgresFixture fixture)
 
     /// <summary>
     /// The cold half of the cache-served path, which the primed tests above never reach: on a miss
-    /// <c>GetCachedAsync</c> refreshes, and it does so with an ambient transaction already open on
-    /// the caller's <c>DbContext</c> — so the refresh needs a <b>second</b> pooled connection while
-    /// the caller still holds the first. It completes only because the refresh takes its own scope,
-    /// its own context and its own connection. A refresh that reached for the ambient one would wait
-    /// on a transaction its own caller is holding, which hangs rather than failing an assertion,
-    /// hence the explicit timeout rather than the runner's.
+    /// <c>GetCachedAsync</c> refreshes with an ambient transaction already holding the pool's only
+    /// connection. The refresh must therefore read through that transaction rather than opening a
+    /// platform scope and waiting forever for a second connection. A larger pool would hide the
+    /// regression, so this test deliberately constrains it to one.
     /// </summary>
     [Fact]
     public async Task The_cached_read_loads_a_cold_key_inside_the_ambient_transaction()
     {
         var ct = TestContext.Current.CancellationToken;
 
-        await using var host = new ApiFactory(fixture.AppConnectionString);
+        var oneConnection = new NpgsqlConnectionStringBuilder(fixture.AppConnectionString)
+        {
+            MaxPoolSize = 1,
+        }.ConnectionString;
+
+        await using var host = new ApiFactory(oneConnection);
         _ = host.CreateClient();
 
         // Never handed to CapabilityCache before this point, so this key can only be a cold load.
@@ -266,7 +269,7 @@ public sealed class CapabilityGateTests(PostgresFixture fixture)
             org,
             async () =>
             {
-                var cached = await gate.GetCachedAsync(ct).WaitAsync(TimeSpan.FromSeconds(30), ct);
+                var cached = await gate.GetCachedAsync(ct).WaitAsync(TimeSpan.FromSeconds(5), ct);
 
                 cached.Version.ShouldNotBeNullOrWhiteSpace();
                 cache.ColdLoads.ShouldBe(
