@@ -153,6 +153,14 @@ public static class CapabilityAge
             // appears in the registry — i.e. when it was introduced. A name deleted and later re-added
             // therefore dates to the FIRST introduction, which is the conservative direction: re-adding
             // a money-path capability under the same name re-arms the same risk.
+            //
+            // Two ways the clock resets, both unsafe and neither detectable from here:
+            //   * RENAMING a capability's Name string starts a new pickaxe history at zero. Defensible
+            //     (a renamed money-path capability is arguably a new one) but it is a one-line bypass.
+            //   * A rename of THIS FILE combined with a rewrite of more than half its content in the
+            //     same commit defeats git's rename detection, so --follow stops there and every age
+            //     dates to that commit. The vacuity guard cannot catch it: the pathspec still resolves
+            //     and the dates are merely younger.
             var log = await GitAsync(
                 repoRoot,
                 ["log", "--follow", "--format=%aI", "-S", capability.Name, "--", RegistryRelativePath],

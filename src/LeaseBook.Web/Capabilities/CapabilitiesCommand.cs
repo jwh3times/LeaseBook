@@ -79,6 +79,16 @@ public static class CapabilitiesCommand
             if (action.Kind == CapabilitiesActionKind.List)
             {
                 await executor.RunAsync(() => ListAsync(db, action, ct), ct);
+
+                // AFTER the transaction has committed and released its connection. The age report
+                // touches no DbContext — it reads git history — and it spawns one subprocess per
+                // capability at up to 15s each. Inside the executor that time would be spent
+                // idle-in-transaction on a pooled connection for no benefit whatsoever.
+                if (action.Stale)
+                {
+                    await ReportAgeAsync(ct);
+                }
+
                 return 0;
             }
 
@@ -149,8 +159,8 @@ public static class CapabilitiesCommand
     /// <summary>
     /// Prints the registry joined to its stored state: the flag, plus how many orgs hold a live
     /// entitlement and how many cohort rules exist. With <c>--org</c> it adds that tenant's own
-    /// entitlement and cohort state; with <c>--stale</c> it appends the age report
-    /// (<see cref="ReportAgeAsync"/>).
+    /// entitlement and cohort state. <c>--stale</c> appends the age report, which the caller runs after
+    /// this transaction commits — see <see cref="ReportAgeAsync"/>.
     /// <para>
     /// <b>Platform-scoped, and it has to be.</b> <c>feature_flags</c> alone would not need it
     /// (<c>feature_flags_read</c> is <c>FOR SELECT USING (true)</c>, which is why
@@ -229,11 +239,6 @@ public static class CapabilitiesCommand
         {
             await ListForOrgAsync(db, orgId, ct);
         }
-
-        if (action.Stale)
-        {
-            await ReportAgeAsync(ct);
-        }
     }
 
     /// <summary>
@@ -243,6 +248,11 @@ public static class CapabilitiesCommand
     /// <b>The same verdict CI enforces, from the same code.</b> <c>CapabilityAgeTests</c> fails the
     /// build on exactly what this prints as STALE — both call <see cref="CapabilityAge.IsStale"/> — so
     /// an operator can never be told "within window" by the tool that CI is about to contradict.
+    /// </para>
+    /// <para>
+    /// <b>Run outside the platform-scoped transaction</b>, by <see cref="RunAsync"/> once the listing
+    /// has committed: it needs no database at all, and one subprocess per capability at up to 15s each
+    /// is not something to hold a pooled connection open through.
     /// </para>
     /// <para>
     /// <b>Age comes from git history, so it is UNKNOWN wherever the source tree or history is not.</b>
