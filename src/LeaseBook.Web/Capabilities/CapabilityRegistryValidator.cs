@@ -1,4 +1,4 @@
-using System.Net.Sockets;
+using LeaseBook.Web.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using CapabilityCatalog = LeaseBook.Modules.Capabilities.Registry.Capabilities;
@@ -76,10 +76,10 @@ public static class CapabilityRegistryValidator
     /// </para>
     /// <para>
     /// Caught narrowly, and by walking the exception chain rather than matching the thrown type — see
-    /// <see cref="IsUnreachable"/>, which explains why the obvious version of this filter silently never
-    /// fires. A <see cref="PostgresException"/> anywhere in the chain means the server answered and
-    /// rejected us — a missing table or a revoked grant — which is a deployment defect that should still
-    /// surface, not a transient outage to ride out.
+    /// <see cref="DatabaseReachability.IsUnreachable"/>, which explains why the obvious version of this
+    /// filter silently never fires. A <see cref="PostgresException"/> anywhere in the chain means the
+    /// server answered and rejected us — a missing table or a revoked grant — which is a deployment
+    /// defect that should still surface, not a transient outage to ride out.
     /// </para>
     /// </remarks>
     /// <param name="environment">
@@ -109,7 +109,7 @@ public static class CapabilityRegistryValidator
                 .SqlQuery<string>($"""SELECT name AS "Value" FROM feature_flags ORDER BY name""")
                 .ToListAsync(ct);
         }
-        catch (Exception ex) when (IsUnreachable(ex))
+        catch (Exception ex) when (DatabaseReachability.IsUnreachable(ex))
         {
             Logger(scope).LogError(
                 ex,
@@ -142,41 +142,6 @@ public static class CapabilityRegistryValidator
         Logger(scope).LogError(
             "Capability registry drift detected at startup; continuing because the rows are inert. {Detail}",
             detail);
-    }
-
-    /// <summary>
-    /// True when the failure is "the server could not be reached", false when it is "the server
-    /// answered and said no".
-    /// </summary>
-    /// <remarks>
-    /// <b>The chain has to be walked, not the top frame matched.</b> EF Core wraps a transient
-    /// provider failure in an <see cref="InvalidOperationException"/> reading "An exception has been
-    /// raised that is likely due to a transient failure", with the real
-    /// <see cref="NpgsqlException"/> underneath. A filter written against the exception type actually
-    /// thrown therefore never fires against a live unreachable database, only against a hand-thrown
-    /// test double — which is precisely the trap
-    /// <c>An_unreachable_database_does_not_stop_the_host_from_binding</c> caught.
-    /// <para>
-    /// <see cref="PostgresException"/> is checked BEFORE its <see cref="NpgsqlException"/> base and
-    /// returns false: a server-side error such as a missing table or a revoked grant means the
-    /// connection worked perfectly and the deployment is broken. That must keep surfacing rather than
-    /// being ridden out as an outage.
-    /// </para>
-    /// </remarks>
-    private static bool IsUnreachable(Exception exception)
-    {
-        for (var current = exception; current is not null; current = current.InnerException)
-        {
-            switch (current)
-            {
-                case PostgresException:
-                    return false;
-                case NpgsqlException or SocketException or TimeoutException:
-                    return true;
-            }
-        }
-
-        return false;
     }
 
     private static ILogger<CapabilityRegistryValidatorMarker> Logger(IServiceScope scope) =>

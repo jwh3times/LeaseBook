@@ -67,11 +67,15 @@ public static class CapabilitiesCommand
         var configuredOperator = Environment.GetEnvironmentVariable(OperatorVariable);
 
         // BEFORE the scope and before any of THIS command's database work, so a refusal writes nothing
-        // and opens no transaction. It is not the first database call the PROCESS makes: Program.cs
-        // runs RoleSeeder.EnsureRolesAsync before dispatching any verb, so the connection has already
-        // been proven by the time we get here. That ordering is pre-existing and deliberate elsewhere;
-        // the guarantee being made here is about writes, not about the process touching nothing.
-        // Resolved from the root provider, where IHostEnvironment is a singleton.
+        // and opens no transaction. It is not the first database call the PROCESS makes — Program.cs
+        // attempts role seeding before dispatching any verb — but do NOT read that as proof the
+        // connection works: that call is TryEnsureRolesAsync, which reports an unreachable server and
+        // continues so the host can bind. So this verb may well be the first thing to actually reach
+        // the database, and the first place an outage surfaces. That is fine and intended: it fails at
+        // its own work, with this command's own error handling, rather than behind a role seeder the
+        // operator never asked to run. The guarantee being made here is about writes, not about the
+        // process touching nothing. Resolved from the root provider, where IHostEnvironment is a
+        // singleton.
         var environment = services.GetRequiredService<IHostEnvironment>();
         if (AttributionRefusal(action.Kind, environment.IsDevelopment(), configuredOperator) is { } gap)
         {

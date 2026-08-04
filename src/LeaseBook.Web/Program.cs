@@ -184,15 +184,32 @@ if (!isOpenApiBuild)
     builder.Services.AddHostedService(sp => sp.GetRequiredService<CapabilityNotificationListener>());
     builder.Services.AddSingleton<CapabilityReadinessProbe>();
     builder.Services.AddHostedService(sp => sp.GetRequiredService<CapabilityReadinessProbe>());
+
+    // The role-seeding half of the same gate (ADR-028 §9). Registered on the same terms and for the
+    // same reason: it retries the one boot-time database write the host cannot serve traffic without,
+    // and against a reachable database it finds the work already done by the synchronous call below
+    // and exits immediately.
+    builder.Services.AddHostedService(sp => sp.GetRequiredService<RoleSeedingProbe>());
 }
 
-// Readiness (Task 7): what the probe above establishes, /api/health/ready reports. Registered
-// unconditionally — the check only reads a bool off the singleton cache, so it costs nothing in the
-// OpenAPI build, and MetaEndpoints maps the route in every configuration. Tagged `ready` so liveness
+// Not inside the carve-out above: the synchronous role-seeding call below marks this even when no
+// hosted service runs, and the readiness check resolves it unconditionally.
+builder.Services.AddSingleton<RoleSeedingState>();
+builder.Services.AddSingleton<RoleSeedingProbe>();
+
+// Readiness (Task 7): what the probes above establish, /api/health/ready reports. Registered
+// unconditionally — each check only reads a bool off a singleton, so they cost nothing in the OpenAPI
+// build, and MetaEndpoints maps the route in every configuration. Tagged `ready` so liveness
 // (/api/health) and readiness stay separable: an unreachable seam must remove a replica from
 // rotation, never restart it.
+//
+// TWO checks, not one, and both are load-bearing. The seam being reachable says nothing about whether
+// the four fixed roles exist — seeding happens once at boot, reachability is proven continuously — so
+// a replica that rode out a database outage at boot would otherwise report healthy with no roles and
+// fail every authenticated request. The endpoint reports the worst of the two.
 builder.Services.AddHealthChecks()
-    .AddCheck<CapabilityReadinessCheck>(CapabilityReadinessCheck.Name, tags: [CapabilityReadinessCheck.ReadyTag]);
+    .AddCheck<CapabilityReadinessCheck>(CapabilityReadinessCheck.Name, tags: [CapabilityReadinessCheck.ReadyTag])
+    .AddCheck<RoleSeedingReadinessCheck>(RoleSeedingReadinessCheck.Name, tags: [CapabilityReadinessCheck.ReadyTag]);
 
 // Accounting module services (chart-of-accounts provisioning, period lifecycle; the posting engine
 // and event catalog register here in later WPs). They consume the ambient DbContext + ITenantContext.
@@ -455,9 +472,27 @@ if (!isOpenApiBuild
 
 // The four fixed roles must exist before sign-in/seeding (idempotent). Skipped during build-time
 // OpenAPI generation (ADR-012) — see the isOpenApiBuild note above.
-if (!isOpenApiBuild)
+//
+// Try, not Ensure: an UNREACHABLE database is reported rather than thrown, so the host still binds a
+// port. Without that, a replica coming up during a database outage died right here — before Kestrel
+// bound and before any probe could observe it — and ACA crash-looped the revision, which is the one
+// failure no probe tuning can recover from. Every other fault (a missing table, a revoked grant, a
+// role that could not be created) still throws, because those are deployment defects whose answer is
+// a fix, not a wait.
+//
+// Skipping the seeding is only safe because readiness gates on the result: RoleSeedingState stays
+// false, RoleSeedingReadinessCheck reports 503, and RoleSeedingProbe keeps retrying once app.Run()
+// starts the hosted services. Swallowing the failure WITHOUT that gate would be worse than the crash
+// loop it replaces — a role-less replica would pass the capability readiness check the moment the
+// seam became reachable and enter rotation unable to authenticate anyone.
+//
+// The CLI verbs below are unaffected by the softening. The four seeders each call EnsureRolesAsync
+// (the throwing entry point) themselves, so `seed` still seeds roles against a reachable database and
+// still fails loudly against an unreachable one; `check-invariants`, `capabilities` and `perf-probe`
+// need no roles at all.
+if (!isOpenApiBuild && await RoleSeeder.TryEnsureRolesAsync(app.Services))
 {
-    await RoleSeeder.EnsureRolesAsync(app.Services);
+    app.Services.GetRequiredService<RoleSeedingState>().MarkSeeded();
 }
 
 if (seedTarget is { } target)
