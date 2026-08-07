@@ -1,4 +1,5 @@
 ---
+# GENERATED — do not edit. Source: .agents/skills/ship/SKILL.md — regenerate with 'node scripts/sync-agent-mirrors.mjs'.
 name: ship
 description: Use when a branch is ready for review or the user says "ship it", "open a PR", or "push this" — refreshes docs, updates the CHANGELOG [Unreleased] section, flags private-roadmap WP drift, runs the fast checks, pushes, and opens or updates the PR. LeaseBook-specific.
 ---
