@@ -70,9 +70,10 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: npm ci
-      # `.codex/agents/*.toml` and `.agents/skills/` are generated from `.claude/`. Regenerating
-      # here and failing on any difference is what keeps the harness copies from drifting apart —
-      # editing an agent contract without re-running the sync is caught before merge.
+      # `.codex/agents/*.toml` is generated from `.claude/agents/`; `.claude/skills/` is generated
+      # from `.agents/skills/`. Regenerating here and failing on any difference is what keeps the
+      # harness copies from drifting apart — editing an agent or skill without re-running the sync
+      # is caught before merge.
       - name: Verify committed harness mirrors are up to date
         working-directory: ${{ github.workspace }}
         run: node scripts/sync-agent-mirrors.mjs --check
