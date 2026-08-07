@@ -153,15 +153,25 @@ Run `dotnet tool restore` once for `dotnet-ef`.
 
 ## Domain Guidance Files
 
-Specialist-agent guidance is authored under `.claude/agents/`, which is the canonical source. The same
-instructions are mirrored for other harnesses: `.codex/agents/*.toml` for Codex, and `.agents/skills/`
-for the portable skills. Whichever harness you are in, these are project knowledge — before editing one
-of these domains, read the corresponding file and apply its rules unless a higher-level invariant in
-this file conflicts.
+Specialist-agent guidance is authored under `.claude/agents/`, mirrored to `.codex/agents/*.toml` for
+Codex. Skills run the opposite direction: **`.agents/skills/` is authored** — that's where the skills
+installer writes when installing or updating a skill, so keeping it the source means installing stays
+a one-way operation with no manual copying — and `.claude/skills/` is generated for Claude Code, with
+each generated `SKILL.md` carrying a `# GENERATED — do not edit` banner as a YAML comment on line 2
+(the frontmatter's opening `---` stays on line 1). Whichever harness you are in, these are project
+knowledge — before editing one of these domains, read the corresponding file and apply its rules
+unless a higher-level invariant in this file conflicts.
 
-**Edit `.claude/` only.** The mirrors are generated; hand-editing one is overwritten on the next sync.
-After changing an agent or skill, run `node scripts/sync-agent-mirrors.mjs` and commit the result. CI
-regenerates and fails the build if a committed mirror is stale.
+**Edit `.claude/agents/` and `.agents/skills/` only** — never `.codex/agents/` or `.claude/skills/`
+directly; both are generated and hand-editing either is overwritten on the next sync. After changing
+an agent or a skill, run `node scripts/sync-agent-mirrors.mjs` (or, from `web/`, `npm run sync:agents`)
+and commit the result. CI regenerates with `--check` and fails the build if a committed mirror is
+stale. Run `npm run format` (from `web/`) **before** the sync, not after — formatting the generated
+copy instead of the authored source just re-drifts it on the next pass. Never reintroduce symlinks
+under `.claude/skills/`: this repo's `core.symlinks` is `false`, so git would silently duplicate every
+file inside a symlinked directory into the repository instead of recording a link (verify with
+`git config core.symlinks` and `git add -n <path>` — a multi-file listing instead of one entry means
+this has happened).
 
 | Work type                                                               | Read first                               |
 | ----------------------------------------------------------------------- | ---------------------------------------- |
