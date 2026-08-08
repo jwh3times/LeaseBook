@@ -193,6 +193,22 @@ harness is guaranteed to run it, and CI does not. When source changes affect doc
 decisions, user workflows, commands, or business events, check documentation drift manually and update
 the relevant docs in the same change.
 
+## Agent skills
+
+### Issue tracker
+
+Issues live in GitHub Issues for this repo (`gh` CLI). See [`docs/agents/issue-tracker.md`](docs/agents/issue-tracker.md).
+
+### Triage labels
+
+Default label vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`,
+`wontfix`. See [`docs/agents/triage-labels.md`](docs/agents/triage-labels.md).
+
+### Domain docs
+
+Single-context layout — `CONTEXT.md` and `docs/adr/` at the repo root. See
+[`docs/agents/domain.md`](docs/agents/domain.md).
+
 ## Architecture
 
 `docs/architecture.md` is the canonical public map of the implemented system. `docs/blueprint.md` is
