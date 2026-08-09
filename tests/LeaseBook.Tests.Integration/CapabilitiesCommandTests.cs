@@ -1,11 +1,15 @@
 using System.Text.Json;
 using LeaseBook.Modules.Capabilities.Caching;
+using LeaseBook.Modules.Capabilities.Resolution;
 using LeaseBook.SharedKernel;
 using LeaseBook.Tests.Common;
 using LeaseBook.Tests.Integration.Fixtures;
+using LeaseBook.Tests.Integration.Support;
 using LeaseBook.Web.Adapters;
 using LeaseBook.Web.Auth;
 using LeaseBook.Web.Capabilities;
+using LeaseBook.Web.Persistence;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
@@ -44,7 +48,7 @@ public sealed class CapabilitiesCommandTests(PostgresFixture fixture)
     public async Task Flag_enable_writes_the_row_and_exactly_one_audit_event()
     {
         var ct = TestContext.Current.CancellationToken;
-        var since = await NowAsync(ct);
+        var since = await Probe.NowAsync(ct);
 
         try
         {
@@ -52,9 +56,9 @@ public sealed class CapabilitiesCommandTests(PostgresFixture fixture)
 
             exit.ShouldBe(0);
             output.ShouldContain("ENABLED");
-            (await ReadFlagAsync(Capability, ct)).ShouldBe(true);
+            (await Probe.ReadFlagAsync(Capability, ct)).ShouldBe(true);
 
-            var audits = await ReadAuditsAsync("flag.enable", Capability, since, ct);
+            var audits = await Probe.ReadAuditsAsync("flag.enable", Capability, since, ct);
             audits.Count.ShouldBe(1, "one verb writes exactly one platform audit row");
             audits[0].Actor.ShouldBe(CapabilitiesCommand.Actor);
             audits[0].OrgId.ShouldBeNull("a flag is deployment-wide, so the audit row names no org");
@@ -66,79 +70,7 @@ public sealed class CapabilitiesCommandTests(PostgresFixture fixture)
         }
         finally
         {
-            await DeleteFlagAsync(Capability, ct);
-        }
-    }
-
-    /// <summary>
-    /// A flag is mutable state, so the write destroys the previous value: if the audit row does not
-    /// carry it, it is gone for good. An entitlement needs no equivalent — its history IS the table.
-    /// </summary>
-    [Fact]
-    public async Task Flag_disable_records_the_value_it_overwrote()
-    {
-        var ct = TestContext.Current.CancellationToken;
-        var since = await NowAsync(ct);
-
-        try
-        {
-            (await RunAsync(["capabilities", "flag", "enable", Capability])).Exit.ShouldBe(0);
-            var (exit, output, _) = await RunAsync(["capabilities", "flag", "disable", Capability]);
-
-            exit.ShouldBe(0);
-            output.ShouldContain("KILLED");
-            (await ReadFlagAsync(Capability, ct)).ShouldBe(false);
-
-            var audits = await ReadAuditsAsync("flag.disable", Capability, since, ct);
-            audits.Count.ShouldBe(1);
-
-            var detail = JsonDocument.Parse(audits[0].Detail).RootElement;
-            detail.GetProperty("enabled").GetBoolean().ShouldBeFalse();
-            detail.GetProperty("previous").GetBoolean().ShouldBeTrue();
-        }
-        finally
-        {
-            await DeleteFlagAsync(Capability, ct);
-        }
-    }
-
-    [Fact]
-    public async Task Flag_clear_deletes_the_override_audits_the_previous_value_and_notifies()
-    {
-        var ct = TestContext.Current.CancellationToken;
-        var received = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
-
-        try
-        {
-            (await RunAsync(["capabilities", "flag", "disable", Capability])).Exit.ShouldBe(0);
-            var since = await NowAsync(ct);
-
-            await using var listener = await fixture.OpenAppConnectionAsync(ct);
-            listener.Notification += (_, args) => received.TrySetResult(args.Payload);
-            await using (var listen = new NpgsqlCommand(
-                $"LISTEN {CapabilityNotifications.Channel}", listener))
-            {
-                await listen.ExecuteNonQueryAsync(ct);
-            }
-
-            var (exit, output, _) = await RunAsync(["capabilities", "flag", "clear", Capability]);
-
-            exit.ShouldBe(0);
-            output.ShouldContain("CLEARED");
-
-            (await listener.WaitAsync(TimeSpan.FromSeconds(20), ct)).ShouldBeTrue();
-            (await received.Task).ShouldBe(Capability);
-            (await ReadFlagAsync(Capability, ct)).ShouldBeNull(
-                "absence restores cohort/registry resolution; explicit false does not");
-
-            var audits = await ReadAuditsAsync("flag.clear", Capability, since, ct);
-            audits.Count.ShouldBe(1);
-            var detail = JsonDocument.Parse(audits[0].Detail).RootElement;
-            detail.GetProperty("previous").GetBoolean().ShouldBeFalse();
-        }
-        finally
-        {
-            await DeleteFlagAsync(Capability, ct);
+            await Probe.DeleteFlagAsync(Capability, ct);
         }
     }
 
@@ -146,302 +78,17 @@ public sealed class CapabilitiesCommandTests(PostgresFixture fixture)
     public async Task Flag_clear_matching_nothing_is_refused_and_records_nothing()
     {
         var ct = TestContext.Current.CancellationToken;
-        await DeleteFlagAsync(Capability, ct);
-        var since = await NowAsync(ct);
+        await Probe.DeleteFlagAsync(Capability, ct);
+        var since = await Probe.NowAsync(ct);
 
         var (exit, _, error) = await RunAsync(["capabilities", "flag", "clear", Capability]);
 
         exit.ShouldBe(1);
         error.ShouldContain("no explicit flag override");
-        (await ReadAuditsAsync("flag.clear", Capability, since, ct)).ShouldBeEmpty();
+        (await Probe.ReadAuditsAsync("flag.clear", Capability, since, ct)).ShouldBeEmpty();
     }
 
-    /// <summary>
-    /// W4: the <c>NOTIFY</c> must be issued INSIDE the write transaction. Postgres queues
-    /// notifications and delivers them after commit, so by the time this listener is woken the row it
-    /// was told about is already visible — which is what the second assertion proves. Issued after the
-    /// commit instead, that ordering guarantee is gone and the race returns.
-    /// </summary>
-    [Fact]
-    public async Task A_flag_toggle_notifies_only_once_the_row_is_visible()
-    {
-        var ct = TestContext.Current.CancellationToken;
-        var received = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        await using var listener = await fixture.OpenAppConnectionAsync(ct);
-        listener.Notification += (_, args) => received.TrySetResult(args.Payload);
-
-        await using (var listen = new NpgsqlCommand(
-            $"LISTEN {CapabilityNotifications.Channel}", listener))
-        {
-            await listen.ExecuteNonQueryAsync(ct);
-        }
-
-        try
-        {
-            (await RunAsync(["capabilities", "flag", "enable", Capability])).Exit.ShouldBe(0);
-
-            // Wait to completion BEFORE touching the connection again — Npgsql forbids issuing a
-            // command while a wait is in flight.
-            var delivered = await listener.WaitAsync(TimeSpan.FromSeconds(20), ct);
-            delivered.ShouldBeTrue("the writer must issue NOTIFY, and inside its own transaction");
-            (await received.Task).ShouldBe(Capability, "the payload names the capability that moved");
-
-            // Read on the LISTENER's own connection, which holds no transaction: the row must
-            // already be committed and visible, because the notification was delivered after commit.
-            await using var read = new NpgsqlCommand(
-                "SELECT enabled FROM feature_flags WHERE name = @name", listener);
-            read.Parameters.AddWithValue("name", Capability);
-            (await read.ExecuteScalarAsync(ct)).ShouldBe(
-                true, "delivery after commit means the change is visible when the wake-up arrives");
-        }
-        finally
-        {
-            await DeleteFlagAsync(Capability, ct);
-        }
-    }
-
-    // ── Entitlements ────────────────────────────────────────────────────────────────────────────
-
-    /// <summary>
-    /// A revoke is a new row with <c>granted = false</c>, never an update — the table has no
-    /// UPDATE/DELETE grant in either plane. Both events survive, and current state is the latest.
-    /// </summary>
-    [Fact]
-    public async Task Grant_then_revoke_appends_two_events_and_two_audit_rows()
-    {
-        var ct = TestContext.Current.CancellationToken;
-        var org = UuidV7.NewId();
-        await SeedOrgAsync(org, ct);
-
-        (await RunAsync(["capabilities", "grant", Capability, "--org", org.ToString()])).Exit.ShouldBe(0);
-        (await RunAsync(["capabilities", "revoke", Capability, "--org", org.ToString()])).Exit.ShouldBe(0);
-
-        var events = await ReadEntitlementsAsync(org, ct);
-        events.Count.ShouldBe(2, "entitlements are append-only events, so the grant is still there");
-        events[^1].Granted.ShouldBeFalse("the latest row per (org, capability) is the current state");
-        events[0].Actor.ShouldBe(CapabilitiesCommand.Actor);
-
-        var audits = await ReadAuditsForOrgAsync(org, ct);
-        audits.Select(a => a.Action).ShouldBe(["entitlement.grant", "entitlement.revoke"]);
-        audits.ShouldAllBe(a => a.Capability == Capability);
-    }
-
-    /// <summary>
-    /// <b>The atomicity proof that discriminates.</b> Every row Postgres stores carries <c>xmin</c>,
-    /// the id of the (sub)transaction that inserted it. Rows written by two different transactions can
-    /// never share it, which is the property being relied on here.
-    /// <para>
-    /// <b>What this actually asserts is slightly stronger than "same transaction", deliberately.</b>
-    /// <c>xmin</c> holds the SUBtransaction xid for rows inserted inside a savepoint, and EF opens a
-    /// savepoint per <c>SaveChanges</c> when a transaction is already open — so a refactor that kept
-    /// one transaction but split the write across two <c>SaveChanges</c> calls would also turn this
-    /// red. That is the right direction to err: it is stricter than advertised and can never be a
-    /// false green. The shipped path writes both rows in a single <c>SaveChanges</c>, so they share
-    /// one subxid.
-    /// </para>
-    /// <para>
-    /// The rollback test below is necessary but NOT sufficient on its own: the FK fires on the
-    /// entitlement INSERT, which precedes the audit write under "one transaction" and under
-    /// "state first, audit separately" alike, so its emptiness carries no discriminating
-    /// information. The failure mode that separates the two designs — state row present, audit row
-    /// absent — is what <c>xmin</c> equality rules out. Verified by splitting the audit write into a
-    /// second <c>PlatformScopedExecutor.RunAsync</c> in a scratch edit and watching this go red.
-    /// </para>
-    /// <para>
-    /// The timestamp equality proves something different and weaker, and is kept for that: both rows
-    /// carry the single <c>SELECT now()</c> the transaction opened with. It is NOT atomicity evidence
-    /// — it stayed green under the split above, because the deferred audit row reused the same
-    /// captured value.
-    /// </para>
-    /// </summary>
-    [Fact]
-    public async Task The_state_row_and_its_audit_row_are_written_by_one_transaction()
-    {
-        var ct = TestContext.Current.CancellationToken;
-        var org = UuidV7.NewId();
-        await SeedOrgAsync(org, ct);
-
-        (await RunAsync(["capabilities", "grant", Capability, "--org", org.ToString()])).Exit.ShouldBe(0);
-
-        var (stateXmin, stateAt) = await ReadRowIdentityAsync(
-            "SELECT xmin::text, effective_at FROM entitlements WHERE org_id = @org", org, ct);
-        var (auditXmin, auditAt) = await ReadRowIdentityAsync(
-            "SELECT xmin::text, occurred_at FROM platform_audit_events WHERE org_id = @org", org, ct);
-
-        auditXmin.ShouldBe(
-            stateXmin,
-            "the entitlement and its audit row must be inserted by the SAME Postgres transaction — " +
-            "equal xmin is the only evidence that rules out 'state committed, audit written after'");
-
-        auditAt.ShouldBe(
-            stateAt,
-            "both carry the single SELECT now() the transaction opened with (transaction start time)");
-    }
-
-    /// <summary>
-    /// The rollback half. The FK to <c>orgs</c> rejects the entitlement, so the whole platform-scoped
-    /// transaction rolls back and the audit row, added in the same <c>SaveChanges</c>, goes with it.
-    /// Read
-    /// <see cref="The_state_row_and_its_audit_row_are_written_by_one_transaction"/> for why this test
-    /// alone would not establish atomicity.
-    /// </summary>
-    [Fact]
-    public async Task A_rejected_write_leaves_neither_a_state_row_nor_an_audit_row()
-    {
-        var ct = TestContext.Current.CancellationToken;
-        var ghost = UuidV7.NewId(); // never inserted into orgs
-
-        var (exit, _, errors) = await RunAsync(["capabilities", "grant", Capability, "--org", ghost.ToString()]);
-
-        exit.ShouldBe(1);
-        errors.ShouldContain("does not exist");
-
-        (await ReadEntitlementsAsync(ghost, ct)).ShouldBeEmpty();
-        (await ReadAuditsForOrgAsync(ghost, ct)).ShouldBeEmpty(
-            "the audit row is written in the same transaction, so a rolled-back write leaves none");
-    }
-
-    // ── Cohorts ─────────────────────────────────────────────────────────────────────────────────
-
-    [Fact]
-    public async Task Cohort_add_writes_the_rule_and_one_audit_event()
-    {
-        var ct = TestContext.Current.CancellationToken;
-        var org = UuidV7.NewId();
-        var user = UuidV7.NewId();
-        await SeedOrgAsync(org, ct);
-        await SeedUserAsync(user, org, ct);
-
-        var (exit, _, _) = await RunAsync(
-            ["capabilities", "cohort", "add", Capability, "--org", org.ToString(), "--user", user.ToString()]);
-
-        exit.ShouldBe(0);
-
-        var rows = await ReadCohortsAsync(org, ct);
-        rows.Count.ShouldBe(1);
-        rows[0].UserId.ShouldBe(user);
-        rows[0].AddedBy.ShouldBe(CapabilitiesCommand.Actor);
-
-        var audits = await ReadAuditsForOrgAsync(org, ct);
-        audits.Count.ShouldBe(1);
-        audits[0].Action.ShouldBe("cohort.add");
-        JsonDocument.Parse(audits[0].Detail).RootElement
-            .GetProperty("user_id").GetString().ShouldBe(user.ToString());
-    }
-
-    /// <summary>
-    /// <c>remove</c> is the exact inverse of <c>add</c>, which is what stops the CLI creating state it
-    /// cannot undo. <c>capability_cohorts</c> keeps its UPDATE/DELETE grants on purpose (membership is
-    /// mutable, unlike an entitlement), so this is an ordinary delete rather than a compensating event.
-    /// </summary>
-    [Fact]
-    public async Task Cohort_remove_deletes_the_rule_and_records_the_removal()
-    {
-        var ct = TestContext.Current.CancellationToken;
-        var org = UuidV7.NewId();
-        await SeedOrgAsync(org, ct);
-
-        (await RunAsync(["capabilities", "cohort", "add", Capability, "--org", org.ToString()]))
-            .Exit.ShouldBe(0);
-
-        var (exit, output, _) = await RunAsync(
-            ["capabilities", "cohort", "remove", Capability, "--org", org.ToString()]);
-
-        exit.ShouldBe(0);
-        output.ShouldContain("removed");
-        (await ReadCohortsAsync(org, ct)).ShouldBeEmpty();
-
-        var audits = await ReadAuditsForOrgAsync(org, ct);
-        audits.Select(a => a.Action).ShouldBe(["cohort.add", "cohort.remove"]);
-        JsonDocument.Parse(audits[^1].Detail).RootElement.GetProperty("removed").GetInt32().ShouldBe(1);
-    }
-
-    /// <summary>
-    /// Without <c>--user</c>, <c>remove</c> targets the org-wide rule ONLY. Anything looser would let a
-    /// bare <c>--org</c> silently destroy user-level rules the operator never named.
-    /// </summary>
-    [Fact]
-    public async Task Cohort_remove_without_a_user_leaves_user_level_rules_alone()
-    {
-        var ct = TestContext.Current.CancellationToken;
-        var org = UuidV7.NewId();
-        var user = UuidV7.NewId();
-        await SeedOrgAsync(org, ct);
-        await SeedUserAsync(user, org, ct);
-
-        (await RunAsync(["capabilities", "cohort", "add", Capability, "--org", org.ToString()]))
-            .Exit.ShouldBe(0);
-        (await RunAsync(
-            ["capabilities", "cohort", "add", Capability, "--org", org.ToString(), "--user", user.ToString()]))
-            .Exit.ShouldBe(0);
-
-        (await RunAsync(["capabilities", "cohort", "remove", Capability, "--org", org.ToString()]))
-            .Exit.ShouldBe(0);
-
-        var remaining = await ReadCohortsAsync(org, ct);
-        remaining.Count.ShouldBe(1);
-        remaining[0].UserId.ShouldBe(user, "only the org-wide rule was named, so only it was removed");
-    }
-
-    [Fact]
-    public async Task Cohort_add_refuses_a_user_that_does_not_exist_and_writes_nothing()
-    {
-        var ct = TestContext.Current.CancellationToken;
-        var org = UuidV7.NewId();
-        var missingUser = UuidV7.NewId();
-        await SeedOrgAsync(org, ct);
-
-        var (exit, _, errors) = await RunAsync(
-            ["capabilities", "cohort", "add", Capability, "--org", org.ToString(),
-             "--user", missingUser.ToString()]);
-
-        exit.ShouldBe(1);
-        errors.ShouldContain("does not exist in org");
-        (await ReadCohortsAsync(org, ct)).ShouldBeEmpty();
-        (await ReadAuditsForOrgAsync(org, ct)).ShouldBeEmpty();
-    }
-
-    [Fact]
-    public async Task Cohort_add_refuses_a_user_from_another_org_and_writes_nothing()
-    {
-        var ct = TestContext.Current.CancellationToken;
-        var requestedOrg = UuidV7.NewId();
-        var usersOrg = UuidV7.NewId();
-        var user = UuidV7.NewId();
-        await SeedOrgAsync(requestedOrg, ct);
-        await SeedOrgAsync(usersOrg, ct);
-        await SeedUserAsync(user, usersOrg, ct);
-
-        var (exit, _, errors) = await RunAsync(
-            ["capabilities", "cohort", "add", Capability, "--org", requestedOrg.ToString(),
-             "--user", user.ToString()]);
-
-        exit.ShouldBe(1);
-        errors.ShouldContain("does not exist in org");
-        (await ReadCohortsAsync(requestedOrg, ct)).ShouldBeEmpty();
-        (await ReadAuditsForOrgAsync(requestedOrg, ct)).ShouldBeEmpty();
-    }
-
-    /// <summary>
-    /// A removal matching nothing is refused rather than reported as a successful no-op: the likely
-    /// cause is a mistyped org, and "removed 0 rules" is how an operator concludes a cohort is gone
-    /// when it is not. Refused inside the transaction, so it writes no audit row either.
-    /// </summary>
-    [Fact]
-    public async Task Cohort_remove_matching_nothing_is_refused_and_records_nothing()
-    {
-        var ct = TestContext.Current.CancellationToken;
-        var org = UuidV7.NewId();
-        await SeedOrgAsync(org, ct);
-
-        var (exit, _, errors) = await RunAsync(
-            ["capabilities", "cohort", "remove", Capability, "--org", org.ToString()]);
-
-        exit.ShouldBe(1);
-        errors.ShouldContain("no '" + Capability + "' cohort rule exists");
-        (await ReadAuditsForOrgAsync(org, ct)).ShouldBeEmpty();
-    }
 
     // ── Refusals write nothing at all ───────────────────────────────────────────────────────────
 
@@ -454,7 +101,7 @@ public sealed class CapabilitiesCommandTests(PostgresFixture fixture)
     {
         var ct = TestContext.Current.CancellationToken;
         var fixtureName = CapabilityCatalog.MoneyPathFixture.Name;
-        var since = await NowAsync(ct);
+        var since = await Probe.NowAsync(ct);
 
         var (exit, _, errors) = await RunAsync(["capabilities", "flag", "enable", fixtureName]);
 
@@ -462,8 +109,8 @@ public sealed class CapabilitiesCommandTests(PostgresFixture fixture)
         errors.ShouldContain(fixtureName);
         errors.ShouldContain("409");
 
-        (await ReadFlagAsync(fixtureName, ct)).ShouldBeNull("no feature_flags row may be created");
-        (await ReadAuditsAsync("flag.enable", fixtureName, since, ct)).ShouldBeEmpty();
+        (await Probe.ReadFlagAsync(fixtureName, ct)).ShouldBeNull("no feature_flags row may be created");
+        (await Probe.ReadAuditsAsync("flag.enable", fixtureName, since, ct)).ShouldBeEmpty();
     }
 
     [Fact]
@@ -478,7 +125,7 @@ public sealed class CapabilitiesCommandTests(PostgresFixture fixture)
         errors.ShouldContain("unknown capability");
 
         // The whole point: no row is created, so CapabilityRegistryValidator never sees this name.
-        (await ReadFlagAsync(Typo, ct)).ShouldBeNull();
+        (await Probe.ReadFlagAsync(Typo, ct)).ShouldBeNull();
     }
 
     // ── List ────────────────────────────────────────────────────────────────────────────────────
@@ -512,7 +159,7 @@ public sealed class CapabilitiesCommandTests(PostgresFixture fixture)
     public async Task List_for_an_org_reports_entitlement_and_cohort_state()
     {
         var org = UuidV7.NewId();
-        await SeedOrgAsync(org, TestContext.Current.CancellationToken);
+        await Probe.SeedOrgAsync(org, TestContext.Current.CancellationToken);
 
         (await RunAsync(["capabilities", "grant", Capability, "--org", org.ToString()])).Exit.ShouldBe(0);
         (await RunAsync(["capabilities", "cohort", "add", Capability, "--org", org.ToString()]))
@@ -651,7 +298,7 @@ public sealed class CapabilitiesCommandTests(PostgresFixture fixture)
         }
 
         errors.ToString().ShouldContain(CapabilitiesCommand.OperatorVariable);
-        (await ReadFlagAsync(Capability, TestContext.Current.CancellationToken))
+        (await Probe.ReadFlagAsync(Capability, TestContext.Current.CancellationToken))
             .ShouldBeNull("a refused command writes nothing at all");
     }
 
@@ -730,203 +377,89 @@ public sealed class CapabilitiesCommandTests(PostgresFixture fixture)
         }
     }
 
-    private async Task<DateTime> NowAsync(CancellationToken ct)
-    {
-        await using var conn = await fixture.OpenAppConnectionAsync(ct);
-        await using var cmd = new NpgsqlCommand("SELECT now()", conn);
-        return (DateTime)(await cmd.ExecuteScalarAsync(ct))!;
-    }
+    private CapabilityStateProbe Probe => new(fixture);
 
-    private async Task SeedOrgAsync(Guid orgId, CancellationToken ct)
-    {
-        await using var conn = await fixture.OpenAppConnectionAsync(ct);
-        await using var cmd = new NpgsqlCommand(
-            "INSERT INTO orgs (id, name, created_at) VALUES (@id, 'capabilities-cli-test', now())", conn);
-        cmd.Parameters.AddWithValue("id", orgId);
-        await cmd.ExecuteNonQueryAsync(ct);
-    }
-
-    private async Task SeedUserAsync(Guid userId, Guid orgId, CancellationToken ct)
-    {
-        await using var db = fixture.CreateContext(fixture.MigratorConnectionString);
-        db.Add(new AppUser
-        {
-            Id = userId,
-            OrgId = orgId,
-            UserName = $"{userId}@capability.test",
-            NormalizedUserName = $"{userId}@CAPABILITY.TEST",
-            Email = $"{userId}@capability.test",
-            NormalizedEmail = $"{userId}@CAPABILITY.TEST",
-            SecurityStamp = userId.ToString(),
-            ConcurrencyStamp = userId.ToString(),
-        });
-        await db.SaveChangesAsync(ct);
-    }
-
-    /// <summary>Null when no row exists — which resolves as the registry default, not as a kill.</summary>
-    private async Task<bool?> ReadFlagAsync(string name, CancellationToken ct)
-    {
-        await using var conn = await fixture.OpenAppConnectionAsync(ct);
-        await using var cmd = new NpgsqlCommand("SELECT enabled FROM feature_flags WHERE name = @name", conn);
-        cmd.Parameters.AddWithValue("name", name);
-        return await cmd.ExecuteScalarAsync(ct) as bool?;
-    }
+    // ── Current-entitlement ordering, pinned across the two sites that share it ─────────────────
 
     /// <summary>
-    /// Restores the shared, global flag state. The delete DOES notify, matching the sibling helpers:
-    /// any host still running in this collection drops its cached set immediately rather than carrying
-    /// flipped state for up to a TTL into an unrelated test.
+    /// <b>Two places decide which entitlement event is "current", and they must not drift apart.</b>
+    /// <c>CapabilityStateReader</c> answers it for resolution — what the product actually does — and
+    /// the CLI's per-org listing answers it for an operator diagnosing an incident. Their
+    /// <c>WHERE</c> and <c>ORDER BY</c> are byte-identical today and nothing but this test says they
+    /// have to stay that way. A divergence would be quiet and nasty: the listing an operator trusts
+    /// would disagree with the state the product is enforcing.
     /// </summary>
-    private async Task DeleteFlagAsync(string name, CancellationToken ct)
+    /// <remarks>
+    /// Pins the two ordering terms that are observable. The <c>granted ASC</c> tie-break is
+    /// deliberately NOT pinned — a unique index makes two rows with the same
+    /// <c>(org, capability, effective_at)</c> unconstructible, so that tie cannot be built to observe.
+    /// Asserting it would mean scanning source text for the clause, which pins the spelling rather
+    /// than the behaviour and is the pattern this repository is trying to use less of, not more.
+    /// </remarks>
+    [Theory]
+    // Later effective_at wins, regardless of insertion order or id ordering.
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task The_current_entitlement_is_the_same_row_for_resolution_and_for_the_listing(
+        bool olderGrant, bool newerGrant)
     {
-        await using var conn = await fixture.OpenAppConnectionAsync(ct);
-        await using var tx = await conn.BeginTransactionAsync(ct);
-        await RlsProbe.SetPlatformAsync(conn, tx, ct);
+        var ct = TestContext.Current.CancellationToken;
+        var org = UuidV7.NewId();
+        await Probe.SeedOrgAsync(org, ct);
 
-        await using (var cmd = new NpgsqlCommand("DELETE FROM feature_flags WHERE name = @name", conn, tx))
+        var baseline = await Probe.NowAsync(ct);
+
+        // Inserted newest-first so a reader relying on physical order rather than effective_at fails.
+        await Probe.SeedEntitlementAsync(
+            UuidV7.NewId(), org, Capability, newerGrant, baseline.AddSeconds(-1), ct);
+        await Probe.SeedEntitlementAsync(
+            UuidV7.NewId(), org, Capability, olderGrant, baseline.AddSeconds(-60), ct);
+
+        var (exit, output, _) = await RunAsync(["capabilities", "list", "--org", org.ToString()]);
+        exit.ShouldBe(0);
+
+        var listingSaysGranted = output.Contains("granted", StringComparison.OrdinalIgnoreCase)
+            && !output.Contains("revoked", StringComparison.OrdinalIgnoreCase);
+
+        listingSaysGranted.ShouldBe(
+            newerGrant,
+            "the per-org listing must report the latest event by effective_at as the current state");
+
+        // The flag has to be on for resolution to be a usable oracle here, and the reason is the
+        // two-source design itself: a grant does not turn a capability ON, it only clears the
+        // entitlement gate at step 1 of the resolution order. This capability is RequiresGrant with
+        // DefaultEnabled false, so without a flag it resolves false whether granted or not, and the
+        // test would say nothing about ordering. With the flag on, step 1 is the only step that can
+        // still say no — which makes IsEnabled track the current entitlement exactly.
+        try
         {
-            cmd.Parameters.AddWithValue("name", name);
-            await cmd.ExecuteNonQueryAsync(ct);
-        }
+            (await RunAsync(["capabilities", "flag", "enable", Capability])).Exit.ShouldBe(0);
 
-        await using (var signal = new NpgsqlCommand(
-            $"SELECT pg_notify('{CapabilityNotifications.Channel}', @name)", conn, tx))
+            var resolved = await ResolveAsync(org, ct);
+            resolved.ShouldBe(
+                newerGrant,
+                "resolution must agree with the listing — an operator diagnosing an incident reads the " +
+                "listing and acts on what the product is actually enforcing");
+        }
+        finally
         {
-            signal.Parameters.AddWithValue("name", name);
-            await signal.ExecuteNonQueryAsync(ct);
+            await Probe.DeleteFlagAsync(Capability, ct);
         }
-
-        await tx.CommitAsync(ct);
     }
 
-    private async Task<List<(string Action, string? Capability, Guid? OrgId, string Actor, string Detail)>>
-        ReadAuditsAsync(string action, string capability, DateTime since, CancellationToken ct) =>
-        await ReadAuditsAsync(
-            "SELECT action, capability, org_id, actor, detail_json FROM platform_audit_events " +
-            "WHERE action = @action AND capability = @capability AND occurred_at >= @since " +
-            "ORDER BY occurred_at, id",
-            ct,
-            ("action", action), ("capability", capability), ("since", since));
-
-    private async Task<List<(string Action, string? Capability, Guid? OrgId, string Actor, string Detail)>>
-        ReadAuditsForOrgAsync(Guid orgId, CancellationToken ct) =>
-        await ReadAuditsAsync(
-            "SELECT action, capability, org_id, actor, detail_json FROM platform_audit_events " +
-            "WHERE org_id = @org ORDER BY occurred_at, id",
-            ct,
-            ("org", orgId));
-
-    /// <summary>
-    /// Platform scope, because <c>platform_audit_events_platform_only</c> hides these rows from every
-    /// tenant session whatever its org context.
-    /// </summary>
-    private async Task<List<(string Action, string? Capability, Guid? OrgId, string Actor, string Detail)>>
-        ReadAuditsAsync(string sql, CancellationToken ct, params (string Name, object Value)[] parameters)
+    /// <summary>Resolution's own answer, read through the module rather than through the CLI.</summary>
+    private async Task<bool> ResolveAsync(Guid orgId, CancellationToken ct)
     {
-        var rows = new List<(string, string?, Guid?, string, string)>();
+        await using var scope = fixture.Api.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var reader = scope.ServiceProvider.GetRequiredService<CapabilityStateReader>();
 
-        await using var conn = await fixture.OpenAppConnectionAsync(ct);
-        await using var tx = await conn.BeginTransactionAsync(ct);
-        await RlsProbe.SetPlatformAsync(conn, tx, ct);
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        await db.Database.ExecuteSqlAsync($"SELECT set_config('app.org_id', {orgId.ToString()}, true)", ct);
 
-        await using (var cmd = new NpgsqlCommand(sql, conn, tx))
-        {
-            foreach (var (name, value) in parameters)
-            {
-                cmd.Parameters.AddWithValue(name, value);
-            }
+        var set = await reader.ReadAsync(orgId, null, ct);
+        await tx.RollbackAsync(ct);
 
-            await using var reader = await cmd.ExecuteReaderAsync(ct);
-            while (await reader.ReadAsync(ct))
-            {
-                rows.Add((
-                    reader.GetString(0),
-                    reader.IsDBNull(1) ? null : reader.GetString(1),
-                    reader.IsDBNull(2) ? null : reader.GetGuid(2),
-                    reader.GetString(3),
-                    reader.GetString(4)));
-            }
-        }
-
-        await tx.CommitAsync(ct);
-        return rows;
+        return set.IsEnabled(CapabilityCatalog.ConsolidatedStatements);
     }
-
-    /// <summary>
-    /// Reads a row's inserting (sub)transaction id and its timestamp. <c>xmin</c> is a system column
-    /// every heap row carries, and rows written by two different transactions can never share it —
-    /// which is what makes the atomicity assertion an observation rather than a proxy.
-    /// </summary>
-    private async Task<(string Xmin, DateTime At)> ReadRowIdentityAsync(
-        string sql, Guid orgId, CancellationToken ct)
-    {
-        await using var conn = await fixture.OpenAppConnectionAsync(ct);
-        await using var tx = await conn.BeginTransactionAsync(ct);
-        await RlsProbe.SetPlatformAsync(conn, tx, ct);
-
-        (string Xmin, DateTime At) row;
-        await using (var cmd = new NpgsqlCommand(sql, conn, tx))
-        {
-            cmd.Parameters.AddWithValue("org", orgId);
-
-            await using var reader = await cmd.ExecuteReaderAsync(ct);
-            (await reader.ReadAsync(ct)).ShouldBeTrue($"expected exactly one row from: {sql}");
-            row = (reader.GetString(0), reader.GetDateTime(1));
-            (await reader.ReadAsync(ct)).ShouldBeFalse($"expected exactly one row from: {sql}");
-        }
-
-        // Committed like every sibling helper. Read-only, so it changes nothing — but a helper that
-        // silently leaves its transaction open is the kind of inconsistency the next one copies.
-        await tx.CommitAsync(ct);
-        return row;
-    }
-
-    private async Task<List<(bool Granted, string Actor)>> ReadEntitlementsAsync(
-        Guid orgId, CancellationToken ct)
-    {
-        var rows = new List<(bool, string)>();
-
-        await using var conn = await fixture.OpenAppConnectionAsync(ct);
-        await using var tx = await conn.BeginTransactionAsync(ct);
-        await RlsProbe.SetPlatformAsync(conn, tx, ct);
-
-        await using (var cmd = new NpgsqlCommand(
-            "SELECT granted, actor FROM entitlements WHERE org_id = @org ORDER BY effective_at, granted DESC",
-            conn, tx))
-        {
-            cmd.Parameters.AddWithValue("org", orgId);
-            await using var reader = await cmd.ExecuteReaderAsync(ct);
-            while (await reader.ReadAsync(ct))
-            {
-                rows.Add((reader.GetBoolean(0), reader.GetString(1)));
-            }
-        }
-
-        await tx.CommitAsync(ct);
-        return rows;
-    }
-
-    private async Task<List<(Guid? UserId, string AddedBy)>> ReadCohortsAsync(Guid orgId, CancellationToken ct)
-    {
-        var rows = new List<(Guid?, string)>();
-
-        await using var conn = await fixture.OpenAppConnectionAsync(ct);
-        await using var tx = await conn.BeginTransactionAsync(ct);
-        await RlsProbe.SetPlatformAsync(conn, tx, ct);
-
-        await using (var cmd = new NpgsqlCommand(
-            "SELECT user_id, added_by FROM capability_cohorts WHERE org_id = @org", conn, tx))
-        {
-            cmd.Parameters.AddWithValue("org", orgId);
-            await using var reader = await cmd.ExecuteReaderAsync(ct);
-            while (await reader.ReadAsync(ct))
-            {
-                rows.Add((reader.IsDBNull(0) ? null : reader.GetGuid(0), reader.GetString(1)));
-            }
-        }
-
-        await tx.CommitAsync(ct);
-        return rows;
-    }
-
 }
