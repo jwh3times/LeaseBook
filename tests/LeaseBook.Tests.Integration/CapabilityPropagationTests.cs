@@ -1,4 +1,5 @@
 using LeaseBook.Modules.Capabilities.Caching;
+using LeaseBook.Modules.Capabilities.Contracts;
 using LeaseBook.SharedKernel;
 using LeaseBook.Tests.Common;
 using LeaseBook.Tests.Integration.Fixtures;
@@ -279,7 +280,10 @@ public sealed class CapabilityPropagationTests(PostgresFixture fixture)
 
     /// <summary>
     /// Simulates a dropped listener: the row lands, but on a connection that emits no notification at
-    /// all. Raw SQL rather than the host's executor precisely so no code path can slip a NOTIFY in.
+    /// all. Raw SQL rather than <see cref="ICapabilityAdmin"/>, precisely so no code path can slip a
+    /// <c>NOTIFY</c> in — every write member issues one inside its own transaction, which is exactly
+    /// what this test needs NOT to happen. (Before the write path moved behind that seam, the thing
+    /// being avoided was the CLI verb; the constraint is unchanged, only its name is.)
     /// </summary>
     private async Task WriteFlagRowWithoutNotifyAsync(CancellationToken ct)
     {
