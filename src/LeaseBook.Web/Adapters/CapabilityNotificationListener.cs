@@ -42,9 +42,6 @@ public sealed class CapabilityNotificationListener(
     IServiceScopeFactory scopeFactory,
     ILogger<CapabilityNotificationListener> logger) : BackgroundService
 {
-    /// <summary>The channel name. Shared with the platform writer (Task 12) — do not fork it.</summary>
-    public const string Channel = "leasebook_capabilities";
-
     /// <summary>Seconds. See the keepalive note on the class.</summary>
     private const int KeepaliveSeconds = 30;
 
@@ -153,14 +150,15 @@ public sealed class CapabilityNotificationListener(
 
             // The channel is an identifier, so it cannot be a parameter. It is a compile-time
             // constant, never user input.
-            await using (var listen = new NpgsqlCommand($"LISTEN {Channel}", connection))
+            await using (var listen = new NpgsqlCommand($"LISTEN {CapabilityNotifications.Channel}", connection))
             {
                 await listen.ExecuteNonQueryAsync(ct);
             }
 
             _isListening = true;
             onConnected();
-            logger.LogInformation("Capability notification listener subscribed to {Channel}.", Channel);
+            logger.LogInformation(
+                "Capability notification listener subscribed to {Channel}.", CapabilityNotifications.Channel);
 
             while (!ct.IsCancellationRequested)
             {

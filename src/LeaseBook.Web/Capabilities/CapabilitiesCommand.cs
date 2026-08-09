@@ -1,9 +1,9 @@
 using System.Globalization;
 using System.Text.Json;
+using LeaseBook.Modules.Capabilities.Caching;
+using LeaseBook.Modules.Capabilities.Contracts;
 using LeaseBook.Modules.Capabilities.Domain;
 using LeaseBook.SharedKernel;
-using LeaseBook.Web.Adapters;
-using LeaseBook.Web.Auth;
 using LeaseBook.Web.Tenancy;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -89,6 +89,7 @@ public static class CapabilitiesCommand
         await using var scope = services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<DbContext>();
         var executor = scope.ServiceProvider.GetRequiredService<PlatformScopedExecutor>();
+        var membership = scope.ServiceProvider.GetRequiredService<IOrgMembership>();
 
         var actor = BuildActor(configuredOperator);
 
@@ -114,13 +115,14 @@ public static class CapabilitiesCommand
             }
 
             var applied = default(DateTime);
-            await executor.RunAsync(async () => applied = await ApplyAsync(db, action, actor, ct), ct);
+            await executor.RunAsync(
+                async () => applied = await ApplyAsync(db, membership, action, actor, ct), ct);
 
             // Printed AFTER the transaction commits, never inside it. A success line followed by a
             // commit-time stack trace would tell the operator the opposite of what happened.
             Console.WriteLine(Summarize(action, applied, actor));
         }
-        catch (CapabilitiesRefusalException refusal)
+        catch (CapabilityRefusedException refusal)
         {
             // A deliberate in-transaction refusal: nothing to remove, or an org that does not exist.
             // Throwing is what rolled the transaction back, so no state row and no audit row survive.
@@ -493,7 +495,7 @@ public static class CapabilitiesCommand
 
         if (!exists)
         {
-            throw new CapabilitiesRefusalException(
+            throw new CapabilityRefusedException(
                 $"capabilities: org {orgId} does not exist, so there is nothing to list for it. An org " +
                 "with no capability rows and an org that is not there both look like " +
                 "'(no entitlement event)', and reporting the second as the first is how a grant that " +
@@ -514,7 +516,7 @@ public static class CapabilitiesCommand
     /// </param>
     /// <returns>The transaction timestamp every row it wrote carries.</returns>
     private static async Task<DateTime> ApplyAsync(
-        DbContext db, CapabilitiesAction action, string actor, CancellationToken ct)
+        DbContext db, IOrgMembership membership, CapabilitiesAction action, string actor, CancellationToken ct)
     {
         var capability = action.Capability!;
 
@@ -532,7 +534,7 @@ public static class CapabilitiesCommand
             CapabilitiesActionKind.FlagClear => await ClearFlagAsync(db, action, ct),
             CapabilitiesActionKind.Grant or CapabilitiesActionKind.Revoke =>
                 WriteEntitlement(db, action, now, actor),
-            CapabilitiesActionKind.CohortAdd => await WriteCohortAsync(db, action, now, actor, ct),
+            CapabilitiesActionKind.CohortAdd => await WriteCohortAsync(db, membership, action, now, actor, ct),
             CapabilitiesActionKind.CohortRemove => await RemoveCohortAsync(db, action, ct),
             _ => throw new InvalidOperationException($"Unhandled action kind {action.Kind}."),
         };
@@ -557,7 +559,7 @@ public static class CapabilitiesCommand
 
         // Inside the transaction. See the class remarks.
         await db.Database.ExecuteSqlAsync(
-            $"SELECT pg_notify({CapabilityNotificationListener.Channel}, {capability})", ct);
+            $"SELECT pg_notify({CapabilityNotifications.Channel}, {capability})", ct);
 
         return now;
     }
@@ -628,7 +630,7 @@ public static class CapabilitiesCommand
 
         if (flag is null)
         {
-            throw new CapabilitiesRefusalException(
+            throw new CapabilityRefusedException(
                 $"capabilities: no explicit flag override exists for '{name}', so nothing was cleared " +
                 "and nothing was recorded. Resolution is already using cohort state and the registry default.");
         }
@@ -676,21 +678,24 @@ public static class CapabilitiesCommand
     }
 
     private static async Task<(string Action, string Detail)> WriteCohortAsync(
-        DbContext db, CapabilitiesAction action, DateTime now, string actor, CancellationToken ct)
+        DbContext db,
+        IOrgMembership membership,
+        CapabilitiesAction action,
+        DateTime now,
+        string actor,
+        CancellationToken ct)
     {
         var orgId = action.OrgId!.Value;
 
         if (action.UserId is { } userId)
         {
             // Identity soft spot: asp_net_users intentionally has no RLS because login happens before
-            // org context exists. Both columns are therefore load-bearing here; an id-only lookup
-            // would authorize a user from another tenant into this org's cohort.
-            var belongsToOrg = await db.Set<AppUser>()
-                .AnyAsync(user => user.Id == userId && user.OrgId == orgId, ct);
-
-            if (!belongsToOrg)
+            // org context exists. The check goes through IOrgMembership rather than reading AppUser
+            // here, so the requirement travels with the write path when it moves behind the module's
+            // seam — and so it stops being something each future writer has to remember.
+            if (!await membership.IsUserInOrgAsync(userId, orgId, ct))
             {
-                throw new CapabilitiesRefusalException(
+                throw new CapabilityRefusedException(
                     $"capabilities: user {userId} does not exist in org {orgId}, so no cohort rule " +
                     "and no audit event were written. asp_net_users is RLS-exempt; cohort adds must " +
                     "validate the user against the explicitly named org.");
@@ -757,7 +762,7 @@ public static class CapabilitiesCommand
                 ? $"user {named} in org {orgId}"
                 : $"org {orgId} (org-wide)";
 
-            throw new CapabilitiesRefusalException(
+            throw new CapabilityRefusedException(
                 $"capabilities: no '{capability}' cohort rule exists for {scope}, so nothing was " +
                 "removed and nothing was recorded. `cohort remove` is the exact inverse of `cohort " +
                 "add`: without --user it targets the org-wide rule only. Run " +
@@ -883,12 +888,6 @@ public static class CapabilitiesCommand
     }
 
     private static string Json(Dictionary<string, object?> detail) => JsonSerializer.Serialize(detail);
-
-    /// <summary>
-    /// A refusal decided inside the transaction, after a read the parser could not perform. Throwing
-    /// is what rolls the transaction back, so a refused command leaves no state row and no audit row.
-    /// </summary>
-    private sealed class CapabilitiesRefusalException(string message) : Exception(message);
 
     private sealed record CapabilityCount(string Capability, long Count);
 

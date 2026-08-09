@@ -340,7 +340,7 @@ public sealed class RunCapabilityFreezeTests(PostgresFixture fixture)
         await RlsProbe.SetPlatformAsync(conn, tx, ct);
         await ExecAsync(conn, tx, "DELETE FROM feature_flags WHERE name = @name", ct, ("name", Capability));
         await ExecAsync(
-            conn, tx, $"SELECT pg_notify('{CapabilityNotificationListener.Channel}', @name)", ct,
+            conn, tx, $"SELECT pg_notify('{CapabilityNotifications.Channel}', @name)", ct,
             ("name", Capability));
 
         await tx.CommitAsync(ct);
