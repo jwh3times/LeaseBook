@@ -144,12 +144,7 @@ public sealed class InvariantSweepTests(PostgresFixture fixture)
         // this deliberate corruption has to declare its org context — there is no role that can write
         // an org-scoped row without one. Transaction-local, exactly as OrgScopedExecutor does it.
         await using var tx = await conn.BeginTransactionAsync(ct);
-        await using (var context = new NpgsqlCommand(
-            "SELECT set_config('app.org_id', @org, true)", conn, tx))
-        {
-            context.Parameters.AddWithValue("org", orgId.ToString());
-            await context.ExecuteNonQueryAsync(ct);
-        }
+        await RlsProbe.SetOrgAsync(conn, tx, orgId, ct);
 
         // The line's dimension FK is composite and org-scoped (ADR-013), so the account has to exist
         // in this org before the line can reference it.

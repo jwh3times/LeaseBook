@@ -441,7 +441,7 @@ public sealed class RunCapabilityPeriodTests(PostgresFixture fixture)
         await using var conn = await fixture.OpenAppConnectionAsync(ct);
         await using var tx = await conn.BeginTransactionAsync(ct);
 
-        await ExecAsync(conn, tx, "SELECT set_config('app.platform', 'on', true)", ct);
+        await RlsProbe.SetPlatformAsync(conn, tx, ct);
         await ExecAsync(
             conn, tx,
             """
@@ -459,7 +459,7 @@ public sealed class RunCapabilityPeriodTests(PostgresFixture fixture)
         await using var conn = await fixture.OpenAppConnectionAsync(ct);
         await using var tx = await conn.BeginTransactionAsync(ct);
 
-        await ExecAsync(conn, tx, "SELECT set_config('app.platform', 'on', true)", ct);
+        await RlsProbe.SetPlatformAsync(conn, tx, ct);
         await ExecAsync(conn, tx, "DELETE FROM feature_flags WHERE name = @name", ct, ("name", Capability));
         await ExecAsync(
             conn, tx, $"SELECT pg_notify('{CapabilityNotificationListener.Channel}', @name)", ct,

@@ -103,10 +103,7 @@ public sealed class StatementDeliveryTests(PostgresFixture fixture)
         await using var probeConn = new NpgsqlConnection(fixture.AppConnectionString);
         await probeConn.OpenAsync(ct);
         await using var tx = await probeConn.BeginTransactionAsync(ct);
-        await using var setOrgCmd = new NpgsqlCommand(
-            "SELECT set_config('app.org_id', @org, true)", probeConn, tx);
-        setOrgCmd.Parameters.AddWithValue("org", orgId.ToString());
-        await setOrgCmd.ExecuteNonQueryAsync(ct);
+        await RlsProbe.SetOrgAsync(probeConn, tx, orgId, ct);
 
         // COUNT(*) for the unique owner id — must be 0: the gate threw before any DB write.
         await using var countCmd = new NpgsqlCommand(
@@ -171,10 +168,7 @@ public sealed class StatementDeliveryTests(PostgresFixture fixture)
         await probeConn.OpenAsync(ct);
         await using var tx = await probeConn.BeginTransactionAsync(ct);
         // SET LOCAL app.org_id so the RLS policy on statement_deliveries allows the SELECT.
-        await using var setOrgCmd = new NpgsqlCommand(
-            "SELECT set_config('app.org_id', @org, true)", probeConn, tx);
-        setOrgCmd.Parameters.AddWithValue("org", orgId.ToString());
-        await setOrgCmd.ExecuteNonQueryAsync(ct);
+        await RlsProbe.SetOrgAsync(probeConn, tx, orgId, ct);
 
         await using var selectCmd = new NpgsqlCommand(
             "SELECT id, state, to_email, owner_id, period_year, period_month, artifact_key " +

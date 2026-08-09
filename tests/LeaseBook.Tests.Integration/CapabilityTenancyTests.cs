@@ -700,12 +700,12 @@ public sealed class CapabilityTenancyTests(PostgresFixture fixture)
     {
         if (orgId is { } org)
         {
-            await ExecAsync(conn, tx, "SELECT set_config('app.org_id', @org, true)", ct, ("org", org.ToString()));
+            await RlsProbe.SetOrgAsync(conn, tx, org, ct);
         }
 
         if (platform)
         {
-            await ExecAsync(conn, tx, "SELECT set_config('app.platform', 'on', true)", ct);
+            await RlsProbe.SetPlatformAsync(conn, tx, ct);
         }
     }
 

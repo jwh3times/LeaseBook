@@ -780,7 +780,7 @@ public sealed class CapabilitiesCommandTests(PostgresFixture fixture)
     {
         await using var conn = await fixture.OpenAppConnectionAsync(ct);
         await using var tx = await conn.BeginTransactionAsync(ct);
-        await PlatformScopeAsync(conn, tx, ct);
+        await RlsProbe.SetPlatformAsync(conn, tx, ct);
 
         await using (var cmd = new NpgsqlCommand("DELETE FROM feature_flags WHERE name = @name", conn, tx))
         {
@@ -826,7 +826,7 @@ public sealed class CapabilitiesCommandTests(PostgresFixture fixture)
 
         await using var conn = await fixture.OpenAppConnectionAsync(ct);
         await using var tx = await conn.BeginTransactionAsync(ct);
-        await PlatformScopeAsync(conn, tx, ct);
+        await RlsProbe.SetPlatformAsync(conn, tx, ct);
 
         await using (var cmd = new NpgsqlCommand(sql, conn, tx))
         {
@@ -861,7 +861,7 @@ public sealed class CapabilitiesCommandTests(PostgresFixture fixture)
     {
         await using var conn = await fixture.OpenAppConnectionAsync(ct);
         await using var tx = await conn.BeginTransactionAsync(ct);
-        await PlatformScopeAsync(conn, tx, ct);
+        await RlsProbe.SetPlatformAsync(conn, tx, ct);
 
         (string Xmin, DateTime At) row;
         await using (var cmd = new NpgsqlCommand(sql, conn, tx))
@@ -887,7 +887,7 @@ public sealed class CapabilitiesCommandTests(PostgresFixture fixture)
 
         await using var conn = await fixture.OpenAppConnectionAsync(ct);
         await using var tx = await conn.BeginTransactionAsync(ct);
-        await PlatformScopeAsync(conn, tx, ct);
+        await RlsProbe.SetPlatformAsync(conn, tx, ct);
 
         await using (var cmd = new NpgsqlCommand(
             "SELECT granted, actor FROM entitlements WHERE org_id = @org ORDER BY effective_at, granted DESC",
@@ -911,7 +911,7 @@ public sealed class CapabilitiesCommandTests(PostgresFixture fixture)
 
         await using var conn = await fixture.OpenAppConnectionAsync(ct);
         await using var tx = await conn.BeginTransactionAsync(ct);
-        await PlatformScopeAsync(conn, tx, ct);
+        await RlsProbe.SetPlatformAsync(conn, tx, ct);
 
         await using (var cmd = new NpgsqlCommand(
             "SELECT user_id, added_by FROM capability_cohorts WHERE org_id = @org", conn, tx))
@@ -928,10 +928,4 @@ public sealed class CapabilitiesCommandTests(PostgresFixture fixture)
         return rows;
     }
 
-    private static async Task PlatformScopeAsync(
-        NpgsqlConnection conn, NpgsqlTransaction tx, CancellationToken ct)
-    {
-        await using var cmd = new NpgsqlCommand("SELECT set_config('app.platform', 'on', true)", conn, tx);
-        await cmd.ExecuteNonQueryAsync(ct);
-    }
 }
