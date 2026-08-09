@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using LeaseBook.Modules.Capabilities.Caching;
 using LeaseBook.Modules.Capabilities.Contracts;
 using LeaseBook.Modules.Directory.Features.BankAccounts;
 using LeaseBook.Modules.Directory.Features.Leases;
@@ -303,7 +304,7 @@ public sealed class RunCapabilityVersionTests(PostgresFixture fixture)
         await RlsProbe.SetPlatformAsync(conn, tx, ct);
         await ExecAsync(conn, tx, "DELETE FROM feature_flags WHERE name = @name", ct, ("name", Capability));
         await ExecAsync(
-            conn, tx, $"SELECT pg_notify('{CapabilityNotificationListener.Channel}', @name)", ct,
+            conn, tx, $"SELECT pg_notify('{CapabilityNotifications.Channel}', @name)", ct,
             ("name", Capability));
 
         await tx.CommitAsync(ct);

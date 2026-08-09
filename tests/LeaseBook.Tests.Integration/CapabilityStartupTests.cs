@@ -369,7 +369,7 @@ public sealed class CapabilityStartupTests(PostgresFixture fixture)
             // Inside the same transaction: Postgres queues notifications and delivers them after
             // commit, so no listener can be woken before the change it must observe is visible.
             await using var signal = new NpgsqlCommand(
-                $"SELECT pg_notify('{CapabilityNotificationListener.Channel}', @name)", conn, tx);
+                $"SELECT pg_notify('{CapabilityNotifications.Channel}', @name)", conn, tx);
             signal.Parameters.AddWithValue("name", name);
             await signal.ExecuteNonQueryAsync(ct);
         }

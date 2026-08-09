@@ -170,6 +170,9 @@ builder.Services.AddScoped<PlatformScopedExecutor>();
 // has already opened.
 builder.Services.AddCapabilitiesModule();
 builder.Services.AddScoped<LeaseBook.Modules.Capabilities.Contracts.IPlatformScope, PlatformScopeAdapter>();
+// Identity is host-owned, so "is this user in this org?" is also a port (ADR-007). asp_net_users is
+// RLS-exempt, which makes this the only thing stopping a cohort rule naming another tenant's user.
+builder.Services.AddScoped<LeaseBook.Modules.Capabilities.Contracts.IOrgMembership, OrgMembershipAdapter>();
 
 // The seam's two hosted services are host-owned. The LISTEN/NOTIFY listener holds a raw Npgsql
 // connection outside the EF pool — composition-root work over the host's persistence driver, so

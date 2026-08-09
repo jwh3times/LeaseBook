@@ -1,4 +1,5 @@
 using System.Text.Json;
+using LeaseBook.Modules.Capabilities.Caching;
 using LeaseBook.SharedKernel;
 using LeaseBook.Tests.Common;
 using LeaseBook.Tests.Integration.Fixtures;
@@ -115,7 +116,7 @@ public sealed class CapabilitiesCommandTests(PostgresFixture fixture)
             await using var listener = await fixture.OpenAppConnectionAsync(ct);
             listener.Notification += (_, args) => received.TrySetResult(args.Payload);
             await using (var listen = new NpgsqlCommand(
-                $"LISTEN {CapabilityNotificationListener.Channel}", listener))
+                $"LISTEN {CapabilityNotifications.Channel}", listener))
             {
                 await listen.ExecuteNonQueryAsync(ct);
             }
@@ -171,7 +172,7 @@ public sealed class CapabilitiesCommandTests(PostgresFixture fixture)
         listener.Notification += (_, args) => received.TrySetResult(args.Payload);
 
         await using (var listen = new NpgsqlCommand(
-            $"LISTEN {CapabilityNotificationListener.Channel}", listener))
+            $"LISTEN {CapabilityNotifications.Channel}", listener))
         {
             await listen.ExecuteNonQueryAsync(ct);
         }
@@ -789,7 +790,7 @@ public sealed class CapabilitiesCommandTests(PostgresFixture fixture)
         }
 
         await using (var signal = new NpgsqlCommand(
-            $"SELECT pg_notify('{CapabilityNotificationListener.Channel}', @name)", conn, tx))
+            $"SELECT pg_notify('{CapabilityNotifications.Channel}', @name)", conn, tx))
         {
             signal.Parameters.AddWithValue("name", name);
             await signal.ExecuteNonQueryAsync(ct);
