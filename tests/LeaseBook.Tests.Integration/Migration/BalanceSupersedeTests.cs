@@ -768,7 +768,7 @@ public sealed class BalanceSupersedeTests(PostgresFixture fixture)
         var service = scope.ServiceProvider.GetRequiredService<BalanceImportService>();
 
         ImportBatchResult result = null!;
-        await executor.RunAsync(orgId, async () =>
+        await executor.RunAsSystemAsync(orgId, "test-harness", async () =>
         {
             await using var stream = new MemoryStream(Encoding.UTF8.GetBytes(csv));
             result = await service.SupersedeAsync(kind, "appfolio-default", $"{kind}.csv", cutover, stream, ct);
@@ -810,7 +810,7 @@ public sealed class BalanceSupersedeTests(PostgresFixture fixture)
         {
             var executor = scope.ServiceProvider.GetRequiredService<OrgScopedExecutor>();
             var sender = scope.ServiceProvider.GetRequiredService<ISender>();
-            await executor.RunAsync(orgId, async () =>
+            await executor.RunAsSystemAsync(orgId, "test-harness", async () =>
             {
                 await sender.Send(new CreateBankAccount(trustBankName, null, null, "trust"), ct);
                 await sender.Send(new CreateBankAccount(depositBankName, null, null, "deposit"), ct);
@@ -834,8 +834,8 @@ public sealed class BalanceSupersedeTests(PostgresFixture fixture)
     {
         var tenant = new TenantContext { OrgId = orgId };
         await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
-        var executor = new OrgScopedExecutor(db, tenant);
-        await executor.RunAsync(orgId, () => read(db), ct);
+        var executor = new OrgScopedExecutor(db, tenant, new ActorContext());
+        await executor.RunAsSystemAsync(orgId, "test-harness", () => read(db), ct);
     }
 
     private async Task<(int Journal, int Batches)> CountsAsync(Guid orgId, CancellationToken ct)

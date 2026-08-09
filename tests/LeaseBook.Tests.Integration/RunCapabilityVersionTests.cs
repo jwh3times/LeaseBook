@@ -235,7 +235,7 @@ public sealed class RunCapabilityVersionTests(PostgresFixture fixture)
         {
             var executor = scope.ServiceProvider.GetRequiredService<OrgScopedExecutor>();
             var sender = scope.ServiceProvider.GetRequiredService<ISender>();
-            await executor.RunAsync(orgId, async () =>
+            await executor.RunAsSystemAsync(orgId, "test-harness", async () =>
             {
                 var ownerId = await sender.Send(new CreateOwner("Version Owner", null, null, null, null, 0m), ct);
                 var propId = await sender.Send(new CreateProperty(ownerId, "1 Version St", "Raleigh", "NC", null, null), ct);
@@ -316,8 +316,8 @@ public sealed class RunCapabilityVersionTests(PostgresFixture fixture)
         var executor = scope.ServiceProvider.GetRequiredService<OrgScopedExecutor>();
 
         var count = -1;
-        await executor.RunAsync(
-            orgId,
+        await executor.RunAsSystemAsync(
+            orgId, "test-harness",
             async () => count = await db.Set<Modules.Operations.Domain.BulkRun>().CountAsync(ct),
             ct);
 

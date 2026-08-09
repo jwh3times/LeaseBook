@@ -27,7 +27,7 @@ public sealed class BankBalancesTests(PostgresFixture fixture)
         var sender = scope.ServiceProvider.GetRequiredService<ISender>();
 
         BankBalancesResponse balances = null!;
-        await executor.RunAsync(DemoSeeder.DemoOrgId,
+        await executor.RunAsSystemAsync(DemoSeeder.DemoOrgId, "test-harness",
             async () => balances = await sender.Query(new GetBankBalances(), ct), ct);
 
         // Golden-locked (M4 GoldenFileTests): Operating Trust has exactly 3 uncleared items.

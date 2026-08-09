@@ -273,7 +273,7 @@ public sealed class ScenarioGoldenTests(PostgresFixture fixture)
         var executor = scope.ServiceProvider.GetRequiredService<OrgScopedExecutor>();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         T result = default!;
-        await executor.RunAsync(ScenarioSeeder.ScenarioOrgId, async () => result = await query(db), ct);
+        await executor.RunAsSystemAsync(ScenarioSeeder.ScenarioOrgId, "test-harness", async () => result = await query(db), ct);
         return result;
     }
 }

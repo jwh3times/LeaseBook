@@ -154,7 +154,7 @@ public sealed class StatementDeliveryTests(PostgresFixture fixture)
 
         // Run delivery inside an org-scoped executor so SET LOCAL app.org_id is active for the
         // SaveChangesAsync call inside LocalStatementDelivery (RLS requires app.org_id in transaction).
-        await executor.RunAsync(orgId, async () =>
+        await executor.RunAsSystemAsync(orgId, "test-harness", async () =>
         {
             var balancedView = BuildBalancedView();
             result = await delivery.DeliverAsync(balancedView, "owner@example.com", ct);

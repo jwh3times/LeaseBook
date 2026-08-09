@@ -169,14 +169,14 @@ public sealed class AuditExtractTests(PostgresFixture fixture)
     {
         await using var scope = fixture.Api.Services.CreateAsyncScope();
         var sp = scope.ServiceProvider;
-        if (actorUserId is { } uid)
-        {
-            sp.GetRequiredService<ActorContext>().UserId = uid;
-        }
+
+        // The executor owns ActorContext for the length of the unit of work, exactly as the request
+        // path does. Setting it by hand before the call would simply be overwritten.
+        var actor = actorUserId is { } uid ? Actor.User(uid) : Actor.System("test-harness");
 
         var executor = sp.GetRequiredService<OrgScopedExecutor>();
         T result = default!;
-        await executor.RunAsync(orgId, async () => result = await work(sp, sp.GetRequiredService<ISender>(), ct), ct);
+        await executor.RunAsync(orgId, actor, async () => result = await work(sp, sp.GetRequiredService<ISender>(), ct), ct);
         return result;
     }
 }

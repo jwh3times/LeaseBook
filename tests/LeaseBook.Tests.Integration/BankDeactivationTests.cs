@@ -25,7 +25,7 @@ public sealed class BankDeactivationTests(PostgresFixture fixture)
         var executor = scope.ServiceProvider.GetRequiredService<OrgScopedExecutor>();
         var sender = scope.ServiceProvider.GetRequiredService<ISender>();
 
-        await executor.RunAsync(DemoSeeder.DemoOrgId, async () =>
+        await executor.RunAsSystemAsync(DemoSeeder.DemoOrgId, "test-harness", async () =>
         {
             var banks = await sender.Query(new ListBankAccounts(), ct);
             var operatingTrust = banks.Single(b => b.Name == "Operating Trust"); // has 3 uncleared
@@ -48,7 +48,7 @@ public sealed class BankDeactivationTests(PostgresFixture fixture)
         var executor = scope.ServiceProvider.GetRequiredService<OrgScopedExecutor>();
         var sender = scope.ServiceProvider.GetRequiredService<ISender>();
 
-        await executor.RunAsync(orgId, async () =>
+        await executor.RunAsSystemAsync(orgId, "test-harness", async () =>
         {
             // Provision the chart so CreateBankAccount can add its ledger account.
             await scope.ServiceProvider.GetRequiredService<IChartOfAccounts>().ProvisionAsync([], ct);
@@ -80,7 +80,7 @@ public sealed class BankDeactivationTests(PostgresFixture fixture)
         var executor = scope.ServiceProvider.GetRequiredService<OrgScopedExecutor>();
         var sender = scope.ServiceProvider.GetRequiredService<ISender>();
 
-        await executor.RunAsync(DemoSeeder.DemoOrgId, async () =>
+        await executor.RunAsSystemAsync(DemoSeeder.DemoOrgId, "test-harness", async () =>
         {
             var result = await sender.Send(new SetBankAccountActive(Guid.NewGuid(), false), ct);
             result.Outcome.ShouldBe(SetActiveOutcome.NotFound);

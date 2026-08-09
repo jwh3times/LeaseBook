@@ -39,7 +39,7 @@ public sealed class DashboardTests(PostgresFixture fixture)
         var service = new DashboardService(sender, new FixedClock(new DateTimeOffset(2026, 6, 15, 0, 0, 0, TimeSpan.Zero)));
 
         DashboardResponse dash = null!;
-        await executor.RunAsync(DemoSeeder.DemoOrgId, async () => dash = await service.ComposeAsync(ct), ct);
+        await executor.RunAsSystemAsync(DemoSeeder.DemoOrgId, "test-harness", async () => dash = await service.ComposeAsync(ct), ct);
 
         dash.Kpis.TrustTotal.ShouldBe(483_620.69m);
         dash.Kpis.OwnersPayable.ShouldBe(OwnersPayable);
@@ -48,7 +48,7 @@ public sealed class DashboardTests(PostgresFixture fixture)
         // The KPI is the honest sum across bank accounts (not hardcoded) — proven structurally via a
         // sibling GetBankBalances query (DashboardBankRow carries UnclearedCount, not Uncleared dollar net).
         BankBalancesResponse bal = null!;
-        await executor.RunAsync(DemoSeeder.DemoOrgId,
+        await executor.RunAsSystemAsync(DemoSeeder.DemoOrgId, "test-harness",
             async () => bal = await sender.Query(new GetBankBalances(), ct), ct);
         dash.Kpis.Uncleared.ShouldBe(bal.Rows.Sum(r => r.Uncleared));
         dash.Kpis.UnclearedCount.ShouldBe(bal.Rows.Sum(r => r.UnclearedCount));
@@ -95,7 +95,7 @@ public sealed class DashboardTests(PostgresFixture fixture)
         var service = new DashboardService(sender, new FixedClock(new DateTimeOffset(2026, 6, 15, 0, 0, 0, TimeSpan.Zero)));
 
         DashboardResponse dash = null!;
-        await executor.RunAsync(orgId, async () => dash = await service.ComposeAsync(ct), ct);
+        await executor.RunAsSystemAsync(orgId, "test-harness", async () => dash = await service.ComposeAsync(ct), ct);
         return dash;
     }
 

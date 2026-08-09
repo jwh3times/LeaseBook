@@ -117,6 +117,6 @@ public sealed class SearchTests(PostgresFixture fixture)
     {
         await using var scope = fixture.Api.Services.CreateAsyncScope();
         var executor = scope.ServiceProvider.GetRequiredService<OrgScopedExecutor>();
-        await executor.RunAsync(orgId, () => work(scope.ServiceProvider), ct);
+        await executor.RunAsSystemAsync(orgId, "test-harness", () => work(scope.ServiceProvider), ct);
     }
 }

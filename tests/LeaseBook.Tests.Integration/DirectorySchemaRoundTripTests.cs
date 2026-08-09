@@ -31,7 +31,7 @@ public sealed class DirectorySchemaRoundTripTests(PostgresFixture fixture)
 
         var tenant = new TenantContext();
         await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
-        var executor = new OrgScopedExecutor(db, tenant);
+        var executor = new OrgScopedExecutor(db, tenant, new ActorContext());
 
         var ownerId = UuidV7.NewId();
         var propertyId = UuidV7.NewId();
@@ -41,7 +41,7 @@ public sealed class DirectorySchemaRoundTripTests(PostgresFixture fixture)
         var bankId = UuidV7.NewId();
         var settingsId = UuidV7.NewId();
 
-        await executor.RunAsync(orgId, async () =>
+        await executor.RunAsSystemAsync(orgId, "test-harness", async () =>
         {
             // Insert in FK dependency order: owner → property → unit; tenant; lease (tenant+unit); etc.
             db.Set<Owner>().Add(new Owner
@@ -107,7 +107,7 @@ public sealed class DirectorySchemaRoundTripTests(PostgresFixture fixture)
             await db.SaveChangesAsync(ct);
         }, ct);
 
-        await executor.RunAsync(orgId, async () =>
+        await executor.RunAsSystemAsync(orgId, "test-harness", async () =>
         {
             var owner = await db.Set<Owner>().AsNoTracking().SingleAsync(o => o.Id == ownerId, ct);
             owner.OrgId.ShouldBe(orgId);                       // stamped by the interceptor
@@ -159,16 +159,16 @@ public sealed class DirectorySchemaRoundTripTests(PostgresFixture fixture)
 
         var tenant = new TenantContext();
         await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
-        var executor = new OrgScopedExecutor(db, tenant);
+        var executor = new OrgScopedExecutor(db, tenant, new ActorContext());
 
-        await executor.RunAsync(orgId, async () =>
+        await executor.RunAsSystemAsync(orgId, "test-harness", async () =>
         {
             db.Set<OrgSettings>().Add(new OrgSettings { Id = UuidV7.NewId() });
             await db.SaveChangesAsync(ct);
         }, ct);
 
         // A second settings row for the same org violates the unique (org_id) index (§C.1, P46).
-        var ex = await Should.ThrowAsync<DbUpdateException>(() => executor.RunAsync(orgId, async () =>
+        var ex = await Should.ThrowAsync<DbUpdateException>(() => executor.RunAsSystemAsync(orgId, "test-harness", async () =>
         {
             db.Set<OrgSettings>().Add(new OrgSettings { Id = UuidV7.NewId() });
             await db.SaveChangesAsync(ct);

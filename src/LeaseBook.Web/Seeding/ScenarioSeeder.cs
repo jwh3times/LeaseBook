@@ -137,11 +137,11 @@ public static class ScenarioSeeder
 
         var executor = sp.GetRequiredService<OrgScopedExecutor>();
         var db = sp.GetRequiredService<AppDbContext>();
-        await executor.RunAsync(ScenarioOrgId, async () =>
+        // Imports/sign-off/audit rows should carry a real actor, not "system" (design §2 R4). This
+        // used to be a hand-written ActorContext assignment inside the work, because the executor
+        // had no way to carry it.
+        await executor.RunAsync(ScenarioOrgId, Actor.User(adminId), async () =>
         {
-            // Imports/sign-off/audit rows should carry a real actor, not "system" (design §2 R4).
-            sp.GetRequiredService<ActorContext>().UserId = adminId;
-
             if (await db.Set<JournalEntry>().AnyAsync(ct))
             {
                 // Already seeded (idempotent — the journal is the anchor); the pins still hold.

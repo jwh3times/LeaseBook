@@ -73,7 +73,13 @@ public sealed class SweepCapabilityFreezeTests
 
         source.ShouldContain("foreach (var orgId in targets)");
         source.ShouldContain("services.CreateAsyncScope()");
-        source.ShouldContain("executor.RunAsync(orgId");
+
+        // Matched loosely on purpose. Pinning the whole call — "executor.RunAsync(orgId" — made this
+        // assertion fail when the sweep moved to RunAsSystemAsync, a rename that could not affect the
+        // property under test (one scope and one transaction per org). The member name is not the
+        // invariant; opening the unit of work per org inside the loop is.
+        source.ShouldContain("executor.RunAs");
+        source.ShouldContain("(orgId, ");
     }
 
     /// <summary>

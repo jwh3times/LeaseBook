@@ -33,3 +33,12 @@ established when the unit of work begins and ceases to exist when it ends — it
 never outlives the work it was established for.
 _Avoid_: scope, session, request (each of these is a thing that _has_ a unit of work, not the unit
 of work itself)
+
+### Accountability
+
+**Actor**:
+Who is accountable for a unit of work — either a named person, or the system acting for a stated
+reason. There is no third case: work no person is accountable for must still name the process that
+did it. "Unknown" is not an answer the language admits.
+_Avoid_: user (a person is a person; an actor is the role a person **or** the system fills),
+author, created-by

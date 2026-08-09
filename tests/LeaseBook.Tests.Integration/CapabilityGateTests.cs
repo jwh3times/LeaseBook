@@ -74,8 +74,8 @@ public sealed class CapabilityGateTests(PostgresFixture fixture)
             var executor = scope.ServiceProvider.GetRequiredService<OrgScopedExecutor>();
             var gate = scope.ServiceProvider.GetRequiredService<ICapabilityGate>();
 
-            await executor.RunAsync(
-                org,
+            await executor.RunAsSystemAsync(
+                org, "test-harness",
                 async () =>
                 {
                     // Control: the cached entry is neither expired nor invalidated, so the seam's
@@ -128,8 +128,8 @@ public sealed class CapabilityGateTests(PostgresFixture fixture)
             var executor = scope.ServiceProvider.GetRequiredService<OrgScopedExecutor>();
             var gate = scope.ServiceProvider.GetRequiredService<ICapabilityGate>();
 
-            await executor.RunAsync(
-                org,
+            await executor.RunAsSystemAsync(
+                org, "test-harness",
                 async () =>
                 {
                     (await gate.GetCachedAsync(ct))
@@ -173,8 +173,8 @@ public sealed class CapabilityGateTests(PostgresFixture fixture)
             var executor = scope.ServiceProvider.GetRequiredService<OrgScopedExecutor>();
             var gate = scope.ServiceProvider.GetRequiredService<ICapabilityGate>();
 
-            await executor.RunAsync(
-                org,
+            await executor.RunAsSystemAsync(
+                org, "test-harness",
                 async () => (await gate.ResolveDurableAsync(ct))
                     .IsEnabled(CapabilityCatalog.ConsolidatedStatements)
                     .ShouldBeFalse("entitlement gates before flag — a rollout must not hand out a paid feature"),
@@ -213,8 +213,8 @@ public sealed class CapabilityGateTests(PostgresFixture fixture)
             var executor = scope.ServiceProvider.GetRequiredService<OrgScopedExecutor>();
             var gate = scope.ServiceProvider.GetRequiredService<ICapabilityGate>();
 
-            await executor.RunAsync(
-                org,
+            await executor.RunAsSystemAsync(
+                org, "test-harness",
                 async () =>
                 {
                     db.Database.CurrentTransaction.ShouldNotBeNull(
@@ -265,8 +265,8 @@ public sealed class CapabilityGateTests(PostgresFixture fixture)
         var cache = host.Services.GetRequiredService<CapabilityCache>();
         var coldLoadsBefore = cache.ColdLoads;
 
-        await executor.RunAsync(
-            org,
+        await executor.RunAsSystemAsync(
+            org, "test-harness",
             async () =>
             {
                 var cached = await gate.GetCachedAsync(ct).WaitAsync(TimeSpan.FromSeconds(5), ct);

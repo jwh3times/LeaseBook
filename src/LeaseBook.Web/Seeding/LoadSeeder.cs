@@ -145,7 +145,7 @@ public static class LoadSeeder
         // every journal-dimension FK (P38 / ADR-008) has a target the moment its line posts.
         var executor = sp.GetRequiredService<OrgScopedExecutor>();
         var db = sp.GetRequiredService<AppDbContext>();
-        await executor.RunAsync(LoadOrgId, async () =>
+        await executor.RunAsSystemAsync(LoadOrgId, "seed:load", async () =>
         {
             if (await db.Set<JournalEntry>().AnyAsync(ct))
             {

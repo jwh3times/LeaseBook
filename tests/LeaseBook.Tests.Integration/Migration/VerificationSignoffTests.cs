@@ -98,9 +98,9 @@ public sealed class VerificationSignoffTests(PostgresFixture fixture)
         // --- Assert: signed row exists AND audit_events row with entity_type = 'migration-signed-off' ---
         var tenant = new TenantContext { OrgId = setup.OrgId };
         await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
-        var executor = new OrgScopedExecutor(db, tenant);
+        var executor = new OrgScopedExecutor(db, tenant, new ActorContext());
 
-        await executor.RunAsync(setup.OrgId, async () =>
+        await executor.RunAsSystemAsync(setup.OrgId, "test-harness", async () =>
         {
             // The signed row should be findable by the returned id.
             var signedRow = await db.Set<MigrationVerification>()
@@ -171,9 +171,9 @@ public sealed class VerificationSignoffTests(PostgresFixture fixture)
         // --- Gate-before-side-effect: assert NO audit row and NO signed row were written ---
         var tenant = new TenantContext { OrgId = setup.OrgId };
         await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
-        var executor = new OrgScopedExecutor(db, tenant);
+        var executor = new OrgScopedExecutor(db, tenant, new ActorContext());
 
-        await executor.RunAsync(setup.OrgId, async () =>
+        await executor.RunAsSystemAsync(setup.OrgId, "test-harness", async () =>
         {
             // No 'migration-signed-off' audit event should exist.
             var auditCount = await db.Set<AuditEvent>()
@@ -305,9 +305,9 @@ public sealed class VerificationSignoffTests(PostgresFixture fixture)
         // --- No signed row, no audit row: the gate fired before any side effect ---
         var tenant = new TenantContext { OrgId = setup.OrgId };
         await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
-        var executor = new OrgScopedExecutor(db, tenant);
+        var executor = new OrgScopedExecutor(db, tenant, new ActorContext());
 
-        await executor.RunAsync(setup.OrgId, async () =>
+        await executor.RunAsSystemAsync(setup.OrgId, "test-harness", async () =>
         {
             var auditCount = await db.Set<AuditEvent>()
                 .CountAsync(a => a.EntityType == "migration-signed-off", ct);
@@ -482,9 +482,9 @@ public sealed class VerificationSignoffTests(PostgresFixture fixture)
         // --- Gate-before-side-effect: NO signed row and NO audit row were written ---
         var tenant = new TenantContext { OrgId = setup.OrgId };
         await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
-        var executor = new OrgScopedExecutor(db, tenant);
+        var executor = new OrgScopedExecutor(db, tenant, new ActorContext());
 
-        await executor.RunAsync(setup.OrgId, async () =>
+        await executor.RunAsSystemAsync(setup.OrgId, "test-harness", async () =>
         {
             var auditCount = await db.Set<AuditEvent>()
                 .CountAsync(a => a.EntityType == "migration-signed-off", ct);
@@ -599,7 +599,7 @@ public sealed class VerificationSignoffTests(PostgresFixture fixture)
         {
             var executor = scope.ServiceProvider.GetRequiredService<OrgScopedExecutor>();
             var sender = scope.ServiceProvider.GetRequiredService<ISender>();
-            await executor.RunAsync(orgId, async () =>
+            await executor.RunAsSystemAsync(orgId, "test-harness", async () =>
             {
                 await sender.Send(new CreateBankAccount(trustBankName, null, null, "trust"), ct);
                 await sender.Send(new CreateBankAccount(depositBankName, null, null, "deposit"), ct);
@@ -622,12 +622,12 @@ public sealed class VerificationSignoffTests(PostgresFixture fixture)
     {
         var tenant = new TenantContext { OrgId = orgId };
         await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
-        var executor = new OrgScopedExecutor(db, tenant);
+        var executor = new OrgScopedExecutor(db, tenant, new ActorContext());
 
         Guid trustId = default;
         Guid depositId = default;
 
-        await executor.RunAsync(orgId, async () =>
+        await executor.RunAsSystemAsync(orgId, "test-harness", async () =>
         {
             var banks = await db.Set<LeaseBook.Modules.Directory.Domain.BankAccount>()
                 .AsNoTracking()

@@ -54,10 +54,10 @@ public sealed class EntityImportTests(PostgresFixture fixture)
         var tenant = new TenantContext();
         tenant.OrgId = orgId;
         await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
-        var executor = new OrgScopedExecutor(db, tenant);
+        var executor = new OrgScopedExecutor(db, tenant, new ActorContext());
 
         List<Owner> owners = null!;
-        await executor.RunAsync(orgId, async () =>
+        await executor.RunAsSystemAsync(orgId, "test-harness", async () =>
         {
             owners = await db.Set<Owner>()
                 .AsNoTracking()
@@ -70,7 +70,7 @@ public sealed class EntityImportTests(PostgresFixture fixture)
         owners.ShouldContain(o => o.Name == "Linden Properties LLC");
 
         // Verify the import_batch row is persisted as "posted".
-        await executor.RunAsync(orgId, async () =>
+        await executor.RunAsSystemAsync(orgId, "test-harness", async () =>
         {
             var batch = await db.Set<ImportBatch>()
                 .SingleOrDefaultAsync(b => b.Id == result.BatchId, ct);
@@ -116,9 +116,9 @@ public sealed class EntityImportTests(PostgresFixture fixture)
         var tenant = new TenantContext();
         tenant.OrgId = orgId;
         await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
-        var executor = new OrgScopedExecutor(db, tenant);
+        var executor = new OrgScopedExecutor(db, tenant, new ActorContext());
 
-        await executor.RunAsync(orgId, async () =>
+        await executor.RunAsSystemAsync(orgId, "test-harness", async () =>
         {
             var owners = await db.Set<Owner>().AsNoTracking().ToListAsync(ct);
             owners.Count.ShouldBe(1);
@@ -177,9 +177,9 @@ public sealed class EntityImportTests(PostgresFixture fixture)
         var tenant = new TenantContext();
         tenant.OrgId = orgId;
         await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
-        var executor = new OrgScopedExecutor(db, tenant);
+        var executor = new OrgScopedExecutor(db, tenant, new ActorContext());
 
-        await executor.RunAsync(orgId, async () =>
+        await executor.RunAsSystemAsync(orgId, "test-harness", async () =>
         {
             var properties = await db.Set<Property>().AsNoTracking().ToListAsync(ct);
             properties.Count.ShouldBe(1);
@@ -221,9 +221,9 @@ public sealed class EntityImportTests(PostgresFixture fixture)
         var tenant = new TenantContext();
         tenant.OrgId = orgId;
         await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
-        var executor = new OrgScopedExecutor(db, tenant);
+        var executor = new OrgScopedExecutor(db, tenant, new ActorContext());
 
-        await executor.RunAsync(orgId, async () =>
+        await executor.RunAsSystemAsync(orgId, "test-harness", async () =>
         {
             var rows = await db.Set<ImportRow>()
                 .Where(r => r.BatchId == result.BatchId)
