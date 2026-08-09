@@ -293,13 +293,9 @@ public sealed class CapabilityCache(
         var platform = scope.ServiceProvider.GetRequiredService<IPlatformScope>();
         var reader = scope.ServiceProvider.GetRequiredService<CapabilityStateReader>();
 
-        CapabilitySet? set = null;
-        await platform.RunAsync(
-            async () => set = await reader.ReadAsync(orgId, userId, requirePlatformScope: true, ct),
+        return await platform.RunAsync(
+            () => reader.ReadAsync(orgId, userId, requirePlatformScope: true, ct),
             ct);
-
-        return set ?? throw new InvalidOperationException(
-            "The platform-scoped capability read completed without producing a set.");
     }
 
     private void Count(RefreshReason reason)

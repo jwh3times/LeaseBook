@@ -125,6 +125,27 @@ gate, with the same limits, as the money-path scans in _Accepted limitations_ be
 drift, not a privilege boundary. Anything that would change that assessment belongs in the security
 review, not here.
 
+**Amended 2026-08-09 — why the platform executor lives in the host.** The scan above is only as good
+as the number of places someone would plausibly reach for. What keeps that number at one is where
+the executor sits: `PlatformScopedExecutor` is in `LeaseBook.Web`, and no feature module may
+reference the host, so a module that needs the platform plane must declare a port and be satisfied
+by a host adapter (ADR-007). It is not nameable from module code at all.
+
+This is worth recording because the reason stated in the code was wrong, and the wrong reason would
+have justified moving it. Several doc comments said the executor lives in the host because
+"`SharedKernel` stays pure cross-cutting primitives" — but its sibling `OrgScopedExecutor` is a
+scoped executor living in `SharedKernel`, and is why that project references EF Relational at all.
+Purity cannot be the distinction. **Containment is:** every module references `SharedKernel`, so a
+platform executor there would be nameable from every module, and the escape would stop being a
+one-call-site property held by a scan and become a typed API handed to code that has no business
+with it.
+
+The practical consequence for future refactoring: the two planes may share an _implementation_ — they
+do, as of the same date, through a transaction bracket in `SharedKernel` that deliberately knows no
+GUC name — but they must not share a _public interface_, and the platform type must not move into
+`SharedKernel`. A shared bracket is safe precisely because reaching the escape through it still means
+writing the `set_config('app.platform', ...)` string yourself, which is what the scan looks for.
+
 Reads on the money path therefore need no escape at all. `feature_flags` is readable from the tenant
 plane by design — a tenant must not be able to _toggle_ a flag; reading one reveals nothing that the
 UI does not — and the two organization-scoped tables already permit an organization to read its own
