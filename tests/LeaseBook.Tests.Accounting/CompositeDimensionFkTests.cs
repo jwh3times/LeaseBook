@@ -66,11 +66,7 @@ public sealed class CompositeDimensionFkTests(PostgresFixture fixture)
 
         // FORCE ROW LEVEL SECURITY applies even to the migrator (table owner), so the WITH CHECK policy
         // needs an org context — set it for this transaction.
-        await using (var setOrg = new NpgsqlCommand("SELECT set_config('app.org_id', @org, true)", conn, tx))
-        {
-            setOrg.Parameters.AddWithValue("org", orgId.ToString());
-            await setOrg.ExecuteNonQueryAsync(ct);
-        }
+        await RlsProbe.SetOrgAsync(conn, tx, orgId, ct);
 
         var entryId = UuidV7.NewId();
         await using (var entry = new NpgsqlCommand(

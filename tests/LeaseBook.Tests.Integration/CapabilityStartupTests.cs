@@ -356,10 +356,7 @@ public sealed class CapabilityStartupTests(PostgresFixture fixture)
         await using var conn = await fixture.OpenAppConnectionAsync(ct);
         await using var tx = await conn.BeginTransactionAsync(ct);
 
-        await using (var scope = new NpgsqlCommand("SELECT set_config('app.platform', 'on', true)", conn, tx))
-        {
-            await scope.ExecuteNonQueryAsync(ct);
-        }
+        await RlsProbe.SetPlatformAsync(conn, tx, ct);
 
         await using (var cmd = new NpgsqlCommand(sql, conn, tx))
         {
