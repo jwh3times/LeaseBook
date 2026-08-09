@@ -172,6 +172,90 @@ public sealed class TenantIsolationTests(PostgresFixture fixture)
         row.OrgId.ShouldBe(orgA);
     }
 
+    // T6 — a unit of work refuses to nest on a context that already has a transaction. Context is
+    // set with SET LOCAL, so an inner scope would silently run under the OUTER transaction's context
+    // rather than its own. The provider rejects the second BeginTransaction anyway; this asserts the
+    // refusal names the tenancy constraint, which is what the five prose warnings existed to say.
+    [Fact]
+    public async Task Org_scoped_work_refuses_to_nest_on_a_context_that_is_already_in_a_transaction()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var tenant = new TenantContext();
+        await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
+        await using var outer = await db.Database.BeginTransactionAsync(ct);
+
+        var executor = new OrgScopedExecutor(db, tenant);
+        var executed = false;
+
+        var ex = await Should.ThrowAsync<InvalidOperationException>(async () =>
+            await executor.RunAsync(UuidV7.NewId(), () =>
+            {
+                executed = true;
+                return Task.CompletedTask;
+            }, ct));
+
+        ex.Message.ShouldContain("cannot nest");
+        executed.ShouldBeFalse();
+        await outer.RollbackAsync(ct);
+    }
+
+    // T7 — the same guard covers the platform plane, because both share one transaction bracket.
+    [Fact]
+    public async Task Platform_scoped_work_refuses_to_nest_on_a_context_that_is_already_in_a_transaction()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = fixture.CreateContext(fixture.AppConnectionString);
+        await using var outer = await db.Database.BeginTransactionAsync(ct);
+
+        var ex = await Should.ThrowAsync<InvalidOperationException>(async () =>
+            await new PlatformScopedExecutor(db).RunAsync(() => Task.CompletedTask, ct));
+
+        ex.Message.ShouldContain("cannot nest");
+        await outer.RollbackAsync(ct);
+    }
+
+    // T8 — the complement, and the reason the guard checks the CONTEXT rather than some ambient flag:
+    // out-of-band work on its OWN context is the correct pattern (it is how CapabilityCache refreshes
+    // while a request transaction is open elsewhere), and must not be caught.
+    [Fact]
+    public async Task Platform_scoped_work_on_its_own_context_is_unaffected_by_another_open_transaction()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var busy = fixture.CreateContext(fixture.AppConnectionString);
+        await using var outer = await busy.Database.BeginTransactionAsync(ct);
+
+        await using var fresh = fixture.CreateContext(fixture.AppConnectionString);
+        var ran = false;
+
+        await new PlatformScopedExecutor(fresh).RunAsync(() =>
+        {
+            ran = true;
+            return Task.CompletedTask;
+        }, ct);
+
+        ran.ShouldBeTrue();
+        await outer.RollbackAsync(ct);
+    }
+
+    // T9 — the value-returning form. Its absence is what forced callers into a captured local plus
+    // an unreachable null check; CapabilityCache carried exactly that branch before this existed.
+    [Fact]
+    public async Task Scoped_work_returns_the_works_result_on_both_planes()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var orgA = UuidV7.NewId();
+        var tenant = new TenantContext();
+        await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
+
+        var org = await new OrgScopedExecutor(db, tenant)
+            .RunAsync(orgA, () => Task.FromResult(tenant.OrgId), ct);
+        org.ShouldBe(orgA, "the tenant plane sets context before the work runs, and returns its result");
+
+        await using var platformDb = fixture.CreateContext(fixture.AppConnectionString);
+        var answer = await new PlatformScopedExecutor(platformDb).RunAsync(() => Task.FromResult(42), ct);
+        answer.ShouldBe(42);
+    }
+
     private static async Task SeedAsync(NpgsqlConnection conn, Guid orgId, int count, CancellationToken ct)
     {
         await using var tx = await conn.BeginTransactionAsync(ct);

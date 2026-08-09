@@ -51,13 +51,15 @@ Never hand-roll these steps — `SchemaGuardTests` fails CI if any `org_id` tabl
 ### Org context is always `SET LOCAL` inside the transaction
 
 ```csharp
-// LeaseBook.Web/Tenancy/OrgContextMiddleware.cs pattern
-await using var tx = await db.Database.BeginTransactionAsync(ct);
-await db.Database.ExecuteSqlRawAsync(
-    "SET LOCAL app.org_id = {0}", orgId.ToString());
-// … work …
-await tx.CommitAsync(ct);
+// SharedKernel/Tenancy/OrgScopedExecutor.cs — the one place app.org_id is set.
+// Requests reach it through OrgContextMiddleware; jobs, the CLI and the seeders call it directly.
+// Parameterized set_config, not `SET LOCAL app.org_id = …`: the value argument is text and the
+// RLS policy casts it back with ::uuid.
+await db.Database.ExecuteSqlAsync(
+    $"SELECT set_config('app.org_id', {orgId.ToString()}, true)", ct);
 ```
+
+The surrounding transaction lives in `SharedKernel/Tenancy/TransactionalUnitOfWork.cs`, shared with the platform plane and refusing to nest. Do not open your own — resolve a scope and use the executor.
 
 **Never `SET app.org_id`** (session-level) — pooled connections would leak context to the next tenant. `SET LOCAL` scopes to the transaction and clears on commit/rollback. Missing context fails closed: `current_setting('app.org_id', true)` → NULL → policies match no rows.
 
@@ -77,7 +79,7 @@ This ensures a line's `org_id` matches its referenced entity's `org_id` at the c
 
 ### Soft spot: `asp_net_users`
 
-`asp_net_users` carries `org_id` but is **RLS-exempt** (login precedes org context). Any read or write against users must filter by `org_id` explicitly in code, and must ship a cross-org isolation test. The T1–T5 test pack and schema guard won't catch a mistake here.
+`asp_net_users` carries `org_id` but is **RLS-exempt** (login precedes org context). Any read or write against users must filter by `org_id` explicitly in code, and must ship a cross-org isolation test. The numbered `TenantIsolationTests` pack and schema guard won't catch a mistake here — none of its cases touch this table.
 
 ---
 

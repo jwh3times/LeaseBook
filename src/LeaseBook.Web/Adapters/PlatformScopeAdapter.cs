@@ -13,4 +13,7 @@ namespace LeaseBook.Web.Adapters;
 internal sealed class PlatformScopeAdapter(PlatformScopedExecutor executor) : IPlatformScope
 {
     public Task RunAsync(Func<Task> work, CancellationToken ct = default) => executor.RunAsync(work, ct);
+
+    public Task<T> RunAsync<T>(Func<Task<T>> work, CancellationToken ct = default) =>
+        executor.RunAsync(work, ct);
 }

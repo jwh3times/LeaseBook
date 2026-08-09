@@ -10,12 +10,35 @@ namespace LeaseBook.SharedKernel.Tenancy;
 /// <c>SET LOCAL</c> only survives inside this transaction — that is what makes Npgsql connection
 /// pooling safe (§C.4). Missing context is never allowed to silently return empty rows: a
 /// <see cref="Guid.Empty"/> org id throws <b>before</b> any database access.
+/// <para>
+/// The transaction bracket itself — including the refusal to nest — lives in
+/// <see cref="TransactionalUnitOfWork"/>, shared with the platform plane. Only the one
+/// <c>set_config</c> line below is specific to this plane.
+/// </para>
 /// </summary>
 public sealed class OrgScopedExecutor(DbContext db, TenantContext tenantContext)
 {
-    public async Task RunAsync(Guid orgId, Func<Task> work, CancellationToken ct = default)
+    public Task RunAsync(Guid orgId, Func<Task> work, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(work);
+
+        return RunAsync(
+            orgId,
+            async () =>
+            {
+                await work();
+                return (object?)null;
+            },
+            ct);
+    }
+
+    /// <summary>Value-returning form. See <see cref="RunAsync(Guid, Func{Task}, CancellationToken)"/>.</summary>
+    public async Task<T> RunAsync<T>(Guid orgId, Func<Task<T>> work, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(work);
+
+        // Before the nesting check and before any database access: an empty org id is a caller
+        // mistake, and TenantIsolationTests pins that it is reported without touching the database.
         if (orgId == Guid.Empty)
         {
             throw new ArgumentException(
@@ -24,23 +47,21 @@ public sealed class OrgScopedExecutor(DbContext db, TenantContext tenantContext)
         }
 
         var previous = tenantContext.OrgId;
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
         try
         {
-            // Parameterized equivalent of `SET LOCAL app.org_id = '<uuid>'`. Bound as text because
-            // set_config's value argument is text; the RLS policy casts it back with ::uuid.
-            await db.Database.ExecuteSqlAsync(
-                $"SELECT set_config('app.org_id', {orgId.ToString()}, true)", ct);
-            tenantContext.OrgId = orgId;
-
-            await work();
-
-            await transaction.CommitAsync(ct);
-        }
-        catch
-        {
-            await transaction.RollbackAsync(ct);
-            throw;
+            return await TransactionalUnitOfWork.RunAsync(
+                db,
+                async token =>
+                {
+                    // Parameterized equivalent of `SET LOCAL app.org_id = '<uuid>'`. Bound as text
+                    // because set_config's value argument is text; the RLS policy casts it back
+                    // with ::uuid.
+                    await db.Database.ExecuteSqlAsync(
+                        $"SELECT set_config('app.org_id', {orgId.ToString()}, true)", token);
+                    tenantContext.OrgId = orgId;
+                },
+                work,
+                ct);
         }
         finally
         {
