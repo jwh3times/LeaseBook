@@ -1,3 +1,4 @@
+using LeaseBook.Modules.Capabilities.Admin;
 using LeaseBook.Modules.Capabilities.Caching;
 using LeaseBook.Modules.Capabilities.Contracts;
 using LeaseBook.Modules.Capabilities.Resolution;
@@ -30,6 +31,10 @@ public static class CapabilitiesModuleServiceCollectionExtensions
         // Scoped: the seam every caller uses. It binds the singleton cache and the scoped reader to
         // the ambient (org, user), so it can only live as long as that context does.
         services.AddScoped<ICapabilityGate, CapabilityGate>();
+
+        // Scoped: the write seam. Each member opens its own platform-scoped transaction on the
+        // ambient DbContext, so like the reader it lives as long as that context does.
+        services.AddScoped<ICapabilityAdmin, CapabilityAdmin>();
 
         return services;
     }

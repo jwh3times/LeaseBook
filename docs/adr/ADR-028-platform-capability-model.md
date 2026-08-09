@@ -37,6 +37,9 @@ per-user beta membership) — plus the registry default. No feature module reads
 host's `capabilities` CLI verb and its startup registry validator do, through the shared
 `AppDbContext` (§15 Q2).
 
+> **Superseded 2026-08-09 — see the amendment in §14.** The Capabilities module now writes all four
+> tables and reads three, behind `ICapabilityAdmin`. The host keeps only the operator-facing reads.
+
 ### 2. Resolution order
 
 Evaluated in this order, for each capability:
@@ -384,6 +387,27 @@ never be refused, because reading it is what an operator does first during an in
 
 Fixture capabilities are refused by every mutating subcommand, including cohort membership — a cohort
 row turns a capability on as effectively as a flag does.
+
+**Amended 2026-08-09 — "no endpoint, no UI" is now a property of the types, not a rule to remember.**
+The write _surface_ is unchanged: `capabilities` is still the only way to change this state. What
+moved is the write _implementation_, from the host verb into the module, behind `ICapabilityAdmin`.
+Each member opens its own platform scope rather than expecting a caller to have opened one, and since
+`IPlatformScope` opens its own transaction while a scoped unit of work refuses to nest, the write path
+**cannot execute inside a request transaction** — which every authenticated request already is. An
+endpoint that tried to call it would fail at the first write, in every environment, on the first run.
+
+This is worth recording precisely because the guarantee is easy to give back. Making the member accept
+an ambient scope instead — a change that would look like tidying — would restore the old situation in
+which nothing but this paragraph stops an endpoint being added. The refusal to nest is load-bearing;
+do not "simplify" it away.
+
+Two consequences. The obligation stated in _Accepted limitations_ below, that any writer off the
+tracked-entity path must assert an affected-row count, now has exactly one place it can be discharged
+rather than being owed by every future writer. And the claim earlier in this ADR that "no feature
+module reads those tables" no longer holds: the Capabilities module now writes all four and reads
+three of them. The host retains the operator-facing reads — the deployment-wide listing, the per-org
+listing with attribution, the org-existence check and the registry-drift validator — because each
+answers a question the module's deliberately single-org, fail-closed reader cannot.
 
 `flag clear` deletes the explicit deployment-wide override, restoring fall-through to cohort state and
 the registry default. It is distinct from `flag disable`: explicit false is the kill step and beats a

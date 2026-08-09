@@ -42,3 +42,31 @@ reason. There is no third case: work no person is accountable for must still nam
 did it. "Unknown" is not an answer the language admits.
 _Avoid_: user (a person is a person; an actor is the role a person **or** the system fills),
 author, created-by
+
+### Capabilities
+
+Whether a behaviour is available is answered from two independent sources, and conflating them is the
+failure the whole design exists to prevent: an operator turning something off during an incident must
+never be indistinguishable from a customer never having been entitled to it.
+
+**Capability**:
+A named behaviour that can be switched on or off for a given organization. What exists is declared in
+code; the database holds only its state.
+_Avoid_: feature (too broad — a feature is what the product does; a capability is the switch),
+toggle, permission (a permission is about a person, a capability is about an organization)
+
+**Feature flag**:
+The operations answer to "is this on for this deployment right now?" — temporary, applies to everyone
+at once, and expected to end in deletion.
+_Avoid_: kill switch (that is one use of a flag, not the thing itself), setting
+
+**Entitlement**:
+The commercial answer to "is this organization allowed to have this?" — durable, per-organization, and
+the sort of fact a customer can be told. Recorded as an append-only history of grant and revoke
+events, never as a mutable row.
+_Avoid_: licence, subscription, plan, permission
+
+**Cohort**:
+Membership in a staged rollout, for an organization or one of its users. Widens availability; never
+narrows it.
+_Avoid_: beta group, segment, audience
