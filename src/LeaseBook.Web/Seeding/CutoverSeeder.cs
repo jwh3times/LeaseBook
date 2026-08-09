@@ -80,7 +80,7 @@ public static class CutoverSeeder
         // Step 3 (org-scoped): bank accounts + chart of accounts (no journal data).
         var executor = sp.GetRequiredService<OrgScopedExecutor>();
         var db = sp.GetRequiredService<AppDbContext>();
-        await executor.RunAsync(CutoverOrgId, async () =>
+        await executor.RunAsSystemAsync(CutoverOrgId, "seed:cutover", async () =>
         {
             await EnsureOrgContentAsync(db, sp, ct);
         }, ct);

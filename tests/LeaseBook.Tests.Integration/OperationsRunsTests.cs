@@ -302,7 +302,7 @@ public sealed class OperationsRunsTests(PostgresFixture fixture)
         await using var scope = fixture.Api.Services.CreateAsyncScope();
         var executor = scope.ServiceProvider.GetRequiredService<OrgScopedExecutor>();
         var engine = scope.ServiceProvider.GetRequiredService<RunEngine>();
-        await executor.RunAsync(orgId, () => work(engine, scope.ServiceProvider), ct);
+        await executor.RunAsSystemAsync(orgId, "test-harness", () => work(engine, scope.ServiceProvider), ct);
     }
 
     private async Task DispatchAsync(Guid orgId, Func<ISender, IServiceProvider, Task> work, CancellationToken ct)
@@ -310,7 +310,7 @@ public sealed class OperationsRunsTests(PostgresFixture fixture)
         await using var scope = fixture.Api.Services.CreateAsyncScope();
         var executor = scope.ServiceProvider.GetRequiredService<OrgScopedExecutor>();
         var sender = scope.ServiceProvider.GetRequiredService<ISender>();
-        await executor.RunAsync(orgId, () => work(sender, scope.ServiceProvider), ct);
+        await executor.RunAsSystemAsync(orgId, "test-harness", () => work(sender, scope.ServiceProvider), ct);
     }
 
     /// <summary>
@@ -322,7 +322,7 @@ public sealed class OperationsRunsTests(PostgresFixture fixture)
     {
         var tenant = new LeaseBook.SharedKernel.Tenancy.TenantContext();
         await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
-        var executor = new OrgScopedExecutor(db, tenant);
-        await executor.RunAsync(orgId, () => new AccountingPeriods(db).CloseAsync(year, month, ct), ct);
+        var executor = new OrgScopedExecutor(db, tenant, new ActorContext());
+        await executor.RunAsSystemAsync(orgId, "test-harness", () => new AccountingPeriods(db).CloseAsync(year, month, ct), ct);
     }
 }

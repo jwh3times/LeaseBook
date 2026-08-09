@@ -88,8 +88,8 @@ public sealed class RunCapabilityPeriodTests(PostgresFixture fixture)
         var releaseFirst = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var secondAcquired = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        var first = firstExecutor.RunAsync(
-            org,
+        var first = firstExecutor.RunAsSystemAsync(
+            org, "test-harness",
             async () =>
             {
                 await firstLock.AcquireAsync(RunType.Rent, period, ct);
@@ -100,8 +100,8 @@ public sealed class RunCapabilityPeriodTests(PostgresFixture fixture)
 
         await firstAcquired.Task.WaitAsync(TimeSpan.FromSeconds(5), ct);
 
-        var second = secondExecutor.RunAsync(
-            org,
+        var second = secondExecutor.RunAsSystemAsync(
+            org, "test-harness",
             async () =>
             {
                 await secondLock.AcquireAsync(RunType.Rent, period, ct);
@@ -114,8 +114,8 @@ public sealed class RunCapabilityPeriodTests(PostgresFixture fixture)
             await Should.ThrowAsync<TimeoutException>(
                 async () => await secondAcquired.Task.WaitAsync(TimeSpan.FromMilliseconds(500)));
 
-            await otherExecutor.RunAsync(
-                org,
+            await otherExecutor.RunAsSystemAsync(
+                org, "test-harness",
                 async () => await otherLock.AcquireAsync(RunType.Rent, new RunPeriod(2026, 11), ct),
                 ct).WaitAsync(TimeSpan.FromSeconds(5), ct);
         }
@@ -382,7 +382,7 @@ public sealed class RunCapabilityPeriodTests(PostgresFixture fixture)
         {
             var executor = scope.ServiceProvider.GetRequiredService<OrgScopedExecutor>();
             var sender = scope.ServiceProvider.GetRequiredService<ISender>();
-            await executor.RunAsync(orgId, async () =>
+            await executor.RunAsSystemAsync(orgId, "test-harness", async () =>
             {
                 var ownerId = await sender.Send(new CreateOwner("Period Owner", null, null, null, null, 0m), ct);
                 var propId = await sender.Send(
@@ -475,7 +475,7 @@ public sealed class RunCapabilityPeriodTests(PostgresFixture fixture)
         var executor = scope.ServiceProvider.GetRequiredService<OrgScopedExecutor>();
 
         var count = -1;
-        await executor.RunAsync(orgId, async () => count = await db.Set<BulkRun>().CountAsync(ct), ct);
+        await executor.RunAsSystemAsync(orgId, "test-harness", async () => count = await db.Set<BulkRun>().CountAsync(ct), ct);
         return count;
     }
 
@@ -491,8 +491,8 @@ public sealed class RunCapabilityPeriodTests(PostgresFixture fixture)
         var executor = scope.ServiceProvider.GetRequiredService<OrgScopedExecutor>();
 
         var summary = string.Empty;
-        await executor.RunAsync(
-            orgId,
+        await executor.RunAsSystemAsync(
+            orgId, "test-harness",
             async () => summary = await db.Set<BulkRun>()
                 .Where(r => r.PeriodYear == year && r.PeriodMonth == month)
                 .OrderByDescending(r => r.CreatedAt)

@@ -137,7 +137,7 @@ public sealed class CompliancePackEndpointTests(PostgresFixture fixture)
         {
             var executor = scope.ServiceProvider.GetRequiredService<OrgScopedExecutor>();
             var sender = scope.ServiceProvider.GetRequiredService<ISender>();
-            await executor.RunAsync(orgId, async () =>
+            await executor.RunAsSystemAsync(orgId, "test-harness", async () =>
                 trustBankId = (await sender.Send(new CreateBankAccount("Operating Trust", null, null, "trust"), ct)).Id, ct);
         }
 
@@ -150,7 +150,7 @@ public sealed class CompliancePackEndpointTests(PostgresFixture fixture)
         var executor = scope.ServiceProvider.GetRequiredService<OrgScopedExecutor>();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var count = 0;
-        await executor.RunAsync(orgId, async () =>
+        await executor.RunAsSystemAsync(orgId, "test-harness", async () =>
             count = await db.AuditEvents.CountAsync(a => a.EntityType == "compliance-pack-generated", ct), ct);
         return count;
     }

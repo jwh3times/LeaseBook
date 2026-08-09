@@ -24,10 +24,7 @@ public sealed class OrgContextMiddleware(RequestDelegate next)
     /// <summary>Claim carrying the caller's org id; added at sign-in by WP-06.</summary>
     public const string OrgIdClaim = "org_id";
 
-    public async Task InvokeAsync(
-        HttpContext context,
-        ActorContext actorContext,
-        OrgScopedExecutor executor)
+    public async Task InvokeAsync(HttpContext context, OrgScopedExecutor executor)
     {
         var orgClaim = context.User.FindFirst(OrgIdClaim)?.Value;
         if (context.User.Identity?.IsAuthenticated != true || !Guid.TryParse(orgClaim, out var orgId))
@@ -37,15 +34,15 @@ public sealed class OrgContextMiddleware(RequestDelegate next)
             return;
         }
 
-        await executor.RunAsync(orgId, async () =>
-        {
-            // The acting user (P52) — stamps journal_entries.created_by and audit_events.actor_user_id.
-            if (Guid.TryParse(context.User.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var userId))
-            {
-                actorContext.UserId = userId;
-            }
+        // The acting user (P52) — stamps journal_entries.created_by and audit_events.actor_user_id.
+        // An authenticated principal whose id will not parse (or parses as empty) is named rather
+        // than left anonymous. The stamped value is null either way, exactly as before; what changes
+        // is that the odd case says what it is instead of looking like every other unattributed write.
+        var actor = Guid.TryParse(context.User.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var userId)
+            && userId != Guid.Empty
+                ? Actor.User(userId)
+                : Actor.System("principal-without-user-id");
 
-            await next(context);
-        }, context.RequestAborted);
+        await executor.RunAsync(orgId, actor, () => next(context), context.RequestAborted);
     }
 }

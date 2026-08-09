@@ -96,7 +96,7 @@ public sealed class RentRollTests(PostgresFixture fixture)
         var executor = scope.ServiceProvider.GetRequiredService<OrgScopedExecutor>();
         var sender = scope.ServiceProvider.GetRequiredService<ISender>();
         T result = default!;
-        await executor.RunAsync(DemoSeeder.DemoOrgId, async () => result = await work(sender, ct), ct);
+        await executor.RunAsSystemAsync(DemoSeeder.DemoOrgId, "test-harness", async () => result = await work(sender, ct), ct);
         return result;
     }
 }

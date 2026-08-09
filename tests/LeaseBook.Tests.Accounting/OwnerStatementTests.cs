@@ -81,7 +81,7 @@ public sealed class OwnerStatementGoldenTests(PostgresFixture fixture)
         var executor = scope.ServiceProvider.GetRequiredService<OrgScopedExecutor>();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         T result = default!;
-        await executor.RunAsync(DemoSeeder.DemoOrgId, async () => result = await query(db), ct);
+        await executor.RunAsSystemAsync(DemoSeeder.DemoOrgId, "test-harness", async () => result = await query(db), ct);
         return result;
     }
 }

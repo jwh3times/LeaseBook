@@ -58,7 +58,7 @@ public sealed class CompliancePackAssemblerTests(PostgresFixture fixture)
         var sp = scope.ServiceProvider;
         var executor = sp.GetRequiredService<OrgScopedExecutor>();
         CompliancePack pack = default!;
-        await executor.RunAsync(DemoSeeder.DemoOrgId, async () =>
+        await executor.RunAsSystemAsync(DemoSeeder.DemoOrgId, "test-harness", async () =>
         {
             var assembler = new CompliancePackAssembler(
                 sp.GetRequiredService<ISender>(),

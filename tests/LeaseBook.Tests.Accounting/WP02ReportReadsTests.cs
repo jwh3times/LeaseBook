@@ -163,7 +163,7 @@ public sealed class WP02ReportReadsTests(PostgresFixture fixture)
         var executor = scope.ServiceProvider.GetRequiredService<OrgScopedExecutor>();
         var db = scope.ServiceProvider.GetRequiredService<LeaseBook.Web.Persistence.AppDbContext>();
         T result = default!;
-        await executor.RunAsync(DemoSeeder.DemoOrgId, async () => result = await query(db), ct);
+        await executor.RunAsSystemAsync(DemoSeeder.DemoOrgId, "test-harness", async () => result = await query(db), ct);
         return result;
     }
 }

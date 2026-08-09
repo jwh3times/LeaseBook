@@ -209,7 +209,7 @@ public sealed class LateFeeOverrideValidationTests(PostgresFixture fixture)
         {
             var executor = scope.ServiceProvider.GetRequiredService<OrgScopedExecutor>();
             var sender = scope.ServiceProvider.GetRequiredService<ISender>();
-            await executor.RunAsync(orgId, async () =>
+            await executor.RunAsSystemAsync(orgId, "test-harness", async () =>
             {
                 var ownerId = await sender.Send(new CreateOwner("Validate Owner", null, null, null, null, 0m), ct);
                 var propId = await sender.Send(new CreateProperty(ownerId, "1 Validate St", "Raleigh", "NC", null, null), ct);

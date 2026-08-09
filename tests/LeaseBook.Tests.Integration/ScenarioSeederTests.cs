@@ -134,7 +134,7 @@ public sealed class ScenarioSeederTests(PostgresFixture fixture)
         // March is finalized — a bank-touching posting dated inside it must 409. The failed
         // transaction rolls back, so the fixture is untouched.
         await Should.ThrowAsync<AccountPeriodLockedException>(
-            executor.RunAsync(ScenarioSeeder.ScenarioOrgId, async () =>
+            executor.RunAsSystemAsync(ScenarioSeeder.ScenarioOrgId, "test-harness", async () =>
                 await sender.Send(new RecordBankAdjustment(
                     "fee", 1.00m, new DateOnly(2026, 3, 15), ScenarioSeeder.OperatingTrustId, null,
                     "Locked-period probe", "scenario-test:locked-period-probe"), ct), ct));
@@ -185,7 +185,7 @@ public sealed class ScenarioSeederTests(PostgresFixture fixture)
         var executor = scope.ServiceProvider.GetRequiredService<OrgScopedExecutor>();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         T result = default!;
-        await executor.RunAsync(ScenarioSeeder.ScenarioOrgId, async () => result = await query(db), ct);
+        await executor.RunAsSystemAsync(ScenarioSeeder.ScenarioOrgId, "test-harness", async () => result = await query(db), ct);
         return result;
     }
 }

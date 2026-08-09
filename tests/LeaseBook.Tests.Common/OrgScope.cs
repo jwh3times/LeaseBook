@@ -67,11 +67,16 @@ public sealed class OrgScope : IAsyncDisposable
 
         var tenant = new TenantContext();
         var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
-        return new OrgScope(orgId, db, tenant, new OrgScopedExecutor(db, tenant));
+        return new OrgScope(orgId, db, tenant, new OrgScopedExecutor(db, tenant, new ActorContext()));
     }
 
-    /// <summary>Runs <paramref name="work"/> inside this org's unit-of-work transaction (sets <c>app.org_id</c>).</summary>
-    public Task RunAsync(Func<Task> work, CancellationToken ct = default) => Executor.RunAsync(OrgId, work, ct);
+    /// <summary>
+    /// Runs <paramref name="work"/> inside this org's unit-of-work transaction (sets <c>app.org_id</c>),
+    /// attributed to the test harness. A test that cares which actor a row is stamped with should call
+    /// <see cref="Executor"/> directly with an explicit <see cref="Actor"/> rather than going through here.
+    /// </summary>
+    public Task RunAsync(Func<Task> work, CancellationToken ct = default) =>
+        Executor.RunAsSystemAsync(OrgId, "test-harness", work, ct);
 
     public ValueTask DisposeAsync() => Db.DisposeAsync();
 }

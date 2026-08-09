@@ -61,19 +61,19 @@ public sealed class AccountingPeriodsTests(PostgresFixture fixture)
         // Two independent app-role connections racing to create the same month's period.
         var tenant1 = new TenantContext();
         await using var db1 = fixture.CreateContext(fixture.AppConnectionString, tenant1);
-        var ex1 = new OrgScopedExecutor(db1, tenant1);
+        var ex1 = new OrgScopedExecutor(db1, tenant1, new ActorContext());
 
         var tenant2 = new TenantContext();
         await using var db2 = fixture.CreateContext(fixture.AppConnectionString, tenant2);
-        var ex2 = new OrgScopedExecutor(db2, tenant2);
+        var ex2 = new OrgScopedExecutor(db2, tenant2, new ActorContext());
 
         var date = new DateOnly(2026, 3, 10);
         AccountingPeriod? p1 = null;
         AccountingPeriod? p2 = null;
 
         await Task.WhenAll(
-            ex1.RunAsync(orgId, async () => p1 = await new AccountingPeriods(db1).GetOpenPeriodAsync(date, ct), ct),
-            ex2.RunAsync(orgId, async () => p2 = await new AccountingPeriods(db2).GetOpenPeriodAsync(date, ct), ct));
+            ex1.RunAsSystemAsync(orgId, "test-harness", async () => p1 = await new AccountingPeriods(db1).GetOpenPeriodAsync(date, ct), ct),
+            ex2.RunAsSystemAsync(orgId, "test-harness", async () => p2 = await new AccountingPeriods(db2).GetOpenPeriodAsync(date, ct), ct));
 
         p1.ShouldNotBeNull();
         p2.ShouldNotBeNull();
@@ -81,7 +81,7 @@ public sealed class AccountingPeriodsTests(PostgresFixture fixture)
         p2.Month.ShouldBe(3);
 
         long count = 0;
-        await ex1.RunAsync(orgId, async () =>
+        await ex1.RunAsSystemAsync(orgId, "test-harness", async () =>
             count = await db1.Set<AccountingPeriod>().CountAsync(p => p.Year == 2026 && p.Month == 3, ct), ct);
         count.ShouldBe(1); // exactly one row survived the race
     }

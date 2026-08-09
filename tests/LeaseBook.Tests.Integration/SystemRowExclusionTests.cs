@@ -33,7 +33,7 @@ public sealed class SystemRowExclusionTests(PostgresFixture fixture)
         var sender = scope.ServiceProvider.GetRequiredService<ISender>();
         var db = scope.ServiceProvider.GetRequiredService<DbContext>();
 
-        await executor.RunAsync(DemoSeeder.DemoOrgId, async () =>
+        await executor.RunAsSystemAsync(DemoSeeder.DemoOrgId, "test-harness", async () =>
         {
             var systemOwnerIds = await db.Set<Owner>().Where(o => o.IsSystem).Select(o => o.Id).ToListAsync(ct);
             var systemTenantIds = await db.Set<Tenant>().Where(t => t.IsSystem).Select(t => t.Id).ToListAsync(ct);

@@ -101,6 +101,44 @@ public sealed class ActorAuditTests(PostgresFixture fixture)
         createdBy.ShouldBeNull();
     }
 
+    // The unit of work's actor parameter is what decides attribution — not an ambient value a caller
+    // set beforehand. Before the parameter existed, presetting ActorContext by hand was the ONLY way
+    // to attribute a job or seeder write, and ScenarioSeeder did exactly that from inside the work.
+    // Money-adjacent: this is journal_entries.created_by on a real posting.
+    [Fact]
+    public async Task The_units_actor_decides_created_by_and_a_preset_context_does_not_leak_in()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var orgId = await NewOrgAsync(ct);
+        var (userId, _) = await CreateUserAsync(orgId, "Renée Calloway", ct);
+        var tenantId = await SetupTenantAsync(orgId, ct);
+
+        await using var scope = fixture.Api.Services.CreateAsyncScope();
+        var sp = scope.ServiceProvider;
+        var executor = sp.GetRequiredService<OrgScopedExecutor>();
+        var sender = sp.GetRequiredService<ISender>();
+
+        // A caller sets the context by hand, the old way, and then declares a system unit of work.
+        sp.GetRequiredService<ActorContext>().UserId = userId;
+
+        var systemEntry = Guid.Empty;
+        await executor.RunAsSystemAsync(orgId, "nightly-job", async () =>
+            systemEntry = (await sender.Send(new AddCharge(tenantId, 1450m, Feb1, "rent", null, Key()), ct)).EntryId, ct);
+
+        var userEntry = Guid.Empty;
+        await executor.RunAsync(orgId, Actor.User(userId), async () =>
+            userEntry = (await sender.Send(new AddCharge(tenantId, 1450m, Feb3, "rent", null, Key()), ct)).EntryId, ct);
+
+        var stamps = await AsActorAsync(orgId, null, (s, _, c) =>
+            s.GetRequiredService<AppDbContext>().Set<JournalEntry>()
+                .Where(e => e.Id == systemEntry || e.Id == userEntry)
+                .ToDictionaryAsync(e => e.Id, e => e.CreatedBy, c), ct);
+
+        stamps[systemEntry].ShouldBeNull(
+            "the unit of work declared a system actor, so a value set before it must not survive into the posting");
+        stamps[userEntry].ShouldBe(userId);
+    }
+
     [Fact]
     public async Task The_audit_trail_is_isolated_across_orgs()
     {
@@ -172,14 +210,14 @@ public sealed class ActorAuditTests(PostgresFixture fixture)
     {
         await using var scope = fixture.Api.Services.CreateAsyncScope();
         var sp = scope.ServiceProvider;
-        if (actorUserId is { } uid)
-        {
-            sp.GetRequiredService<ActorContext>().UserId = uid;
-        }
+
+        // The executor owns ActorContext for the length of the unit of work, exactly as the request
+        // path does. Setting it by hand before the call would simply be overwritten.
+        var actor = actorUserId is { } uid ? Actor.User(uid) : Actor.System("test-harness");
 
         var executor = sp.GetRequiredService<OrgScopedExecutor>();
         T result = default!;
-        await executor.RunAsync(orgId, async () => result = await work(sp, sp.GetRequiredService<ISender>(), ct), ct);
+        await executor.RunAsync(orgId, actor, async () => result = await work(sp, sp.GetRequiredService<ISender>(), ct), ct);
         return result;
     }
 }

@@ -184,7 +184,7 @@ public sealed class LedgerHttpTests(PostgresFixture fixture)
         {
             var executor = scope.ServiceProvider.GetRequiredService<OrgScopedExecutor>();
             var sender = scope.ServiceProvider.GetRequiredService<ISender>();
-            await executor.RunAsync(orgId, async () =>
+            await executor.RunAsSystemAsync(orgId, "test-harness", async () =>
             {
                 var ownerId = await sender.Send(new CreateOwner("Owner", null, null, null, 800, 0m), ct);
                 var propertyId = await sender.Send(new CreateProperty(ownerId, "412 Oakmont Ave", "Asheville", "NC", "28801", null), ct);

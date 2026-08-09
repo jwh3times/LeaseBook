@@ -255,7 +255,7 @@ public sealed class OnboardingStatusTests(PostgresFixture fixture)
             await using var scope = fixture.Api.Services.CreateAsyncScope();
             var executor = scope.ServiceProvider.GetRequiredService<OrgScopedExecutor>();
             var sender = scope.ServiceProvider.GetRequiredService<ISender>();
-            await executor.RunAsync(orgId, async () =>
+            await executor.RunAsSystemAsync(orgId, "test-harness", async () =>
             {
                 await sender.Send(new CreateBankAccount(trustBankName, null, null, "trust"), ct);
                 await sender.Send(new CreateBankAccount(depositBankName, null, null, "deposit"), ct);
@@ -313,12 +313,12 @@ public sealed class OnboardingStatusTests(PostgresFixture fixture)
     {
         var tenant = new TenantContext { OrgId = orgId };
         await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
-        var executor = new OrgScopedExecutor(db, tenant);
+        var executor = new OrgScopedExecutor(db, tenant, new ActorContext());
 
         Guid trustId = default;
         Guid depositId = default;
 
-        await executor.RunAsync(orgId, async () =>
+        await executor.RunAsSystemAsync(orgId, "test-harness", async () =>
         {
             var banks = await db.Set<BankAccount>()
                 .AsNoTracking()

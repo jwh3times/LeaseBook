@@ -97,8 +97,8 @@ public sealed class RunCapabilityFreezeTests(PostgresFixture fixture)
                 new RunPeriodLock(db), snapshot);
 
             RunResult? result = null;
-            await executor.RunAsync(
-                org,
+            await executor.RunAsSystemAsync(
+                org, "test-harness",
                 async () =>
                 {
                     // Transaction start: OFF (entitlement granted, no flag row, registry default).
@@ -181,8 +181,8 @@ public sealed class RunCapabilityFreezeTests(PostgresFixture fixture)
             await WriteFlagAsync(enabled: true, ct);
 
             RunResult? result = null;
-            await executor.RunAsync(
-                org,
+            await executor.RunAsSystemAsync(
+                org, "test-harness",
                 async () => result = await engine.ConfirmAsync(
                     RunType.Rent, new RunPeriod(2026, 7), Targets,
                     expectedCapabilitiesVersion: null, acknowledgeCapabilityChange: false, ct),
@@ -227,8 +227,8 @@ public sealed class RunCapabilityFreezeTests(PostgresFixture fixture)
         var executor = scope.ServiceProvider.GetRequiredService<OrgScopedExecutor>();
         var snapshot = scope.ServiceProvider.GetRequiredService<ICapabilitySnapshot>();
 
-        await executor.RunAsync(
-            org,
+        await executor.RunAsSystemAsync(
+            org, "test-harness",
             async () =>
             {
                 var before = db.Database.CurrentTransaction;
@@ -354,8 +354,8 @@ public sealed class RunCapabilityFreezeTests(PostgresFixture fixture)
         var executor = scope.ServiceProvider.GetRequiredService<OrgScopedExecutor>();
 
         List<string> snapshots = [];
-        await executor.RunAsync(
-            orgId,
+        await executor.RunAsSystemAsync(
+            orgId, "test-harness",
             async () => snapshots = await db.Set<BulkRunItem>()
                 .Where(i => i.RunId == runId)
                 .OrderBy(i => i.TargetId)
@@ -376,8 +376,8 @@ public sealed class RunCapabilityFreezeTests(PostgresFixture fixture)
         var executor = scope.ServiceProvider.GetRequiredService<OrgScopedExecutor>();
 
         var summary = string.Empty;
-        await executor.RunAsync(
-            orgId,
+        await executor.RunAsSystemAsync(
+            orgId, "test-harness",
             async () => summary = await db.Set<BulkRun>()
                 .Where(r => r.Id == runId)
                 .Select(r => r.SummaryJson)

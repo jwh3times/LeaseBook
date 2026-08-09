@@ -55,7 +55,7 @@ public static class DemoSeeder
         // BEFORE the journal so every journal-dimension FK (P38 / ADR-008) has a target when it posts.
         var executor = sp.GetRequiredService<OrgScopedExecutor>();
         var db = sp.GetRequiredService<AppDbContext>();
-        await executor.RunAsync(DemoOrgId, async () =>
+        await executor.RunAsSystemAsync(DemoOrgId, "seed:demo", async () =>
         {
             var alreadyProvisioned = await db.AuditEvents
                 .AnyAsync(e => e.EntityType == ProvisionAuditEntityType, ct);

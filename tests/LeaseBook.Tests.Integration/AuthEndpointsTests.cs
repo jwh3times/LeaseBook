@@ -181,7 +181,7 @@ public sealed class AuthEndpointsTests(PostgresFixture fixture)
         await using var scope = fixture.Api.Services.CreateAsyncScope();
         var executor = scope.ServiceProvider.GetRequiredService<OrgScopedExecutor>();
         var chartOfAccounts = scope.ServiceProvider.GetRequiredService<IChartOfAccounts>();
-        await executor.RunAsync(orgId,
+        await executor.RunAsSystemAsync(orgId, "test-harness",
             () => chartOfAccounts.ProvisionAsync([new BankAccountSpec(UuidV7.NewId(), bankName, BankPurpose.Trust)], ct),
             ct);
     }

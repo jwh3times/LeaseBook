@@ -62,7 +62,8 @@ public sealed class InvariantSweepRunner(
             var checks = scope.ServiceProvider.GetRequiredService<IInvariantChecks>();
 
             IReadOnlyList<InvariantViolation> found = [];
-            await executor.RunAsync(orgId, async () => found = await checks.CheckCoreAsync(ct), ct);
+            await executor.RunAsSystemAsync(
+                orgId, "invariant-sweep", async () => found = await checks.CheckCoreAsync(ct), ct);
 
             foreach (var violation in found)
             {

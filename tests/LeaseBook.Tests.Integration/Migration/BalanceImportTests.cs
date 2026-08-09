@@ -114,9 +114,9 @@ public sealed class BalanceImportTests(PostgresFixture fixture)
         // --- assert clearing nets to $0 in both bases ---
         var tenant = new TenantContext { OrgId = setup.OrgId };
         await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
-        var executor = new OrgScopedExecutor(db, tenant);
+        var executor = new OrgScopedExecutor(db, tenant, new ActorContext());
 
-        await executor.RunAsync(setup.OrgId, async () =>
+        await executor.RunAsSystemAsync(setup.OrgId, "test-harness", async () =>
         {
             var cashNet = await ClearingNetAsync(db, "cash", ct);
             var accrualNet = await ClearingNetAsync(db, "accrual", ct);
@@ -168,10 +168,10 @@ public sealed class BalanceImportTests(PostgresFixture fixture)
         // Count journal entries after first import
         var tenant = new TenantContext { OrgId = setup.OrgId };
         await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
-        var executor = new OrgScopedExecutor(db, tenant);
+        var executor = new OrgScopedExecutor(db, tenant, new ActorContext());
 
         int firstCount = 0;
-        await executor.RunAsync(setup.OrgId, async () =>
+        await executor.RunAsSystemAsync(setup.OrgId, "test-harness", async () =>
         {
             firstCount = await db.Set<JournalEntry>().CountAsync(ct);
         }, ct);
@@ -195,7 +195,7 @@ public sealed class BalanceImportTests(PostgresFixture fixture)
 
         // Journal entry count must not increase
         int secondCount = 0;
-        await executor.RunAsync(setup.OrgId, async () =>
+        await executor.RunAsSystemAsync(setup.OrgId, "test-harness", async () =>
         {
             secondCount = await db.Set<JournalEntry>().CountAsync(ct);
         }, ct);
@@ -203,7 +203,7 @@ public sealed class BalanceImportTests(PostgresFixture fixture)
         secondCount.ShouldBe(firstCount, "re-import must not create additional journal entries");
 
         // Verify already-posted rows in the second batch
-        await executor.RunAsync(setup.OrgId, async () =>
+        await executor.RunAsSystemAsync(setup.OrgId, "test-harness", async () =>
         {
             var secondBatch = await db.Set<ImportBatch>()
                 .Where(b => b.EntityKind == "BankBalances" && b.Status == "posted")
@@ -251,9 +251,9 @@ public sealed class BalanceImportTests(PostgresFixture fixture)
         // Clearing should show the gap (1000.00), not $0
         var tenant = new TenantContext { OrgId = setup.OrgId };
         await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
-        var executor = new OrgScopedExecutor(db, tenant);
+        var executor = new OrgScopedExecutor(db, tenant, new ActorContext());
 
-        await executor.RunAsync(setup.OrgId, async () =>
+        await executor.RunAsSystemAsync(setup.OrgId, "test-harness", async () =>
         {
             var cashNet = await ClearingNetAsync(db, "cash", ct);
             cashNet.ShouldBe(-1000m, $"clearing cash net should equal the gap (bank debit = clearing credit); got {cashNet}");
@@ -337,9 +337,9 @@ public sealed class BalanceImportTests(PostgresFixture fixture)
 
         var tenant = new TenantContext { OrgId = setup.OrgId };
         await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
-        var executor = new OrgScopedExecutor(db, tenant);
+        var executor = new OrgScopedExecutor(db, tenant, new ActorContext());
 
-        await executor.RunAsync(setup.OrgId, async () =>
+        await executor.RunAsSystemAsync(setup.OrgId, "test-harness", async () =>
         {
             // Two journal entries created: one for cash (Both) and one for accrual delta (Accrual).
             var entryCount = await db.Set<JournalEntry>().CountAsync(ct);
@@ -403,9 +403,9 @@ public sealed class BalanceImportTests(PostgresFixture fixture)
 
         var tenant = new TenantContext { OrgId = setup.OrgId };
         await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
-        var executor = new OrgScopedExecutor(db, tenant);
+        var executor = new OrgScopedExecutor(db, tenant, new ActorContext());
 
-        await executor.RunAsync(setup.OrgId, async () =>
+        await executor.RunAsSystemAsync(setup.OrgId, "test-harness", async () =>
         {
             // ACCRUAL identity: the owner accrual-delta clearing DR 200 offsets the receivable clearing
             // CR 200, and the cash legs (equity 500 / bank 500) cancel → accrual ties to exactly $0.00.
@@ -453,9 +453,9 @@ public sealed class BalanceImportTests(PostgresFixture fixture)
 
         var tenant = new TenantContext { OrgId = setup.OrgId };
         await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
-        var executor = new OrgScopedExecutor(db, tenant);
+        var executor = new OrgScopedExecutor(db, tenant, new ActorContext());
 
-        await executor.RunAsync(setup.OrgId, async () =>
+        await executor.RunAsSystemAsync(setup.OrgId, "test-harness", async () =>
         {
             // No journal entry was created at all (both rows were no-ops).
             var entryCount = await db.Set<JournalEntry>().CountAsync(ct);
@@ -498,9 +498,9 @@ public sealed class BalanceImportTests(PostgresFixture fixture)
 
         var tenant = new TenantContext { OrgId = setup.OrgId };
         await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
-        var executor = new OrgScopedExecutor(db, tenant);
+        var executor = new OrgScopedExecutor(db, tenant, new ActorContext());
 
-        await executor.RunAsync(setup.OrgId, async () =>
+        await executor.RunAsSystemAsync(setup.OrgId, "test-harness", async () =>
         {
             // Exactly ONE entry — the accrual delta. The cash line was a no-op.
             var entryCount = await db.Set<JournalEntry>().CountAsync(ct);
@@ -560,7 +560,7 @@ public sealed class BalanceImportTests(PostgresFixture fixture)
         {
             var executor = scope.ServiceProvider.GetRequiredService<OrgScopedExecutor>();
             var sender = scope.ServiceProvider.GetRequiredService<ISender>();
-            await executor.RunAsync(setup.OrgId, async () =>
+            await executor.RunAsSystemAsync(setup.OrgId, "test-harness", async () =>
             {
                 await sender.Send(new CreateBankAccount(setup.TrustBankName, null, null, "trust"), ct);
             }, ct);
@@ -580,8 +580,8 @@ public sealed class BalanceImportTests(PostgresFixture fixture)
         // No journal entry posted for the ambiguous row.
         var tenant = new TenantContext { OrgId = setup.OrgId };
         await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
-        var executor2 = new OrgScopedExecutor(db, tenant);
-        await executor2.RunAsync(setup.OrgId, async () =>
+        var executor2 = new OrgScopedExecutor(db, tenant, new ActorContext());
+        await executor2.RunAsSystemAsync(setup.OrgId, "test-harness", async () =>
         {
             (await db.Set<JournalEntry>().CountAsync(ct)).ShouldBe(0);
         }, ct);
@@ -611,10 +611,10 @@ public sealed class BalanceImportTests(PostgresFixture fixture)
         // ImportOwnerTenantChainAsync imported O-1 under ("Chain Owner LLC").
         var tenant = new TenantContext { OrgId = setup.OrgId };
         await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
-        var executor = new OrgScopedExecutor(db, tenant);
+        var executor = new OrgScopedExecutor(db, tenant, new ActorContext());
 
         var ownerId = Guid.Empty;
-        await executor.RunAsync(setup.OrgId, async () =>
+        await executor.RunAsSystemAsync(setup.OrgId, "test-harness", async () =>
         {
             ownerId = await db.Set<Owner>().AsNoTracking()
                 .Where(o => o.Name == "Chain Owner LLC")
@@ -678,10 +678,10 @@ public sealed class BalanceImportTests(PostgresFixture fixture)
 
         var tenant = new TenantContext { OrgId = setup.OrgId };
         await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
-        var executor = new OrgScopedExecutor(db, tenant);
+        var executor = new OrgScopedExecutor(db, tenant, new ActorContext());
 
         var trustBankId = Guid.Empty;
-        await executor.RunAsync(setup.OrgId, async () =>
+        await executor.RunAsSystemAsync(setup.OrgId, "test-harness", async () =>
         {
             trustBankId = await db.Set<BankAccount>().AsNoTracking()
                 .Where(b => b.Name == setup.TrustBankName)
@@ -707,7 +707,7 @@ public sealed class BalanceImportTests(PostgresFixture fixture)
             new { csvContent = heldCsv, cutoverDate = CutoverStr, filename = "held_fees.csv" }, ct);
         heldResult.ErrorCount.ShouldBe(0, $"held fees errors: {string.Join("; ", heldResult.Errors.Select(e => e.Reason))}");
 
-        await executor.RunAsync(setup.OrgId, async () =>
+        await executor.RunAsSystemAsync(setup.OrgId, "test-harness", async () =>
         {
             var cashNet = await ClearingNetAsync(db, "cash", ct);
             var accrualNet = await ClearingNetAsync(db, "accrual", ct);
@@ -742,9 +742,9 @@ public sealed class BalanceImportTests(PostgresFixture fixture)
         // operator's own CSV text (row.Name), never an internally generated identifier.
         var tenant = new TenantContext { OrgId = setup.OrgId };
         await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
-        var executor = new OrgScopedExecutor(db, tenant);
+        var executor = new OrgScopedExecutor(db, tenant, new ActorContext());
         var operatingBankId = Guid.Empty;
-        await executor.RunAsync(setup.OrgId, async () =>
+        await executor.RunAsSystemAsync(setup.OrgId, "test-harness", async () =>
         {
             operatingBankId = await db.Set<BankAccount>().AsNoTracking()
                 .Where(b => b.Name == setup.OperatingBankName)
@@ -804,10 +804,10 @@ public sealed class BalanceImportTests(PostgresFixture fixture)
 
         var tenant = new TenantContext { OrgId = setup.OrgId };
         await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
-        var executor = new OrgScopedExecutor(db, tenant);
+        var executor = new OrgScopedExecutor(db, tenant, new ActorContext());
 
         var depositBankId = Guid.Empty;
-        await executor.RunAsync(setup.OrgId, async () =>
+        await executor.RunAsSystemAsync(setup.OrgId, "test-harness", async () =>
         {
             depositBankId = await db.Set<BankAccount>().AsNoTracking()
                 .Where(b => b.Name == setup.DepositBankName)
@@ -872,7 +872,7 @@ public sealed class BalanceImportTests(PostgresFixture fixture)
         {
             var executor = scope.ServiceProvider.GetRequiredService<OrgScopedExecutor>();
             var sender = scope.ServiceProvider.GetRequiredService<ISender>();
-            await executor.RunAsync(orgId, async () =>
+            await executor.RunAsSystemAsync(orgId, "test-harness", async () =>
             {
                 await sender.Send(new CreateBankAccount(trustBankName, null, null, "trust"), ct);
                 await sender.Send(new CreateBankAccount(depositBankName, null, null, "deposit"), ct);
