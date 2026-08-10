@@ -193,6 +193,12 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Fixed
 
+- **Late-fee confirms now recheck eligibility before posting** — a stale or hand-crafted confirm
+  could name a lease that preview had rejected because it was still within its grace period or its
+  delinquency could not be attributed across multiple active leases. Planning refreshed the
+  delinquency data but did not reapply those two gates, so that selected lease could still be
+  charged. Confirm now excludes it from posting using the current data, matching the preview rule.
+
 - **Per-lease late-fee overrides are now validated** — a lease could be saved with a negative late
   fee, a rent due day outside 1–28, or an unrecognized fee type, none of which the equivalent
   organization-level settings allowed. The invalid fee type surfaced as a server error rather than a
