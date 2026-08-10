@@ -3,18 +3,32 @@
  * Mirrors the pattern in web/src/features/banking/banking.ts.
  */
 import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
-import { api, primeCsrf, type components } from '@/api';
+import {
+  getApiOperationsRuns,
+  getApiOperationsRunsByTypePreview,
+  postApiOperationsRunsByTypeConfirm,
+  primeCsrf,
+  type BulkRunDetailResponse,
+  type BulkRunSpa,
+  type ConfirmRunRequest,
+  type PreviewRowSpa,
+  type RunHistoryResponse,
+  type RunPreviewSpaResponse,
+  type RunResultSpaResponse,
+} from '@/api';
 import { toApiError, type ApiError } from '@/lib/apiError';
 
 // ─── Types mirroring the SPA-response records ─────────────────────────────────
 
-export type RunPreviewSpaResponse = components['schemas']['RunPreviewSpaResponse'];
-export type PreviewRowSpa = components['schemas']['PreviewRowSpa'];
-export type RunResultSpaResponse = components['schemas']['RunResultSpaResponse'];
-export type RunHistoryResponse = components['schemas']['RunHistoryResponse'];
-export type BulkRunSpa = components['schemas']['BulkRunSpa'];
-export type BulkRunDetailResponse = components['schemas']['BulkRunDetailResponse'];
-export type ConfirmRunRequest = components['schemas']['ConfirmRunRequest'];
+export type {
+  BulkRunDetailResponse,
+  BulkRunSpa,
+  ConfirmRunRequest,
+  PreviewRowSpa,
+  RunHistoryResponse,
+  RunPreviewSpaResponse,
+  RunResultSpaResponse,
+};
 
 export type RunType = 'rent' | 'latefee' | 'disbursement';
 
@@ -36,8 +50,9 @@ export function useRunPreview(
   return useQuery({
     queryKey: runPreviewKey(type, year, month),
     queryFn: async () => {
-      const { data, error } = await api.GET('/api/operations/runs/{type}/preview', {
-        params: { path: { type }, query: { year, month } },
+      const { data, error } = await getApiOperationsRunsByTypePreview({
+        path: { type },
+        query: { year, month },
       });
       if (error || !data) throw new Error(`Failed to load ${type} preview`);
       return data;
@@ -50,7 +65,7 @@ export function useRunHistory(): UseQueryResult<RunHistoryResponse> {
   return useQuery({
     queryKey: runHistoryKey(),
     queryFn: async () => {
-      const { data, error } = await api.GET('/api/operations/runs');
+      const { data, error } = await getApiOperationsRuns();
       if (error || !data) throw new Error('Failed to load run history');
       return data;
     },
@@ -64,11 +79,11 @@ export type RunError = ApiError;
 const toRunError = toApiError;
 
 async function unwrap<T>(
-  call: Promise<{ data?: T; error?: unknown; response: Response }>,
+  call: Promise<{ data?: T; error?: unknown; response?: Response }>,
 ): Promise<T> {
   const { data, error, response } = await call;
   if (data !== undefined && data !== null) return data;
-  throw toRunError(error, response.status);
+  throw toRunError(error, response?.status ?? 0);
 }
 
 /** The 409 the server raises when the capability set moved between preview and confirm. */
@@ -92,8 +107,8 @@ export function useConfirmRun(type: RunType) {
     mutationFn: async ({ year, month, selectedTargetIds, capabilitiesVersion }) => {
       await primeCsrf();
       return unwrap(
-        api.POST('/api/operations/runs/{type}/confirm', {
-          params: { path: { type } },
+        postApiOperationsRunsByTypeConfirm({
+          path: { type },
           body: {
             year,
             month,

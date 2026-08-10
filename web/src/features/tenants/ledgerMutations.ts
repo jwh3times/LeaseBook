@@ -1,7 +1,18 @@
-import { api, primeCsrf, type components } from '@/api';
+import {
+  postApiAccountingEntriesByEntryIdVoid,
+  postApiAccountingTenantsByTenantIdCharges,
+  postApiAccountingTenantsByTenantIdCredits,
+  postApiAccountingTenantsByTenantIdDepositApplications,
+  postApiAccountingTenantsByTenantIdDeposits,
+  postApiAccountingTenantsByTenantIdPayments,
+  postApiAccountingTenantsByTenantIdPrepaymentApplications,
+  postApiAccountingTenantsByTenantIdPrepayments,
+  primeCsrf,
+  type PostResult,
+} from '@/api';
 import { toApiError, type ApiError } from '@/lib/apiError';
 
-export type PostResult = components['schemas']['PostResult'];
+export type { PostResult };
 
 /** A client-side idempotency key (P54): minted once per composer/modal open. */
 export function newSourceRef(): string {
@@ -32,11 +43,11 @@ function toError(error: unknown, status: number): LedgerPostError {
 }
 
 async function unwrap(
-  call: Promise<{ data?: PostResult; error?: unknown; response: Response }>,
+  call: Promise<{ data?: PostResult; error?: unknown; response?: Response }>,
 ): Promise<PostResult> {
   const { data, error, response } = await call;
   if (data) return data;
-  throw toError(error, response.status);
+  throw toError(error, response?.status ?? 0);
 }
 
 /** The composer/apply fields, pre-coerced. `category` drives which command (and event) is posted. */
@@ -94,20 +105,20 @@ export async function submitLedgerEntry(
   const { category, amount, date, memo, method, bankAccountId, sourceRef } = input;
   const trimmed = memo.trim();
   const memoOrNull = trimmed === '' ? null : trimmed;
-  const path = { path: { tenantId } } as const;
+  const path = { tenantId } as const;
 
   switch (category) {
     case 'Payment':
       return unwrap(
-        api.POST('/api/accounting/tenants/{tenantId}/payments', {
-          params: path,
+        postApiAccountingTenantsByTenantIdPayments({
+          path,
           body: { tenantId, amount, date, method, bankAccountId, memo: memoOrNull, sourceRef },
         }),
       );
     case 'Security Deposit':
       return unwrap(
-        api.POST('/api/accounting/tenants/{tenantId}/deposits', {
-          params: path,
+        postApiAccountingTenantsByTenantIdDeposits({
+          path,
           body: {
             tenantId,
             amount,
@@ -120,22 +131,22 @@ export async function submitLedgerEntry(
       );
     case 'Prepayment':
       return unwrap(
-        api.POST('/api/accounting/tenants/{tenantId}/prepayments', {
-          params: path,
+        postApiAccountingTenantsByTenantIdPrepayments({
+          path,
           body: { tenantId, amount, date, bankAccountId, memo: memoOrNull, sourceRef },
         }),
       );
     case 'Credit':
       return unwrap(
-        api.POST('/api/accounting/tenants/{tenantId}/credits', {
-          params: path,
+        postApiAccountingTenantsByTenantIdCredits({
+          path,
           body: { tenantId, amount, date, reason: memoOrNull ?? 'Credit', sourceRef },
         }),
       );
     default:
       return unwrap(
-        api.POST('/api/accounting/tenants/{tenantId}/charges', {
-          params: path,
+        postApiAccountingTenantsByTenantIdCharges({
+          path,
           body: {
             tenantId,
             amount,
@@ -157,8 +168,8 @@ export async function voidEntry(
 ): Promise<PostResult> {
   await primeCsrf();
   return unwrap(
-    api.POST('/api/accounting/entries/{entryId}/void', {
-      params: { path: { entryId } },
+    postApiAccountingEntriesByEntryIdVoid({
+      path: { entryId },
       body: { entryId, reason, asOfDate: null, sourceRef },
     }),
   );
@@ -180,8 +191,8 @@ export async function applyDeposit(
 ): Promise<PostResult> {
   await primeCsrf();
   return unwrap(
-    api.POST('/api/accounting/tenants/{tenantId}/deposit-applications', {
-      params: { path: { tenantId } },
+    postApiAccountingTenantsByTenantIdDepositApplications({
+      path: { tenantId },
       body: {
         tenantId,
         amount: input.amount,
@@ -211,8 +222,8 @@ export async function applyPrepayment(
   await primeCsrf();
   const memo = input.memo.trim();
   return unwrap(
-    api.POST('/api/accounting/tenants/{tenantId}/prepayment-applications', {
-      params: { path: { tenantId } },
+    postApiAccountingTenantsByTenantIdPrepaymentApplications({
+      path: { tenantId },
       body: {
         tenantId,
         amount: input.amount,

@@ -122,7 +122,7 @@ test.describe.serial('M5 reports', () => {
     await gotoO5Statement(page);
     await selectMay2026Cash(page);
 
-    // Intercept the PDF download at the API level (the SPA uses fetch → blob → anchor click).
+    // Intercept the PDF download at the API level (the SPA uses client → blob → anchor click).
     // We intercept via a route that captures the response before the anchor fires.
     const pdfPromise = page.waitForResponse(
       (response) =>

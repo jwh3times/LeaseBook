@@ -1,8 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
-import type { components } from '@/api';
+import type { BudgetTelemetryRequest } from '@/api';
 import { DEMO_ADMIN, openPalette, signIn } from './helpers';
-
-type BudgetTelemetryRequest = components['schemas']['BudgetTelemetryRequest'];
 
 // Keyboard-only operability e2e (WP-4 step 4): the flagship budgeted flow driven entirely by keyboard
 // (⌘K → tenant → composer → amount → Enter posts, budget ≤ 3), palette arrow navigation, focus-return

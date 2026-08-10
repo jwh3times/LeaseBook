@@ -1,0 +1,20 @@
+{
+  "name": "@leasebook/openapi-codegen",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "generate": "openapi-ts",
+    "generate:dev": "openapi-ts -i http://localhost:5080/openapi/v1.json"
+  },
+  "devDependencies": {
+    "@hey-api/openapi-ts": "0.99.0",
+    "typescript": "5.9.3"
+  },
+  "overrides": {
+    "js-yaml": "4.3.1"
+  },
+  "engines": {
+    "node": ">=26"
+  }
+}

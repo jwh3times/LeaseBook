@@ -1,13 +1,13 @@
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
-import { api, type components } from '@/api';
+import { getApiDashboard, type DashboardResponse } from '@/api';
 
-export type DashboardResponse = components['schemas']['DashboardResponse'];
+export type { DashboardResponse };
 
 export function useDashboard(): UseQueryResult<DashboardResponse> {
   return useQuery({
     queryKey: ['dashboard'],
     queryFn: async () => {
-      const { data, error } = await api.GET('/api/dashboard');
+      const { data, error } = await getApiDashboard();
       if (error || !data) throw new Error('Failed to load the dashboard');
       return data;
     },

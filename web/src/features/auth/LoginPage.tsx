@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
-import { api, primeCsrf } from '@/api';
+import { postApiAuthLogin, postApiAuthMfa, primeCsrf } from '@/api';
 import { Button, Card, Input } from '@/design';
 import { sessionQueryKey } from './useSession';
 
@@ -29,7 +29,7 @@ export function LoginPage() {
     event.preventDefault();
     setError(null);
     setBusy(true);
-    const { data, error: requestError } = await api.POST('/api/auth/login', {
+    const { data, error: requestError } = await postApiAuthLogin({
       body: { email, password },
     });
     setBusy(false);
@@ -50,7 +50,7 @@ export function LoginPage() {
     if (!mfaToken) return;
     setError(null);
     setBusy(true);
-    const { data, error: requestError } = await api.POST('/api/auth/mfa', {
+    const { data, error: requestError } = await postApiAuthMfa({
       body: { mfaToken, code },
     });
     setBusy(false);
