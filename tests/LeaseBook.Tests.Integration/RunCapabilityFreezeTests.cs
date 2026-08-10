@@ -467,16 +467,6 @@ file sealed class RecordingStrategy(Guid[] targets, Func<Task>? afterFirstItem =
 /// <summary>No-op posting: this suite proves the freeze, not the postings.</summary>
 file sealed class NoOpBatchPosting : IBatchPosting
 {
-    public Task<IReadOnlyDictionary<Guid, Guid>> PostRentChargesAsync(
-        IReadOnlyList<RentChargeIntent> intents, CancellationToken ct) =>
-        Task.FromResult<IReadOnlyDictionary<Guid, Guid>>(new Dictionary<Guid, Guid>());
-
-    public Task<IReadOnlyDictionary<Guid, Guid>> PostLateFeesAsync(
-        IReadOnlyList<LateFeeIntent> intents, CancellationToken ct) =>
-        Task.FromResult<IReadOnlyDictionary<Guid, Guid>>(new Dictionary<Guid, Guid>());
-
-    public Task<IReadOnlyDictionary<Guid, DisbursementPostingResult>> PostDisbursementsAsync(
-        IReadOnlyList<DisbursementIntent> intents, CancellationToken ct) =>
-        Task.FromResult<IReadOnlyDictionary<Guid, DisbursementPostingResult>>(
-            new Dictionary<Guid, DisbursementPostingResult>());
+    public Task<PostOutcome> PostAsync(RunIntent intent, CancellationToken ct) =>
+        Task.FromResult(PostOutcome.Posted(Guid.Empty));
 }
