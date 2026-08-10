@@ -1,5 +1,4 @@
 using System.Reflection;
-using System.Text.RegularExpressions;
 using NetArchTest.Rules;
 using Shouldly;
 
@@ -129,69 +128,27 @@ public sealed class MoneyPathBoundaryTests
     }
 
     /// <summary>
-    /// Reflection and NetArchTest both see only what actually links. A reflection-hiding route —
+    /// Reflection and NetArchTest both see only type-level links. A reflection-hiding route —
     /// <c>Type.GetType("...CapabilitySet, LeaseBook.Modules.Capabilities")</c>, or a raw
     /// <c>feature_flags</c> string-keyed lookup that never names a Capabilities type — is invisible
     /// to <see cref="Accounting_does_not_reference_the_capability_module"/> and
-    /// <see cref="No_accounting_type_depends_on_the_capability_namespace"/> alike. This scans source
-    /// text instead, the same technique <see cref="PlatformScopeCallSiteTests"/> and
-    /// <see cref="ErrorContractTests"/> use for the routes reflection cannot see.
+    /// <see cref="No_accounting_type_depends_on_the_capability_namespace"/> alike. The compiled-code
+    /// module closes that gap through IL member references and string literals, without pinning the
+    /// gate to source paths, comments, or formatting.
     /// </summary>
     [Fact]
-    public void No_accounting_source_file_references_the_capability_seam()
+    public void No_accounting_compiled_code_references_the_capability_seam()
     {
-        var repoRoot = FindRepoRoot();
-        var accountingRoot = Path.Combine(repoRoot, "src", "LeaseBook.Modules.Accounting");
-        var offenders = new List<string>();
-
-        foreach (var file in Directory.EnumerateFiles(accountingRoot, "*.cs", SearchOption.AllDirectories))
-        {
-            if (file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}") ||
-                file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}"))
-            {
-                continue;
-            }
-
-            foreach (var (line, number) in File.ReadLines(file).Select((l, i) => (l, i + 1)))
-            {
-                if (CapabilitySeamMention.IsMatch(StripLineComment(line)))
-                {
-                    offenders.Add($"{Path.GetRelativePath(repoRoot, file)}:{number}: {line.Trim()}");
-                }
-            }
-        }
+        var offenders = CapabilityCodeGuard.FindMentions(CompiledCode.In(Accounting))
+            .Select(reference => reference.ToString())
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
 
         offenders.ShouldBeEmpty(
-            $"Accounting source references the capability seam by name — {Rule} " +
+            $"Accounting compiled code references the capability seam by name — {Rule} " +
             "This catches what reflection cannot: Type.GetType(\"...CapabilitySet, " +
             "LeaseBook.Modules.Capabilities\") and raw feature_flags/IsEnabled lookups are invisible " +
             "to the assembly- and namespace-dependency checks above." +
-            (offenders.Count == 0 ? "" : Environment.NewLine + string.Join(Environment.NewLine, offenders)));
-    }
-
-    private static readonly Regex CapabilitySeamMention = new(
-        @"Capabilit|Entitlement|feature_flag|IsEnabled\s*\(",
-        RegexOptions.Compiled | RegexOptions.IgnoreCase);
-
-    /// <summary>
-    /// Only a WHOLE-LINE "//" comment is skipped, matching <see cref="PlatformScopeCallSiteTests"/>'s
-    /// rule and rationale exactly: cutting at the first "//" anywhere on the line would let a marker
-    /// inside an earlier string literal blind the scan to real code after it. This is not
-    /// hypothetical for this specific file — a future doc comment on an Accounting type explaining
-    /// why it must NOT reference the capability seam would otherwise trip this regex on itself.
-    /// </summary>
-    private static string StripLineComment(string line) =>
-        line.TrimStart().StartsWith("//", StringComparison.Ordinal) ? "" : line;
-
-    private static string FindRepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "LeaseBook.slnx")))
-        {
-            dir = dir.Parent;
-        }
-
-        return dir?.FullName
-            ?? throw new InvalidOperationException("LeaseBook.slnx not found above the test base directory.");
+            (offenders.Length == 0 ? "" : Environment.NewLine + string.Join(Environment.NewLine, offenders)));
     }
 }

@@ -12,6 +12,7 @@
     <PackageReference Include="xunit.runner.visualstudio" />
     <PackageReference Include="Shouldly" />
     <PackageReference Include="NetArchTest.Rules" />
+    <PackageReference Include="Mono.Cecil" />
   </ItemGroup>
 
   <!-- References every assembly whose boundaries it inspects. -->

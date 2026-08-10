@@ -39,8 +39,6 @@ public sealed class PlatformScopeCallSiteTests
     [Fact]
     public void Only_the_sanctioned_setters_touch_the_platform_scope_guc()
     {
-        var repoRoot = FindRepoRoot();
-
         // Pinned to full relative paths, not file names: an EndsWith on
         // "Tenancy/PlatformScopedExecutor.cs" would exempt a same-named file dropped into any
         // module's Tenancy folder, which is a free bypass of this guard.
@@ -60,22 +58,14 @@ public sealed class PlatformScopeCallSiteTests
         ];
         var offenders = new List<string>();
 
-        foreach (var file in EnumerateGuardedFiles(repoRoot))
+        foreach (var file in RepositorySource.Current.CodeFilesUnder("src", "infra", "tests"))
         {
-            var relative = Path.GetRelativePath(repoRoot, file);
-            if (allowed.Contains(relative, StringComparer.Ordinal))
+            if (allowed.Contains(file.RelativePath, StringComparer.Ordinal))
             {
                 continue;
             }
 
-            var marker = Path.GetExtension(file).Equals(".sql", StringComparison.OrdinalIgnoreCase) ? "--" : "//";
-            foreach (var (line, number) in File.ReadLines(file).Select((l, i) => (l, i + 1)))
-            {
-                if (SetsPlatformScope.IsMatch(StripLineComment(line, marker)))
-                {
-                    offenders.Add($"{Path.GetRelativePath(repoRoot, file)}:{number}: {line.Trim()}");
-                }
-            }
+            offenders.AddRange(file.Find(SetsPlatformScope).Select(match => match.ToString()));
         }
 
         offenders.ShouldBeEmpty(
@@ -101,7 +91,7 @@ public sealed class PlatformScopeCallSiteTests
     [InlineData("tests", "LeaseBook.Tests.Common", "RlsProbe.cs")]
     public void An_allowed_setter_still_sets_the_guc_transaction_locally(params string[] segments)
     {
-        var source = File.ReadAllText(Path.Combine(FindRepoRoot(), Path.Combine(segments)));
+        var source = RepositorySource.Current.File(Path.Combine(segments)).Text;
 
         SetsPlatformScope.IsMatch(source).ShouldBeTrue();
 
@@ -111,72 +101,4 @@ public sealed class PlatformScopeCallSiteTests
             .ShouldBeTrue("the escape must be transaction-local — the third argument is is_local");
     }
 
-    /// <summary>
-    /// Comments are not call sites. This matters in practice, not in theory: the doc comments on
-    /// <c>Rls.cs</c> and the capabilities migration have to spell out <i>why</i> setting this GUC
-    /// inside the request transaction is unsafe, and without this the guard fails on its own
-    /// rationale.
-    /// <para>
-    /// Only a WHOLE-LINE comment is skipped, never a trailing one. Cutting at the first marker
-    /// anywhere on the line would let a marker inside an earlier string literal blind the guard to
-    /// real code after it — <c>Log("https://wiki/x"); db.ExecuteSqlRaw("SET LOCAL app.platform …");</c>
-    /// would be silently skipped on the <c>//</c> in the URL. Whole-line matching covers every false
-    /// positive actually hit and removes that bypass entirely.
-    /// </para>
-    /// </summary>
-    private static string StripLineComment(string line, string marker) =>
-        line.TrimStart().StartsWith(marker, StringComparison.Ordinal) ? "" : line;
-
-    /// <summary>
-    /// Application code, database bootstrap, AND tests. SQL is in scope because
-    /// <c>ALTER ROLE leasebook_app SET app.platform = 'on'</c> in <c>infra/db/bootstrap.sql</c> would
-    /// open the escape permanently, for every pooled connection in production — and nothing else in
-    /// the suite would notice, because the test fixture applies that same bootstrap, so the isolation
-    /// tests would keep passing with their own <c>SET LOCAL</c> merely redundant.
-    /// <para>
-    /// Tests are in scope because omitting them let thirteen copies of the statement accumulate
-    /// unchallenged. A guard that cannot see half the repository is a guard over the half nobody was
-    /// going to break.
-    /// </para>
-    /// </summary>
-    private static IEnumerable<string> EnumerateGuardedFiles(string repoRoot)
-    {
-        var roots = new (string Dir, string Pattern)[]
-        {
-            (Path.Combine(repoRoot, "src"), "*.cs"),
-            (Path.Combine(repoRoot, "infra"), "*.sql"),
-            (Path.Combine(repoRoot, "tests"), "*.cs"),
-        };
-
-        foreach (var (dir, pattern) in roots)
-        {
-            if (!Directory.Exists(dir))
-            {
-                continue;
-            }
-
-            foreach (var file in Directory.EnumerateFiles(dir, pattern, SearchOption.AllDirectories))
-            {
-                if (file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}") ||
-                    file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}"))
-                {
-                    continue;
-                }
-
-                yield return file;
-            }
-        }
-    }
-
-    private static string FindRepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "LeaseBook.slnx")))
-        {
-            dir = dir.Parent;
-        }
-
-        return dir?.FullName
-            ?? throw new InvalidOperationException("LeaseBook.slnx not found above the test base directory.");
-    }
 }

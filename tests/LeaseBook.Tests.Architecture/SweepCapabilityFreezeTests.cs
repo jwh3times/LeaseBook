@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+using LeaseBook.Web.Jobs;
 using Shouldly;
 
 namespace LeaseBook.Tests.Architecture;
@@ -16,14 +16,13 @@ namespace LeaseBook.Tests.Architecture;
 /// asking future authors not to do that is not enforcement; this is.
 /// </para>
 /// <para>
-/// <b>Scope, stated so it is not mistaken for more than it is.</b> This scans one file. A per-org
-/// resolve introduced in the Hangfire job wrapper, in a scope decorator, or in
+/// <b>Scope, stated so it is not mistaken for more than it is.</b> This inspects the compiled
+/// <see cref="InvariantSweepRunner"/> type, including its async state machines and string-backed
+/// lookups. A per-org resolve introduced in the Hangfire job wrapper, in a scope decorator, or in
 /// <c>OrgScopedExecutor</c> itself would split a sweep just as effectively and would not be caught
-/// here. The gap is narrow rather than open — a rename or move of the scanned file fails this suite
-/// red with a <see cref="FileNotFoundException"/> rather than passing vacuously — and widening the
-/// scan to every file that could host a per-org loop would be a guess at a list, which is a worse
-/// gate than a precise one with its limits written down. Anyone adding a capability read to the
-/// sweep's surrounding machinery has to hold the same rule by reading it here.
+/// here. Widening the check to every type that could host a per-org loop would be a guess at a list,
+/// which is a worse gate than a precise one with its limits written down. Anyone adding a capability
+/// read to the sweep's surrounding machinery has to hold the same rule by reading it here.
 /// </para>
 /// <para>
 /// <b>This is a deliberate stop sign, not a permanent ban.</b> When the sweep genuinely needs a
@@ -35,21 +34,13 @@ namespace LeaseBook.Tests.Architecture;
 /// </summary>
 public sealed class SweepCapabilityFreezeTests
 {
-    private static readonly string SweepRunner =
-        Path.Combine("src", "LeaseBook.Web", "Jobs", "InvariantSweepRunner.cs");
-
-    private static readonly Regex CapabilitySeamMention = new(
-        @"Capabilit|Entitlement|feature_flag|IsEnabled\s*\(",
-        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private const string SweepRunner = "src/LeaseBook.Web/Jobs/InvariantSweepRunner.cs";
 
     [Fact]
     public void The_sweep_resolves_no_capability_inside_its_per_org_loop()
     {
-        var repoRoot = FindRepoRoot();
-        var offenders = File.ReadLines(Path.Combine(repoRoot, SweepRunner))
-            .Select((line, index) => (Line: line, Number: index + 1))
-            .Where(x => CapabilitySeamMention.IsMatch(StripLineComment(x.Line)))
-            .Select(x => $"{SweepRunner}:{x.Number}: {x.Line.Trim()}")
+        var offenders = CapabilityCodeGuard.FindMentions(CompiledCode.In(typeof(InvariantSweepRunner)))
+            .Select(reference => reference.ToString())
             .ToArray();
 
         offenders.ShouldBeEmpty(
@@ -69,7 +60,7 @@ public sealed class SweepCapabilityFreezeTests
     [Fact]
     public void The_sweep_still_loops_orgs_one_scope_and_transaction_at_a_time()
     {
-        var source = File.ReadAllText(Path.Combine(FindRepoRoot(), SweepRunner));
+        var source = RepositorySource.Current.File(SweepRunner).Text;
 
         source.ShouldContain("foreach (var orgId in targets)");
         source.ShouldContain("services.CreateAsyncScope()");
@@ -82,24 +73,4 @@ public sealed class SweepCapabilityFreezeTests
         source.ShouldContain("(orgId, ");
     }
 
-    /// <summary>
-    /// Whole-line comments only, matching <see cref="PlatformScopeCallSiteTests"/>'s rule and
-    /// rationale: the file under scan has to explain in prose WHY it resolves no capability, and
-    /// cutting at the first marker anywhere on a line would let a marker inside a string literal
-    /// blind the scan to real code after it.
-    /// </summary>
-    private static string StripLineComment(string line) =>
-        line.TrimStart().StartsWith("//", StringComparison.Ordinal) ? "" : line;
-
-    private static string FindRepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "LeaseBook.slnx")))
-        {
-            dir = dir.Parent;
-        }
-
-        return dir?.FullName
-            ?? throw new InvalidOperationException("LeaseBook.slnx not found above the test base directory.");
-    }
 }

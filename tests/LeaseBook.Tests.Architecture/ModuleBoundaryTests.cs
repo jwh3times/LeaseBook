@@ -12,21 +12,6 @@ namespace LeaseBook.Tests.Architecture;
 /// </summary>
 public sealed class ModuleBoundaryTests
 {
-    private static readonly Assembly SharedKernel = typeof(SharedKernel.Cqrs.ISender).Assembly;
-    private static readonly Assembly Web = typeof(Program).Assembly;
-    private static readonly Assembly Migrator = typeof(LeaseBook.Migrator.Model.EntityKind).Assembly;
-
-    private static readonly (string Name, Assembly Assembly)[] Modules =
-    [
-        ("LeaseBook.Modules.Accounting", typeof(Modules.Accounting.ModuleMarker).Assembly),
-        ("LeaseBook.Modules.Directory", typeof(Modules.Directory.ModuleMarker).Assembly),
-        ("LeaseBook.Modules.Banking", typeof(Modules.Banking.ModuleMarker).Assembly),
-        ("LeaseBook.Modules.Reporting", typeof(Modules.Reporting.ModuleMarker).Assembly),
-        ("LeaseBook.Modules.Operations", typeof(Modules.Operations.ModuleMarker).Assembly),
-        ("LeaseBook.Modules.Payments", typeof(Modules.Payments.ModuleMarker).Assembly),
-        ("LeaseBook.Modules.Capabilities", typeof(Modules.Capabilities.ModuleMarker).Assembly),
-    ];
-
     private static string[] ReferencedNames(Assembly assembly) =>
         assembly.GetReferencedAssemblies()
             .Select(a => a.Name)
@@ -37,9 +22,9 @@ public sealed class ModuleBoundaryTests
     [Fact]
     public void Modules_reference_neither_other_modules_nor_the_host()
     {
-        var moduleNames = Modules.Select(m => m.Name).ToHashSet(StringComparer.Ordinal);
+        var moduleNames = ArchitectureAssemblies.Modules.Select(m => m.Name).ToHashSet(StringComparer.Ordinal);
 
-        foreach (var (name, assembly) in Modules)
+        foreach (var (name, assembly) in ArchitectureAssemblies.Modules)
         {
             var forbidden = ReferencedNames(assembly)
                 .Where(r => r == "LeaseBook.Web" || (moduleNames.Contains(r) && r != name))
@@ -53,7 +38,7 @@ public sealed class ModuleBoundaryTests
     [Fact]
     public void SharedKernel_references_no_module_and_not_the_host()
     {
-        var refs = ReferencedNames(SharedKernel);
+        var refs = ReferencedNames(ArchitectureAssemblies.SharedKernel);
 
         refs.ShouldNotContain("LeaseBook.Web");
         refs.Where(r => r.StartsWith("LeaseBook.Modules.", StringComparison.Ordinal))
@@ -63,9 +48,9 @@ public sealed class ModuleBoundaryTests
     [Fact]
     public void Host_references_every_module()
     {
-        var refs = ReferencedNames(Web).ToHashSet(StringComparer.Ordinal);
+        var refs = ReferencedNames(ArchitectureAssemblies.Web).ToHashSet(StringComparer.Ordinal);
 
-        foreach (var (name, _) in Modules)
+        foreach (var (name, _) in ArchitectureAssemblies.Modules)
         {
             refs.ShouldContain(name, $"the host must reference module {name}");
         }
@@ -74,7 +59,7 @@ public sealed class ModuleBoundaryTests
     [Fact]
     public void Migrator_references_only_sharedkernel_among_leasebook_assemblies()
     {
-        var leaseBookRefs = ReferencedNames(Migrator)
+        var leaseBookRefs = ReferencedNames(ArchitectureAssemblies.Migrator)
             .Where(r => r.StartsWith("LeaseBook.", StringComparison.Ordinal))
             .ToArray();
 
@@ -86,9 +71,9 @@ public sealed class ModuleBoundaryTests
     [Fact]
     public void SharedKernel_types_have_no_dependency_on_any_module_namespace()
     {
-        var forbidden = Modules.Select(m => m.Name).Append("LeaseBook.Web").ToArray();
+        var forbidden = ArchitectureAssemblies.Modules.Select(m => m.Name).Append("LeaseBook.Web").ToArray();
 
-        var result = Types.InAssembly(SharedKernel)
+        var result = Types.InAssembly(ArchitectureAssemblies.SharedKernel)
             .Should()
             .NotHaveDependencyOnAny(forbidden)
             .GetResult();
@@ -100,9 +85,12 @@ public sealed class ModuleBoundaryTests
     [Fact]
     public void Module_types_have_no_dependency_on_another_module_namespace()
     {
-        foreach (var (name, assembly) in Modules)
+        foreach (var (name, assembly) in ArchitectureAssemblies.Modules)
         {
-            var otherModules = Modules.Where(m => m.Name != name).Select(m => m.Name).ToArray();
+            var otherModules = ArchitectureAssemblies.Modules
+                .Where(m => m.Name != name)
+                .Select(m => m.Name)
+                .ToArray();
 
             var result = Types.InAssembly(assembly)
                 .Should()

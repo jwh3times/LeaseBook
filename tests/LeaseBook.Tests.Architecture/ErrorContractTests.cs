@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using LeaseBook.SharedKernel.Endpoints;
 using Shouldly;
 
 namespace LeaseBook.Tests.Architecture;
@@ -6,53 +7,39 @@ namespace LeaseBook.Tests.Architecture;
 /// <summary>
 /// ADR-025's single-factory rule, enforced: every problem-details response is built by
 /// ProblemResults. 28 pre-existing direct call sites are the proof that a doc-comment convention
-/// does not hold on its own. Reflection cannot see call sites, so this scans source.
+/// does not hold on its own. Reflection cannot see call sites; the compiled-code module reads those
+/// method references from IL without pinning this rule to source formatting or paths.
 /// </summary>
 public sealed class ErrorContractTests
 {
     private static readonly Regex Forbidden = new(
-        @"\b(?:TypedResults|Results)\.(?:Problem|ValidationProblem)\s*\(",
+        @"Microsoft\.AspNetCore\.Http\.(?:TypedResults|Results)::(?:Problem|ValidationProblem)\(",
         RegexOptions.Compiled);
 
     [Fact]
     public void Only_ProblemResults_builds_problem_details_responses()
     {
-        var repoRoot = FindRepoRoot();
-        var offenders = new List<string>();
+        var factoryType = typeof(ProblemResults).FullName.ShouldNotBeNull();
+        var references = CompiledCode.In(ArchitectureAssemblies.Application);
+        references.ShouldContain(
+            reference =>
+                reference.Kind == CompiledReferenceKind.Method &&
+                Forbidden.IsMatch(reference.Target) &&
+                reference.CallerType == factoryType,
+            "ProblemResults must still contain the sanctioned framework calls; otherwise this guard " +
+            "could pass because the IL reader or target pattern stopped seeing its subject");
 
-        foreach (var file in Directory.EnumerateFiles(
-                     Path.Combine(repoRoot, "src"), "*.cs", SearchOption.AllDirectories))
-        {
-            if (file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}") ||
-                file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}") ||
-                file.EndsWith($"Endpoints{Path.DirectorySeparatorChar}ProblemResults.cs", StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            foreach (var (line, number) in File.ReadLines(file).Select((l, i) => (l, i + 1)))
-            {
-                if (Forbidden.IsMatch(line))
-                {
-                    offenders.Add($"{Path.GetRelativePath(repoRoot, file)}:{number}: {line.Trim()}");
-                }
-            }
-        }
+        var offenders = references
+            .Where(reference =>
+                reference.Kind == CompiledReferenceKind.Method &&
+                Forbidden.IsMatch(reference.Target) &&
+                reference.CallerType != factoryType)
+            .Select(reference => reference.ToString())
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
 
         offenders.ShouldBeEmpty(
             "route these through ProblemResults (ADR-025) — direct Problem/ValidationProblem calls " +
             "ship responses without code/correlationId");
-    }
-
-    private static string FindRepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "LeaseBook.slnx")))
-        {
-            dir = dir.Parent;
-        }
-
-        return dir?.FullName
-            ?? throw new InvalidOperationException("LeaseBook.slnx not found above the test base directory.");
     }
 }

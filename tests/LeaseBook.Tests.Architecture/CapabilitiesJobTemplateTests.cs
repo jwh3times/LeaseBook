@@ -136,7 +136,7 @@ public sealed class CapabilitiesJobTemplateTests
 
         foreach (var nearMiss in (string[])["secretref:", "secret_ref:", "SecretRef:", "Name:", "Value:"])
         {
-            Significant(yaml).ShouldNotContain(
+            RepositorySource.Current.File(ExecTemplatePath).SignificantText.ShouldNotContain(
                 nearMiss,
                 Case.Sensitive,
                 $"`{nearMiss}` is silently discarded by the execution-template deserializer");
@@ -171,7 +171,10 @@ public sealed class CapabilitiesJobTemplateTests
     [InlineData("^    resources:$", "resources")]
     public void Every_structural_key_is_spelled_the_only_way_that_binds(string pattern, string what)
     {
-        Regex.IsMatch(Significant(ReadRepoFile(ExecTemplatePath)), pattern, RegexOptions.Multiline)
+        Regex.IsMatch(
+                RepositorySource.Current.File(ExecTemplatePath).SignificantText,
+                pattern,
+                RegexOptions.Multiline)
             .ShouldBeTrue(
                 $"{ExecTemplatePath} must declare {what} matching /{pattern}/. The execution-template " +
                 "deserializer matches keys case-sensitively and DISCARDS what it does not recognise " +
@@ -290,13 +293,6 @@ public sealed class CapabilitiesJobTemplateTests
         Regex.Match(yaml, $@"^      - name: {Regex.Escape(name)}\r?\n        value: ""?([^""\r\n]*)""?$",
             RegexOptions.Multiline);
 
-    /// <summary>
-    /// The file with comment lines removed. The template documents its own near-miss spellings by name,
-    /// and a check that tripped over that explanation would be its own false positive.
-    /// </summary>
-    private static string Significant(string yaml) =>
-        string.Join('\n', yaml.Split('\n').Where(line => !line.TrimStart().StartsWith('#')));
-
     private static List<string> Args(string yaml)
     {
         var block = Regex.Match(yaml, @"^    args:\r?\n((?:      - .+\r?\n)+)", RegexOptions.Multiline);
@@ -307,13 +303,5 @@ public sealed class CapabilitiesJobTemplateTests
     }
 
     private static string ReadRepoFile(string relativePath)
-    {
-        var root = CapabilityAge.FindRepoRoot();
-        root.ShouldNotBeNull("these files are pinned relative to the repository root");
-
-        var full = Path.Combine(root, relativePath.Replace('/', Path.DirectorySeparatorChar));
-        File.Exists(full).ShouldBeTrue($"{relativePath} must exist; the deployment procedure cites it");
-
-        return File.ReadAllText(full);
-    }
+        => RepositorySource.Current.File(relativePath).Text;
 }
