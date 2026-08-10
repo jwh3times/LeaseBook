@@ -1,13 +1,14 @@
 ---
 # GENERATED — do not edit. Source: .agents/skills/ship/SKILL.md — regenerate with 'node scripts/sync-agent-mirrors.mjs'.
 name: ship
-description: Use when a branch is ready for review or the user says "ship it", "open a PR", or "push this" — refreshes docs, updates the CHANGELOG [Unreleased] section, flags private-roadmap WP drift, runs the fast checks, pushes, and opens or updates the PR. LeaseBook-specific.
+description: Use when a branch is ready for review or the user says "ship it", "open a PR", or "push this" — classifies the release impact as major, minor, or build; refreshes docs and the changelog; flags private-roadmap WP drift; runs the fast checks; pushes; and opens or updates the PR. LeaseBook-specific.
 ---
 
 # Ship
 
 Take the current branch from "code is done" to "PR is open and green-able": refresh docs,
-record the change in the changelog, run the cheap gates, push, and open or update the PR.
+classify its release impact, record the change in the changelog, run the cheap gates, push, and open
+or update the PR.
 
 **Announce at start:** "I'm using the ship skill to open a PR for this branch."
 
@@ -19,10 +20,13 @@ incrementing build (`v0.2.1`, `v0.2.2`, …) by `.github/workflows/version.yml`,
 per-merge build tags get **no** changelog section of their own — they roll up into the next
 cut. A dated section is cut only on a **deliberate `VERSION` major/minor bump**.
 
-So on an ordinary ship there is **no version to compute** and **no dated section to write** —
-you add the branch's user-visible changes to `[Unreleased]`. The `changelog.yml` CI gate
-fails a PR that touches product source without updating `[Unreleased]`, which is why this
-step is not optional.
+Every ship evaluates whether the diff warrants a major line, a minor line, or the standard build
+increment. On an ordinary build ship there is no `VERSION` edit and no dated section: add the
+branch's user-visible changes to `[Unreleased]`, then let the merge workflow choose the next build.
+A major/minor recommendation is a deliberate release decision and requires maintainer confirmation
+before changing `VERSION` and cutting `[Unreleased]`. The `changelog.yml` CI gate fails a PR that
+touches product source without updating `[Unreleased]`, which is why the changelog step is not
+optional.
 
 This skill stops at "PR open". The repo tags and releases on merge; it does not self-merge.
 
@@ -34,16 +38,57 @@ This skill stops at "PR open". The repo tags and releases on merge; it does not 
   (`git checkout -b <type>/<topic>`, e.g. `feat/owner-statement-pdf`).
 - **Clean working tree.** Run `git status --porcelain`. If anything is uncommitted, stop and
   ask whether to commit it — do not commit silently. (This also makes the `git add -A` in
-  step 5 safe: the only changes left will be this skill's own doc/changelog edits.)
+  step 6 safe: the only changes left will be this skill's own release-preparation edits.)
 - **`gh` authenticated.** `gh auth status` must succeed.
 
-### 2. Refresh the docs
+### 2. Evaluate release impact
 
-Compute the branch's diff base and hand the diff to the `docs-updater` subagent:
+Fetch `origin/main` and tags, compute the merge-base diff once, and read the current `VERSION` and
+the cut policy at the top of `CHANGELOG.md`:
 
 ```
-git fetch -q origin main
-git diff $(git merge-base origin/main HEAD)..HEAD --stat
+git fetch -q --tags origin main
+base=$(git merge-base origin/main HEAD)
+git diff "$base"..HEAD --stat
+git diff "$base"..HEAD
+```
+
+Classify the **product diff**, not the version number of a dependency being upgraded. Apply the
+highest category that matches:
+
+- **Major** — the first stable `1.0.0` release, or (after 1.0) an incompatible change to a supported
+  product contract: public API, CLI, configuration, deployment/upgrade path, persisted data, or an
+  established user workflow. A required customer/operator migration, removed behavior, or changed
+  accounting meaning is incompatible. While LeaseBook remains on `0.y`, treat an incompatible
+  pre-release change as at least minor unless the branch deliberately declares stable `1.0`.
+- **Minor** — a backward-compatible user-visible capability or a material expansion of existing
+  behavior. On `0.y`, this also carries intentionally incompatible pre-release changes that are not
+  the stable `1.0` cut.
+- **Build** — backward-compatible fixes (including security fixes), internal refactors, tests, docs,
+  CI/tooling, dependency maintenance, and other changes that add no material product capability.
+
+State the recommendation, the concrete diff evidence, and the proposed version action before
+editing release files. The default is not evidence: inspect API/CLI/config/schema and user-facing
+behavior explicitly. If categories are mixed, the highest one wins.
+
+- **Build:** leave `VERSION` unchanged. The merge workflow increments the third component; do not
+  promise an exact tag because another merge can land first.
+- **Major/minor already prepared in the branch:** verify that `VERSION` is the expected new line
+  (`<next-major>.0.0` or `<major>.<next-minor>.0`) and that the changelog cut matches it.
+- **Major/minor recommended but not prepared:** stop and ask the maintainer to confirm the proposed
+  line before editing `VERSION` or cutting the changelog. If they explicitly choose build instead,
+  record that decision in the final report and continue without a `VERSION` edit.
+
+After approval, set `VERSION` to the confirmed line. The changelog step below performs the matching
+dated cut. Version classification is advisory until the maintainer confirms it; never silently turn
+a major/minor recommendation into a build ship.
+
+### 3. Refresh the docs
+
+Hand the already-computed branch diff to the `docs-updater` subagent:
+
+```
+git diff "$base"..HEAD --stat
 ```
 
 Invoke the `docs-updater` subagent (Agent tool, `subagent_type: docs-updater`), scoped to
@@ -51,15 +96,15 @@ Invoke the `docs-updater` subagent (Agent tool, `subagent_type: docs-updater`), 
 the docs it owns (README.md, AGENTS.md, `docs/`, ADRs, runbooks, etc.). It runs
 `npm run docs:check` itself.
 
-**Tell it to leave `CHANGELOG.md` alone** — you own the changelog in step 3, so you don't
-fight over the file. `CHANGELOG.md` is not in the docs-updater topology anyway.
+**Tell it to leave `CHANGELOG.md` and `VERSION` alone** — you own the release files in step 4, so
+you don't fight over them. `CHANGELOG.md` is not in the docs-updater topology anyway.
 
-### 2b. Flag private-roadmap WP drift (warn only — never edit or commit `private/`)
+### 3b. Flag private-roadmap WP drift (warn only — never edit or commit `private/`)
 
 The detailed plan lives in `private/roadmap.md` — **gitignored, so CI can never see it.** This local
 ship ritual is therefore the _only_ place its drift can be caught. That file's §10 ("Keeping this
 document honest") requires each WP's PR to tick that WP's own checkboxes and update the §1/§2 status
-lines in the same change; the `docs-updater` in step 2 cannot do this (it has no `private/` topology).
+lines in the same change; the `docs-updater` in step 3 cannot do this (it has no `private/` topology).
 
 **Skip entirely if `private/roadmap.md` is absent** — public clones and CI have no `private/` tree;
 do not warn about the missing file.
@@ -84,29 +129,38 @@ these still read as "not done":
 - §3's **execution-order** line does not prefix this WP with `✅`.
 
 Surface the findings and let the maintainer edit `private/roadmap.md` themselves. **Never edit,
-stage, or commit it** — it is under `private/` (step 5 and the "Do not" list forbid it). Like the
+stage, or commit it** — it is under `private/` (step 6 and the "Do not" list forbid it). Like the
 schema-drift nudge, this only warns; it never blocks the push.
 
-### 3. Update the CHANGELOG `[Unreleased]` section
+### 4. Update the changelog
 
-Read the branch diff (`git diff $(git merge-base origin/main HEAD)..HEAD`) and merge the
-user-visible changes into the **existing** `[Unreleased]` section.
+Read the branch diff (`git diff "$base"..HEAD`) and derive the user-visible changelog entries.
 
 Rules:
 
-- Group under Keep a Changelog headings — `Added`, `Changed`, `Deprecated`, `Removed`,
-  `Fixed`, `Security`. The file keeps all of a section's standard headings present; replace the
-  `- _Nothing yet._` placeholder when you add an entry under a heading, and leave the
-  placeholder where a heading stays empty.
+- Group under Keep a Changelog headings — `Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`,
+  `Security`. Preserve the file's existing heading and placeholder convention; replace
+  `- _Nothing yet._` when adding an entry under that heading.
 - Describe user-visible behavior and its consequences, derived from the branch diff — not a
   commit log. Match the voice of the existing bolded-lead-in entries.
-- **Do NOT** compute a version, write a dated `## [x.y.z]` section, or edit the
-  `[Unreleased]: …compare` links. Those belong only to a deliberate `VERSION` cut, which is
-  out of scope for this skill.
 - **Idempotent:** if you already added entries for this branch on a previous `/ship`, rewrite
   them in place — never stack a second copy.
 
-### 4. Fast checks — refuse to push if any fail
+Then follow the confirmed classification:
+
+- **Build:** merge the branch entries into `[Unreleased]`; do not write a dated section or edit
+  comparison links.
+- **Major/minor, cut not yet prepared:** merge the branch entries into `[Unreleased]`, then move the
+  complete accumulated contents into `## [<confirmed-version>] - YYYY-MM-DD`; restore the current
+  empty `[Unreleased]` heading/placeholder shape; change its comparison base to the confirmed
+  version; and add the release link.
+- **Major/minor, cut already prepared:** rewrite this branch's entries in the matching dated section
+  and leave the new `[Unreleased]` accumulator intact. Never duplicate the entries above and below
+  the cut.
+
+For every major/minor path, the dated section, `VERSION`, and links must name the same version.
+
+### 5. Fast checks — refuse to push if any fail
 
 Tests, the container build, e2e, migration apply, and the API-client drift check are **not**
 run here; CI owns them (`dotnet test` needs Docker/Testcontainers; e2e needs a seeded host).
@@ -119,7 +173,7 @@ dotnet format --verify-no-changes --exclude src/LeaseBook.Web/Migrations
 dotnet build -c Debug
 ```
 
-Web, from `web/` (run **after** the step 2–3 doc/changelog edits — `docs:check` lints the whole
+Web, from `web/` (run **after** the step 3–4 docs/release edits — `docs:check` lints the whole
 markdown set, root `*.md` included):
 
 ```
@@ -146,17 +200,17 @@ result. This can't be verified locally without a running host, so warn — don't
 invariant, property-based, and golden-file suites, which run under `dotnet test` in CI. Per the
 Definition of Done these should already have been run during development; note it in the report.
 
-### 5. Commit the docs and changelog
+### 6. Commit the ship edits
 
 ```
 git add -A
 git commit -m "docs: update docs and changelog"
 ```
 
-`git add -A` is safe because the tree was clean at step 1 — the only changes are this skill's
-edits. Never stage anything under `private/`.
+`git add -A` is safe because the tree was clean at step 1 — the only changes are this skill's docs,
+changelog, and any confirmed `VERSION` edit. Never stage anything under `private/`.
 
-### 6. Push and open or update the PR
+### 7. Push and open or update the PR
 
 ```
 git push -u origin HEAD
@@ -168,20 +222,22 @@ Get the branch name (`git branch --show-current`) and check for an existing open
 gh pr list --head <branch> --state open --json number,url
 ```
 
-- **No PR** → `gh pr create --base main` with a title and a body derived from the `[Unreleased]`
-  entries you added.
+- **No PR** → `gh pr create --base main` with a title and a body derived from the changelog entries
+  you added or cut.
 - **PR exists** → `gh pr edit <number>` to refresh the body. Do not open a second PR.
 
 **Never merge the PR. Never push to `main`.**
 
-### 7. Report
+### 8. Report
 
 Give the user:
 
 - the PR URL and branch;
+- the major/minor/build recommendation, its diff evidence, and the confirmed decision; for a
+  major/minor cut, the new `VERSION`; for a build, that the exact tag is assigned on merge;
 - what `docs-updater` changed;
-- the `[Unreleased]` entries you added;
-- any private-roadmap WP-drift warning from step 2b (and confirm you did **not** touch `private/`);
+- the changelog entries you added and whether they remain in `[Unreleased]` or were cut;
+- any private-roadmap WP-drift warning from step 3b (and confirm you did **not** touch `private/`);
 - fast-check results, and any schema-drift or accounting-suite notes.
 
 State plainly that the full test suites run in CI, not locally — do not imply the branch is
@@ -197,8 +253,8 @@ enforces when marked a **required status check** on the `main` branch protection
 - Merge the PR. The repo tags/releases on merge; `/ship` stops at "PR open".
 - Push to `main`.
 - Run the full test suites — that is CI's job and it makes this skill slow.
-- Compute a version, write a dated `## [x.y.z]` section, or edit the compare links. Ordinary
-  ships only touch `[Unreleased]`.
+- Change `VERSION`, write a dated `## [x.y.z]` section, or edit compare links without a confirmed
+  major/minor classification. Build ships only touch `[Unreleased]`.
 - Commit anything under `private/`.
-- Edit or stage `private/roadmap.md` — the step 2b drift check only **warns**; the maintainer
+- Edit or stage `private/roadmap.md` — the step 3b drift check only **warns**; the maintainer
   updates that file themselves.
