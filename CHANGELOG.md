@@ -180,6 +180,10 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Changed
 
+- **Release-impact classification during shipping** — the `/ship` workflow now inspects the branch
+  diff and recommends a major, minor, or standard build increase with concrete evidence. Major and
+  minor cuts require maintainer confirmation before `VERSION` and the dated changelog are changed;
+  ordinary changes leave `VERSION` alone for the merge workflow to assign the next build.
 - **Documentation containment** — the public roadmap now presents shipped capabilities and broad
   direction without internal execution details; milestone retrospectives, planning-session
   artifacts, and unvalidated migration research remain private.

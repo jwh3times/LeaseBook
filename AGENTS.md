@@ -19,6 +19,7 @@ them directly; do not trust summaries, including this one, for current progress.
   tenant ledger action hub; Banking and Reconciliation; Owner Statements and Reporting; Bulk
   Operations; and the Migration toolkit and import-first onboarding.
 - M8, Hardening, Compliance and Beta Launch, is the current frontier. Merged so far:
+
   - CI e2e run plus the automated WCAG 2 AA accessibility gate (ADR-022), visual-regression
     baselines for money-critical states (ADR-023), the full-stack boot gate, and the changelog
     (ADR-024) and public-docs policy gates.
