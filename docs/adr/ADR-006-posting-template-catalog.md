@@ -33,6 +33,7 @@ journal rows, and how the two bases coexist.
   queries always filter to exactly one requested basis plus `both`.
 
 - **Two templates were added beyond the PRD's narrative list:**
+
   - `BalanceForward` — cutover/opening positions (all lines `both`). M7 import needs it and the demo
     dataset cannot reconcile without it. Exposed only via a separate `IBalanceForward` contract
     consumed by seed/import code, never by the product's event flows.
