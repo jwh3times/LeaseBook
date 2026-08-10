@@ -53,9 +53,9 @@ differs from the committed copy.** Concretely:
 - **The gate** (`.github/workflows/ci.yml` → `schema-drift` job) builds the host to emit the doc, runs
   `openapi-typescript … --alphabetize` over it, and `git diff --exit-code`s the result against the
   committed `schema.d.ts`, failing with a "run `npm run api:generate`" message on any difference.
-- **Generated-file hygiene.** `schema.d.ts` is excluded from Prettier and ESLint (the prior
-  `src/api/**/*.gen.ts` patterns never matched the real filename), so `npm run format` cannot rewrite
-  it and reintroduce drift.
+- **Generated-file hygiene.** `schema.d.ts` is excluded from Prettier and the active linter (ESLint at
+  the time of this decision; `Oxlint` under [ADR-029](ADR-029-frontend-linting-with-oxlint.md)), so
+  `npm run format` cannot rewrite it and reintroduce drift.
 
 **The held TS 6 upgrade is muted, not forgotten.** `.github/dependabot.yml` ignores `typescript`
 `version-update:semver-major`, and `.github/workflows/ts6-unblock-watch.yml` checks weekly whether

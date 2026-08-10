@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living decision index
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-08-04
+- **Last reviewed:** 2026-08-10
 
 An **Architecture Decision Record** captures a single significant or non-obvious engineering
 decision — the context that forced it, the choice made, and the consequences accepted — so it can be
@@ -53,6 +53,7 @@ form, write it, and add a row to the index below. When a decision is replaced, m
 | [026](ADR-026-deposit-disposition-owner-attribution.md)              | A deposit disposition carries its collection's owner attribution (invariant I7) | Accepted                      | 2026-07-31 |
 | [027](ADR-027-prod-private-networking-and-migration-job.md)          | Production private networking and migrations as a Container Apps Job            | Accepted                      | 2026-08-02 |
 | [028](ADR-028-platform-capability-model.md)                          | Platform capability model — feature flags, entitlements, and the money rule     | Accepted                      | 2026-08-03 |
+| [029](ADR-029-frontend-linting-with-oxlint.md)                       | Frontend linting with `Oxlint` and type-aware `tsgolint`                        | Accepted                      | 2026-08-10 |
 
 ## Status legend
 

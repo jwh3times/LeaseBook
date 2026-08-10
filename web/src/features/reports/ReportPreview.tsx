@@ -28,10 +28,14 @@ function isMoneyColumn(col: string): boolean {
 function renderCell(col: string, value: unknown): React.ReactNode {
   if (value == null) return '—';
   if (isMoneyColumn(col) && (typeof value === 'number' || typeof value === 'string')) {
-    const n = num(value as number | string);
+    const n = num(value);
     if (!Number.isNaN(n)) return <Money value={n} colorize />;
   }
-  return String(value);
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
+    return value.toString();
+  }
+  return JSON.stringify(value);
 }
 
 export interface ReportPreviewProps {

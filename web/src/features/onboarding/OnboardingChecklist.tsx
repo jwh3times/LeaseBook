@@ -108,11 +108,11 @@ export function OnboardingChecklist({
 
   function handleStepClick(index: number, stepId: string) {
     if (stepId === 'banks') {
-      navigate('/settings');
+      void navigate('/settings');
       return;
     }
     if (stepId === 'reconcile') {
-      navigate('/banking');
+      void navigate('/banking');
       return;
     }
     onSelectStep(index);

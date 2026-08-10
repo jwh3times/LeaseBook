@@ -30,9 +30,9 @@ export function OperationsPage() {
   // Sync URL param → tab on first render (dashboard CTA sets ?tab=disbursement).
   useEffect(() => {
     if (paramTab && TABS.some((t) => t.id === paramTab) && paramTab !== activeTab) {
-      setActiveTab(paramTab as Tab);
+      setActiveTab(paramTab);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // oxlint-disable-next-line react/exhaustive-deps
   }, [paramTab]);
 
   const switchTab = (tab: Tab) => {

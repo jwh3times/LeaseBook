@@ -60,7 +60,7 @@ interface ReportCardProps {
 
 function ReportCard({ report, active, onSelect }: ReportCardProps) {
   const iconName =
-    (report.icon as string) in
+    report.icon in
     // A safe fallback: if the icon name doesn't exist, use 'doc'
     {
       owners: true,
@@ -196,7 +196,7 @@ function BuilderPanel({ report }: BuilderPanelProps) {
   };
 
   const iconName =
-    (report.icon as string) in
+    report.icon in
     {
       owners: true,
       dashboard: true,

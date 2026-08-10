@@ -140,7 +140,7 @@ export function IndexView<T>({
             rows={filtered}
             rowKey={rowKey}
             onRowClick={open}
-            selectedKey={filtered[selected] ? rowKey(filtered[selected]!) : undefined}
+            selectedKey={filtered[selected] ? rowKey(filtered[selected]) : undefined}
           />
         )}
       </Card>

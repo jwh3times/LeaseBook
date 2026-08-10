@@ -43,7 +43,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
   function activate(result: SearchResult) {
     pushRecent(result);
     trackInteraction('entity-jump', 2, true); // open palette + select ≤ 2 interactions to reach any entity
-    navigate(primaryRoute(result));
+    void navigate(primaryRoute(result));
     onClose();
   }
 

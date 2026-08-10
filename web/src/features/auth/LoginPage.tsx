@@ -22,7 +22,7 @@ export function LoginPage() {
 
   async function finishSignIn() {
     await queryClient.invalidateQueries({ queryKey: sessionQueryKey });
-    navigate('/dashboard', { replace: true });
+    void navigate('/dashboard', { replace: true });
   }
 
   async function submitPassword(event: FormEvent) {

@@ -25,10 +25,10 @@ export function RecordQuickSwitch({
       if (isTypingTarget(event.target)) return;
       if (event.key === '[' && prev) {
         event.preventDefault();
-        navigate(toPath(prev));
+        void navigate(toPath(prev));
       } else if (event.key === ']' && next) {
         event.preventDefault();
-        navigate(toPath(next));
+        void navigate(toPath(next));
       }
     }
     window.addEventListener('keydown', onKey);
