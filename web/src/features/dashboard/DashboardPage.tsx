@@ -35,7 +35,7 @@ export function DashboardPage() {
   useEffect(() => {
     if (!ob) return;
     if (!ob.hasJournalData && !ob.signedOff) {
-      navigate('/onboarding', { replace: true });
+      void navigate('/onboarding', { replace: true });
     }
   }, [ob, navigate]);
 

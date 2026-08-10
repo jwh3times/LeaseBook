@@ -59,7 +59,7 @@ export function BankingPage() {
       new Set(rows.map((r) => r.propertyId).filter((id): id is string => !!id)),
     );
     return ids.map((id) => ({ id, label: propertyLabel(id) }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // oxlint-disable-next-line react/exhaustive-deps
   }, [rows, properties.data]);
 
   const filtered = useMemo(() => {

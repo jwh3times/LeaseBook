@@ -51,7 +51,7 @@ function detailWith(overrides: Partial<NonNullable<TenantDetail['lease']>>): Ten
     ownerName: 'Hargrove',
     balance: 0,
     depositHeld: 0,
-  } as TenantDetail;
+  };
 }
 
 function renderModal(detail: TenantDetail) {
