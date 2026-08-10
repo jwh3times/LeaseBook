@@ -94,9 +94,10 @@ Key design decisions (each recorded as an ADR in [`docs/adr/`](docs/adr)):
 - **CQRS with vertical slices.** Commands and queries dispatch through a small hand-rolled `ISender`
   with a validation/telemetry decorator pipeline (no MediatR/AutoMapper). Endpoints are minimal APIs
   only — bind → dispatch → `TypedResults`.
-- **Generated, type-safe API client.** The SPA's TypeScript client is generated from the host's OpenAPI
-  document, so the frontend and backend contracts cannot silently drift — a CI gate regenerates the
-  client from a build-time copy of the contract and fails if the committed client is stale (ADR-012).
+- **Generated, type-safe API client.** Hey API generates the SPA's named TypeScript models and fetch
+  SDK from the host's OpenAPI document, so the frontend and backend contracts cannot silently drift —
+  a CI gate regenerates the client from a build-time copy and fails if the committed client is stale
+  (ADR-012, ADR-030).
 
 ---
 
@@ -106,7 +107,7 @@ Key design decisions (each recorded as an ADR in [`docs/adr/`](docs/adr)):
 | ---------- | ------------------------------------------------------------------------------ |
 | Backend    | C# / .NET 10, ASP.NET Core minimal APIs, EF Core + Npgsql                      |
 | Database   | PostgreSQL 18 (row-level security, `NUMERIC` money)                            |
-| Frontend   | React 19 + TypeScript, Vite, TanStack Query, generated OpenAPI client          |
+| Frontend   | React 19 + TypeScript 7, Vite, TanStack Query, Hey API generated client        |
 | Validation | FluentValidation (one validator per slice)                                     |
 | CSV / PDF  | CsvHelper (imports/exports) · QuestPDF (statement + report PDFs)               |
 | Jobs       | Hangfire on PostgreSQL storage (nightly trust-invariant sweep)                 |
@@ -243,7 +244,7 @@ the [local-development runbook](docs/runbooks/local-dev.md) owns the commands.
 
 LeaseBook follows a few firm conventions:
 
-- Nullable reference types and warnings-as-errors are on; `dotnet format` and ESLint/Prettier are CI
+- Nullable reference types and warnings-as-errors are on; `dotnet format`, `Oxlint`, and Prettier are CI
   gates.
 - The accounting invariants are non-negotiable — changes that touch money must keep the invariant,
   property-based, and golden-file suites green.

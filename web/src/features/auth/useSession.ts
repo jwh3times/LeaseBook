@@ -1,7 +1,7 @@
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
-import { api, type components } from '@/api';
+import { getApiAuthMe, type MeResponse } from '@/api';
 
-export type Session = components['schemas']['MeResponse'];
+export type Session = MeResponse;
 
 export const sessionQueryKey = ['session'] as const;
 
@@ -13,9 +13,9 @@ export function useSession(): UseQueryResult<Session | null> {
   return useQuery({
     queryKey: sessionQueryKey,
     queryFn: async (): Promise<Session | null> => {
-      const { data, response } = await api.GET('/api/auth/me');
-      if (response.status === 401) return null;
-      if (!data) throw new Error(`Unexpected /api/auth/me response: ${response.status}`);
+      const { data, response } = await getApiAuthMe();
+      if (response?.status === 401) return null;
+      if (!data) throw new Error(`Unexpected /api/auth/me response: ${response?.status ?? 'none'}`);
       return data;
     },
     retry: false,

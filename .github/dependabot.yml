@@ -87,18 +87,12 @@ updates:
         update-types:
           - "major"
 
-      # @eslint/js is lockstep-versioned with eslint; plugins peer-cap on the eslint
-      # major; typescript-eslint peer-bounds both eslint and typescript.
-      lint-and-typescript:
+      # Oxlint delegates type-aware rules to tsgolint; keep their compiler-facing majors aligned.
+      oxlint:
         applies-to: version-updates
         patterns:
-          - "eslint"
-          - "@eslint/*"
-          - "eslint-plugin-*"
-          - "eslint-config-*"
-          - "typescript-eslint"
-          - "globals"
-          - "typescript"
+          - "oxlint"
+          - "oxlint-tsgolint"
         update-types:
           - "major"
 
@@ -109,11 +103,27 @@ updates:
         update-types:
           - "minor"
           - "patch"
-    # TypeScript majors are held until the SPA toolchain can accept them. TS 6 (was PR #9) is
-    # blocked by openapi-typescript's `typescript: "^5.x"` peer — no published release admits
-    # TS 6, and forcing it would mean an unsafe `--legacy-peer-deps` resolve. This ignore is
-    # open-ended, so the ts6-unblock-watch workflow opens a tracking issue when openapi-typescript
-    # relaxes that peer; remove this entry then and let Dependabot re-propose the major.
+  # Hey API code generation is isolated from the SPA because the generator still uses the
+  # JavaScript compiler API removed by native TypeScript 7. Keep its TS 5 toolchain independently
+  # reproducible until Hey API can execute under TS 7.
+  - package-ecosystem: "npm"
+    directory: "/web/codegen"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "05:00"
+      timezone: "America/New_York"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "frontend"
+    commit-message:
+      prefix: "build(codegen)"
+    groups:
+      hey-api-codegen:
+        patterns:
+          - "@hey-api/*"
+          - "typescript"
     ignore:
       - dependency-name: "typescript"
         update-types:

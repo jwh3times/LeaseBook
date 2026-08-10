@@ -3,20 +3,41 @@
  * Mirrors the pattern in web/src/features/operations/useRuns.ts.
  */
 import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
-import { api, primeCsrf, type components } from '@/api';
+import {
+  getApiOnboardingStatus,
+  postApiOnboardingImportBalancesByKind,
+  postApiOnboardingImportBalancesByKindSupersede,
+  postApiOnboardingImportByKind,
+  postApiOnboardingVerification,
+  postApiOnboardingVerificationByIdSignoff,
+  primeCsrf,
+  type BalanceImportRequest,
+  type BankBalanceDto,
+  type EntityImportRequest,
+  type ImportBatchError,
+  type ImportBatchResult,
+  type ImportOutcomeCounts,
+  type OnboardingStatusResponse,
+  type VarianceLine,
+  type VerificationReport,
+  type VerificationRequestDto,
+} from '@/api';
 import { toApiError, type ApiError } from '@/lib/apiError';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type OnboardingStatusResponse = components['schemas']['OnboardingStatusResponse'];
-export type ImportBatchResult = components['schemas']['ImportBatchResult'];
-export type ImportBatchError = components['schemas']['ImportBatchError'];
-export type EntityImportRequest = components['schemas']['EntityImportRequest'];
-export type BalanceImportRequest = components['schemas']['BalanceImportRequest'];
-export type VerificationRequestDto = components['schemas']['VerificationRequestDto'];
-export type VerificationReport = components['schemas']['VerificationReport'];
-export type VarianceLine = components['schemas']['VarianceLine'];
-export type BankBalanceDto = components['schemas']['BankBalanceDto'];
+export type {
+  BalanceImportRequest,
+  BankBalanceDto,
+  EntityImportRequest,
+  ImportBatchError,
+  ImportBatchResult,
+  ImportOutcomeCounts,
+  OnboardingStatusResponse,
+  VarianceLine,
+  VerificationReport,
+  VerificationRequestDto,
+};
 
 export type EntityKind = 'owners' | 'properties' | 'units' | 'tenants_leases';
 export type BalanceKind =
@@ -36,11 +57,11 @@ export type OnboardingError = ApiError;
 const toOnboardingError = toApiError;
 
 async function unwrap<T>(
-  call: Promise<{ data?: T; error?: unknown; response: Response }>,
+  call: Promise<{ data?: T; error?: unknown; response?: Response }>,
 ): Promise<T> {
   const { data, error, response } = await call;
   if (data !== undefined && data !== null) return data;
-  throw toOnboardingError(error, response.status);
+  throw toOnboardingError(error, response?.status ?? 0);
 }
 
 // ─── Queries ──────────────────────────────────────────────────────────────────
@@ -50,7 +71,7 @@ export function useOnboardingStatus(): UseQueryResult<OnboardingStatusResponse> 
   return useQuery({
     queryKey: onboardingStatusKey(),
     queryFn: async () => {
-      const { data, error } = await api.GET('/api/onboarding/status');
+      const { data, error } = await getApiOnboardingStatus();
       if (error || !data) throw new Error('Failed to load onboarding status');
       return data;
     },
@@ -66,8 +87,8 @@ export function useImportEntities(kind: EntityKind) {
     mutationFn: async (body) => {
       await primeCsrf();
       return unwrap(
-        api.POST('/api/onboarding/import/{kind}', {
-          params: { path: { kind } },
+        postApiOnboardingImportByKind({
+          path: { kind },
           body,
         }),
       );
@@ -85,8 +106,8 @@ export function useImportBalances(kind: BalanceKind) {
     mutationFn: async (body) => {
       await primeCsrf();
       return unwrap(
-        api.POST('/api/onboarding/import-balances/{kind}', {
-          params: { path: { kind } },
+        postApiOnboardingImportBalancesByKind({
+          path: { kind },
           body,
         }),
       );
@@ -97,8 +118,6 @@ export function useImportBalances(kind: BalanceKind) {
   });
 }
 
-export type ImportOutcomeCounts = components['schemas']['ImportOutcomeCounts'];
-
 /** Corrected re-import (supersede) for an already-imported balance kind. Invalidates status. */
 export function useSupersedeBalances(kind: BalanceKind) {
   const queryClient = useQueryClient();
@@ -106,8 +125,8 @@ export function useSupersedeBalances(kind: BalanceKind) {
     mutationFn: async (body) => {
       await primeCsrf();
       return unwrap(
-        api.POST('/api/onboarding/import-balances/{kind}/supersede', {
-          params: { path: { kind } },
+        postApiOnboardingImportBalancesByKindSupersede({
+          path: { kind },
           body,
         }),
       );
@@ -124,7 +143,7 @@ export function useVerify() {
   return useMutation<VerificationReport, OnboardingError, VerificationRequestDto>({
     mutationFn: async (body) => {
       await primeCsrf();
-      return unwrap(api.POST('/api/onboarding/verification', { body }));
+      return unwrap(postApiOnboardingVerification({ body }));
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: onboardingStatusKey() });
@@ -138,11 +157,11 @@ export function useSignoff() {
   return useMutation<void, OnboardingError, { id: string }>({
     mutationFn: async ({ id }) => {
       await primeCsrf();
-      const { error, response } = await api.POST('/api/onboarding/verification/{id}/signoff', {
-        params: { path: { id } },
+      const { error, response } = await postApiOnboardingVerificationByIdSignoff({
+        path: { id },
       });
-      if (response.ok) return;
-      throw toOnboardingError(error, response.status);
+      if (!error && response?.ok) return;
+      throw toOnboardingError(error, response?.status ?? 0);
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: onboardingStatusKey() });

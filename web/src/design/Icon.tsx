@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react';
 
 // Functional UI glyphs ported from the prototype's icon set (components.jsx).
-// eslint-disable-next-line react-refresh/only-export-components -- icon-path data colocated with Icon
+// oxlint-disable-next-line react/only-export-components -- icon-path data colocated with Icon
 export const ICONS = {
   dashboard: 'M3 3h7v8H3V3zm11 0h7v5h-7V3zM3 14h7v7H3v-7zm11-3h7v10h-7V11z',
   owners: 'M3 21V8l6-4 6 4v13M9 21v-5h2v5M15 21V11l3-2 3 2v10M3 21h18',

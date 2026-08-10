@@ -45,7 +45,7 @@ cd web && npm install && npm run typecheck && npm run test
 
 ## Code conventions
 
-The build enforces most of these — treat a clean `dotnet format`, ESLint, and the analyzers as the
+The build enforces most of these — treat a clean `dotnet format`, `Oxlint`, and the analyzers as the
 minimum bar, not the goal.
 
 ### Backend (C# / .NET)
@@ -66,16 +66,17 @@ minimum bar, not the goal.
 
 ### Frontend (React / TypeScript)
 
-- Strict TypeScript; ESLint and Prettier are CI gates (`npm run lint`, `npm run typecheck`).
+- Strict TypeScript; type-aware `Oxlint` and Prettier are CI gates (`npm run lint`,
+  `npm run typecheck`).
 - Reusable UI primitives live in the design system (`web/src/design`); app-level shared components
   composed above them (page scaffolds, modals, the record quick-switch) live in `web/src/components`;
   `web/src/lib` holds pure TypeScript utilities and hooks only. Money renders through the `<Money>`
   primitive with tabular numerals and the organization's negative-display preference — never hand-formatted.
 - Status is never conveyed by color alone (pair an icon or label with the color).
-- The API client (`web/src/api/schema.d.ts`) is **generated** from the host's OpenAPI document
-  (`npm run api:generate`) — don't hand-edit it; regenerate and commit it when the contract changes.
+- The API client (`web/src/api/generated`) is **generated** from the host's OpenAPI document with Hey
+  API (`npm run api:generate`) — don't hand-edit it; regenerate and commit it when the contract changes.
   CI's `schema-drift` job enforces this (ADR-012): it regenerates the client from a build-time copy
-  of the contract and fails if the committed file is stale. It's excluded from Prettier/ESLint, so
+  of the contract and fails if the committed file is stale. It's excluded from Prettier/`Oxlint`, so
   leave it exactly as the generator emits it.
 
 ### Architecture decisions
@@ -150,7 +151,7 @@ Before requesting review, confirm:
       product-source change has no user-visible effect).
 - [ ] Accounting-adjacent changes keep the invariant/property/golden suites green.
 - [ ] New org-scoped tables have their RLS policy; the schema guard passes.
-- [ ] A regenerated, committed `schema.d.ts` accompanies any API-contract change (CI's `schema-drift` job enforces it).
+- [ ] A regenerated, committed `web/src/api/generated` accompanies any API-contract change (CI's `schema-drift` job enforces it).
 - [ ] An ADR accompanies any significant design decision.
 - [ ] No secrets, credentials, or confidential planning material are committed (the secrets scan runs in CI).
 

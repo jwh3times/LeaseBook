@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router';
-import { api, primeCsrf } from '@/api';
+import { postApiAuthLogout, primeCsrf } from '@/api';
 import {
   AppLayout,
   Avatar,
@@ -42,7 +42,7 @@ export function AppShell() {
   useGlobalShortcuts({
     onPalette: () => setPaletteOpen(true),
     onHelp: () => setHelpOpen(true),
-    onNavigate: navigate,
+    onNavigate: (path) => void navigate(path),
   });
 
   const active =
@@ -51,9 +51,9 @@ export function AppShell() {
 
   async function signOut() {
     await primeCsrf();
-    await api.POST('/api/auth/logout');
+    await postApiAuthLogout();
     await queryClient.invalidateQueries({ queryKey: sessionQueryKey });
-    navigate('/login', { replace: true });
+    void navigate('/login', { replace: true });
   }
 
   return (
@@ -66,9 +66,9 @@ export function AppShell() {
             activeId={active.item.id}
             onNavigate={(id) => {
               const target = NAV_ROUTES.find((route) => route.item.id === id);
-              if (target) navigate(target.path);
+              if (target) void navigate(target.path);
             }}
-            onSettings={() => navigate(SETTINGS_ROUTE.path)}
+            onSettings={() => void navigate(SETTINGS_ROUTE.path)}
             user={{
               name: displayName,
               role: session?.role ?? '',

@@ -25,7 +25,6 @@
     "erasableSyntaxOnly": true,
 
     /* Path alias @/* -> src/* */
-    "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"]
     },

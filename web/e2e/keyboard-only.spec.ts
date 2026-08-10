@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import type { BudgetTelemetryRequest } from '@/api';
 import { DEMO_ADMIN, openPalette, signIn } from './helpers';
 
 // Keyboard-only operability e2e (WP-4 step 4): the flagship budgeted flow driven entirely by keyboard
@@ -68,7 +69,7 @@ test.describe('keyboard-only operability', () => {
     await amount.pressSequentially(UNIQUE_AMOUNT);
     await amount.press('Enter');
 
-    const event = JSON.parse((await budget).postData() ?? '{}');
+    const event = JSON.parse((await budget).postData() ?? '{}') as BudgetTelemetryRequest;
     expect(event.task).toBe('record-payment');
     expect(event.met).toBe(true);
     expect(event.interactions).toBeLessThanOrEqual(3);

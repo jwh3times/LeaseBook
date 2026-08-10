@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import type { BudgetTelemetryRequest } from '@/api';
 import { seedTheme, visualSnapshot } from './helpers';
 
 // The M3 ledger-hub budgeted flows (§D step 6), run against the seeded demo org. The seeded admin
@@ -45,7 +46,7 @@ test('records a payment in ≤ 3 interactions, then voids it with a linked rever
   await page.getByLabel('Amount').fill(UNIQUE_AMOUNT);
   await page.getByLabel('Amount').press('Enter');
 
-  const event = JSON.parse((await budget).postData() ?? '{}');
+  const event = JSON.parse((await budget).postData() ?? '{}') as BudgetTelemetryRequest;
   expect(event.task).toBe('record-payment');
   expect(event.met).toBe(true);
   expect(event.interactions).toBeLessThanOrEqual(3);
