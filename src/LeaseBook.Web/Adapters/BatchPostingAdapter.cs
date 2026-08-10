@@ -64,10 +64,8 @@ internal sealed class BatchPostingAdapter(IAccountingEvents events) : IBatchPost
         {
             return PostOutcome.Refused(PostStatus.PeriodClosed);
         }
-        catch (ReserveFloorException)
-        {
-            return PostOutcome.Refused(PostStatus.ReserveFloor);
-        }
+
+        // ReserveFloorException is deliberately NOT caught here — see PostDisbursementAsync.
     }
 
     private async Task<PostOutcome> PostRentAsync(RentChargeIntent i, CancellationToken ct) =>
@@ -88,29 +86,44 @@ internal sealed class BatchPostingAdapter(IAccountingEvents events) : IBatchPost
     /// The management-fee assessment posts FIRST when non-zero: it reduces owner equity before the
     /// disbursement's reserve-floor guard runs, so the guard sees the balance the owner will actually
     /// be left with. A refusal from either leaves neither — both run inside the run's transaction.
+    /// <para>
+    /// <b><c>ReserveFloorException</c> is caught here and not in <see cref="PostAsync"/>, so the
+    /// classification is scoped to the one posting that can raise it.</b> Accounting's reserve-floor
+    /// guard runs on <c>OwnerDisbursed</c> and nothing else, so the same exception reaching a rent or
+    /// late-fee posting would mean something has gone wrong in the layer below — and catching it in
+    /// the outer block would file that away as an ordinary per-item exclusion on the money path.
+    /// Left uncaught it aborts the run inside its own transaction, by name.
+    /// </para>
     /// </summary>
     private async Task<PostOutcome> PostDisbursementAsync(DisbursementIntent i, CancellationToken ct)
     {
         Guid? feeEntryId = null;
 
-        if (i.MgmtFee > 0m)
+        try
         {
-            feeEntryId = await events.PostAsync(
-                new ManagementFeeAssessed(
-                    i.OwnerId, i.PropertyId,
-                    new Money(i.MgmtFee), i.Date, i.OperatingBankId,
-                    i.Description, i.FeeSourceRef),
+            if (i.MgmtFee > 0m)
+            {
+                feeEntryId = await events.PostAsync(
+                    new ManagementFeeAssessed(
+                        i.OwnerId, i.PropertyId,
+                        new Money(i.MgmtFee), i.Date, i.OperatingBankId,
+                        i.Description, i.FeeSourceRef),
+                    ct);
+            }
+
+            var disbursementEntryId = await events.PostAsync(
+                new OwnerDisbursed(
+                    i.OwnerId,
+                    new Money(i.DisburseAmount), i.Date, i.OperatingBankId,
+                    i.Description, i.DisburseSourceRef,
+                    Reserve: new Money(i.Reserve)),
                 ct);
+
+            return PostOutcome.Posted(disbursementEntryId, feeEntryId);
         }
-
-        var disbursementEntryId = await events.PostAsync(
-            new OwnerDisbursed(
-                i.OwnerId,
-                new Money(i.DisburseAmount), i.Date, i.OperatingBankId,
-                i.Description, i.DisburseSourceRef,
-                Reserve: new Money(i.Reserve)),
-            ct);
-
-        return PostOutcome.Posted(disbursementEntryId, feeEntryId);
+        catch (ReserveFloorException)
+        {
+            return PostOutcome.Refused(PostStatus.ReserveFloor);
+        }
     }
 }

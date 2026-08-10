@@ -1,17 +1,16 @@
-using System.Text.Json;
 using LeaseBook.Modules.Operations.Contracts;
 using LeaseBook.Modules.Operations.Domain;
 
 namespace LeaseBook.Modules.Operations.Runs;
 
 /// <summary>
-/// <see cref="IRunStrategy"/> for <see cref="RunType.LateFee"/>. Previews and confirms the monthly
-/// late-fee charge run, applying the NC §42-46 statutory clamp via <see cref="LateFeeCalculator"/>.
+/// <see cref="IRunStrategy"/> for <see cref="RunType.LateFee"/>. Previews the monthly late-fee charge
+/// run and plans it, applying the NC §42-46 statutory clamp via <see cref="LateFeeCalculator"/>.
 /// <para>
 /// <b>Source-ref convention (ADR-019):</b> <c>latefee:{year}-{month:00}:lease={leaseId}</c>.
 /// The existing <c>(org_id, source_ref)</c> partial unique index on <c>journal_entries</c>
-/// deduplicates repeat runs; a <c>DuplicateSourceRefException</c> on confirm is caught per-item
-/// and recorded as <see cref="RunItemStatus.Skipped"/>.
+/// deduplicates repeat runs; the engine records the resulting refusal as
+/// <see cref="RunItemStatus.Skipped"/>.
 /// </para>
 /// <para>
 /// <b>Charge date:</b> the first day of the period month (<c>new DateOnly(year, month, 1)</c>).
@@ -34,9 +33,9 @@ namespace LeaseBook.Modules.Operations.Runs;
 ///     leases; balance cannot be attributed — excluded as <c>ambiguous_multiple_active_leases</c>).</item>
 ///   <item>Lease with no effective policy resolved.</item>
 /// </list>
-/// A locked bank period (<c>AccountPeriodLockedException</c>) or a closed accounting period
-/// (<c>PeriodClosedException</c>) is surfaced per-item during confirm (caught →
-/// <see cref="RunItemStatus.Excluded"/>).
+/// A locked bank period or a closed accounting period comes back from the posting port as a refusal
+/// and the engine records it per-item as <see cref="RunItemStatus.Excluded"/>; neither is visible
+/// here.
 /// </para>
 /// </summary>
 public sealed class LateFeeRunStrategy(
@@ -138,21 +137,11 @@ public sealed class LateFeeRunStrategy(
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<BulkRunItem>> ConfirmAsync(
-        BulkRun run,
+    public async Task<IReadOnlyList<RunPlanItem>> PlanAsync(
+        RunPeriod period,
         IReadOnlyList<Guid> selectedTargetIds,
-        IBatchPosting posting,
-        RunCapabilities capabilities,
         CancellationToken ct)
     {
-        // Frozen at RunEngine.ConfirmAsync entry and unused here: no capability gates this run type
-        // yet. When one does, it may only decide whether a target is posted at all — never an amount,
-        // a date, or any other input to the business event.
-        _ = capabilities;
-
-        var period = new RunPeriod(run.PeriodYear, run.PeriodMonth);
-        var selectedSet = new HashSet<Guid>(selectedTargetIds);
-
         // Re-fetch delinquency data (preview may be stale). Use last day of period for same reason as PreviewAsync.
         var asOf = new DateOnly(period.Year, period.Month, DateTime.DaysInMonth(period.Year, period.Month));
         var allDelinquent = await delinquency.GetAsync(period.Year, period.Month, asOf, ct);
@@ -177,30 +166,19 @@ public sealed class LateFeeRunStrategy(
             : (IReadOnlySet<Guid>)new HashSet<Guid>();
 
         var chargeDate = new DateOnly(period.Year, period.Month, 1);
-
-        // Build intents for selected, eligible leases.
-        var intents = new List<LateFeeIntent>(selectedTargetIds.Count);
-        var skippedItems = new List<BulkRunItem>();
+        var plan = new List<RunPlanItem>(selectedTargetIds.Count);
 
         foreach (var leaseId in selectedTargetIds)
         {
             if (!byLeaseId.TryGetValue(leaseId, out var row))
             {
-                skippedItems.Add(BulkRunItem.Create(
-                    run.Id, RunTargetKind.Lease, leaseId,
-                    RunItemStatus.Excluded, 0m,
-                    JsonSerializer.Serialize(new { reason = "lease_not_delinquent" }),
-                    run.CreatedAt));
+                plan.Add(Exclude(leaseId, RunItemStatus.Excluded, "lease_not_delinquent"));
                 continue;
             }
 
             if (!policyMap.TryGetValue(leaseId, out var policy))
             {
-                skippedItems.Add(BulkRunItem.Create(
-                    run.Id, RunTargetKind.Lease, leaseId,
-                    RunItemStatus.Excluded, 0m,
-                    JsonSerializer.Serialize(new { reason = "no_policy" }),
-                    run.CreatedAt));
+                plan.Add(Exclude(leaseId, RunItemStatus.Excluded, "no_policy"));
                 continue;
             }
 
@@ -208,70 +186,44 @@ public sealed class LateFeeRunStrategy(
             // tenant in the period, regardless of source_ref.
             if (alreadyChargedTenants.Contains(row.TenantId))
             {
-                skippedItems.Add(BulkRunItem.Create(
-                    run.Id, RunTargetKind.Lease, leaseId,
-                    RunItemStatus.Skipped, 0m,
-                    JsonSerializer.Serialize(new { reason = "already_charged_in_period" }),
-                    run.CreatedAt));
+                plan.Add(Exclude(leaseId, RunItemStatus.Skipped, "already_charged_in_period"));
                 continue;
             }
 
             var amount = LateFeeCalculator.Compute(policy, row.Rent);
             var description = $"Late fee {period.Key} — {row.TenantName} {row.UnitLabel}";
+            var sourceRef = SourceRef(period, leaseId);
 
-            intents.Add(new LateFeeIntent(
-                LeaseId: leaseId,
-                TenantId: row.TenantId,
-                PropertyId: row.PropertyId,
-                OwnerId: row.OwnerId,
-                UnitId: row.UnitId,
+            plan.Add(new PlannedPosting(
+                TargetKind: RunTargetKind.Lease,
+                TargetId: leaseId,
+                Intent: new LateFeeIntent(
+                    LeaseId: leaseId,
+                    TenantId: row.TenantId,
+                    PropertyId: row.PropertyId,
+                    OwnerId: row.OwnerId,
+                    UnitId: row.UnitId,
+                    Amount: amount,
+                    Date: chargeDate,
+                    Description: description,
+                    SourceRef: sourceRef),
                 Amount: amount,
-                Date: chargeDate,
-                Description: description,
-                SourceRef: SourceRef(period, leaseId)));
+                PostedDetail: new Dictionary<string, object?>(StringComparer.Ordinal)
+                {
+                    ["sourceRef"] = sourceRef,
+                    ["amount"] = amount,
+                },
+                RefusedDetail: new Dictionary<string, object?>(StringComparer.Ordinal)
+                {
+                    ["sourceRef"] = sourceRef,
+                }));
         }
 
-        // Post one at a time so we can catch per-item exceptions cleanly.
-        // Catch DuplicateSourceRefException per-item → Skipped (idempotent re-run).
-        // Catch AccountPeriodLockedException per-item → Excluded (bank period locked).
-        // Catch PeriodClosedException per-item → Excluded (accounting period closed).
-        var items = new List<BulkRunItem>(selectedTargetIds.Count);
-        items.AddRange(skippedItems);
+        return plan;
 
-        foreach (var intent in intents)
-        {
-            var outcome = await posting.PostAsync(intent, ct);
-
-            items.Add(outcome.Status switch
-            {
-                PostStatus.Posted => BulkRunItem.Create(
-                    run.Id, RunTargetKind.Lease, intent.LeaseId,
-                    RunItemStatus.Posted, intent.Amount,
-                    JsonSerializer.Serialize(new
-                    {
-                        entryId = outcome.EntryId,
-                        sourceRef = intent.SourceRef,
-                        amount = intent.Amount,
-                    }),
-                    run.CreatedAt,
-                    resultingJournalEntryId: outcome.EntryId),
-
-                PostStatus.DuplicateSourceRef => Refused(RunItemStatus.Skipped, "duplicate_source_ref"),
-                PostStatus.PeriodLocked => Refused(RunItemStatus.Excluded, "period_locked"),
-                PostStatus.PeriodClosed => Refused(RunItemStatus.Excluded, "period_closed"),
-
-                // ReserveFloor is disbursement-only; here it would mean a mis-routed intent.
-                _ => throw new InvalidOperationException(
-                    $"Unexpected posting outcome {outcome.Status} for a late fee."),
-            });
-
-            BulkRunItem Refused(RunItemStatus status, string reason) => BulkRunItem.Create(
-                run.Id, RunTargetKind.Lease, intent.LeaseId, status, 0m,
-                JsonSerializer.Serialize(new { sourceRef = intent.SourceRef, reason }),
-                run.CreatedAt);
-        }
-
-        return items;
+        static PlannedExclusion Exclude(Guid leaseId, RunItemStatus status, string reason) =>
+            new(RunTargetKind.Lease, leaseId, status,
+                new Dictionary<string, object?>(StringComparer.Ordinal) { ["reason"] = reason });
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────

@@ -67,18 +67,25 @@ The `entry_date` for a rent charge is the **first day of the period month** (e.g
 for the March 2026 run). This simplifies period locking: the single date is predictable and
 auditable, and all rent charges for a period fall in the same accounting period.
 
-### 5. Exception handling in `RentRunStrategy.ConfirmAsync`
+### 5. Per-item refusals on a rent run
 
-Per-item exceptions from `IBatchPosting.PostRentChargesAsync` are caught and mapped:
+A refusal from the posting port is recorded against the one item it concerns and the run carries on:
 
-| Exception type name            | Outcome                                   |
-| ------------------------------ | ----------------------------------------- |
-| `DuplicateSourceRefException`  | `Skipped` (already posted in a prior run) |
-| `AccountPeriodLockedException` | `Excluded` (period is locked)             |
-| `PeriodClosedException`        | `Excluded` (period is closed)             |
+| `PostStatus`         | Outcome                                   |
+| -------------------- | ----------------------------------------- |
+| `DuplicateSourceRef` | `Skipped` (already posted in a prior run) |
+| `PeriodLocked`       | `Excluded` (bank period is locked)        |
+| `PeriodClosed`       | `Excluded` (accounting period is closed)  |
 
-Type detection uses `ex.GetType().Name` (string comparison, not type reference) to avoid an
-ADR-007 violation: `Modules.Operations` must not reference `Modules.Accounting` types.
+**Superseded 2026-08-09 (ADR-019 §4a/§4b), recorded because the original mechanism is worth not
+repeating.** This section described `RentRunStrategy` catching Accounting's exceptions itself and
+classifying them by `ex.GetType().Name` — a string comparison rather than a type reference, chosen so
+that `Modules.Operations` need not reference `Modules.Accounting` types. It worked, and it made a
+rename in Accounting able to silently reclassify a money-path failure as unhandled with nothing
+failing anywhere. The translation now happens once, in `BatchPostingAdapter`, which is the only type
+that can see both assemblies; `IBatchPosting` returns a typed `PostStatus`, and `RunEngine` maps it to
+a run-item status. The ADR-007 boundary is kept the same way it always was — Operations still names no
+Accounting type — without the string match.
 
 Leases with `Rent == 0` and leases whose term ends before the period start are
 surfaced as `Exceptions` in the preview (not rows), so the operator sees them explicitly.

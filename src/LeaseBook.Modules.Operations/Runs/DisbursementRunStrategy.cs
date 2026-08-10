@@ -1,12 +1,11 @@
-using System.Text.Json;
 using LeaseBook.Modules.Operations.Contracts;
 using LeaseBook.Modules.Operations.Domain;
 
 namespace LeaseBook.Modules.Operations.Runs;
 
 /// <summary>
-/// <see cref="IRunStrategy"/> for <see cref="RunType.Disbursement"/>. Previews and confirms the
-/// monthly owner disbursement run, folding the management-fee assessment into the same batch
+/// <see cref="IRunStrategy"/> for <see cref="RunType.Disbursement"/>. Previews the monthly owner
+/// disbursement run and plans it, folding the management-fee assessment into the same intent
 /// (ADR-018).
 /// <para>
 /// <b>Math (per owner, equity-at-run-time — D3):</b>
@@ -43,13 +42,11 @@ namespace LeaseBook.Modules.Operations.Runs;
 /// resolution path). Property-precise fees require per-property equity decomposition (future work).
 /// </para>
 /// <para>
-/// <b>Exceptions caught per-item on confirm (ADR-007 — type-name string match):</b>
-/// <list type="bullet">
-///   <item><c>DuplicateSourceRefException</c> → <see cref="RunItemStatus.Skipped"/>.</item>
-///   <item><c>AccountPeriodLockedException</c> → <see cref="RunItemStatus.Excluded"/>.</item>
-///   <item><c>PeriodClosedException</c> → <see cref="RunItemStatus.Excluded"/>.</item>
-///   <item><c>ReserveFloorException</c> → <see cref="RunItemStatus.Excluded"/> (posting-time backstop).</item>
-/// </list>
+/// <b>Posting refusals, recorded per-item by the engine.</b> The strategy sees none of them: the
+/// posting port returns a <see cref="Contracts.PostStatus"/> and <see cref="RunEngine"/> maps it.
+/// <see cref="Contracts.PostStatus.ReserveFloor"/> is the one of these that is disbursement-specific
+/// — the posting-time backstop for equity that moved between preview and confirm, where the
+/// <c>disburse &lt;= 0</c> exclusion above is the same rule applied to the data the plan was built on.
 /// </para>
 /// </summary>
 public sealed class DisbursementRunStrategy(
@@ -130,21 +127,11 @@ public sealed class DisbursementRunStrategy(
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<BulkRunItem>> ConfirmAsync(
-        BulkRun run,
+    public async Task<IReadOnlyList<RunPlanItem>> PlanAsync(
+        RunPeriod period,
         IReadOnlyList<Guid> selectedTargetIds,
-        IBatchPosting posting,
-        RunCapabilities capabilities,
         CancellationToken ct)
     {
-        // Frozen at RunEngine.ConfirmAsync entry and unused here: no capability gates this run type
-        // yet. When one does, it may only decide whether a target is posted at all — never an amount,
-        // a date, or any other input to the business event.
-        _ = capabilities;
-
-        var period = new RunPeriod(run.PeriodYear, run.PeriodMonth);
-        var selectedSet = new HashSet<Guid>(selectedTargetIds);
-
         // Re-fetch owner data and equity at confirm time (preview may be stale).
         var allOwners = await ownerData.GetAsync(ct);
         var byOwnerId = allOwners.ToDictionary(o => o.OwnerId);
@@ -154,22 +141,18 @@ public sealed class DisbursementRunStrategy(
             ? await equityBalances.GetAsync(ownerIdsInScope, Basis, ct)
             : (IReadOnlyDictionary<Guid, decimal>)new Dictionary<Guid, decimal>();
 
-        var (operatingBankId, bankDisplay) = await bankInfo.GetOperatingTrustAsync(ct);
+        var (operatingBankId, _) = await bankInfo.GetOperatingTrustAsync(ct);
         var chargeDate = new DateOnly(period.Year, period.Month, 1);
-
-        // Build intents for selected, eligible owners.
-        var intents = new List<DisbursementIntent>(selectedTargetIds.Count);
-        var skippedItems = new List<BulkRunItem>();
+        var plan = new List<RunPlanItem>(selectedTargetIds.Count);
 
         foreach (var ownerId in selectedTargetIds)
         {
             if (!byOwnerId.TryGetValue(ownerId, out var owner))
             {
-                skippedItems.Add(BulkRunItem.Create(
-                    run.Id, RunTargetKind.Owner, ownerId,
-                    RunItemStatus.Excluded, 0m,
-                    JsonSerializer.Serialize(new { reason = "owner_not_found" }),
-                    run.CreatedAt));
+                plan.Add(Exclude(ownerId, new Dictionary<string, object?>(StringComparer.Ordinal)
+                {
+                    ["reason"] = "owner_not_found",
+                }));
                 continue;
             }
 
@@ -180,96 +163,68 @@ public sealed class DisbursementRunStrategy(
 
             if (equity <= 0m)
             {
-                skippedItems.Add(BulkRunItem.Create(
-                    run.Id, RunTargetKind.Owner, ownerId,
-                    RunItemStatus.Excluded, 0m,
-                    JsonSerializer.Serialize(new { reason = "non_positive_equity", equity }),
-                    run.CreatedAt));
+                plan.Add(Exclude(ownerId, new Dictionary<string, object?>(StringComparer.Ordinal)
+                {
+                    ["reason"] = "non_positive_equity",
+                    ["equity"] = equity,
+                }));
                 continue;
             }
 
             if (disburse <= 0m)
             {
-                skippedItems.Add(BulkRunItem.Create(
-                    run.Id, RunTargetKind.Owner, ownerId,
-                    RunItemStatus.Excluded, 0m,
-                    JsonSerializer.Serialize(new
-                    {
-                        reason = "below_reserve_floor",
-                        equity,
-                        fee,
-                        netBeforeReserve,
-                        reserve = owner.ReserveAmount,
-                        disburse,
-                    }),
-                    run.CreatedAt));
+                plan.Add(Exclude(ownerId, new Dictionary<string, object?>(StringComparer.Ordinal)
+                {
+                    ["reason"] = "below_reserve_floor",
+                    ["equity"] = equity,
+                    ["fee"] = fee,
+                    ["netBeforeReserve"] = netBeforeReserve,
+                    ["reserve"] = owner.ReserveAmount,
+                    ["disburse"] = disburse,
+                }));
                 continue;
             }
 
             var description = $"Disbursement {period.Key} — {owner.Name}";
-            var bankWithdrawalRef = $"check/ACH {period.Key} {owner.Name}";
+            var feeRef = FeeSourceRef(period, ownerId);
+            var disburseRef = DisburseSourceRef(period, ownerId);
 
-            intents.Add(new DisbursementIntent(
-                OwnerId: ownerId,
-                PropertyId: null,
-                MgmtFee: fee,
-                DisburseAmount: disburse,
-                Reserve: owner.ReserveAmount,
-                Date: chargeDate,
-                OperatingBankId: operatingBankId,
-                Description: description,
-                FeeSourceRef: FeeSourceRef(period, ownerId),
-                DisburseSourceRef: DisburseSourceRef(period, ownerId)));
+            plan.Add(new PlannedPosting(
+                TargetKind: RunTargetKind.Owner,
+                TargetId: ownerId,
+                Intent: new DisbursementIntent(
+                    OwnerId: ownerId,
+                    PropertyId: null,
+                    MgmtFee: fee,
+                    DisburseAmount: disburse,
+                    Reserve: owner.ReserveAmount,
+                    Date: chargeDate,
+                    OperatingBankId: operatingBankId,
+                    Description: description,
+                    FeeSourceRef: feeRef,
+                    DisburseSourceRef: disburseRef),
+                Amount: disburse,
+                PostedDetail: new Dictionary<string, object?>(StringComparer.Ordinal)
+                {
+                    ["feeSourceRef"] = feeRef,
+                    ["disburseSourceRef"] = disburseRef,
+                    ["fee"] = fee,
+                    ["disburse"] = disburse,
+                    ["reserve"] = owner.ReserveAmount,
+                    ["bankWithdrawalRef"] = $"check/ACH {period.Key} {owner.Name}",
+                },
+                RefusedDetail: new Dictionary<string, object?>(StringComparer.Ordinal)
+                {
+                    ["disburseSourceRef"] = disburseRef,
+                }));
         }
 
-        // Post one at a time so we can catch per-item exceptions cleanly.
-        var items = new List<BulkRunItem>(selectedTargetIds.Count);
-        items.AddRange(skippedItems);
+        return plan;
 
-        foreach (var intent in intents)
-        {
-            var disburseRef = intent.DisburseSourceRef;
-            var outcome = await posting.PostAsync(intent, ct);
-
-            items.Add(outcome.Status switch
-            {
-                PostStatus.Posted => BulkRunItem.Create(
-                    run.Id, RunTargetKind.Owner, intent.OwnerId,
-                    RunItemStatus.Posted, intent.DisburseAmount,
-                    JsonSerializer.Serialize(new
-                    {
-                        feeEntryId = outcome.FeeEntryId,
-                        disbursementEntryId = outcome.EntryId,
-                        feeSourceRef = intent.FeeSourceRef,
-                        disburseSourceRef = disburseRef,
-                        fee = intent.MgmtFee,
-                        disburse = intent.DisburseAmount,
-                        reserve = intent.Reserve,
-                        bankWithdrawalRef = $"check/ACH {new RunPeriod(intent.Date.Year, intent.Date.Month).Key} {byOwnerId[intent.OwnerId].Name}",
-                    }),
-                    run.CreatedAt,
-                    resultingJournalEntryId: outcome.EntryId),
-
-                PostStatus.DuplicateSourceRef => Refused(RunItemStatus.Skipped, "duplicate_source_ref"),
-                PostStatus.PeriodLocked => Refused(RunItemStatus.Excluded, "period_locked"),
-                PostStatus.PeriodClosed => Refused(RunItemStatus.Excluded, "period_closed"),
-
-                // Posting-time backstop (GuardReserveFloorAsync). Preview already excluded
-                // below-reserve owners; this is the safety net for equity that changed between
-                // preview and confirm.
-                PostStatus.ReserveFloor => Refused(RunItemStatus.Excluded, "reserve_floor"),
-
-                _ => throw new InvalidOperationException(
-                    $"Unexpected posting outcome {outcome.Status} for a disbursement."),
-            });
-
-            BulkRunItem Refused(RunItemStatus status, string reason) => BulkRunItem.Create(
-                run.Id, RunTargetKind.Owner, intent.OwnerId, status, 0m,
-                JsonSerializer.Serialize(new { disburseSourceRef = disburseRef, reason }),
-                run.CreatedAt);
-        }
-
-        return items;
+        // Every disbursement refusal the strategy itself decides is an exclusion: an owner with no
+        // equity or below the floor has nothing to post, as opposed to something already posted.
+        static PlannedExclusion Exclude(Guid ownerId, Dictionary<string, object?> detail) =>
+            new(RunTargetKind.Owner, ownerId, RunItemStatus.Excluded, detail);
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────

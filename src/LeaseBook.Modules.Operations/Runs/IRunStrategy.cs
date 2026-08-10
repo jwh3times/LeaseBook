@@ -1,4 +1,3 @@
-using LeaseBook.Modules.Operations.Contracts;
 using LeaseBook.Modules.Operations.Domain;
 
 namespace LeaseBook.Modules.Operations.Runs;
@@ -6,7 +5,13 @@ namespace LeaseBook.Modules.Operations.Runs;
 /// <summary>
 /// One strategy per <see cref="Domain.RunType"/> (WP-2 = Rent, WP-3 = LateFee, WP-4 = Disbursement).
 /// The <see cref="RunEngine"/> resolves the correct strategy by <see cref="Domain.RunType"/> and calls
-/// <see cref="PreviewAsync"/> / <see cref="ConfirmAsync"/> without knowing the concrete type.
+/// <see cref="PreviewAsync"/> / <see cref="PlanAsync"/> without knowing the concrete type.
+/// <para>
+/// A strategy answers two questions and no others: <b>what would this run do</b>, and <b>what should
+/// it do for these targets</b>. It posts nothing, records nothing, and catches nothing — the engine
+/// owns the posting loop, the outcome-to-status mapping, item construction and persistence
+/// (ADR-019 §4, amended 2026-08-09).
+/// </para>
 /// </summary>
 public interface IRunStrategy
 {
@@ -19,32 +24,29 @@ public interface IRunStrategy
     Task<RunPreview> PreviewAsync(RunPeriod period, CancellationToken ct);
 
     /// <summary>
-    /// Executes the run for the selected targets, posting via <paramref name="posting"/>, and returns
-    /// the per-item outcomes as <see cref="BulkRunItem"/>s (not yet persisted — the engine does that).
+    /// Decides what the run should do for each of <paramref name="selectedTargetIds"/>, as one
+    /// <see cref="RunPlanItem"/> per target: post this intent, or record this target as skipped or
+    /// excluded for this reason. Nothing is posted and nothing is persisted here.
     /// <para>
-    /// Implementations must catch <c>DuplicateSourceRefException</c> per-item (→ Skipped) and the
-    /// period-locked exception per-item (→ Excluded); no unhandled posting exception should escape.
+    /// <b>Capabilities are deliberately absent from this signature.</b> The freeze is an engine
+    /// property — <see cref="RunEngine.ConfirmAsync"/> resolves the set exactly once, at its own
+    /// entry, and both capability guards reject above this call — so a capability can decide whether a
+    /// run happens and never what it produces. Passing the set down here would widen the surface that
+    /// could re-resolve it without making any guarantee stronger; under the chunked confirm ADR-019's
+    /// revisit trigger contemplates, the engine is what resumes and therefore what must carry the
+    /// snapshot across a chunk boundary.
     /// </para>
     /// <para>
-    /// <paramref name="capabilities"/> is resolved ONCE at <see cref="RunEngine.ConfirmAsync"/> entry
-    /// and frozen for the whole run. It is a parameter rather than an ambient service on purpose:
-    /// ADR-019 contemplates chunked confirms, and under chunking a chunk boundary is a new
-    /// transaction. An ambient lookup would silently lose the freeze there; a parameter cannot be lost
-    /// without a signature change. Do not re-resolve inside an implementation, and do not inject the
-    /// snapshot port into one.
-    /// </para>
-    /// <para>
-    /// <b>What it may decide.</b> Reachability only (ADR-028): whether a posting path runs at all.
-    /// It may never change the lines or amounts an existing business event produces, so no value read
-    /// off it may become an argument to an Accounting command, business event, or posting-template
-    /// input. Money-affecting parameters live in <c>OrgSettings</c>, which is org-scoped, RLS'd,
-    /// audited, seeded and golden-pinned; capabilities are none of those things.
+    /// It follows that a strategy must not reach a capability by another route either — no injected
+    /// <c>ICapabilitySnapshot</c>, no collaborator that resolves one. Whoever first needs a capability
+    /// inside a strategy has to state which of the two they are doing: gating whether a target is
+    /// posted at all (allowed, and it belongs above this call), or deriving a posted value (forbidden
+    /// by ADR-028 §4 and the money rule beneath it — money-affecting parameters live in
+    /// <c>OrgSettings</c>, which is org-scoped, RLS'd, audited, seeded and golden-pinned).
     /// </para>
     /// </summary>
-    Task<IReadOnlyList<BulkRunItem>> ConfirmAsync(
-        BulkRun run,
+    Task<IReadOnlyList<RunPlanItem>> PlanAsync(
+        RunPeriod period,
         IReadOnlyList<Guid> selectedTargetIds,
-        IBatchPosting posting,
-        RunCapabilities capabilities,
         CancellationToken ct);
 }

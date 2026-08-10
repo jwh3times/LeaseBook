@@ -70,3 +70,19 @@ _Avoid_: licence, subscription, plan, permission
 Membership in a staged rollout, for an organization or one of its users. Widens availability; never
 narrows it.
 _Avoid_: beta group, segment, audience
+
+### Bulk runs
+
+**Confirm**:
+The operator's decision to execute a previewed run over a selection of targets, and the one
+transaction that carries it out. It names the whole act — not a step within it. Until 2026-08-09 the
+word also named the method each run type used to do its own posting, so "confirm" meant two things one
+call apart; it now means only the first.
+_Avoid_: commit (that is the transaction's own word), submit, apply, execute
+
+**Run plan**:
+What a run intends to do for each selected target, decided before anything is posted: post this, or
+record this target as skipped or excluded for this reason. It is per-run-type knowledge and nothing
+else — it holds no loop, no posting and no persistence, and it is what a run type contributes beyond
+its preview.
+_Avoid_: batch (a plan is not sized or chunked), work list, queue, job
