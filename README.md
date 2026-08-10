@@ -243,7 +243,7 @@ the [local-development runbook](docs/runbooks/local-dev.md) owns the commands.
 
 LeaseBook follows a few firm conventions:
 
-- Nullable reference types and warnings-as-errors are on; `dotnet format` and ESLint/Prettier are CI
+- Nullable reference types and warnings-as-errors are on; `dotnet format`, `Oxlint`, and Prettier are CI
   gates.
 - The accounting invariants are non-negotiable — changes that touch money must keep the invariant,
   property-based, and golden-file suites green.

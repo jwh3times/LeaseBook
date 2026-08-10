@@ -45,7 +45,7 @@ cd web && npm install && npm run typecheck && npm run test
 
 ## Code conventions
 
-The build enforces most of these — treat a clean `dotnet format`, ESLint, and the analyzers as the
+The build enforces most of these — treat a clean `dotnet format`, `Oxlint`, and the analyzers as the
 minimum bar, not the goal.
 
 ### Backend (C# / .NET)
@@ -66,7 +66,8 @@ minimum bar, not the goal.
 
 ### Frontend (React / TypeScript)
 
-- Strict TypeScript; ESLint and Prettier are CI gates (`npm run lint`, `npm run typecheck`).
+- Strict TypeScript; type-aware `Oxlint` and Prettier are CI gates (`npm run lint`,
+  `npm run typecheck`).
 - Reusable UI primitives live in the design system (`web/src/design`); app-level shared components
   composed above them (page scaffolds, modals, the record quick-switch) live in `web/src/components`;
   `web/src/lib` holds pure TypeScript utilities and hooks only. Money renders through the `<Money>`
@@ -75,7 +76,7 @@ minimum bar, not the goal.
 - The API client (`web/src/api/schema.d.ts`) is **generated** from the host's OpenAPI document
   (`npm run api:generate`) — don't hand-edit it; regenerate and commit it when the contract changes.
   CI's `schema-drift` job enforces this (ADR-012): it regenerates the client from a build-time copy
-  of the contract and fails if the committed file is stale. It's excluded from Prettier/ESLint, so
+  of the contract and fails if the committed file is stale. It's excluded from Prettier/`Oxlint`, so
   leave it exactly as the generator emits it.
 
 ### Architecture decisions

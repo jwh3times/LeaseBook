@@ -180,6 +180,12 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Changed
 
+- **Type-aware frontend linting** — the web build now uses `Oxlint` with its TypeScript-aware `tsgolint`
+  engine instead of ESLint and typescript-eslint. The same `npm run lint` gate now catches unsafe
+  typed operations across application, test, and Playwright code while removing the ESLint dependency
+  stack and keeping generated OpenAPI declarations out of formatting and lint rewrites. See
+  [ADR-029](docs/adr/ADR-029-frontend-linting-with-oxlint.md).
+
 - **Release-impact classification during shipping** — the `/ship` workflow now inspects the branch
   diff and recommends a major, minor, or standard build increase with concrete evidence. Major and
   minor cuts require maintainer confirmation before `VERSION` and the dated changelog are changed;
