@@ -49,11 +49,22 @@ public sealed class RunCapabilityFreezeTests(PostgresFixture fixture)
     ];
 
     /// <summary>
-    /// The whole point of the task. Asserted against the PERSISTED bulk_run_items rows, not only the
-    /// in-memory outcomes, because the persisted rows are what an auditor reads.
+    /// The whole point of the task. Asserted against the PERSISTED run, not only the in-memory
+    /// outcome, because the persisted row is what an auditor reads.
+    /// <para>
+    /// <b>What moved on 2026-08-09, and why the assertion is not weaker for it.</b> Until the planning
+    /// move (ADR-019 §4, amended) the capability set was a parameter of
+    /// <c>IRunStrategy.ConfirmAsync</c>, and this test read it per item through a strategy double to
+    /// prove item 3 agreed with item 1. Strategies are handed no capability set now — the engine
+    /// resolves once and drives the loop itself — so a per-item disagreement has no mechanism left and
+    /// the per-item read was measuring a hazard that no longer exists. What remains observable is the
+    /// property that always mattered: the run records the set live at CONFIRM ENTRY, and the three
+    /// flips below are what make each wrong answer distinguishable rather than a shared "false".
+    /// The "resolved exactly once" half is pinned arithmetically in <c>RunEngineTests</c>.
+    /// </para>
     /// </summary>
     [Fact]
-    public async Task Every_item_posts_under_the_snapshot_taken_at_confirm_entry()
+    public async Task The_run_records_the_capability_set_resolved_at_confirm_entry()
     {
         var ct = TestContext.Current.CancellationToken;
         var org = await SeedOrgAsync(ct);
@@ -64,7 +75,6 @@ public sealed class RunCapabilityFreezeTests(PostgresFixture fixture)
             await using var scope = fixture.Api.Services.CreateAsyncScope();
             var db = scope.ServiceProvider.GetRequiredService<DbContext>();
             var executor = scope.ServiceProvider.GetRequiredService<OrgScopedExecutor>();
-            var gate = scope.ServiceProvider.GetRequiredService<ICapabilityGate>();
             var snapshot = scope.ServiceProvider.GetRequiredService<ICapabilitySnapshot>();
             var cache = fixture.Api.Services.GetRequiredService<CapabilityCache>();
 
@@ -78,42 +88,49 @@ public sealed class RunCapabilityFreezeTests(PostgresFixture fixture)
                 .ShouldBeFalse("the cache must hold a resolved 'off' set before the flip");
 
             // Mid-run: flip back OFF from another connection, then prove - on the run's own
-            // transaction - that a fresh resolve would now disagree. Without this control a per-item
+            // transaction - that a fresh resolve would now disagree. Without this control a late
             // re-resolve could pass vacuously because nothing observable had changed.
-            var strategy = new RecordingStrategy(
-                Targets,
-                afterFirstItem: async () =>
-                {
-                    await WriteFlagAsync(enabled: false, ct);
-                    (await gate.ResolveDurableAsync(ct))
-                        .IsEnabled(CapabilityCatalog.ConsolidatedStatements)
-                        .ShouldBeFalse(
-                            "control: the mid-run flip must be visible to a fresh read inside the " +
-                            "run's own transaction, otherwise a per-item re-resolve would pass anyway");
-                });
+            //
+            // The hook fires from inside the ENGINE's posting loop, between item 1 and item 2. That is
+            // where a re-resolve would now have to live, and it is later in the confirm than the old
+            // strategy-side hook could reach.
+            var posting = new HookedBatchPosting(afterFirstPost: async () =>
+            {
+                await WriteFlagAsync(enabled: false, ct);
+                (await snapshot.ResolveDurableAsync(ct))
+                    .IsEnabled(Capability)
+                    .ShouldBeFalse(
+                        "control: the mid-run flip must be visible to a fresh read inside the " +
+                        "run's own transaction, otherwise a late re-resolve would pass anyway");
+            });
 
             var engine = new RunEngine(
-                db, [strategy], new NoOpBatchPosting(), TimeProvider.System,
+                db, [new PlanEveryTargetStrategy(Targets)], posting, TimeProvider.System,
                 new RunPeriodLock(db), snapshot);
 
             RunResult? result = null;
+            string offVersion = string.Empty;
+            string onVersion = string.Empty;
+
             await executor.RunAsSystemAsync(
                 org, "test-harness",
                 async () =>
                 {
                     // Transaction start: OFF (entitlement granted, no flag row, registry default).
-                    (await gate.ResolveDurableAsync(ct))
-                        .IsEnabled(CapabilityCatalog.ConsolidatedStatements)
+                    var atTransactionStart = await snapshot.ResolveDurableAsync(ct);
+                    atTransactionStart.IsEnabled(Capability)
                         .ShouldBeFalse("negative control - the transaction opens with the capability off");
+                    offVersion = atTransactionStart.Version;
 
                     // Flip ON after the transaction is open but before confirm entry. A snapshot
                     // taken at transaction start would answer "off" here and fail below.
                     await WriteFlagAsync(enabled: true, ct);
-                    (await gate.ResolveDurableAsync(ct))
-                        .IsEnabled(CapabilityCatalog.ConsolidatedStatements)
+                    var atConfirmEntry = await snapshot.ResolveDurableAsync(ct);
+                    atConfirmEntry.IsEnabled(Capability)
                         .ShouldBeTrue(
                             "READ COMMITTED: a committed flip is visible to the open transaction - " +
-                            "the precondition that makes both failure modes observable");
+                            "the precondition that makes every failure mode observable");
+                    onVersion = atConfirmEntry.Version;
 
                     // Control: the cached entry is neither expired nor invalidated, so the
                     // cache-served path still answers with the pre-flip value at this instant.
@@ -131,21 +148,31 @@ public sealed class RunCapabilityFreezeTests(PostgresFixture fixture)
                 ct);
 
             result.ShouldNotBeNull();
-            strategy.Observed.Count.ShouldBe(Targets.Length, "every target must have been decided");
-            strategy.Observed.Select(o => o.Version).Distinct().Count().ShouldBe(
-                1, "one run, one capability version - a mid-run flip must not split it");
 
-            var persisted = await ReadItemStatesAsync(org, result!.RunId, ct);
-            persisted.Count.ShouldBe(Targets.Length);
-            persisted.ShouldAllBe(
-                s => s.Enabled,
-                "every persisted item must carry the set captured at ConfirmAsync entry (ON): not " +
-                "the state at transaction start, not a stale cached set, and not a per-item re-resolve");
-            persisted.Select(s => s.Version).Distinct().Count().ShouldBe(
-                1,
-                "every item must reflect the set captured at ConfirmAsync entry (ON), not the set at " +
-                "transaction start (OFF) and not a per-item re-resolve (ON then OFF)");
-            persisted[0].Version.ShouldBe(strategy.Observed[0].Version);
+            // Without this the summary assertion below could pass on a run that never noticed either
+            // flip: two states that hash to one token make every "which set was it" question vacuous.
+            onVersion.ShouldNotBe(
+                offVersion, "the on and off states must produce different version tokens");
+
+            posting.Posts.ShouldBe(
+                Targets.Length,
+                "the engine must have driven every planned posting - the mid-run flip has to land " +
+                "with items still to come, or it is not mid-run at all");
+
+            var statuses = await ReadItemStatusesAsync(org, result!.RunId, ct);
+            statuses.Count.ShouldBe(Targets.Length);
+            statuses.ShouldAllBe(s => s == RunItemStatus.Posted);
+
+            var summary = await ReadSummaryJsonAsync(org, result.RunId, ct);
+            using var parsed = JsonDocument.Parse(summary);
+
+            parsed.RootElement.GetProperty("capabilities").GetString().ShouldBe(
+                onVersion,
+                "the run must record the set captured at ConfirmAsync entry (ON): not the state at " +
+                "transaction start (OFF), not the stale cached set, and not a late re-resolve (OFF)");
+            parsed.RootElement.GetProperty("capabilitiesEnabled").EnumerateArray()
+                .Select(e => e.GetString())
+                .ShouldContain(Capability);
         }
         finally
         {
@@ -173,19 +200,23 @@ public sealed class RunCapabilityFreezeTests(PostgresFixture fixture)
             var executor = scope.ServiceProvider.GetRequiredService<OrgScopedExecutor>();
             var snapshot = scope.ServiceProvider.GetRequiredService<ICapabilitySnapshot>();
 
-            var strategy = new RecordingStrategy(Targets);
             var engine = new RunEngine(
-                db, [strategy], new NoOpBatchPosting(), TimeProvider.System,
-                new RunPeriodLock(db), snapshot);
+                db, [new PlanEveryTargetStrategy(Targets)], new HookedBatchPosting(),
+                TimeProvider.System, new RunPeriodLock(db), snapshot);
 
             await WriteFlagAsync(enabled: true, ct);
 
             RunResult? result = null;
+            var resolvedVersion = string.Empty;
             await executor.RunAsSystemAsync(
                 org, "test-harness",
-                async () => result = await engine.ConfirmAsync(
-                    RunType.Rent, new RunPeriod(2026, 7), Targets,
-                    expectedCapabilitiesVersion: null, acknowledgeCapabilityChange: false, ct),
+                async () =>
+                {
+                    resolvedVersion = (await snapshot.ResolveDurableAsync(ct)).Version;
+                    result = await engine.ConfirmAsync(
+                        RunType.Rent, new RunPeriod(2026, 7), Targets,
+                        expectedCapabilitiesVersion: null, acknowledgeCapabilityChange: false, ct);
+                },
                 ct);
 
             var summary = await ReadSummaryJsonAsync(org, result!.RunId, ct);
@@ -198,7 +229,7 @@ public sealed class RunCapabilityFreezeTests(PostgresFixture fixture)
             root.GetProperty("total").GetDecimal().ShouldBe(0m);
 
             root.GetProperty("capabilities").GetString().ShouldBe(
-                strategy.Observed[0].Version,
+                resolvedVersion,
                 "the recorded version must be the set the run actually ran under - the cross-run " +
                 "consistency check parses exactly this");
             root.GetProperty("capabilitiesEnabled").EnumerateArray()
@@ -346,27 +377,24 @@ public sealed class RunCapabilityFreezeTests(PostgresFixture fixture)
         await tx.CommitAsync(ct);
     }
 
-    private async Task<IReadOnlyList<ItemState>> ReadItemStatesAsync(
+    private async Task<IReadOnlyList<RunItemStatus>> ReadItemStatusesAsync(
         Guid orgId, Guid runId, CancellationToken ct)
     {
         await using var scope = fixture.Api.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<DbContext>();
         var executor = scope.ServiceProvider.GetRequiredService<OrgScopedExecutor>();
 
-        List<string> snapshots = [];
+        List<RunItemStatus> statuses = [];
         await executor.RunAsSystemAsync(
             orgId, "test-harness",
-            async () => snapshots = await db.Set<BulkRunItem>()
+            async () => statuses = await db.Set<BulkRunItem>()
                 .Where(i => i.RunId == runId)
                 .OrderBy(i => i.TargetId)
-                .Select(i => i.SnapshotJson!)
+                .Select(i => i.Status)
                 .ToListAsync(ct),
             ct);
 
-        return snapshots
-            .Select(s => JsonSerializer.Deserialize<ItemState>(
-                s, new JsonSerializerOptions(JsonSerializerDefaults.Web))!)
-            .ToList();
+        return statuses;
     }
 
     private async Task<string> ReadSummaryJsonAsync(Guid orgId, Guid runId, CancellationToken ct)
@@ -400,25 +428,15 @@ public sealed class RunCapabilityFreezeTests(PostgresFixture fixture)
         return await cmd.ExecuteNonQueryAsync(ct);
     }
 
-    private sealed record ItemState(bool Enabled, string Version);
 }
 
 /// <summary>
-/// A strategy double that records the capability set it was HANDED for each target - into the item's
-/// own snapshot_json, so the assertion can be made against persisted rows. It posts nothing: what is
-/// under test is which capability set decided each item, not what was posted.
-/// <para>
-/// It reads the parameter once PER ITEM on purpose. Real strategies would gate at most once, but
-/// reading it per item is what proves the parameter carries one set for the whole loop rather than
-/// the loop having been frozen by luck.
-/// </para>
+/// Plans one zero-amount posting per target and decides nothing else. It is handed no capability set,
+/// which is the point: after the planning move (ADR-019 §4, amended 2026-08-09) no strategy is, so
+/// the freeze can only be observed where the engine records it.
 /// </summary>
-file sealed class RecordingStrategy(Guid[] targets, Func<Task>? afterFirstItem = null) : IRunStrategy
+file sealed class PlanEveryTargetStrategy(Guid[] targets) : IRunStrategy
 {
-    private readonly List<(bool Enabled, string Version)> _observed = [];
-
-    public IReadOnlyList<(bool Enabled, string Version)> Observed => _observed;
-
     public RunType RunType => RunType.Rent;
 
     public Task<RunPreview> PreviewAsync(RunPeriod period, CancellationToken ct)
@@ -432,41 +450,44 @@ file sealed class RecordingStrategy(Guid[] targets, Func<Task>? afterFirstItem =
         return Task.FromResult(new RunPreview(RunType.Rent, period, rows, []));
     }
 
-    public async Task<IReadOnlyList<BulkRunItem>> ConfirmAsync(
-        BulkRun run,
-        IReadOnlyList<Guid> selectedTargetIds,
-        IBatchPosting posting,
-        RunCapabilities capabilities,
-        CancellationToken ct)
+    public Task<IReadOnlyList<RunPlanItem>> PlanAsync(
+        RunPeriod period, IReadOnlyList<Guid> selectedTargetIds, CancellationToken ct)
     {
-        var items = new List<BulkRunItem>(selectedTargetIds.Count);
+        IReadOnlyList<RunPlanItem> plan = selectedTargetIds
+            .Select(RunPlanItem (id) => new PlannedPosting(
+                RunTargetKind.Lease, id,
+                new RentChargeIntent(
+                    LeaseId: id, TenantId: id, PropertyId: id, OwnerId: id, UnitId: null,
+                    Amount: 0m, Date: new DateOnly(period.Year, period.Month, 1),
+                    Description: $"Freeze probe {period.Key}",
+                    SourceRef: $"freeze:{period.Key}:lease={id}"),
+                Amount: 0m,
+                PostedDetail: new Dictionary<string, object?>(StringComparer.Ordinal),
+                RefusedDetail: new Dictionary<string, object?>(StringComparer.Ordinal)))
+            .ToList();
 
-        foreach (var targetId in selectedTargetIds)
-        {
-            // The catalog, not a literal. Under the throwing IsEnabled a stale literal is an
-            // exception rather than a quiet false, and this suite is the one place that must
-            // not have its own copy of the string it pivots on.
-            var enabled = capabilities.IsEnabled(CapabilityCatalog.ConsolidatedStatements.Name);
-            _observed.Add((enabled, capabilities.Version));
-
-            items.Add(BulkRunItem.Create(
-                run.Id, RunTargetKind.Lease, targetId, RunItemStatus.Posted, 0m,
-                JsonSerializer.Serialize(new { enabled, version = capabilities.Version }),
-                run.CreatedAt));
-
-            if (items.Count == 1 && afterFirstItem is not null)
-            {
-                await afterFirstItem();
-            }
-        }
-
-        return items;
+        return Task.FromResult(plan);
     }
 }
 
-/// <summary>No-op posting: this suite proves the freeze, not the postings.</summary>
-file sealed class NoOpBatchPosting : IBatchPosting
+/// <summary>
+/// Posting that writes nothing — this suite proves the freeze, not the postings — with an optional
+/// hook fired after the first one. The hook is what makes "mid-run" mean mid-run: it runs inside the
+/// engine's own item loop, with items still to come.
+/// </summary>
+file sealed class HookedBatchPosting(Func<Task>? afterFirstPost = null) : IBatchPosting
 {
-    public Task<PostOutcome> PostAsync(RunIntent intent, CancellationToken ct) =>
-        Task.FromResult(PostOutcome.Posted(Guid.Empty));
+    public int Posts { get; private set; }
+
+    public async Task<PostOutcome> PostAsync(RunIntent intent, CancellationToken ct)
+    {
+        Posts++;
+
+        if (Posts == 1 && afterFirstPost is not null)
+        {
+            await afterFirstPost();
+        }
+
+        return PostOutcome.Posted(Guid.Empty);
+    }
 }

@@ -273,10 +273,12 @@ under different capability states and neither guard fires. That is acceptable to
 only: the reachability-only rule means a capability gating late-fee reachability cannot change what
 rent posted. It is not acceptable in general.
 
-**Widening trigger: the first money-path capability whose gate is read by more than one
-`IRunStrategy`.** At that point one period genuinely can hold two runs whose outcomes depend on the
-same capability, and the guard must widen to (organization, year, month) — which needs a new index,
-since `run_type` is the second column of the existing one. That trigger is mechanically checkable, so
+**Widening trigger: the first money-path capability whose gate governs more than one run type.** At
+that point one period genuinely can hold two runs whose outcomes depend on the same capability, and
+the guard must widen to (organization, year, month) — which needs a new index, since `run_type` is the
+second column of the existing one. (Stated in terms of run types rather than of an `IRunStrategy`
+reading a gate: since ADR-019's 2026-08-09 amendment no strategy is handed a capability set at all, so
+such a gate necessarily sits above the plan, in the engine or the endpoint.) That trigger is mechanically checkable, so
 per this repository's preference for enforcement over discipline it should become a CI gate rather
 than a line in this document.
 
@@ -509,7 +511,7 @@ checks, which is where an operator will read them. Azure remains operator-gated.
 
 Reopen when any of these becomes observable:
 
-- **A money-path capability's gate is read by more than one `IRunStrategy`** — widen the cross-run guard
+- **A money-path capability's gate governs more than one run type** — widen the cross-run guard
   to (organization, year, month) per §10, and add the CI gate that detects the condition.
 - **The first non-fixture money-path capability ships** — settle §12 (an override affordance or a
   recorded reason there is none), and start its §13 countdown deliberately rather than incidentally.

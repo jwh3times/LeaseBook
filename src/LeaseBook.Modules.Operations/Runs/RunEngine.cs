@@ -1,3 +1,4 @@
+using System.Text.Json;
 using LeaseBook.Modules.Operations.Contracts;
 using LeaseBook.Modules.Operations.Domain;
 using LeaseBook.SharedKernel.Observability;
@@ -7,25 +8,24 @@ namespace LeaseBook.Modules.Operations.Runs;
 
 /// <summary>
 /// The shared run pipeline (ADR-019 / M6 WP-1). Resolves the right <see cref="IRunStrategy"/> by
-/// <see cref="RunType"/>, delegates preview and confirm work to it, persists the <see cref="BulkRun"/>
-/// header + <see cref="BulkRunItem"/> rows, and returns a <see cref="RunResult"/>.
+/// <see cref="RunType"/>, asks it what the run should do, posts what it asked for, persists the
+/// <see cref="BulkRun"/> header + <see cref="BulkRunItem"/> rows, and returns a <see cref="RunResult"/>.
 /// <para>
 /// <b>Transaction model:</b> <c>ConfirmAsync</c> does NOT open a new transaction. It must be called
 /// inside the ambient org-scoped transaction (set up by the request middleware or
-/// <c>OrgScopedExecutor</c>). The strategy posts through <see cref="IBatchPosting"/> under that same
-/// transaction; all writes are committed together. Per-item posting exceptions
-/// (<c>DuplicateSourceRefException</c>, period-lock) are expected to be caught inside the strategy's
-/// <c>ConfirmAsync</c> and tagged as <c>Skipped</c> / <c>Excluded</c>; no unhandled posting exception
-/// should escape.
+/// <c>OrgScopedExecutor</c>). Postings go through <see cref="IBatchPosting"/> under that same
+/// transaction; all writes are committed together. Every per-item refusal comes back from the port as
+/// a <see cref="PostOutcome"/> rather than an exception, so the loop below records each and carries
+/// on; anything that does throw is not per-item — a lost connection, a rolled-back transaction — and
+/// is deliberately not caught.
 /// </para>
 /// <para>
 /// <b>Capability freeze:</b> <c>ConfirmAsync</c> resolves the capability set exactly once, at its own
-/// entry, and hands it to the strategy as a parameter. One run therefore decides every item under one
-/// set even if an operator flips a flag mid-run. The freeze holds today partly because confirm runs
-/// inside a single request transaction; it is carried by the signature so that a future chunked
-/// confirm (ADR-019's revisit trigger) cannot lose it silently at a chunk boundary. A capability may
-/// gate whether a posting path is reachable and nothing else — it must never become an input to what
-/// an event posts.
+/// entry, and nothing downstream resolves it again. One run therefore decides every item under one
+/// set even if an operator flips a flag mid-run — and since the strategy is never handed the set at
+/// all (ADR-019 §4a, amended 2026-08-09), a capability can decide whether a run happens and never what
+/// it produces. Under a future chunked confirm (ADR-019's revisit trigger) this method is what
+/// resumes, so it is also what must carry the snapshot across a chunk boundary.
 /// </para>
 /// <para>
 /// <b>The preview → confirm window.</b> The freeze above makes one confirm internally consistent; it
@@ -216,9 +216,12 @@ public sealed class RunEngine(
 
         activity?.SetTag("capability_change_acknowledged", overrodePriorState);
 
-        // Let the strategy do its work — posting under the ambient transaction, and under this one
-        // frozen set. Passed explicitly rather than looked up: see IRunStrategy.ConfirmAsync.
-        var items = await strategy.ConfirmAsync(run, selectedTargetIds, posting, capabilities, ct);
+        // Ask the strategy what this run should do, then do it. The split is the point: the strategy
+        // knows which targets are eligible and what each one is worth, and nothing else — no loop, no
+        // outcome mapping, no item construction. It is also handed no capability set, which is what
+        // makes "a capability cannot move an amount" structural rather than a rule (see IRunStrategy).
+        var plan = await strategy.PlanAsync(period, selectedTargetIds, ct);
+        var items = await ExecutePlanAsync(run, plan, ct);
 
         // Compute summary, patch onto run, then add to the change tracker for a single save.
         int posted = 0, skipped = 0, excluded = 0;
@@ -280,6 +283,127 @@ public sealed class RunEngine(
 
         return result;
     }
+
+    /// <summary>
+    /// Drives the plan and returns the rows to persist. One posting attempt per
+    /// <see cref="PlannedPosting"/>, in plan order, on the caller's ambient transaction.
+    /// <para>
+    /// <b>This loop used to live in every strategy.</b> Three copies of it, three catch ladders, three
+    /// sets of <c>BulkRunItem.Create</c> calls and three copies of the serialization — none of it
+    /// domain knowledge, and a fourth run type had to reproduce all of it correctly from memory. What
+    /// a strategy actually knows is which targets are eligible and what each is worth; that is what a
+    /// <see cref="RunPlanItem"/> carries and all it carries.
+    /// </para>
+    /// <para>
+    /// <b>Refusals do not abort the run.</b> Every <see cref="PostStatus"/> other than
+    /// <see cref="PostStatus.Posted"/> is a per-item outcome the port returns rather than throws, so a
+    /// duplicate source ref or a locked period costs one item and no more. A genuine exception —
+    /// connection loss, a rolled-back transaction — is not caught here, because it is not per-item and
+    /// the run's own transaction is what unwinds it.
+    /// </para>
+    /// </summary>
+    private async Task<IReadOnlyList<BulkRunItem>> ExecutePlanAsync(
+        BulkRun run, IReadOnlyList<RunPlanItem> plan, CancellationToken ct)
+    {
+        var items = new List<BulkRunItem>(plan.Count);
+
+        foreach (var planned in plan)
+        {
+            switch (planned)
+            {
+                case PlannedExclusion exclusion:
+                    if (exclusion.Status == RunItemStatus.Posted)
+                    {
+                        throw new InvalidOperationException(
+                            $"A PlannedExclusion for target {exclusion.TargetId} claims Posted status, " +
+                            "but nothing was posted for it. An item that posts is a PlannedPosting.");
+                    }
+
+                    items.Add(BulkRunItem.Create(
+                        run.Id, exclusion.TargetKind, exclusion.TargetId, exclusion.Status, 0m,
+                        Serialize(exclusion.Detail), run.CreatedAt));
+                    break;
+
+                case PlannedPosting intended:
+                    items.Add(await PostPlannedAsync(run, intended, ct));
+                    break;
+
+                // RunPlanItem's constructor is private protected, so a third case can only be added in
+                // this module and in the same file as the other two. This arm is the reminder to come
+                // back here when that happens, not a live branch.
+                default:
+                    throw new InvalidOperationException(
+                        $"No execution branch for run plan item {planned.GetType().Name}.");
+            }
+        }
+
+        return items;
+    }
+
+    /// <summary>
+    /// Posts one planned intent and turns the outcome into the row that records it. The engine
+    /// contributes exactly four keys to <c>snapshot_json</c> — <c>entryId</c>, <c>feeEntryId</c> and
+    /// <c>reason</c> — because only it has the outcome; everything else on the item is the strategy's
+    /// own vocabulary, copied through unread.
+    /// </summary>
+    private async Task<BulkRunItem> PostPlannedAsync(
+        BulkRun run, PlannedPosting planned, CancellationToken ct)
+    {
+        var outcome = await posting.PostAsync(planned.Intent, ct);
+
+        if (outcome.Status == PostStatus.Posted)
+        {
+            var detail = new Dictionary<string, object?>(planned.PostedDetail, StringComparer.Ordinal)
+            {
+                ["entryId"] = outcome.EntryId,
+            };
+
+            // Only a disbursement that actually assessed a fee has one; adding a null for every other
+            // intent would put a field in the run log that means nothing.
+            if (outcome.FeeEntryId is not null)
+            {
+                detail["feeEntryId"] = outcome.FeeEntryId;
+            }
+
+            return BulkRunItem.Create(
+                run.Id, planned.TargetKind, planned.TargetId, RunItemStatus.Posted, planned.Amount,
+                Serialize(detail), run.CreatedAt, resultingJournalEntryId: outcome.EntryId);
+        }
+
+        var (status, reason) = Classify(outcome.Status);
+        var refusal = new Dictionary<string, object?>(planned.RefusedDetail, StringComparer.Ordinal)
+        {
+            ["reason"] = reason,
+        };
+
+        // Zero, not the planned amount: nothing was posted, so nothing may count toward the run total.
+        return BulkRunItem.Create(
+            run.Id, planned.TargetKind, planned.TargetId, status, 0m,
+            Serialize(refusal), run.CreatedAt);
+    }
+
+    /// <summary>
+    /// The one place a posting refusal becomes a run-item status and an operator-readable reason. It
+    /// was three places — one per strategy — each mapping the same four cases identically, and each
+    /// free to drift.
+    /// </summary>
+    private static (RunItemStatus Status, string Reason) Classify(PostStatus status) => status switch
+    {
+        // The run is being repeated. ADR-019 §2 makes that the designed recovery path, so it is a
+        // skip: the work exists, this run simply did not do it.
+        PostStatus.DuplicateSourceRef => (RunItemStatus.Skipped, "duplicate_source_ref"),
+        PostStatus.PeriodLocked => (RunItemStatus.Excluded, "period_locked"),
+        PostStatus.PeriodClosed => (RunItemStatus.Excluded, "period_closed"),
+        PostStatus.ReserveFloor => (RunItemStatus.Excluded, "reserve_floor"),
+
+        // Posted is handled by the caller and never reaches here; anything else is a PostStatus added
+        // without a decision about what it means for a run item, which is a money-path question.
+        _ => throw new InvalidOperationException(
+            $"No run-item classification for posting outcome {status}."),
+    };
+
+    private static string Serialize(IReadOnlyDictionary<string, object?> detail) =>
+        JsonSerializer.Serialize(detail);
 
     /// <summary>
     /// The money-path capability state recorded by the most recent committed run for this

@@ -1,17 +1,16 @@
-using System.Text.Json;
 using LeaseBook.Modules.Operations.Contracts;
 using LeaseBook.Modules.Operations.Domain;
 
 namespace LeaseBook.Modules.Operations.Runs;
 
 /// <summary>
-/// <see cref="IRunStrategy"/> for <see cref="RunType.Rent"/>. Previews and confirms the monthly
-/// rent charge run, applying actual-days proration (ADR-017) for leases that start or end mid-month.
+/// <see cref="IRunStrategy"/> for <see cref="RunType.Rent"/>. Previews the monthly rent charge run and
+/// plans it, applying actual-days proration (ADR-017) for leases that start or end mid-month.
 /// <para>
 /// <b>Source-ref convention (ADR-019):</b> <c>rent:{year}-{month:00}:lease={leaseId}</c>.
 /// The existing <c>(org_id, source_ref)</c> partial unique index on <c>journal_entries</c>
-/// deduplicates repeat runs; a <c>DuplicateSourceRefException</c> on confirm is caught
-/// per-item and recorded as <see cref="RunItemStatus.Skipped"/>.
+/// deduplicates repeat runs; the engine records the resulting refusal as
+/// <see cref="RunItemStatus.Skipped"/>.
 /// </para>
 /// <para>
 /// <b>Charge date:</b> the first day of the period month (<c>new DateOnly(year, month, 1)</c>).
@@ -23,8 +22,9 @@ namespace LeaseBook.Modules.Operations.Runs;
 ///   <item>Lease with <see cref="LeaseScheduleRow.Rent"/> == 0 (not chargeable).</item>
 ///   <item>Lease ended before the period (term does not overlap).</item>
 /// </list>
-/// A locked bank period (<c>AccountPeriodLockedException</c>) or a closed accounting period
-/// (<c>PeriodClosedException</c>) is surfaced per-item during confirm (caught → <see cref="RunItemStatus.Excluded"/>).
+/// A locked bank period or a closed accounting period comes back from the posting port as a refusal
+/// and the engine records it per-item as <see cref="RunItemStatus.Excluded"/>; neither is visible
+/// here.
 /// </para>
 /// </summary>
 public sealed class RentRunStrategy(
@@ -98,21 +98,11 @@ public sealed class RentRunStrategy(
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<BulkRunItem>> ConfirmAsync(
-        BulkRun run,
+    public async Task<IReadOnlyList<RunPlanItem>> PlanAsync(
+        RunPeriod period,
         IReadOnlyList<Guid> selectedTargetIds,
-        IBatchPosting posting,
-        RunCapabilities capabilities,
         CancellationToken ct)
     {
-        // Frozen at RunEngine.ConfirmAsync entry and unused here: no capability gates this run type
-        // yet. When one does, it may only decide whether a target is posted at all — never an amount,
-        // a date, or any other input to the business event.
-        _ = capabilities;
-
-        var period = new RunPeriod(run.PeriodYear, run.PeriodMonth);
-        var selectedSet = new HashSet<Guid>(selectedTargetIds);
-
         // Re-fetch the schedule to get current data (preview may be stale).
         var allRows = await schedule.GetActiveAsync(period.Year, period.Month, ct);
         var byLeaseId = allRows.ToDictionary(r => r.LeaseId);
@@ -128,32 +118,20 @@ public sealed class RentRunStrategy(
             ? await periodGuard.GetChargedTenantsAsync("RentCharged", null, period.Year, period.Month, tenantIdsInScope, ct)
             : (IReadOnlySet<Guid>)new HashSet<Guid>();
 
-        // Build intents for selected, eligible leases.
-        var intents = new List<RentChargeIntent>(selectedTargetIds.Count);
-        var skippedItems = new List<BulkRunItem>();
-
+        var plan = new List<RunPlanItem>(selectedTargetIds.Count);
         var chargeDate = new DateOnly(period.Year, period.Month, 1);
 
         foreach (var leaseId in selectedTargetIds)
         {
             if (!byLeaseId.TryGetValue(leaseId, out var row))
             {
-                // Target not found in schedule — record as excluded.
-                skippedItems.Add(BulkRunItem.Create(
-                    run.Id, RunTargetKind.Lease, leaseId,
-                    RunItemStatus.Excluded, 0m,
-                    JsonSerializer.Serialize(new { reason = "lease_not_in_schedule" }),
-                    run.CreatedAt));
+                plan.Add(Exclude(leaseId, RunItemStatus.Excluded, "lease_not_in_schedule"));
                 continue;
             }
 
             if (row.Rent == 0m)
             {
-                skippedItems.Add(BulkRunItem.Create(
-                    run.Id, RunTargetKind.Lease, leaseId,
-                    RunItemStatus.Excluded, 0m,
-                    JsonSerializer.Serialize(new { reason = "rent_zero" }),
-                    run.CreatedAt));
+                plan.Add(Exclude(leaseId, RunItemStatus.Excluded, "rent_zero"));
                 continue;
             }
 
@@ -161,11 +139,7 @@ public sealed class RentRunStrategy(
             // tenant in the period, regardless of source_ref (manual, seed, import, or other run).
             if (alreadyChargedTenants.Contains(row.TenantId))
             {
-                skippedItems.Add(BulkRunItem.Create(
-                    run.Id, RunTargetKind.Lease, leaseId,
-                    RunItemStatus.Skipped, 0m,
-                    JsonSerializer.Serialize(new { reason = "already_charged_in_period" }),
-                    run.CreatedAt));
+                plan.Add(Exclude(leaseId, RunItemStatus.Skipped, "already_charged_in_period"));
                 continue;
             }
 
@@ -174,64 +148,39 @@ public sealed class RentRunStrategy(
             var description = prorated
                 ? $"Rent {period.Key} — {row.TenantName} {row.UnitLabel} (prorated)"
                 : $"Rent {period.Key} — {row.TenantName} {row.UnitLabel}";
+            var sourceRef = SourceRef(period, leaseId);
 
-            intents.Add(new RentChargeIntent(
-                LeaseId: leaseId,
-                TenantId: row.TenantId,
-                PropertyId: row.PropertyId,
-                OwnerId: row.OwnerId,
-                UnitId: row.UnitId,
+            plan.Add(new PlannedPosting(
+                TargetKind: RunTargetKind.Lease,
+                TargetId: leaseId,
+                Intent: new RentChargeIntent(
+                    LeaseId: leaseId,
+                    TenantId: row.TenantId,
+                    PropertyId: row.PropertyId,
+                    OwnerId: row.OwnerId,
+                    UnitId: row.UnitId,
+                    Amount: amount,
+                    Date: chargeDate,
+                    Description: description,
+                    SourceRef: sourceRef),
                 Amount: amount,
-                Date: chargeDate,
-                Description: description,
-                SourceRef: SourceRef(period, leaseId)));
+                PostedDetail: new Dictionary<string, object?>(StringComparer.Ordinal)
+                {
+                    ["sourceRef"] = sourceRef,
+                    ["amount"] = amount,
+                    ["prorated"] = prorated,
+                },
+                RefusedDetail: new Dictionary<string, object?>(StringComparer.Ordinal)
+                {
+                    ["sourceRef"] = sourceRef,
+                }));
         }
 
-        // Post all intents. Catch DuplicateSourceRefException per-item → Skipped.
-        // Catch AccountPeriodLockedException per-item → Excluded (bank period locked).
-        // Catch PeriodClosedException per-item → Excluded (accounting period closed).
-        var items = new List<BulkRunItem>(selectedTargetIds.Count);
-        items.AddRange(skippedItems);
+        return plan;
 
-        // One intent at a time, and every refusal comes back as an outcome rather than an exception,
-        // so the loop records each and carries on. This used to be per-item for a worse reason: the
-        // port's only failure channel was a throw, which would have aborted a whole batch.
-        foreach (var intent in intents)
-        {
-            var outcome = await posting.PostAsync(intent, ct);
-
-            items.Add(outcome.Status switch
-            {
-                PostStatus.Posted => BulkRunItem.Create(
-                    run.Id, RunTargetKind.Lease, intent.LeaseId,
-                    RunItemStatus.Posted, intent.Amount,
-                    JsonSerializer.Serialize(new
-                    {
-                        entryId = outcome.EntryId,
-                        sourceRef = intent.SourceRef,
-                        amount = intent.Amount,
-                        prorated = intent.Amount != byLeaseId[intent.LeaseId].Rent,
-                    }),
-                    run.CreatedAt,
-                    resultingJournalEntryId: outcome.EntryId),
-
-                PostStatus.DuplicateSourceRef => Refused(RunItemStatus.Skipped, "duplicate_source_ref"),
-                PostStatus.PeriodLocked => Refused(RunItemStatus.Excluded, "period_locked"),
-                PostStatus.PeriodClosed => Refused(RunItemStatus.Excluded, "period_closed"),
-
-                // ReserveFloor is a disbursement-only refusal; reaching it here means the adapter
-                // mis-routed an intent, which is a wiring bug rather than a per-item outcome.
-                _ => throw new InvalidOperationException(
-                    $"Unexpected posting outcome {outcome.Status} for a rent charge."),
-            });
-
-            BulkRunItem Refused(RunItemStatus status, string reason) => BulkRunItem.Create(
-                run.Id, RunTargetKind.Lease, intent.LeaseId, status, 0m,
-                JsonSerializer.Serialize(new { sourceRef = intent.SourceRef, reason }),
-                run.CreatedAt);
-        }
-
-        return items;
+        static PlannedExclusion Exclude(Guid leaseId, RunItemStatus status, string reason) =>
+            new(RunTargetKind.Lease, leaseId, status,
+                new Dictionary<string, object?>(StringComparer.Ordinal) { ["reason"] = reason });
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────
