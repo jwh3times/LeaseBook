@@ -4,6 +4,7 @@ using LeaseBook.Modules.Capabilities.Caching;
 using LeaseBook.Modules.Capabilities.Contracts;
 using LeaseBook.Modules.Capabilities.Domain;
 using LeaseBook.SharedKernel;
+using LeaseBook.Web.Cli;
 using LeaseBook.Web.Tenancy;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -47,20 +48,15 @@ public static class CapabilitiesCommand
     public const string OperatorVariable = "LEASEBOOK_OPERATOR";
 
     /// <summary>
-    /// Runs one invocation and returns the process exit code: 0 on success, 1 on any parse or write
-    /// failure.
+    /// Runs one parsed invocation and returns the process exit code: 0 on success, 1 on a known
+    /// operator-actionable refusal or write failure.
     /// </summary>
-    public static async Task<int> RunAsync(IServiceProvider services, string[] args)
+    internal static async Task<int> RunAsync(
+        IServiceProvider services,
+        CapabilitiesAction action,
+        CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(services);
-
-        if (!CapabilitiesVerb.TryResolve(args, out var action, out var error))
-        {
-            Console.Error.WriteLine(error);
-            return 1;
-        }
-
-        var ct = CancellationToken.None;
 
         // Read ONCE per invocation, then threaded through every row this command writes. The value is
         // an environment read; taking it separately for the state row and its audit row would let the
@@ -68,11 +64,9 @@ public static class CapabilitiesCommand
         var configuredOperator = Environment.GetEnvironmentVariable(OperatorVariable);
 
         // BEFORE the scope and before any of THIS command's database work, so a refusal writes nothing
-        // and opens no transaction. It is not the first database call the PROCESS makes — Program.cs
-        // attempts role seeding before dispatching any verb — but do NOT read that as proof the
-        // connection works: that call is TryEnsureRolesAsync, which reports an unreachable server and
-        // continues so the host can bind. So this verb may well be the first thing to actually reach
-        // the database, and the first place an outage surfaces. Verified: `capabilities list` against a
+        // and opens no transaction. CLI dispatch precedes the web host's best-effort role seeding, so
+        // this verb is the first thing in this process that may reach the database. Verified:
+        // `capabilities list` against a
         // dead endpoint now dies with an unhandled NpgsqlException from executor.RunAsync below rather
         // than from the role seeder — a different frame, the same loud non-zero exit, and deliberately
         // NOT summarized (see the catch filter: only operator-actionable rejections are). The guarantee
@@ -82,7 +76,7 @@ public static class CapabilitiesCommand
         if (AttributionRefusal(action.Kind, environment.IsDevelopment(), configuredOperator) is { } gap)
         {
             Console.Error.WriteLine(gap);
-            return 1;
+            return CliExitCodes.Failure;
         }
 
         // A scope of our own: this runs from the root provider, where no request or job scope exists.
@@ -111,7 +105,7 @@ public static class CapabilitiesCommand
                     await ReportAgeAsync(ct);
                 }
 
-                return 0;
+                return CliExitCodes.Success;
             }
 
             // No executor here: the module member opens its own platform-scoped transaction. That is
@@ -127,17 +121,17 @@ public static class CapabilitiesCommand
             // A deliberate in-transaction refusal: nothing to remove, or an org that does not exist.
             // Throwing is what rolled the transaction back, so no state row and no audit row survive.
             Console.Error.WriteLine(refusal.Message);
-            return 1;
+            return CliExitCodes.Failure;
         }
         catch (Exception ex) when (Describe(ex) is { } message)
         {
             // A known, operator-actionable database rejection. Anything else propagates with its
             // stack: an unexpected failure on the platform plane is not something to summarize away.
             Console.Error.WriteLine(message);
-            return 1;
+            return CliExitCodes.Failure;
         }
 
-        return 0;
+        return CliExitCodes.Success;
     }
 
     /// <summary>
