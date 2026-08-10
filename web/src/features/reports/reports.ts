@@ -1,15 +1,34 @@
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
-import { api, primeCsrf, type components } from '@/api';
+import {
+  getApiReports,
+  getApiReportsByIdCsv,
+  getApiReportsByIdPreview,
+  getApiReportsCompliancePack,
+  getApiStatementsByOwnerId,
+  getApiStatementsByOwnerIdCsv,
+  getApiStatementsByOwnerIdPdf,
+  postApiStatementsByOwnerIdDeliver,
+  primeCsrf,
+  type FiduciaryPanel,
+  type PmBrandingRow,
+  type ReconciliationSnapshotRow,
+  type ReportDescriptor,
+  type StatementLineView,
+  type StatementSectionView,
+  type StatementView,
+} from '@/api';
 import { num } from '@/lib/directory';
 import { toApiError, type ApiError } from '@/lib/apiError';
 
-export type StatementView = components['schemas']['StatementView'];
-export type StatementSectionView = components['schemas']['StatementSectionView'];
-export type StatementLineView = components['schemas']['StatementLineView'];
-export type FiduciaryPanel = components['schemas']['FiduciaryPanel'];
-export type PmBrandingRow = components['schemas']['PmBrandingRow'];
-export type ReconciliationSnapshotRow = components['schemas']['ReconciliationSnapshotRow'];
-export type ReportDescriptor = components['schemas']['ReportDescriptor'];
+export type {
+  FiduciaryPanel,
+  PmBrandingRow,
+  ReconciliationSnapshotRow,
+  ReportDescriptor,
+  StatementLineView,
+  StatementSectionView,
+  StatementView,
+};
 
 // Re-export num for use in components (avoids a second import).
 export { num };
@@ -60,15 +79,13 @@ export function useStatement(
     queryKey: statementKey(ownerId, filters),
     enabled: !!ownerId,
     queryFn: async () => {
-      const { data, error } = await api.GET('/api/statements/{ownerId}', {
-        params: {
-          path: { ownerId },
-          query: {
-            basis: filters.basis,
-            year: filters.year,
-            month: filters.month,
-            propertyId: filters.propertyId,
-          },
+      const { data, error } = await getApiStatementsByOwnerId({
+        path: { ownerId },
+        query: {
+          basis: filters.basis,
+          year: filters.year,
+          month: filters.month,
+          propertyId: filters.propertyId,
         },
       });
       if (error || !data) throw new Error('Failed to load owner statement');
@@ -81,7 +98,7 @@ export function useReportCatalog(): UseQueryResult<ReportDescriptor[]> {
   return useQuery({
     queryKey: reportCatalogKey(),
     queryFn: async () => {
-      const { data, error } = await api.GET('/api/reports');
+      const { data, error } = await getApiReports();
       if (error || !data) throw new Error('Failed to load report catalog');
       return data;
     },
@@ -108,17 +125,15 @@ export function useReportPreview(
     queryFn: async () => {
       // The preview endpoint is now annotated with Produces<PreviewSpaResponse> (WP-6/M6), so
       // the generated client types the response correctly. Use the typed api client directly.
-      const { data, error } = await api.GET('/api/reports/{id}/preview', {
-        params: {
-          path: { id },
-          query: {
-            year: filters.year,
-            month: filters.month,
-            asOf: filters.asOf,
-            ownerId: filters.ownerId,
-            propertyId: filters.propertyId,
-            bankAccountId: filters.bankAccountId,
-          },
+      const { data, error } = await getApiReportsByIdPreview({
+        path: { id },
+        query: {
+          year: filters.year,
+          month: filters.month,
+          asOf: filters.asOf,
+          ownerId: filters.ownerId,
+          propertyId: filters.propertyId,
+          bankAccountId: filters.bankAccountId,
         },
       });
       if (error || !data) throw new Error(`Preview failed`);
@@ -133,18 +148,6 @@ export function useReportPreview(
   });
 }
 
-function buildFilterParams(filters: ReportFilters): string {
-  const params = new URLSearchParams();
-  if (filters.year != null) params.set('year', String(filters.year));
-  if (filters.month != null) params.set('month', String(filters.month));
-  if (filters.asOf) params.set('asOf', filters.asOf);
-  if (filters.basis) params.set('basis', filters.basis);
-  if (filters.propertyId) params.set('propertyId', filters.propertyId);
-  if (filters.ownerId) params.set('ownerId', filters.ownerId);
-  if (filters.bankAccountId) params.set('bankAccountId', filters.bankAccountId);
-  return params.toString();
-}
-
 // ---- Mutations ---------------------------------------------------------------
 
 export type ReportsError = ApiError;
@@ -157,66 +160,49 @@ interface ProblemBody {
   correlationId?: string;
 }
 
-async function unwrapResponse(call: Promise<Response>): Promise<void> {
-  const response = await call;
-  if (!response.ok) {
-    let body: unknown;
-    try {
-      body = await response.json();
-    } catch {
-      body = {};
-    }
-    throw toReportsError(body, response.status);
-  }
-}
-
 export async function deliverStatement(
   ownerId: string,
   filters: StatementFilters,
   toEmail?: string,
 ): Promise<void> {
   await primeCsrf();
-  const params = new URLSearchParams({
-    basis: filters.basis,
-    year: String(filters.year),
-    month: String(filters.month),
+  const { error, response } = await postApiStatementsByOwnerIdDeliver({
+    path: { ownerId },
+    query: {
+      basis: filters.basis,
+      year: filters.year,
+      month: filters.month,
+      propertyId: filters.propertyId,
+      toEmail,
+    },
   });
-  if (filters.propertyId) params.set('propertyId', filters.propertyId);
-  if (toEmail) params.set('toEmail', toEmail);
-  await unwrapResponse(
-    fetch(`/api/statements/${encodeURIComponent(ownerId)}/deliver?${params.toString()}`, {
-      method: 'POST',
-      credentials: 'include',
-    }),
-  );
+  if (error || !response?.ok) throw toReportsError(error, response?.status ?? 0);
 }
 
-/** Triggers a browser download for PDF or CSV. Uses authenticated fetch → blob → anchor. */
+/** Triggers a browser download for PDF or CSV through the authenticated generated client. */
 export async function downloadStatement(
   ownerId: string,
   filters: StatementFilters,
   format: 'pdf' | 'csv',
 ): Promise<void> {
-  const params = new URLSearchParams({
-    basis: filters.basis,
-    year: String(filters.year),
-    month: String(filters.month),
-  });
-  if (filters.propertyId) params.set('propertyId', filters.propertyId);
-  const response = await fetch(
-    `/api/statements/${encodeURIComponent(ownerId)}/${format}?${params.toString()}`,
-    { credentials: 'include' },
-  );
-  if (!response.ok) {
-    let body: unknown;
-    try {
-      body = await response.json();
-    } catch {
-      body = {};
-    }
-    throw toApiError(body, response.status);
+  const options = {
+    path: { ownerId },
+    query: {
+      basis: filters.basis,
+      year: filters.year,
+      month: filters.month,
+      propertyId: filters.propertyId,
+    },
+    parseAs: 'blob' as const,
+  };
+  const result =
+    format === 'pdf'
+      ? await getApiStatementsByOwnerIdPdf(options)
+      : await getApiStatementsByOwnerIdCsv(options);
+  if (result.error || !(result.data instanceof Blob)) {
+    throw toApiError(result.error, result.response?.status ?? 0);
   }
-  const blob = await response.blob();
+  const blob = result.data;
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
@@ -277,7 +263,7 @@ export function compliancePackError(body: ProblemBody, status: number): ReportsE
 
 /**
  * Triggers a browser download of the trust compliance pack ZIP for one trust account and period
- * (authenticated fetch → blob → anchor click, matching downloadStatement / downloadReportCsv). On a
+ * (authenticated client → blob → anchor click, matching downloadStatement / downloadReportCsv). On a
  * non-2xx it throws a {@link ReportsError} with a friendly, code-aware message (see
  * {@link compliancePackError}); the caller renders `.message` in a non-color-only alert.
  */
@@ -286,20 +272,14 @@ export async function downloadCompliancePack(
   from: string,
   to: string,
 ): Promise<void> {
-  const params = new URLSearchParams({ bankAccountId, from, to });
-  const response = await fetch(`/api/reports/compliance-pack?${params.toString()}`, {
-    credentials: 'include',
+  const { data, error, response } = await getApiReportsCompliancePack({
+    query: { bankAccountId, from, to },
+    parseAs: 'blob',
   });
-  if (!response.ok) {
-    let body: ProblemBody;
-    try {
-      body = (await response.json()) as ProblemBody;
-    } catch {
-      body = {};
-    }
-    throw compliancePackError(body, response.status);
+  if (error || !(data instanceof Blob)) {
+    throw compliancePackError(error ?? {}, response?.status ?? 0);
   }
-  const blob = await response.blob();
+  const blob = data;
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
@@ -312,20 +292,22 @@ export async function downloadCompliancePack(
 
 /** Triggers a browser download for a report's CSV export. */
 export async function downloadReportCsv(id: string, filters: ReportFilters): Promise<void> {
-  const response = await fetch(
-    `/api/reports/${encodeURIComponent(id)}/csv?` + buildFilterParams(filters),
-    { credentials: 'include' },
-  );
-  if (!response.ok) {
-    let body: unknown;
-    try {
-      body = await response.json();
-    } catch {
-      body = {};
-    }
-    throw toApiError(body, response.status);
+  const { data, error, response } = await getApiReportsByIdCsv({
+    path: { id },
+    query: {
+      year: filters.year,
+      month: filters.month,
+      asOf: filters.asOf,
+      propertyId: filters.propertyId,
+      ownerId: filters.ownerId,
+      bankAccountId: filters.bankAccountId,
+    },
+    parseAs: 'blob',
+  });
+  if (error || !(data instanceof Blob)) {
+    throw toApiError(error, response?.status ?? 0);
   }
-  const blob = await response.blob();
+  const blob = data;
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;

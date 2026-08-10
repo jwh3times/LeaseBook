@@ -1,8 +1,11 @@
 # ADR-029: Frontend linting with `Oxlint` and type-aware `tsgolint`
 
-- **Status:** Accepted
+- **Status:** Accepted (amended by ADR-030)
 - **Date:** 2026-08-10
 - **Deciders:** Jerry Holland
+
+[ADR-030](ADR-030-hey-api-and-typescript-7.md) removes the application-level TypeScript 5
+constraint described here. The linting decision remains in force.
 
 ## Context
 

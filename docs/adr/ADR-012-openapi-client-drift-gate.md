@@ -1,8 +1,11 @@
 # ADR-012: Enforce the generated API client with a build-time OpenAPI drift gate
 
-- **Status:** Accepted
+- **Status:** Accepted (amended by ADR-030)
 - **Date:** 2026-06-15
 - **Deciders:** Engineering
+
+[ADR-030](ADR-030-hey-api-and-typescript-7.md) replaces this record's generator, generated-file
+layout, and compiler pin. The build-time OpenAPI emission and drift-gate decision remain in force.
 
 ## Context
 

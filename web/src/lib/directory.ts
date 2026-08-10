@@ -1,13 +1,41 @@
 import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
-import { api, primeCsrf, type components } from '@/api';
+import {
+  getApiDirectoryOwners,
+  getApiDirectoryOwnersById,
+  getApiDirectoryProperties,
+  getApiDirectoryPropertiesById,
+  getApiDirectoryTenants,
+  getApiDirectoryTenantsById,
+  postApiDirectoryOwners,
+  postApiDirectoryProperties,
+  postApiDirectoryTenants,
+  primeCsrf,
+  putApiDirectoryLeasesById,
+  type CreateOwner,
+  type CreateProperty,
+  type CreateTenant,
+  type OwnerDetail,
+  type OwnerListRow,
+  type PagedResponseOfOwnerListRow,
+  type PagedResponseOfPropertyListRow,
+  type PagedResponseOfTenantListRow,
+  type PropertyDetail,
+  type PropertyListRow,
+  type TenantDetail,
+  type TenantListRow,
+  type UnitRow,
+  type UpdateLease,
+} from '@/api';
 
-export type TenantListRow = components['schemas']['TenantListRow'];
-export type OwnerListRow = components['schemas']['OwnerListRow'];
-export type PropertyListRow = components['schemas']['PropertyListRow'];
-export type UnitRow = components['schemas']['UnitRow'];
-export type TenantDetail = components['schemas']['TenantDetail'];
-export type OwnerDetail = components['schemas']['OwnerDetail'];
-export type PropertyDetail = components['schemas']['PropertyDetail'];
+export type {
+  OwnerDetail,
+  OwnerListRow,
+  PropertyDetail,
+  PropertyListRow,
+  TenantDetail,
+  TenantListRow,
+  UnitRow,
+};
 
 // .NET 10's OpenAPI types decimals as JSON-Schema ["number","string"], so the generated client widens
 // numeric fields to `number | string` even though they arrive as JSON numbers. Coerce at the render
@@ -26,79 +54,62 @@ function unwrap<T>(result: { data?: T; error?: unknown }, what: string): T {
   return result.data;
 }
 
-export function useTenants(): UseQueryResult<
-  components['schemas']['PagedResponseOfTenantListRow']
-> {
+export function useTenants(): UseQueryResult<PagedResponseOfTenantListRow> {
   return useQuery({
     queryKey: ['tenants'],
     queryFn: async () =>
-      unwrap(
-        await api.GET('/api/directory/tenants', { params: { query: { pageSize: PAGE } } }),
-        'tenants',
-      ),
+      unwrap(await getApiDirectoryTenants({ query: { pageSize: PAGE } }), 'tenants'),
   });
 }
 
 export function useOwners(
   opts: { enabled?: boolean } = {},
-): UseQueryResult<components['schemas']['PagedResponseOfOwnerListRow']> {
+): UseQueryResult<PagedResponseOfOwnerListRow> {
   return useQuery({
     queryKey: ['owners'],
     enabled: opts.enabled ?? true,
     queryFn: async () =>
-      unwrap(
-        await api.GET('/api/directory/owners', { params: { query: { pageSize: PAGE } } }),
-        'owners',
-      ),
+      unwrap(await getApiDirectoryOwners({ query: { pageSize: PAGE } }), 'owners'),
   });
 }
 
 export function useProperties(
   opts: { enabled?: boolean } = {},
-): UseQueryResult<components['schemas']['PagedResponseOfPropertyListRow']> {
+): UseQueryResult<PagedResponseOfPropertyListRow> {
   return useQuery({
     queryKey: ['properties'],
     enabled: opts.enabled ?? true,
     queryFn: async () =>
-      unwrap(
-        await api.GET('/api/directory/properties', { params: { query: { pageSize: PAGE } } }),
-        'properties',
-      ),
+      unwrap(await getApiDirectoryProperties({ query: { pageSize: PAGE } }), 'properties'),
   });
 }
 
 export function useTenantDetail(id: string): UseQueryResult<TenantDetail> {
   return useQuery({
     queryKey: ['tenant', id],
-    queryFn: async () =>
-      unwrap(await api.GET('/api/directory/tenants/{id}', { params: { path: { id } } }), 'tenant'),
+    queryFn: async () => unwrap(await getApiDirectoryTenantsById({ path: { id } }), 'tenant'),
   });
 }
 
 export function useOwnerDetail(id: string): UseQueryResult<OwnerDetail> {
   return useQuery({
     queryKey: ['owner', id],
-    queryFn: async () =>
-      unwrap(await api.GET('/api/directory/owners/{id}', { params: { path: { id } } }), 'owner'),
+    queryFn: async () => unwrap(await getApiDirectoryOwnersById({ path: { id } }), 'owner'),
   });
 }
 
 export function usePropertyDetail(id: string): UseQueryResult<PropertyDetail> {
   return useQuery({
     queryKey: ['property', id],
-    queryFn: async () =>
-      unwrap(
-        await api.GET('/api/directory/properties/{id}', { params: { path: { id } } }),
-        'property',
-      ),
+    queryFn: async () => unwrap(await getApiDirectoryPropertiesById({ path: { id } }), 'property'),
   });
 }
 
-type CreateTenantBody = components['schemas']['CreateTenant'];
-type CreateOwnerBody = components['schemas']['CreateOwner'];
-type CreatePropertyBody = components['schemas']['CreateProperty'];
+type CreateTenantBody = CreateTenant;
+type CreateOwnerBody = CreateOwner;
+type CreatePropertyBody = CreateProperty;
 
-type UpdateLeaseBody = components['schemas']['UpdateLease'];
+type UpdateLeaseBody = UpdateLease;
 
 /**
  * Updates a lease (WP-6). `UpdateLease` replaces every field rather than patching, so callers must
@@ -110,8 +121,8 @@ export function useUpdateLease(tenantId: string) {
   return useMutation({
     mutationFn: async ({ id, ...body }: UpdateLeaseBody & { id: string }) => {
       await primeCsrf();
-      const { error } = await api.PUT('/api/directory/leases/{id}', {
-        params: { path: { id } },
+      const { error } = await putApiDirectoryLeasesById({
+        path: { id },
         body: body as UpdateLeaseBody,
       });
       if (error) throw error;
@@ -125,7 +136,7 @@ export function useCreateTenant() {
   return useMutation({
     mutationFn: async (body: CreateTenantBody) => {
       await primeCsrf();
-      return unwrap(await api.POST('/api/directory/tenants', { body }), 'tenant create');
+      return unwrap(await postApiDirectoryTenants({ body }), 'tenant create');
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['tenants'] }),
   });
@@ -136,7 +147,7 @@ export function useCreateOwner() {
   return useMutation({
     mutationFn: async (body: CreateOwnerBody) => {
       await primeCsrf();
-      return unwrap(await api.POST('/api/directory/owners', { body }), 'owner create');
+      return unwrap(await postApiDirectoryOwners({ body }), 'owner create');
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['owners'] }),
   });
@@ -147,7 +158,7 @@ export function useCreateProperty() {
   return useMutation({
     mutationFn: async (body: CreatePropertyBody) => {
       await primeCsrf();
-      return unwrap(await api.POST('/api/directory/properties', { body }), 'property create');
+      return unwrap(await postApiDirectoryProperties({ body }), 'property create');
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['properties'] }),
   });

@@ -12,7 +12,7 @@ You build and review LeaseBook's React 19 + TypeScript + Vite SPA in `web/`. Eve
 
 ```
 web/src/
-  api/           — generated OpenAPI client (schema.d.ts + client.ts + index.ts)
+  api/           — generated Hey API SDK/models plus hand-authored runtime and XSRF setup
   design/        — design system primitives (prototype-ported): tokens.css, Money.tsx, Badge.tsx, EmptyState.tsx, …
   components/    — app-level shared components above the primitives: Modal.tsx, IndexView.tsx, DetailPage.tsx, StatusBadge.tsx, recordNav.tsx, …
   features/      — feature modules: tenants/, owners/, banking/, reports/, operations/, palette/, …
@@ -90,12 +90,9 @@ export function useTenantLedger(
   return useQuery({
     queryKey: tenantLedgerKey(id),
     queryFn: async () => {
-      const { data, error } = await api.GET(
-        "/api/accounting/tenants/{tenantId}/ledger",
-        {
-          params: { path: { tenantId: id } },
-        },
-      );
+      const { data, error } = await getApiAccountingTenantsByTenantIdLedger({
+        path: { tenantId: id },
+      });
       if (error || !data) throw new Error("Failed to load the ledger");
       return data;
     },
@@ -107,13 +104,11 @@ export function useRecordPayment(tenantId: string) {
   const queryClient = useQueryClient();
   return useMutation<PostResult, LedgerPostError, RecordPaymentRequest>({
     mutationFn: async (body) => {
-      const { data, error } = await api.POST(
-        "/api/accounting/tenants/{tenantId}/payments",
-        {
-          params: { path: { tenantId } },
-          body,
-        },
-      );
+      await primeCsrf();
+      const { data, error } = await postApiAccountingTenantsByTenantIdPayments({
+        path: { tenantId },
+        body,
+      });
       if (error) throw error;
       return data!;
     },
@@ -140,30 +135,30 @@ Rules:
 ## API client
 
 ```ts
-import { api, type components } from "@/api";
+import {
+  getApiAccountingBanksByBankAccountIdRegister,
+  postApiAccountingTenantsByTenantIdPayments,
+  type RegisterResponse,
+} from "@/api";
 
 // GET
-const { data, error } = await api.GET(
-  "/api/banking/banks/{bankAccountId}/register",
-  {
-    params: { path: { bankAccountId }, query: { from, to } },
-  },
-);
+const { data, error } = await getApiAccountingBanksByBankAccountIdRegister({
+  path: { bankAccountId },
+  query: { from, to },
+});
 
 // POST
-const { data, error } = await api.POST(
-  "/api/accounting/tenants/{tenantId}/payments",
-  {
-    params: { path: { tenantId } },
-    body: { amount, date, memo },
-  },
-);
+const { data, error } = await postApiAccountingTenantsByTenantIdPayments({
+  path: { tenantId },
+  body: { amount, date, memo },
+});
 
 // Types
-type BankRegisterResponse = components["schemas"]["BankRegisterResponse"];
+type BankRegister = RegisterResponse;
 ```
 
-- The client is generated via `npm run api:generate` (host must be on :5080) — don't hand-write API types
+- The client is generated via `npm run api:generate` into `src/api/generated` — import named SDK
+  functions and models through `@/api`; never edit generated files or hand-write API types
 - XSRF cookie → `X-XSRF-TOKEN` header is handled automatically by the client middleware
 - Never call `fetch` directly for API requests
 
@@ -274,9 +269,9 @@ test("records a payment", async () => {
 | `Intl.NumberFormat` inline                  | `formatMoney` / `<Money>`                                    |
 | Hardcoded color values                      | CSS tokens: `var(--text)`, `var(--surface)`, etc.            |
 | Color as sole status indicator              | `<Badge tone={…} dot>` (always `dot` or `icon`)              |
-| `fetch(…)` for API calls                    | `api.GET(…)` / `api.POST(…)` from `@/api`                    |
-| Hand-written API types                      | `components['schemas']['TypeName']` from `@/api`             |
+| `fetch(…)` for API calls                    | Generated named SDK functions from `@/api`                   |
+| Hand-written API types                      | Generated named model types from `@/api`                     |
 | Relative import paths `../../`              | `@/design`, `@/components`, `@/api`, `@/lib`, `@/features/…` |
 | Ad-hoc `font-variant-numeric`               | `<td className="num">` / `<Money>` / `className="pf-num"`    |
 | New CSS custom properties in feature CSS    | Add to `web/src/design/tokens.css` only                      |
-| Direct `fetch` for XSRF-protected endpoints | `api.POST/PUT/DELETE` (handles XSRF automatically)           |
+| Direct `fetch` for XSRF-protected endpoints | Generated write functions (XSRF is configured automatically) |

@@ -130,10 +130,12 @@ them (page scaffolds, modals, the record quick-switch) live in `web/src/componen
 `web/src/lib` holds pure TypeScript utilities and hooks only. Money always renders through the
 `<Money>` primitive with
 tabular numerals and the organization's negative-display preference, and status is never conveyed by
-color alone. The typed API client (`web/src/api/schema.d.ts`) is **generated** from the host's
-OpenAPI document, never hand-edited. A build-time drift gate regenerates the client from a build-time
-copy of the contract and fails CI if the committed file is stale, so the frontend and backend
-contracts cannot silently diverge — see [ADR-012](adr/ADR-012-openapi-client-drift-gate.md).
+color alone. The typed API client (`web/src/api/generated`) is **generated** by Hey API from the
+host's OpenAPI document, never hand-edited. A build-time drift gate regenerates the client from a
+build-time copy of the contract and fails CI if the committed files are stale, so the frontend and
+backend contracts cannot silently diverge — see
+[ADR-012](adr/ADR-012-openapi-client-drift-gate.md) and
+[ADR-030](adr/ADR-030-hey-api-and-typescript-7.md).
 
 ## Data and persistence
 
