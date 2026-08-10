@@ -183,6 +183,14 @@
       "env": {
         "node": true
       }
+    },
+    {
+      // The Hey API generator is a separate TS 5 package; a root-only install cannot resolve its
+      // types. Keep syntax linting here while its own generation job validates the typed config.
+      "files": ["codegen/openapi-ts.config.ts"],
+      "rules": {
+        "typescript/no-unsafe-call": "off"
+      }
     }
   ]
 }
