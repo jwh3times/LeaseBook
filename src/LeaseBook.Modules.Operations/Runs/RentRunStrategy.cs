@@ -193,60 +193,42 @@ public sealed class RentRunStrategy(
         var items = new List<BulkRunItem>(selectedTargetIds.Count);
         items.AddRange(skippedItems);
 
-        // Post one at a time so we can catch per-item exceptions cleanly.
+        // One intent at a time, and every refusal comes back as an outcome rather than an exception,
+        // so the loop records each and carries on. This used to be per-item for a worse reason: the
+        // port's only failure channel was a throw, which would have aborted a whole batch.
         foreach (var intent in intents)
         {
-            BulkRunItem item;
-            try
+            var outcome = await posting.PostAsync(intent, ct);
+
+            items.Add(outcome.Status switch
             {
-                var resultMap = await posting.PostRentChargesAsync([intent], ct);
-                var entryId = resultMap[intent.LeaseId];
-                var snapshot = JsonSerializer.Serialize(new
-                {
-                    entryId,
-                    sourceRef = intent.SourceRef,
-                    amount = intent.Amount,
-                    prorated = intent.Amount != byLeaseId[intent.LeaseId].Rent,
-                });
-                item = BulkRunItem.Create(
+                PostStatus.Posted => BulkRunItem.Create(
                     run.Id, RunTargetKind.Lease, intent.LeaseId,
-                    RunItemStatus.Posted, intent.Amount, snapshot, run.CreatedAt,
-                    resultingJournalEntryId: entryId);
-            }
-            catch (Exception ex) when (IsDuplicateSourceRef(ex))
-            {
-                var snapshot = JsonSerializer.Serialize(new
-                {
-                    sourceRef = intent.SourceRef,
-                    reason = "duplicate_source_ref",
-                });
-                item = BulkRunItem.Create(
-                    run.Id, RunTargetKind.Lease, intent.LeaseId,
-                    RunItemStatus.Skipped, 0m, snapshot, run.CreatedAt);
-            }
-            catch (Exception ex) when (IsPeriodLocked(ex))
-            {
-                var snapshot = JsonSerializer.Serialize(new
-                {
-                    sourceRef = intent.SourceRef,
-                    reason = "period_locked",
-                });
-                item = BulkRunItem.Create(
-                    run.Id, RunTargetKind.Lease, intent.LeaseId,
-                    RunItemStatus.Excluded, 0m, snapshot, run.CreatedAt);
-            }
-            catch (Exception ex) when (IsPeriodClosed(ex))
-            {
-                var snapshot = JsonSerializer.Serialize(new
-                {
-                    sourceRef = intent.SourceRef,
-                    reason = "period_closed",
-                });
-                item = BulkRunItem.Create(
-                    run.Id, RunTargetKind.Lease, intent.LeaseId,
-                    RunItemStatus.Excluded, 0m, snapshot, run.CreatedAt);
-            }
-            items.Add(item);
+                    RunItemStatus.Posted, intent.Amount,
+                    JsonSerializer.Serialize(new
+                    {
+                        entryId = outcome.EntryId,
+                        sourceRef = intent.SourceRef,
+                        amount = intent.Amount,
+                        prorated = intent.Amount != byLeaseId[intent.LeaseId].Rent,
+                    }),
+                    run.CreatedAt,
+                    resultingJournalEntryId: outcome.EntryId),
+
+                PostStatus.DuplicateSourceRef => Refused(RunItemStatus.Skipped, "duplicate_source_ref"),
+                PostStatus.PeriodLocked => Refused(RunItemStatus.Excluded, "period_locked"),
+                PostStatus.PeriodClosed => Refused(RunItemStatus.Excluded, "period_closed"),
+
+                // ReserveFloor is a disbursement-only refusal; reaching it here means the adapter
+                // mis-routed an intent, which is a wiring bug rather than a per-item outcome.
+                _ => throw new InvalidOperationException(
+                    $"Unexpected posting outcome {outcome.Status} for a rent charge."),
+            });
+
+            BulkRunItem Refused(RunItemStatus status, string reason) => BulkRunItem.Create(
+                run.Id, RunTargetKind.Lease, intent.LeaseId, status, 0m,
+                JsonSerializer.Serialize(new { sourceRef = intent.SourceRef, reason }),
+                run.CreatedAt);
         }
 
         return items;
@@ -254,27 +236,13 @@ public sealed class RentRunStrategy(
 
     // ── helpers ──────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// ADR-019 §2. Deliberately built here rather than centrally: the ADR's generalised shape
+    /// <c>{runType}:{year}-{month:00}:{target}</c> does not describe its own table — <c>latefee</c> is
+    /// not <c>LateFee</c> lowercased and <c>disbursement-fee</c> is not a run type at all — so a
+    /// helper deriving the prefix from <c>RunType</c> would change two of the four keys and break
+    /// idempotency against already-committed runs, silently, as duplicate postings.
+    /// </summary>
     private static string SourceRef(RunPeriod period, Guid leaseId) =>
         $"rent:{period.Key}:lease={leaseId}";
-
-    /// <summary>
-    /// Checks for DuplicateSourceRefException without referencing Accounting assembly
-    /// (ADR-007: Operations references SharedKernel only — no Accounting types).
-    /// The exception type name is sufficient for an exception filter.
-    /// </summary>
-    private static bool IsDuplicateSourceRef(Exception ex) =>
-        ex.GetType().Name == "DuplicateSourceRefException";
-
-    /// <summary>
-    /// Checks for AccountPeriodLockedException without referencing Accounting assembly.
-    /// </summary>
-    private static bool IsPeriodLocked(Exception ex) =>
-        ex.GetType().Name == "AccountPeriodLockedException";
-
-    /// <summary>
-    /// Checks for PeriodClosedException without referencing Accounting assembly (ADR-007).
-    /// A RentCharged posting into a closed accounting period raises this; the item is Excluded.
-    /// </summary>
-    private static bool IsPeriodClosed(Exception ex) =>
-        ex.GetType().Name == "PeriodClosedException";
 }

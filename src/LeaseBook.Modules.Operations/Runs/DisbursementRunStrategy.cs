@@ -228,80 +228,45 @@ public sealed class DisbursementRunStrategy(
 
         foreach (var intent in intents)
         {
-            BulkRunItem item;
-            var feeRef = intent.FeeSourceRef;
             var disburseRef = intent.DisburseSourceRef;
+            var outcome = await posting.PostAsync(intent, ct);
 
-            try
+            items.Add(outcome.Status switch
             {
-                var resultMap = await posting.PostDisbursementsAsync([intent], ct);
-                var result = resultMap[intent.OwnerId];
+                PostStatus.Posted => BulkRunItem.Create(
+                    run.Id, RunTargetKind.Owner, intent.OwnerId,
+                    RunItemStatus.Posted, intent.DisburseAmount,
+                    JsonSerializer.Serialize(new
+                    {
+                        feeEntryId = outcome.FeeEntryId,
+                        disbursementEntryId = outcome.EntryId,
+                        feeSourceRef = intent.FeeSourceRef,
+                        disburseSourceRef = disburseRef,
+                        fee = intent.MgmtFee,
+                        disburse = intent.DisburseAmount,
+                        reserve = intent.Reserve,
+                        bankWithdrawalRef = $"check/ACH {new RunPeriod(intent.Date.Year, intent.Date.Month).Key} {byOwnerId[intent.OwnerId].Name}",
+                    }),
+                    run.CreatedAt,
+                    resultingJournalEntryId: outcome.EntryId),
 
-                var snapshot = JsonSerializer.Serialize(new
-                {
-                    feeEntryId = result.FeeEntryId,
-                    disbursementEntryId = result.DisbursementEntryId,
-                    feeSourceRef = feeRef,
-                    disburseSourceRef = disburseRef,
-                    fee = intent.MgmtFee,
-                    disburse = intent.DisburseAmount,
-                    reserve = intent.Reserve,
-                    bankWithdrawalRef = $"check/ACH {new RunPeriod(intent.Date.Year, intent.Date.Month).Key} {byOwnerId[intent.OwnerId].Name}",
-                });
+                PostStatus.DuplicateSourceRef => Refused(RunItemStatus.Skipped, "duplicate_source_ref"),
+                PostStatus.PeriodLocked => Refused(RunItemStatus.Excluded, "period_locked"),
+                PostStatus.PeriodClosed => Refused(RunItemStatus.Excluded, "period_closed"),
 
-                item = BulkRunItem.Create(
-                    run.Id, RunTargetKind.Owner, intent.OwnerId,
-                    RunItemStatus.Posted, intent.DisburseAmount, snapshot, run.CreatedAt,
-                    resultingJournalEntryId: result.DisbursementEntryId);
-            }
-            catch (Exception ex) when (IsDuplicateSourceRef(ex))
-            {
-                var snapshot = JsonSerializer.Serialize(new
-                {
-                    disburseSourceRef = disburseRef,
-                    reason = "duplicate_source_ref",
-                });
-                item = BulkRunItem.Create(
-                    run.Id, RunTargetKind.Owner, intent.OwnerId,
-                    RunItemStatus.Skipped, 0m, snapshot, run.CreatedAt);
-            }
-            catch (Exception ex) when (IsPeriodLocked(ex))
-            {
-                var snapshot = JsonSerializer.Serialize(new
-                {
-                    disburseSourceRef = disburseRef,
-                    reason = "period_locked",
-                });
-                item = BulkRunItem.Create(
-                    run.Id, RunTargetKind.Owner, intent.OwnerId,
-                    RunItemStatus.Excluded, 0m, snapshot, run.CreatedAt);
-            }
-            catch (Exception ex) when (IsPeriodClosed(ex))
-            {
-                var snapshot = JsonSerializer.Serialize(new
-                {
-                    disburseSourceRef = disburseRef,
-                    reason = "period_closed",
-                });
-                item = BulkRunItem.Create(
-                    run.Id, RunTargetKind.Owner, intent.OwnerId,
-                    RunItemStatus.Excluded, 0m, snapshot, run.CreatedAt);
-            }
-            catch (Exception ex) when (IsReserveFloor(ex))
-            {
                 // Posting-time backstop (GuardReserveFloorAsync). Preview already excluded
-                // below-reserve owners; this catch is the safety net for equity that changed
-                // between preview and confirm.
-                var snapshot = JsonSerializer.Serialize(new
-                {
-                    disburseSourceRef = disburseRef,
-                    reason = "reserve_floor",
-                });
-                item = BulkRunItem.Create(
-                    run.Id, RunTargetKind.Owner, intent.OwnerId,
-                    RunItemStatus.Excluded, 0m, snapshot, run.CreatedAt);
-            }
-            items.Add(item);
+                // below-reserve owners; this is the safety net for equity that changed between
+                // preview and confirm.
+                PostStatus.ReserveFloor => Refused(RunItemStatus.Excluded, "reserve_floor"),
+
+                _ => throw new InvalidOperationException(
+                    $"Unexpected posting outcome {outcome.Status} for a disbursement."),
+            });
+
+            BulkRunItem Refused(RunItemStatus status, string reason) => BulkRunItem.Create(
+                run.Id, RunTargetKind.Owner, intent.OwnerId, status, 0m,
+                JsonSerializer.Serialize(new { disburseSourceRef = disburseRef, reason }),
+                run.CreatedAt);
         }
 
         return items;
@@ -309,35 +274,11 @@ public sealed class DisbursementRunStrategy(
 
     // ── helpers ──────────────────────────────────────────────────────────────
 
+    /// <summary>ADR-019 §2. Built here, not derived — see the note on <c>RentRunStrategy.SourceRef</c>.</summary>
     private static string FeeSourceRef(RunPeriod period, Guid ownerId) =>
         $"disbursement-fee:{period.Key}:owner={ownerId}";
 
+    /// <inheritdoc cref="FeeSourceRef"/>
     private static string DisburseSourceRef(RunPeriod period, Guid ownerId) =>
         $"disbursement:{period.Key}:owner={ownerId}";
-
-    /// <summary>
-    /// Checks for DuplicateSourceRefException without referencing Accounting assembly
-    /// (ADR-007: Operations references SharedKernel only — no Accounting types).
-    /// </summary>
-    private static bool IsDuplicateSourceRef(Exception ex) =>
-        ex.GetType().Name == "DuplicateSourceRefException";
-
-    /// <summary>Checks for AccountPeriodLockedException without referencing Accounting assembly (ADR-007).</summary>
-    private static bool IsPeriodLocked(Exception ex) =>
-        ex.GetType().Name == "AccountPeriodLockedException";
-
-    /// <summary>
-    /// Checks for PeriodClosedException without referencing Accounting assembly (ADR-007).
-    /// An OwnerDisbursed posting into a closed accounting period raises this; the item is Excluded.
-    /// </summary>
-    private static bool IsPeriodClosed(Exception ex) =>
-        ex.GetType().Name == "PeriodClosedException";
-
-    /// <summary>
-    /// Checks for ReserveFloorException without referencing Accounting assembly (ADR-007).
-    /// GuardReserveFloorAsync throws this when owner equity after fee is below the reserve floor;
-    /// caught here as the safety net even though preview already excludes below-reserve owners.
-    /// </summary>
-    private static bool IsReserveFloor(Exception ex) =>
-        ex.GetType().Name == "ReserveFloorException";
 }

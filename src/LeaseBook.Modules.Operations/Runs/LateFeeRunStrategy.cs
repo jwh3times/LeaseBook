@@ -240,56 +240,35 @@ public sealed class LateFeeRunStrategy(
 
         foreach (var intent in intents)
         {
-            BulkRunItem item;
-            try
+            var outcome = await posting.PostAsync(intent, ct);
+
+            items.Add(outcome.Status switch
             {
-                var resultMap = await posting.PostLateFeesAsync([intent], ct);
-                var entryId = resultMap[intent.LeaseId];
-                var snapshot = JsonSerializer.Serialize(new
-                {
-                    entryId,
-                    sourceRef = intent.SourceRef,
-                    amount = intent.Amount,
-                });
-                item = BulkRunItem.Create(
+                PostStatus.Posted => BulkRunItem.Create(
                     run.Id, RunTargetKind.Lease, intent.LeaseId,
-                    RunItemStatus.Posted, intent.Amount, snapshot, run.CreatedAt,
-                    resultingJournalEntryId: entryId);
-            }
-            catch (Exception ex) when (IsDuplicateSourceRef(ex))
-            {
-                var snapshot = JsonSerializer.Serialize(new
-                {
-                    sourceRef = intent.SourceRef,
-                    reason = "duplicate_source_ref",
-                });
-                item = BulkRunItem.Create(
-                    run.Id, RunTargetKind.Lease, intent.LeaseId,
-                    RunItemStatus.Skipped, 0m, snapshot, run.CreatedAt);
-            }
-            catch (Exception ex) when (IsPeriodLocked(ex))
-            {
-                var snapshot = JsonSerializer.Serialize(new
-                {
-                    sourceRef = intent.SourceRef,
-                    reason = "period_locked",
-                });
-                item = BulkRunItem.Create(
-                    run.Id, RunTargetKind.Lease, intent.LeaseId,
-                    RunItemStatus.Excluded, 0m, snapshot, run.CreatedAt);
-            }
-            catch (Exception ex) when (IsPeriodClosed(ex))
-            {
-                var snapshot = JsonSerializer.Serialize(new
-                {
-                    sourceRef = intent.SourceRef,
-                    reason = "period_closed",
-                });
-                item = BulkRunItem.Create(
-                    run.Id, RunTargetKind.Lease, intent.LeaseId,
-                    RunItemStatus.Excluded, 0m, snapshot, run.CreatedAt);
-            }
-            items.Add(item);
+                    RunItemStatus.Posted, intent.Amount,
+                    JsonSerializer.Serialize(new
+                    {
+                        entryId = outcome.EntryId,
+                        sourceRef = intent.SourceRef,
+                        amount = intent.Amount,
+                    }),
+                    run.CreatedAt,
+                    resultingJournalEntryId: outcome.EntryId),
+
+                PostStatus.DuplicateSourceRef => Refused(RunItemStatus.Skipped, "duplicate_source_ref"),
+                PostStatus.PeriodLocked => Refused(RunItemStatus.Excluded, "period_locked"),
+                PostStatus.PeriodClosed => Refused(RunItemStatus.Excluded, "period_closed"),
+
+                // ReserveFloor is disbursement-only; here it would mean a mis-routed intent.
+                _ => throw new InvalidOperationException(
+                    $"Unexpected posting outcome {outcome.Status} for a late fee."),
+            });
+
+            BulkRunItem Refused(RunItemStatus status, string reason) => BulkRunItem.Create(
+                run.Id, RunTargetKind.Lease, intent.LeaseId, status, 0m,
+                JsonSerializer.Serialize(new { sourceRef = intent.SourceRef, reason }),
+                run.CreatedAt);
         }
 
         return items;
@@ -297,24 +276,7 @@ public sealed class LateFeeRunStrategy(
 
     // ── helpers ──────────────────────────────────────────────────────────────
 
+    /// <summary>ADR-019 §2. Built here, not derived — see the note on <c>RentRunStrategy.SourceRef</c>.</summary>
     private static string SourceRef(RunPeriod period, Guid leaseId) =>
         $"latefee:{period.Key}:lease={leaseId}";
-
-    /// <summary>
-    /// Checks for DuplicateSourceRefException without referencing Accounting assembly
-    /// (ADR-007: Operations references SharedKernel only — no Accounting types).
-    /// </summary>
-    private static bool IsDuplicateSourceRef(Exception ex) =>
-        ex.GetType().Name == "DuplicateSourceRefException";
-
-    /// <summary>Checks for AccountPeriodLockedException without referencing Accounting assembly (ADR-007).</summary>
-    private static bool IsPeriodLocked(Exception ex) =>
-        ex.GetType().Name == "AccountPeriodLockedException";
-
-    /// <summary>
-    /// Checks for PeriodClosedException without referencing Accounting assembly (ADR-007).
-    /// A FeeCharged posting into a closed accounting period raises this; the item is Excluded.
-    /// </summary>
-    private static bool IsPeriodClosed(Exception ex) =>
-        ex.GetType().Name == "PeriodClosedException";
 }
