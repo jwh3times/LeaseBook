@@ -57,8 +57,10 @@ $env:ASPNETCORE_ENVIRONMENT='Development'; dotnet run --project src/LeaseBook.We
 | `--warmup`    | `10`                    | Untimed warmup requests per path      |
 | `--budget-ms` | `300`                   | p95 budget; the pass/fail threshold   |
 
-Exit codes: **0** all paths within budget · **1** at least one p95 missed · **2** the probe could not
-run at all (host unreachable, fixture not seeded, login failed).
+Exit codes: **0** all paths within budget · **1** invalid invocation or at least one p95 missed ·
+**2** the probe could not run at all (host unreachable, fixture not seeded, login failed). Option
+values are strict: a missing, non-numeric, or out-of-range value is an error rather than a request to
+use the default.
 
 It measures over the wire, not in process, because the budget is a user-facing promise: the number
 has to include routing, authorization, serialization, and the RLS transaction, not just the SQL. It

@@ -162,6 +162,9 @@ never live in the repo.
 
 ### The four fixture orgs
 
+Operator verb options are strict: unknown or repeated options, missing option values, and incompatible
+combinations fail with a usage error before the process attempts its first database call.
+
 `seed --org <name>` is strict: an unknown name is an error, never a silent fall-through. Each
 fixture serves a different job; all are idempotent and coexist in one database without moving each
 other's figures.
