@@ -37,6 +37,17 @@ using QuestPDF.Infrastructure;
 // threshold; LeaseBook qualifies at launch. Must be set before the first document is rendered.
 QuestPDF.Settings.License = LicenseType.Community;
 
+// Resolve foreground operator tools before composing the host. Parsing is pure, so a typo prints its
+// own usage error before configuration or the database can fail first. The same resolution is later
+// used for EF log suppression and dispatch: CliApplication's registry is the only verb list.
+var cli = CliApplication.Resolve(args);
+if (cli.Error is { } cliError)
+{
+    Console.Error.WriteLine(cliError);
+    Environment.ExitCode = CliExitCodes.Failure;
+    return;
+}
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Build-time OpenAPI generation (ADR-012): the GetDocument tool runs this program up to app.Run()
@@ -58,7 +69,7 @@ var isOpenApiBuild = Environment.GetEnvironmentVariable("LEASEBOOK_OPENAPI_BUILD
 // leave the rest. Nothing is lost — the exception still carries the Postgres message, and whichever
 // path survives (a friendly print, or the runtime's own unhandled-exception output) still shows it.
 // The web host is untouched: it keeps full EF logging, which ADR-025's diagnostics depend on.
-if (args is ["seed", ..] or ["check-invariants", ..] or ["capabilities", ..] or ["perf-probe", ..])
+if (cli.IsCli)
 {
     builder.Logging.AddFilter("Microsoft.EntityFrameworkCore.Database.Command", LogLevel.None);
     builder.Logging.AddFilter("Microsoft.EntityFrameworkCore.Update", LogLevel.None);
@@ -424,52 +435,13 @@ app.MapModuleEndpoints(endpointAssemblies);
 // SPA fallback: client-side routes resolve to index.html (served from wwwroot in the container).
 app.MapFallbackToFile("index.html").AllowAnonymous();
 
-// CLI: `dotnet run --project src/LeaseBook.Web -- seed --org demo|cutover|load|scenario` provisions
-//      the named fixture org and exits. --org is required; an unknown value exits non-zero (WP-13
-//      step 0) — a typo must never silently seed the wrong org.
-//
-// Parsed BEFORE the role seeder below because that is this program's first database call: resolving
-// the argument first means a typo'd --org prints the usage message even with no database reachable,
-// instead of failing with an Npgsql connection error (WP-11 step 7, from the PR #126 review). The
-// behavior contract is unchanged — this is ordering only.
-SeedTarget? seedTarget = null;
-if (args is ["seed", ..])
+// Foreground tools run before the web host's best-effort role seeding and production boot guards.
+// Each seed invocation calls the throwing RoleSeeder.EnsureRolesAsync itself; the other verbs need no
+// roles. Consequently a CLI process performs only the work its verb owns, and its friendly failure
+// cannot be preceded by an unrelated role-seeding database attempt.
+if (cli.Invocation is { } invocation)
 {
-    if (!SeedVerb.TryResolve(args, out var resolvedTarget, out var seedError))
-    {
-        Console.Error.WriteLine(seedError);
-        Environment.ExitCode = 1;
-        return;
-    }
-
-    seedTarget = resolvedTarget;
-}
-
-// Checked BEFORE RoleSeeder, which is this process's first database call and would otherwise fail
-// first with an Npgsql "connection string has not been initialized" — true, and useless.
-//
-// The capabilities ACA job is the one caller that can arrive here with no connection string for a
-// reason that is not "the secret is not wired yet", and the two are INDISTINGUISHABLE at the point of
-// failure: `az containerapp job start --yaml` deserializes the execution template with a matcher that
-// is case-sensitive and silently discards what it does not recognise, so a single mis-cased key drops
-// the whole entry. An operator who does not know that goes and debugs Key Vault RBAC — and
-// infra/README.md tells them an empty defaultSecretUri is a normal pre-bootstrap state, which makes
-// the wrong branch the plausible one. Name the cheaper suspect first.
-if (!isOpenApiBuild
-    && args is ["capabilities", ..]
-    && string.IsNullOrWhiteSpace(app.Configuration.GetConnectionString("Default")))
-{
-    Console.Error.WriteLine(
-        "capabilities: ConnectionStrings__Default is not set, so this process cannot reach the " +
-        "database. Two causes look identical here, so check them in this order:\n" +
-        "1. If this execution was started with `--yaml`, a mis-cased key in the execution template " +
-        "was DROPPED SILENTLY. `secretRef` is the only spelling that binds — `secretref`, " +
-        "`secret_ref` and `SecretRef` are all discarded without an error, and so is `Name` for " +
-        "`name`. Diff your file against infra/jobs/capabilities-exec.yaml.\n" +
-        "2. Only then: the Key Vault secret may genuinely not be wired yet — defaultSecretUri is " +
-        "empty until the operator has bootstrapped the Postgres roles and stored the app connection " +
-        "string (infra/db/azure-bootstrap.md).");
-    Environment.ExitCode = 1;
+    Environment.ExitCode = await invocation.RunAsync(app.Services, CancellationToken.None);
     return;
 }
 
@@ -489,60 +461,10 @@ if (!isOpenApiBuild
 // loop it replaces — a role-less replica would pass the capability readiness check the moment the
 // seam became reachable and enter rotation unable to authenticate anyone.
 //
-// The CLI verbs below are unaffected by the softening. The four seeders each call EnsureRolesAsync
-// (the throwing entry point) themselves, so `seed` still seeds roles against a reachable database and
-// still fails loudly against an unreachable one; `check-invariants`, `capabilities` and `perf-probe`
-// need no roles at all.
+// CLI processes have already returned above. The softening therefore applies only to the web host.
 if (!isOpenApiBuild && await RoleSeeder.TryEnsureRolesAsync(app.Services))
 {
     app.Services.GetRequiredService<RoleSeedingState>().MarkSeeded();
-}
-
-if (seedTarget is { } target)
-{
-    await (target switch
-    {
-        SeedTarget.Cutover => CutoverSeeder.SeedAsync(app.Services),
-        SeedTarget.Load => LoadSeeder.SeedAsync(app.Services),
-        SeedTarget.Scenario => ScenarioSeeder.SeedAsync(app.Services),
-        _ => DemoSeeder.SeedAsync(app.Services),
-    });
-
-    return;
-}
-
-// CLI: `dotnet run --project src/LeaseBook.Web -- check-invariants [--org <id|demo>|--all]` sweeps the
-// core correctness invariants and exits non-zero on any violation (P33).
-if (args is ["check-invariants", ..])
-{
-    Environment.ExitCode = await InvariantSweep.RunAsync(app.Services, args);
-    return;
-}
-
-// CLI: `dotnet run --project src/LeaseBook.Web -- capabilities <subcommand>` (ADR-028) reads and
-//      mutates platform capability state — the only write surface there is, deliberately: no
-//      endpoint and no UI. Every mutation writes a platform_audit_events row in the same
-//      transaction. In production this verb is reached through the capabilities ACA job, because the
-//      VNet-injected database has no public endpoint (ADR-027).
-//
-// Placed with the other verbs, i.e. BEFORE the production guards and the registry validator below.
-// The validator in particular must not gate this process: an operator's most likely reason to run
-// `capabilities` at all is to correct the very drift that validator reports.
-if (args is ["capabilities", ..])
-{
-    Environment.ExitCode = await CapabilitiesCommand.RunAsync(app.Services, args);
-    return;
-}
-
-// CLI: `dotnet run --project src/LeaseBook.Web -- perf-probe [--base-url <url>] [--n <count>]
-//      [--warmup <count>] [--budget-ms <ms>]` measures p50/p95/p99 on the three money-critical read
-// paths against the load fixture and exits non-zero when p95 misses the budget (WP-9).
-// Unlike the verbs above it drives an ALREADY-RUNNING host over HTTP rather than this process's
-// services, so start the host (and `seed --org load`) first. Not a CI gate — see docs/perf.md.
-if (args is ["perf-probe", ..])
-{
-    Environment.ExitCode = await PerfProbe.RunAsync(args);
-    return;
 }
 
 // Task 10 (F3a, F8): fail-fast in any non-Development environment if AllowedHosts is left open or

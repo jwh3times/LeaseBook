@@ -8,6 +8,7 @@ using LeaseBook.Tests.Integration.Support;
 using LeaseBook.Web.Adapters;
 using LeaseBook.Web.Auth;
 using LeaseBook.Web.Capabilities;
+using LeaseBook.Web.Cli;
 using LeaseBook.Web.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -288,7 +289,14 @@ public sealed class CapabilitiesCommandTests(PostgresFixture fixture)
         try
         {
             Console.SetError(errors);
-            var exit = await CapabilitiesCommand.RunAsync(services, ["capabilities", "flag", "disable", Capability]);
+            CapabilitiesVerb.TryResolve(
+                ["capabilities", "flag", "disable", Capability],
+                out var action,
+                out _).ShouldBeTrue();
+            var exit = await CapabilitiesCommand.RunAsync(
+                services,
+                action,
+                TestContext.Current.CancellationToken);
 
             exit.ShouldBe(1);
         }
@@ -367,7 +375,17 @@ public sealed class CapabilitiesCommandTests(PostgresFixture fixture)
         {
             Console.SetOut(output);
             Console.SetError(errors);
-            var exit = await CapabilitiesCommand.RunAsync(fixture.Api.Services, args);
+            var resolution = CliApplication.Resolve(args);
+            if (resolution.Error is { } parseError)
+            {
+                Console.Error.WriteLine(parseError);
+                return (CliExitCodes.Failure, output.ToString(), errors.ToString());
+            }
+
+            resolution.Invocation.ShouldNotBeNull();
+            var exit = await resolution.Invocation.RunAsync(
+                fixture.Api.Services,
+                TestContext.Current.CancellationToken);
             return (exit, output.ToString(), errors.ToString());
         }
         finally

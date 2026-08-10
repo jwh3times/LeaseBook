@@ -12,17 +12,18 @@ namespace LeaseBook.Web.Cli;
 /// </summary>
 public static class InvariantSweep
 {
-    public static async Task<int> RunAsync(IServiceProvider services, string[] args)
+    public static async Task<int> RunAsync(
+        IServiceProvider services,
+        IReadOnlyList<Guid>? orgIds,
+        CancellationToken ct)
     {
-        var orgIds = ResolveOrgIds(args);
-
         var runner = services.GetRequiredService<ISweepRunner>();
-        var result = await runner.RunAsync(orgIds, CancellationToken.None);
+        var result = await runner.RunAsync(orgIds, ct);
 
         if (result.OrgsChecked == 0)
         {
             Console.WriteLine("check-invariants: no orgs to check.");
-            return 0;
+            return CliExitCodes.Success;
         }
 
         if (!result.IsClean)
@@ -34,47 +35,68 @@ public static class InvariantSweep
                 Console.Error.WriteLine($"  [{violation.OrgId:N}] {violation.Invariant}: {violation.Detail}");
             }
 
-            return 1;
+            return CliExitCodes.Failure;
         }
 
         Console.WriteLine($"check-invariants: all clean across {result.OrgsChecked} org(s).");
-        return 0;
+        return CliExitCodes.Success;
     }
 
-    // --org demo | --org cutover | --org load | --org scenario | --org <guid> | --all (default).
-    // Null means "every org" — the same mode the nightly job runs in.
-    private static IReadOnlyList<Guid>? ResolveOrgIds(string[] args)
+}
+
+/// <summary>Strict grammar for <c>check-invariants [--org &lt;alias|guid&gt; | --all]</c>.</summary>
+internal sealed class InvariantSweepVerb : ICliVerb
+{
+    public string Name => "check-invariants";
+
+    public bool TryCreateInvocation(string[] args, out CliInvocation invocation, out string error)
     {
-        var orgFlag = Array.IndexOf(args, "--org");
-        if (orgFlag < 0 || orgFlag + 1 >= args.Length)
+        if (!TryResolve(args, out var orgIds, out error))
         {
-            return null;
+            invocation = null!;
+            return false;
         }
 
-        var value = args[orgFlag + 1];
-        if (string.Equals(value, "demo", StringComparison.OrdinalIgnoreCase))
+        invocation = new CliInvocation(
+            Name,
+            (services, ct) => InvariantSweep.RunAsync(services, orgIds, ct));
+        return true;
+    }
+
+    internal static bool TryResolve(
+        string[] args,
+        out IReadOnlyList<Guid>? orgIds,
+        out string error)
+    {
+        orgIds = null;
+        error = string.Empty;
+
+        if (args.Length == 1)
         {
-            return [DemoSeeder.DemoOrgId];
+            return true;
         }
 
-        if (string.Equals(value, "cutover", StringComparison.OrdinalIgnoreCase))
+        if (args.Length == 2 && string.Equals(args[1], "--all", StringComparison.Ordinal))
         {
-            return [CutoverSeeder.CutoverOrgId];
+            return true;
         }
 
-        if (string.Equals(value, "load", StringComparison.OrdinalIgnoreCase))
+        if (args.Length != 3 || !string.Equals(args[1], "--org", StringComparison.Ordinal))
         {
-            return [LoadSeeder.LoadOrgId];
+            error =
+                "check-invariants: expected `--all` or `--org <id|demo|cutover|load|scenario>`.";
+            return false;
         }
 
-        if (string.Equals(value, "scenario", StringComparison.OrdinalIgnoreCase))
+        var value = args[2];
+        if (!CliOrg.TryResolveId(value, out var orgId))
         {
-            return [ScenarioSeeder.ScenarioOrgId];
+            error =
+                $"check-invariants: --org expects {CliOrg.FixtureNames}, or a GUID, got '{value}'.";
+            return false;
         }
 
-        return Guid.TryParse(value, out var id)
-            ? [id]
-            : throw new ArgumentException(
-                $"--org expects 'demo', 'cutover', 'load', 'scenario', or a GUID, got '{value}'.");
+        orgIds = [orgId];
+        return true;
     }
 }

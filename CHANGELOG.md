@@ -205,6 +205,14 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Fixed
 
+- **Operator commands now fail predictably on malformed arguments** — `seed`,
+  `check-invariants`, `capabilities`, and `perf-probe` now resolve through one strict command
+  registry with a shared fixture-org vocabulary and exit-code contract. A mistyped
+  `check-invariants --org` prints a concise usage error instead of an unhandled stack trace, while
+  dangling, duplicate, malformed, or out-of-range performance-probe flags are rejected instead of
+  silently falling back to defaults. CLI processes also skip the web host's unrelated best-effort
+  role-seeding attempt, so their own actionable failure is the first one an operator sees.
+
 - **Late-fee confirms now recheck eligibility before posting** — a stale or hand-crafted confirm
   could name a lease that preview had rejected because it was still within its grace period or its
   delinquency could not be attributed across multiple active leases. Planning refreshed the
