@@ -26,7 +26,9 @@ namespace LeaseBook.Modules.Operations.Runs;
 /// from the effective policy (<see cref="ILateFeePolicyData"/>).
 /// </para>
 /// <para>
-/// <b>Exceptions (surfaces in preview, not as rows):</b>
+/// <b>Eligibility exclusions:</b> preview surfaces these as exceptions rather than chargeable rows;
+/// planning re-establishes the same rules from its confirm-time data and records a selected target as
+/// <see cref="RunItemStatus.Excluded"/> rather than posting it.
 /// <list type="bullet">
 ///   <item>Lease with <see cref="DelinquentLedgerRow.Balance"/> == 0 or within grace period.</item>
 ///   <item>Lease with <see cref="DelinquentLedgerRow.DaysLate"/> == -1 (tenant has multiple active
@@ -176,9 +178,24 @@ public sealed class LateFeeRunStrategy(
                 continue;
             }
 
+            if (row.DaysLate < 0)
+            {
+                plan.Add(Exclude(leaseId, RunItemStatus.Excluded, "ambiguous_multiple_active_leases"));
+                continue;
+            }
+
             if (!policyMap.TryGetValue(leaseId, out var policy))
             {
                 plan.Add(Exclude(leaseId, RunItemStatus.Excluded, "no_policy"));
+                continue;
+            }
+
+            // Confirm accepts target ids rather than a server-held preview token, so eligibility
+            // must be re-established from the confirm-time rows. A target selected directly (or a
+            // preview that became stale) must not bypass the statutory grace boundary.
+            if (row.DaysLate <= policy.GraceDays)
+            {
+                plan.Add(Exclude(leaseId, RunItemStatus.Excluded, "within_grace_period"));
                 continue;
             }
 
