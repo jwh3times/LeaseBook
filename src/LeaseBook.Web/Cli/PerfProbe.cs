@@ -30,19 +30,19 @@ namespace LeaseBook.Web.Cli;
 /// (see <c>docs/perf.md</c>); revisit CI-gating once a deployed environment exists (Track B).
 /// </para>
 /// </summary>
-public static class PerfProbe
+internal static class PerfProbe
 {
     private const int DefaultIterations = 100;
     private const int DefaultWarmup = 10;
     private const int DefaultBudgetMs = 300;
     private const string DefaultBaseUrl = "http://localhost:5080";
 
-    public static async Task<int> RunAsync(string[] args, CancellationToken ct = default)
+    public static async Task<int> RunAsync(PerfProbeOptions options, CancellationToken ct = default)
     {
-        var baseUrl = (Arg(args, "--base-url") ?? DefaultBaseUrl).TrimEnd('/');
-        var iterations = IntArg(args, "--n", DefaultIterations);
-        var warmup = IntArg(args, "--warmup", DefaultWarmup);
-        var budgetMs = IntArg(args, "--budget-ms", DefaultBudgetMs);
+        var baseUrl = options.BaseUrl;
+        var iterations = options.Iterations;
+        var warmup = options.Warmup;
+        var budgetMs = options.BudgetMs;
 
         var cookies = new CookieContainer();
         using var handler = new HttpClientHandler { CookieContainer = cookies, UseCookies = true };
@@ -81,23 +81,23 @@ public static class PerfProbe
                 await Console.Error.WriteLineAsync(
                     $"perf-probe: {failed} of {targets.Count} read path(s) missed the p95 < {budgetMs} ms budget. " +
                     "Profile the offender with EXPLAIN (ANALYZE, BUFFERS) before changing anything.");
-                return 1;
+                return CliExitCodes.Failure;
             }
 
             Console.WriteLine($"perf-probe: all {targets.Count} read paths within the p95 < {budgetMs} ms budget.");
-            return 0;
+            return CliExitCodes.Success;
         }
         catch (HttpRequestException ex)
         {
             await Console.Error.WriteLineAsync(
                 $"perf-probe: could not reach {baseUrl} ({ex.Message}). Start the host first, e.g. " +
                 "`$env:ASPNETCORE_ENVIRONMENT='Development'; dotnet run --project src/LeaseBook.Web`.");
-            return 2;
+            return CliExitCodes.Unavailable;
         }
         catch (InvalidOperationException ex)
         {
             await Console.Error.WriteLineAsync($"perf-probe: {ex.Message}");
-            return 2;
+            return CliExitCodes.Unavailable;
         }
     }
 
@@ -231,16 +231,122 @@ public static class PerfProbe
         return sorted[Math.Clamp(rank - 1, 0, sorted.Length - 1)];
     }
 
-    private static string? Arg(string[] args, string name)
+    private readonly record struct Stats(double P50, double P95, double P99, double Min, double Max);
+
+    internal static PerfProbeOptions Defaults { get; } =
+        new(DefaultBaseUrl, DefaultIterations, DefaultWarmup, DefaultBudgetMs);
+}
+
+internal sealed record PerfProbeOptions(string BaseUrl, int Iterations, int Warmup, int BudgetMs);
+
+/// <summary>
+/// Strict grammar for the HTTP performance harness. Invalid or dangling numeric flags are errors,
+/// never silent requests to run with the default value.
+/// </summary>
+internal sealed class PerfProbeVerb : ICliVerb
+{
+    public string Name => "perf-probe";
+
+    public bool TryCreateInvocation(string[] args, out CliInvocation invocation, out string error)
     {
-        var i = Array.IndexOf(args, name);
-        return i >= 0 && i + 1 < args.Length ? args[i + 1] : null;
+        if (!TryResolve(args, out var options, out error))
+        {
+            invocation = null!;
+            return false;
+        }
+
+        invocation = new CliInvocation(Name, (_, ct) => PerfProbe.RunAsync(options, ct));
+        return true;
     }
 
-    private static int IntArg(string[] args, string name, int fallback) =>
-        Arg(args, name) is { } raw && int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value)
-            ? value
-            : fallback;
+    internal static bool TryResolve(string[] args, out PerfProbeOptions options, out string error)
+    {
+        var defaults = PerfProbe.Defaults;
+        var baseUrl = defaults.BaseUrl;
+        var iterations = defaults.Iterations;
+        var warmup = defaults.Warmup;
+        var budgetMs = defaults.BudgetMs;
+        var seen = new HashSet<string>(StringComparer.Ordinal);
 
-    private readonly record struct Stats(double P50, double P95, double P99, double Min, double Max);
+        for (var i = 1; i < args.Length; i++)
+        {
+            var flag = args[i];
+            if (flag is not ("--base-url" or "--n" or "--warmup" or "--budget-ms"))
+            {
+                return Fail($"perf-probe: unexpected argument '{flag}'.", out options, out error);
+            }
+
+            if (!seen.Add(flag))
+            {
+                return Fail($"perf-probe: {flag} was given more than once.", out options, out error);
+            }
+
+            if (i + 1 >= args.Length || args[i + 1].StartsWith("--", StringComparison.Ordinal))
+            {
+                return Fail($"perf-probe: {flag} expects a value.", out options, out error);
+            }
+
+            var value = args[++i];
+            switch (flag)
+            {
+                case "--base-url":
+                    if (!Uri.TryCreate(value, UriKind.Absolute, out var uri)
+                        || uri.Scheme is not ("http" or "https"))
+                    {
+                        return Fail(
+                            $"perf-probe: --base-url expects an absolute HTTP(S) URL, got '{value}'.",
+                            out options,
+                            out error);
+                    }
+
+                    baseUrl = value.TrimEnd('/');
+                    break;
+                case "--n":
+                    if (!TryInt(value, minimum: 1, out iterations))
+                    {
+                        return Fail(
+                            $"perf-probe: --n expects a positive integer, got '{value}'.",
+                            out options,
+                            out error);
+                    }
+
+                    break;
+                case "--warmup":
+                    if (!TryInt(value, minimum: 0, out warmup))
+                    {
+                        return Fail(
+                            $"perf-probe: --warmup expects a non-negative integer, got '{value}'.",
+                            out options,
+                            out error);
+                    }
+
+                    break;
+                case "--budget-ms":
+                    if (!TryInt(value, minimum: 1, out budgetMs))
+                    {
+                        return Fail(
+                            $"perf-probe: --budget-ms expects a positive integer, got '{value}'.",
+                            out options,
+                            out error);
+                    }
+
+                    break;
+            }
+        }
+
+        options = new PerfProbeOptions(baseUrl, iterations, warmup, budgetMs);
+        error = string.Empty;
+        return true;
+    }
+
+    private static bool TryInt(string raw, int minimum, out int value) =>
+        int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out value)
+        && value >= minimum;
+
+    private static bool Fail(string message, out PerfProbeOptions options, out string error)
+    {
+        options = PerfProbe.Defaults;
+        error = message;
+        return false;
+    }
 }

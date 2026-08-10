@@ -1,3 +1,5 @@
+using LeaseBook.Web.Cli;
+
 namespace LeaseBook.Web.Seeding;
 
 /// <summary>
@@ -5,43 +7,65 @@ namespace LeaseBook.Web.Seeding;
 /// or missing value is an error, never a silent fall-through to the demo org — a typo'd fixture
 /// name must fail loudly, not seed the wrong org. Wording mirrors InvariantSweep's --org errors.
 /// </summary>
-public static class SeedVerb
+internal sealed class SeedVerb : ICliVerb
 {
+    public string Name => "seed";
+
     public const string Usage =
-        "seed: --org is required and expects 'demo', 'cutover', 'load', or 'scenario' " +
+        $"seed: --org is required and expects {CliOrg.FixtureNames} " +
         "(e.g. `dotnet run --project src/LeaseBook.Web -- seed --org demo`).";
 
-    public static bool TryResolve(string[] args, out SeedTarget target, out string error)
+    public bool TryCreateInvocation(string[] args, out CliInvocation invocation, out string error)
+    {
+        if (!TryResolve(args, out var target, out error))
+        {
+            invocation = null!;
+            return false;
+        }
+
+        invocation = new CliInvocation(Name, (services, ct) => SeedAsync(services, target, ct));
+        return true;
+    }
+
+    internal static bool TryResolve(string[] args, out SeedTarget target, out string error)
     {
         target = default;
         error = string.Empty;
 
-        var orgFlag = Array.IndexOf(args, "--org");
-        if (orgFlag < 0 || orgFlag + 1 >= args.Length)
+        if (args.Length != 3 || !string.Equals(args[1], "--org", StringComparison.Ordinal))
         {
             error = Usage;
             return false;
         }
 
-        var value = args[orgFlag + 1];
-        switch (value.ToLowerInvariant())
+        var value = args[2];
+        if (CliOrg.TryResolveFixture(value, out var org))
         {
-            case "demo":
-                target = SeedTarget.Demo;
-                return true;
-            case "cutover":
-                target = SeedTarget.Cutover;
-                return true;
-            case "load":
-                target = SeedTarget.Load;
-                return true;
-            case "scenario":
-                target = SeedTarget.Scenario;
-                return true;
-            default:
-                error = $"seed: unknown --org '{value}' — expected 'demo', 'cutover', 'load', or 'scenario'.";
-                return false;
+            target = org.SeedTarget;
+            return true;
         }
+
+        error = $"seed: unknown --org '{value}' — expected {CliOrg.FixtureNames}.";
+        return false;
+    }
+
+    private static Task<int> SeedAsync(IServiceProvider services, SeedTarget target, CancellationToken ct)
+    {
+        var seed = target switch
+        {
+            SeedTarget.Cutover => CutoverSeeder.SeedAsync(services, ct),
+            SeedTarget.Load => LoadSeeder.SeedAsync(services, ct),
+            SeedTarget.Scenario => ScenarioSeeder.SeedAsync(services, ct),
+            _ => DemoSeeder.SeedAsync(services, ct),
+        };
+
+        return ExitAfterAsync(seed);
+    }
+
+    private static async Task<int> ExitAfterAsync(Task seed)
+    {
+        await seed;
+        return CliExitCodes.Success;
     }
 }
 

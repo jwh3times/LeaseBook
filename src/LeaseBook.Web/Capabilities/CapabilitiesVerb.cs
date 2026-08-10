@@ -1,4 +1,5 @@
 using LeaseBook.Modules.Capabilities.Registry;
+using LeaseBook.Web.Cli;
 using LeaseBook.Web.Seeding;
 using CapabilityCatalog = LeaseBook.Modules.Capabilities.Registry.Capabilities;
 
@@ -413,8 +414,8 @@ public static class CapabilitiesVerb
     }
 
     /// <summary>
-    /// The same <c>--org</c> vocabulary <c>check-invariants</c> accepts (see
-    /// <c>InvariantSweep.ResolveOrgIds</c>): a GUID, or one of the fixture aliases. One vocabulary
+    /// The same <c>--org</c> vocabulary <c>check-invariants</c> accepts: a GUID, or one of the fixture
+    /// aliases. One vocabulary
     /// across the CLI — an operator who learned it on one verb should not be surprised by another.
     /// Unlike that verb this one reports rather than throws, so the caller can print usage.
     /// </summary>
@@ -422,31 +423,39 @@ public static class CapabilitiesVerb
     {
         error = string.Empty;
 
-        switch (value.ToLowerInvariant())
-        {
-            case "demo":
-                orgId = DemoSeeder.DemoOrgId;
-                return true;
-            case "cutover":
-                orgId = CutoverSeeder.CutoverOrgId;
-                return true;
-            case "load":
-                orgId = LoadSeeder.LoadOrgId;
-                return true;
-            case "scenario":
-                orgId = ScenarioSeeder.ScenarioOrgId;
-                return true;
-        }
-
-        if (Guid.TryParse(value, out orgId))
+        if (CliOrg.TryResolveId(value, out orgId))
         {
             return true;
         }
 
         error =
-            $"capabilities: --org expects an org id or 'demo', 'cutover', 'load', or 'scenario', got " +
+            $"capabilities: --org expects an org id or {CliOrg.FixtureNames}, got " +
             $"'{value}'.";
         return false;
+    }
+
+    internal static Task<int> RunInvocationAsync(
+        IServiceProvider services,
+        CapabilitiesAction action,
+        CancellationToken ct)
+    {
+        var configuration = services.GetRequiredService<IConfiguration>();
+        if (!string.IsNullOrWhiteSpace(configuration.GetConnectionString("Default")))
+        {
+            return CapabilitiesCommand.RunAsync(services, action, ct);
+        }
+
+        Console.Error.WriteLine(
+            "capabilities: ConnectionStrings__Default is not set, so this process cannot reach the " +
+            "database. Two causes look identical here, so check them in this order:\n" +
+            "1. If this execution was started with `--yaml`, a mis-cased key in the execution template " +
+            "was DROPPED SILENTLY. `secretRef` is the only spelling that binds — `secretref`, " +
+            "`secret_ref` and `SecretRef` are all discarded without an error, and so is `Name` for " +
+            "`name`. Diff your file against infra/jobs/capabilities-exec.yaml.\n" +
+            "2. Only then: the Key Vault secret may genuinely not be wired yet — defaultSecretUri is " +
+            "empty until the operator has bootstrapped the Postgres roles and stored the app connection " +
+            "string (infra/db/azure-bootstrap.md).");
+        return Task.FromResult(CliExitCodes.Failure);
     }
 
     private static CapabilitiesAction Empty => new(CapabilitiesActionKind.List);
@@ -456,5 +465,25 @@ public static class CapabilitiesVerb
         action = Empty;
         error = message;
         return false;
+    }
+}
+
+/// <summary>The capabilities grammar's adapter into the process-wide CLI registry.</summary>
+internal sealed class CapabilitiesCliVerb : ICliVerb
+{
+    public string Name => "capabilities";
+
+    public bool TryCreateInvocation(string[] args, out CliInvocation invocation, out string error)
+    {
+        if (!CapabilitiesVerb.TryResolve(args, out var action, out error))
+        {
+            invocation = null!;
+            return false;
+        }
+
+        invocation = new CliInvocation(
+            Name,
+            (services, ct) => CapabilitiesVerb.RunInvocationAsync(services, action, ct));
+        return true;
     }
 }
