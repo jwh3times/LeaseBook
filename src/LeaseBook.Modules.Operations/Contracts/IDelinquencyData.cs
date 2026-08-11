@@ -3,9 +3,38 @@ namespace LeaseBook.Modules.Operations.Contracts;
 // ── Data DTO ─────────────────────────────────────────────────────────────────
 
 /// <summary>
+/// Whether a tenant-level delinquent balance can be attributed to a specific lease. The cases are
+/// nested so callers cannot add a third meaning without changing this contract and every exhaustive
+/// consumer.
+/// </summary>
+public abstract record DelinquencyAttribution
+{
+    private DelinquencyAttribution()
+    {
+    }
+
+    /// <summary>A balance attributable to this lease, with a non-negative age.</summary>
+    public sealed record AttributedToLease : DelinquencyAttribution
+    {
+        public AttributedToLease(int daysLate)
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(daysLate);
+            DaysLate = daysLate;
+        }
+
+        public int DaysLate { get; }
+    }
+
+    /// <summary>
+    /// A tenant has multiple active leases, so their tenant-level balance cannot be assigned to one.
+    /// </summary>
+    public sealed record AmbiguousMultipleActiveLeases : DelinquencyAttribution;
+}
+
+/// <summary>
 /// One delinquent lease row returned by <see cref="IDelinquencyData"/>. Carries all dimension
-/// fields needed to construct a <see cref="LateFeeIntent"/> plus the balance and actual days-late
-/// for the grace-gate check and preview display.
+/// fields needed to construct a <see cref="LateFeeIntent"/> plus the balance-attribution result used
+/// by the grace gate and preview display.
 /// </summary>
 public sealed record DelinquentLedgerRow(
     Guid LeaseId,
@@ -18,12 +47,10 @@ public sealed record DelinquentLedgerRow(
     decimal Rent,
     decimal Balance,
     /// <summary>
-    /// The actual age in days of the oldest past-due charge (sourced from
-    /// <c>GetDelinquencyAging.OldestAgeDays</c>, which is MAX(age_days) over entries with
-    /// positive net-owed). Used by <see cref="LateFeeRunStrategy"/> to gate against
-    /// <c>policy.GraceDays</c> directly.
+    /// Either an attributed, non-negative age sourced from
+    /// <c>GetDelinquencyAging.OldestAgeDays</c>, or the explicit multiple-active-lease ambiguity.
     /// </summary>
-    int DaysLate);
+    DelinquencyAttribution Attribution);
 
 // ── Port ──────────────────────────────────────────────────────────────────────
 
@@ -35,10 +62,9 @@ public sealed record DelinquentLedgerRow(
 /// <see cref="LeaseBook.SharedKernel.Cqrs.ISender"/>, then joining them to produce per-lease rows.
 /// <para>
 /// A tenant with multiple active leases gets one row per lease (since the late fee is
-/// charged per-lease, not per-tenant). The balance is the tenant's total receivable balance
-/// as of <paramref name="asOf"/>, attributed to each of their leases equally (tenant-level
-/// delinquency spread is a known simplification for Phase 1; corrected in Phase 3 when
-/// per-lease GL accounts are introduced).
+/// charged per-lease, not per-tenant), each carrying an explicit
+/// <see cref="DelinquencyAttribution.AmbiguousMultipleActiveLeases"/> case. No lease is chargeable
+/// until per-lease GL accounts make the tenant-level balance attributable.
 /// </para>
 /// </summary>
 public interface IDelinquencyData
@@ -46,7 +72,8 @@ public interface IDelinquencyData
     /// <summary>
     /// Returns leases with a positive receivable balance, joined to their schedule dimensions.
     /// Only tenants with a positive total balance surface. The grace-period gate is NOT applied
-    /// here — callers filter on <see cref="DelinquentLedgerRow.DaysLate"/> vs their policy.
+    /// here — callers handle <see cref="DelinquentLedgerRow.Attribution"/> and compare an attributed
+    /// age with their policy.
     /// </summary>
     /// <param name="year">Period year (used to fetch the active lease schedule).</param>
     /// <param name="month">Period month.</param>

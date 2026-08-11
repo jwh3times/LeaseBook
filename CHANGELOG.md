@@ -180,6 +180,12 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Changed
 
+- **Late-fee ambiguity can no longer masquerade as an age** — when one tenant has multiple active
+  leases, the unattributable balance is now a distinct contract case instead of the magic age `-1`.
+  Preview and confirmation both handle that case explicitly before grace-period or fee calculation,
+  preserving the existing no-charge outcome while preventing a negative age from being mistaken for
+  ordinary delinquency data.
+
 - **Architecture guards now inspect compiled behavior where possible** — the error-contract and
   accounting capability-boundary gates now inspect compiled method, type, and string references
   instead of source spelling, so formatting, comments, file moves, and harmless member renames no
