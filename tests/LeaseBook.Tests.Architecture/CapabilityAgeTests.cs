@@ -130,20 +130,14 @@ public sealed class CapabilityAgeTests
     [Fact]
     public async Task The_age_probe_can_actually_see_this_repository()
     {
-        var repoRoot = CapabilityAge.FindRepoRoot();
-        if (repoRoot is null)
+        var source = RepositorySource.TryLocate();
+        if (source is null)
         {
             SkipUnlessCi("capability age probe NOT ARMED: no source tree above the test assembly.");
             return;
         }
 
-        File.Exists(Path.Combine(
-                repoRoot,
-                CapabilityAge.RegistryRelativePath.Replace('/', Path.DirectorySeparatorChar)))
-            .ShouldBeTrue(
-                $"the capability registry must be at {CapabilityAge.RegistryRelativePath}: the age " +
-                "probe reads history by that pathspec, so a moved registry makes every capability " +
-                "ageless and the gate above vacuous. Update CapabilityAge.RegistryRelativePath.");
+        _ = source.File(CapabilityAge.RegistryRelativePath);
 
         var report = await CapabilityAge.ResolveAsync(TestContext.Current.CancellationToken);
         if (!report.IsAvailable)

@@ -194,7 +194,7 @@ public static class CapabilityAge
     /// Walks up from the running assembly for <c>LeaseBook.slnx</c>. Null when there is no source tree,
     /// which is the normal state of a deployed container.
     /// </summary>
-    public static string? FindRepoRoot()
+    private static string? FindRepoRoot()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
         while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "LeaseBook.slnx")))
