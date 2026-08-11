@@ -65,7 +65,7 @@ internal sealed class DelinquencyDataAdapter(ISender sender) : IDelinquencyData
                         UnitLabel: lease.UnitLabel,
                         Rent: lease.Rent,
                         Balance: agingRow.Total,
-                        DaysLate: -1)); // Sentinel: signals ambiguous_multiple_active_leases to strategy.
+                        Attribution: new DelinquencyAttribution.AmbiguousMultipleActiveLeases()));
                 }
                 continue;
             }
@@ -82,7 +82,7 @@ internal sealed class DelinquencyDataAdapter(ISender sender) : IDelinquencyData
                 UnitLabel: singleLease.UnitLabel,
                 Rent: singleLease.Rent,
                 Balance: agingRow.Total,
-                DaysLate: agingRow.OldestAgeDays)); // Real age from the Accounting query.
+                Attribution: new DelinquencyAttribution.AttributedToLease(agingRow.OldestAgeDays)));
         }
 
         return result;

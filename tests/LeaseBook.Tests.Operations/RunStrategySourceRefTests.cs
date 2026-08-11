@@ -79,5 +79,5 @@ public sealed class RunStrategySourceRefTests
             "4D",
             1_200m,
             1_200m,
-            6);
+            new DelinquencyAttribution.AttributedToLease(6));
 }

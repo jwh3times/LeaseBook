@@ -18,8 +18,8 @@ namespace LeaseBook.Modules.Operations.Runs;
 /// <para>
 /// <b>Delinquency signal:</b> the <see cref="IDelinquencyData"/> port provides per-lease
 /// receivable balances (from Accounting via the host adapter). Rent is always charged on the
-/// period's 1st by the rent-charge run (WP-2); <see cref="DelinquentLedgerRow.DaysLate"/> is
-/// the ACTUAL age in days of the oldest past-due charge (sourced from
+/// period's 1st by the rent-charge run (WP-2); an attributed delinquency carries the ACTUAL age in
+/// days of the oldest past-due charge (sourced from
 /// <c>GetDelinquencyAging.OldestAgeDays</c>). A lease is eligible when
 /// <c>DaysLate &gt; GraceDays</c> (strictly past the grace window; a charge exactly
 /// <c>GraceDays</c> old is still within grace). The effective grace is resolved per-lease
@@ -31,8 +31,8 @@ namespace LeaseBook.Modules.Operations.Runs;
 /// <see cref="RunItemStatus.Excluded"/> rather than posting it.
 /// <list type="bullet">
 ///   <item>Lease with <see cref="DelinquentLedgerRow.Balance"/> == 0 or within grace period.</item>
-///   <item>Lease with <see cref="DelinquentLedgerRow.DaysLate"/> == -1 (tenant has multiple active
-///     leases; balance cannot be attributed — excluded as <c>ambiguous_multiple_active_leases</c>).</item>
+///   <item>Lease with <see cref="DelinquencyAttribution.AmbiguousMultipleActiveLeases"/> (balance
+///     cannot be attributed — excluded as <c>ambiguous_multiple_active_leases</c>).</item>
 ///   <item>Lease with no effective policy resolved.</item>
 /// </list>
 /// A locked bank period or a closed accounting period comes back from the posting port as a refusal
@@ -89,12 +89,18 @@ public sealed class LateFeeRunStrategy(
 
         foreach (var row in delinquentRows)
         {
-            // DaysLate == -1 is the sentinel set by the adapter when the tenant has more than one
-            // active lease and the balance cannot be attributed to a single lease.
-            if (row.DaysLate < 0)
+            int daysLate;
+            switch (row.Attribution)
             {
-                exceptions.Add($"{row.TenantName}: multiple active leases — the balance cannot be attributed. Skipped.");
-                continue;
+                case DelinquencyAttribution.AmbiguousMultipleActiveLeases:
+                    exceptions.Add($"{row.TenantName}: multiple active leases — the balance cannot be attributed. Skipped.");
+                    continue;
+                case DelinquencyAttribution.AttributedToLease attributed:
+                    daysLate = attributed.DaysLate;
+                    break;
+                default:
+                    throw new InvalidOperationException(
+                        $"Unknown delinquency attribution case '{row.Attribution.GetType().Name}'.");
             }
 
             if (!policyMap.TryGetValue(row.LeaseId, out var policy))
@@ -106,9 +112,9 @@ public sealed class LateFeeRunStrategy(
             // Gate: a lease is eligible when its oldest past-due charge is strictly past the grace
             // window (DaysLate > GraceDays). A charge exactly GraceDays old is still within grace.
             // DaysLate is the real age in days from GetDelinquencyAging.OldestAgeDays, not a bucket floor.
-            if (row.DaysLate <= policy.GraceDays)
+            if (daysLate <= policy.GraceDays)
             {
-                exceptions.Add($"{row.TenantName}: within the grace period ({row.DaysLate} days late, {policy.GraceDays} allowed) — skipped.");
+                exceptions.Add($"{row.TenantName}: within the grace period ({daysLate} days late, {policy.GraceDays} allowed) — skipped.");
                 continue;
             }
 
@@ -120,7 +126,7 @@ public sealed class LateFeeRunStrategy(
             {
                 ["unit"] = row.UnitLabel,
                 ["balance"] = row.Balance.ToString("F2"),
-                ["daysLate"] = row.DaysLate.ToString(),
+                ["daysLate"] = daysLate.ToString(),
                 ["feeKind"] = policy.Kind.ToString(),
                 ["monthlyRent"] = row.Rent.ToString("F2"),
             };
@@ -178,10 +184,18 @@ public sealed class LateFeeRunStrategy(
                 continue;
             }
 
-            if (row.DaysLate < 0)
+            int daysLate;
+            switch (row.Attribution)
             {
-                plan.Add(Exclude(leaseId, RunItemStatus.Excluded, "ambiguous_multiple_active_leases"));
-                continue;
+                case DelinquencyAttribution.AmbiguousMultipleActiveLeases:
+                    plan.Add(Exclude(leaseId, RunItemStatus.Excluded, "ambiguous_multiple_active_leases"));
+                    continue;
+                case DelinquencyAttribution.AttributedToLease attributed:
+                    daysLate = attributed.DaysLate;
+                    break;
+                default:
+                    throw new InvalidOperationException(
+                        $"Unknown delinquency attribution case '{row.Attribution.GetType().Name}'.");
             }
 
             if (!policyMap.TryGetValue(leaseId, out var policy))
@@ -193,7 +207,7 @@ public sealed class LateFeeRunStrategy(
             // Confirm accepts target ids rather than a server-held preview token, so eligibility
             // must be re-established from the confirm-time rows. A target selected directly (or a
             // preview that became stale) must not bypass the statutory grace boundary.
-            if (row.DaysLate <= policy.GraceDays)
+            if (daysLate <= policy.GraceDays)
             {
                 plan.Add(Exclude(leaseId, RunItemStatus.Excluded, "within_grace_period"));
                 continue;
