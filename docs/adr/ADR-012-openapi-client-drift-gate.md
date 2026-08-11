@@ -62,7 +62,10 @@ differs from the committed copy.** Concretely:
 
 **The held TS 6 upgrade is muted, not forgotten.** `.github/dependabot.yml` ignores `typescript`
 `version-update:semver-major`, and `.github/workflows/ts6-unblock-watch.yml` checks weekly whether
-the published `openapi-typescript` peer admits TS 6, opening a tracking issue when it does.
+the published `openapi-typescript` peer admits TS 6, opening a tracking issue when it does. (That
+watcher was retired together with `openapi-typescript` under ADR-030. The equivalent un-mute signal
+for the Hey API generator is `.github/workflows/codegen-unblock-watch.yml`, which _executes_ the
+generator rather than reading a declared peer range — see ADR-030's revisit trigger.)
 
 ## Consequences
 
@@ -81,4 +84,6 @@ Reopen if **build-time generation stops being viable** — e.g., startup grows m
 side effects than a single guard can reasonably cover, or a future `Microsoft.AspNetCore.OpenApi`
 changes the build tool's behavior — in which case fall back to booting the host against a throwaway
 Postgres (the `migration-check` pattern) and reading `/openapi/v1.json`. Independently, when the
-`openapi-typescript` peer admits TypeScript 6, drop the Dependabot ignore and retire the watcher.
+`openapi-typescript` peer admits TypeScript 6, drop the Dependabot ignore and retire the watcher —
+that second trigger is superseded by ADR-030, which replaced the generator and now owns the
+compiler-unblock condition.
