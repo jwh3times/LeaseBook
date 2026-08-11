@@ -1,0 +1,147 @@
+# Watches for the upstream condition that unblocks the isolated code-generation toolchain.
+#
+# ADR-030 splits code generation into web/codegen, pinned to TypeScript 5.9 because the Hey API
+# generator loads a JavaScript compiler API that native TypeScript 7 no longer exposes: it dies at
+# module load with `Cannot read properties of undefined (reading 'AnyKeyword')` on ts.SyntaxKind.
+# The matching `typescript` major ignore in .github/dependabot.yml is open-ended, so without a
+# signal it would mute TS 7, 8, ... in that package forever. This workflow runs the real generator
+# weekly against the compiler major the SPA actually uses and, once it succeeds, opens a tracking
+# issue telling us to drop the pin.
+#
+# This replaces the retired ts6-unblock-watch.yml, which inspected openapi-typescript's declared
+# peer range. A declared range is not enough here: @hey-api/openapi-ts@0.99.0 already advertises
+# `typescript: ">=5.5.3 || >=6.0.0 || 6.0.1-rc"`, which nominally admits TS 7 while still crashing
+# on it. Only executing the generator distinguishes the two.
+name: Hey API codegen unblock watch
+
+on:
+  schedule:
+    # Mondays 12:23 UTC — after the weekly web/codegen Dependabot sweep (05:00 America/New_York).
+    - cron: "23 12 * * 1"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read # read web/package.json to learn the SPA's compiler major
+  issues: write # file the tracking issue
+
+jobs:
+  check:
+    name: Run the Hey API generator under the SPA TypeScript major
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "26"
+
+      - name: Open a tracking issue if the generator runs under the SPA compiler
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          # Track whatever major the SPA is on rather than a hardcoded 7, so this keeps working
+          # when the SPA moves again. web/ carries no TypeScript 5 dependency by ADR-030.
+          ts_range=$(node -p "require('./web/package.json').devDependencies.typescript")
+          echo "SPA TypeScript range: ${ts_range}"
+
+          work=$(mktemp -d)
+
+          # Minimal document: the crash is at generator module load, before any spec is parsed, so
+          # a real API document (which would need a .NET build to produce) buys nothing here.
+          cat >"${work}/spec.json" <<'SPEC'
+          {
+            "openapi": "3.1.0",
+            "info": { "title": "codegen-unblock-probe", "version": "1.0.0" },
+            "paths": {
+              "/ping": {
+                "get": {
+                  "operationId": "ping",
+                  "responses": {
+                    "200": {
+                      "description": "ok",
+                      "content": {
+                        "application/json": {
+                          "schema": { "type": "object", "properties": { "ok": { "type": "boolean" } } }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+          SPEC
+
+          # Same plugin set as web/codegen/openapi-ts.config.ts, minus runtimeConfigPath (that points
+          # into the SPA tree). Exercises the generator paths we actually depend on.
+          cat >"${work}/openapi-ts.config.mjs" <<'CONFIG'
+          export default {
+            input: 'spec.json',
+            output: 'out',
+            plugins: [
+              '@hey-api/typescript',
+              '@hey-api/client-fetch',
+              { name: '@hey-api/sdk', responseStyle: 'fields' },
+            ],
+          };
+          CONFIG
+
+          cd "${work}"
+          npm init -y >/dev/null 2>&1
+
+          # `latest` is the version we would actually adopt. No --legacy-peer-deps: a genuine peer
+          # conflict means still blocked, and forcing past it would manufacture a false green.
+          if ! npm install --no-audit --no-fund --loglevel=error \
+            "@hey-api/openapi-ts@latest" "typescript@${ts_range}" >install.log 2>&1; then
+            echo "Install failed (peer conflict or transient npm); still blocked. Log:"
+            tail -20 install.log
+            exit 0
+          fi
+
+          gen_version=$(node -p "require('./node_modules/@hey-api/openapi-ts/package.json').version")
+          ts_version=$(node -p "require('./node_modules/typescript/package.json').version")
+          echo "Probing @hey-api/openapi-ts@${gen_version} against typescript@${ts_version}"
+
+          # Exit code alone is not enough — require the emitted artifact too.
+          admits=false
+          if npx --no-install openapi-ts -f openapi-ts.config.mjs >generate.log 2>&1 \
+            && [ -f out/types.gen.ts ]; then
+            admits=true
+          fi
+
+          if [ "${admits}" != "true" ]; then
+            echo "Generator still fails under typescript@${ts_version} — nothing to do. Output:"
+            tail -20 generate.log
+            exit 0
+          fi
+
+          echo "Generator succeeded under typescript@${ts_version}."
+
+          title="Hey API generator runs under the SPA TypeScript major — drop the codegen pin"
+
+          # De-dupe: only one open tracking issue at a time. Title is deliberately version-free so
+          # this still matches after the SPA moves to a later major.
+          open_count=$(gh issue list --state open --search "in:title \"${title}\"" --json number --jq 'length')
+          if [ "${open_count}" != "0" ]; then
+            echo "Tracking issue already open — not duplicating."
+            exit 0
+          fi
+
+          # printf keeps every line in this file indented; a column-0 line would terminate the YAML
+          # block scalar. Backticks are escaped to stay literal.
+          body=$(printf '%s\n' \
+            "\`@hey-api/openapi-ts@${gen_version}\` generated a client successfully under \`typescript@${ts_version}\`, the major the SPA declares (\`${ts_range}\`)." \
+            "" \
+            "[ADR-030](${{ github.server_url }}/${{ github.repository }}/blob/main/docs/adr/ADR-030-hey-api-and-typescript-7.md) isolated code generation into \`web/codegen\` on TypeScript 5.9 because the generator crashed at module load reading \`ts.SyntaxKind\`, an API native TypeScript 7 does not expose. That probe now passes, which is ADR-030's stated revisit trigger." \
+            "" \
+            "**To unblock:**" \
+            "1. Remove the \`typescript\` \`version-update:semver-major\` ignore from the \`/web/codegen\` block in \`.github/dependabot.yml\`." \
+            "2. Raise \`typescript\` in \`web/codegen/package.json\` to the SPA major, or collapse code generation back into the root package as ADR-030 contemplates." \
+            "3. With the API host running on :5080, verify \`npm run api:generate\` from \`web/\` and confirm the ADR-012 drift gate is clean, then \`npm run lint\`, \`npm run typecheck\`, \`npm run test\`, and \`npm run build\`." \
+            "4. Update ADR-030 to record the collapsed boundary, and retire this workflow." \
+            "" \
+            "_Filed automatically by .github/workflows/codegen-unblock-watch.yml._")
+
+          gh issue create --title "${title}" --body "${body}"

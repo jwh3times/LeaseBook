@@ -124,6 +124,9 @@ updates:
         patterns:
           - "@hey-api/*"
           - "typescript"
+    # This ignore is open-ended, so the codegen-unblock-watch workflow runs the real generator
+    # weekly against the compiler major the SPA declares and opens a tracking issue once it stops
+    # crashing. Remove this entry then and let Dependabot re-propose the major (ADR-030).
     ignore:
       - dependency-name: "typescript"
         update-types:
