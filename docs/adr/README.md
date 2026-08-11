@@ -55,6 +55,7 @@ form, write it, and add a row to the index below. When a decision is replaced, m
 | [028](ADR-028-platform-capability-model.md)                          | Platform capability model — feature flags, entitlements, and the money rule     | Accepted                      | 2026-08-03 |
 | [029](ADR-029-frontend-linting-with-oxlint.md)                       | Frontend linting with `Oxlint` and type-aware `tsgolint`                        | Accepted (amended by ADR-030) | 2026-08-10 |
 | [030](ADR-030-hey-api-and-typescript-7.md)                           | Generate the frontend API client with Hey API across a TypeScript 7 boundary    | Accepted                      | 2026-08-10 |
+| [031](ADR-031-compiled-il-architecture-guards.md)                    | Inspect compiled IL for architecture guards                                     | Accepted                      | 2026-08-10 |
 
 ## Status legend
 
