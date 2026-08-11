@@ -16,6 +16,13 @@ public sealed class LateFeeRunStrategyTests
     };
 
     [Fact]
+    public void Attributed_delinquency_rejects_negative_days_late()
+    {
+        Should.Throw<ArgumentOutOfRangeException>(
+            () => new DelinquencyAttribution.AttributedToLease(-1));
+    }
+
+    [Fact]
     public async Task Plan_excludes_a_selected_lease_at_the_grace_boundary()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -37,7 +44,7 @@ public sealed class LateFeeRunStrategyTests
     {
         var ct = TestContext.Current.CancellationToken;
         var leaseId = Guid.NewGuid();
-        var row = DelinquentLease(leaseId, daysLate: -1);
+        var row = AmbiguousDelinquentLease(leaseId);
         var strategy = BuildStrategy(
             [row],
             [(leaseId, new LateFeePolicy(1, 5, LateFeeKind.Flat, 50m, 0))]);
@@ -107,5 +114,11 @@ public sealed class LateFeeRunStrategyTests
             UnitLabel: "1A",
             Rent: 1_000m,
             Balance: 1_000m,
-            DaysLate: daysLate);
+            Attribution: new DelinquencyAttribution.AttributedToLease(daysLate));
+
+    private static DelinquentLedgerRow AmbiguousDelinquentLease(Guid leaseId) =>
+        DelinquentLease(leaseId, daysLate: 0) with
+        {
+            Attribution = new DelinquencyAttribution.AmbiguousMultipleActiveLeases(),
+        };
 }
