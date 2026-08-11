@@ -44,4 +44,11 @@ hand.
 
 When the current Hey API generator runs successfully with the repository's TypeScript 7 version,
 remove the isolated TypeScript pin and re-evaluate collapsing code generation into the root package.
+`.github/workflows/codegen-unblock-watch.yml` watches for that condition weekly: it installs the
+latest generator alongside the compiler range `web/package.json` declares and runs a real generation,
+opening a tracking issue once it succeeds. The probe executes the generator rather than reading its
+declared peer range because the published range already admits TypeScript 7 while the generator still
+crashes on it. That watcher is also the un-mute signal for the open-ended `typescript` major ignore
+on `/web/codegen` in `.github/dependabot.yml`; retire both when the pin goes.
+
 Separately, add stable endpoint `operationId` values if generated names materially impede navigation.
