@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living architecture guide
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-08-03
+- **Last reviewed:** 2026-08-11
 
 This is the canonical public map of the system **as implemented**. It explains how the pieces fit
 together and links the decisions that shaped them without reproducing every invariant. Accepted
@@ -147,6 +147,15 @@ applied by the `leasebook_migrator` role through a one-shot migrator image — *
 startup**. Money is `decimal` in C# and `NUMERIC(14,2)` in Postgres, end to end, never floating
 point. The journal and audit tables are append-only: the runtime role holds no `UPDATE`/`DELETE`
 grant on them, so corrections can only ever be linked reversals.
+
+## Test execution
+
+Every executable xUnit v3 project runs on Microsoft Testing Platform v2. The .NET 10 runner is selected
+once in the repository's `global.json`, and test projects reference the explicit `xunit.v3.mtp-v2`
+package; the VSTest adapter and `Microsoft.NET.Test.Sdk` compatibility path are intentionally absent.
+The same projects are discovered by Visual Studio 2022 17.14 or later through its MTP Test Explorer
+integration. CI uses the MTP console result plus retained TRX reports. See
+[ADR-032](adr/ADR-032-microsoft-testing-platform-v2.md).
 
 ## Background work
 

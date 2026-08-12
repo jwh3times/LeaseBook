@@ -103,17 +103,17 @@ Key design decisions (each recorded as an ADR in [`docs/adr/`](docs/adr)):
 
 ## Tech stack
 
-| Layer      | Technology                                                                     |
-| ---------- | ------------------------------------------------------------------------------ |
-| Backend    | C# / .NET 10, ASP.NET Core minimal APIs, EF Core + Npgsql                      |
-| Database   | PostgreSQL 18 (row-level security, `NUMERIC` money)                            |
-| Frontend   | React 19 + TypeScript 7, Vite, TanStack Query, Hey API generated client        |
-| Validation | FluentValidation (one validator per slice)                                     |
-| CSV / PDF  | CsvHelper (imports/exports) · QuestPDF (statement + report PDFs)               |
-| Jobs       | Hangfire on PostgreSQL storage (nightly trust-invariant sweep)                 |
-| Telemetry  | OpenTelemetry                                                                  |
-| Testing    | xUnit v3, Shouldly, Testcontainers, CsCheck (property-based), Playwright (e2e) |
-| Infra / CI | Docker, Azure Container Apps + Bicep (`infra/`), GitHub Actions                |
+| Layer      | Technology                                                                                                      |
+| ---------- | --------------------------------------------------------------------------------------------------------------- |
+| Backend    | C# / .NET 10, ASP.NET Core minimal APIs, EF Core + Npgsql                                                       |
+| Database   | PostgreSQL 18 (row-level security, `NUMERIC` money)                                                             |
+| Frontend   | React 19 + TypeScript 7, Vite, TanStack Query, Hey API generated client                                         |
+| Validation | FluentValidation (one validator per slice)                                                                      |
+| CSV / PDF  | CsvHelper (imports/exports) · QuestPDF (statement + report PDFs)                                                |
+| Jobs       | Hangfire on PostgreSQL storage (nightly trust-invariant sweep)                                                  |
+| Telemetry  | OpenTelemetry                                                                                                   |
+| Testing    | xUnit v3 on Microsoft Testing Platform v2, Shouldly, Testcontainers, CsCheck (property-based), Playwright (e2e) |
+| Infra / CI | Docker, Azure Container Apps + Bicep (`infra/`), GitHub Actions                                                 |
 
 ---
 

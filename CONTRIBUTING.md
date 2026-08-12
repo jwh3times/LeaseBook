@@ -28,6 +28,18 @@ dotnet test LeaseBook.slnx                # Docker must be running
 cd web && npm install && npm run typecheck && npm run test
 ```
 
+Backend tests run through Microsoft Testing Platform v2, selected repository-wide by `global.json`.
+Visual Studio Test Explorer requires Visual Studio 2022 17.14 or later; no VSTest compatibility
+packages are retained. MTP filters replace the former VSTest `FullyQualifiedName` expressions:
+
+```bash
+# Class-level equivalent of: --filter "FullyQualifiedName~TenantIsolationTests"
+dotnet test tests/LeaseBook.Tests.Integration/LeaseBook.Tests.Integration.csproj --filter-class '*TenantIsolationTests'
+
+# One method
+dotnet test tests/LeaseBook.Tests.Integration/LeaseBook.Tests.Integration.csproj --filter-method '*Reads_under_an_org_context_see_only_that_orgs_rows'
+```
+
 ---
 
 ## Workflow
@@ -155,11 +167,11 @@ Before requesting review, confirm:
 - [ ] An ADR accompanies any significant design decision.
 - [ ] No secrets, credentials, or confidential planning material are committed (the secrets scan runs in CI).
 
-CI runs the full backend test suite against real PostgreSQL, applies the migrations to a blank database,
-seeds the performance fixture and checks its invariants, validates public documentation, type-checks and
-builds the web app, runs the Playwright e2e suite including the accessibility gate, compiles the Bicep
-templates and parameter files, builds the container image and boots the full stack, and scans for secrets
-on every push and pull request.
+CI runs the full backend test suite against real PostgreSQL and retains its MTP-generated TRX reports,
+applies the migrations to a blank database, seeds the performance fixture and checks its invariants,
+validates public documentation, type-checks and builds the web app, runs the Playwright e2e suite
+including the accessibility gate, compiles the Bicep templates and parameter files, builds the container
+image and boots the full stack, and scans for secrets on every push and pull request.
 
 The `bicep` job proves the infrastructure templates compile — syntax, types, and resource schemas. It
 cannot prove a deployment is correct: overlapping address space, a subnet delegated to the wrong service,
