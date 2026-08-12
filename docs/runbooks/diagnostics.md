@@ -3,12 +3,34 @@
 - **Audience:** Operators and maintainers
 - **Status:** Living runbook; canonical error-diagnosis reference
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-08-04
+- **Last reviewed:** 2026-08-12
 
 How to turn the reference an operator sees on screen into the full server-side detail in
 Application Insights. See [ADR-025](../adr/ADR-025-error-contract-and-observability.md) for the
 contract this runbook operates: an error response never carries internal exception detail, but it
 always carries a correlation id an engineer can search on.
+
+## Telemetry collection boundary
+
+LeaseBook deliberately uses the standalone Azure Monitor exporter rather than the ASP.NET Core
+Azure Monitor distro. Exporters are attached only when `APPLICATIONINSIGHTS_CONNECTION_STRING` is
+non-empty; without it, no telemetry leaves the process. The configured signal surface is ASP.NET Core
+request traces, the custom `LeaseBookTelemetry` ActivitySource, and correlated structured logs. It
+does not include the distro's automatic HTTP-client/SQL tracing, standard metrics, performance
+counters, or Live Metrics.
+
+Query-string values are redacted by the current ASP.NET Core instrumentation, and
+`DeliverTelemetryTests` guards the statement-delivery email specifically. Do not set
+`OTEL_DOTNET_EXPERIMENTAL_ASPNETCORE_DISABLE_URL_QUERY_REDACTION=true`: that changes the security
+boundary this runbook assumes. The distro uses that unsafe value by default, which is why ADR-025's
+2026-08 amendment defers adoption until metrics or Live Metrics are explicitly required and the
+privacy override can be validated in a live telemetry environment.
+
+The exporter retries transient ingestion failures and uses offline storage by default. That behavior
+does not require the distro. Microsoft Entra-authenticated ingestion is also available on the
+standalone exporter but is not wired until the live Azure identity and role assignment are
+deployment-validated. See the
+[distro evaluation](../research/azure-monitor-opentelemetry-distro.md) for the full comparison.
 
 ## When to use
 

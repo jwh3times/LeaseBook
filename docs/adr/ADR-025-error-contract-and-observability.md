@@ -175,6 +175,49 @@ the logging provider itself). Extending the existing piecemeal pipeline with
 wiring style for traces and logs alike and preserves that control. Revisit if the metrics half of
 `UseAzureMonitor()` is ever wanted (a candidate for B4).
 
+### 2026-08-12 amendment — distro re-evaluation
+
+Issue #163 reopened this choice against the current Azure Monitor distro rather than carrying the
+2026-07 conclusion forward by assumption. The result is **defer again; keep the standalone exporter
+and the manual pipeline**. The supporting comparison and primary-source links are captured in the
+[Azure Monitor distro evaluation](../research/azure-monitor-opentelemetry-distro.md).
+
+The distro is now more capable, but adopting it is not an exporter-only substitution. It adds
+ASP.NET Core, HTTP client, and SQL client tracing; server/client and Application Insights standard
+metrics; Azure resource detectors; logging; rate-limited trace sampling; trace-based log sampling;
+and Live Metrics. LeaseBook's current production-telemetry scope needs the existing request/custom
+traces, correlated structured logs, click-budget queries, and alert events. It does not yet require
+OpenTelemetry meter instruments or Live Metrics, so enabling those defaults would broaden collection
+before an operator has a live requirement or a measured cost/volume baseline.
+
+The original control concerns are no longer absolute blockers. The custom
+`LeaseBookTelemetry.SourceName` can be added after `UseAzureMonitor()`, the service resource can be
+configured, and the EF Core rule can remain scoped to `OpenTelemetryLoggerProvider`. The distro and
+standalone paths both use the Azure Monitor exporter, so retry/offline-storage behavior and optional
+Microsoft Entra credentials are available either way. Those capabilities therefore do not justify a
+pipeline migration on their own.
+
+The security default is the deciding risk. Microsoft's distro currently disables ASP.NET Core and
+HTTP-client query-string redaction unless the corresponding
+`OTEL_DOTNET_EXPERIMENTAL_*_DISABLE_URL_QUERY_REDACTION` settings are explicitly set to `false`.
+LeaseBook's standalone ASP.NET Core instrumentation redacts query values by default, and
+`DeliverTelemetryTests` re-verified that the recipient email on the statement-delivery query string
+does not reach Activity tags during this evaluation. A distro migration would therefore require an
+explicit privacy override plus regression coverage in the same package change; inheriting the
+distro default is not acceptable.
+
+Operationally, nothing changes in this amendment: exporters remain conditional on a non-empty
+`APPLICATIONINSIGHTS_CONNECTION_STRING`; the custom ActivitySource, W3C operation correlation,
+structured-log options, and provider-only EF filter remain intact; no metrics provider or Live
+Metrics channel is added. This gate is load-bearing: an unconditional `UseAzureMonitor()`
+registration reaches exporter construction and throws when it cannot resolve a connection string,
+instead of preserving the current local/test no-export state. Revisit only when OpenTelemetry metrics
+or Live Metrics become an explicit release requirement and a live Application Insights environment
+exists to validate them. Any future adoption must make query redaction explicit, keep the distro
+registration behind the connection-string gate, retain the custom source and EF filter, choose
+sampling and offline-storage policy deliberately, and run the telemetry security suite before
+deployment.
+
 **Residual holes — stated so "nothing fails silently" is an honest claim, not overstated:**
 
 - **Streamed responses.** Every current file download (`/api/reports/{id}/csv`,
