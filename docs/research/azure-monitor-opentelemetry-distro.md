@@ -56,7 +56,7 @@ The distribution enables standard metrics, performance counters, and Live Metric
 options. Its current default trace rate limit is five traces per second, while metrics are not
 sampled.
 ([`AzureMonitorOptions` source](https://github.com/Azure/azure-sdk-for-net/blob/main/sdk/monitor/Azure.Monitor.OpenTelemetry.AspNetCore/src/AzureMonitorOptions.cs),
-[sampling guidance](https://learn.microsoft.com/en-us/azure/azure-monitor/app/opentelemetry-configuration#sampling))
+[sampling guidance](https://learn.microsoft.com/en-us/azure/azure-monitor/app/opentelemetry-configuration))
 
 Live Metrics is an on-demand, approximately one-second stream with no retention; it is intended for
 interactive production diagnosis rather than durable reporting. Microsoft describes it as free and
@@ -138,7 +138,7 @@ query values by default. The Azure Monitor distribution deliberately sets both
 `OTEL_DOTNET_EXPERIMENTAL_ASPNETCORE_DISABLE_URL_QUERY_REDACTION` and
 `OTEL_DOTNET_EXPERIMENTAL_HTTPCLIENT_DISABLE_URL_QUERY_REDACTION` to `true` when they are absent,
 which disables that protection.
-([ASP.NET Core instrumentation redaction behavior](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/blob/main/src/OpenTelemetry.Instrumentation.AspNetCore/README.md#environment-variables),
+([ASP.NET Core instrumentation redaction behavior](https://github.com/open-telemetry/opentelemetry-dotnet-contrib/blob/main/src/OpenTelemetry.Instrumentation.AspNetCore/README.md),
 [`UseAzureMonitor` redaction defaults](https://github.com/Azure/azure-sdk-for-net/blob/main/sdk/monitor/Azure.Monitor.OpenTelemetry.AspNetCore/src/OpenTelemetryBuilderExtensions.cs))
 
 Before registering the distribution, LeaseBook must explicitly set both configuration keys to
@@ -152,7 +152,7 @@ The `LeaseBook` activity source remains supported, but it is not discovered auto
 it through `ConfigureOpenTelemetryTracerProvider(... AddSource(LeaseBookTelemetry.SourceName))` and
 retain the `LeaseBook.Web` service resource. Microsoft documents this hook specifically for custom
 `ActivitySource` instances used with `UseAzureMonitor()`.
-([custom telemetry guidance](https://learn.microsoft.com/en-us/azure/azure-monitor/app/opentelemetry-add-modify?tabs=net#add-a-custom-distributed-trace))
+([custom telemetry guidance](https://learn.microsoft.com/en-us/azure/azure-monitor/app/opentelemetry-add-modify?tabs=net))
 
 Application Insights correlation follows W3C activity context: the activity trace ID becomes the
 operation ID and parent/child activity IDs link the operation. Therefore the existing error
@@ -163,7 +163,7 @@ contract's correlation token remains compatible as long as the custom source and
 Sampling is the subtle part of that contract. The distribution currently defaults to a five-trace-
 per-second rate limit, and its trace-based log sampler drops logs attached to unsampled traces by
 default. Metrics are never sampled.
-([sampling configuration](https://learn.microsoft.com/en-us/azure/azure-monitor/app/opentelemetry-configuration#sampling),
+([sampling configuration](https://learn.microsoft.com/en-us/azure/azure-monitor/app/opentelemetry-configuration),
 [`AzureMonitorOptions` defaults](https://github.com/Azure/azure-sdk-for-net/blob/main/sdk/monitor/Azure.Monitor.OpenTelemetry.AspNetCore/src/AzureMonitorOptions.cs))
 
 For beta, LeaseBook should configure 100% trace sampling explicitly. If trace sampling is introduced
