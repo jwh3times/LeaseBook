@@ -209,5 +209,7 @@ Before a migration PR is complete, confirm:
 - [ ] `NUMERIC(14,2)` for any money column (no float)
 - [ ] Leading `org_id` in at least one index
 - [ ] Composite `(org_id, id)` FKs for any journal-dimension references
-- [ ] `SchemaGuardTests` will pass — run `dotnet test --filter SchemaGuard` to confirm
+- [ ] `SchemaGuardTests` will pass — run
+      `dotnet test tests/LeaseBook.Tests.Integration/LeaseBook.Tests.Integration.csproj --filter-class '*SchemaGuardTests'`
+      to confirm
 - [ ] `Down()` migration reverses the `Up()` completely
