@@ -180,6 +180,12 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Changed
 
+- **Backend tests now run on Microsoft Testing Platform v2** — command-line, CI, and supported
+  Visual Studio Test Explorer execution now share the same xUnit runner instead of retaining a
+  separate VSTest compatibility path. Contributor class and method filters use MTP syntax, and CI
+  retains a TRX report from every backend test assembly. See
+  [ADR-032](docs/adr/ADR-032-microsoft-testing-platform-v2.md).
+
 - **Late-fee ambiguity can no longer masquerade as an age** — when one tenant has multiple active
   leases, the unattributable balance is now a distinct contract case instead of the magic age `-1`.
   Preview and confirmation both handle that case explicitly before grace-period or fee calculation,
