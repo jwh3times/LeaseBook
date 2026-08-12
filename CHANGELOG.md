@@ -180,6 +180,14 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Changed
 
+- **Azure Monitor's ASP.NET Core distro remains deferred after a fresh evaluation** — the current
+  manual OpenTelemetry pipeline keeps its conditional export, custom LeaseBook spans, correlated
+  logs, and provider-only EF filtering without turning on a broader metrics, sampling, dependency-
+  tracing, and Live Metrics surface. The evaluation also found that the distro disables query-string
+  redaction by default, while LeaseBook's existing recipient-email leak guard confirms the current
+  pipeline redacts values. ADR-025 now records the comparison and the explicit conditions for
+  reconsidering adoption.
+
 - **Backend tests now run on Microsoft Testing Platform v2** — command-line, CI, and supported
   Visual Studio Test Explorer execution now share the same xUnit runner instead of retaining a
   separate VSTest compatibility path. Contributor class and method filters use MTP syntax, and CI

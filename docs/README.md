@@ -3,7 +3,7 @@
 - **Audience:** Evaluators, contributors, operators, and maintainers
 - **Status:** Living index
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-07-20
+- **Last reviewed:** 2026-08-12
 
 Use this page to find the maintained source for a question. Documents intentionally have one owner;
 summaries elsewhere should link here rather than restating mutable detail.
@@ -27,6 +27,8 @@ summaries elsewhere should link here rather than restating mutable detail.
   the implemented architecture supersede it where the system evolved.
 - [Architecture Decision Records](adr/README.md) preserve significant engineering decisions and
   their revisit triggers.
+- [Azure Monitor OpenTelemetry distro evaluation](research/azure-monitor-opentelemetry-distro.md)
+  records the source-backed comparison supporting ADR-025's 2026-08 amendment.
 - [Parallel-run checklist](migration/parallel-run.md) supports a migration overlap period.
 - [Infrastructure guide](../infra/README.md) and
   [Azure database bootstrap](../infra/db/azure-bootstrap.md) cover authored Azure infrastructure.
