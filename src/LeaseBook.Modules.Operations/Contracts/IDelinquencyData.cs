@@ -13,22 +13,25 @@ public abstract record DelinquencyAttribution
     {
     }
 
-    /// <summary>A balance attributable to this lease, with a non-negative age.</summary>
+    /// <summary>A balance attributable to this lease and its specific rent obligation.</summary>
     public sealed record AttributedToLease : DelinquencyAttribution
     {
-        public AttributedToLease(int daysLate)
+        public AttributedToLease(Guid rentObligationEntryId)
         {
-            ArgumentOutOfRangeException.ThrowIfNegative(daysLate);
-            DaysLate = daysLate;
+            ArgumentOutOfRangeException.ThrowIfEqual(rentObligationEntryId, Guid.Empty);
+            RentObligationEntryId = rentObligationEntryId;
         }
 
-        public int DaysLate { get; }
+        public Guid RentObligationEntryId { get; }
     }
 
     /// <summary>
     /// A tenant has multiple active leases, so their tenant-level balance cannot be assigned to one.
     /// </summary>
     public sealed record AmbiguousMultipleActiveLeases : DelinquencyAttribution;
+
+    /// <summary>The tenant owes money, but no canonical rent charge exists for this lease period.</summary>
+    public sealed record NoRentObligation : DelinquencyAttribution;
 }
 
 /// <summary>
@@ -47,8 +50,8 @@ public sealed record DelinquentLedgerRow(
     decimal Rent,
     decimal Balance,
     /// <summary>
-    /// Either an attributed, non-negative age sourced from
-    /// <c>GetDelinquencyAging.OldestAgeDays</c>, or the explicit multiple-active-lease ambiguity.
+    /// Either the specific rent obligation, or an explicit reason that the tenant-level balance
+    /// cannot safely be linked to one.
     /// </summary>
     DelinquencyAttribution Attribution);
 
@@ -57,7 +60,8 @@ public sealed record DelinquentLedgerRow(
 /// <summary>
 /// Read-direction cross-module port (ADR-007 / WP-3). Operations declares the interface;
 /// the host adapter (<c>DelinquencyDataAdapter</c>) implements it by dispatching
-/// Accounting's <c>GetDelinquencyAging</c> (for per-tenant balance) and Directory's
+/// Accounting's <c>GetDelinquencyAging</c> (for per-tenant balance), Accounting's
+/// <c>GetRentObligationEntries</c> (for the specific canonical rent charge), and Directory's
 /// <c>GetActiveLeaseSchedule</c> (for lease → tenant mapping) via
 /// <see cref="LeaseBook.SharedKernel.Cqrs.ISender"/>, then joining them to produce per-lease rows.
 /// <para>
@@ -72,15 +76,13 @@ public interface IDelinquencyData
     /// <summary>
     /// Returns leases with a positive receivable balance, joined to their schedule dimensions.
     /// Only tenants with a positive total balance surface. The grace-period gate is NOT applied
-    /// here — callers handle <see cref="DelinquentLedgerRow.Attribution"/> and compare an attributed
-    /// age with their policy.
+    /// here — callers calculate eligibility from the lease policy's contractual due date.
     /// </summary>
     /// <param name="year">Period year (used to fetch the active lease schedule).</param>
     /// <param name="month">Period month.</param>
     /// <param name="asOf">
-    /// Balance age measured from this date. The late-fee run strategy passes the last day of
-    /// the period month so that rent charges posted on the 1st have a positive age by
-    /// end-of-month (the standard PM assessment workflow).
+    /// Actual assessment date. Future journal entries are not eligible obligations and aging never
+    /// projects beyond this date.
     /// </param>
     /// <param name="ct">Cancellation token.</param>
     Task<IReadOnlyList<DelinquentLedgerRow>> GetAsync(

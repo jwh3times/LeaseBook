@@ -7,32 +7,30 @@ namespace LeaseBook.Modules.Operations.Runs;
 /// <see cref="IRunStrategy"/> for <see cref="RunType.LateFee"/>. Previews the monthly late-fee charge
 /// run and plans it, applying the NC §42-46 statutory clamp via <see cref="LateFeeCalculator"/>.
 /// <para>
-/// <b>Source-ref convention (ADR-019):</b> <c>latefee:{year}-{month:00}:lease={leaseId}</c>.
-/// The existing <c>(org_id, source_ref)</c> partial unique index on <c>journal_entries</c>
-/// deduplicates repeat runs; the engine records the resulting refusal as
-/// <see cref="RunItemStatus.Skipped"/>.
+/// <b>Source-ref convention (ADR-033):</b> <c>latefee:rent-entry={rentEntryId}</c>. The key
+/// deduplicates repeat runs while the journal's unique <c>assesses_entry_id</c> relationship enforces
+/// one assessment per rent obligation even under a different source reference.
 /// </para>
 /// <para>
-/// <b>Charge date:</b> the first day of the period month (<c>new DateOnly(year, month, 1)</c>).
+/// <b>Assessment and charge date:</b> the server's current UTC calendar date. The operator supplies
+/// no date, so a future-dated assessment is not representable. Confirm recalculates and posts on its
+/// own assessment date.
 /// </para>
 /// <para>
 /// <b>Delinquency signal:</b> the <see cref="IDelinquencyData"/> port provides per-lease
-/// receivable balances (from Accounting via the host adapter). Rent is always charged on the
-/// period's 1st by the rent-charge run (WP-2); an attributed delinquency carries the ACTUAL age in
-/// days of the oldest past-due charge (sourced from
-/// <c>GetDelinquencyAging.OldestAgeDays</c>). A lease is eligible when
-/// <c>DaysLate &gt; GraceDays</c> (strictly past the grace window; a charge exactly
-/// <c>GraceDays</c> old is still within grace). The effective grace is resolved per-lease
-/// from the effective policy (<see cref="ILateFeePolicyData"/>).
+/// receivable balances and the canonical, unreversed rent obligation. Eligibility comes from the
+/// effective policy's contractual due date: the following day is late day one, and the first
+/// permitted assessment is due date plus <c>max(5, contractual threshold)</c>.
 /// </para>
 /// <para>
 /// <b>Eligibility exclusions:</b> preview surfaces these as exceptions rather than chargeable rows;
 /// planning re-establishes the same rules from its confirm-time data and records a selected target as
 /// <see cref="RunItemStatus.Excluded"/> rather than posting it.
 /// <list type="bullet">
-///   <item>Lease with <see cref="DelinquentLedgerRow.Balance"/> == 0 or within grace period.</item>
+///   <item>Lease before its late-fee eligibility date.</item>
 ///   <item>Lease with <see cref="DelinquencyAttribution.AmbiguousMultipleActiveLeases"/> (balance
 ///     cannot be attributed — excluded as <c>ambiguous_multiple_active_leases</c>).</item>
+///   <item>Lease whose period has no canonical, unreversed, open rent obligation.</item>
 ///   <item>Lease with no effective policy resolved.</item>
 /// </list>
 /// A locked bank period or a closed accounting period comes back from the posting port as a refusal
@@ -44,7 +42,7 @@ public sealed class LateFeeRunStrategy(
     IDelinquencyData delinquency,
     ILateFeePolicyData policies,
     IPostedSourceRefs postedRefs,
-    IPeriodChargeGuard periodGuard) : IRunStrategy
+    TimeProvider clock) : IRunStrategy
 {
     /// <inheritdoc />
     public RunType RunType => RunType.LateFee;
@@ -52,15 +50,10 @@ public sealed class LateFeeRunStrategy(
     /// <inheritdoc />
     public async Task<RunPreview> PreviewAsync(RunPeriod period, CancellationToken ct)
     {
-        // The "as of" date for aging is the last day of the period month. This ensures rent charges
-        // posted on the 1st of the period have a positive age_days value by end-of-month (they land
-        // in D1_30 after 1+ days), making them visible in GetDelinquencyAging. Running the late-fee
-        // assessment end-of-month is the standard PM workflow: confirm who still owes before closing
-        // the period.
-        var asOf = new DateOnly(period.Year, period.Month, DateTime.DaysInMonth(period.Year, period.Month));
+        var assessmentDate = CurrentDate();
 
         // Fetch delinquent leases and their effective policies in parallel.
-        var delinquentRows = await delinquency.GetAsync(period.Year, period.Month, asOf, ct);
+        var delinquentRows = await delinquency.GetAsync(period.Year, period.Month, assessmentDate, ct);
 
         if (delinquentRows.Count == 0)
         {
@@ -69,35 +62,35 @@ public sealed class LateFeeRunStrategy(
 
         var leaseIds = delinquentRows.Select(r => r.LeaseId).ToList();
 
-        // Fetch effective policies and already-posted source refs in parallel.
+        // Fetch effective policies, then the already-posted obligation keys.
         var policyMap = await policies.GetAsync(leaseIds, ct);
 
-        var allKeys = leaseIds.Select(id => SourceRef(period, id)).ToList();
+        var allKeys = delinquentRows
+            .Select(r => r.Attribution)
+            .OfType<DelinquencyAttribution.AttributedToLease>()
+            .Select(a => SourceRef(a.RentObligationEntryId))
+            .ToList();
         var alreadyPosted = allKeys.Count > 0
             ? await postedRefs.GetExistingAsync(allKeys, ct)
             : (IReadOnlySet<string>)new HashSet<string>();
-
-        // Structural cross-source guard: detect FeeCharged/late entries posted by any means
-        // so we never double-assess a late fee for the same tenant+period.
-        var allTenantIds = delinquentRows.Select(r => r.TenantId).ToList();
-        var alreadyChargedTenants = allTenantIds.Count > 0
-            ? await periodGuard.GetChargedTenantsAsync("FeeCharged", "late", period.Year, period.Month, allTenantIds, ct)
-            : (IReadOnlySet<Guid>)new HashSet<Guid>();
 
         var previewRows = new List<PreviewRow>(delinquentRows.Count);
         var exceptions = new List<string>();
 
         foreach (var row in delinquentRows)
         {
-            int daysLate;
+            Guid rentObligationEntryId;
             switch (row.Attribution)
             {
                 case DelinquencyAttribution.AmbiguousMultipleActiveLeases:
                     exceptions.Add($"{row.TenantName}: multiple active leases — the balance cannot be attributed. Skipped.");
                     continue;
                 case DelinquencyAttribution.AttributedToLease attributed:
-                    daysLate = attributed.DaysLate;
+                    rentObligationEntryId = attributed.RentObligationEntryId;
                     break;
+                case DelinquencyAttribution.NoRentObligation:
+                    exceptions.Add($"{row.TenantName}: no open rent obligation found for {period.Key} — skipped.");
+                    continue;
                 default:
                     throw new InvalidOperationException(
                         $"Unknown delinquency attribution case '{row.Attribution.GetType().Name}'.");
@@ -109,24 +102,30 @@ public sealed class LateFeeRunStrategy(
                 continue;
             }
 
-            // Gate: a lease is eligible when its oldest past-due charge is strictly past the grace
-            // window (DaysLate > GraceDays). A charge exactly GraceDays old is still within grace.
-            // DaysLate is the real age in days from GetDelinquencyAging.OldestAgeDays, not a bucket floor.
-            if (daysLate <= policy.GraceDays)
+            var dueDate = new DateOnly(period.Year, period.Month, policy.RentDueDay);
+            var contractualThreshold = Math.Max(5, policy.GraceDays);
+            var eligibilityDate = dueDate.AddDays(contractualThreshold);
+            var daysLate = assessmentDate.DayNumber - dueDate.DayNumber;
+
+            if (assessmentDate < eligibilityDate)
             {
-                exceptions.Add($"{row.TenantName}: within the grace period ({daysLate} days late, {policy.GraceDays} allowed) — skipped.");
+                exceptions.Add($"{row.TenantName}: not eligible until {eligibilityDate:yyyy-MM-dd} " +
+                    $"({daysLate} late days, threshold {contractualThreshold}) — skipped.");
                 continue;
             }
 
             var amount = LateFeeCalculator.Compute(policy, row.Rent);
-            var key = SourceRef(period, row.LeaseId);
-            var alreadyDone = alreadyPosted.Contains(key) || alreadyChargedTenants.Contains(row.TenantId);
+            var key = SourceRef(rentObligationEntryId);
+            var alreadyDone = alreadyPosted.Contains(key);
 
             var detail = new Dictionary<string, string>
             {
                 ["unit"] = row.UnitLabel,
                 ["balance"] = row.Balance.ToString("F2"),
                 ["daysLate"] = daysLate.ToString(),
+                ["dueDate"] = dueDate.ToString("yyyy-MM-dd"),
+                ["assessmentDate"] = assessmentDate.ToString("yyyy-MM-dd"),
+                ["eligibilityDate"] = eligibilityDate.ToString("yyyy-MM-dd"),
                 ["feeKind"] = policy.Kind.ToString(),
                 ["monthlyRent"] = row.Rent.ToString("F2"),
             };
@@ -150,9 +149,8 @@ public sealed class LateFeeRunStrategy(
         IReadOnlyList<Guid> selectedTargetIds,
         CancellationToken ct)
     {
-        // Re-fetch delinquency data (preview may be stale). Use last day of period for same reason as PreviewAsync.
-        var asOf = new DateOnly(period.Year, period.Month, DateTime.DaysInMonth(period.Year, period.Month));
-        var allDelinquent = await delinquency.GetAsync(period.Year, period.Month, asOf, ct);
+        var assessmentDate = CurrentDate();
+        var allDelinquent = await delinquency.GetAsync(period.Year, period.Month, assessmentDate, ct);
         var byLeaseId = allDelinquent.ToDictionary(r => r.LeaseId);
 
         // Fetch effective policies for selected leases.
@@ -163,17 +161,6 @@ public sealed class LateFeeRunStrategy(
             ? await policies.GetAsync(selectedInSchedule, ct)
             : (IReadOnlyDictionary<Guid, LateFeePolicy>)new Dictionary<Guid, LateFeePolicy>();
 
-        // Re-run the structural cross-source guard at confirm time.
-        var tenantIdsInScope = selectedTargetIds
-            .Where(id => byLeaseId.ContainsKey(id))
-            .Select(id => byLeaseId[id].TenantId)
-            .Distinct()
-            .ToList();
-        var alreadyChargedTenants = tenantIdsInScope.Count > 0
-            ? await periodGuard.GetChargedTenantsAsync("FeeCharged", "late", period.Year, period.Month, tenantIdsInScope, ct)
-            : (IReadOnlySet<Guid>)new HashSet<Guid>();
-
-        var chargeDate = new DateOnly(period.Year, period.Month, 1);
         var plan = new List<RunPlanItem>(selectedTargetIds.Count);
 
         foreach (var leaseId in selectedTargetIds)
@@ -184,15 +171,18 @@ public sealed class LateFeeRunStrategy(
                 continue;
             }
 
-            int daysLate;
+            Guid rentObligationEntryId;
             switch (row.Attribution)
             {
                 case DelinquencyAttribution.AmbiguousMultipleActiveLeases:
                     plan.Add(Exclude(leaseId, RunItemStatus.Excluded, "ambiguous_multiple_active_leases"));
                     continue;
                 case DelinquencyAttribution.AttributedToLease attributed:
-                    daysLate = attributed.DaysLate;
+                    rentObligationEntryId = attributed.RentObligationEntryId;
                     break;
+                case DelinquencyAttribution.NoRentObligation:
+                    plan.Add(Exclude(leaseId, RunItemStatus.Excluded, "rent_obligation_not_found"));
+                    continue;
                 default:
                     throw new InvalidOperationException(
                         $"Unknown delinquency attribution case '{row.Attribution.GetType().Name}'.");
@@ -204,38 +194,35 @@ public sealed class LateFeeRunStrategy(
                 continue;
             }
 
-            // Confirm accepts target ids rather than a server-held preview token, so eligibility
-            // must be re-established from the confirm-time rows. A target selected directly (or a
-            // preview that became stale) must not bypass the statutory grace boundary.
-            if (daysLate <= policy.GraceDays)
-            {
-                plan.Add(Exclude(leaseId, RunItemStatus.Excluded, "within_grace_period"));
-                continue;
-            }
+            var dueDate = new DateOnly(period.Year, period.Month, policy.RentDueDay);
+            var contractualThreshold = Math.Max(5, policy.GraceDays);
+            var eligibilityDate = dueDate.AddDays(contractualThreshold);
 
-            // Structural cross-source guard: skip if any FeeCharged/late already exists for this
-            // tenant in the period, regardless of source_ref.
-            if (alreadyChargedTenants.Contains(row.TenantId))
+            // Eligibility is re-established at confirmation from the contractual due date. The day
+            // after due is late day one, so due + 5 is the first statutory charge date; a lease may
+            // extend that threshold but cannot shorten it.
+            if (assessmentDate < eligibilityDate)
             {
-                plan.Add(Exclude(leaseId, RunItemStatus.Skipped, "already_charged_in_period"));
+                plan.Add(Exclude(leaseId, RunItemStatus.Excluded, "before_late_fee_eligibility"));
                 continue;
             }
 
             var amount = LateFeeCalculator.Compute(policy, row.Rent);
             var description = $"Late fee {period.Key} — {row.TenantName} {row.UnitLabel}";
-            var sourceRef = SourceRef(period, leaseId);
+            var sourceRef = SourceRef(rentObligationEntryId);
 
             plan.Add(new PlannedPosting(
                 TargetKind: RunTargetKind.Lease,
                 TargetId: leaseId,
                 Intent: new LateFeeIntent(
                     LeaseId: leaseId,
+                    RentObligationEntryId: rentObligationEntryId,
                     TenantId: row.TenantId,
                     PropertyId: row.PropertyId,
                     OwnerId: row.OwnerId,
                     UnitId: row.UnitId,
                     Amount: amount,
-                    Date: chargeDate,
+                    Date: assessmentDate,
                     Description: description,
                     SourceRef: sourceRef),
                 Amount: amount,
@@ -259,7 +246,9 @@ public sealed class LateFeeRunStrategy(
 
     // ── helpers ──────────────────────────────────────────────────────────────
 
-    /// <summary>ADR-019 §2. Built here, not derived — see the note on <c>RentRunStrategy.SourceRef</c>.</summary>
-    private static string SourceRef(RunPeriod period, Guid leaseId) =>
-        $"latefee:{period.Key}:lease={leaseId}";
+    /// <summary>ADR-033. One deterministic key per rent obligation.</summary>
+    private static string SourceRef(Guid rentObligationEntryId) =>
+        $"latefee:rent-entry={rentObligationEntryId}";
+
+    private DateOnly CurrentDate() => DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
 }

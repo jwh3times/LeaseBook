@@ -11,6 +11,7 @@ public sealed class JournalEntryConfiguration : IEntityTypeConfiguration<Journal
         builder.ToTable("journal_entries");
 
         builder.HasKey(e => e.Id);
+        builder.HasAlternateKey(e => new { e.OrgId, e.Id });
         builder.Property(e => e.OrgId).IsRequired();
         builder.Property(e => e.EntryDate).IsRequired();
         builder.Property(e => e.EventType).IsRequired();
@@ -18,6 +19,7 @@ public sealed class JournalEntryConfiguration : IEntityTypeConfiguration<Journal
         builder.Property(e => e.Description);
         builder.Property(e => e.SourceRef);
         builder.Property(e => e.ReversesEntryId);
+        builder.Property(e => e.AssessesEntryId);
         builder.Property(e => e.CreatedBy);
         builder.Property(e => e.PostedAt).IsRequired();
         builder.Property(e => e.CreatedAt).IsRequired();
@@ -36,6 +38,13 @@ public sealed class JournalEntryConfiguration : IEntityTypeConfiguration<Journal
             .HasForeignKey(e => e.ReversesEntryId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        // A late-fee assessment points at its specific rent obligation (no inverse navigation).
+        builder.HasOne<JournalEntry>()
+            .WithMany()
+            .HasForeignKey(e => new { e.OrgId, e.AssessesEntryId })
+            .HasPrincipalKey(e => new { e.OrgId, e.Id })
+            .OnDelete(DeleteBehavior.Restrict);
+
         builder.HasIndex(e => new { e.OrgId, e.EntryDate });
 
         // Idempotency: at most one entry per (org, source_ref) when a source_ref is supplied.
@@ -47,5 +56,10 @@ public sealed class JournalEntryConfiguration : IEntityTypeConfiguration<Journal
         builder.HasIndex(e => new { e.OrgId, e.ReversesEntryId })
             .IsUnique()
             .HasFilter("reverses_entry_id IS NOT NULL");
+
+        // N.C. G.S. 42-46(b): at most one late fee may assess a specific rental payment.
+        builder.HasIndex(e => new { e.OrgId, e.AssessesEntryId })
+            .IsUnique()
+            .HasFilter("assesses_entry_id IS NOT NULL");
     }
 }

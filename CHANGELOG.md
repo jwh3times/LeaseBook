@@ -232,6 +232,13 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Fixed
 
+- **Late fees now follow the lease due date and the actual assessment day** — late day one is the
+  day after rent is contractually due, and a fee becomes chargeable on late day five or a later
+  lease threshold. Preview no longer ages balances to month-end, confirmation cannot create a
+  future-dated assessment, and the fee posts on the confirmation date. Each fee now links directly
+  to the still-open rent obligation it assesses, with database-backed one-fee-per-obligation
+  protection; settling rent cannot be undone by leaving an unrelated tenant charge open.
+
 - **Operator commands now fail predictably on malformed arguments** — `seed`,
   `check-invariants`, `capabilities`, and `perf-probe` now resolve through one strict command
   registry with a shared fixture-org vocabulary and exit-code contract. A mistyped

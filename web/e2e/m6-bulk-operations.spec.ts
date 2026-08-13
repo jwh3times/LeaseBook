@@ -162,14 +162,13 @@ test.describe.serial('M6 full-month cycle', () => {
     await page.screenshot({ path: 'e2e-results/m6-latefee-preview.png', fullPage: true });
 
     // The run has either eligible rows or an empty/all-excluded grid — both are valid product
-    // states (delinquency depends on seed payment dates vs grace period). If there are eligible
-    // rows (checkboxes), select all and confirm; otherwise assert the grid rendered without error.
-    const eligibleCheckboxes = page.locator('input[type="checkbox"]');
-    const checkboxCount = await eligibleCheckboxes.count();
+    // states (delinquency depends on seed payment dates vs grace period). The header checkbox is
+    // always rendered with a non-empty grid, so count the eligible row roles rather than all inputs.
+    const eligibleRows = page.locator('tr[role="checkbox"]');
+    const eligibleCount = await eligibleRows.count();
 
-    if (checkboxCount > 0) {
-      // Select all (the header "toggle all" checkbox is first).
-      await eligibleCheckboxes.first().check();
+    if (eligibleCount > 0) {
+      await page.getByLabel('Select all eligible', { exact: true }).check();
 
       // Confirm button: "Confirm — charge N lease(s)" (LateFeeRunScreen template).
       const confirmBtn = page.getByRole('button', { name: /confirm.*charge.*lease/i });

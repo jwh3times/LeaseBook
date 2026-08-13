@@ -4,14 +4,16 @@ import { DEMO_ADMIN, signIn } from './helpers';
 /**
  * M8 WP-6 — the late-fee policy settings surface.
  *
- * The run is exercised in **preview only**. A late-fee preview is a pure read: it computes what
- * would be charged without writing a journal entry. Confirming would post real charges into the demo
- * org, whose figures are the golden-file fixture, so this spec must never click confirm.
+ * The run is exercised in **preview only**. The demo's seeded May charges predate canonical rent
+ * source references, so ADR-033 requires the preview to refuse them rather than invent an assessment
+ * target. Confirming would post real charges into the golden fixture, so this spec never clicks it.
  *
  * The org policy is restored in a `finally` — the demo org is shared by every other spec, and a
  * leftover 0-day grace period would silently change what they see.
  */
-test('org late-fee policy round-trips and drives the run preview', async ({ page }) => {
+test('org late-fee policy round-trips and preview requires an open rent obligation', async ({
+  page,
+}) => {
   await signIn(page, DEMO_ADMIN);
 
   await page.goto('/settings');
@@ -40,9 +42,18 @@ test('org late-fee policy round-trips and drives the run preview', async ({ page
     await page.goto('/operations?tab=latefee');
     await expect(page.getByText('Late fee run')).toBeVisible({ timeout: 15_000 });
 
-    // The preview must actually price the new policy. $37 is below the NC §42-46 cap for every demo
-    // rent (the cap is the greater of $15 or 5% of rent), so the configured fee is what shows.
-    await expect(page.getByText('$37.00').first()).toBeVisible({ timeout: 15_000 });
+    // The demo fixture's canonical open rent obligations are in May 2026. Late-fee eligibility is
+    // obligation-specific, so preview that contractual period rather than the wall-clock month.
+    await page.getByLabel('Select year').selectOption('2026');
+    await page.getByLabel('Select month').selectOption('5');
+
+    // The seed's legacy May rent entries have no canonical source reference. A delinquent aggregate
+    // is no longer enough: issue #182 requires a specific, open rent obligation to assess.
+    const warnings = page.getByRole('alert');
+    await expect(warnings).toContainText('no open rent obligation found for 2026-05', {
+      timeout: 15_000,
+    });
+    await expect(page.getByText('$37.00')).toHaveCount(0);
 
     // The confirm button must stay disabled: nothing is selected, and this spec selects nothing.
     const confirm = page.getByRole('button', { name: /select leases to charge|confirm — charge/i });

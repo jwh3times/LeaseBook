@@ -11,13 +11,16 @@ namespace LeaseBook.Tests.Integration;
 public sealed class DelinquencyDataAdapterTests
 {
     [Fact]
-    public async Task One_active_lease_carries_an_attributed_age()
+    public async Task One_active_lease_carries_its_specific_rent_obligation()
     {
         var tenantId = Guid.NewGuid();
         var lease = Lease(tenantId, "1A");
+        var rentEntryId = Guid.NewGuid();
+        var rentRef = $"rent:2026-03:lease={lease.LeaseId}";
         var adapter = new DelinquencyDataAdapter(new StubSender(
             Aging(tenantId, oldestAgeDays: 17),
-            new LeaseScheduleResponse([lease])));
+            new LeaseScheduleResponse([lease]),
+            new RentObligationEntriesResponse([new(rentEntryId, rentRef, tenantId)])));
 
         var rows = await adapter.GetAsync(
             year: 2026,
@@ -30,7 +33,7 @@ public sealed class DelinquencyDataAdapterTests
         row.Balance.ShouldBe(1_000m);
         row.Attribution
             .ShouldBeOfType<DelinquencyAttribution.AttributedToLease>()
-            .DaysLate.ShouldBe(17);
+            .RentObligationEntryId.ShouldBe(rentEntryId);
     }
 
     [Fact]
@@ -41,7 +44,8 @@ public sealed class DelinquencyDataAdapterTests
         var secondLease = Lease(tenantId, "1B");
         var adapter = new DelinquencyDataAdapter(new StubSender(
             Aging(tenantId, oldestAgeDays: 17),
-            new LeaseScheduleResponse([firstLease, secondLease])));
+            new LeaseScheduleResponse([firstLease, secondLease]),
+            new RentObligationEntriesResponse([])));
 
         var rows = await adapter.GetAsync(
             year: 2026,
@@ -84,7 +88,8 @@ public sealed class DelinquencyDataAdapterTests
 
     private sealed class StubSender(
         DelinquencyResponse aging,
-        LeaseScheduleResponse schedule) : ISender
+        LeaseScheduleResponse schedule,
+        RentObligationEntriesResponse rentObligations) : ISender
     {
         public Task<TResult> Send<TResult>(ICommand<TResult> command, CancellationToken ct = default) =>
             throw new InvalidOperationException($"Unexpected command {command.GetType().Name}.");
@@ -95,6 +100,7 @@ public sealed class DelinquencyDataAdapterTests
             {
                 GetDelinquencyAging => aging,
                 GetActiveLeaseSchedule => schedule,
+                GetRentObligationEntries => rentObligations,
                 _ => throw new InvalidOperationException($"Unexpected query {query.GetType().Name}."),
             };
 
