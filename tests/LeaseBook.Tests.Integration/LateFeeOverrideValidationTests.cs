@@ -67,7 +67,7 @@ public sealed class LateFeeOverrideValidationTests(PostgresFixture fixture)
         var setup = await SetupAsync(ct);
         var client = await LoggedInClientAsync(setup, ct);
 
-        var body = LeaseBody(setup);
+        var body = LeaseBody(setup, status: "pending");
         body[field] = value;
 
         var response = await client.PostAsJsonAsync("/api/directory/leases", body, ct);
@@ -102,7 +102,10 @@ public sealed class LateFeeOverrideValidationTests(PostgresFixture fixture)
         var setup = await SetupAsync(ct);
         var client = await LoggedInClientAsync(setup, ct);
 
-        var response = await client.PostAsJsonAsync("/api/directory/leases", LeaseBody(setup), ct);
+        var response = await client.PostAsJsonAsync(
+            "/api/directory/leases",
+            LeaseBody(setup, status: "pending"),
+            ct);
 
         response.StatusCode.ShouldBe(HttpStatusCode.OK,
             "null overrides mean 'use the org default' — validation must not require them");
@@ -115,7 +118,7 @@ public sealed class LateFeeOverrideValidationTests(PostgresFixture fixture)
         var setup = await SetupAsync(ct);
         var client = await LoggedInClientAsync(setup, ct);
 
-        var body = LeaseBody(setup);
+        var body = LeaseBody(setup, status: "pending");
         body["lateFeeRentDueDayOverride"] = 28;   // upper bound is legal
         body["lateFeeGraceDaysOverride"] = 0;     // zero grace is legal, and is NOT "inherit"
         body["lateFeeKindOverride"] = "percent";
@@ -167,7 +170,7 @@ public sealed class LateFeeOverrideValidationTests(PostgresFixture fixture)
     private sealed record Setup(Guid OrgId, string Email, Guid TenantId, Guid UnitId, Guid LeaseId);
 
     /// <summary>A minimal valid lease payload; each test mutates the one field under test.</summary>
-    private static Dictionary<string, object?> LeaseBody(Setup setup) => new()
+    private static Dictionary<string, object?> LeaseBody(Setup setup, string status = "active") => new()
     {
         ["tenantId"] = setup.TenantId,
         ["unitId"] = setup.UnitId,
@@ -175,7 +178,7 @@ public sealed class LateFeeOverrideValidationTests(PostgresFixture fixture)
         ["endDate"] = "2027-12-31",
         ["rent"] = 1200m,
         ["depositRequired"] = 1200m,
-        ["status"] = "active",
+        ["status"] = status,
     };
 
     private async Task<Setup> SetupAsync(CancellationToken ct)

@@ -37,7 +37,7 @@ public sealed class DelinquencyDataAdapterTests
     }
 
     [Fact]
-    public async Task Multiple_active_leases_carry_explicit_ambiguity_for_every_lease()
+    public async Task Duplicate_active_lease_rows_fail_instead_of_guessing_attribution()
     {
         var tenantId = Guid.NewGuid();
         var firstLease = Lease(tenantId, "1A");
@@ -47,17 +47,11 @@ public sealed class DelinquencyDataAdapterTests
             new LeaseScheduleResponse([firstLease, secondLease]),
             new RentObligationEntriesResponse([])));
 
-        var rows = await adapter.GetAsync(
+        await Should.ThrowAsync<ArgumentException>(() => adapter.GetAsync(
             year: 2026,
             month: 3,
             asOf: new DateOnly(2026, 3, 31),
-            TestContext.Current.CancellationToken);
-
-        rows.Count.ShouldBe(2);
-        rows.ShouldContain(row => row.LeaseId == firstLease.LeaseId);
-        rows.ShouldContain(row => row.LeaseId == secondLease.LeaseId);
-        rows.ShouldAllBe(row =>
-            row.Attribution is DelinquencyAttribution.AmbiguousMultipleActiveLeases);
+            TestContext.Current.CancellationToken));
     }
 
     private static DelinquencyResponse Aging(Guid tenantId, int oldestAgeDays) =>

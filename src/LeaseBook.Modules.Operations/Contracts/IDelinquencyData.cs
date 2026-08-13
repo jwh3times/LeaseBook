@@ -3,8 +3,8 @@ namespace LeaseBook.Modules.Operations.Contracts;
 // ── Data DTO ─────────────────────────────────────────────────────────────────
 
 /// <summary>
-/// Whether a tenant-level delinquent balance can be attributed to a specific lease. The cases are
-/// nested so callers cannot add a third meaning without changing this contract and every exhaustive
+/// Whether a tenant-level delinquent balance can be attributed to its active lease. The cases are
+/// nested so callers cannot add another meaning without changing this contract and every exhaustive
 /// consumer.
 /// </summary>
 public abstract record DelinquencyAttribution
@@ -24,11 +24,6 @@ public abstract record DelinquencyAttribution
 
         public Guid RentObligationEntryId { get; }
     }
-
-    /// <summary>
-    /// A tenant has multiple active leases, so their tenant-level balance cannot be assigned to one.
-    /// </summary>
-    public sealed record AmbiguousMultipleActiveLeases : DelinquencyAttribution;
 
     /// <summary>The tenant owes money, but no canonical rent charge exists for this lease period.</summary>
     public sealed record NoRentObligation : DelinquencyAttribution;
@@ -64,12 +59,9 @@ public sealed record DelinquentLedgerRow(
 /// <c>GetRentObligationEntries</c> (for the specific canonical rent charge), and Directory's
 /// <c>GetActiveLeaseSchedule</c> (for lease → tenant mapping) via
 /// <see cref="LeaseBook.SharedKernel.Cqrs.ISender"/>, then joining them to produce per-lease rows.
-/// <para>
-/// A tenant with multiple active leases gets one row per lease (since the late fee is
-/// charged per-lease, not per-tenant), each carrying an explicit
-/// <see cref="DelinquencyAttribution.AmbiguousMultipleActiveLeases"/> case. No lease is chargeable
-/// until per-lease GL accounts make the tenant-level balance attributable.
-/// </para>
+/// Directory enforces at most one active lease per tenant, so the active lease is the sole source of
+/// the owner, property, and unit attribution. The adapter fails rather than selecting a row if that
+/// invariant is ever violated.
 /// </summary>
 public interface IDelinquencyData
 {

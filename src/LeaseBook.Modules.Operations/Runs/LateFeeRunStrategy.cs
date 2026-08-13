@@ -28,8 +28,6 @@ namespace LeaseBook.Modules.Operations.Runs;
 /// <see cref="RunItemStatus.Excluded"/> rather than posting it.
 /// <list type="bullet">
 ///   <item>Lease before its late-fee eligibility date.</item>
-///   <item>Lease with <see cref="DelinquencyAttribution.AmbiguousMultipleActiveLeases"/> (balance
-///     cannot be attributed — excluded as <c>ambiguous_multiple_active_leases</c>).</item>
 ///   <item>Lease whose period has no canonical, unreversed, open rent obligation.</item>
 ///   <item>Lease with no effective policy resolved.</item>
 /// </list>
@@ -82,9 +80,6 @@ public sealed class LateFeeRunStrategy(
             Guid rentObligationEntryId;
             switch (row.Attribution)
             {
-                case DelinquencyAttribution.AmbiguousMultipleActiveLeases:
-                    exceptions.Add($"{row.TenantName}: multiple active leases — the balance cannot be attributed. Skipped.");
-                    continue;
                 case DelinquencyAttribution.AttributedToLease attributed:
                     rentObligationEntryId = attributed.RentObligationEntryId;
                     break;
@@ -174,9 +169,6 @@ public sealed class LateFeeRunStrategy(
             Guid rentObligationEntryId;
             switch (row.Attribution)
             {
-                case DelinquencyAttribution.AmbiguousMultipleActiveLeases:
-                    plan.Add(Exclude(leaseId, RunItemStatus.Excluded, "ambiguous_multiple_active_leases"));
-                    continue;
                 case DelinquencyAttribution.AttributedToLease attributed:
                     rentObligationEntryId = attributed.RentObligationEntryId;
                     break;

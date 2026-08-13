@@ -36,7 +36,9 @@ public sealed class LeaseLiteConfiguration : IEntityTypeConfiguration<LeaseLite>
         builder.HasOne<Tenant>().WithMany().HasForeignKey(e => e.TenantId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<Unit>().WithMany().HasForeignKey(e => e.UnitId).OnDelete(DeleteBehavior.Restrict);
 
-        builder.HasIndex(e => new { e.OrgId, e.TenantId });
+        builder.HasIndex(e => new { e.OrgId, e.TenantId })
+            .IsUnique()
+            .HasFilter("status = 'active'");
         builder.HasIndex(e => new { e.OrgId, e.UnitId });
     }
 }

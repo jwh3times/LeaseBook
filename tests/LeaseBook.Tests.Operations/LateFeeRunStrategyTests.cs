@@ -95,23 +95,6 @@ public sealed class LateFeeRunStrategyTests
             () => new DelinquencyAttribution.AttributedToLease(Guid.Empty));
     }
 
-    [Fact]
-    public async Task Plan_excludes_a_selected_lease_whose_delinquency_is_ambiguous()
-    {
-        var ct = TestContext.Current.CancellationToken;
-        var leaseId = Guid.NewGuid();
-        var row = AmbiguousDelinquentLease(leaseId);
-        var strategy = BuildStrategy(
-            [row],
-            [(leaseId, new LateFeePolicy(1, 5, LateFeeKind.Flat, 50m, 0))]);
-
-        var plan = await strategy.PlanAsync(Period, [leaseId], ct);
-
-        var exclusion = plan.ShouldHaveSingleItem().ShouldBeOfType<PlannedExclusion>();
-        exclusion.Status.ShouldBe(RunItemStatus.Excluded);
-        exclusion.Detail["reason"].ShouldBe("ambiguous_multiple_active_leases");
-    }
-
     [Theory]
     [MemberData(nameof(ClampCases))]
     public async Task Plan_applies_the_NC_statutory_clamp(
@@ -175,12 +158,6 @@ public sealed class LateFeeRunStrategyTests
             Rent: 1_000m,
             Balance: 1_000m,
             Attribution: new DelinquencyAttribution.AttributedToLease(Guid.NewGuid()));
-
-    private static DelinquentLedgerRow AmbiguousDelinquentLease(Guid leaseId) =>
-        DelinquentLease(leaseId) with
-        {
-            Attribution = new DelinquencyAttribution.AmbiguousMultipleActiveLeases(),
-        };
 
     private sealed class FixedTimeProvider(DateOnly date) : TimeProvider
     {

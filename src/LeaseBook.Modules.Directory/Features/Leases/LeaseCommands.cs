@@ -1,4 +1,5 @@
 using FluentValidation;
+using FluentValidation.Results;
 using LeaseBook.Modules.Directory.Domain;
 using LeaseBook.Modules.Directory.Features.Shared;
 using LeaseBook.Modules.Directory.Persistence;
@@ -83,6 +84,13 @@ internal sealed class CreateLeaseHandler(DbContext db) : ICommandHandler<CreateL
 {
     public async Task<Guid> Handle(CreateLease command, CancellationToken ct)
     {
+        await ActiveLeaseCardinality.ThrowIfAnotherIsActiveAsync(
+            db,
+            command.TenantId,
+            command.Status,
+            exceptLeaseId: null,
+            ct);
+
         var lease = new LeaseLite
         {
             Id = UuidV7.NewId(),
@@ -117,6 +125,13 @@ internal sealed class UpdateLeaseHandler(DbContext db) : ICommandHandler<UpdateL
             return false;
         }
 
+        await ActiveLeaseCardinality.ThrowIfAnotherIsActiveAsync(
+            db,
+            command.TenantId,
+            command.Status,
+            command.Id,
+            ct);
+
         lease.TenantId = command.TenantId;
         lease.UnitId = command.UnitId;
         lease.StartDate = command.StartDate;
@@ -133,5 +148,38 @@ internal sealed class UpdateLeaseHandler(DbContext db) : ICommandHandler<UpdateL
         lease.LateFeeRateBpsOverride = command.LateFeeRateBpsOverride;
         await db.SaveChangesAsync(ct);
         return true;
+    }
+}
+
+internal static class ActiveLeaseCardinality
+{
+    public static async Task ThrowIfAnotherIsActiveAsync(
+        DbContext db,
+        Guid tenantId,
+        string requestedStatus,
+        Guid? exceptLeaseId,
+        CancellationToken ct)
+    {
+        if (!string.Equals(requestedStatus, "active", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        var anotherIsActive = await db.Set<LeaseLite>().AsNoTracking()
+            .AnyAsync(lease =>
+                lease.TenantId == tenantId
+                && lease.Status == LeaseStatus.Active
+                && (!exceptLeaseId.HasValue || lease.Id != exceptLeaseId.Value), ct);
+        if (!anotherIsActive)
+        {
+            return;
+        }
+
+        throw new ValidationException(
+        [
+            new ValidationFailure(
+                "tenantId",
+                "A tenant can have only one active lease; end the current lease before activating another."),
+        ]);
     }
 }
