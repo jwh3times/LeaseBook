@@ -20,7 +20,11 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Changed
 
-- _Nothing yet._
+- **Unambiguous bank-account purposes** — Settings and migration onboarding now distinguish the
+  operating trust account and security-deposit trust account (inside the trust equation) from the PM
+  operating account (outside it). Bank purpose is stated as immutable after creation because it fixes
+  the provisioned account class and fiduciary boundary; the existing `trust`, `deposit`, and
+  `operating` API values and accounting behavior are unchanged.
 
 ### Fixed
 

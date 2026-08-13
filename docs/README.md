@@ -3,7 +3,7 @@
 - **Audience:** Evaluators, contributors, operators, and maintainers
 - **Status:** Living index
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-08-12
+- **Last reviewed:** 2026-08-13
 
 Use this page to find the maintained source for a question. Documents intentionally have one owner;
 summaries elsewhere should link here rather than restating mutable detail.
@@ -14,6 +14,7 @@ summaries elsewhere should link here rather than restating mutable detail.
 | ------------------------------------------------- | ------------------------------------------------------ |
 | Understand the product and run it locally         | [Project README](../README.md)                         |
 | Understand supported scope and explicit non-goals | [Product scope](product-scope.md)                      |
+| Use the project's settled domain terminology      | [Domain glossary](../CONTEXT.md)                       |
 | Understand the implemented system                 | [Architecture](architecture.md)                        |
 | Understand trust-accounting behavior              | [Accounting](accounting.md)                            |
 | Set up or operate a development environment       | [Local-development runbook](runbooks/local-dev.md)     |
