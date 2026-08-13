@@ -3,7 +3,7 @@
 - **Audience:** Contributors, operators, and reviewers
 - **Status:** Living accounting guide
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-07-31
+- **Last reviewed:** 2026-08-13
 
 This is the canonical public explanation of the shipped trust-accounting model, written so a
 property manager, bookkeeper, or attorney can evaluate it without reading C#. The Accounting module
@@ -287,8 +287,8 @@ daily rate = monthly rent ÷ actual days in month; charge = daily rate × days t
 the period; half-up rounding to the cent. The run is idempotent: re-running a period marks
 already-charged leases as "already done" and posts only newly eligible ones — never double-charges.
 
-**Late-fee run.** Selectively charges `FeeCharged(FeeKind.Late)` on delinquent ledgers past the
-grace period. The policy is five fields — rent due day, grace days, fee kind (flat or percent), the
+**Late-fee run.** Selectively charges `FeeCharged(FeeKind.Late)` against a specific unpaid rent
+obligation. The policy is five fields — rent due day, grace days, fee kind (flat or percent), the
 flat amount, and the percent rate. The org defaults are edited under **Settings → Late fees**, and a
 lease may override any one of them from that tenant's ledger page (**Tenants → tenant → Late fees**);
 a field left unset on the lease inherits the org default. The effective policy is therefore resolved
@@ -297,7 +297,14 @@ statutory ceiling** (the late fee may not exceed the greater of $15.00 or 5% of 
 regardless of the policy configured). That ceiling is not a setting and is not stored anywhere: it is
 computed from each lease's own rent when the run values the fee, so a configured fee above it is
 charged at the cap. Operators review the preview and pick which delinquent ledgers to charge before
-confirming; the run is never silent.
+confirming; the run is never silent. Eligibility is calculated from the contractual rent due date,
+not the rent journal date: the next calendar day is late day one, and charging begins on late day
+five or the later configured threshold. Preview and confirm use the real server date, confirm posts
+on that assessment date, and no operator-supplied future assessment date exists. The fee entry's
+`assesses_entry_id` points to the exact `RentCharged` entry, with a unique org-scoped constraint that
+permits only one fee for that rent obligation. Receivable reductions apply oldest-charge-first when
+the run decides whether that rent remains open, so an unrelated open charge cannot revive settled
+rent eligibility (ADR-033).
 
 **Owner disbursement run (with folded management fee).** For each owner, posts two events
 atomically: `ManagementFeeAssessed` (equity × effective bps, half-up — ADR-018) followed by
@@ -310,14 +317,18 @@ owner-level `DefaultMgmtFeeBps` only (documented in ADR-018).
 
 ### Source-ref idempotency convention (ADR-019)
 
-Every posting made by a bulk run carries a deterministic `source_ref` key that ties the journal
-entry to the run target and period:
+Every posting made by a bulk run carries a deterministic `source_ref` key. Rent and disbursement
+keys tie the journal entry to the run target and period:
 
 ```
 {runType}:{year}-{month:00}:{targetKind}={targetId}
 ```
 
 Examples: `rent:2026-05:lease=<leaseId>`, `disbursement:2026-05:owner=<ownerId>`.
+
+Late fees are the obligation-keyed exception: `latefee:rent-entry=<rentEntryId>`. That key makes a
+repeat run idempotent, while the separate unique `assesses_entry_id` relationship prevents a second
+fee for the same rental payment even if another caller supplies a different source reference.
 
 The `source_ref` is checked by the existing `(org_id, source_ref)` partial unique index on
 `journal_entries` before and after posting. A second run for the same target and period raises
@@ -330,8 +341,9 @@ Operations reads preview inputs from Directory and Accounting through **consumer
 host adapters**, exactly mirroring M5's read-direction ADR-016. The host adapter for writes
 (`BatchPostingAdapter`) loops the existing public `IAccountingEvents.PostAsync` for each intent;
 there is no new batch command in Accounting. Operations never references Accounting's event types —
-the adapter translates Operations primitives (target id, amount, date, period, kind) into the
-correct Accounting events (`RentCharged`, `FeeCharged`, `ManagementFeeAssessed`, `OwnerDisbursed`).
+the adapter translates Operations primitives (target id, amount, date, period, kind, and the assessed
+rent-obligation entry id for a late fee) into the correct Accounting events (`RentCharged`,
+`FeeCharged`, `ManagementFeeAssessed`, `OwnerDisbursed`).
 
 ### Run history
 
@@ -347,7 +359,8 @@ the run preview and confirm, not as a run-level failure. The run posts what it c
 locked-period targets as excluded with a reason, so a partially locked month is handled gracefully.
 
 See also: **ADR-017** (rent proration method), **ADR-018** (management-fee rounding), **ADR-019**
-(bulk-run engine and cross-module batch posting).
+(bulk-run engine and cross-module batch posting), **ADR-033** (late-fee eligibility and rent-obligation
+linkage).
 
 ## Migration / balance-forward cutover (M7)
 

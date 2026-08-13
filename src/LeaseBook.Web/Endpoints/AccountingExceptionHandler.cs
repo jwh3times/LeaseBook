@@ -23,7 +23,8 @@ public sealed class AccountingExceptionHandler(ILogger<AccountingExceptionHandle
 
         var status = domain.Code switch
         {
-            "unbalanced_entry" or "invalid_line" or "unknown_account" or "pm_income_owner_dim"
+            "unbalanced_entry" or "invalid_line" or "unknown_account" or "pm_income_owner_dim" or
+            "invalid_assessment_target"
                 => StatusCodes.Status422UnprocessableEntity,
             "reconciliation_not_found" or "entry_not_found" => StatusCodes.Status404NotFound,
             _ => StatusCodes.Status409Conflict, // period_closed, insufficient_liability, reserve_floor,

@@ -31,7 +31,7 @@ public sealed class RunStrategySourceRefTests
                     [lateFeeRow.LeaseId] = new(1, 5, LateFeeKind.Flat, 25m, 0),
                 }),
                 new StubPostedSourceRefs(),
-                new StubPeriodChargeGuard())
+                TimeProvider.System)
             .PlanAsync(period, [lateFeeRow.LeaseId], ct);
 
         var owner = new OwnerDisbursementRow(Guid.NewGuid(), "Katherine Owner", 100m, 800);
@@ -50,7 +50,9 @@ public sealed class RunStrategySourceRefTests
             .Intent.ShouldBeOfType<DisbursementIntent>();
 
         rent.SourceRef.ShouldBe($"rent:2026-03:lease={rentRow.LeaseId}");
-        lateFee.SourceRef.ShouldBe($"latefee:2026-03:lease={lateFeeRow.LeaseId}");
+        var rentEntryId = lateFeeRow.Attribution.ShouldBeOfType<DelinquencyAttribution.AttributedToLease>()
+            .RentObligationEntryId;
+        lateFee.SourceRef.ShouldBe($"latefee:rent-entry={rentEntryId}");
         disbursement.FeeSourceRef.ShouldBe($"disbursement-fee:2026-03:owner={owner.OwnerId}");
         disbursement.DisburseSourceRef.ShouldBe($"disbursement:2026-03:owner={owner.OwnerId}");
     }
@@ -79,5 +81,5 @@ public sealed class RunStrategySourceRefTests
             "4D",
             1_200m,
             1_200m,
-            new DelinquencyAttribution.AttributedToLease(6));
+            new DelinquencyAttribution.AttributedToLease(Guid.NewGuid()));
 }

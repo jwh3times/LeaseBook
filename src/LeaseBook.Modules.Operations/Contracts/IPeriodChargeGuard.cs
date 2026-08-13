@@ -5,11 +5,9 @@ namespace LeaseBook.Modules.Operations.Contracts;
 /// (<c>PeriodChargeGuardAdapter</c>) implements it by dispatching an Accounting
 /// <c>GetTenantsChargedInPeriod</c> query via <see cref="LeaseBook.SharedKernel.Cqrs.ISender"/>.
 /// <para>
-/// Used by <see cref="RentRunStrategy"/> and <see cref="LateFeeRunStrategy"/> to detect tenants
-/// that already have a charge of the given event type in the period, regardless of how that charge
-/// was posted (manual M3 composer, seed, CSV import, or a prior bulk run). This is the structural
-/// cross-source double-charge guard: the <c>IPostedSourceRefs</c> port only detects idempotent
-/// re-runs of the SAME bulk key; this port detects ANY charge from ANY source.
+/// Used by <see cref="RentRunStrategy"/> to detect tenants that already have a charge of the given
+/// event type in the period, regardless of how that charge was posted (manual M3 composer, seed,
+/// CSV import, or a prior bulk run).
 /// </para>
 /// </summary>
 public interface IPeriodChargeGuard

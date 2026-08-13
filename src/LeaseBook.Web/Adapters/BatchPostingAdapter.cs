@@ -56,6 +56,10 @@ internal sealed class BatchPostingAdapter(IAccountingEvents events) : IBatchPost
             // index, so this is the normal signal for "already done", not an error.
             return PostOutcome.Refused(PostStatus.DuplicateSourceRef);
         }
+        catch (RentObligationAlreadyAssessedException)
+        {
+            return PostOutcome.Refused(PostStatus.DuplicateSourceRef);
+        }
         catch (AccountPeriodLockedException)
         {
             return PostOutcome.Refused(PostStatus.PeriodLocked);
@@ -79,7 +83,8 @@ internal sealed class BatchPostingAdapter(IAccountingEvents events) : IBatchPost
         PostOutcome.Posted(await events.PostAsync(
             new FeeCharged(
                 i.TenantId, i.PropertyId, i.OwnerId, i.UnitId,
-                new Money(i.Amount), i.Date, FeeKind.Late, i.Description, i.SourceRef),
+                new Money(i.Amount), i.Date, FeeKind.Late, i.Description, i.SourceRef,
+                i.RentObligationEntryId),
             ct));
 
     /// <summary>
