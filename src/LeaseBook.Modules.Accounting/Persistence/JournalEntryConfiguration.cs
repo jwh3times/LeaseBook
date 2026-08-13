@@ -14,6 +14,7 @@ public sealed class JournalEntryConfiguration : IEntityTypeConfiguration<Journal
         builder.HasAlternateKey(e => new { e.OrgId, e.Id });
         builder.Property(e => e.OrgId).IsRequired();
         builder.Property(e => e.EntryDate).IsRequired();
+        builder.Property(e => e.DueDate);
         builder.Property(e => e.EventType).IsRequired();
         builder.Property(e => e.EventSubtype);
         builder.Property(e => e.Description);

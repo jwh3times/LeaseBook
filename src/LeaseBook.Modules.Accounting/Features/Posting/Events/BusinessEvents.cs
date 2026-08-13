@@ -42,7 +42,8 @@ public enum RefundSource
 /// <summary>Rent accrues: receivable up, owner income up (accrual only).</summary>
 public sealed record RentCharged(
     Guid TenantId, Guid PropertyId, Guid OwnerId, Guid? UnitId,
-    Money Amount, DateOnly Date, string Description, string? SourceRef = null) : AccountingEvent;
+    Money Amount, DateOnly Date, string Description, string? SourceRef = null,
+    DateOnly? DueDate = null) : AccountingEvent;
 
 /// <summary>A non-rent charge (late fee, maintenance recharge, …); same shape as rent (M1: accrues to owner).</summary>
 public sealed record FeeCharged(

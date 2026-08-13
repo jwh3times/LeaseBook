@@ -29,6 +29,7 @@ internal sealed class LeaseScheduleDataAdapter(ISender sender) : ILeaseScheduleD
                 r.TenantName,
                 r.UnitLabel,
                 r.Rent,
+                r.RentDueDay,
                 r.StartDate,
                 r.EndDate))
             .ToList();

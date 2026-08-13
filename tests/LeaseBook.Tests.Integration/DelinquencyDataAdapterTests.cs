@@ -70,6 +70,7 @@ public sealed class DelinquencyDataAdapterTests
                 D61_90: 0m,
                 Over90: 0m,
                 Total: 1_000m,
+                UnappliedCredit: 0m,
                 OldestAgeDays: oldestAgeDays),
         ]);
 
@@ -83,6 +84,7 @@ public sealed class DelinquencyDataAdapterTests
             TenantName: "Ada Tenant",
             UnitLabel: unitLabel,
             Rent: 1_000m,
+            RentDueDay: 1,
             StartDate: new DateOnly(2025, 1, 1),
             EndDate: new DateOnly(2027, 12, 31));
 

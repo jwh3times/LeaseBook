@@ -148,13 +148,14 @@ public sealed class ScenarioGoldenTests(PostgresFixture fixture)
             .ShouldBe((0m, 215.00m, 215.00m, 215.00m, 665.00m));
         tS6.Total.ShouldBe(1_310.00m);
 
-        // T-S2's partial payments bucket by their own entry_date (not FIFO-applied), so individual
-        // buckets legitimately go negative while Total stays right — lock the OBSERVED shape; do
-        // not "fix" the negatives (GetDelinquencyAging.cs:55-57 documents the semantics).
+        // T-S2's 600 + 1,000 + 1,415 payments and 85 credit satisfy March through May charges
+        // FIFO. Only June remains: 1,000 rent due June 1 + 50 late fee due June 9 + 25 NSF fee due
+        // June 20. At June 30 all 1,075 is 1-30 days old and no bucket can be negative.
         var tS2 = aging.Rows.Single(r => r.TenantId == tenants["Rosa Delgado"]);
         (tS2.Current, tS2.D1_30, tS2.D31_60, tS2.D61_90, tS2.Over90)
-            .ShouldBe((0m, 1_075.00m, -415.00m, -35.00m, 450.00m));
+            .ShouldBe((0m, 1_075.00m, 0m, 0m, 0m));
         tS2.Total.ShouldBe(1_075.00m);
+        tS2.UnappliedCredit.ShouldBe(0m);
     }
 
     [Fact]

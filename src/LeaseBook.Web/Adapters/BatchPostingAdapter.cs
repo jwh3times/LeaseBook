@@ -76,7 +76,7 @@ internal sealed class BatchPostingAdapter(IAccountingEvents events) : IBatchPost
         PostOutcome.Posted(await events.PostAsync(
             new RentCharged(
                 i.TenantId, i.PropertyId, i.OwnerId, i.UnitId,
-                new Money(i.Amount), i.Date, i.Description, i.SourceRef),
+                new Money(i.Amount), i.Date, i.Description, i.SourceRef, i.DueDate),
             ct));
 
     private async Task<PostOutcome> PostLateFeeAsync(LateFeeIntent i, CancellationToken ct) =>

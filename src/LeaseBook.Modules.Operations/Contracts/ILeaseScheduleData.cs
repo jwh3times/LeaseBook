@@ -17,6 +17,7 @@ public sealed record LeaseScheduleRow(
     string TenantName,
     string UnitLabel,
     decimal Rent,
+    int RentDueDay,
     DateOnly? StartDate,
     DateOnly? EndDate);
 

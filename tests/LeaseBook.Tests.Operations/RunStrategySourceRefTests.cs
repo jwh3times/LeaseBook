@@ -67,6 +67,7 @@ public sealed class RunStrategySourceRefTests
             "Dorothy Tenant",
             "3C",
             1_200m,
+            1,
             new DateOnly(2025, 1, 1),
             new DateOnly(2027, 12, 31));
 

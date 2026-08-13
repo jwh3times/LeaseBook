@@ -18,7 +18,8 @@ public sealed record PostEntryRequest(
     string? SourceRef,
     IReadOnlyList<PostLineRequest> Lines,
     Guid? ReversesEntryId = null,
-    Guid? AssessesEntryId = null);
+    Guid? AssessesEntryId = null,
+    DateOnly? DueDate = null);
 
 /// <summary>
 /// One requested line. Exactly one of <see cref="Debit"/>/<see cref="Credit"/> must be set and

@@ -94,6 +94,7 @@ public sealed class ReportPreviewService(ISender sender)
             ["d61_90"] = r.D61_90,
             ["over90"] = r.Over90,
             ["total"] = r.Total,
+            ["unappliedCredit"] = r.UnappliedCredit,
         }).ToList<object>();
 
         return new ReportPreviewResult(descriptor.Id, descriptor.Name, descriptor.Category, null, rows);
