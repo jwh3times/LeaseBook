@@ -10,9 +10,14 @@ namespace LeaseBook.Modules.Directory.Features.BankAccounts;
 
 /// <summary>
 /// Creates a bank account and provisions the matching chart-of-accounts account through the
-/// cross-module port (§C.8 / P49). No hard delete — a bank with journal history cannot be removed;
-/// deactivation: see SetBankAccountActive.
+/// cross-module port (§C.8 / P49). Purpose is immutable after creation: <c>trust</c> is the operating
+/// trust account and <c>deposit</c> is the security-deposit trust account (both inside the trust
+/// equation); <c>operating</c> is the PM operating account (outside it). No hard delete — a bank with
+/// journal history cannot be removed; deactivation: see SetBankAccountActive.
 /// </summary>
+/// <param name="Purpose">
+/// Immutable bank purpose: <c>trust</c>, <c>deposit</c>, or <c>operating</c>, with the meanings above.
+/// </param>
 public sealed record CreateBankAccount(string Name, string? Institution, string? Mask, string Purpose)
     : ICommand<BankAccountResponse>;
 

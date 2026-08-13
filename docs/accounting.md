@@ -38,6 +38,23 @@ database level (a line tagged owner-and-PM-income is rejected), so the manager's
 appear on an owner's statement. Likewise security deposits and prepayments are **liabilities** — they
 are not income, and they do not become income until they are actually applied.
 
+### Bank purpose fixes the trust boundary
+
+**Bank accounts** is the generic category for every real-world account configured in LeaseBook. Each
+one receives an immutable **bank purpose** when it is created; that purpose determines the account
+class and whether the account participates in the trust equation:
+
+| Bank purpose                   | API value   | Account class       | Trust equation |
+| ------------------------------ | ----------- | ------------------- | -------------- |
+| Operating trust account        | `trust`     | `trust_bank`        | Inside         |
+| Security-deposit trust account | `deposit`   | `trust_bank`        | Inside         |
+| PM operating account           | `operating` | `pm_operating_bank` | Outside        |
+
+The generic label is never **trust bank accounts**, because that would incorrectly include the PM
+operating account. Likewise, **operating account** is not shorthand for the operating trust account:
+the unqualified phrase can be mistaken for the PM operating account. Bank purpose cannot be changed
+after creation because changing it would move an existing account across the fiduciary boundary.
+
 ## Two bases, one set of books
 
 Every line is tagged **cash**, **accrual**, or **both**:

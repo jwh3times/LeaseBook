@@ -117,15 +117,15 @@ export function OnboardingPage() {
           {activeStep === 0 && (
             <Card pad>
               <CardHeader
-                title="Set up trust bank accounts"
-                sub="Configure your trust, deposit, and operating bank accounts before importing data."
+                title="Set up bank accounts"
+                sub="Configure an operating trust account and a security-deposit trust account (inside the trust equation), plus the PM operating account (outside it), before importing data."
               />
               <p className="fs14 mt8">
                 Go to{' '}
                 <a href="/settings" className="pf-link">
                   Settings → Bank accounts
                 </a>{' '}
-                to add your trust bank accounts, then return here.
+                to add your bank accounts, then return here.
               </p>
             </Card>
           )}

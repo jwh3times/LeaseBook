@@ -7,7 +7,8 @@ namespace LeaseBook.Modules.Directory.Features.BankAccounts;
 
 /// <summary>
 /// Edits a bank account's display fields (§C.4). Editing the name does <b>not</b> rename the provisioned
-/// accounting account — the display name is cosmetic; a rename sync is a later concern.
+/// accounting account — the display name is cosmetic; a rename sync is a later concern. Bank purpose
+/// is immutable because it fixes the provisioned account class and trust-equation boundary.
 /// Returns null → 404 when the id is unknown. Deactivation: see SetBankAccountActive.
 /// </summary>
 public sealed record UpdateBankAccount(Guid Id, string Name, string? Institution, string? Mask)

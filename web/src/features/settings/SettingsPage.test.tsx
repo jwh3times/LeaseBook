@@ -79,6 +79,49 @@ describe('SettingsPage', () => {
     expect(screen.getByRole('button', { name: 'Deactivate' })).toBeInTheDocument();
   });
 
+  it('distinguishes the PM operating account from the operating trust account', async () => {
+    server.use(
+      http.get('/api/settings/org', () => HttpResponse.json(ORG)),
+      http.get('/api/settings/banks', () =>
+        HttpResponse.json([
+          ACTIVE_BANK,
+          {
+            ...ACTIVE_BANK,
+            id: 'b2',
+            name: 'Management Checking',
+            purpose: 'operating',
+          },
+        ]),
+      ),
+    );
+
+    renderSettings();
+
+    expect(await screen.findByText('Operating trust account')).toBeInTheDocument();
+    expect(screen.getByText('PM operating account')).toBeInTheDocument();
+    expect(screen.getByText('Bank accounts')).toBeInTheDocument();
+    expect(screen.getAllByText('Inside the trust equation.')).not.toHaveLength(0);
+    expect(screen.getByText('Outside the trust equation.')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'New account' }));
+
+    expect(
+      screen.getByRole('option', {
+        name: 'Operating trust account — Inside the trust equation.',
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('option', {
+        name: 'PM operating account — Outside the trust equation.',
+      }),
+    ).toBeInTheDocument();
+
+    await userEvent.selectOptions(screen.getByLabelText('Purpose'), 'operating');
+    expect(screen.getByText(/management company's own non-trust bank account/i)).toHaveTextContent(
+      /outside the trust equation.*cannot be changed after creation/i,
+    );
+  });
+
   it('deactivates a bank account and flips the badge to Inactive', async () => {
     server.use(
       http.get('/api/settings/org', () => HttpResponse.json(ORG)),

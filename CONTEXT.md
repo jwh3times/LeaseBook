@@ -45,6 +45,31 @@ did it. "Unknown" is not an answer the language admits.
 _Avoid_: user (a person is a person; an actor is the role a person **or** the system fills),
 author, created-by
 
+### Bank accounts
+
+**Bank account**:
+A real-world financial account held by the property manager. This is the generic category for both
+fiduciary trust accounts and the property manager's own non-trust account.
+_Avoid_: trust bank account (as the umbrella term), trust and operating account
+
+**Bank purpose**:
+The immutable classification of a bank account as operating trust, security-deposit trust, or PM
+operating. It fixes whether the account holds fiduciary funds and belongs inside the trust equation.
+_Avoid_: account type, bank type
+
+**Operating trust account**:
+A fiduciary bank account used for rent receipts, owner funds, and owner disbursements. It is inside
+the trust equation.
+_Avoid_: trust account, operating account
+
+**Security-deposit trust account**:
+A fiduciary bank account used to hold security deposits. It is inside the trust equation.
+_Avoid_: deposit account, deposit bank
+
+**PM operating account**:
+The property management company's own non-trust bank account. It is outside the trust equation.
+_Avoid_: operating account, management operating account
+
 ### Capabilities
 
 Whether a behaviour is available is answered from two independent sources, and conflating them is the

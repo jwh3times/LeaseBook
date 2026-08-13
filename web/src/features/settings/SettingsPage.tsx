@@ -11,7 +11,30 @@ import {
   type OrgSettings,
 } from '@/lib/settings';
 
-const BANK_PURPOSES = ['trust', 'deposit', 'operating'] as const;
+const BANK_PURPOSES = [
+  {
+    value: 'trust',
+    label: 'Operating trust account',
+    boundary: 'Inside the trust equation.',
+    description: 'Used for rent receipts, owner funds, and owner disbursements.',
+  },
+  {
+    value: 'deposit',
+    label: 'Security-deposit trust account',
+    boundary: 'Inside the trust equation.',
+    description: 'Used to hold tenant security deposits.',
+  },
+  {
+    value: 'operating',
+    label: 'PM operating account',
+    boundary: 'Outside the trust equation.',
+    description: "The management company's own non-trust bank account.",
+  },
+] as const;
+
+function describeBankPurpose(value: string) {
+  return BANK_PURPOSES.find((purpose) => purpose.value === value);
+}
 
 export function SettingsPage() {
   const settings = useOrgSettings();
@@ -333,11 +356,17 @@ function BankAccountsSection() {
     {
       key: 'purpose',
       header: 'Purpose',
-      render: (b) => (
-        <Badge tone={b.purpose === 'operating' ? 'neutral' : 'accent'} dot>
-          {b.purpose}
-        </Badge>
-      ),
+      render: (b) => {
+        const purpose = describeBankPurpose(b.purpose);
+        return (
+          <div className="col gap4">
+            <Badge tone={b.purpose === 'operating' ? 'neutral' : 'accent'} dot>
+              {purpose?.label ?? b.purpose}
+            </Badge>
+            {purpose && <span className="t3 fs12">{purpose.boundary}</span>}
+          </div>
+        );
+      },
     },
     {
       key: 'status',
@@ -373,8 +402,8 @@ function BankAccountsSection() {
   return (
     <Card>
       <CardHeader
-        title="Trust bank accounts"
-        sub="Creating an account provisions its ledger account."
+        title="Bank accounts"
+        sub="Purpose is fixed when an account is created and determines whether it belongs inside the trust equation."
         actions={
           <Button variant="primary" size="sm" icon="plus" onClick={() => setShowNew(true)}>
             New account
@@ -407,6 +436,7 @@ function NewBankModal({ onClose }: { onClose: () => void }) {
   const [mask, setMask] = useState('');
   const [purpose, setPurpose] = useState<string>('trust');
   const [error, setError] = useState<string | null>(null);
+  const selectedPurpose = describeBankPurpose(purpose)!;
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -460,13 +490,22 @@ function NewBankModal({ onClose }: { onClose: () => void }) {
           </div>
           <div className="pf-formrow grow">
             <label htmlFor="b-purpose">Purpose</label>
-            <Select id="b-purpose" value={purpose} onChange={(e) => setPurpose(e.target.value)}>
+            <Select
+              id="b-purpose"
+              value={purpose}
+              aria-describedby="b-purpose-help"
+              onChange={(e) => setPurpose(e.target.value)}
+            >
               {BANK_PURPOSES.map((p) => (
-                <option key={p} value={p}>
-                  {p.charAt(0).toUpperCase() + p.slice(1)}
+                <option key={p.value} value={p.value}>
+                  {p.label} — {p.boundary}
                 </option>
               ))}
             </Select>
+            <span id="b-purpose-help" className="t3 fs12">
+              {selectedPurpose.description} {selectedPurpose.boundary} Purpose cannot be changed
+              after creation.
+            </span>
           </div>
         </div>
         {error && (
