@@ -81,6 +81,10 @@
     <!-- Direct architecture-test use; already resolved transitively by NetArchTest at this version. -->
     <PackageVersion Include="Mono.Cecil" Version="0.11.6" />
     <PackageVersion Include="Testcontainers.PostgreSql" Version="4.13.0" />
+    <!-- Transitive of Testcontainers. Pinned to 2026.0.0 to clear NU1903 /
+         GHSA-q939-rpr3-3284 (arbitrary file write during recursive SCP downloads). Transitive
+         pinning (above) forces the patched release until Testcontainers raises its dependency. -->
+    <PackageVersion Include="SSH.NET" Version="2026.0.0" />
     <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.11" />
     <!-- Property-based testing (P29): framework-agnostic, runs under xUnit v3/MTP. FsCheck rejected
          (immature xunit-v3 adapter). The accounting harness (WP-07/WP-08) leans on this. -->
