@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 namespace LeaseBook.Modules.Directory.Features.Tenants;
 
 /// <summary>
-/// Resolves a tenant's posting dimensions from its <b>active lease</b> (P58): the owner/property/unit a
+/// Resolves a tenant's posting dimensions from its single <b>active lease</b> (P58): the owner/property/unit a
 /// ledger posting carries. A thin intra-Directory LINQ read of Directory's own tables — the host's
 /// <c>ITenantPostingDimensions</c> adapter dispatches it for the Accounting composer (ADR-007). Returns
 /// <see langword="null"/> when the tenant has no active lease (or is a system row), so the Accounting
@@ -34,5 +34,5 @@ internal sealed class GetTenantPostingDimensionsHandler(DbContext db)
             join o in db.Set<Owner>().AsNoTracking() on p.OwnerId equals o.Id
             where t.Id == query.TenantId && l.Status == LeaseStatus.Active
             select new TenantPostingDimensionsView(o.Id, p.Id, u.Id))
-        .FirstOrDefaultAsync(ct);
+        .SingleOrDefaultAsync(ct);
 }

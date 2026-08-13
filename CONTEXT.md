@@ -75,6 +75,17 @@ _Avoid_: beta group, segment, audience
 
 ### Receivables and delinquency
 
+**Tenant financial account**:
+The tenant-level receivable and liability relationship attributed through the tenant's one active
+lease to one unit, property and owner. A tenant may have pending and historical leases, but only the
+active lease supplies current financial attribution.
+_Avoid_: renter balance (a balance is one figure within the account), occupancy account
+
+**Financial attribution**:
+The owner, property and unit identity carried by a financial event. Posted attribution is a
+historical fact: later lease or directory changes do not rewrite it.
+_Avoid_: current lease lookup (that is how a new event obtains attribution, not the attribution)
+
 **Open charge**:
 The unpaid portion of a charge owed by a tenant. Allocating a payment or general credit reduces its
 remaining amount; a linked reversal may cancel the charge or cancel an earlier reduction. A charge

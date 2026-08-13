@@ -309,69 +309,6 @@ public sealed class LateFeeRunTests(PostgresFixture fixture)
         secondResult.Total.ShouldBe(0m);
     }
 
-    [Fact]
-    public async Task Multi_active_lease_per_tenant_produces_no_late_fee_and_surfaces_ambiguity()
-    {
-        // Arrange: one tenant with TWO active leases, both delinquent on tenant balance.
-        // The adapter cannot attribute the tenant-level balance to one lease → neither must be charged.
-        var ct = TestContext.Current.CancellationToken;
-        var orgId = await NewOrgAsync(ct);
-        Guid tenantId = default, leaseId1 = default, leaseId2 = default;
-
-        await DispatchAsync(orgId, async (s, _) =>
-        {
-            await s.Send(new CreateBankAccount("Trust MultiLease", null, null, "trust"), ct);
-            var ownerId = await s.Send(new CreateOwner("MultiLease Owner", null, null, null, 800, 0m), ct);
-            var propId = await s.Send(new CreateProperty(ownerId, "30 Multi Ln", "Raleigh", "NC", null, null), ct);
-            var u1 = await s.Send(new CreateUnit(propId, "#A", 1100m, "occupied"), ct);
-            var u2 = await s.Send(new CreateUnit(propId, "#B", 1200m, "occupied"), ct);
-            tenantId = await s.Send(new CreateTenant("Multi Lease Tenant", null, null, "current"), ct);
-
-            // Same tenant, two active leases.
-            leaseId1 = await s.Send(new CreateLease(
-                tenantId, u1,
-                new DateOnly(2025, 1, 1), new DateOnly(2027, 12, 31),
-                1100m, 1100m, "active",
-                LateFeeRentDueDayOverride: 1, LateFeeGraceDaysOverride: 0,
-                LateFeeKindOverride: "flat", LateFeeAmountOverride: 50m, LateFeeRateBpsOverride: null), ct);
-            leaseId2 = await s.Send(new CreateLease(
-                tenantId, u2,
-                new DateOnly(2025, 1, 1), new DateOnly(2027, 12, 31),
-                1200m, 1200m, "active",
-                LateFeeRentDueDayOverride: 1, LateFeeGraceDaysOverride: 0,
-                LateFeeKindOverride: "flat", LateFeeAmountOverride: 50m, LateFeeRateBpsOverride: null), ct);
-        }, ct);
-
-        // Create a delinquent balance on the tenant.
-        await DispatchAsync(orgId, async (s, _) =>
-        {
-            await s.Send(
-                new LeaseBook.Modules.Accounting.Features.LedgerPosting.AddCharge(
-                    tenantId, 1100m,
-                    new DateOnly(Period.Year, Period.Month, 1),
-                    "rent", null,
-                    $"rent:{Period.Key}:lease={leaseId1}"),
-                ct);
-        }, ct);
-
-        // Act: preview must produce zero chargeable rows for this tenant and surface the ambiguity.
-        RunPreview? preview = null;
-        await RunAsync(orgId, async (engine, _) =>
-        {
-            preview = await engine.PreviewAsync(RunType.LateFee, Period, ct);
-        }, ct);
-
-        preview.ShouldNotBeNull();
-        // Neither lease must appear in chargeable rows.
-        preview!.Rows.ShouldNotContain(r => r.TargetId == leaseId1,
-            "lease1 of ambiguous tenant must NOT be in chargeable rows");
-        preview.Rows.ShouldNotContain(r => r.TargetId == leaseId2,
-            "lease2 of ambiguous tenant must NOT be in chargeable rows");
-        // The ambiguity must be visible in exceptions.
-        preview.Exceptions.ShouldContain(e => e.Contains("multiple active leases"),
-            "ambiguous multi-lease tenant must surface 'ambiguous_multiple_active_leases' in exceptions");
-    }
-
     // ── helpers ──────────────────────────────────────────────────────────────
 
     private sealed record Ctx(

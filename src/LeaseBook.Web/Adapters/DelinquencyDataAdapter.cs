@@ -14,13 +14,9 @@ namespace LeaseBook.Web.Adapters;
 ///   <item>Accounting's <see cref="GetRentObligationEntries"/> — canonical, unreversed rent entries
 ///     that remain open under oldest-charge-first allocation at the assessment date.</item>
 /// </list>
-/// Joins them on <c>tenant_id</c> to produce per-lease delinquency rows with rules:
-/// <list type="bullet">
-///   <item>A tenant with exactly one active lease → one chargeable row attributed to that lease.</item>
-///   <item>A tenant with MORE than one active lease → excluded with reason
-///     <c>"ambiguous_multiple_active_leases"</c>; no fee is posted to any of their leases
-///     (Phase 1: can't attribute a tenant-level balance to one lease without per-lease GL).</item>
-/// </list>
+/// Joins them on <c>tenant_id</c> to produce one delinquency row for the tenant's active lease.
+/// Directory's command and database constraints guarantee at most one active lease per tenant; the
+/// dictionary construction deliberately fails rather than guessing if that invariant is violated.
 /// </summary>
 internal sealed class DelinquencyDataAdapter(ISender sender) : IDelinquencyData
 {
@@ -45,56 +41,30 @@ internal sealed class DelinquencyDataAdapter(ISender sender) : IDelinquencyData
             .Where(r => r.Total > 0m)
             .ToDictionary(r => r.TenantId);
 
-        // Group leases by tenant_id so we can detect the multi-lease ambiguity case.
-        var leasesByTenant = schedule.Rows
-            .GroupBy(l => l.TenantId)
-            .ToDictionary(g => g.Key, g => g.ToList());
+        var leaseByTenant = schedule.Rows.ToDictionary(l => l.TenantId);
 
         var result = new List<DelinquentLedgerRow>();
         foreach (var (tenantId, agingRow) in agingByTenant)
         {
-            if (!leasesByTenant.TryGetValue(tenantId, out var tenantLeases))
+            if (!leaseByTenant.TryGetValue(tenantId, out var lease))
             {
                 continue; // Delinquent tenant has no active lease in this period — skip.
             }
 
-            if (tenantLeases.Count > 1)
-            {
-                // Cannot attribute a tenant-level balance to one lease when multiple are active.
-                // Surface one excluded row per lease so the preview can list them with the reason.
-                foreach (var lease in tenantLeases)
-                {
-                    result.Add(new DelinquentLedgerRow(
-                        LeaseId: lease.LeaseId,
-                        TenantId: lease.TenantId,
-                        PropertyId: lease.PropertyId,
-                        OwnerId: lease.OwnerId,
-                        UnitId: lease.UnitId,
-                        TenantName: lease.TenantName,
-                        UnitLabel: lease.UnitLabel,
-                        Rent: lease.Rent,
-                        Balance: agingRow.Total,
-                        Attribution: new DelinquencyAttribution.AmbiguousMultipleActiveLeases()));
-                }
-                continue;
-            }
-
-            // Exactly one active lease — attribute the balance to it.
-            var singleLease = tenantLeases[0];
-            var rentRef = $"rent:{year}-{month:00}:lease={singleLease.LeaseId}";
+            var rentRef = $"rent:{year}-{month:00}:lease={lease.LeaseId}";
             var attribution = rentObligationByRef.TryGetValue(rentRef, out var obligation) &&
-                obligation.TenantId == singleLease.TenantId
+                obligation.TenantId == lease.TenantId
                 ? (DelinquencyAttribution)new DelinquencyAttribution.AttributedToLease(obligation.EntryId)
                 : new DelinquencyAttribution.NoRentObligation();
             result.Add(new DelinquentLedgerRow(
-                LeaseId: singleLease.LeaseId,
-                TenantId: singleLease.TenantId,
-                PropertyId: singleLease.PropertyId,
-                OwnerId: singleLease.OwnerId,
-                UnitId: singleLease.UnitId,
-                TenantName: singleLease.TenantName,
-                UnitLabel: singleLease.UnitLabel,
-                Rent: singleLease.Rent,
+                LeaseId: lease.LeaseId,
+                TenantId: lease.TenantId,
+                PropertyId: lease.PropertyId,
+                OwnerId: lease.OwnerId,
+                UnitId: lease.UnitId,
+                TenantName: lease.TenantName,
+                UnitLabel: lease.UnitLabel,
+                Rent: lease.Rent,
                 Balance: agingRow.Total,
                 Attribution: attribution));
         }

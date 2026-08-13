@@ -16,6 +16,24 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Added
 
+- _Nothing yet._
+
+### Changed
+
+- _Nothing yet._
+
+### Fixed
+
+- _Nothing yet._
+
+### Security
+
+- _Nothing yet._
+
+## [0.3.0] - 2026-08-13
+
+### Added
+
 - **Capability control in production** — feature flags, per-organization entitlements and cohort
   rules can now be changed in a running production environment without a deployment or a restart,
   through a manual-trigger job that runs the same application image from inside the private network
@@ -179,6 +197,13 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   the suite rejects an empty posting rather than passing vacuously.
 
 ### Changed
+
+- **Tenant financial attribution is deterministic** — a tenant can now have only one active lease,
+  enforced by both lease commands and PostgreSQL. Pending and historical leases remain available,
+  but every new tenant-account posting derives its owner, property, and unit from the single active
+  lease and preserves those dimensions as immutable history. Attempts to activate a second lease are
+  rejected instead of silently assigning payments or charges to whichever lease the database returns
+  first. See [ADR-035](docs/adr/ADR-035-single-active-lease-financial-attribution.md).
 
 - **Azure Monitor's ASP.NET Core distro remains deferred after a fresh evaluation** — the current
   manual OpenTelemetry pipeline keeps its conditional export, custom LeaseBook spans, correlated
@@ -423,5 +448,6 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.3.0
 [0.2.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.2.0

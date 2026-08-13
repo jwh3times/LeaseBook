@@ -76,7 +76,7 @@ internal sealed class GetTenantDetailHandler(DbContext db, ITenantFinancials ten
                 PropertyAddress = p.Address,
                 OwnerId = o.Id,
                 OwnerName = o.Name,
-            }).FirstOrDefaultAsync(ct);
+            }).SingleOrDefaultAsync(ct);
 
         var balances = await tenantFinancials.BalancesAsync(ct);
         var deposits = await tenantFinancials.DepositsHeldAsync(ct);

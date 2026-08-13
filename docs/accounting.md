@@ -164,6 +164,18 @@ separate unapplied-credit amount and never makes a bucket negative. A payment ov
 the posting template holds it as a prepayment liability until an operator applies it to charges
 (ADR-034).
 
+### Tenant financial attribution
+
+Phase 1 permits one active lease per tenant. That lease supplies the owner, property and unit copied
+onto new tenant-account journal lines; create and update reject a second active lease, and the database
+enforces the same cardinality. Pending and ended leases remain available for future and historical
+records.
+
+Posted dimensions are immutable historical attribution. A later lease or directory change does not
+move an existing journal line to another owner or property. Simultaneous occupancies require distinct
+tenant accounts until Accounting has persisted per-lease receivable and liability allocation. See
+[ADR-035](adr/ADR-035-single-active-lease-financial-attribution.md).
+
 ## Who did it
 
 Every posted entry now records the acting user. The authenticated user's id is stamped onto the journal
