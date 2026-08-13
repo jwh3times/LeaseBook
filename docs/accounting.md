@@ -147,6 +147,23 @@ excess into a prepayment. An _application_ has no such overflow, so applying a d
 income** (damages) is deliberately _not_ capped — damages legitimately exceed any rent owed. This sits
 alongside the existing rule that an application can never exceed the deposit/prepayment actually held.
 
+### Open charges, allocation and aging
+
+The delinquency report reconstructs open charges as of its report date. Each charge carries a
+contractual due date separately from its accounting date; the monthly rent run records the effective
+lease due date even though the rent entry posts on the first of the month. Historical charges from
+before this field existed fall back to their entry date because their former lease policy cannot be
+reconstructed safely.
+
+Tenant payments, applied deposits/prepayments and general credits reduce the oldest due charge
+first. Charges with the same due date use stable journal order. A linked reversal removes both the
+original activity and its mirror from allocation once the reversal is effective, so reversing a
+payment reopens the original charge at the original age. Only the remaining amount of a charge enters
+an aging bucket. The report's total is therefore gross open receivables; excess general credit is a
+separate unapplied-credit amount and never makes a bucket negative. A payment overage is different:
+the posting template holds it as a prepayment liability until an operator applies it to charges
+(ADR-034).
+
 ## Who did it
 
 Every posted entry now records the acting user. The authenticated user's id is stamped onto the journal

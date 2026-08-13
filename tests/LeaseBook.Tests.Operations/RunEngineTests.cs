@@ -294,6 +294,7 @@ public sealed class RunEngineTests(PostgresFixture fixture)
             new RentChargeIntent(
                 LeaseId: targetId, TenantId: targetId, PropertyId: targetId, OwnerId: targetId,
                 UnitId: null, Amount: amount, Date: new DateOnly(2026, 6, 1),
+                DueDate: new DateOnly(2026, 6, 1),
                 Description: "Rent 2026-06", SourceRef: $"rent:2026-06:lease={targetId}"),
             amount,
             PostedDetail: new Dictionary<string, object?>(StringComparer.Ordinal)
@@ -360,6 +361,7 @@ file sealed class NoOpStrategy(Guid[] targets) : IRunStrategy
                 new RentChargeIntent(
                     LeaseId: id, TenantId: id, PropertyId: id, OwnerId: id, UnitId: null,
                     Amount: 0m, Date: new DateOnly(period.Year, period.Month, 1),
+                    DueDate: new DateOnly(period.Year, period.Month, 1),
                     Description: $"No-op {period.Key}", SourceRef: $"noop:{period.Key}:lease={id}"),
                 Amount: 0m,
                 PostedDetail: new Dictionary<string, object?>(StringComparer.Ordinal),

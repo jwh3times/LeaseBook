@@ -1,9 +1,11 @@
+using LeaseBook.Modules.Accounting.Domain;
 using LeaseBook.Modules.Accounting.Features.Ledgers;
 using LeaseBook.Modules.Accounting.Periods;
 using LeaseBook.Modules.Directory.Features.BankAccounts;
 using LeaseBook.Modules.Directory.Features.Leases;
 using LeaseBook.Modules.Directory.Features.Owners;
 using LeaseBook.Modules.Directory.Features.Properties;
+using LeaseBook.Modules.Directory.Features.Settings;
 using LeaseBook.Modules.Directory.Features.Tenants;
 using LeaseBook.Modules.Directory.Features.Units;
 using LeaseBook.Modules.Operations.Domain;
@@ -13,6 +15,8 @@ using LeaseBook.SharedKernel.Cqrs;
 using LeaseBook.SharedKernel.Tenancy;
 using LeaseBook.Tests.Common;
 using LeaseBook.Tests.Integration.Fixtures;
+using LeaseBook.Web.Persistence;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Shouldly;
 
@@ -85,13 +89,19 @@ public sealed class OperationsRunsTests(PostgresFixture fixture)
         var ctx = await SetupAsync(ct);
 
         RunResult? result = null;
-        await RunAsync(ctx.OrgId, async (engine, _) =>
+        List<DateOnly?> dueDates = [];
+        await RunAsync(ctx.OrgId, async (engine, services) =>
         {
             var preview = await engine.PreviewAsync(RunType.Rent, Period, ct);
             var targets = preview.Rows.Select(r => r.TargetId).ToList();
             result = await engine.ConfirmAsync(
                 RunType.Rent, Period, targets, preview.CapabilitiesVersion,
                 acknowledgeCapabilityChange: false, ct);
+            var db = services.GetRequiredService<AppDbContext>();
+            dueDates = await db.Set<JournalEntry>()
+                .Where(entry => entry.EventType == "RentCharged")
+                .Select(entry => entry.DueDate)
+                .ToListAsync(ct);
         }, ct);
 
         result.ShouldNotBeNull();
@@ -99,6 +109,8 @@ public sealed class OperationsRunsTests(PostgresFixture fixture)
         result.Skipped.ShouldBe(0);
         result.Excluded.ShouldBe(0);
         result.Total.ShouldBe(GoldenTotal);
+        dueDates.Count.ShouldBe(3);
+        dueDates.ShouldAllBe(date => date == new DateOnly(2026, 3, 15));
     }
 
     [Fact]
@@ -253,6 +265,9 @@ public sealed class OperationsRunsTests(PostgresFixture fixture)
             // Create trust bank account (provisions chart of accounts in Accounting).
             var trust = await s.Send(new CreateBankAccount("Operating Trust", null, null, "trust"), ct);
             trustBankId = trust.Id;
+            await s.Send(new UpdateOrgSettings(
+                null, null, null, null, null, null, null, null, null,
+                RentDueDay: 15), ct);
 
             // Owner + 2 properties.
             var ownerId = await s.Send(new CreateOwner("Test Owner", null, null, null, 800, 0m), ct);

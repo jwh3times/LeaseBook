@@ -180,7 +180,8 @@ internal sealed class PostingService(
             request.EntryDate, request.EventType, request.EventSubtype, request.Description,
             request.SourceRef, request.ReversesEntryId,
             createdBy: actor?.UserId, postedAt: DateTime.UtcNow,
-            assessesEntryId: request.AssessesEntryId);
+            assessesEntryId: request.AssessesEntryId,
+            dueDate: request.DueDate);
         foreach (var line in lines)
         {
             entry.AddLine(line);

@@ -232,6 +232,12 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Fixed
 
+- **Delinquency aging now allocates payments before assigning buckets** — tenant payments and general
+  credits satisfy the oldest contractual due charge first, with stable journal ordering for ties.
+  Aging contains only each charge's remaining amount, never produces negative buckets, and reports
+  excess general credit separately. Late-fee assessment uses the same allocation replay to identify
+  the specific open rent obligation it charges.
+
 - **Late fees now follow the lease due date and the actual assessment day** — late day one is the
   day after rent is contractually due, and a fee becomes chargeable on late day five or a later
   lease threshold. Preview no longer ages balances to month-end, confirmation cannot create a

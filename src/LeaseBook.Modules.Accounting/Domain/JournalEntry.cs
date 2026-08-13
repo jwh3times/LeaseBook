@@ -27,6 +27,7 @@ public sealed class JournalEntry : IOrgScoped
         string? sourceRef,
         Guid? reversesEntryId,
         Guid? assessesEntryId,
+        DateOnly? dueDate,
         Guid? createdBy,
         DateTime postedAt)
     {
@@ -38,6 +39,7 @@ public sealed class JournalEntry : IOrgScoped
         SourceRef = sourceRef;
         ReversesEntryId = reversesEntryId;
         AssessesEntryId = assessesEntryId;
+        DueDate = dueDate;
         CreatedBy = createdBy;
         PostedAt = postedAt;
     }
@@ -66,6 +68,9 @@ public sealed class JournalEntry : IOrgScoped
     /// <summary>The rent obligation assessed by this entry, when this is a late fee.</summary>
     public Guid? AssessesEntryId { get; private set; }
 
+    /// <summary>The contractual due date for a charge; null for non-charge activity.</summary>
+    public DateOnly? DueDate { get; private set; }
+
     /// <summary>Acting user id; null for the seeder and background jobs.</summary>
     public Guid? CreatedBy { get; private set; }
 
@@ -86,9 +91,10 @@ public sealed class JournalEntry : IOrgScoped
         Guid? reversesEntryId,
         Guid? createdBy,
         DateTime postedAt,
-        Guid? assessesEntryId = null) =>
+        Guid? assessesEntryId = null,
+        DateOnly? dueDate = null) =>
         new(entryDate, eventType, eventSubtype, description, sourceRef, reversesEntryId,
-            assessesEntryId, createdBy, postedAt);
+            assessesEntryId, dueDate, createdBy, postedAt);
 
     internal void AddLine(JournalLine line)
     {

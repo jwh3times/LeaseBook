@@ -10,6 +10,21 @@ public sealed class RentRunStrategyTests
     private static readonly RunPeriod Period = new(2026, 6);
 
     [Fact]
+    public async Task Plan_carries_the_contractual_due_date_separately_from_the_posting_date()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var row = ActiveLease(rent: 1_000m) with { RentDueDay = 15 };
+        var strategy = BuildStrategy([row]);
+
+        var plan = await strategy.PlanAsync(Period, [row.LeaseId], ct);
+
+        var intent = plan.ShouldHaveSingleItem().ShouldBeOfType<PlannedPosting>()
+            .Intent.ShouldBeOfType<RentChargeIntent>();
+        intent.Date.ShouldBe(new DateOnly(2026, 6, 1));
+        intent.DueDate.ShouldBe(new DateOnly(2026, 6, 15));
+    }
+
+    [Fact]
     public async Task Plan_turns_an_eligible_selected_lease_into_a_prorated_rent_intent()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -71,6 +86,7 @@ public sealed class RentRunStrategyTests
             TenantName: "Grace Hopper",
             UnitLabel: "2B",
             Rent: rent,
+            RentDueDay: 1,
             StartDate: startDate,
             EndDate: endDate);
 

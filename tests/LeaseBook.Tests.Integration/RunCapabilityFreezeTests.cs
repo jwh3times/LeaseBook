@@ -459,6 +459,7 @@ file sealed class PlanEveryTargetStrategy(Guid[] targets) : IRunStrategy
                 new RentChargeIntent(
                     LeaseId: id, TenantId: id, PropertyId: id, OwnerId: id, UnitId: null,
                     Amount: 0m, Date: new DateOnly(period.Year, period.Month, 1),
+                    DueDate: new DateOnly(period.Year, period.Month, 1),
                     Description: $"Freeze probe {period.Key}",
                     SourceRef: $"freeze:{period.Key}:lease={id}"),
                 Amount: 0m,

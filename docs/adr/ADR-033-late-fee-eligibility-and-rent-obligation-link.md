@@ -1,10 +1,14 @@
 # ADR-033: Late-fee eligibility and rent-obligation linkage
 
-- **Status:** Accepted
+- **Status:** Accepted (amended by ADR-034)
 - **Date:** 2026-08-13
 - **Deciders:** Jerry Holland
 - **Amends:** [ADR-006](ADR-006-posting-template-catalog.md) and
   [ADR-019](ADR-019-bulk-run-engine-and-batch-posting.md)
+
+[ADR-034](ADR-034-computed-fifo-receivable-allocation.md) extends oldest-charge-first allocation to
+delinquency aging and persists charge due dates. The eligibility and rent-obligation linkage
+decision here remains in force.
 
 ## Context
 

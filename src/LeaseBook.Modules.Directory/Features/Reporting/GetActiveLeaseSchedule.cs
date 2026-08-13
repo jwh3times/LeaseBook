@@ -35,6 +35,7 @@ public sealed record LeaseScheduleResponse(IReadOnlyList<LeaseScheduleRow> Rows)
 /// <param name="TenantName">Display name of the tenant.</param>
 /// <param name="UnitLabel">Unit label (e.g. "#2B").</param>
 /// <param name="Rent">Monthly rent on the lease.</param>
+/// <param name="RentDueDay">Effective contractual rent due day for this lease.</param>
 /// <param name="StartDate">Lease start date; null = month-to-month with no stated start.</param>
 /// <param name="EndDate">Lease end date; null = open-ended.</param>
 public sealed record LeaseScheduleRow(
@@ -46,6 +47,7 @@ public sealed record LeaseScheduleRow(
     string TenantName,
     string UnitLabel,
     decimal Rent,
+    int RentDueDay,
     DateOnly? StartDate,
     DateOnly? EndDate);
 
@@ -56,6 +58,10 @@ internal sealed class GetActiveLeaseScheduleHandler(DbContext db)
     {
         var periodStart = new DateOnly(query.Year, query.Month, 1);
         var periodEnd = new DateOnly(query.Year, query.Month, DateTime.DaysInMonth(query.Year, query.Month));
+        var rentDueDay = await db.Set<OrgSettings>()
+            .AsNoTracking()
+            .Select(settings => (int?)settings.RentDueDay)
+            .SingleOrDefaultAsync(ct) ?? 1;
 
         // Active leases whose term overlaps the period, joined to unit → property (for owner) + tenant.
         // NotSystem() applied to Unit, Property, Tenant (M5-prep convention — never leak system rows).
@@ -77,6 +83,7 @@ internal sealed class GetActiveLeaseScheduleHandler(DbContext db)
                 t.DisplayName,
                 u.Label,
                 l.Rent.Amount,
+                l.LateFeeRentDueDayOverride ?? rentDueDay,
                 l.StartDate,
                 l.EndDate))
             .ToListAsync(ct);

@@ -108,7 +108,7 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
                     PropertyId: e.PropertyId, UnitId: e.UnitId, OwnerId: e.OwnerId, TenantId: e.TenantId),
                 new(AccountCodes.OwnerEquity, null, e.Amount, EntryBasis.Accrual,
                     PropertyId: e.PropertyId, OwnerId: e.OwnerId),
-            ]), ct);
+            ], DueDate: e.DueDate ?? e.Date), ct);
 
     private Task<Guid> PostFeeChargedAsync(FeeCharged e, CancellationToken ct) =>
         posting.PostAsync(new PostEntryRequest(e.Date, "FeeCharged", FeeSubtype(e.Kind), e.Description, e.SourceRef,
@@ -117,7 +117,7 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
                     PropertyId: e.PropertyId, UnitId: e.UnitId, OwnerId: e.OwnerId, TenantId: e.TenantId),
                 new(AccountCodes.OwnerEquity, null, e.Amount, EntryBasis.Accrual,
                     PropertyId: e.PropertyId, OwnerId: e.OwnerId),
-            ], AssessesEntryId: e.AssessesEntryId), ct);
+            ], AssessesEntryId: e.AssessesEntryId, DueDate: e.Date), ct);
 
     private Task<Guid> PostCreditIssuedAsync(CreditIssued e, CancellationToken ct) =>
         posting.PostAsync(new PostEntryRequest(e.Date, "CreditIssued", null, e.Reason, e.SourceRef,

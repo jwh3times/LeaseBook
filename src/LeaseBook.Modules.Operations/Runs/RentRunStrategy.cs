@@ -149,6 +149,7 @@ public sealed class RentRunStrategy(
                 ? $"Rent {period.Key} — {row.TenantName} {row.UnitLabel} (prorated)"
                 : $"Rent {period.Key} — {row.TenantName} {row.UnitLabel}";
             var sourceRef = SourceRef(period, leaseId);
+            var dueDate = new DateOnly(period.Year, period.Month, row.RentDueDay);
 
             plan.Add(new PlannedPosting(
                 TargetKind: RunTargetKind.Lease,
@@ -161,6 +162,7 @@ public sealed class RentRunStrategy(
                     UnitId: row.UnitId,
                     Amount: amount,
                     Date: chargeDate,
+                    DueDate: dueDate,
                     Description: description,
                     SourceRef: sourceRef),
                 Amount: amount,

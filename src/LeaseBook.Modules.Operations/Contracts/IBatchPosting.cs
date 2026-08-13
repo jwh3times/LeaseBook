@@ -12,6 +12,7 @@ namespace LeaseBook.Modules.Operations.Contracts;
 public abstract record RunIntent;
 
 /// <summary>Intent to post a rent charge for one lease.</summary>
+/// <param name="DueDate">The lease's contractual due date; distinct from the accounting date.</param>
 /// <param name="SourceRef">ADR-019 idempotency key: <c>"rent:{period}:lease={leaseId}"</c>.</param>
 public sealed record RentChargeIntent(
     Guid LeaseId,
@@ -21,6 +22,7 @@ public sealed record RentChargeIntent(
     Guid? UnitId,
     decimal Amount,
     DateOnly Date,
+    DateOnly DueDate,
     string Description,
     string SourceRef) : RunIntent;
 

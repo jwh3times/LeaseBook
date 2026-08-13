@@ -111,16 +111,16 @@ public sealed class WP02ReportReadsTests(PostgresFixture fixture)
         var result = await QueryAsync(
             db => new GetDelinquencyAgingHandler(db).Handle(new GetDelinquencyAging(asOf), ct), ct);
 
-        // T3 aging locked (observed 2026-06-22):
+        // T3 aging locks FIFO allocation by due date:
         // T3 has three relevant entries:
         //   - May charge 2026-05-01 (+1620, age 52 days → D31_60)
-        //   - May payment 2026-05-30 (credit -1620, age 23 days → D1_30)
+        //   - May payment 2026-05-30 (-1620) fully satisfies the oldest open charge
         //   - June charge 2026-06-01 (+1620, age 21 days → D1_30)
-        // Bucketed by entry: D1_30 = -1620 + 1620 = 0; D31_60 = 1620. Total = 1620.
+        // Only the remaining June charge is aged; the paid May charge appears in no bucket.
         var t3 = result.Rows.Single(r => r.TenantId == DemoIds.T3);
         t3.Current.ShouldBe(0m, "T3 current");
-        t3.D1_30.ShouldBe(0m, "T3 D1_30");
-        t3.D31_60.ShouldBe(1620.00m, "T3 D31_60");
+        t3.D1_30.ShouldBe(1620.00m, "T3 D1_30");
+        t3.D31_60.ShouldBe(0m, "T3 D31_60");
         t3.D61_90.ShouldBe(0m, "T3 D61_90");
         t3.Over90.ShouldBe(0m, "T3 Over90");
 
