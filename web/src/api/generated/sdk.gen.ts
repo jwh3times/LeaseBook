@@ -294,8 +294,14 @@ export const putApiSettingsOrg = <ThrowOnError extends boolean = false>(options:
     }
 });
 
+/**
+ * Lists bank accounts and their immutable purpose. The trust and deposit values are inside the trust equation; operating is the PM operating account outside it.
+ */
 export const getApiSettingsBanks = <ThrowOnError extends boolean = false>(options?: Options<GetApiSettingsBanksData, ThrowOnError>): RequestResult<GetApiSettingsBanksResponses, unknown, ThrowOnError> => (options?.client ?? client).get<GetApiSettingsBanksResponses, unknown, ThrowOnError>({ url: '/api/settings/banks', ...options });
 
+/**
+ * Creates a bank account. Purpose is immutable: trust means operating trust account and deposit means security-deposit trust account (inside the trust equation); operating means PM operating account (outside it).
+ */
 export const postApiSettingsBanks = <ThrowOnError extends boolean = false>(options: Options<PostApiSettingsBanksData, ThrowOnError>): RequestResult<PostApiSettingsBanksResponses, unknown, ThrowOnError> => (options.client ?? client).post<PostApiSettingsBanksResponses, unknown, ThrowOnError>({
     url: '/api/settings/banks',
     ...options,
@@ -307,6 +313,9 @@ export const postApiSettingsBanks = <ThrowOnError extends boolean = false>(optio
 
 export const getApiSettingsBanksById = <ThrowOnError extends boolean = false>(options: Options<GetApiSettingsBanksByIdData, ThrowOnError>): RequestResult<GetApiSettingsBanksByIdResponses, GetApiSettingsBanksByIdErrors, ThrowOnError> => (options.client ?? client).get<GetApiSettingsBanksByIdResponses, GetApiSettingsBanksByIdErrors, ThrowOnError>({ url: '/api/settings/banks/{id}', ...options });
 
+/**
+ * Updates bank-account display fields. Bank purpose is immutable and cannot be changed.
+ */
 export const putApiSettingsBanksById = <ThrowOnError extends boolean = false>(options: Options<PutApiSettingsBanksByIdData, ThrowOnError>): RequestResult<PutApiSettingsBanksByIdResponses, PutApiSettingsBanksByIdErrors, ThrowOnError> => (options.client ?? client).put<PutApiSettingsBanksByIdResponses, PutApiSettingsBanksByIdErrors, ThrowOnError>({
     url: '/api/settings/banks/{id}',
     ...options,
