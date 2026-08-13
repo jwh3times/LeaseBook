@@ -4,6 +4,7 @@ using LeaseBook.Modules.Accounting.Domain;
 using LeaseBook.Modules.Accounting.Features.Posting.Events;
 using LeaseBook.Modules.Accounting.Features.Reconciliation;
 using LeaseBook.Modules.Directory.Domain;
+using LeaseBook.Modules.Operations.Contracts;
 using LeaseBook.Modules.Operations.Domain;
 using LeaseBook.Modules.Operations.Runs;
 using LeaseBook.SharedKernel;
@@ -117,11 +118,14 @@ public static class LoadSeeder
     /// window — the ADR-018 equity-basis management fees (assessed on standing equity, retained
     /// reserve included, every month) plus the 18,500.00 opening PM-operating position. Sweeps and
     /// trust transfers net to zero org-wide, so this is exactly fees earned + opening.
+    /// ADR-033 deliberately moved the pin from 552,342.68 to 552,279.93: late fees are now assessed
+    /// only when the period has a canonical open rent obligation, removing unsupported assessments
+    /// that the former tenant-balance aggregate admitted.
     /// <b>Intended-until-C1:</b> the C1 engagement owns the fee-basis question, so a deliberate
     /// basis change moves this constant in the same commit — a silent engine change must never move
     /// it unnoticed.
     /// </summary>
-    private const decimal ExpectedLifetimePmIncome = 552_342.68m;
+    private const decimal ExpectedLifetimePmIncome = 552_279.93m;
 
     public static async Task SeedAsync(IServiceProvider services, CancellationToken ct = default)
     {
@@ -515,7 +519,6 @@ public static class LoadSeeder
         IServiceProvider sp, AppDbContext db, LoadFixture fixture, LoadRandom rng, CancellationToken ct)
     {
         var events = sp.GetRequiredService<IAccountingEvents>();
-        var engine = sp.GetRequiredService<RunEngine>();
         var sender = sp.GetRequiredService<ISender>();
 
         var leaseById = fixture.Leases.ToDictionary(l => l.LeaseId);
@@ -539,6 +542,7 @@ public static class LoadSeeder
             var period = new RunPeriod(monthStart.Year, monthStart.Month);
             var daysInMonth = DateTime.DaysInMonth(period.Year, period.Month);
             var monthEnd = new DateOnly(period.Year, period.Month, daysInMonth);
+            var engine = CreateHistoricalRunEngine(sp, db, monthEnd);
 
             DateOnly Day(int day) => new(period.Year, period.Month, Math.Min(day, daysInMonth));
 
@@ -723,6 +727,42 @@ public static class LoadSeeder
                 db.ChangeTracker.Clear();
             }
         }
+    }
+
+    /// <summary>
+    /// Builds the real run pipeline against the fixture's simulated month-end. Late-fee eligibility
+    /// and posting dates are intentionally based on confirmation time, so resolving the application's
+    /// system-clock engine here would make this fixed historical fixture depend on the day it is seeded.
+    /// </summary>
+    private static RunEngine CreateHistoricalRunEngine(
+        IServiceProvider sp, AppDbContext db, DateOnly assessmentDate)
+    {
+        var clock = new FixedDateTimeProvider(assessmentDate);
+        var strategies = sp.GetRequiredService<IEnumerable<IRunStrategy>>()
+            .Select(strategy => strategy.RunType == RunType.LateFee
+                ? new LateFeeRunStrategy(
+                    sp.GetRequiredService<IDelinquencyData>(),
+                    sp.GetRequiredService<ILateFeePolicyData>(),
+                    sp.GetRequiredService<IPostedSourceRefs>(),
+                    clock)
+                : strategy)
+            .ToList();
+
+        return new RunEngine(
+            db,
+            strategies,
+            sp.GetRequiredService<IBatchPosting>(),
+            clock,
+            sp.GetRequiredService<IRunPeriodLock>(),
+            sp.GetRequiredService<ICapabilitySnapshot>());
+    }
+
+    private sealed class FixedDateTimeProvider(DateOnly date) : TimeProvider
+    {
+        private readonly DateTimeOffset _utcNow =
+            new(date.Year, date.Month, date.Day, 12, 0, 0, TimeSpan.Zero);
+
+        public override DateTimeOffset GetUtcNow() => _utcNow;
     }
 
     /// <summary>

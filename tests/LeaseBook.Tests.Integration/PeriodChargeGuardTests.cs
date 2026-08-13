@@ -4,7 +4,6 @@ using LeaseBook.Modules.Directory.Features.BankAccounts;
 using LeaseBook.Modules.Directory.Features.Leases;
 using LeaseBook.Modules.Directory.Features.Owners;
 using LeaseBook.Modules.Directory.Features.Properties;
-using LeaseBook.Modules.Directory.Features.Settings;
 using LeaseBook.Modules.Directory.Features.Tenants;
 using LeaseBook.Modules.Directory.Features.Units;
 using LeaseBook.Modules.Operations.Domain;
@@ -23,8 +22,8 @@ namespace LeaseBook.Tests.Integration;
 
 /// <summary>
 /// TDD integration tests for Fix A: the structural period guard that prevents cross-source
-/// double-charging. A manual charge with a non-bulk source_ref must prevent the bulk rent/late-fee
-/// run from posting a second charge for the same tenant+period.
+/// duplicate rent charges. Late-fee duplication is now enforced per rent obligation by the
+/// journal's unique assesses-entry relationship (ADR-033), rather than by tenant and period.
 /// </summary>
 [Collection(nameof(DatabaseCollection))]
 public sealed class PeriodChargeGuardTests(PostgresFixture fixture)
@@ -95,73 +94,6 @@ public sealed class PeriodChargeGuardTests(PostgresFixture fixture)
         }, ct);
 
         rentChargedCount.ShouldBe(1, "exactly one RentCharged entry must exist — the guard blocked a double-charge");
-    }
-
-    [Fact]
-    public async Task Late_fee_run_marks_AlreadyDone_when_manual_FeeCharged_Late_exists_for_tenant_in_period()
-    {
-        var ct = TestContext.Current.CancellationToken;
-        var ctx = await SetupAsync(ct);
-
-        // Make the tenant delinquent: post rent charge without payment → balance outstanding.
-        await DispatchAsync(ctx.OrgId, async (s, _) =>
-        {
-            await s.Send(new AddCharge(
-                ctx.TenantId, ctx.Rent,
-                new DateOnly(Period.Year, Period.Month, 1),
-                "rent", null,
-                $"rent:{Period.Key}:lease={ctx.LeaseId}"),
-                ct);
-        }, ct);
-
-        // Set org settings: flat late fee $50, 0 grace days → tenant immediately eligible.
-        await DispatchAsync(ctx.OrgId, async (s, _) =>
-        {
-            await s.Send(new UpdateOrgSettings(
-                null, null, null, null, null, null, null, null, null,
-                LateFeeGraceDays: 0,
-                LateFeeKind: "flat",
-                LateFeeAmount: 50m),
-                ct);
-        }, ct);
-
-        // Post a manual FeeCharged/Late (non-bulk source_ref — simulates M3 composer).
-        await DispatchAsync(ctx.OrgId, async (s, _) =>
-        {
-            await s.Send(new AddCharge(
-                ctx.TenantId, 50m,
-                new DateOnly(Period.Year, Period.Month, 31),
-                "late", null,
-                $"manual:latefee:tenant={ctx.TenantId}"), // non-bulk key
-                ct);
-        }, ct);
-
-        // Preview: the lease must be AlreadyDone (structural period guard detects the manual late fee).
-        RunPreview? preview = null;
-        await RunAsync(ctx.OrgId, async (engine, _) =>
-        {
-            preview = await engine.PreviewAsync(RunType.LateFee, Period, ct);
-        }, ct);
-
-        preview.ShouldNotBeNull();
-        // If the lease appears in the preview (it's delinquent), AlreadyDone must be true.
-        if (preview!.Rows.Count > 0)
-        {
-            preview.Rows[0].AlreadyDone.ShouldBeTrue(
-                "structural period guard must flag lease AlreadyDone when a manual FeeCharged/Late exists");
-        }
-
-        // Confirm with the lease — must not post a second late fee.
-        RunResult? confirmResult = null;
-        await RunAsync(ctx.OrgId, async (engine, _) =>
-        {
-            confirmResult = await engine.ConfirmAsync(
-                RunType.LateFee, Period, [ctx.LeaseId], preview!.CapabilitiesVersion,
-                acknowledgeCapabilityChange: false, ct);
-        }, ct);
-
-        confirmResult.ShouldNotBeNull();
-        confirmResult!.Posted.ShouldBe(0, "structural guard must prevent a second late fee from being posted");
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────

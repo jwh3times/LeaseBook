@@ -26,6 +26,7 @@ public sealed class JournalEntry : IOrgScoped
         string? description,
         string? sourceRef,
         Guid? reversesEntryId,
+        Guid? assessesEntryId,
         Guid? createdBy,
         DateTime postedAt)
     {
@@ -36,6 +37,7 @@ public sealed class JournalEntry : IOrgScoped
         Description = description;
         SourceRef = sourceRef;
         ReversesEntryId = reversesEntryId;
+        AssessesEntryId = assessesEntryId;
         CreatedBy = createdBy;
         PostedAt = postedAt;
     }
@@ -61,6 +63,9 @@ public sealed class JournalEntry : IOrgScoped
     /// <summary>The entry this one reverses (void), if any; an entry can be reversed at most once.</summary>
     public Guid? ReversesEntryId { get; private set; }
 
+    /// <summary>The rent obligation assessed by this entry, when this is a late fee.</summary>
+    public Guid? AssessesEntryId { get; private set; }
+
     /// <summary>Acting user id; null for the seeder and background jobs.</summary>
     public Guid? CreatedBy { get; private set; }
 
@@ -80,8 +85,10 @@ public sealed class JournalEntry : IOrgScoped
         string? sourceRef,
         Guid? reversesEntryId,
         Guid? createdBy,
-        DateTime postedAt) =>
-        new(entryDate, eventType, eventSubtype, description, sourceRef, reversesEntryId, createdBy, postedAt);
+        DateTime postedAt,
+        Guid? assessesEntryId = null) =>
+        new(entryDate, eventType, eventSubtype, description, sourceRef, reversesEntryId,
+            assessesEntryId, createdBy, postedAt);
 
     internal void AddLine(JournalLine line)
     {

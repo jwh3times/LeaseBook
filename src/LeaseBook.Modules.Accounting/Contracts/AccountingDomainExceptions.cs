@@ -254,6 +254,26 @@ public sealed class DuplicateSourceRefException(string sourceRef, Guid existingE
     public Guid ExistingEntryId { get; } = existingEntryId;
 }
 
+/// <summary>The rental payment already has its one permitted late-fee assessment (409).</summary>
+public sealed class RentObligationAlreadyAssessedException(Guid rentObligationEntryId, Guid existingEntryId)
+    : AccountingDomainException(
+        "rent_obligation_already_assessed",
+        "That rental payment has already been assessed a late fee.")
+{
+    public Guid RentObligationEntryId { get; } = rentObligationEntryId;
+
+    public Guid ExistingEntryId { get; } = existingEntryId;
+}
+
+/// <summary>An assessment relation did not target a rent charge (422).</summary>
+public sealed class InvalidAssessmentTargetException(Guid entryId)
+    : AccountingDomainException(
+        "invalid_assessment_target",
+        "A late fee must assess a rent charge.")
+{
+    public Guid EntryId { get; } = entryId;
+}
+
 /// <summary>No active trust bank account exists, so trust-money operations cannot proceed (409).</summary>
 public sealed class NoTrustAccountException()
     : AccountingDomainException(

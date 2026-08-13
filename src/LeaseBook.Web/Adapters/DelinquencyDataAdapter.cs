@@ -11,6 +11,8 @@ namespace LeaseBook.Web.Adapters;
 /// <list type="bullet">
 ///   <item>Accounting's <see cref="GetDelinquencyAging"/> — per-tenant receivable balance with real age.</item>
 ///   <item>Directory's <see cref="GetActiveLeaseSchedule"/> — active leases with dimension ids.</item>
+///   <item>Accounting's <see cref="GetRentObligationEntries"/> — canonical, unreversed rent entries
+///     that remain open under oldest-charge-first allocation at the assessment date.</item>
 /// </list>
 /// Joins them on <c>tenant_id</c> to produce per-lease delinquency rows with rules:
 /// <list type="bullet">
@@ -29,6 +31,13 @@ internal sealed class DelinquencyDataAdapter(ISender sender) : IDelinquencyData
         // Sequential is required because both queries share the ambient EF DbContext (not thread-safe).
         var aging = await sender.Query(new GetDelinquencyAging(asOf), ct);
         var schedule = await sender.Query(new GetActiveLeaseSchedule(year, month), ct);
+        var rentRefs = schedule.Rows
+            .Select(l => $"rent:{year}-{month:00}:lease={l.LeaseId}")
+            .ToList();
+        var rentObligations = rentRefs.Count == 0
+            ? new RentObligationEntriesResponse([])
+            : await sender.Query(new GetRentObligationEntries(rentRefs, asOf), ct);
+        var rentObligationByRef = rentObligations.Rows.ToDictionary(r => r.SourceRef, StringComparer.Ordinal);
 
         // Index delinquency rows by tenant_id. Only tenants with Total > 0 are present
         // (HAVING SUM > 0 in GetDelinquencyAging).
@@ -72,6 +81,11 @@ internal sealed class DelinquencyDataAdapter(ISender sender) : IDelinquencyData
 
             // Exactly one active lease — attribute the balance to it.
             var singleLease = tenantLeases[0];
+            var rentRef = $"rent:{year}-{month:00}:lease={singleLease.LeaseId}";
+            var attribution = rentObligationByRef.TryGetValue(rentRef, out var obligation) &&
+                obligation.TenantId == singleLease.TenantId
+                ? (DelinquencyAttribution)new DelinquencyAttribution.AttributedToLease(obligation.EntryId)
+                : new DelinquencyAttribution.NoRentObligation();
             result.Add(new DelinquentLedgerRow(
                 LeaseId: singleLease.LeaseId,
                 TenantId: singleLease.TenantId,
@@ -82,7 +96,7 @@ internal sealed class DelinquencyDataAdapter(ISender sender) : IDelinquencyData
                 UnitLabel: singleLease.UnitLabel,
                 Rent: singleLease.Rent,
                 Balance: agingRow.Total,
-                Attribution: new DelinquencyAttribution.AttributedToLease(agingRow.OldestAgeDays)));
+                Attribution: attribution));
         }
 
         return result;

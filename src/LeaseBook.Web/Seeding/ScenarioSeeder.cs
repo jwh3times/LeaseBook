@@ -10,6 +10,7 @@ using LeaseBook.Modules.Accounting.Features.Reconciliation;
 using LeaseBook.Modules.Banking.Features.Import;
 using LeaseBook.Modules.Banking.Import;
 using LeaseBook.Modules.Directory.Domain;
+using LeaseBook.Modules.Operations.Contracts;
 using LeaseBook.Modules.Operations.Domain;
 using LeaseBook.Modules.Operations.Runs;
 using LeaseBook.Modules.Reporting.Delivery;
@@ -173,7 +174,8 @@ public static class ScenarioSeeder
                 sp.GetRequiredService<IAccountingEvents>(),
                 sp.GetRequiredService<RunEngine>(),
                 db, ids,
-                sp.GetRequiredService<ITenantPostingDimensions>());
+                sp.GetRequiredService<ITenantPostingDimensions>(),
+                assessmentDate => CreateHistoricalRunEngine(sp, db, assessmentDate));
 
             await PostMarchAsync(ctx, ct);
             await PostAprilAsync(ctx, ct);
@@ -462,7 +464,7 @@ public static class ScenarioSeeder
 
     private sealed record Ctx(
         ISender Sender, IAccountingEvents Events, RunEngine Engine, AppDbContext Db, DirectoryIds Ids,
-        ITenantPostingDimensions Dimensions)
+        ITenantPostingDimensions Dimensions, Func<DateOnly, RunEngine> HistoricalRunEngine)
     {
         public Guid Tenant(string name) => Ids.Tenants[name];
 
@@ -501,7 +503,7 @@ public static class ScenarioSeeder
             "Disposal repair recharge", "scenario:recharge:2026-03:t-s8"), ct);
         await PayAsync(ctx, "Silas Byrd", 120.00m, new(2026, 3, 20), "cash", ct, "recharge");
 
-        await ConfirmRunAsync(ctx, RunType.LateFee, 2026, 3, ct); // T-S2 50.00 at-cap, T-S6 15.00 floor
+        await ConfirmRunAsync(ctx, RunType.LateFee, 2026, 3, ct, new(2026, 3, 20)); // T-S2 50.00 at-cap, T-S6 15.00 floor
         await ConfirmRunAsync(ctx, RunType.Disbursement, 2026, 3, ct);
 
         await AssertHeldAsync(ctx.Db, OperatingTrustId, HeldAfterMarchRun,
@@ -544,7 +546,7 @@ public static class ScenarioSeeder
         await PayAsync(ctx, "Marcus Vale", 1_500.00m, new(2026, 4, 4), "card", ct);
         // T-S8 misses April entirely — feeds the percent-path late fee (400 bps × 1,375 = 55.00).
 
-        await ConfirmRunAsync(ctx, RunType.LateFee, 2026, 4, ct);
+        await ConfirmRunAsync(ctx, RunType.LateFee, 2026, 4, ct, new(2026, 4, 20));
         await ConfirmRunAsync(ctx, RunType.Disbursement, 2026, 4, ct);
 
         // Partial sweep literal (R11): held is 1,857.80 here; sweeping it all would let the
@@ -635,7 +637,7 @@ public static class ScenarioSeeder
             "Asheville Plumbing Co.", "Water heater element replacement",
             "scenario:vendor:o-s5", new Money(250.00m)), ct);
 
-        await ConfirmRunAsync(ctx, RunType.LateFee, 2026, 5, ct); // only T-S6
+        await ConfirmRunAsync(ctx, RunType.LateFee, 2026, 5, ct, new(2026, 5, 29)); // only T-S6
         await ConfirmRunAsync(ctx, RunType.Disbursement, 2026, 5, ct);
 
         // Full sweep literal — held lands on exactly zero (asserted; over-sweep would throw).
@@ -696,10 +698,9 @@ public static class ScenarioSeeder
         await PayAsync(ctx, "Silas Byrd", 1_375.00m, new(2026, 6, 6), "cash", ct);
         // T-S2 pays nothing in June — June's at-cap run fee + the open receivable at as-of.
 
-        await ConfirmRunAsync(ctx, RunType.LateFee, 2026, 6, ct);
+        await ConfirmRunAsync(ctx, RunType.LateFee, 2026, 6, ct, new(2026, 6, 9));
 
-        // The visible void pair: a duplicate manual late fee (posted AFTER the run — the run's
-        // period-charge guard would otherwise skip T-S2 and invert the story), then its reversal.
+        // The visible void pair: a duplicate manual late fee posted after the run, then its reversal.
         var duplicate = await ctx.Sender.Send(new AddCharge(
             ctx.Tenant("Rosa Delgado"), 50.00m, new(2026, 6, 18), "late",
             "Late fee — June", "scenario:duplatefee:t-s2"), ct);
@@ -843,10 +844,16 @@ public static class ScenarioSeeder
     /// disbursement exclusion reasons to show). Already-done rows are left unselected.
     /// </summary>
     private static async Task<IReadOnlyList<PreviewRow>> ConfirmRunAsync(
-        Ctx ctx, RunType runType, int year, int month, CancellationToken ct)
+        Ctx ctx, RunType runType, int year, int month, CancellationToken ct,
+        DateOnly? historicalAssessmentDate = null)
     {
+        // The scenario org replays a historical timeline. Its late-fee runs therefore use the
+        // timeline's assessment date, while normal product runs use TimeProvider.System.
+        var engine = historicalAssessmentDate is { } assessmentDate
+            ? ctx.HistoricalRunEngine(assessmentDate)
+            : ctx.Engine;
         var period = new RunPeriod(year, month);
-        var preview = await ctx.Engine.PreviewAsync(runType, period, ct);
+        var preview = await engine.PreviewAsync(runType, period, ct);
         var selected = preview.Rows.Where(r => !r.AlreadyDone).ToList();
         if (selected.Count > 0)
         {
@@ -854,13 +861,40 @@ public static class ScenarioSeeder
             // the same guard a real operator does rather than opting out with null.
             // No acknowledgement: the seeder flips no capability between its runs, so the cross-run
             // guard has nothing to reject. If it ever did, silently overriding it would be the bug.
-            await ctx.Engine.ConfirmAsync(
+            await engine.ConfirmAsync(
                 runType, period, selected.Select(r => r.TargetId).ToList(), preview.CapabilitiesVersion,
                 acknowledgeCapabilityChange: false, ct);
         }
 
         ctx.Db.ChangeTracker.Clear();
         return selected;
+    }
+
+    private static RunEngine CreateHistoricalRunEngine(
+        IServiceProvider services, AppDbContext db, DateOnly assessmentDate)
+    {
+        var clock = new FixedDateTimeProvider(assessmentDate);
+        var strategies = services.GetRequiredService<IEnumerable<IRunStrategy>>()
+            .Where(strategy => strategy.RunType != RunType.LateFee)
+            .Append<IRunStrategy>(new LateFeeRunStrategy(
+                services.GetRequiredService<IDelinquencyData>(),
+                services.GetRequiredService<ILateFeePolicyData>(),
+                services.GetRequiredService<IPostedSourceRefs>(),
+                clock));
+
+        return new RunEngine(
+            db,
+            strategies,
+            services.GetRequiredService<IBatchPosting>(),
+            clock,
+            services.GetRequiredService<IRunPeriodLock>(),
+            services.GetRequiredService<ICapabilitySnapshot>());
+    }
+
+    private sealed class FixedDateTimeProvider(DateOnly date) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() =>
+            new(date.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
     }
 
     /// <summary>

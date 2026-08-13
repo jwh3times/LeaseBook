@@ -25,9 +25,11 @@ public sealed record RentChargeIntent(
     string SourceRef) : RunIntent;
 
 /// <summary>Intent to post a late-fee charge for one lease.</summary>
-/// <param name="SourceRef">ADR-019 idempotency key: <c>"latefee:{period}:lease={leaseId}"</c>.</param>
+/// <param name="RentObligationEntryId">The specific rent journal entry this fee assesses.</param>
+/// <param name="SourceRef">Idempotency key: <c>"latefee:rent-entry={rentEntryId}"</c>.</param>
 public sealed record LateFeeIntent(
     Guid LeaseId,
+    Guid RentObligationEntryId,
     Guid TenantId,
     Guid PropertyId,
     Guid OwnerId,
