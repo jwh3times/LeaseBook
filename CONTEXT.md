@@ -13,18 +13,20 @@ this file grows one resolved ambiguity at a time.
 ### Access planes
 
 Every piece of work in the system runs in exactly one access plane, and which one it is determines
-what data is visible at all. The distinction is not a permission level layered on top of a shared
-view — the two planes see disjoint things.
+the authority and organization boundary the work carries. The planes are mutually exclusive ways
+of acting, not disjoint sets of readable facts: explicitly global, read-only operating state can be
+visible from either plane.
 
 **Tenant plane**:
-The access mode in which work sees exactly one organization's data and nothing else. Every ordinary
-read and write happens here, including everything a customer can reach.
+The access mode in which work can act on exactly one organization's data. Every ordinary read and
+write happens here, including everything a customer can reach; globally readable operating facts do
+not widen that organization boundary.
 _Avoid_: org plane, tenant scope, org context (as a name for the plane itself)
 
 **Platform plane**:
-The access mode in which work sees the state used to operate the product across organizations, which
-belongs to no single one of them. Reserved for running the business itself; nothing a customer does
-reaches it.
+The access mode in which work can act on state used to operate the product across organizations.
+Reserved for running the business itself; it does not grant access to ordinary customer data, and
+nothing a customer does reaches it.
 _Avoid_: admin plane, superuser mode, god mode
 
 **Unit of work**:
@@ -73,6 +75,12 @@ _Avoid_: beta group, segment, audience
 
 ### Receivables and delinquency
 
+**Open charge**:
+The unpaid portion of a charge owed by a tenant. Allocating a payment or general credit reduces its
+remaining amount; a linked reversal may cancel the charge or cancel an earlier reduction. A charge
+stops being open when its remaining amount reaches zero.
+_Avoid_: outstanding entry (the entry remains part of the record after the charge is paid), balance
+
 **Rent obligation**:
 The specific rent charge for one lease and rental period. A late-fee assessment names this charge
 directly; tenant, lease and calendar month are not substitutes for the obligation's identity.
@@ -97,6 +105,27 @@ _Avoid_: grace-period end, month end
 The date on which eligibility is evaluated and a resulting late fee is posted. An assessment is a
 present-tense act; it is never dated in the future.
 _Avoid_: as-of date (too broad), run period, posting month
+
+**Payment allocation**:
+The assignment of a tenant payment or general credit to open charges. Allocation satisfies the open
+charge with the oldest due date first; when due dates tie, it satisfies the earlier charge first.
+_Avoid_: payment aging (payments do not acquire an age), bucket netting
+
+**Delinquent balance**:
+The sum of the remaining amounts of open charges whose due dates have passed, measured as of a stated
+date. It is a gross receivable figure; an unapplied credit is reported separately rather than used to
+make an aging bucket negative.
+_Avoid_: tenant balance (which may also include unapplied credit or prepayment), arrears total
+
+**Aging bucket**:
+A range of elapsed calendar days since an open charge's due date. Only the charge's remaining amount
+belongs in a bucket; payments and unapplied credits do not have their own aging buckets.
+_Avoid_: entry-date bucket
+
+**Unapplied credit**:
+A credit-side tenant amount that is not allocated to an open charge. It is shown separately from
+delinquency aging; its kind determines whether and how it can be applied later.
+_Avoid_: negative delinquency, negative aging
 
 ### Bulk runs
 
