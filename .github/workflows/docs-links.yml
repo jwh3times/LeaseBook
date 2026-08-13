@@ -26,6 +26,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      - name: Prepare current-release link exclusions
+        id: release-links
+        shell: bash
+        run: |
+          version=$(tr -d '[:space:]' < VERSION)
+          if [[ ! "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "::error file=VERSION::Version '$version' must be plain SemVer."
+            exit 1
+          fi
+
+          # A major/minor PR cuts the changelog before the merge-only release workflow creates
+          # its tag. Push workflows can race that tag too. Exclude only those two current-version
+          # URLs there; the weekly sweep uses a never-matching regex and checks every release link.
+          if [[ "$GITHUB_EVENT_NAME" == "schedule" ]]; then
+            echo 'compare=^$' >> "$GITHUB_OUTPUT"
+            echo 'release=^$' >> "$GITHUB_OUTPUT"
+          else
+            echo "compare=^https://github\\.com/jwh3times/LeaseBook/compare/v${version}\\.\\.\\.HEAD$" >> "$GITHUB_OUTPUT"
+            echo "release=^https://github\\.com/jwh3times/LeaseBook/releases/tag/v${version}$" >> "$GITHUB_OUTPUT"
+          fi
       - uses: lycheeverse/lychee-action@v2
         env:
           # Authenticates github.com link checks (avoids rate-limit 403s).
@@ -40,6 +60,8 @@ jobs:
             --include-fragments
             --accept '200..=299, 429'
             --exclude '^https?://(localhost|127\.0\.0\.1)'
+            --exclude '${{ steps.release-links.outputs.compare }}'
+            --exclude '${{ steps.release-links.outputs.release }}'
             'README.md' 'CHANGELOG.md' 'CONTRIBUTING.md' 'SECURITY.md' 'SUPPORT.md'
             'CODE_OF_CONDUCT.md' 'AGENTS.md' 'CLAUDE.md'
             'docs/**/*.md' 'infra/**/*.md' '.github/**/*.md' '.claude/**/*.md'
