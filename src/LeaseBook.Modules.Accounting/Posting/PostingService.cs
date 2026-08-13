@@ -133,9 +133,54 @@ internal sealed class PostingService(
             }
         }
 
+        if (request.AssessesEntryId is Guid assessedEntryId)
+        {
+            var assessedEntry = await db.Set<JournalEntry>().AsNoTracking()
+                .Where(e => e.Id == assessedEntryId)
+                .Select(e => new { e.Id, e.EventType })
+                .SingleOrDefaultAsync(ct);
+            if (assessedEntry is null)
+            {
+                throw new EntryNotFoundException(assessedEntryId);
+            }
+
+            if (assessedEntry.EventType != "RentCharged" ||
+                request.EventType != "FeeCharged" ||
+                request.EventSubtype != "late")
+            {
+                throw new InvalidAssessmentTargetException(assessedEntryId);
+            }
+
+            var assessedDimensions = await db.Set<JournalLine>().AsNoTracking()
+                .Where(l => l.EntryId == assessedEntryId &&
+                    l.AccountClass == AccountClass.TenantReceivable)
+                .Select(l => new { l.TenantId, l.PropertyId, l.OwnerId, l.UnitId })
+                .SingleAsync(ct);
+            var feeDimensions = lines.SingleOrDefault(l =>
+                l.AccountClass == AccountClass.TenantReceivable);
+            if (feeDimensions is null ||
+                feeDimensions.TenantId != assessedDimensions.TenantId ||
+                feeDimensions.PropertyId != assessedDimensions.PropertyId ||
+                feeDimensions.OwnerId != assessedDimensions.OwnerId ||
+                feeDimensions.UnitId != assessedDimensions.UnitId)
+            {
+                throw new InvalidAssessmentTargetException(assessedEntryId);
+            }
+
+            var existingAssessment = await db.Set<JournalEntry>().AsNoTracking()
+                .FirstOrDefaultAsync(e => e.AssessesEntryId == assessedEntryId, ct);
+            if (existingAssessment is not null)
+            {
+                throw new RentObligationAlreadyAssessedException(
+                    assessedEntryId, existingAssessment.Id);
+            }
+        }
+
         var entry = JournalEntry.Create(
             request.EntryDate, request.EventType, request.EventSubtype, request.Description,
-            request.SourceRef, request.ReversesEntryId, createdBy: actor?.UserId, postedAt: DateTime.UtcNow);
+            request.SourceRef, request.ReversesEntryId,
+            createdBy: actor?.UserId, postedAt: DateTime.UtcNow,
+            assessesEntryId: request.AssessesEntryId);
         foreach (var line in lines)
         {
             entry.AddLine(line);
@@ -179,6 +224,16 @@ internal sealed class PostingService(
             if (existing is not null)
             {
                 throw new AlreadyReversedException(reversed, AlreadyReversedReason.AlreadyReversed);
+            }
+        }
+
+        if (request.AssessesEntryId is Guid assessed)
+        {
+            var existing = await db.Set<JournalEntry>().AsNoTracking()
+                .FirstOrDefaultAsync(e => e.AssessesEntryId == assessed, ct);
+            if (existing is not null)
+            {
+                throw new RentObligationAlreadyAssessedException(assessed, existing.Id);
             }
         }
     }

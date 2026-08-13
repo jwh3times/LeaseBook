@@ -3,9 +3,11 @@
 - **Status:** Accepted
 - **Date:** 2026-06-23
 - **Milestone:** M6 (plan-local WP-1 — not a `docs/ROADMAP.md` WP id)
-- **Amended by:** [ADR-028](ADR-028-platform-capability-model.md) — adds the capability snapshot the
-  run engine freezes at confirm entry (§4a below) and the chunked-confirm constraint in the revisit
-  trigger
+- **Amended by:** [ADR-028](ADR-028-platform-capability-model.md),
+  [ADR-033](ADR-033-late-fee-eligibility-and-rent-obligation-link.md). ADR-028 adds the capability
+  snapshot the run engine freezes at confirm entry (§4a below) and the chunked-confirm constraint in
+  the revisit trigger; ADR-033 replaces the late-fee source-ref row with a rent-obligation key and
+  structural one-fee constraint.
 - **Amended 2026-08-09 (self):** strategies plan and the engine executes (§4b); §4a revised so no
   capability set reaches a strategy; §2 corrected — source-ref keys must not be derived from
   `RunType`
@@ -57,6 +59,10 @@ accounting event so the existing constraint deduplicates repeat runs.
 | Late fee         | Lease  | `latefee:{year}-{month:00}:lease={leaseId}`          |
 | Disbursement fee | Owner  | `disbursement-fee:{year}-{month:00}:owner={ownerId}` |
 | Disbursement     | Owner  | `disbursement:{year}-{month:00}:owner={ownerId}`     |
+
+The late-fee row above records the original M6 convention. ADR-033 replaces it with
+`latefee:rent-entry={rentEntryId}` and adds the journal's unique `assesses_entry_id` relationship;
+rent and disbursement conventions are unchanged.
 
 **Correction (2026-08-09): the generalised shape does not describe this table, so do not derive a key
 from `RunType`.** The revisit trigger below states the convention as

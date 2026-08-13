@@ -71,6 +71,33 @@ Membership in a staged rollout, for an organization or one of its users. Widens 
 narrows it.
 _Avoid_: beta group, segment, audience
 
+### Receivables and delinquency
+
+**Rent obligation**:
+The specific rent charge for one lease and rental period. A late-fee assessment names this charge
+directly; tenant, lease and calendar month are not substitutes for the obligation's identity.
+_Avoid_: rent balance, monthly tenant charge
+
+**Rent due date**:
+The calendar date on which a rent obligation is contractually due, derived from the effective lease
+policy for that rental period. It is not the date on which the journal entry happened to be posted.
+_Avoid_: charge date, posting date
+
+**Late day**:
+An elapsed calendar day after the rent due date. The calendar day immediately after the due date is
+late day one.
+_Avoid_: days since posting, grace day
+
+**Late-fee eligibility date**:
+The first date on which a late fee may be assessed for a rent obligation: late day five, or a later
+day when the lease grants a longer contractual threshold.
+_Avoid_: grace-period end, month end
+
+**Assessment date**:
+The date on which eligibility is evaluated and a resulting late fee is posted. An assessment is a
+present-tense act; it is never dated in the future.
+_Avoid_: as-of date (too broad), run period, posting month
+
 ### Bulk runs
 
 **Confirm**:

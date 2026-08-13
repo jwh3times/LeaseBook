@@ -47,7 +47,8 @@ public sealed record RentCharged(
 /// <summary>A non-rent charge (late fee, maintenance recharge, …); same shape as rent (M1: accrues to owner).</summary>
 public sealed record FeeCharged(
     Guid TenantId, Guid PropertyId, Guid OwnerId, Guid? UnitId,
-    Money Amount, DateOnly Date, FeeKind Kind, string Description, string? SourceRef = null) : AccountingEvent;
+    Money Amount, DateOnly Date, FeeKind Kind, string Description, string? SourceRef = null,
+    Guid? AssessesEntryId = null) : AccountingEvent;
 
 /// <summary>A goodwill credit reduces what the tenant owes and the owner's accrued income.</summary>
 public sealed record CreditIssued(

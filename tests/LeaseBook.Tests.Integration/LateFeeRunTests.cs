@@ -1,4 +1,7 @@
+using LeaseBook.Modules.Accounting.Contracts;
+using LeaseBook.Modules.Accounting.Domain;
 using LeaseBook.Modules.Accounting.Features.Ledgers;
+using LeaseBook.Modules.Accounting.Features.Posting.Events;
 using LeaseBook.Modules.Accounting.Periods;
 using LeaseBook.Modules.Directory.Features.BankAccounts;
 using LeaseBook.Modules.Directory.Features.Leases;
@@ -14,6 +17,7 @@ using LeaseBook.SharedKernel.Cqrs;
 using LeaseBook.SharedKernel.Tenancy;
 using LeaseBook.Tests.Common;
 using LeaseBook.Tests.Integration.Fixtures;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Shouldly;
 using OrgEntity = LeaseBook.Web.Persistence.Org;
@@ -41,6 +45,120 @@ public sealed class LateFeeRunTests(PostgresFixture fixture)
     private static readonly RunPeriod Period = new(2026, 3);
 
     private const decimal HighRentRent = 1450m;
+
+    [Fact]
+    public async Task Confirm_posts_on_the_assessment_date_and_links_the_rent_obligation()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var ctx = await SetupAsync(HighRentRent, flatFeeOverride: 50m, ct);
+        var rentEntryId = await PostRentChargeAsync(ctx, ct);
+        var earliestAssessmentDate = DateOnly.FromDateTime(DateTime.UtcNow);
+
+        JournalEntry? feeEntry = null;
+        await RunAsync(ctx.OrgId, async (engine, services) =>
+        {
+            var preview = await engine.PreviewAsync(RunType.LateFee, Period, ct);
+            var result = await engine.ConfirmAsync(
+                RunType.LateFee, Period, [ctx.LeaseId], preview.CapabilitiesVersion,
+                acknowledgeCapabilityChange: false, ct);
+            result.Posted.ShouldBe(1);
+
+            var db = services.GetRequiredService<DbContext>();
+            feeEntry = await db.Set<JournalEntry>()
+                .SingleAsync(e => e.SourceRef == $"latefee:rent-entry={rentEntryId}", ct);
+
+            var accountingEvents = services.GetRequiredService<IAccountingEvents>();
+            await Should.ThrowAsync<RentObligationAlreadyAssessedException>(() =>
+                accountingEvents.PostAsync(
+                    new FeeCharged(
+                        ctx.TenantId,
+                        ctx.PropertyId,
+                        ctx.OwnerId,
+                        ctx.UnitId,
+                        new Money(10m),
+                        feeEntry.EntryDate,
+                        FeeKind.Late,
+                        "Different source, same rent obligation",
+                        $"manual-late-fee:{Guid.NewGuid()}",
+                        rentEntryId),
+                    ct));
+        }, ct);
+
+        feeEntry.ShouldNotBeNull();
+        feeEntry!.EntryDate.ShouldBeInRange(
+            earliestAssessmentDate,
+            DateOnly.FromDateTime(DateTime.UtcNow));
+        feeEntry.AssessesEntryId.ShouldBe(rentEntryId);
+    }
+
+    [Fact]
+    public async Task Preview_does_not_age_a_future_rent_obligation()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var ctx = await SetupAsync(HighRentRent, flatFeeOverride: 50m, ct);
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var futureMonth = today.AddMonths(1);
+        var futurePeriod = new RunPeriod(futureMonth.Year, futureMonth.Month);
+
+        await DispatchAsync(ctx.OrgId, async (sender, _) =>
+        {
+            await sender.Send(
+                new LeaseBook.Modules.Accounting.Features.LedgerPosting.AddCharge(
+                    ctx.TenantId,
+                    ctx.Rent,
+                    new DateOnly(futurePeriod.Year, futurePeriod.Month, 1),
+                    "rent",
+                    null,
+                    $"rent:{futurePeriod.Key}:lease={ctx.LeaseId}"),
+                ct);
+        }, ct);
+
+        RunPreview? preview = null;
+        await RunAsync(ctx.OrgId, async (engine, _) =>
+        {
+            preview = await engine.PreviewAsync(RunType.LateFee, futurePeriod, ct);
+        }, ct);
+
+        preview.ShouldNotBeNull();
+        preview!.Rows.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Preview_does_not_assess_paid_rent_when_another_charge_remains_open()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var ctx = await SetupAsync(HighRentRent, flatFeeOverride: 50m, ct);
+        await PostRentChargeAsync(ctx, ct);
+
+        await DispatchAsync(ctx.OrgId, async (sender, _) =>
+        {
+            await sender.Send(new LeaseBook.Modules.Accounting.Features.LedgerPosting.RecordPayment(
+                ctx.TenantId,
+                ctx.Rent,
+                new DateOnly(2026, 3, 10),
+                "ach",
+                ctx.TrustBankId,
+                null,
+                $"payment:{Guid.NewGuid()}"), ct);
+            await sender.Send(new LeaseBook.Modules.Accounting.Features.LedgerPosting.AddCharge(
+                ctx.TenantId,
+                25m,
+                new DateOnly(2026, 3, 11),
+                "other",
+                "Key replacement",
+                $"other:{Guid.NewGuid()}"), ct);
+        }, ct);
+
+        RunPreview? preview = null;
+        await RunAsync(ctx.OrgId, async (engine, _) =>
+        {
+            preview = await engine.PreviewAsync(RunType.LateFee, Period, ct);
+        }, ct);
+
+        preview.ShouldNotBeNull();
+        preview!.Rows.ShouldNotContain(row => row.TargetId == ctx.LeaseId);
+        preview.Exceptions.ShouldContain(message => message.Contains("no open rent obligation"));
+    }
 
     [Fact]
     public async Task Selective_confirm_posts_only_chosen_leases()
@@ -263,6 +381,7 @@ public sealed class LateFeeRunTests(PostgresFixture fixture)
         Guid LeaseId,
         Guid PropertyId,
         Guid OwnerId,
+        Guid UnitId,
         decimal Rent);
 
     private sealed record TwoLeaseCtx(
@@ -279,7 +398,8 @@ public sealed class LateFeeRunTests(PostgresFixture fixture)
     private async Task<Ctx> SetupAsync(decimal rent, decimal? flatFeeOverride, CancellationToken ct)
     {
         var orgId = await NewOrgAsync(ct);
-        Guid trustBankId = default, tenantId = default, leaseId = default, propId = default, ownerId = default;
+        Guid trustBankId = default, tenantId = default, leaseId = default, propId = default,
+            ownerId = default, unitId = default;
 
         await DispatchAsync(orgId, async (s, _) =>
         {
@@ -288,7 +408,7 @@ public sealed class LateFeeRunTests(PostgresFixture fixture)
 
             ownerId = await s.Send(new CreateOwner("Fee Test Owner", null, null, null, 800, 0m), ct);
             propId = await s.Send(new CreateProperty(ownerId, "100 Fee Ln", "Raleigh", "NC", null, null), ct);
-            var unitId = await s.Send(new CreateUnit(propId, "#A", rent, "occupied"), ct);
+            unitId = await s.Send(new CreateUnit(propId, "#A", rent, "occupied"), ct);
             tenantId = await s.Send(new CreateTenant("Late Fee Tenant", null, null, "current"), ct);
 
             leaseId = await s.Send(new CreateLease(
@@ -296,13 +416,13 @@ public sealed class LateFeeRunTests(PostgresFixture fixture)
                 new DateOnly(2025, 1, 1), new DateOnly(2027, 12, 31),
                 rent, rent, "active",
                 LateFeeRentDueDayOverride: 1,
-                LateFeeGraceDaysOverride: 0, // No grace — immediately eligible.
+                LateFeeGraceDaysOverride: 0, // Statutory five-day threshold still applies.
                 LateFeeKindOverride: flatFeeOverride.HasValue ? "flat" : null,
                 LateFeeAmountOverride: flatFeeOverride,
                 LateFeeRateBpsOverride: null), ct);
         }, ct);
 
-        return new Ctx(orgId, trustBankId, tenantId, leaseId, propId, ownerId, rent);
+        return new Ctx(orgId, trustBankId, tenantId, leaseId, propId, ownerId, unitId, rent);
     }
 
     private async Task<TwoLeaseCtx> SetupTwoLeasesAsync(CancellationToken ct)
@@ -338,19 +458,20 @@ public sealed class LateFeeRunTests(PostgresFixture fixture)
     /// The GetDelinquencyAging query returns tenants with D1_30+ balance > 0 and age > 0 days.
     /// We post a RentCharged entry (which goes to tenant_receivable) to produce a balance.
     /// </summary>
-    private async Task PostRentChargeAsync(Ctx ctx, CancellationToken ct)
+    private async Task<Guid> PostRentChargeAsync(Ctx ctx, CancellationToken ct)
     {
         // Post via the Accounting posting command so the journal entry lands correctly.
-        await DispatchAsync(ctx.OrgId, async (s, _) =>
+        return await DispatchAsync(ctx.OrgId, async (s, _) =>
         {
             // AddCharge is the ledger command that posts a RentCharged event via IAccountingEvents.
-            await s.Send(
+            var result = await s.Send(
                 new LeaseBook.Modules.Accounting.Features.LedgerPosting.AddCharge(
                     ctx.TenantId, ctx.Rent,
                     new DateOnly(Period.Year, Period.Month, 1),
                     "rent", null,
                     $"rent:{Period.Key}:lease={ctx.LeaseId}"),
                 ct);
+            return result.EntryId;
         }, ct);
     }
 
