@@ -30,6 +30,22 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 - _Nothing yet._
 
+## [0.4.0] - 2026-08-13
+
+### Added
+
+- **Effective-dated property ownership transfers** — PM staff can now record a property sale through
+  one idempotent API workflow that appends the ownership transition and hands every held security
+  deposit from the seller's responsibility bucket to the buyer's in the same transaction. The
+  handoff moves neither cash nor owner equity, preserves all prior journal attribution, and makes new
+  charges, payments, deposits, credits and bulk-run postings use the owner effective on their
+  accounting date. Ordinary property edits can no longer change ownership. Closed accounting
+  periods, reconciled deposit-bank months, future closings, and backdated transfers that would strand
+  later seller-attributed deposit activity are rejected rather than creating an inconsistent ledger.
+  Imported deposit opening positions now carry property attribution, and deposit dispositions guard
+  the exact tenant/property/owner/bank liability bucket. See
+  [ADR-036](docs/adr/ADR-036-effective-dated-property-ownership-transfer.md).
+
 ## [0.3.0] - 2026-08-13
 
 ### Added
@@ -448,6 +464,7 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.4.0
 [0.3.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.3.0
 [0.2.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.2.0
