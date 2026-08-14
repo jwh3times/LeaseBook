@@ -26,7 +26,7 @@ public interface ISweepRunner
     /// <param name="orgIds">
     /// The orgs to check, or <c>null</c> for every org — the nightly job's mode. Each org runs in its
     /// own <see cref="SharedKernel.Tenancy.OrgScopedExecutor"/> transaction, which throws rather than
-    /// letting a missing org context turn RLS into a silently empty read.
+    /// letting a missing organization context turn RLS into a silently empty read.
     /// </param>
     Task<SweepResult> RunAsync(IReadOnlyList<Guid>? orgIds = null, CancellationToken ct = default);
 }

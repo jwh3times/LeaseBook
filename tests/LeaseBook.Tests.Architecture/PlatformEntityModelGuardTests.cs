@@ -15,7 +15,7 @@ namespace LeaseBook.Tests.Architecture;
 /// implements <see cref="IOrgScoped"/> — there is no per-entity opt-in. So adding <c>: IOrgScoped</c>
 /// to <see cref="Entitlement"/> is a one-token change that silently empties every cross-org platform
 /// read that RLS deliberately permits. It fails <i>asymmetrically</i>, which is why it needs a guard
-/// rather than trust: the write side throws loudly (the tenancy pass demands a tenant context), so a
+/// rather than trust: the write side throws loudly (the isolation pass demands an organization context), so a
 /// developer making the change sees writes break and "fixes" them, while the read side just returns
 /// zero rows and no existing test goes red.
 /// </para>
@@ -40,7 +40,7 @@ public sealed class PlatformEntityModelGuardTests
     ];
 
     private const string Why =
-        "Platform tables are data ABOUT orgs, not tenant data belonging to one. IOrgScoped is what " +
+        "Platform tables are data ABOUT orgs, not organization data belonging to one. IOrgScoped is what " +
         "makes AppDbContext attach the org global query filter (and org stamping, the CrossOrg write " +
         "guard, and the audit pass) — attaching it here silently reduces every cross-org platform " +
         "read to zero rows while RLS would have allowed it, and nothing else in the suite goes red. " +
@@ -83,7 +83,7 @@ public sealed class PlatformEntityModelGuardTests
     /// <summary>
     /// The positive control. Without it the test above would pass vacuously if the EF metadata API it
     /// reads ever stopped reporting filters — the guard would go green for exactly the wrong reason.
-    /// <c>AuditEvent</c> is real tenant data and MUST be filtered.
+    /// <c>AuditEvent</c> is real organization data and MUST be filtered.
     /// </summary>
     [Fact]
     public void An_org_scoped_entity_does_carry_a_query_filter()

@@ -40,7 +40,7 @@ public sealed class CapabilityStateReader(DbContext db)
     /// rows, every <c>RequiresGrant</c> capability resolves false, and the caller sees a plausible
     /// "not entitled" answer with no error recorded anywhere. That is indistinguishable from a
     /// deliberate revoke. One extra round trip converts it into a throw, mirroring the repo rule that
-    /// a background job with missing org context fails rather than returning empty.
+    /// a background job with missing organization context fails rather than returning empty.
     /// </remarks>
     public async Task<CapabilitySet> ReadAsync(
         Guid orgId, Guid? userId, bool requirePlatformScope, CancellationToken ct)
@@ -48,7 +48,7 @@ public sealed class CapabilityStateReader(DbContext db)
         if (orgId == Guid.Empty)
         {
             throw new ArgumentException(
-                "Capability resolution requires a non-empty org id — resolving with no org context " +
+                "Capability resolution requires a non-empty org id — resolving with no organization context " +
                 "would read zero entitlement rows and silently answer 'off' for every paid capability.",
                 nameof(orgId));
         }

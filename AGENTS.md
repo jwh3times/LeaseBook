@@ -185,7 +185,7 @@ this has happened).
 | Azure infra, Bicep, deploy workflows, Key Vault, managed identity, PITR | `.claude/agents/azure-infrastructure.md` |
 | Documentation drift after source changes                                | `.claude/agents/docs-updater.md`         |
 
-Cross-cutting rules, module boundaries, tenancy model, and trust-accounting invariants in this file
+Cross-cutting rules, module boundaries, organization-isolation model, and trust-accounting invariants in this file
 apply to all work. If a domain guidance file conflicts with these invariants, the invariant wins.
 
 The `/ship` skill detects documentation drift: it invokes the `docs-updater` agent for the docs it owns
@@ -271,12 +271,12 @@ Violating these is a correctness bug, not a style issue.
   Money-affecting parameters belong in `OrgSettings`. A multi-step run resolves the capability set
   once and passes it explicitly; it never re-asks mid-run.
 
-### Multi-Tenancy
+### Organization Isolation
 
 - Postgres RLS is the security boundary. EF global query filters are ergonomics only.
-- Org context is set with `SET LOCAL app.org_id` inside the transaction. Never use session-level
+- Organization context is set with `SET LOCAL app.org_id` inside the transaction. Never use session-level
   `SET`, because pooled connections would leak context.
-- Missing org context fails closed.
+- Missing organization context fails closed.
 - There are three DB roles:
   - `leasebook_migrator`: schema owner of `public`, migrations only
   - `leasebook_app`: runtime, RLS-subject via `FORCE ROW LEVEL SECURITY`
@@ -294,11 +294,11 @@ Violating these is a correctness bug, not a style issue.
   `capability_cohorts` keep `org_id` and an org read policy **plus** a platform escape — an escape
   rather than no RLS, because forgetting it yields zero rows instead of every org's rows.
   `feature_flags` is globally readable (`USING (true)`) and platform-write-only: it is deployment
-  config, and the property worth protecting is that a tenant cannot _toggle_ a flag. Only
+  config, and the property worth protecting is that an organization cannot _toggle_ a flag. Only
   `platform_audit_events` is platform-only in both directions. `app.platform` is set in exactly one
   place, never inside a request transaction, and an architecture test scanning `src/`/`infra/` fails
   the build on a second call site. Do not "correct" any of these to a plain org policy or to no RLS.
-- Background jobs must establish org context explicitly and throw when it is missing.
+- Background jobs must establish organization context explicitly and throw when it is missing.
 - Any read of `entitlements`, `capability_cohorts`, or `platform_audit_events` that needs rows beyond
   the ambient org must assert platform scope and throw when it is missing. RLS filters rather than
   raises, so a scope-less read returns zero rows with no error — and "no row" is a meaningful value
@@ -355,7 +355,7 @@ These flows are instrumented in telemetry; regressions fail the release checklis
   diffs in files you need to touch.
 - Keep edits scoped to the requested work and existing module boundaries.
 - Prefer existing repo patterns, helpers, tests, and design primitives over new abstractions.
-- Add tests proportional to risk. Money, tenancy, RLS, posting, and migration changes require higher
+- Add tests proportional to risk. Money, organization isolation, RLS, posting, and migration changes require higher
   confidence than presentational changes.
 - Do not put confidential `private/` details into committed files, PR descriptions, public docs, or
   generated output.

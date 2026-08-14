@@ -10,7 +10,7 @@ using Shouldly;
 namespace LeaseBook.Tests.Integration;
 
 /// <summary>
-/// The permanent tenant-isolation pack (§C.4 / WP-05). Every assertion runs through the RLS-subject
+/// The permanent organization-isolation pack (§C.4 / WP-05). Every assertion runs through the RLS-subject
 /// <b>app role</b> — never the migrator — so it proves the Postgres policy is the boundary, not the
 /// EF query filter (pitfall E2). Each test uses fresh org ids, so the shared container's rows from
 /// other tests are simply invisible (which is itself the property under test).
@@ -18,7 +18,7 @@ namespace LeaseBook.Tests.Integration;
 [Collection(nameof(DatabaseCollection))]
 public sealed class TenantIsolationTests(PostgresFixture fixture)
 {
-    // T1 — reads are scoped to the active org context.
+    // T1 — reads are scoped to the active organization context.
     [Fact]
     public async Task Reads_under_an_org_context_see_only_that_orgs_rows()
     {
@@ -249,7 +249,7 @@ public sealed class TenantIsolationTests(PostgresFixture fixture)
 
         var org = await new OrgScopedExecutor(db, tenant, new ActorContext())
             .RunAsSystemAsync(orgA, "test-harness", () => Task.FromResult(tenant.OrgId), ct);
-        org.ShouldBe(orgA, "the tenant plane sets context before the work runs, and returns its result");
+        org.ShouldBe(orgA, "the organization plane sets context before the work runs, and returns its result");
 
         await using var platformDb = fixture.CreateContext(fixture.AppConnectionString);
         var answer = await new PlatformScopedExecutor(platformDb).RunAsync(() => Task.FromResult(42), ct);

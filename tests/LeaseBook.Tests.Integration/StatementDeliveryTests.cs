@@ -98,7 +98,7 @@ public sealed class StatementDeliveryTests(PostgresFixture fixture)
         adminUser.ShouldNotBeNull("demo org must be seeded before the probe");
         var orgId = adminUser!.OrgId;
 
-        // Open an app-role connection (subject to RLS) and set the org context, exactly as the
+        // Open an app-role connection (subject to RLS) and set the organization context, exactly as the
         // happy-path test does — same probe pattern.
         await using var probeConn = new NpgsqlConnection(fixture.AppConnectionString);
         await probeConn.OpenAsync(ct);
@@ -127,7 +127,7 @@ public sealed class StatementDeliveryTests(PostgresFixture fixture)
         var ct = TestContext.Current.CancellationToken;
         await DemoSeeder.SeedAsync(fixture.Api.Services, ct);
 
-        // Use a fresh scope so tenant context is wired up through the DI chain.
+        // Use a fresh scope so organization context is wired up through the DI chain.
         // The OrgContextMiddleware normally sets this for HTTP requests; for direct service
         // calls we drive the org scope manually via OrgScopedExecutor (which issues SET LOCAL
         // app.org_id, the same mechanism the middleware uses for HTTP requests).
@@ -140,7 +140,7 @@ public sealed class StatementDeliveryTests(PostgresFixture fixture)
         adminUser.ShouldNotBeNull("demo admin user must be seeded");
         var orgId = adminUser!.OrgId;
 
-        // Set the in-process tenant context (EF global filter).
+        // Set the in-process organization context (EF global filter).
         tenantContext.OrgId = orgId;
 
         var executor = scope.ServiceProvider.GetRequiredService<LeaseBook.SharedKernel.Tenancy.OrgScopedExecutor>();
@@ -161,7 +161,7 @@ public sealed class StatementDeliveryTests(PostgresFixture fixture)
         result!.State.ShouldBe(DeliveryState.Queued, "new delivery is always Queued");
         result.Id.ShouldNotBe(Guid.Empty);
 
-        // Read back the delivery record via the app role connection with org context set (RLS
+        // Read back the delivery record via the app role connection with organization context set (RLS
         // applies via FORCE ROW LEVEL SECURITY even to the migrator/owner role, so we must set
         // app.org_id in a transaction, just like the app does at runtime).
         await using var probeConn = new NpgsqlConnection(fixture.AppConnectionString);

@@ -23,11 +23,11 @@ internal sealed class PostingService(
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        // (a) org context present — fail fast before any work (the DB would also fail closed).
+        // (a) organization context present — fail fast before any work (the DB would also fail closed).
         if (tenant.OrgId is null)
         {
             throw new InvalidOperationException(
-                "PostingService requires an ambient org context (request middleware or OrgScopedExecutor).");
+                "PostingService requires an ambient organization context (request middleware or OrgScopedExecutor).");
         }
 
         if (request.Lines.Count == 0)

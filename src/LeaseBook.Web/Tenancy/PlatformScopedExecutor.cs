@@ -26,7 +26,7 @@ namespace LeaseBook.Web.Tenancy;
 /// </para>
 /// <para>
 /// What the GUC unlocks: on <c>entitlements</c> and <c>capability_cohorts</c> it is the <i>only</i>
-/// way to satisfy the <c>{table}_platform_write</c> policy — a tenant-plane transaction may read its
+/// way to satisfy the <c>{table}_platform_write</c> policy — an organization-plane transaction may read its
 /// own rows but every write is rejected. On <c>feature_flags</c> and <c>platform_audit_events</c> it
 /// gates reads as well. It does NOT widen ordinary org-scoped tables: those carry the plain
 /// <c>EnableOrgRls</c> policy, which never mentions <c>app.platform</c>. Opening platform scope is

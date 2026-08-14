@@ -237,7 +237,7 @@ public static class CapabilitiesCommand
 
     /// <summary>
     /// Prints the registry joined to its stored state: the flag, plus how many orgs hold a live
-    /// entitlement and how many cohort rules exist. With <c>--org</c> it adds that tenant's own
+    /// entitlement and how many cohort rules exist. With <c>--org</c> it adds that organization's own
     /// entitlement and cohort state. <c>--stale</c> appends the age report, which the caller runs after
     /// this transaction commits — see <see cref="ReportAgeAsync"/>.
     /// <para>
@@ -477,7 +477,7 @@ public static class CapabilitiesCommand
     /// so the same mistake reads the same way whichever verb surfaced it.
     /// </para>
     /// <para>
-    /// <c>orgs</c> is global-class — no <c>org_id</c>, no RLS, the org IS the tenant — so this read
+    /// <c>orgs</c> is global-class — no <c>org_id</c> and no RLS — so this read
     /// needs no context of its own and cannot itself return a misleading empty.
     /// </para>
     /// </summary>
@@ -493,7 +493,7 @@ public static class CapabilitiesCommand
                 $"capabilities: org {orgId} does not exist, so there is nothing to list for it. An org " +
                 "with no capability rows and an org that is not there both look like " +
                 "'(no entitlement event)', and reporting the second as the first is how a grant that " +
-                "landed gets issued twice. Pass a real tenant id, or one of 'demo', 'cutover', 'load', " +
+                "landed gets issued twice. Pass a real organization id, or one of 'demo', 'cutover', 'load', " +
                 "or 'scenario'.");
         }
     }

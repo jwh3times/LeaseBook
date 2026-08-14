@@ -1,6 +1,6 @@
 # Security Policy
 
-LeaseBook handles fiduciary trust funds and multi-tenant financial data, so we take security seriously
+LeaseBook handles fiduciary trust funds and financial data for multiple organizations, so we take security seriously
 and welcome reports from the community. This document explains how to report a vulnerability and what to
 expect in return.
 
@@ -45,7 +45,7 @@ As a small project we respond on a best-effort basis. We aim to:
 
 LeaseBook treats the following as security-critical, and reports in these areas are especially valued:
 
-- **Cross-tenant isolation.** Tenancy is enforced by PostgreSQL row-level security in addition to
+- **Cross-organization isolation.** Organization isolation is enforced by PostgreSQL row-level security in addition to
   application-layer checks; any path that reads or writes another organization's data is a high-severity
   bug.
 - **Ledger integrity.** The financial journal and audit log are append-only — the runtime database role

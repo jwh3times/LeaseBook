@@ -15,7 +15,7 @@ namespace LeaseBook.Web.Jobs;
 /// Takes the root <see cref="IServiceProvider"/> rather than scoped dependencies because a sweep
 /// spans many orgs and each needs its own scope: <see cref="OrgScopedExecutor"/> sets
 /// <c>app.org_id</c> with <c>SET LOCAL</c>, so reusing one scope across orgs would mean reusing one
-/// transaction and one org context.
+/// transaction and one organization context.
 /// </para>
 /// <para>
 /// <b>Capability snapshots: at the outermost unit of work, never inside this loop (ADR-028).</b>
@@ -78,7 +78,7 @@ public sealed class InvariantSweepRunner(
 
     /// <summary>
     /// The narrow system path: <c>orgs</c> is a global-class table (no <c>org_id</c>, no RLS — the org
-    /// IS the tenant), so enumerating it is the one read a sweep may legitimately make before any org
+    /// is the organization catalog), so enumerating it is the one read a sweep may legitimately make before any org
     /// context exists. Every read after this point is org-scoped.
     /// </summary>
     private async Task<IReadOnlyList<Guid>> ResolveAllOrgIdsAsync(CancellationToken ct)

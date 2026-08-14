@@ -46,7 +46,7 @@ internal sealed class ImportStatementHandler(
 {
     public async Task<ImportResult> Handle(ImportStatement command, CancellationToken ct)
     {
-        _ = tenant.OrgId ?? throw new InvalidOperationException("ImportStatement requires an ambient org context.");
+        _ = tenant.OrgId ?? throw new InvalidOperationException("ImportStatement requires an ambient organization context.");
 
         var parsed = parser.Parse(command.CsvContent, command.ColumnMap);
 

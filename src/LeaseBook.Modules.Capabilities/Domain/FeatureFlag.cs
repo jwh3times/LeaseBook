@@ -2,7 +2,7 @@ namespace LeaseBook.Modules.Capabilities.Domain;
 
 /// <summary>
 /// A deployment-wide kill switch / rollout toggle, keyed by capability name. Genuinely global: a
-/// flag is a property of the deployment, not of a tenant, so there is no OrgId here at all.
+/// flag is a property of the deployment, not of an organization, so there is no OrgId here at all.
 /// <para>
 /// Deliberately mutable state, unlike <see cref="Entitlement"/> — <c>feature_flags</c> keeps its
 /// UPDATE/DELETE grants so the platform CLI can flip a switch. RLS makes the table readable in any

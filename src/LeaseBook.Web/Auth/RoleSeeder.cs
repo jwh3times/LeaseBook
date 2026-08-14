@@ -7,7 +7,7 @@ namespace LeaseBook.Web.Auth;
 /// <summary>
 /// Ensures the fixed <see cref="Roles"/> exist. Idempotent and run at startup so the seeder (WP-09)
 /// and authorization policies always have their roles. Roles live in identity-class tables (no RLS),
-/// so this needs no org context.
+/// so this needs no organization context.
 /// <para>
 /// <b>Two entry points, and the difference is the whole point.</b> <see cref="EnsureRolesAsync"/>
 /// throws on anything that goes wrong and is what the CLI seeders call: an operator running

@@ -135,7 +135,7 @@ internal sealed class CapabilityAdmin(
     }
 
     /// <summary>
-    /// Upserts the flag through EF rather than <c>INSERT … ON CONFLICT</c>, because a tenant-plane
+    /// Upserts the flag through EF rather than <c>INSERT … ON CONFLICT</c>, because an organization-plane
     /// UPDATE here is fail-closed but SILENT: RLS filters the target rows through the write policy's
     /// <c>USING</c>, so the statement succeeds affecting zero rows and only INSERT raises 42501. EF's
     /// update path compares the affected-row count against what it expected and throws
@@ -230,8 +230,8 @@ internal sealed class CapabilityAdmin(
     {
         if (userId is { } user && !await orgMembership.IsUserInOrgAsync(user, orgId, ct))
         {
-            // asp_net_users is RLS-exempt — login precedes org context — so nothing in the database
-            // stops a rule naming another tenant's user. Both the id and the org are load-bearing.
+            // asp_net_users is RLS-exempt — login precedes organization context — so nothing in the database
+            // stops a rule naming another organization's user. Both the id and the org are load-bearing.
             throw new CapabilityRefusedException(
                 $"capabilities: user {user} does not exist in org {orgId}, so no cohort rule " +
                 "and no audit event were written. asp_net_users is RLS-exempt; cohort adds must " +

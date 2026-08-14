@@ -283,7 +283,7 @@ public sealed class RunCapabilityFreezeTests(PostgresFixture fixture)
     }
 
     /// <summary>
-    /// Missing org context faults the returned task rather than throwing synchronously - the gate was
+    /// Missing organization context faults the returned task rather than throwing synchronously - the gate was
     /// made async-throwing precisely because this adapter is its next consumer, and the difference is
     /// invisible under a bare await but load-bearing under Task.WhenAll. The call below is
     /// deliberately made without a try and before any await.
@@ -299,7 +299,7 @@ public sealed class RunCapabilityFreezeTests(PostgresFixture fixture)
         var pending = snapshot.ResolveDurableAsync(ct);
 
         (await Should.ThrowAsync<InvalidOperationException>(async () => await pending))
-            .Message.ShouldContain("org context");
+            .Message.ShouldContain("organization context");
     }
 
     // -- helpers ---------------------------------------------------------------

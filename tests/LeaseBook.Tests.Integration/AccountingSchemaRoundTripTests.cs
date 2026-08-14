@@ -102,7 +102,7 @@ public sealed class AccountingSchemaRoundTripTests(PostgresFixture fixture)
         var ct = TestContext.Current.CancellationToken;
 
         // The missing UPDATE/DELETE grant is a table-level privilege, checked before any row or RLS
-        // access — so no org context is needed, and each statement runs standalone (a shared
+        // access — so no organization context is needed, and each statement runs standalone (a shared
         // transaction would be poisoned by the first failure: 25P02 instead of 42501).
         await using var conn = await fixture.OpenAppConnectionAsync(ct);
 

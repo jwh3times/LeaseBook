@@ -169,7 +169,7 @@ public sealed record RunCapabilities(
 /// open and throw.
 /// </para>
 /// <para>
-/// Missing org context faults the returned task rather than throwing synchronously, mirroring the
+/// Missing organization context faults the returned task rather than throwing synchronously, mirroring the
 /// gate. Do not "simplify" the adapter into an expression-bodied pass-through that reintroduces a
 /// synchronous throw: the difference is invisible under a bare await and load-bearing the moment a
 /// caller composes several of these with <c>Task.WhenAll</c>.

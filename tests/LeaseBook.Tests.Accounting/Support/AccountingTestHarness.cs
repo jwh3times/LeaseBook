@@ -74,7 +74,7 @@ internal static class AccountingTestHarness
         await conn.OpenAsync(ct);
 
         // The directory tables FORCE row security even for the migrator (table owner), so the WITH CHECK
-        // policy needs an org context — set it transaction-locally to this scope's org. The org row itself
+        // policy needs an organization context — set it transaction-locally to this scope's org. The org row itself
         // already exists (OrgScope.CreateAsync inserted it).
         await using var tx = await conn.BeginTransactionAsync(ct);
         await RlsProbe.SetOrgAsync(conn, tx, orgId, ct);

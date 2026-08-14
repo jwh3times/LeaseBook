@@ -14,7 +14,7 @@ namespace LeaseBook.Tests.Integration.Support;
 /// Deliberately raw, and deliberately NOT through <c>ICapabilityAdmin</c> or
 /// <c>CapabilityStateReader</c>: an oracle that shares a seam with the code under test cannot show
 /// that seam is wrong. Every read opens platform scope through <see cref="RlsProbe.SetPlatformAsync"/>,
-/// because <c>platform_audit_events</c> is hidden from every tenant session whatever its org context.
+/// because <c>platform_audit_events</c> is hidden from every organization session whatever its organization context.
 /// </para>
 /// <para>
 /// Shared by the module-level write tests and the CLI verb tests. They assert different things — what

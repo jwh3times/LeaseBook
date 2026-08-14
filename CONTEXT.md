@@ -10,6 +10,16 @@ this file grows one resolved ambiguity at a time.
 
 ## Language
 
+### Organizations and tenants
+
+**Organization**:
+The property-management company whose data and configuration form one isolation boundary.
+_Avoid_: tenant, account, company, customer (when naming the isolation boundary)
+
+**Tenant**:
+A person or named party responsible under a residential lease.
+_Avoid_: renter, resident, leaseholder
+
 ### Access planes
 
 Every piece of work in the system runs in exactly one access plane, and which one it is determines
@@ -17,11 +27,15 @@ the authority and organization boundary the work carries. The planes are mutuall
 of acting, not disjoint sets of readable facts: explicitly global, read-only operating state can be
 visible from either plane.
 
-**Tenant plane**:
+**Organization plane**:
 The access mode in which work can act on exactly one organization's data. Every ordinary read and
 write happens here, including everything a customer can reach; globally readable operating facts do
 not widen that organization boundary.
-_Avoid_: org plane, tenant scope, org context (as a name for the plane itself)
+_Avoid_: tenant plane, org plane, tenant scope, tenant context
+
+**Organization context**:
+The identity of the one organization carried by organization-plane work.
+_Avoid_: tenant context, org context
 
 **Platform plane**:
 The access mode in which work can act on state used to operate the product across organizations.

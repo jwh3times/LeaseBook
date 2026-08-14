@@ -22,7 +22,7 @@ internal sealed class ReversalService(DbContext db, ITenantContext tenant, IPost
     {
         if (tenant.OrgId is null)
         {
-            throw new InvalidOperationException("ReverseAsync requires an ambient org context.");
+            throw new InvalidOperationException("ReverseAsync requires an ambient organization context.");
         }
 
         var original = await db.Set<JournalEntry>().AsNoTracking()

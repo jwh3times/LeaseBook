@@ -78,7 +78,7 @@ public sealed class AppDbContext(
         }
 
         // One convention, not per-entity copy-paste (pitfall E9): every IOrgScoped entity gets the
-        // same org filter bound to the live tenant context. null OrgId → org_id = NULL → no rows.
+        // same org filter bound to the live organization context. null OrgId → org_id = NULL → no rows.
         foreach (var entityType in modelBuilder.Model.GetEntityTypes())
         {
             if (typeof(IOrgScoped).IsAssignableFrom(entityType.ClrType))
@@ -138,7 +138,7 @@ public sealed class AppDbContext(
 
         var orgId = _tenant.OrgId
             ?? throw new InvalidOperationException(
-                "An org-scoped write was attempted with no tenant context. Org-scoped DB work must " +
+                "An org-scoped write was attempted with no organization context. Org-scoped DB work must " +
                 "run inside the request middleware or OrgScopedExecutor, which set app.org_id (§C.4).");
 
         var audits = new List<AuditEvent>(changes.Count);
@@ -176,7 +176,7 @@ public sealed class AppDbContext(
 
     private static InvalidOperationException CrossOrg(EntityEntry entry, Guid entityOrg, Guid contextOrg) =>
         new($"Cross-org write blocked: {entry.Entity.GetType().Name} carries org {entityOrg} but the " +
-            $"current tenant context is {contextOrg}.");
+            $"current organization context is {contextOrg}.");
 
     private static AuditEvent BuildAuditEvent(EntityEntry entry, Guid orgId, Guid? actorUserId)
     {

@@ -38,7 +38,7 @@ classification.
 
 ## 2. Data inventory (data map)
 
-All application data lives in a single multi-tenant PostgreSQL database, partitioned per organization
+All application data lives in a single PostgreSQL database, partitioned per organization
 by row-level security (§4). Every table below carries an `org_id` and is reachable only within its
 organization's row-level-security context, except the identity and platform tables noted as
 global-class.
@@ -124,9 +124,9 @@ roadmap.
   platform-managed keys. Key Vault soft-delete retains deleted secrets for 90 days. Customer-managed
   keys are not used in the beta design.
 
-## 4. Access controls and tenancy
+## 4. Access controls and organization isolation
 
-- **Row-level security is the tenant boundary.** Every organization-scoped table has `FORCE ROW LEVEL
+- **Row-level security is the organization boundary.** Every organization-scoped table has `FORCE ROW LEVEL
 SECURITY` and an `org_id` isolation policy applied through one migration helper; a CI schema-guard
   test fails the build if any org-scoped table is missing it. Each authenticated request sets its
   organization context inside a transaction (`set_config('app.org_id', …, is_local => true)`), so the

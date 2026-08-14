@@ -21,12 +21,12 @@ public sealed class SchemaGuardTests(PostgresFixture fixture)
     /// </summary>
     private static readonly HashSet<string> GlobalTables = new(StringComparer.Ordinal)
     {
-        "orgs",                  // global-class: the org IS the tenant — it has no org_id
+        "orgs",                  // global-class: the organization catalog — it has no org_id
         "__EFMigrationsHistory", // EF migration bookkeeping — not org data
         "feature_flags",         // global-class (ADR-028): a flag is a property of the deployment,
-                                 // not of a tenant, so it has no org_id and lands in this arm. It is
+                                 // not of an organization, so it has no org_id and lands in this arm. It is
                                  // the one entry here that still carries RLS — its writes are gated on
-                                 // platform scope, so a tenant-plane path cannot toggle a flag, and
+                                 // platform scope, so an organization-plane path cannot toggle a flag, and
                                  // that is asserted by ExpectedPlatformPolicies below. The other three
                                  // capability tables DO carry org_id and get real RLS with a platform
                                  // escape — they pass the org-scoped arm above and need no entry here.
@@ -72,7 +72,7 @@ public sealed class SchemaGuardTests(PostgresFixture fixture)
     /// </summary>
     private static readonly Dictionary<string, PolicyPin[]> ExpectedPlatformPolicies = new(StringComparer.Ordinal)
     {
-        // Tenant reads its OWN rows (or platform reads all); every write is platform-only.
+        // An organization reads its OWN rows (or platform reads all); every write is platform-only.
         ["entitlements"] =
         [
             new("entitlements_org_read", "SELECT", "{public}", OrgOrPlatform, EffectiveCheck: null),
@@ -174,7 +174,7 @@ public sealed class SchemaGuardTests(PostgresFixture fixture)
 
     /// <summary>
     /// Identity-class tables (§C.3 / pitfall E6): exempt from RLS even though <c>asp_net_users</c>
-    /// carries an <c>org_id</c> — authentication must work before any org context exists, so user
+    /// carries an <c>org_id</c> — authentication must work before any organization context exists, so user
     /// isolation is enforced by app logic, not by a row-security policy.
     /// </summary>
     private static readonly HashSet<string> IdentityTables = new(StringComparer.Ordinal)

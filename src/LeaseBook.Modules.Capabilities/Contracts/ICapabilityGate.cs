@@ -12,7 +12,7 @@ namespace LeaseBook.Modules.Capabilities.Contracts;
 /// per-item posting loop it guards and unaffordable on every UI render.
 /// </para>
 /// <para>
-/// <b>Org context is required by both.</b> With none they fault rather than answering "off": without
+/// <b>Organization context is required by both.</b> With none they fault rather than answering "off": without
 /// <c>app.org_id</c> RLS filters entitlements to zero rows, every paid capability reads as
 /// unavailable, and the result is indistinguishable from a deliberate revoke with nothing logged
 /// anywhere. That is the same fail-loud rule background jobs follow. The failure arrives on the
@@ -35,7 +35,7 @@ public interface ICapabilityGate
     /// the token is honoured throughout, so a disconnect stops paying for that refresh.
     /// </para>
     /// </summary>
-    /// <exception cref="InvalidOperationException">There is no ambient org context.</exception>
+    /// <exception cref="InvalidOperationException">There is no ambient organization context.</exception>
     Task<CapabilitySet> GetCachedAsync(CancellationToken ct);
 
     /// <summary>
@@ -50,7 +50,7 @@ public interface ICapabilityGate
     /// </para>
     /// </summary>
     /// <exception cref="InvalidOperationException">
-    /// There is no ambient org context, or the ambient <c>app.org_id</c> is not the org being
+    /// There is no ambient organization context, or the ambient <c>app.org_id</c> is not the org being
     /// resolved.
     /// </exception>
     Task<CapabilitySet> ResolveDurableAsync(CancellationToken ct);
