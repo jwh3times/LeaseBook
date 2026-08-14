@@ -33,7 +33,8 @@ opposite approach: **correctness is structural, not cosmetic.**
 - **Ledgers are append-only.** Corrections are linked reversal entries; posted rows are never updated or
   deleted (the runtime database role has no `UPDATE`/`DELETE` grant on the journal). Every entry carries
   an actor and a full audit trail.
-- **The trust equation holds continuously**: for every trust bank account,
+- **The trust equation holds continuously**: for every operating trust account and
+  security-deposit trust account,
   `book balance = Σ owner equity + Σ deposit liabilities + held management fees`. It is tested on every
   posting and swept by an invariant checker.
 - **Money is `decimal` / `NUMERIC(14,2)` end to end** — never floating point.

@@ -24,19 +24,36 @@ register is a **query over this journal**, never a separately maintained number 
 Every line points at an account, and every account has a **class**. The class — not a report filter —
 is what keeps fiduciary money straight:
 
-| Class               | What it holds                                                                         |
-| ------------------- | ------------------------------------------------------------------------------------- |
-| `trust_bank`        | Money physically in a trust bank account (rent, deposits) — held _for_ owners/tenants |
-| `owner_equity`      | How much of the trust belongs to each owner                                           |
-| `tenant_receivable` | What a tenant owes (rent, fees) — a promise, not cash                                 |
-| `deposit_liability` | Security deposits and prepayments — money we **owe back** until it is applied         |
-| `pm_income`         | The property manager's earned management fee                                          |
-| `pm_operating_bank` | The manager's _own_ operating bank account                                            |
+| Class               | What it holds                                                                     |
+| ------------------- | --------------------------------------------------------------------------------- |
+| `trust_bank`        | Money in an operating trust or security-deposit trust account — held _for_ others |
+| `owner_equity`      | How much of the trust belongs to each owner                                       |
+| `tenant_receivable` | What a tenant owes (rent, fees) — a promise, not cash                             |
+| `deposit_liability` | Security deposits and prepayments — money we **owe back** until it is applied     |
+| `pm_income`         | The property manager's earned management fee                                      |
+| `pm_operating_bank` | The property manager's own **PM operating account**                               |
 
 The crucial separation: **`pm_income` can never carry an owner's name.** It is enforced at the
 database level (a line tagged owner-and-PM-income is rejected), so the manager's fee income can never
 appear on an owner's statement. Likewise security deposits and prepayments are **liabilities** — they
 are not income, and they do not become income until they are actually applied.
+
+### Bank purpose fixes the trust boundary
+
+**Bank accounts** is the generic category for every real-world account configured in LeaseBook. Each
+one receives an immutable **bank purpose** when it is created; that purpose determines the account
+class and whether the account participates in the trust equation:
+
+| Bank purpose                   | API value   | Account class       | Trust equation |
+| ------------------------------ | ----------- | ------------------- | -------------- |
+| Operating trust account        | `trust`     | `trust_bank`        | Inside         |
+| Security-deposit trust account | `deposit`   | `trust_bank`        | Inside         |
+| PM operating account           | `operating` | `pm_operating_bank` | Outside        |
+
+The generic label is never **trust bank accounts**, because that would incorrectly include the PM
+operating account. Likewise, **operating account** is not shorthand for the operating trust account:
+the unqualified phrase can be mistaken for the PM operating account. Bank purpose cannot be changed
+after creation because changing it would move an existing account across the fiduciary boundary.
 
 ## Two bases, one set of books
 
@@ -57,21 +74,21 @@ A tenant, Jasmine, rents a unit from an owner, Renée's client.
 
 1. **Rent charged ($1,450).** Jasmine now owes $1,450 (receivable up) and the owner has earned $1,450
    (owner equity up). _Accrual only_ — no cash has moved yet.
-2. **Payment received ($1,450, ACH into the operating trust).** The trust bank goes up $1,450 (cash
-   in). That clears her receivable (accrual) and turns into the owner's cash income (cash). If she had
+2. **Payment received ($1,450, ACH into the operating trust account).** That account goes up $1,450
+   (cash in). This clears her receivable (accrual) and turns into the owner's cash income (cash). If she had
    **overpaid**, only the part covering what she owed would clear the receivable; the rest would be
    booked as a **prepayment liability** — money we hold for her — never as a negative balance.
 3. **Management fee assessed ($290).** The owner's equity goes down $290 and the manager's
-   `pm_income` goes up $290. The fee is _held in the trust bank_ for now (it is the manager's money,
-   sitting in the trust account until it is moved out).
-4. **Fees swept ($290, trust → the manager's own bank).** The $290 leaves the trust bank and lands in
-   the manager's operating bank; the income attribution moves with the cash. Net income is unchanged —
+   `pm_income` goes up $290. The fee is _held in the operating trust account_ for now (it is the
+   manager's money, sitting there until it is moved out).
+4. **Fees swept ($290, operating trust account → PM operating account).** The $290 moves between those
+   accounts; the income attribution moves with the cash. Net income is unchanged —
    the money just changed pockets.
-5. **Owner disbursed ($8,200).** The owner's equity goes down and the trust bank goes down by the same
+5. **Owner disbursed ($8,200).** The owner's equity and operating trust account go down by the same
    amount. A disbursement is refused if it would take the owner below their configured reserve.
 
 A **security deposit** follows a different rule on purpose: when collected it increases the deposit
-trust bank and a deposit _liability_ — and books **no income at all**. It only becomes income (or
+security-deposit trust account and a deposit _liability_ — and books **no income at all**. It only becomes income (or
 clears a charge) when it is actually **applied** at move-out, and that recognition is identical in the
 cash and accrual views.
 
@@ -95,7 +112,7 @@ later activity under the effective owner before recording the transfer.
 
 ## The trust equation (the safety check)
 
-At all times, for every trust bank account:
+At all times, for every operating trust account and security-deposit trust account:
 
 > **bank book balance = owners' equity + deposit/prepayment liabilities + PM fees held in that bank**
 

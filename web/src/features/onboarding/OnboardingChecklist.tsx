@@ -60,8 +60,9 @@ export function OnboardingChecklist({
   const steps: Step[] = [
     {
       id: 'banks',
-      label: 'Set up trust bank accounts',
-      description: 'Configure your trust, deposit, and operating bank accounts.',
+      label: 'Set up bank accounts',
+      description:
+        'Add the operating and security-deposit trust accounts (inside the trust equation) and the PM operating account (outside it).',
       done: status.banksConfigured,
       doneIcon: 'check',
       pendingIcon: 'wallet',

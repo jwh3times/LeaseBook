@@ -10,7 +10,7 @@ using Microsoft.AspNetCore.Routing;
 namespace LeaseBook.Modules.Directory.Endpoints;
 
 /// <summary>
-/// The settings surface (§C.4): org profile + basis/display preferences and trust bank accounts. Reads
+/// The settings surface (§C.4): org profile + basis/display preferences and bank accounts. Reads
 /// are staff-level (<c>RequirePMStaff</c>); writes are admin-only (<c>RequirePMAdmin</c>) — the server is
 /// the boundary. Thin lambdas: bind → dispatch via <see cref="ISender"/> → <c>TypedResults</c>. No user
 /// management (P48); no delete (M2). Validation runs in the CQRS pipeline (the single validation home).
@@ -37,6 +37,7 @@ public sealed class SettingsEndpoints : IEndpointModule
                 async (bool? activeOnly, ISender sender, CancellationToken ct) =>
                     TypedResults.Ok(await sender.Query(new ListBankAccounts(activeOnly ?? false), ct)))
             .RequireAuthorization("RequirePMStaff")
+            .WithDescription("Lists bank accounts and their immutable purpose. The trust and deposit values are inside the trust equation; operating is the PM operating account outside it.")
             .Produces<IReadOnlyList<BankAccountResponse>>();
 
         group.MapGet("/banks/{id:guid}",
@@ -50,6 +51,7 @@ public sealed class SettingsEndpoints : IEndpointModule
                 async (CreateBankAccount body, ISender sender, CancellationToken ct) =>
                     TypedResults.Ok(await sender.Send(body, ct)))
             .RequireAuthorization("RequirePMAdmin")
+            .WithDescription("Creates a bank account. Purpose is immutable: trust means operating trust account and deposit means security-deposit trust account (inside the trust equation); operating means PM operating account (outside it).")
             .Produces<BankAccountResponse>();
 
         group.MapPut("/banks/{id:guid}",
@@ -58,7 +60,8 @@ public sealed class SettingsEndpoints : IEndpointModule
                     await sender.Send(new UpdateBankAccount(id, body.Name, body.Institution, body.Mask), ct) is { } bank
                         ? TypedResults.Ok(bank)
                         : TypedResults.NotFound())
-            .RequireAuthorization("RequirePMAdmin");
+            .RequireAuthorization("RequirePMAdmin")
+            .WithDescription("Updates bank-account display fields. Bank purpose is immutable and cannot be changed.");
 
         group.MapPut("/banks/{id:guid}/active",
                 async Task<Results<Ok<BankAccountResponse>, NotFound, ProblemHttpResult>> (

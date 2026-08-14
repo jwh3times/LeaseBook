@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living policy
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-07-10
+- **Last reviewed:** 2026-08-13
 
 This policy keeps LeaseBook documentation public-safe, navigable, and maintainable. It applies to
 Markdown, runbooks, diagrams, planning artifacts, and documentation embedded in source or automation.
@@ -27,6 +27,7 @@ not enforce this broader confidentiality boundary.
 | Subject                                          | Canonical public document                        |
 | ------------------------------------------------ | ------------------------------------------------ |
 | Project overview and authoritative port map      | `README.md`                                      |
+| Settled domain terminology                       | `CONTEXT.md`                                     |
 | Supported product scope and non-goals            | `docs/product-scope.md`                          |
 | Implemented module boundaries and system flow    | `docs/architecture.md`                           |
 | Trust-accounting behavior and event workflows    | `docs/accounting.md`                             |

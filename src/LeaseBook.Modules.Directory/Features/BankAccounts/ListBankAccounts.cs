@@ -12,6 +12,11 @@ public sealed record ListBankAccounts(bool ActiveOnly = false) : IQuery<IReadOnl
 /// <summary>One bank account by id (§C.4); null → 404 at the endpoint.</summary>
 public sealed record GetBankAccount(Guid Id) : IQuery<BankAccountResponse?>;
 
+/// <param name="Purpose">
+/// Immutable bank purpose. <c>trust</c> means operating trust account and <c>deposit</c> means
+/// security-deposit trust account (inside the trust equation); <c>operating</c> means PM operating
+/// account (outside the trust equation).
+/// </param>
 public sealed record BankAccountResponse(
     Guid Id, string Name, string? Institution, string? Mask, string Purpose, bool IsActive)
 {
