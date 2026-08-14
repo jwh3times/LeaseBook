@@ -13,9 +13,9 @@ namespace LeaseBook.Web.Adapters;
 /// </summary>
 internal sealed class TenantPostingDimensionsAdapter(ISender sender) : ITenantPostingDimensions
 {
-    public async Task<TenantPostingDimensions?> GetAsync(Guid tenantId, CancellationToken ct)
+    public async Task<TenantPostingDimensions?> GetAsync(Guid tenantId, DateOnly date, CancellationToken ct)
     {
-        var view = await sender.Query(new GetTenantPostingDimensions(tenantId), ct);
+        var view = await sender.Query(new GetTenantPostingDimensions(tenantId, date), ct);
         return view is null ? null : new TenantPostingDimensions(view.OwnerId, view.PropertyId, view.UnitId);
     }
 }

@@ -26,6 +26,28 @@ internal sealed class BalanceReader(DbContext db)
     public Task<decimal> DepositsHeldAsync(Guid tenantId, CancellationToken ct) =>
         HeldLiabilityByCodeAsync(AccountCodes.SecurityDepositsHeld, tenantId, ct);
 
+    /// <summary>
+    /// Security deposit currently held in one exact attribution bucket. Dispositions use this
+    /// stronger read so a positive tenant total cannot mask an empty seller/bank/property bucket.
+    /// </summary>
+    public Task<decimal> DepositsHeldAsync(
+        Guid tenantId,
+        Guid? propertyId,
+        Guid? ownerId,
+        Guid bankAccountId,
+        CancellationToken ct) =>
+        db.Database.SqlQuery<decimal>(
+            $"""
+            SELECT COALESCE(SUM(COALESCE(jl.credit, 0) - COALESCE(jl.debit, 0)), 0) AS "Value"
+            FROM journal_lines jl JOIN accounts a ON a.id = jl.account_id
+            WHERE a.code = {AccountCodes.SecurityDepositsHeld}
+              AND jl.tenant_id = {tenantId}
+              AND jl.property_id IS NOT DISTINCT FROM {propertyId}
+              AND jl.owner_id IS NOT DISTINCT FROM {ownerId}
+              AND jl.bank_account_id = {bankAccountId}
+              AND jl.basis IN ('cash', 'both')
+            """).SingleAsync(ct);
+
     /// <summary>Prepayment currently held for a tenant (CR-positive liability), cash+both.</summary>
     public Task<decimal> PrepaymentsHeldAsync(Guid tenantId, CancellationToken ct) =>
         HeldLiabilityByCodeAsync(AccountCodes.TenantPrepayments, tenantId, ct);

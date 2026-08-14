@@ -62,7 +62,7 @@ public sealed class BalanceImportService(
                 {
                     var result = await PostLineAsync(
                         p.Figure, p.DebitNormal, p.AccountCode, p.Basis,
-                        cutoverDate, p.SourceRef, p.OwnerId, p.TenantId, p.BankAccountId, ct);
+                        cutoverDate, p.SourceRef, p.OwnerId, p.TenantId, p.BankAccountId, p.PropertyId, ct);
                     lines.Add((p, result));
                 }
                 catch (InvalidOpeningPositionException ex)
@@ -308,7 +308,7 @@ public sealed class BalanceImportService(
                     {
                         var result = await PostLineAsync(
                             p.Figure, p.DebitNormal, p.AccountCode, p.Basis,
-                            cutoverDate, newRef, p.OwnerId, p.TenantId, p.BankAccountId, ct);
+                            cutoverDate, newRef, p.OwnerId, p.TenantId, p.BankAccountId, p.PropertyId, ct);
                         if (result.Posted)
                         {
                             revisionEntryId ??= result.EntryId;
@@ -629,6 +629,15 @@ public sealed class BalanceImportService(
         var ownerMap = await resolver.BuildMapAsync(EntityKind.Owners, ct);
         var tenantMap = await BuildTenantMapAsync(ct);
         var depositTrustId = await ResolveDepositTrustAsync(ct);
+        var tenantIds = tenantMap.Values.Distinct().ToList();
+        var activePropertyRows = await (
+            from lease in db.Set<LeaseLite>().AsNoTracking()
+            join unit in db.Set<Unit>().AsNoTracking() on lease.UnitId equals unit.Id
+            join property in db.Set<Property>().AsNoTracking() on unit.PropertyId equals property.Id
+            where lease.Status == LeaseStatus.Active && tenantIds.Contains(lease.TenantId)
+            select new { lease.TenantId, PropertyId = property.Id, property.OwnerId })
+            .ToListAsync(ct);
+        var activePropertyByTenant = activePropertyRows.ToDictionary(row => row.TenantId);
 
         if (depositTrustId is null)
         {
@@ -661,13 +670,30 @@ public sealed class BalanceImportService(
                 continue;
             }
 
+            if (!activePropertyByTenant.TryGetValue(tenantId, out var activeProperty))
+            {
+                errors.Add(BalanceRowOutcome.Error(rowNumber, row.ExternalTenantId, rawJson,
+                    "external_tenant_id",
+                    $"'{row.ExternalTenantId}' has no active imported lease to supply deposit property attribution"));
+                continue;
+            }
+
+            if (activeProperty.OwnerId != ownerId)
+            {
+                errors.Add(BalanceRowOutcome.Error(rowNumber, row.ExternalTenantId, rawJson,
+                    "external_owner_id",
+                    $"'{row.ExternalOwnerId}' does not own the active imported property for tenant '{row.ExternalTenantId}'"));
+                continue;
+            }
+
             // SecurityDepositsHeld is credit-normal; a held amount of exactly $0.00 is still planned —
             // PostLineAsync skips it.
             var sourceRef = $"opening:{cutover:yyyy-MM-dd}:deposit={tenantId}";
             positions.Add(new PlannedPosition(
                 rowNumber, row.ExternalTenantId, rawJson, sourceRef,
                 AccountCodes.SecurityDepositsHeld, DebitNormal: false, row.HeldAmount, EntryBasis.Both,
-                OwnerId: ownerId, TenantId: tenantId, BankAccountId: depositTrustId));
+                OwnerId: ownerId, TenantId: tenantId, BankAccountId: depositTrustId,
+                PropertyId: activeProperty.PropertyId));
         }
 
         return new BalancePlan(positions, errors);
@@ -926,6 +952,7 @@ public sealed class BalanceImportService(
         Guid? ownerId,
         Guid? tenantId,
         Guid? bankAccountId,
+        Guid? propertyId,
         CancellationToken ct)
     {
         // Exactly zero → no-op. Never call the posting service (Money(0) would throw InvalidLineException).
@@ -946,7 +973,7 @@ public sealed class BalanceImportService(
             var entryId = await balanceForward.PostOpeningPositionAsync(new OpeningPositionRequest(
                 accountCode, debit, credit, basis,
                 cutover, sourceRef,
-                OwnerId: ownerId, TenantId: tenantId, BankAccountId: bankAccountId), ct);
+                PropertyId: propertyId, OwnerId: ownerId, TenantId: tenantId, BankAccountId: bankAccountId), ct);
             return new LineResult(Posted: true, EntryId: entryId, AlreadyPosted: false);
         }
         catch (DuplicateSourceRefException ex)
@@ -990,7 +1017,7 @@ public sealed class BalanceImportService(
     private sealed record PlannedPosition(
         int RowNumber, string ExternalId, string RawJson, string SourceRef,
         string AccountCode, bool DebitNormal, decimal Figure, EntryBasis Basis,
-        Guid? OwnerId, Guid? TenantId, Guid? BankAccountId);
+        Guid? OwnerId, Guid? TenantId, Guid? BankAccountId, Guid? PropertyId = null);
 
     /// <summary>
     /// The result of <see cref="PlanAsync"/>: every resolvable row's position(s) plus every

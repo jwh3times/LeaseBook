@@ -26,7 +26,7 @@ internal sealed class CollectDepositHandler(ITenantPostingDimensions dimensions,
 {
     public async Task<PostResult> Handle(CollectDeposit command, CancellationToken ct)
     {
-        var dims = await LedgerPostingMaps.ResolveAsync(dimensions, command.TenantId, ct);
+        var dims = await LedgerPostingMaps.ResolveAsync(dimensions, command.TenantId, command.Date, ct);
         var id = await events.PostAsync(
             new DepositCollected(
                 command.TenantId, dims.PropertyId, dims.OwnerId, LedgerPostingMaps.Money(command.Amount),

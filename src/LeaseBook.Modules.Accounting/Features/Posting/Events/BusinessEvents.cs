@@ -67,6 +67,18 @@ public sealed record DepositCollected(
     Guid TenantId, Guid PropertyId, Guid OwnerId,
     Money Amount, DateOnly Date, Guid DepositBankId, string Description, string? SourceRef = null) : AccountingEvent;
 
+/// <summary>One tenant/bank deposit-liability position moved between owner attribution buckets.</summary>
+public sealed record DepositResponsibilityTransferPosition(Guid TenantId, Guid BankAccountId, Money Amount);
+
+/// <summary>
+/// A property sale moves held security-deposit responsibility from the seller to the buyer without
+/// moving cash or changing the total liability.
+/// </summary>
+public sealed record DepositResponsibilityTransferred(
+    Guid PropertyId, Guid FromOwnerId, Guid ToOwnerId, DateOnly Date,
+    IReadOnlyList<DepositResponsibilityTransferPosition> Positions,
+    string Description, string? SourceRef = null) : AccountingEvent;
+
 /// <summary>A prepayment into a trust bank — a liability until applied.</summary>
 public sealed record PrepaymentReceived(
     Guid TenantId, Guid PropertyId, Guid OwnerId,

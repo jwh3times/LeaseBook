@@ -19,7 +19,8 @@ namespace LeaseBook.Modules.Directory.Features.Reporting;
 /// are filtered via <c>NotSystem()</c> on every join (M5-prep convention).
 /// </para>
 /// </summary>
-public sealed record GetActiveLeaseSchedule(int Year, int Month) : IQuery<LeaseScheduleResponse>;
+public sealed record GetActiveLeaseSchedule(int Year, int Month, DateOnly? AttributionDate = null)
+    : IQuery<LeaseScheduleResponse>;
 
 /// <summary>The full set of schedule rows for the period.</summary>
 public sealed record LeaseScheduleResponse(IReadOnlyList<LeaseScheduleRow> Rows);
@@ -58,6 +59,7 @@ internal sealed class GetActiveLeaseScheduleHandler(DbContext db)
     {
         var periodStart = new DateOnly(query.Year, query.Month, 1);
         var periodEnd = new DateOnly(query.Year, query.Month, DateTime.DaysInMonth(query.Year, query.Month));
+        var attributionDate = query.AttributionDate ?? periodStart;
         var rentDueDay = await db.Set<OrgSettings>()
             .AsNoTracking()
             .Select(settings => (int?)settings.RentDueDay)
@@ -88,6 +90,41 @@ internal sealed class GetActiveLeaseScheduleHandler(DbContext db)
                 l.EndDate))
             .ToListAsync(ct);
 
-        return new LeaseScheduleResponse(rows);
+        if (rows.Count == 0)
+        {
+            return new LeaseScheduleResponse(rows);
+        }
+
+        var propertyIds = rows.Select(row => row.PropertyId).Distinct().ToArray();
+
+        // A rent plan copies owner attribution into immutable journal intents. Lock the whole property
+        // set in one read so a concurrent ownership transfer resolves wholly before or after this
+        // schedule, never between its Directory read and the ambient transaction's posting work.
+        await db.Database.SqlQuery<Guid>(
+                $"""SELECT id AS "Value" FROM properties WHERE id = ANY({propertyIds}) ORDER BY id FOR SHARE""")
+            .ToListAsync(ct);
+
+        var transfers = await db.Set<PropertyOwnershipTransfer>().AsNoTracking()
+            .Where(transfer => propertyIds.Contains(transfer.PropertyId))
+            .OrderBy(transfer => transfer.EffectiveDate)
+            .ToListAsync(ct);
+        var byProperty = transfers
+            .GroupBy(transfer => transfer.PropertyId)
+            .ToDictionary(group => group.Key, group => group.ToList());
+
+        var attributed = rows.Select(row =>
+        {
+            if (!byProperty.TryGetValue(row.PropertyId, out var history))
+            {
+                return row;
+            }
+
+            var effectiveOwner = history
+                .LastOrDefault(transfer => transfer.EffectiveDate <= attributionDate)?.ToOwnerId
+                ?? history[0].FromOwnerId;
+            return row with { OwnerId = effectiveOwner };
+        }).ToList();
+
+        return new LeaseScheduleResponse(attributed);
     }
 }

@@ -29,6 +29,7 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
             CreditIssued e => PostCreditIssuedAsync(e, ct),
             PaymentReceived e => PostPaymentReceivedAsync(e, ct),
             DepositCollected e => PostDepositCollectedAsync(e, ct),
+            DepositResponsibilityTransferred e => PostDepositResponsibilityTransferredAsync(e, ct),
             PrepaymentReceived e => PostPrepaymentReceivedAsync(e, ct),
             DepositApplied e => PostDepositAppliedAsync(e, ct),
             PrepaymentApplied e => PostPrepaymentAppliedAsync(e, ct),
@@ -173,6 +174,26 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
                     PropertyId: e.PropertyId, OwnerId: e.OwnerId, TenantId: e.TenantId, BankAccountId: e.DepositBankId),
             ]), ct);
 
+    private Task<Guid> PostDepositResponsibilityTransferredAsync(
+        DepositResponsibilityTransferred e,
+        CancellationToken ct)
+    {
+        var lines = e.Positions.SelectMany(position => new[]
+        {
+            new PostLineRequest(
+                AccountCodes.SecurityDepositsHeld, position.Amount, null, EntryBasis.Both,
+                PropertyId: e.PropertyId, OwnerId: e.FromOwnerId, TenantId: position.TenantId,
+                BankAccountId: position.BankAccountId),
+            new PostLineRequest(
+                AccountCodes.SecurityDepositsHeld, null, position.Amount, EntryBasis.Both,
+                PropertyId: e.PropertyId, OwnerId: e.ToOwnerId, TenantId: position.TenantId,
+                BankAccountId: position.BankAccountId),
+        }).ToList();
+
+        return posting.PostAsync(new PostEntryRequest(
+            e.Date, "DepositResponsibilityTransferred", null, e.Description, e.SourceRef, lines), ct);
+    }
+
     private Task<Guid> PostPrepaymentReceivedAsync(PrepaymentReceived e, CancellationToken ct) =>
         posting.PostAsync(new PostEntryRequest(e.Date, "PrepaymentReceived", null, e.Description, e.SourceRef,
             [
@@ -187,7 +208,8 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
     private async Task<Guid> PostDepositAppliedAsync(DepositApplied e, CancellationToken ct)
     {
         await postingLock.AcquireAsync(ct);
-        var held = await _balances.DepositsHeldAsync(e.TenantId, ct);
+        var held = await _balances.DepositsHeldAsync(
+            e.TenantId, e.PropertyId, e.OwnerId, e.DepositBankId, ct);
         if (e.Amount.Amount > held)
         {
             throw new InsufficientLiabilityException(LiabilityKind.Deposit, e.Amount.Amount, held, e.TenantId);
@@ -346,9 +368,14 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
     {
         await postingLock.AcquireAsync(ct);
 
-        var (liabilityCode, held, subtype) = e.Source == RefundSource.Prepayments
-            ? (AccountCodes.TenantPrepayments, await _balances.PrepaymentsHeldAsync(e.TenantId, ct), "prepayments")
-            : (AccountCodes.SecurityDepositsHeld, await _balances.DepositsHeldAsync(e.TenantId, ct), "deposits");
+        var liabilityCode = e.Source == RefundSource.Prepayments
+            ? AccountCodes.TenantPrepayments
+            : AccountCodes.SecurityDepositsHeld;
+        var subtype = e.Source == RefundSource.Prepayments ? "prepayments" : "deposits";
+        var held = e.Source == RefundSource.Prepayments
+            ? await _balances.PrepaymentsHeldAsync(e.TenantId, ct)
+            : await _balances.DepositsHeldAsync(
+                e.TenantId, e.PropertyId, e.OwnerId, e.BankAccountId, ct);
 
         if (e.Amount.Amount > held)
         {

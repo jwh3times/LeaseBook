@@ -1,9 +1,9 @@
 name: Changelog
 
 # Enforces the CHANGELOG cut policy: a PR that changes product source (src/** or web/src/**)
-# must add to the [Unreleased] section. Per-merge build tags don't get their own sections —
-# they roll up into the next deliberate cut — so [Unreleased] is where each shipped change is
-# recorded (see the cut policy in CHANGELOG.md and .claude/skills/ship/SKILL.md).
+# must add to the [Unreleased] section, unless the PR is the deliberate major/minor cut that moves
+# [Unreleased] into a matching dated section. Per-merge build tags don't get their own sections —
+# they roll up into the next deliberate cut (see CHANGELOG.md and .claude/skills/ship/SKILL.md).
 #
 # Exemptions: dependabot (its bumps roll up into the next cut) and a visible `skip-changelog`
 # label (for product-source changes with no user-visible effect, e.g. a pure refactor).
@@ -62,6 +62,53 @@ jobs:
           if [[ "$needs_entry" != true ]]; then
             echo "No changes under src/ or web/src/; changelog entry not required."
             exit 0
+          fi
+
+          # A deliberate major/minor cut empties [Unreleased], so comparing that section alone would
+          # reject the exact shape the cut policy requires. Accept only the next x.y.0 line, with a
+          # new, non-empty dated section and links that all name the same version.
+          if ! git diff --quiet "$BASE_SHA" "$HEAD_SHA" -- VERSION; then
+            base_version="$(git show "$BASE_SHA:VERSION" 2>/dev/null | tr -d '\r\n')"
+            head_version="$(git show "$HEAD_SHA:VERSION" 2>/dev/null | tr -d '\r\n')"
+            valid_next_line=false
+
+            if [[ "$base_version" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+              base_major=$((10#${BASH_REMATCH[1]}))
+              base_minor=$((10#${BASH_REMATCH[2]}))
+              if [[ "$head_version" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+                head_major=$((10#${BASH_REMATCH[1]}))
+                head_minor=$((10#${BASH_REMATCH[2]}))
+                head_patch=$((10#${BASH_REMATCH[3]}))
+                if (( head_patch == 0 )) &&
+                   { (( head_major == base_major && head_minor == base_minor + 1 )) ||
+                     (( head_major == base_major + 1 && head_minor == 0 )); }; then
+                  valid_next_line=true
+                fi
+              fi
+            fi
+
+            head_changelog="$(git show "$HEAD_SHA:CHANGELOG.md" 2>/dev/null || true)"
+            base_changelog="$(git show "$BASE_SHA:CHANGELOG.md" 2>/dev/null || true)"
+            escaped_version="${head_version//./\\.}"
+            release_body="$(printf '%s\n' "$head_changelog" | awk -v prefix="## [$head_version] - " '
+              index($0, prefix) == 1 { capture = 1; next }
+              /^## \[/ && capture   { exit }
+              capture               { print }
+            ')"
+            release_entry="$(printf '%s\n' "$release_body" | grep -E '^- ' | grep -Fvx -- '- _Nothing yet._' || true)"
+
+            if [[ "$valid_next_line" == true ]] &&
+               printf '%s\n' "$head_changelog" | grep -Eq "^## \\[${escaped_version}\\] - [0-9]{4}-[0-9]{2}-[0-9]{2}$" &&
+               ! printf '%s\n' "$base_changelog" | grep -Fq "## [$head_version] - " &&
+               [[ -n "$release_entry" ]] &&
+               printf '%s\n' "$head_changelog" | grep -Fqx "[Unreleased]: https://github.com/${GITHUB_REPOSITORY}/compare/v${head_version}...HEAD" &&
+               printf '%s\n' "$head_changelog" | grep -Fqx "[$head_version]: https://github.com/${GITHUB_REPOSITORY}/releases/tag/v${head_version}"; then
+              echo "Valid deliberate release cut from $base_version to $head_version."
+              exit 0
+            fi
+
+            echo "::error file=CHANGELOG.md::VERSION changed from '$base_version' to '$head_version', but the deliberate release cut is incomplete or invalid. Use the next major/minor x.y.0 line, add a new non-empty dated section, and update both release links."
+            exit 1
           fi
 
           # The [Unreleased] section body at a ref: lines after '## [Unreleased]' up to the next

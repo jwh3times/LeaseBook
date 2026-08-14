@@ -86,6 +86,16 @@ The owner, property and unit identity carried by a financial event. Posted attri
 historical fact: later lease or directory changes do not rewrite it.
 _Avoid_: current lease lookup (that is how a new event obtains attribution, not the attribution)
 
+**Property ownership transfer**:
+The effective-dated handoff of a property from one owner to another. It determines the owner for new
+financial events on and after that date and is a recorded transition, not an edit to past attribution.
+_Avoid_: owner edit, property reassignment
+
+**Deposit responsibility**:
+The owner-attributed obligation for a security deposit held for a property. A property ownership
+transfer hands this responsibility to the succeeding owner without moving cash or owner equity.
+_Avoid_: deposit ownership (the deposit remains the tenant's liability until disposition)
+
 **Open charge**:
 The unpaid portion of a charge owed by a tenant. Allocating a payment or general credit reduces its
 remaining amount; a linked reversal may cancel the charge or cancel an earlier reduction. A charge
