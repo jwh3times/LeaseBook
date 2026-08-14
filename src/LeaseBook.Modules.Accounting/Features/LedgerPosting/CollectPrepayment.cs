@@ -26,7 +26,7 @@ internal sealed class CollectPrepaymentHandler(ITenantPostingDimensions dimensio
 {
     public async Task<PostResult> Handle(CollectPrepayment command, CancellationToken ct)
     {
-        var dims = await LedgerPostingMaps.ResolveAsync(dimensions, command.TenantId, ct);
+        var dims = await LedgerPostingMaps.ResolveAsync(dimensions, command.TenantId, command.Date, ct);
         var id = await events.PostAsync(
             new PrepaymentReceived(
                 command.TenantId, dims.PropertyId, dims.OwnerId, LedgerPostingMaps.Money(command.Amount),

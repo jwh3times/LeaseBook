@@ -13,7 +13,7 @@ namespace LeaseBook.Modules.Directory.Features.Tenants;
 /// <see langword="null"/> when the tenant has no active lease (or is a system row), so the Accounting
 /// command rejects rather than mis-attributing a post (M3-E3).
 /// </summary>
-public sealed record GetTenantPostingDimensions(Guid TenantId) : IQuery<TenantPostingDimensionsView?>;
+public sealed record GetTenantPostingDimensions(Guid TenantId, DateOnly Date) : IQuery<TenantPostingDimensionsView?>;
 
 public sealed record TenantPostingDimensionsView(Guid OwnerId, Guid PropertyId, Guid? UnitId);
 
@@ -25,14 +25,43 @@ public sealed class GetTenantPostingDimensionsValidator : AbstractValidator<GetT
 internal sealed class GetTenantPostingDimensionsHandler(DbContext db)
     : IQueryHandler<GetTenantPostingDimensions, TenantPostingDimensionsView?>
 {
-    public Task<TenantPostingDimensionsView?> Handle(GetTenantPostingDimensions query, CancellationToken ct) =>
-        (
+    public async Task<TenantPostingDimensionsView?> Handle(GetTenantPostingDimensions query, CancellationToken ct)
+    {
+        var current = await (
             from t in db.Set<Tenant>().AsNoTracking().NotSystem()
             join l in db.Set<LeaseLite>().AsNoTracking() on t.Id equals l.TenantId
             join u in db.Set<Unit>().AsNoTracking() on l.UnitId equals u.Id
             join p in db.Set<Property>().AsNoTracking() on u.PropertyId equals p.Id
-            join o in db.Set<Owner>().AsNoTracking() on p.OwnerId equals o.Id
             where t.Id == query.TenantId && l.Status == LeaseStatus.Active
-            select new TenantPostingDimensionsView(o.Id, p.Id, u.Id))
-        .SingleOrDefaultAsync(ct);
+            select new TenantPostingDimensionsView(p.OwnerId, p.Id, u.Id))
+            .SingleOrDefaultAsync(ct);
+        if (current is null)
+        {
+            return null;
+        }
+
+        // Hold a shared property-row lock until this posting transaction commits. Ownership transfer
+        // takes the matching exclusive lock, so attribution is resolved wholly before or wholly after
+        // the transfer instead of racing its current-owner/history write.
+        await db.Database.SqlQuery<Guid>(
+                $"""SELECT id AS "Value" FROM properties WHERE id = {current.PropertyId} FOR SHARE""")
+            .SingleAsync(ct);
+
+        var effectiveOwner = await db.Set<PropertyOwnershipTransfer>().AsNoTracking()
+            .Where(transfer => transfer.PropertyId == current.PropertyId
+                && transfer.EffectiveDate <= query.Date)
+            .OrderByDescending(transfer => transfer.EffectiveDate)
+            .Select(transfer => (Guid?)transfer.ToOwnerId)
+            .FirstOrDefaultAsync(ct);
+        if (effectiveOwner is null)
+        {
+            effectiveOwner = await db.Set<PropertyOwnershipTransfer>().AsNoTracking()
+                .Where(transfer => transfer.PropertyId == current.PropertyId)
+                .OrderBy(transfer => transfer.EffectiveDate)
+                .Select(transfer => (Guid?)transfer.FromOwnerId)
+                .FirstOrDefaultAsync(ct);
+        }
+
+        return current with { OwnerId = effectiveOwner ?? current.OwnerId };
+    }
 }

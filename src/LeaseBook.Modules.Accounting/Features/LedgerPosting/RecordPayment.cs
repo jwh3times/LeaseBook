@@ -28,7 +28,7 @@ internal sealed class RecordPaymentHandler(ITenantPostingDimensions dimensions, 
 {
     public async Task<PostResult> Handle(RecordPayment command, CancellationToken ct)
     {
-        var dims = await LedgerPostingMaps.ResolveAsync(dimensions, command.TenantId, ct);
+        var dims = await LedgerPostingMaps.ResolveAsync(dimensions, command.TenantId, command.Date, ct);
         var id = await events.PostAsync(
             new PaymentReceived(
                 command.TenantId, dims.PropertyId, dims.OwnerId, LedgerPostingMaps.Money(command.Amount),

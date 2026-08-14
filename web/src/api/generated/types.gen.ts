@@ -597,6 +597,14 @@ export type PropertyListRow = {
     occupied: number | string;
 };
 
+export type PropertyOwnershipTransferResult = {
+    propertyId: string;
+    fromOwnerId: string;
+    toOwnerId: string;
+    effectiveDate: string;
+    depositEntryId: null | string;
+};
+
 export type ReconciliationHistoryResponse = {
     rows: Array<ReconciliationSummary>;
 };
@@ -852,6 +860,12 @@ export type TenantListRow = {
     status: string;
 };
 
+export type TransferPropertyOwnershipRequest = {
+    toOwnerId: string;
+    effectiveDate: string;
+    sourceRef: string;
+};
+
 export type TrustEquationResponse = {
     rows: Array<TrustEquationRow>;
 };
@@ -930,7 +944,6 @@ export type UpdateOwner = {
 
 export type UpdateProperty = {
     id: string;
-    ownerId: string;
     address: string;
     city: null | string;
     state: null | string;
@@ -1577,6 +1590,31 @@ export type PutApiDirectoryPropertiesByIdResponses = {
 };
 
 export type PutApiDirectoryPropertiesByIdResponse = PutApiDirectoryPropertiesByIdResponses[keyof PutApiDirectoryPropertiesByIdResponses];
+
+export type PostApiDirectoryPropertiesByIdOwnershipTransfersData = {
+    body: TransferPropertyOwnershipRequest;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/directory/properties/{id}/ownership-transfers';
+};
+
+export type PostApiDirectoryPropertiesByIdOwnershipTransfersErrors = {
+    /**
+     * Not Found
+     */
+    404: unknown;
+};
+
+export type PostApiDirectoryPropertiesByIdOwnershipTransfersResponses = {
+    /**
+     * OK
+     */
+    200: PropertyOwnershipTransferResult;
+};
+
+export type PostApiDirectoryPropertiesByIdOwnershipTransfersResponse = PostApiDirectoryPropertiesByIdOwnershipTransfersResponses[keyof PostApiDirectoryPropertiesByIdOwnershipTransfersResponses];
 
 export type GetApiDirectoryUnitsData = {
     body?: never;

@@ -475,8 +475,9 @@ public static class ScenarioSeeder
         /// Needed for the commandless <c>RefundIssued</c> deposit path, whose liability debit must release
         /// the owner bucket its collection credited (I7).
         /// </summary>
-        public async Task<TenantPostingDimensions> DimsAsync(Guid tenantId, CancellationToken ct) =>
-            await Dimensions.GetAsync(tenantId, ct)
+        public async Task<TenantPostingDimensions> DimsAsync(
+            Guid tenantId, DateOnly date, CancellationToken ct) =>
+            await Dimensions.GetAsync(tenantId, date, ct)
             ?? throw new InvalidOperationException($"Scenario seed: tenant {tenantId} has no active lease.");
     }
 
@@ -607,7 +608,7 @@ public static class ScenarioSeeder
         await ctx.Sender.Send(new ApplyDeposit(
             tS4, 300.00m, new(2026, 5, 16), DepositTrustId, OperatingTrustId,
             "to-owner-income", "Move-out: carpet damage", "scenario:depapply:damages:t-s4"), ct);
-        var tS4Dims = await ctx.DimsAsync(tS4, ct);
+        var tS4Dims = await ctx.DimsAsync(tS4, new(2026, 5, 18), ct);
         await ctx.Events.PostAsync(new RefundIssued(
             tS4, new Money(422.58m), new(2026, 5, 18), DepositTrustId, RefundSource.Deposits,
             "Deposit refund check #2101 — Raman move-out", "scenario:refund:deposit:t-s4",

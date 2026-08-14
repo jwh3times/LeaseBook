@@ -74,6 +74,19 @@ public sealed class DirectoryEndpoints : IEndpointModule
         group.MapPut("/properties/{id:guid}",
                 async Task<Results<NoContent, NotFound>> (Guid id, UpdateProperty body, ISender sender, CancellationToken ct) =>
                     await sender.Send(body with { Id = id }, ct) ? TypedResults.NoContent() : TypedResults.NotFound());
+
+        group.MapPost("/properties/{id:guid}/ownership-transfers",
+                async Task<Results<Ok<PropertyOwnershipTransferResult>, NotFound>> (
+                    Guid id,
+                    TransferPropertyOwnershipRequest body,
+                    ISender sender,
+                    CancellationToken ct) =>
+                    await sender.Send(new TransferPropertyOwnership(
+                        id, body.ToOwnerId, body.EffectiveDate, body.SourceRef), ct) is { } result
+                        ? TypedResults.Ok(result)
+                        : TypedResults.NotFound())
+            .WithDescription(
+                "Records an effective-dated property ownership transfer and atomically reattributes held security deposits.");
     }
 
     private static void MapUnits(RouteGroupBuilder group)
@@ -127,3 +140,6 @@ public sealed class DirectoryEndpoints : IEndpointModule
 
 /// <summary>Response for a create: the new entity's id (the SPA navigates to it).</summary>
 public sealed record CreatedId(Guid Id);
+
+/// <summary>The operator-supplied terms of an effective-dated property ownership transfer.</summary>
+public sealed record TransferPropertyOwnershipRequest(Guid ToOwnerId, DateOnly EffectiveDate, string SourceRef);

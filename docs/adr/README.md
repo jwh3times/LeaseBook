@@ -60,6 +60,7 @@ form, write it, and add a row to the index below. When a decision is replaced, m
 | [033](ADR-033-late-fee-eligibility-and-rent-obligation-link.md)      | Late-fee eligibility and rent-obligation linkage                                | Accepted (amended by ADR-034) | 2026-08-13 |
 | [034](ADR-034-computed-fifo-receivable-allocation.md)                | Computed FIFO receivable allocation and charge due dates                        | Accepted                      | 2026-08-13 |
 | [035](ADR-035-single-active-lease-financial-attribution.md)          | One active lease supplies tenant financial attribution                          | Accepted                      | 2026-08-13 |
+| [036](ADR-036-effective-dated-property-ownership-transfer.md)        | Effective-dated property ownership transfers preserve deposit responsibility    | Accepted                      | 2026-08-13 |
 
 ## Status legend
 

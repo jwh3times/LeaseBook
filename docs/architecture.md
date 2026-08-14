@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living architecture guide
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-08-11
+- **Last reviewed:** 2026-08-13
 
 This is the canonical public map of the system **as implemented**. It explains how the pieces fit
 together and links the decisions that shaped them without reproducing every invariant. Accepted
@@ -40,6 +40,12 @@ ambient row-level-security transaction. Ports expose **batch** reads (they retur
 per-id reads. This keeps every module independently extractable and keeps the boundary visible. The
 one sanctioned exception is a dedicated reporting/read layer, which may read across the schema on
 purpose and records its own ADR. See [ADR-007](adr/ADR-007-cross-module-read-contracts.md).
+
+Cross-module writes use the same visible composition seam: the consuming module owns a narrow port,
+and the host adapter dispatches the producing module's command inside the ambient transaction. A
+property ownership transfer uses this path from Directory to Accounting so its append-only ownership
+transition, current Directory owner and deposit-responsibility handoff commit or roll back together. See
+[ADR-036](adr/ADR-036-effective-dated-property-ownership-transfer.md).
 
 ## The accounting core
 
@@ -145,8 +151,9 @@ context (one database, one transaction per request — the RLS boundary). See
 [ADR-004](adr/ADR-004-single-appdbcontext-in-host.md). Migrations are authored in the host and
 applied by the `leasebook_migrator` role through a one-shot migrator image — **never at app
 startup**. Money is `decimal` in C# and `NUMERIC(14,2)` in Postgres, end to end, never floating
-point. The journal and audit tables are append-only: the runtime role holds no `UPDATE`/`DELETE`
-grant on them, so corrections can only ever be linked reversals.
+point. The journal, audit, and property-ownership-transition tables are append-only: the runtime role
+holds no `UPDATE`/`DELETE` grant on them, so corrections can only ever be linked reversals or later
+transitions.
 
 ## Test execution
 

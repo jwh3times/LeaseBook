@@ -227,11 +227,21 @@ public sealed class InvariantTests(PostgresFixture fixture)
             await events.PostAsync(new DepositCollected(
                 Tenant, Property, Owner, new Money(1000m), D(1), scope.DepositBankId, "dep"), ct);
 
-            // A caller that omits the deposit refund's owner dims reproduces the pre-fix shape: the
-            // tenant nets to zero (I4 stays clean) while the owner bucket holds +1000 and the
-            // unattributed bucket goes to −1000. I7 is what makes that loud.
-            await events.PostAsync(new RefundIssued(
-                Tenant, new Money(1000m), D(28), scope.DepositBankId, RefundSource.Deposits, "no dims"), ct);
+            // The public refund path now rejects a mismatched exact bucket before posting. Write the
+            // historical pre-ADR-026 shape through the lower-level posting seam so this test still
+            // proves the independent I7 sweep catches already-persisted bad attribution: the tenant
+            // nets to zero (I4 stays clean), while the owner bucket holds +1000 and the unattributed
+            // bucket goes to -1000.
+            await Posting(scope).PostAsync(new PostEntryRequest(
+                D(28), "RefundIssued", null, "Historical malformed refund", "bad-refund",
+                [
+                    new PostLineRequest(
+                        AccountCodes.SecurityDepositsHeld, new Money(1000m), null, EntryBasis.Both,
+                        TenantId: Tenant, BankAccountId: scope.DepositBankId),
+                    new PostLineRequest(
+                        AccountCodes.TrustBank(scope.DepositBankId), null, new Money(1000m), EntryBasis.Both,
+                        BankAccountId: scope.DepositBankId),
+                ]), ct);
         }, ct);
 
         (await Check(scope, c => new InvariantChecks(scope.Db).CheckDepositLiabilitiesNonNegativeAsync(c), ct))

@@ -35,6 +35,7 @@ public sealed class AuditExtractReader(AppDbContext db, ITenantContext tenant)
         "accounting_periods",
         "statement_matches",
         "statement_imports",
+        "property_ownership_transfers",
         "migration-signed-off",
     ];
 

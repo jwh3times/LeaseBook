@@ -83,6 +83,16 @@ owner it was collected under, so the owner's held-deposit figure comes back down
 different — it is money held against that tenant's own future rent, so it carries no owner tag in
 either direction, and a prepayment refund does not invent one.
 
+If the property is sold while a deposit remains held, the explicit ownership-transfer workflow
+posts `DepositResponsibilityTransferred`: one balanced entry debits the seller's held-deposit bucket and
+credits the buyer's bucket for each tenant and deposit bank as of the effective date. No cash moves,
+and the seller's owner equity does not move; a sale settlement is separate work. The handoff is
+rejected in a closed accounting period or a reconciled deposit-bank month. See
+[ADR-036](adr/ADR-036-effective-dated-property-ownership-transfer.md). Future-dated transfers are
+rejected; scheduling a closing requires a separate workflow. A backdated transfer is also rejected
+when later seller-attributed deposit activity has changed the position: reverse and re-post that
+later activity under the effective owner before recording the transfer.
+
 ## The trust equation (the safety check)
 
 At all times, for every trust bank account:
@@ -125,16 +135,17 @@ exactly one write path to the journal. The command carries only a tenant id plus
 memo; the owner, property and unit are resolved server-side from the tenant's **active lease** (a post
 for a tenant with no active lease is rejected, never guessed). Each command maps to one business event:
 
-| Command (endpoint)                           | Business event                                                             |
-| -------------------------------------------- | -------------------------------------------------------------------------- |
-| `POST /tenants/{id}/payments`                | `PaymentReceived` (ACH/Card/Check/Cash)                                    |
-| `POST /tenants/{id}/charges`                 | `RentCharged` (rent) or `FeeCharged` (late / maintenance-recharge / other) |
-| `POST /tenants/{id}/credits`                 | `CreditIssued`                                                             |
-| `POST /tenants/{id}/deposits`                | `DepositCollected`                                                         |
-| `POST /tenants/{id}/prepayments`             | `PrepaymentReceived`                                                       |
-| `POST /tenants/{id}/deposit-applications`    | `DepositApplied` (to owner income, or against charges)                     |
-| `POST /tenants/{id}/prepayment-applications` | `PrepaymentApplied`                                                        |
-| `POST /entries/{id}/void`                    | a linked reversal (see "Fixing mistakes")                                  |
+| Command (endpoint)                                    | Business event                                                                   |
+| ----------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `POST /tenants/{id}/payments`                         | `PaymentReceived` (ACH/Card/Check/Cash)                                          |
+| `POST /tenants/{id}/charges`                          | `RentCharged` (rent) or `FeeCharged` (late / maintenance-recharge / other)       |
+| `POST /tenants/{id}/credits`                          | `CreditIssued`                                                                   |
+| `POST /tenants/{id}/deposits`                         | `DepositCollected`                                                               |
+| `POST /tenants/{id}/prepayments`                      | `PrepaymentReceived`                                                             |
+| `POST /tenants/{id}/deposit-applications`             | `DepositApplied` (to owner income, or against charges)                           |
+| `POST /tenants/{id}/prepayment-applications`          | `PrepaymentApplied`                                                              |
+| `POST /entries/{id}/void`                             | a linked reversal (see "Fixing mistakes")                                        |
+| `POST /directory/properties/{id}/ownership-transfers` | `DepositResponsibilityTransferred` plus the effective-dated Directory transition |
 
 Every submit carries a client-minted **idempotency key** (`sourceRef`), so a double-click or retry maps
 to "already posted" rather than posting twice. `GET /tenants/{id}/ledger.csv` exports the on-screen
@@ -171,10 +182,18 @@ onto new tenant-account journal lines; create and update reject a second active 
 enforces the same cardinality. Pending and ended leases remain available for future and historical
 records.
 
+The property owner is then resolved for the event's accounting date from append-only ownership
+transitions. Recording a transfer changes the current Directory owner and hands off only security
+deposits still held on the effective date. A later backdated post uses the owner effective on its date,
+but already-posted journal lines are never rewritten. Disposition guards read the exact
+tenant/property/owner/bank bucket, so a post dated before the handoff cannot consume the buyer's
+transferred liability.
+
 Posted dimensions are immutable historical attribution. A later lease or directory change does not
 move an existing journal line to another owner or property. Simultaneous occupancies require distinct
 tenant accounts until Accounting has persisted per-lease receivable and liability allocation. See
-[ADR-035](adr/ADR-035-single-active-lease-financial-attribution.md).
+[ADR-035](adr/ADR-035-single-active-lease-financial-attribution.md) and
+[ADR-036](adr/ADR-036-effective-dated-property-ownership-transfer.md).
 
 ## Who did it
 
@@ -424,7 +443,9 @@ of the M4 reconcile-to-$0 finalize and the M5 statement tie-out.
 Imported deposit liabilities post to `security_deposits_held` — a liability account — exactly as a
 live deposit collection does. They do not hit income. This is the same rule that governs deposits
 collected through the normal workflow: the money belongs to the tenant until it is applied at
-move-out. Importing from AppFolio does not change the classification.
+move-out. Import resolves the tenant's active imported lease and records its property and owner on
+the opening position, so a later property sale can hand off the exact liability. Importing from
+AppFolio does not change the classification.
 
 ### Opening entries, not fake history
 

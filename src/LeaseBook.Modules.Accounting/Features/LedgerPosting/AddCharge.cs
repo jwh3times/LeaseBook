@@ -27,7 +27,7 @@ internal sealed class AddChargeHandler(ITenantPostingDimensions dimensions, IAcc
 {
     public async Task<PostResult> Handle(AddCharge command, CancellationToken ct)
     {
-        var dims = await LedgerPostingMaps.ResolveAsync(dimensions, command.TenantId, ct);
+        var dims = await LedgerPostingMaps.ResolveAsync(dimensions, command.TenantId, command.Date, ct);
         var amount = LedgerPostingMaps.Money(command.Amount);
         var feeKind = LedgerPostingMaps.ChargeKinds[command.Kind];
 

@@ -17,7 +17,7 @@ namespace LeaseBook.Modules.Accounting.Contracts;
 /// </summary>
 public interface ITenantPostingDimensions
 {
-    Task<TenantPostingDimensions?> GetAsync(Guid tenantId, CancellationToken ct);
+    Task<TenantPostingDimensions?> GetAsync(Guid tenantId, DateOnly date, CancellationToken ct);
 }
 
 /// <summary>The owner/property/unit a tenant's postings carry, resolved from the active lease (P58).</summary>

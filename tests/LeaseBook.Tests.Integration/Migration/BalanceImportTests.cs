@@ -125,6 +125,15 @@ public sealed class BalanceImportTests(PostgresFixture fixture)
                 $"migration_clearing cash net should be $0 after tied import; got {cashNet}");
             accrualNet.ShouldBe(0m,
                 $"migration_clearing accrual net should be $0 after tied import; got {accrualNet}");
+
+            var importedDepositPropertyId = await db.Set<JournalLine>().AsNoTracking()
+                .Where(line => line.AccountClass == AccountClass.DepositLiability
+                    && line.TenantId != null
+                    && line.OwnerId != null)
+                .Select(line => line.PropertyId)
+                .SingleAsync(ct);
+            importedDepositPropertyId.ShouldNotBeNull(
+                "a held-deposit opening must carry the property dimension needed for a later ownership handoff");
         }, ct);
     }
 

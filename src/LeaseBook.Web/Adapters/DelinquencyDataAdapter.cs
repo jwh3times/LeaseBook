@@ -26,7 +26,7 @@ internal sealed class DelinquencyDataAdapter(ISender sender) : IDelinquencyData
         // Fetch delinquent tenants (positive net receivable balance) and active lease schedule sequentially.
         // Sequential is required because both queries share the ambient EF DbContext (not thread-safe).
         var aging = await sender.Query(new GetDelinquencyAging(asOf), ct);
-        var schedule = await sender.Query(new GetActiveLeaseSchedule(year, month), ct);
+        var schedule = await sender.Query(new GetActiveLeaseSchedule(year, month, asOf), ct);
         var rentRefs = schedule.Rows
             .Select(l => $"rent:{year}-{month:00}:lease={l.LeaseId}")
             .ToList();

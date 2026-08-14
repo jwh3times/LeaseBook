@@ -68,6 +68,10 @@ public sealed class CatalogBalancePropertyTests(PostgresFixture fixture)
             depTenant, property, owner, amount, D(28), scope.DepositBankId, scope.TrustBankId, DepositApplication.ToOwnerIncome, "da1"), ct);
         await AssertBalancesAsync(scope, new DepositApplied(
             depTenant, property, owner, amount, D(28), scope.DepositBankId, scope.TrustBankId, DepositApplication.AgainstCharges, "da2"), ct);
+        await AssertBalancesAsync(scope, new DepositResponsibilityTransferred(
+            property, owner, feeOwner, D(28),
+            [new DepositResponsibilityTransferPosition(depTenant, scope.DepositBankId, amount)],
+            "property sale", "deposit-transfer"), ct);
 
         // Prepayment application (a receivable must exist for it to apply into too).
         await AssertBalancesAsync(scope, new PrepaymentReceived(preTenant, property, owner, big, D(1), scope.TrustBankId, "pp"), ct);
@@ -101,7 +105,8 @@ public sealed class CatalogBalancePropertyTests(PostgresFixture fixture)
 
         await PostAsync(scope, new DepositCollected(refundDepTenant, property, owner, big, D(1), scope.DepositBankId, "rd"), ct);
         await AssertBalancesAsync(scope, new RefundIssued(
-            refundDepTenant, amount, D(7), scope.DepositBankId, RefundSource.Deposits, "deposit refund"), ct);
+            refundDepTenant, amount, D(7), scope.DepositBankId, RefundSource.Deposits, "deposit refund",
+            PropertyId: property, OwnerId: owner), ct);
 
         // Bank adjustments (ADR-014) — fee, interest, and the trust→trust transfer variant
         // (BankAdjustmentTemplatesTests covers trust→PM-operating only).

@@ -34,7 +34,7 @@ internal sealed class ApplyDepositHandler(ITenantPostingDimensions dimensions, I
 {
     public async Task<PostResult> Handle(ApplyDeposit command, CancellationToken ct)
     {
-        var dims = await LedgerPostingMaps.ResolveAsync(dimensions, command.TenantId, ct);
+        var dims = await LedgerPostingMaps.ResolveAsync(dimensions, command.TenantId, command.Date, ct);
         var id = await events.PostAsync(
             new DepositApplied(
                 command.TenantId, dims.PropertyId, dims.OwnerId, LedgerPostingMaps.Money(command.Amount),

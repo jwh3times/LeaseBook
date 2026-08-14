@@ -58,8 +58,8 @@ internal static class LedgerPostingMaps
     /// transaction through the host adapter, so a tenant the caller's org cannot see resolves to null.
     /// </summary>
     public static async Task<TenantPostingDimensions> ResolveAsync(
-        ITenantPostingDimensions dimensions, Guid tenantId, CancellationToken ct) =>
-        await dimensions.GetAsync(tenantId, ct)
+        ITenantPostingDimensions dimensions, Guid tenantId, DateOnly date, CancellationToken ct) =>
+        await dimensions.GetAsync(tenantId, date, ct)
         ?? throw new ValidationException(
         [
             new ValidationFailure(
