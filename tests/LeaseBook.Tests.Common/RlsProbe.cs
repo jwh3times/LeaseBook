@@ -3,7 +3,7 @@ using Npgsql;
 namespace LeaseBook.Tests.Common;
 
 /// <summary>
-/// Raw-SQL context setters and operations against <c>audit_events</c>, used by the tenant-isolation
+/// Raw-SQL context setters and operations against <c>audit_events</c>, used by the organization-isolation
 /// pack and by every test that has to reach the database below EF. Deliberately bypasses EF (no
 /// global query filter, no stamping) so every assertion is about what the <b>database</b> enforces
 /// through RLS — not the ergonomic layer (pitfall E2). All writes go through the app role connection

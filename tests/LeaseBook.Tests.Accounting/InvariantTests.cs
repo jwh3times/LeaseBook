@@ -285,7 +285,7 @@ public sealed class InvariantTests(PostgresFixture fixture)
         await using var tx = await conn.BeginTransactionAsync(ct);
 
         // FORCE ROW LEVEL SECURITY applies even to the migrator (the table owner), so the WITH CHECK
-        // policy needs an org context — set it for this transaction.
+        // policy needs an organization context — set it for this transaction.
         await RlsProbe.SetOrgAsync(conn, tx, orgId, ct);
 
         var entryId = UuidV7.NewId();

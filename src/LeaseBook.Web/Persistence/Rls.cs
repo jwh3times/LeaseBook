@@ -37,26 +37,26 @@ public static class Rls
     }
 
     /// <summary>
-    /// Tenant-readable, platform-writable (ADR-028). Platform tables carry org_id because they are
-    /// data ABOUT orgs: a tenant may READ its own entitlements and cohort rows, but only the
+    /// Organization-readable, platform-writable (ADR-028). Platform tables carry org_id because they are
+    /// data ABOUT orgs: an organization may READ its own entitlements and cohort rows, but only the
     /// platform plane may WRITE them. The escape is a GUC set by <c>PlatformScopedExecutor</c> and
     /// nowhere else.
     /// <para>
     /// Deliberately TWO policies, not one <c>FOR ALL</c>. A single policy whose WITH CHECK reads
-    /// <c>org_id = my_org OR platform</c> lets a tenant-plane transaction INSERT its own row — i.e.
+    /// <c>org_id = my_org OR platform</c> lets an organization-plane transaction INSERT its own row — i.e.
     /// self-grant a paid capability. <see cref="RevokeAppendOnly"/> does not close that: it strips
     /// UPDATE/DELETE, not INSERT. Splitting read from write is what makes writes platform-only.
     /// </para>
     /// <para>
     /// How Postgres resolves the pair: permissive policies OR together within a command, and
     /// UPDATE/DELETE that read existing rows must additionally satisfy the SELECT policies. So
-    /// SELECT ⇒ org OR platform (tenant reads of its own rows keep working); INSERT ⇒ the write
-    /// policy's WITH CHECK alone, so the tenant plane gets 42501; UPDATE/DELETE ⇒ filtered by the
-    /// write policy's USING, so the tenant plane affects zero rows.
+    /// SELECT ⇒ org OR platform (organization reads of their own rows keep working); INSERT ⇒ the write
+    /// policy's WITH CHECK alone, so the organization plane gets 42501; UPDATE/DELETE ⇒ filtered by the
+    /// write policy's USING, so the organization plane affects zero rows.
     /// </para>
     /// <para>
     /// Why an escape rather than no RLS: a path that forgets to open platform scope returns ZERO
-    /// rows instead of every org's rows. Visible emptiness beats a silent cross-tenant leak. It also
+    /// rows instead of every org's rows. Visible emptiness beats a silent cross-organization leak. It also
     /// keeps the table inside SchemaGuardTests' normal org-scoped arm — no new exemption class.
     /// </para>
     /// </summary>
@@ -80,8 +80,8 @@ public static class Rls
 
     /// <summary>
     /// Readable by anyone, writable only by the platform plane (ADR-028). This is <c>feature_flags</c>:
-    /// deployment configuration, not tenant data. The property worth protecting is that a tenant cannot
-    /// <b>toggle</b> a flag, not that it cannot read one — a flag's effects surface as UI behavior
+    /// deployment configuration, not organization data. The property worth protecting is that
+    /// organization-plane work cannot <b>toggle</b> a flag, not that it cannot read one — a flag's effects surface as UI behavior
     /// anyway.
     /// <para>
     /// Why reads must be ungated: the capability resolver reads flags <i>inside the ambient request
@@ -117,9 +117,9 @@ public static class Rls
     }
 
     /// <summary>
-    /// Platform-plane only: no tenant request can read or write these rows at all, whatever its org
-    /// context. Used for <c>platform_audit_events</c>, which must never be visible inside a tenant
-    /// session — who granted what to whom is not tenant-facing. Applies to org-scoped and global tables
+    /// Platform-plane only: no organization request can read or write these rows at all, whatever its org
+    /// context. Used for <c>platform_audit_events</c>, which must never be visible inside an organization
+    /// session — who granted what to whom is not organization-facing. Applies to org-scoped and global tables
     /// alike — it never mentions org_id, so it carries no requirement about that column.
     /// </summary>
     public static void EnablePlatformOnlyRls(this MigrationBuilder migrationBuilder, string table)

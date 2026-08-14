@@ -106,10 +106,10 @@ exporter, so the correlation id an operator sees on screen is directly searchabl
 Insights once deployed. See [ADR-025](adr/ADR-025-error-contract-and-observability.md) and the
 [diagnostics runbook](runbooks/diagnostics.md).
 
-## Multi-tenancy and security
+## Organization isolation and security
 
-PostgreSQL **row-level security is the tenant-isolation boundary** — EF Core global query filters are
-ergonomics layered on top, not the boundary. Org context is set per-transaction with
+PostgreSQL **row-level security is the organization-isolation boundary** — EF Core global query filters are
+ergonomics layered on top, not the boundary. Organization context is set per-transaction with
 `SET LOCAL app.org_id` (never session-level, which would leak across pooled connections); missing
 context fails closed. Three database roles separate concerns: `leasebook_migrator` (owns the `public`
 schema), `leasebook_app` (runtime, `FORCE ROW LEVEL SECURITY`), and `leasebook_ops` (read-only). The
@@ -120,7 +120,7 @@ org-scoped table is created through the migrations RLS helper (column + `USING`/
 sub-org visibility (an owner sees only their properties) is enforced at the application layer rather
 than by stacking more RLS policies — see [ADR-003](adr/ADR-003-portal-suborg-scoping-at-app-layer.md).
 
-Layered on top of that tenant boundary, the host applies defense-in-depth hardening: a middleware
+Layered on top of that organization boundary, the host applies defense-in-depth hardening: a middleware
 that sets security response headers and a strict content-security policy on every response, rate
 limiting on the authentication endpoints, config-gated multi-factor enforcement for admin accounts,
 and encryption of sensitive authentication data at rest. These controls are environment- and
@@ -181,7 +181,7 @@ pre-created by [`infra/db/bootstrap.sql`](../infra/db/bootstrap.sql). The Hangfi
 deliberately not mounted** (attack surface) — job state is observed through logs, alerts, and the
 `leasebook_ops` read grant.
 
-Redis is deliberately deferred until a concrete need appears. Every job must establish org context
+Redis is deliberately deferred until a concrete need appears. Every job must establish organization context
 transactionally before touching data and throw if it is missing. See
 [ADR-001](adr/ADR-001-background-job-scheduler.md) and [ADR-002](adr/ADR-002-defer-redis.md).
 

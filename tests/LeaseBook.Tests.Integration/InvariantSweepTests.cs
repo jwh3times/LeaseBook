@@ -141,7 +141,7 @@ public sealed class InvariantSweepTests(PostgresFixture fixture)
         await conn.OpenAsync(ct);
 
         // FORCE ROW LEVEL SECURITY means the journal's policies bind the schema owner too, so even
-        // this deliberate corruption has to declare its org context — there is no role that can write
+        // this deliberate corruption has to declare its organization context — there is no role that can write
         // an org-scoped row without one. Transaction-local, exactly as OrgScopedExecutor does it.
         await using var tx = await conn.BeginTransactionAsync(ct);
         await RlsProbe.SetOrgAsync(conn, tx, orgId, ct);

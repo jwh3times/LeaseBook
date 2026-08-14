@@ -19,7 +19,7 @@
 Postgres 18 runs via `docker-compose.yml`. On first start, `infra/db/bootstrap.sql` creates the
 `leasebook` database and three **purpose-separated** login roles. This separation is what makes
 Row-Level Security a real boundary: RLS does not apply to a table's owner by default, so the role
-that runs traffic must not be the role that owns the tables (see `AGENTS.md` → Multi-Tenancy).
+that runs traffic must not be the role that owns the tables (see `AGENTS.md` → Organization Isolation).
 
 | Role                 | Purpose                                                     | RLS                                | Dev password      |
 | -------------------- | ----------------------------------------------------------- | ---------------------------------- | ----------------- |
@@ -96,7 +96,7 @@ the schema is current and the org is seeded — that is success, not a crash. Th
 
 Why a separate migrator image rather than migrating at app startup: schema changes must run as
 `leasebook_migrator`, never the runtime `leasebook_app` role (that separation is what makes RLS a real
-boundary — see Multi-Tenancy in `AGENTS.md`). The chiseled runtime image carries no SDK/`dotnet ef`, so
+boundary — see Organization Isolation in `AGENTS.md`). The chiseled runtime image carries no SDK/`dotnet ef`, so
 the `migrator` stage compiles a self-applying migrations bundle that connects as the migrator role.
 
 Notes:

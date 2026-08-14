@@ -128,10 +128,10 @@ public sealed class CapabilityStateReaderTests(PostgresFixture fixture)
     }
 
     /// <summary>
-    /// The silent-miss guard. A tenant-plane read with no org context does not raise — it returns
+    /// The silent-miss guard. An organization-plane read with no organization context does not raise — it returns
     /// zero rows, which resolves to "no entitlement" and therefore "off" for every paid capability,
     /// with nothing logged anywhere. Out-of-band refreshes assert the GUC so that becomes a throw,
-    /// mirroring the rule that a background job with missing org context fails rather than returning
+    /// mirroring the rule that a background job with missing organization context fails rather than returning
     /// empty.
     /// </summary>
     [Fact]
@@ -213,7 +213,7 @@ public sealed class CapabilityStateReaderTests(PostgresFixture fixture)
     }
 
     /// <summary>
-    /// The tenant-plane mirror of the platform-scope assertion, on the path Task 6 uses. An
+    /// The organization-plane mirror of the platform-scope assertion, on the path Task 6 uses. An
     /// <c>app.org_id</c> that does not match the org being resolved is not an error to Postgres:
     /// <c>_org_read</c> filters both org-scoped queries to zero rows, every RequiresGrant capability
     /// resolves false, and the caller gets a plausible "not entitled" with nothing logged.
@@ -247,7 +247,7 @@ public sealed class CapabilityStateReaderTests(PostgresFixture fixture)
 
     /// <summary>
     /// The positive control for the test above, and the shape Task 6 depends on: with the ambient
-    /// org context matching, resolution works on the tenant plane with no platform escape at all.
+    /// organization context matching, resolution works on the organization plane with no platform escape at all.
     /// </summary>
     [Fact]
     public async Task Reads_its_own_org_on_the_tenant_plane_without_platform_scope()
@@ -272,7 +272,7 @@ public sealed class CapabilityStateReaderTests(PostgresFixture fixture)
         var set = await reader.ReadAsync(org, null, ct);
 
         set.IsEnabled(CapabilityCatalog.ConsolidatedStatements).ShouldBeTrue(
-            "the tenant plane may read its own entitlement and cohort rows via _org_read");
+            "the organization plane may read its own entitlement and cohort rows via _org_read");
 
         await tx.RollbackAsync(ct);
     }

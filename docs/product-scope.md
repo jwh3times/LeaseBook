@@ -21,7 +21,7 @@ Phase 1 supports property-management staff operating a single organization with:
 - Owner statements, operational reports, PDF/CSV output, and delivery records.
 - Preview-confirm-post bulk runs for rent, late fees, and owner disbursements.
 - Staged migration imports, balance-forward opening entries, verification, sign-off, and onboarding.
-- Role-based staff access, PostgreSQL row-level-security tenancy, audit events, and MFA capability.
+- Role-based staff access, PostgreSQL row-level-security organization isolation, audit events, and MFA capability.
 
 The [accounting guide](accounting.md) owns financial behavior, and the
 [architecture guide](architecture.md) owns system boundaries. This scope document does not restate
@@ -32,7 +32,7 @@ their detailed rules.
 - Residential property management is the supported domain.
 - The product is a web application; native mobile clients are not part of the current scope.
 - USD is the current currency, while money remains represented by exact decimal types.
-- Trust-accounting correctness and tenant isolation take precedence over convenience features.
+- Trust-accounting correctness and organization isolation take precedence over convenience features.
 - Budgeted workflows, accessibility, auditability, and demoability are release requirements, as
   defined in [CONTRIBUTING.md](../CONTRIBUTING.md).
 

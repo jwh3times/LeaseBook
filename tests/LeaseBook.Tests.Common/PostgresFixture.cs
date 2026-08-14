@@ -61,7 +61,7 @@ public sealed class PostgresFixture : IAsyncLifetime
         new(BuildOptions(connectionString));
 
     /// <summary>
-    /// AppDbContext bound to a tenant context — what the EF query filter and org stamping read.
+    /// AppDbContext bound to an organization context — what the EF query filter and org stamping read.
     /// Pass the same <paramref name="tenant"/> to an <see cref="OrgScopedExecutor"/> so the SET LOCAL
     /// it issues and the in-process ergonomics agree.
     /// </summary>

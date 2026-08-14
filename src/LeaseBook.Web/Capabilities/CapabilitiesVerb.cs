@@ -87,7 +87,7 @@ public static class CapabilitiesVerb
     // ── Subcommands ─────────────────────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// <c>--org</c> is optional here and narrows the listing to one tenant's entitlement and cohort
+    /// <c>--org</c> is optional here and narrows the listing to one organization's entitlement and cohort
     /// state. Without it the listing is deployment-wide and reports counts. It is optional rather than
     /// required because the common question ("what exists, and what is flagged on?") is not
     /// org-specific — but the per-org form is what makes the entitlement-collision remedy answerable.
@@ -323,7 +323,7 @@ public static class CapabilitiesVerb
     /// one this subcommand defines: <c>--user</c> on a grant, or <c>--stale</c> on a flag toggle, is
     /// an error rather than an ignored extra, because accepting-and-ignoring would silently do
     /// something other than what was asked. A repeated flag is rejected for the same reason —
-    /// last-one-wins on <c>--org</c> would target the wrong tenant without a word.
+    /// last-one-wins on <c>--org</c> would target the wrong organization without a word.
     /// </summary>
     private static bool TryReadOptions(
         string[] args,

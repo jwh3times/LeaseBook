@@ -48,7 +48,7 @@ suite — not by convention. See [`docs/accounting.md`](docs/accounting.md) for 
 
 | Area                             | Capability                                                                                                                                                                                                                                                                                                                       |
 | -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Foundations**                  | Email/password auth with TOTP MFA, role-based authorization, Postgres row-level security as the tenancy boundary, an append-only audit log, a ported design system, and CI.                                                                                                                                                      |
+| **Foundations**                  | Email/password auth with TOTP MFA, role-based authorization, Postgres row-level security as the organization-isolation boundary, an append-only audit log, a ported design system, and CI.                                                                                                                                       |
 | **Trust accounting engine**      | Double-entry journal with dual-basis (cash/accrual) posting templates per business event, a single write path, linked void/reversal, accounting periods, and a continuously-tested invariant suite that also runs as a nightly sweep.                                                                                            |
 | **Directory**                    | Owner, property, and tenant lists and detail pages — with units and lightweight lease records surfaced in context — full-text search, a ⌘K command palette, and a live dashboard with all-owner ending balances.                                                                                                                 |
 | **Tenant ledger action hub**     | Record a payment or charge in place (≤ 3 interactions), collect/hold/apply deposits and prepayments, void with a linked reversal and a per-entry audit drawer, and a filterable, CSV-exportable running-balance ledger.                                                                                                          |
@@ -79,7 +79,7 @@ ASP.NET Core host (LeaseBook.Web)
 ├─ Modules.Capabilities  feature flags, entitlements, cohorts
 ├─ Modules.Payments      Stripe Connect, webhooks                       (roadmap)
 ├─ Modules.Migrator      data-import toolkit
-└─ SharedKernel          Money, ids, CQRS spine, tenancy, result types
+└─ SharedKernel          Money, ids, CQRS spine, organization context, result types
 ```
 
 Key design decisions (each recorded as an ADR in [`docs/adr/`](docs/adr)):
@@ -88,8 +88,8 @@ Key design decisions (each recorded as an ADR in [`docs/adr/`](docs/adr)):
   statements are all read-model projections of the journal — never independently maintained state.
   Business events (`RentCharged`, `PaymentReceived`, `DepositApplied`, …) post through balanced,
   per-basis templates so each accounting basis is a _query_, not a transformation.
-- **PostgreSQL row-level security is the security boundary.** Every org-scoped table carries an `org_id`
-  column with a `FORCE ROW LEVEL SECURITY` policy; org context is set per-transaction with
+- **PostgreSQL row-level security is the security boundary.** Every organization-scoped table carries an `org_id`
+  column with a `FORCE ROW LEVEL SECURITY` policy; organization context is set per-transaction with
   `SET LOCAL app.org_id`. EF Core global query filters are ergonomics layered on top, not the boundary.
   Three database roles separate schema ownership, runtime DML, and read-only access.
 - **CQRS with vertical slices.** Commands and queries dispatch through a small hand-rolled `ISender`
@@ -215,7 +215,7 @@ Correctness is the product, so the accounting module carries the highest test ri
 - **Golden-file tests** replay fixed fixture datasets (the demo and scenario orgs) and assert owner
   balances, tenant ledgers, and bank balances to the cent.
 - **Integration tests** (Testcontainers + real migrations) exercise the HTTP surface as the RLS-subject
-  application role — never bypassing tenancy — including a cross-org isolation pack.
+  application role — never bypassing organization isolation — including a cross-organization isolation pack.
 - **Architecture tests** enforce the module boundaries.
 - **End-to-end tests** (Playwright) cover the budgeted user flows against a seeded host.
 
@@ -262,8 +262,8 @@ stack, and scans for secrets on every push and pull request.
 ## Security
 
 If you discover a security vulnerability, please report it privately to the maintainers rather than
-opening a public issue. As trust-accounting software, LeaseBook treats cross-tenant isolation and the
-append-only ledger guarantees as security-critical; tenancy is enforced by PostgreSQL row-level security
+opening a public issue. As trust-accounting software, LeaseBook treats cross-organization isolation and
+the append-only ledger guarantees as security-critical; isolation is enforced by PostgreSQL row-level security
 in addition to application-layer checks.
 
 ---

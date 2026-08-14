@@ -23,7 +23,7 @@ namespace LeaseBook.Tests.Integration;
 /// </para>
 /// <para>
 /// The escape is TWO policies per table, not one <c>FOR ALL</c> (see
-/// <c>Rls.EnableOrgRlsWithPlatformEscape</c>), so tenant-plane writes fail at deliberately different
+/// <c>Rls.EnableOrgRlsWithPlatformEscape</c>), so organization-plane writes fail at deliberately different
 /// layers, and the tests below assert the layer, not just "it failed":
 /// <list type="bullet">
 /// <item>INSERT → 42501 <i>new row violates row-level security policy</i> (the write policy's WITH CHECK).</item>
@@ -127,7 +127,7 @@ public sealed class CapabilityTenancyTests(PostgresFixture fixture)
     /// <summary>
     /// The escape is scoped to the four platform tables. Ordinary org-scoped tables carry the plain
     /// <c>EnableOrgRls</c> policy, which never mentions <c>app.platform</c>, so opening platform scope
-    /// must not turn into a general cross-tenant bypass.
+    /// must not turn into a general cross-organization bypass.
     /// </summary>
     [Fact]
     public async Task Platform_scope_does_not_widen_ordinary_org_scoped_tables()
@@ -308,10 +308,10 @@ public sealed class CapabilityTenancyTests(PostgresFixture fixture)
 
             var updated = await ExecAsync(conn, tx,
                 "UPDATE capability_cohorts SET added_by = 'tampered', capability = 'everything'", ct);
-            updated.ShouldBe(0, "the write policy must filter the tenant plane out of every row");
+            updated.ShouldBe(0, "the write policy must filter the organization plane out of every row");
 
             var deleted = await ExecAsync(conn, tx, "DELETE FROM capability_cohorts", ct);
-            deleted.ShouldBe(0, "the write policy must filter the tenant plane out of every row");
+            deleted.ShouldBe(0, "the write policy must filter the organization plane out of every row");
 
             await tx.CommitAsync(ct);
         }
@@ -376,7 +376,7 @@ public sealed class CapabilityTenancyTests(PostgresFixture fixture)
         mine.ShouldBe(1, "a tenant sees its own cohort row and only its own");
     }
 
-    // ── platform_audit_events (platform-only) and feature_flags (tenant-readable) ────────────────
+    // ── platform_audit_events (platform-only) and feature_flags (organization-readable) ─────────
 
     [Fact]
     public async Task Platform_audit_events_are_invisible_inside_a_tenant_session()
@@ -454,7 +454,7 @@ public sealed class CapabilityTenancyTests(PostgresFixture fixture)
     }
 
     /// <summary>
-    /// <c>feature_flags</c> is the one platform table a tenant session may READ. Reads are ungated on
+    /// <c>feature_flags</c> is the one platform table an organization session may READ. Reads are ungated on
     /// purpose: the capability resolver reads a flag inside the ambient request transaction so a
     /// money-path kill switch takes effect immediately instead of waiting out a cache TTL, and there
     /// is no safe way to have platform scope in there — <c>PlatformScopedExecutor</c> opens its own
@@ -462,7 +462,7 @@ public sealed class CapabilityTenancyTests(PostgresFixture fixture)
     /// the request with platform scope, defeating org isolation on the other two tables.
     /// <para>
     /// So the property under test is <b>toggling</b>, not reading. The grant is intentionally retained
-    /// (the CLI runs as the app role), which means the tenant-plane UPDATE/DELETE do not throw — they
+    /// (the CLI runs as the app role), which means the organization-plane UPDATE/DELETE do not throw — they
     /// are filtered to zero rows by the write policy. INSERT is the one that raises, because only the
     /// write policy's WITH CHECK applies to it.
     /// </para>
@@ -514,7 +514,7 @@ public sealed class CapabilityTenancyTests(PostgresFixture fixture)
 
                 var toggled = await ExecAsync(conn, tamper,
                     "UPDATE feature_flags SET enabled = true WHERE name = @name", ct, ("name", flag));
-                toggled.ShouldBe(0, "RLS, not the grant, is what stops a tenant-plane flag toggle");
+                toggled.ShouldBe(0, "RLS, not the grant, is what stops an organization-plane flag toggle");
 
                 var dropped = await ExecAsync(conn, tamper,
                     "DELETE FROM feature_flags WHERE name = @name", ct, ("name", flag));
@@ -580,7 +580,7 @@ public sealed class CapabilityTenancyTests(PostgresFixture fixture)
     /// The pooling-safety property. <c>SET LOCAL</c> reverts the placeholder to <c>''</c> (empty
     /// string, not NULL) at commit, and the policies compare it to the literal text <c>'on'</c> with
     /// no boolean cast, so <c>''</c> simply does not match. A session-level SET here would hand the
-    /// next tenant to pick up this connection a live platform scope.
+    /// next organization to pick up this connection a live platform scope.
     /// </summary>
     [Fact]
     public async Task Platform_scope_does_not_leak_past_its_transaction()

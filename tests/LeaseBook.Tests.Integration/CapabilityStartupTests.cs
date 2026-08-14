@@ -29,7 +29,7 @@ namespace LeaseBook.Tests.Integration;
 /// shares one <see cref="PostgresFixture"/> through <see cref="DatabaseCollection"/>. A ghost row left
 /// behind would make every host booted by a sibling test throw at startup, so every insert here is
 /// undone in a <c>finally</c>. Rows are written under platform scope because
-/// <c>feature_flags_platform_write</c> rejects a tenant-plane INSERT with 42501; a plain connection
+/// <c>feature_flags_platform_write</c> rejects an organization-plane INSERT with 42501; a plain connection
 /// would fail the arrange step, not the assertion. Host configuration is not the lever for any of this
 /// — these are database rows, so <c>ApiFactory</c>'s settings dictionary would be the wrong mechanism.
 /// </para>
@@ -323,7 +323,7 @@ public sealed class CapabilityStartupTests(PostgresFixture fixture)
     }
 
     /// <summary>
-    /// Platform scope, because <c>feature_flags_platform_write</c> rejects a tenant-plane INSERT with
+    /// Platform scope, because <c>feature_flags_platform_write</c> rejects an organization-plane INSERT with
     /// 42501. Raw SQL rather than the host's executor so the arrange step cannot depend on the host
     /// under test having booted.
     /// </summary>

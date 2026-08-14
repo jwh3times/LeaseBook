@@ -20,6 +20,12 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Changed
 
+- **Unambiguous organization and tenant language** — Public documentation and operator diagnostics
+  now call the property-management company and RLS isolation boundary an organization, while tenant
+  is reserved for the person or named party responsible under a residential lease. Single-organization
+  work is the organization plane and carries organization context; the RLS boundary and product
+  behavior are unchanged.
+
 - **Unambiguous bank-account purposes** — Settings and migration onboarding now distinguish the
   operating trust account and security-deposit trust account (inside the trust equation) from the PM
   operating account (outside it). Bank purpose is stated as immutable after creation because it fixes

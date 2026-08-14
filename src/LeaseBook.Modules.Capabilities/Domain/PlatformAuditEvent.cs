@@ -4,8 +4,8 @@ namespace LeaseBook.Modules.Capabilities.Domain;
 
 /// <summary>
 /// The append-only record of what the platform plane did: who granted what to whom, who toggled
-/// which flag. The tenant audit trail structurally cannot hold these rows — AppDbContext's audit
-/// pass filters to IOrgScoped and throws without org context, <c>AuditEvent.OrgId</c> is
+/// which flag. The organization audit trail structurally cannot hold these rows — AppDbContext's audit
+/// pass filters to IOrgScoped and throws without organization context, <c>AuditEvent.OrgId</c> is
 /// non-nullable, and <c>audit_events</c> is RLS'd under FORCE with no platform escape.
 /// <para>
 /// <see cref="OrgId"/> is NULLABLE (creating a flag is not org-specific) and is deliberately NOT a

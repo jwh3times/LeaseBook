@@ -13,7 +13,7 @@ security findings, compliance workpapers, and customer-specific planning are mai
 
 Milestones M0-M7 are complete:
 
-- Foundations: authentication, authorization, tenant isolation, audit, CI, and the design system.
+- Foundations: authentication, authorization, organization isolation, audit, CI, and the design system.
 - Trust accounting: the double-entry journal, posting templates, dual-basis reads, and invariant,
   property-based, and golden-file verification.
 - Directory and workflow: owners, properties, units, tenants, leases, dashboard, and search.
@@ -67,7 +67,7 @@ Before beta, the project is focused on:
 - Exercising deployment, backup, restore, telemetry, and alerting procedures in a live environment.
 - Closing remaining workflow gaps found during beta-readiness testing.
 
-Work is considered ready only when the accounting invariants, tenant-isolation guarantees, documented
+Work is considered ready only when the accounting invariants, organization-isolation guarantees, documented
 interaction budgets, and relevant automated gates remain green.
 
 ## Later Direction

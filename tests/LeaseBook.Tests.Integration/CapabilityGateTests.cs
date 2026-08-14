@@ -279,7 +279,7 @@ public sealed class CapabilityGateTests(PostgresFixture fixture)
     }
 
     /// <summary>
-    /// Missing org context fails rather than resolving everything to "off". The silent answer is the
+    /// Missing organization context fails rather than resolving everything to "off". The silent answer is the
     /// dangerous one: with no context RLS filters entitlements to zero rows, every paid capability
     /// reads as unavailable, and it is indistinguishable from a deliberate revoke — the same rule
     /// background jobs follow.
@@ -305,9 +305,9 @@ public sealed class CapabilityGateTests(PostgresFixture fixture)
         var cached = gate.GetCachedAsync(ct);
 
         (await Should.ThrowAsync<InvalidOperationException>(async () => await durable))
-            .Message.ShouldContain("org context");
+            .Message.ShouldContain("organization context");
         (await Should.ThrowAsync<InvalidOperationException>(async () => await cached))
-            .Message.ShouldContain("org context");
+            .Message.ShouldContain("organization context");
     }
 
     /// <summary>A fresh org per test, so the entitlement half needs no cleanup at all.</summary>

@@ -159,7 +159,7 @@ builder.Services.AddRateLimiter(options =>
     };
 });
 
-// Tenancy ergonomics: one request-scoped TenantContext, exposed read-only as ITenantContext (which
+// Organization-isolation ergonomics: one request-scoped TenantContext, exposed read-only as ITenantContext (which
 // the DbContext query filter reads). DbContext is also resolvable as its base type so the
 // scheduler-agnostic OrgScopedExecutor can open the unit-of-work transaction.
 builder.Services.AddScoped<TenantContext>();
@@ -264,7 +264,7 @@ builder.Services.AddScoped<CompliancePackAssembler>();
 
 // M5 WP-05: statement delivery seam + artifact store. IArtifactStore is the byte-only store
 // (local = file system; M8 = Azure Blob). IStatementDelivery is host-owned (references StatementPdf
-// / StatementView). Both are scoped — DeliveryRecord insert needs the ambient tenant context.
+// / StatementView). Both are scoped — DeliveryRecord insert needs the ambient organization context.
 builder.Services.AddScoped<LeaseBook.Modules.Reporting.Delivery.IArtifactStore,
     LeaseBook.Modules.Reporting.Delivery.LocalArtifactStore>();
 builder.Services.AddScoped<IStatementDelivery, LocalStatementDelivery>();

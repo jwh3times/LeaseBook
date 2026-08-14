@@ -307,17 +307,17 @@ is not laziness — see below.
 
 Change only the `args:` list to run a different subcommand. Examples:
 
-| Intent                 | `args:`                                                                               |
-| ---------------------- | ------------------------------------------------------------------------------------- |
-| Kill switch            | `capabilities`, `flag`, `disable`, `<name>`                                           |
-| Re-enable              | `capabilities`, `flag`, `enable`, `<name>`                                            |
-| Restore cohort/default | `capabilities`, `flag`, `clear`, `<name>`                                             |
-| Entitle one tenant     | `capabilities`, `grant`, `<name>`, `--org`, `<org-id>`                                |
-| Withdraw               | `capabilities`, `revoke`, `<name>`, `--org`, `<org-id>`                               |
-| Cohort, whole org      | `capabilities`, `cohort`, `add`, `<name>`, `--org`, `<org-id>`                        |
-| Cohort, one user       | `capabilities`, `cohort`, `add`, `<name>`, `--org`, `<org-id>`, `--user`, `<user-id>` |
-| Undo a cohort rule     | `capabilities`, `cohort`, `remove`, `<name>`, `--org`, `<org-id>`                     |
-| Read one tenant        | `capabilities`, `list`, `--org`, `<org-id>`                                           |
+| Intent                   | `args:`                                                                               |
+| ------------------------ | ------------------------------------------------------------------------------------- |
+| Kill switch              | `capabilities`, `flag`, `disable`, `<name>`                                           |
+| Re-enable                | `capabilities`, `flag`, `enable`, `<name>`                                            |
+| Restore cohort/default   | `capabilities`, `flag`, `clear`, `<name>`                                             |
+| Entitle one organization | `capabilities`, `grant`, `<name>`, `--org`, `<org-id>`                                |
+| Withdraw                 | `capabilities`, `revoke`, `<name>`, `--org`, `<org-id>`                               |
+| Cohort, whole org        | `capabilities`, `cohort`, `add`, `<name>`, `--org`, `<org-id>`                        |
+| Cohort, one user         | `capabilities`, `cohort`, `add`, `<name>`, `--org`, `<org-id>`, `--user`, `<user-id>` |
+| Undo a cohort rule       | `capabilities`, `cohort`, `remove`, `<name>`, `--org`, `<org-id>`                     |
+| Read one organization    | `capabilities`, `list`, `--org`, `<org-id>`                                           |
 
 `cohort remove` is the exact inverse of `cohort add`: without `--user` it targets the org-wide rule
 only, so the two invocations have to match token for token or the removal silently matches nothing

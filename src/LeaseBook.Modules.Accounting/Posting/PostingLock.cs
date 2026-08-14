@@ -13,7 +13,7 @@ internal sealed class PostingLock(DbContext db, ITenantContext tenant) : IPostin
     {
         var orgId = tenant.OrgId
             ?? throw new InvalidOperationException(
-                "AcquireAsync requires an ambient org context — the advisory lock key is per org.");
+                "AcquireAsync requires an ambient organization context — the advisory lock key is per org.");
 
         // The key is the 64-bit hash of an org-namespaced string; the lock is transaction-scoped and
         // released on commit/rollback. orgId is parameterized (text) and concatenated in SQL.

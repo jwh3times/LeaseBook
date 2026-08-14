@@ -29,7 +29,7 @@ internal sealed class ApplyClearancesHandler(DbContext db, ITenantContext tenant
         }
 
         var orgId = tenant.OrgId
-            ?? throw new InvalidOperationException("ApplyClearances requires an ambient org context.");
+            ?? throw new InvalidOperationException("ApplyClearances requires an ambient organization context.");
 
         // Only bank-account lines may be cleared. RLS scopes the count to this org, so a foreign or
         // non-bank id makes the count fall short and the whole batch is rejected (no silent partial clear).

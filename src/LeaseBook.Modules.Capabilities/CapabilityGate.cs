@@ -13,9 +13,9 @@ namespace LeaseBook.Modules.Capabilities;
 /// and <see cref="ResolveDurableAsync"/> is called from inside one — <c>OrgContextMiddleware</c>
 /// opens a transaction for every authenticated request — so reaching for it would throw
 /// "transaction already started" on the money path. It is not needed either: <c>feature_flags</c> is
-/// tenant-readable, and an org's own <c>entitlements</c> and <c>capability_cohorts</c> rows are
+/// organization-readable, and an org's own <c>entitlements</c> and <c>capability_cohorts</c> rows are
 /// readable under the ambient <c>app.org_id</c> through each table's <c>_org_read</c> policy. A
-/// tenant-plane read of a tenant's own capability state is legitimate and needs no escape.
+/// organization-plane read of an organization's own capability state is legitimate and needs no escape.
 /// </para>
 /// <para>
 /// It also does not reimplement resolution. Order lives in <see cref="CapabilityResolver"/> and is
@@ -50,13 +50,13 @@ internal sealed class CapabilityGate(
 
     /// <inheritdoc />
     public async Task<CapabilitySet> ResolveDurableAsync(CancellationToken ct) =>
-        // The three-argument overload: read on the AMBIENT transaction, on the tenant plane. It
+        // The three-argument overload: read on the AMBIENT transaction, on the organization plane. It
         // asserts that app.org_id matches the org being resolved and throws when it does not, which
         // is the guard that keeps a mis-scoped call from returning a plausible "not entitled".
         await reader.ReadAsync(RequireOrg(), actor.UserId, ct);
 
     // Both members are `async` rather than expression-bodied pass-throughs purely so that a missing
-    // org context FAULTS the returned task instead of throwing before the task is handed back. The
+    // organization context FAULTS the returned task instead of throwing before the task is handed back. The
     // difference is invisible under a bare await and load-bearing under Task.WhenAll — which is how
     // a run engine composing several of these would call them.
 
@@ -64,7 +64,7 @@ internal sealed class CapabilityGate(
         tenant.OrgId is { } orgId && orgId != Guid.Empty
             ? orgId
             : throw new InvalidOperationException(
-                "Capability resolution requires org context. Resolving without it would read zero " +
+                "Capability resolution requires organization context. Resolving without it would read zero " +
                 "entitlement rows and answer 'off' for every paid capability — indistinguishable " +
                 "from a deliberate revoke, and recorded nowhere. Establish context first: HTTP " +
                 "requests get it from OrgContextMiddleware, jobs and the CLI from OrgScopedExecutor.");

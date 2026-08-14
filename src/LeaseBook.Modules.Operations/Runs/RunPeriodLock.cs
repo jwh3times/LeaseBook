@@ -15,7 +15,7 @@ public interface IRunPeriodLock
 /// failure all release it without a cleanup path in application code.
 /// <para>
 /// PostgreSQL advisory locks take integers rather than a composite value. <c>hashtextextended</c>
-/// turns the explicit org context plus run coordinates into one stable 64-bit key. A theoretical
+/// turns the explicit organization context plus run coordinates into one stable 64-bit key. A theoretical
 /// hash collision can only serialize unrelated runs; it cannot let related runs overlap or change
 /// correctness.
 /// </para>

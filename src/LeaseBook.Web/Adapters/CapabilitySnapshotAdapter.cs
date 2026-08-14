@@ -19,7 +19,7 @@ namespace LeaseBook.Web.Adapters;
 /// </para>
 /// <para>
 /// <b>Async, not an expression-bodied pass-through.</b> The gate faults its returned task on missing
-/// org context rather than throwing synchronously; the <c>await</c> below preserves that. The
+/// organization context rather than throwing synchronously; the <c>await</c> below preserves that. The
 /// difference is invisible under a bare await and load-bearing under <c>Task.WhenAll</c>.
 /// </para>
 /// </summary>

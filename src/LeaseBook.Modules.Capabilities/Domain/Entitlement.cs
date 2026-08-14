@@ -7,7 +7,7 @@ namespace LeaseBook.Modules.Capabilities.Domain;
 /// EffectiveAt. There is deliberately no RevokedAt column: mutating a grant would require UPDATE on
 /// the table, which would defeat RevokeAppendOnly and leave re-grant-after-revoke undefined.
 /// <para>
-/// <b>Not IOrgScoped, and this is load-bearing.</b> This is platform data ABOUT an org, not tenant
+/// <b>Not IOrgScoped, and this is load-bearing.</b> This is platform data ABOUT an org, not organization
 /// data belonging to one. AppDbContext applies the org global query filter BY CONVENTION to every
 /// IOrgScoped entity, so adding that interface here would silently empty every cross-org platform
 /// read that RLS deliberately permits — with no test failing, because the write side throws loudly
