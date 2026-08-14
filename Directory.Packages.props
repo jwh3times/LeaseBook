@@ -80,7 +80,7 @@
     <PackageVersion Include="NetArchTest.Rules" Version="1.3.2" />
     <!-- Direct architecture-test use; already resolved transitively by NetArchTest at this version. -->
     <PackageVersion Include="Mono.Cecil" Version="0.11.6" />
-    <PackageVersion Include="Testcontainers.PostgreSql" Version="4.13.0" />
+    <PackageVersion Include="Testcontainers.PostgreSql" Version="4.14.0" />
     <!-- Transitive of Testcontainers. Pinned to 2026.0.0 to clear NU1903 /
          GHSA-q939-rpr3-3284 (arbitrary file write during recursive SCP downloads). Transitive
          pinning (above) forces the patched release until Testcontainers raises its dependency. -->
