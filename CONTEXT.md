@@ -84,6 +84,38 @@ _Avoid_: deposit account, deposit bank
 The property management company's own non-trust bank account. It is outside the trust equation.
 _Avoid_: operating account, management operating account
 
+### Dashboard financial metrics
+
+**Trust total**:
+The sum of the current cash-basis book balances of operating trust and security-deposit trust
+accounts. It is a fiduciary-cash total and never includes a PM operating account.
+_Avoid_: total bank cash, all bank balances
+
+**Owner operating balance**:
+An owner's cash-basis owner-equity balance before a prospective management fee or reserve floor is
+applied. It can be positive without all of it being available for disbursement.
+_Avoid_: owners payable, balance available for disbursement
+
+**Available to disburse**:
+For one owner, the positive remainder after the management fee computed on the current owner
+operating balance is deducted and the configured reserve is retained. The dashboard total is the sum
+of those positive per-owner remainders; it is a present-tense preview, not a payable account.
+_Avoid_: owners payable, positive owner balance
+
+**Tenant payments received**:
+The net cash movement into trust accounts from `PaymentReceived` events during a calendar period,
+including linked reversals in the period. Receipt date controls the period, so a payment against a
+prior-period charge counts when received. Owner contributions and other owner-equity credits do not
+count. This is not charge-attributed rent collected: one payment may settle rent, fees, or excess
+prepayment.
+_Avoid_: collected rent, owner income received
+
+**Scheduled rent**:
+The rent-run billing amount for active leases whose terms overlap a calendar month, including the
+same actual-days proration used by the rent run. It is a billing baseline, not a collection target or
+a denominator for tenant payments received.
+_Avoid_: collected target, expected collections
+
 ### Capabilities
 
 Whether a behaviour is available is answered from two independent sources, and conflating them is the

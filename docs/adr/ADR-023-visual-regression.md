@@ -21,7 +21,7 @@ and CI runs Ubuntu.
    baselines (dashboard KPI strip, fiduciary panel, reconcile-$0 strip, ledger composer open,
    onboarding tied-report), placed inline where the existing specs already reach those states.
 3. **Determinism.** `animations: 'disabled'` + `maxDiffPixelRatio: 0.02`; the wall-clock-relative
-   "Collected this month" dashboard KPI is masked; the ledger composer is captured before its random
+   date-relative tenant-payments dashboard KPI is masked; the ledger composer is captured before its random
    test amount is typed.
 4. **Baseline generation = a `workflow_dispatch` Action** ("Update visual baselines") that regenerates
    on the CI Ubuntu setup and commits baselines back. The Playwright Docker image lacks the .NET SDK

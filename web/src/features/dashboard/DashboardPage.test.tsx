@@ -9,12 +9,12 @@ import { DashboardPage } from './DashboardPage';
 
 const DASH = {
   kpis: {
-    trustTotal: 483620.69,
-    ownersPayable: 111967.4,
+    trustTotal: 445380.14,
+    availableToDisburse: 103010.01,
     uncleared: 250.0,
     unclearedCount: 3,
-    collectedMtd: 1380,
-    collectedTarget: 28000,
+    tenantPaymentsMtd: 1380,
+    scheduledRent: 10855,
     vacancy: 13,
   },
   ownerBalances: {
@@ -42,7 +42,6 @@ const DASH = {
     rows: [
       { bankAccountId: 'b1', name: 'Operating Trust', book: 248930.14, unclearedCount: 3 },
       { bankAccountId: 'b2', name: 'Security Deposit Trust', book: 196450, unclearedCount: 0 },
-      { bankAccountId: 'b3', name: 'PM Operating', book: 38240.55, unclearedCount: 0 },
     ],
   },
   actionItems: [
@@ -79,8 +78,10 @@ describe('DashboardPage', () => {
     renderDashboard();
 
     expect(await screen.findByText('Trust total')).toBeInTheDocument();
-    expect(screen.getByText('Owners payable')).toBeInTheDocument();
-    expect(screen.getByText(/483,620\.69/)).toBeInTheDocument();
+    expect(screen.getByText('Available to disburse')).toBeInTheDocument();
+    expect(screen.getByText('Tenant payments received')).toBeInTheDocument();
+    expect(screen.getByText(/scheduled rent/i)).toHaveTextContent('billing baseline');
+    expect(screen.getByText(/445,380\.14/)).toBeInTheDocument();
 
     // The hero is named (0-click owner balances) and shows the relabeled roll-up.
     expect(screen.getByText('Hargrove Family Trust')).toBeInTheDocument();
@@ -88,14 +89,16 @@ describe('DashboardPage', () => {
 
     // Trust accounts and needs-attention items render.
     expect(screen.getByText('Operating Trust')).toBeInTheDocument();
+    expect(screen.queryByText('PM Operating')).not.toBeInTheDocument();
     expect(screen.getByText('Deposits awaiting application')).toBeInTheDocument();
 
     // Per-account uncleared count renders on the bank summary card.
     expect(screen.getByText('3 uncleared')).toBeInTheDocument();
-    expect(screen.getAllByText('Reconciled')).toHaveLength(2);
+    expect(screen.getAllByText('Reconciled')).toHaveLength(1);
 
     // The "Uncleared" StatCard shows the non-zero count badge.
     expect(screen.getByText('3 items')).toBeInTheDocument();
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
   });
 
   it('navigates to an owner from the hero', async () => {

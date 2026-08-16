@@ -9,7 +9,7 @@
     "owners": 8
   },
   "banks": [
-    { "id": "oper", "name": "Operating Trust", "bank": "First Citizens", "mask": "4021", "book": 248930.14, "cleared": 254300.14, "uncleared": 5370.00, "unclearedN": 3, "type": "trust" },
+    { "id": "oper", "name": "Operating Trust", "bank": "First Citizens", "mask": "4021", "book": 248930.14, "cleared": 254300.14, "uncleared": -5370.00, "unclearedN": 3, "type": "trust" },
     { "id": "dep", "name": "Security Deposit Trust", "bank": "First Citizens", "mask": "8847", "book": 196450.00, "cleared": 196450.00, "uncleared": 0, "unclearedN": 0, "type": "deposit" },
     { "id": "mgmt", "name": "PM Operating", "bank": "Wells Fargo", "mask": "1190", "book": 38240.55, "type": "operating" }
   ],
@@ -80,17 +80,17 @@
     { "id": "b10", "date": "May 22, 2026", "desc": "Deposit — Mercer rent", "prop": "88 Riverside Dr", "type": "Deposit", "amount": 2150.00, "status": "reconciled" }
   ],
   "kpis": {
-    "trustTotal": 483620.69,
-    "ownersPayable": 132447.00,
-    "uncleared": 5370.00,
-    "collectedMTD": 198420.00,
-    "collectedTarget": 221600.00,
+    "trustTotal": 445380.14,
+    "availableToDisburse": 103010.01,
+    "uncleared": -5370.00,
+    "tenantPaymentsMTD": 1380.00,
+    "scheduledRent": 10855.00,
     "vacancy": 4
   },
   "actionItems": [
     { "id": "a1", "kind": "alert", "title": "2 deposits awaiting application", "detail": "Security deposits held as liability — apply on move-out", "screen": "ledger" },
     { "id": "a2", "kind": "warn", "title": "Bank reconciliation due", "detail": "Operating Trust · 3 uncleared items · last reconciled May 1", "screen": "bank" },
-    { "id": "a3", "kind": "info", "title": "Owner disbursement run ready", "detail": "8 owners · $132,447.00 net payable this cycle", "screen": "owner" }
+    { "id": "a3", "kind": "info", "title": "Owner disbursement run ready", "detail": "7 owners · $103,010.01 available after fees and reserves", "screen": "owner" }
   ],
   "collectionsByWeek": [42, 58, 71, 88, 96, 100]
 }

@@ -178,16 +178,16 @@ export function KitchenSink() {
         <div style={{ minWidth: 240, flex: 1 }}>
           <StatCard
             label="Trust total"
-            value={<Money value={483620.69} big />}
-            sub="3 accounts"
+            value={<Money value={445380.14} big />}
+            sub="Fiduciary cash"
             spark={[42, 58, 71, 88, 96, 100]}
           />
         </div>
         <div style={{ minWidth: 240, flex: 1 }}>
           <StatCard
-            label="Owners payable"
-            value={<Money value={132447} big />}
-            sub="8 owners this cycle"
+            label="Available to disburse"
+            value={<Money value={103010.01} big />}
+            sub="After fees and reserves"
           />
         </div>
       </div>
