@@ -61,6 +61,17 @@ resource leasebookDb 'Microsoft.DBforPostgreSQL/flexibleServers/databases@2024-0
   name: 'leasebook'
 }
 
+// Migrations create pg_trgm for Directory search and btree_gist for lease-term exclusion
+// constraints. Azure rejects CREATE EXTENSION unless each extension is allowlisted first.
+resource allowedExtensions 'Microsoft.DBforPostgreSQL/flexibleServers/configurations@2024-08-01' = {
+  parent: postgres
+  name: 'azure.extensions'
+  properties: {
+    source: 'user-override'
+    value: 'btree_gist,pg_trgm'
+  }
+}
+
 // Dev only: let Azure services (the CI migration job) reach the server. Prod uses private access.
 // Firewall rules are meaningless on (and rejected for) a VNet-injected server, hence the extra guard.
 resource allowAzureServices 'Microsoft.DBforPostgreSQL/flexibleServers/firewallRules@2024-08-01' = if (!isProd && !usePrivateNetworking) {

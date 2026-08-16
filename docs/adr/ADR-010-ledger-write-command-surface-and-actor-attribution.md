@@ -1,8 +1,12 @@
 # ADR-010: Ledger write commands wrap the engine; the actor is attributed at the seam
 
-- **Status:** Accepted
+- **Status:** Accepted (amended by ADR-037)
 - **Date:** 2026-06-13
 - **Deciders:** Engineering
+
+[ADR-037](ADR-037-effective-dated-lease-attribution.md) replaces this record's lifecycle-status
+selector for posting dimensions with effective-date attribution. The command boundary and actor
+attribution decisions remain in force.
 
 ## Context
 
@@ -69,5 +73,5 @@ added.
 
 When the org-aware composite `(org_id, id)` FK rework lands (M4) the posting path and harness reopen;
 re-confirm the command layer and actor stamping still ride a single write path. If a future write needs
-dimensions that aren't on the active lease (e.g. historical re-postings), revisit the
-`ITenantPostingDimensions` contract rather than letting the client supply them.
+dimensions that aren't on the active lease, revisit the `ITenantPostingDimensions` contract rather than
+letting the client supply them.

@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living decision index
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-08-13
+- **Last reviewed:** 2026-08-16
 
 An **Architecture Decision Record** captures a single significant or non-obvious engineering
 decision — the context that forced it, the choice made, and the consequences accepted — so it can be
@@ -34,7 +34,7 @@ form, write it, and add a row to the index below. When a decision is replaced, m
 | [007](ADR-007-cross-module-read-contracts.md)                        | Cross-module reads go through consumer-owned ports, not shared SQL              | Accepted                      | 2026-06-12 |
 | [008](ADR-008-journal-dimension-fks-and-aggregates.md)               | Journal-dimension FKs and system aggregate rows                                 | Accepted (amended by ADR-013) | 2026-06-13 |
 | [009](ADR-009-search-and-pagination.md)                              | Search via pg_trgm + GIN; consistent paged list contract                        | Accepted                      | 2026-06-13 |
-| [010](ADR-010-ledger-write-command-surface-and-actor-attribution.md) | Ledger write commands wrap the engine; the actor is attributed at the seam      | Accepted                      | 2026-06-13 |
+| [010](ADR-010-ledger-write-command-surface-and-actor-attribution.md) | Ledger write commands wrap the engine; the actor is attributed at the seam      | Accepted (amended by ADR-037) | 2026-06-13 |
 | [011](ADR-011-deposit-prepayment-over-application-policy.md)         | An application may not exceed the open receivable (warn + block)                | Accepted                      | 2026-06-13 |
 | [012](ADR-012-openapi-client-drift-gate.md)                          | Enforce the generated API client with a build-time OpenAPI drift gate           | Accepted (amended by ADR-030) | 2026-06-15 |
 | [013](ADR-013-composite-org-dimension-fks.md)                        | Promote the journal-dimension FKs to composite `(org_id, id)`                   | Accepted                      | 2026-06-20 |
@@ -59,8 +59,9 @@ form, write it, and add a row to the index below. When a decision is replaced, m
 | [032](ADR-032-microsoft-testing-platform-v2.md)                      | Execute xUnit tests with Microsoft Testing Platform v2                          | Accepted                      | 2026-08-11 |
 | [033](ADR-033-late-fee-eligibility-and-rent-obligation-link.md)      | Late-fee eligibility and rent-obligation linkage                                | Accepted (amended by ADR-034) | 2026-08-13 |
 | [034](ADR-034-computed-fifo-receivable-allocation.md)                | Computed FIFO receivable allocation and charge due dates                        | Accepted                      | 2026-08-13 |
-| [035](ADR-035-single-active-lease-financial-attribution.md)          | One active lease supplies tenant financial attribution                          | Accepted                      | 2026-08-13 |
+| [035](ADR-035-single-active-lease-financial-attribution.md)          | One active lease supplies tenant financial attribution                          | Superseded by ADR-037         | 2026-08-13 |
 | [036](ADR-036-effective-dated-property-ownership-transfer.md)        | Effective-dated property ownership transfers preserve deposit responsibility    | Accepted                      | 2026-08-13 |
+| [037](ADR-037-effective-dated-lease-attribution.md)                  | Effective-dated lease attribution and non-overlapping terms                     | Accepted                      | 2026-08-16 |
 
 ## Status legend
 

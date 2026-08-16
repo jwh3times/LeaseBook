@@ -84,9 +84,12 @@ internal sealed class CreateLeaseHandler(DbContext db) : ICommandHandler<CreateL
 {
     public async Task<Guid> Handle(CreateLease command, CancellationToken ct)
     {
-        await ActiveLeaseCardinality.ThrowIfAnotherIsActiveAsync(
+        await LeaseTermCardinality.ThrowIfOverlappingAsync(
             db,
             command.TenantId,
+            command.UnitId,
+            command.StartDate,
+            command.EndDate,
             command.Status,
             exceptLeaseId: null,
             ct);
@@ -125,9 +128,12 @@ internal sealed class UpdateLeaseHandler(DbContext db) : ICommandHandler<UpdateL
             return false;
         }
 
-        await ActiveLeaseCardinality.ThrowIfAnotherIsActiveAsync(
+        await LeaseTermCardinality.ThrowIfOverlappingAsync(
             db,
             command.TenantId,
+            command.UnitId,
+            command.StartDate,
+            command.EndDate,
             command.Status,
             command.Id,
             ct);
@@ -151,35 +157,52 @@ internal sealed class UpdateLeaseHandler(DbContext db) : ICommandHandler<UpdateL
     }
 }
 
-internal static class ActiveLeaseCardinality
+internal static class LeaseTermCardinality
 {
-    public static async Task ThrowIfAnotherIsActiveAsync(
+    public static async Task ThrowIfOverlappingAsync(
         DbContext db,
         Guid tenantId,
+        Guid unitId,
+        DateOnly? startDate,
+        DateOnly? endDate,
         string requestedStatus,
         Guid? exceptLeaseId,
         CancellationToken ct)
     {
-        if (!string.Equals(requestedStatus, "active", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(requestedStatus, "pending", StringComparison.OrdinalIgnoreCase))
         {
             return;
         }
 
-        var anotherIsActive = await db.Set<LeaseLite>().AsNoTracking()
-            .AnyAsync(lease =>
-                lease.TenantId == tenantId
-                && lease.Status == LeaseStatus.Active
-                && (!exceptLeaseId.HasValue || lease.Id != exceptLeaseId.Value), ct);
-        if (!anotherIsActive)
+        var overlappingLeases = db.Set<LeaseLite>().AsNoTracking()
+            .Where(lease =>
+                lease.Status != LeaseStatus.Pending
+                && (!endDate.HasValue || lease.StartDate == null || lease.StartDate <= endDate.Value)
+                && (!startDate.HasValue || lease.EndDate == null || lease.EndDate >= startDate.Value)
+                && (!exceptLeaseId.HasValue || lease.Id != exceptLeaseId.Value));
+
+        var tenantOverlaps = await overlappingLeases.AnyAsync(lease => lease.TenantId == tenantId, ct);
+        if (!tenantOverlaps)
         {
-            return;
+            var unitOverlaps = await overlappingLeases.AnyAsync(lease => lease.UnitId == unitId, ct);
+            if (!unitOverlaps)
+            {
+                return;
+            }
+
+            throw new ValidationException(
+            [
+                new ValidationFailure(
+                    "unitId",
+                    "A unit cannot have overlapping non-pending lease terms."),
+            ]);
         }
 
         throw new ValidationException(
         [
             new ValidationFailure(
                 "tenantId",
-                "A tenant can have only one active lease; end the current lease before activating another."),
+                "A tenant cannot have overlapping non-pending lease terms."),
         ]);
     }
 }

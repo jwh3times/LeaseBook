@@ -1,6 +1,6 @@
 # ADR-035: One active lease supplies tenant financial attribution
 
-- **Status:** Accepted
+- **Status:** Superseded by ADR-037
 - **Date:** 2026-08-13
 - **Deciders:** Jerry Holland
 

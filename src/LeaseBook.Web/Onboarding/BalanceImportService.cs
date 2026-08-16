@@ -7,6 +7,7 @@ using LeaseBook.Modules.Accounting.Contracts;
 using LeaseBook.Modules.Accounting.Domain;
 using LeaseBook.Modules.Accounting.Features.Migration;
 using LeaseBook.Modules.Directory.Domain;
+using LeaseBook.Modules.Directory.Persistence;
 using LeaseBook.SharedKernel;
 using LeaseBook.SharedKernel.Cqrs;
 using LeaseBook.SharedKernel.Tenancy;
@@ -630,14 +631,14 @@ public sealed class BalanceImportService(
         var tenantMap = await BuildTenantMapAsync(ct);
         var depositTrustId = await ResolveDepositTrustAsync(ct);
         var tenantIds = tenantMap.Values.Distinct().ToList();
-        var activePropertyRows = await (
-            from lease in db.Set<LeaseLite>().AsNoTracking()
+        var effectivePropertyRows = await (
+            from lease in db.Set<LeaseLite>().AsNoTracking().EffectiveOn(cutover)
             join unit in db.Set<Unit>().AsNoTracking() on lease.UnitId equals unit.Id
             join property in db.Set<Property>().AsNoTracking() on unit.PropertyId equals property.Id
-            where lease.Status == LeaseStatus.Active && tenantIds.Contains(lease.TenantId)
+            where tenantIds.Contains(lease.TenantId)
             select new { lease.TenantId, PropertyId = property.Id, property.OwnerId })
             .ToListAsync(ct);
-        var activePropertyByTenant = activePropertyRows.ToDictionary(row => row.TenantId);
+        var effectivePropertyByTenant = effectivePropertyRows.ToDictionary(row => row.TenantId);
 
         if (depositTrustId is null)
         {
@@ -670,19 +671,19 @@ public sealed class BalanceImportService(
                 continue;
             }
 
-            if (!activePropertyByTenant.TryGetValue(tenantId, out var activeProperty))
+            if (!effectivePropertyByTenant.TryGetValue(tenantId, out var effectiveProperty))
             {
                 errors.Add(BalanceRowOutcome.Error(rowNumber, row.ExternalTenantId, rawJson,
                     "external_tenant_id",
-                    $"'{row.ExternalTenantId}' has no active imported lease to supply deposit property attribution"));
+                    $"'{row.ExternalTenantId}' has no imported lease effective on the cutover date to supply deposit property attribution"));
                 continue;
             }
 
-            if (activeProperty.OwnerId != ownerId)
+            if (effectiveProperty.OwnerId != ownerId)
             {
                 errors.Add(BalanceRowOutcome.Error(rowNumber, row.ExternalTenantId, rawJson,
                     "external_owner_id",
-                    $"'{row.ExternalOwnerId}' does not own the active imported property for tenant '{row.ExternalTenantId}'"));
+                    $"'{row.ExternalOwnerId}' does not own the imported property effective for tenant '{row.ExternalTenantId}' on the cutover date"));
                 continue;
             }
 
@@ -693,7 +694,7 @@ public sealed class BalanceImportService(
                 rowNumber, row.ExternalTenantId, rawJson, sourceRef,
                 AccountCodes.SecurityDepositsHeld, DebitNormal: false, row.HeldAmount, EntryBasis.Both,
                 OwnerId: ownerId, TenantId: tenantId, BankAccountId: depositTrustId,
-                PropertyId: activeProperty.PropertyId));
+                PropertyId: effectiveProperty.PropertyId));
         }
 
         return new BalancePlan(positions, errors);

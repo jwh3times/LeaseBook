@@ -53,7 +53,7 @@ internal static class LedgerPostingMaps
             .WithMessage("Amount must be a positive value with at most 2 decimal places.");
 
     /// <summary>
-    /// Resolve the tenant's posting dimensions from the active lease, or reject (no active lease ⇒ 400
+    /// Resolve the tenant's posting dimensions from the lease effective on the accounting date, or reject
     /// validation, never a silent default — P58 / M3-E3). The cross-module read rides the ambient RLS
     /// transaction through the host adapter, so a tenant the caller's org cannot see resolves to null.
     /// </summary>
@@ -63,7 +63,7 @@ internal static class LedgerPostingMaps
         ?? throw new ValidationException(
         [
             new ValidationFailure(
-                "tenantId", "This tenant has no active lease, so the posting's owner/property cannot be resolved."),
+                "tenantId", "This tenant has no lease effective on the posting date, so its owner/property cannot be resolved."),
         ]);
 
     public static Money Money(decimal amount) => new(amount);

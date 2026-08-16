@@ -17,7 +17,7 @@ public sealed record GetTenantDetail(Guid Id) : IQuery<TenantDetail?>;
 public sealed record TenantContact(string? Email, string? Phone);
 
 /// <summary>
-/// The tenant's active lease. Carries <see cref="Id"/> and <see cref="UnitId"/> as well as the
+/// The tenant's lease effective today. Carries <see cref="Id"/> and <see cref="UnitId"/> as well as the
 /// editable fields because <c>UpdateLease</c> replaces the whole lease: a client editing one field
 /// has to send the rest back unchanged, and it can only do that if the read returned them (WP-6).
 /// <para>
@@ -39,11 +39,15 @@ public sealed record TenantDetail(
     TenantLeaseInfo? Lease, string? UnitLabel, string? PropertyAddress,
     Guid? OwnerId, string? OwnerName, decimal Balance, decimal DepositHeld);
 
-internal sealed class GetTenantDetailHandler(DbContext db, ITenantFinancials tenantFinancials)
+internal sealed class GetTenantDetailHandler(
+    DbContext db,
+    ITenantFinancials tenantFinancials,
+    TimeProvider clock)
     : IQueryHandler<GetTenantDetail, TenantDetail?>
 {
     public async Task<TenantDetail?> Handle(GetTenantDetail query, CancellationToken ct)
     {
+        var today = DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
         var tenant = await db.Set<Tenant>().AsNoTracking()
             .NotSystem().FirstOrDefaultAsync(t => t.Id == query.Id, ct);
         if (tenant is null)
@@ -51,13 +55,13 @@ internal sealed class GetTenantDetailHandler(DbContext db, ITenantFinancials ten
             return null;
         }
 
-        // The active lease → unit → property → owner chain (may be absent for a tenant with no lease).
+        // The lease effective today → unit → property → owner chain (may be absent).
         var context = await (
-            from l in db.Set<LeaseLite>().AsNoTracking()
+            from l in db.Set<LeaseLite>().AsNoTracking().EffectiveOn(today)
             join u in db.Set<Unit>().AsNoTracking() on l.UnitId equals u.Id
             join p in db.Set<Property>().AsNoTracking() on u.PropertyId equals p.Id
             join o in db.Set<Owner>().AsNoTracking() on p.OwnerId equals o.Id
-            where l.TenantId == tenant.Id && l.Status == LeaseStatus.Active
+            where l.TenantId == tenant.Id
             select new
             {
                 LeaseId = l.Id,

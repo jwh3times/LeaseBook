@@ -7,11 +7,11 @@ using Microsoft.EntityFrameworkCore;
 namespace LeaseBook.Modules.Directory.Features.Reporting;
 
 /// <summary>
-/// Returns the active-lease schedule for a calendar month: all active leases whose term overlaps
+/// Returns the effective lease schedule for a calendar month: all non-pending leases whose term overlaps
 /// the period, joined to tenant / unit / property / owner. Used by the M6 rent-run strategy
 /// (WP-2) via the <c>ILeaseScheduleData</c> port + host adapter (ADR-007 / ADR-019).
 /// <para>
-/// <b>Active</b> = <see cref="LeaseStatus.Active"/>. <b>Overlaps period</b> = start is null or
+/// <b>Effective during the period</b> = not pending, and start is null or
 /// start &lt;= last day of period AND end is null or end &gt;= first day of period.
 /// </para>
 /// <para>
@@ -26,7 +26,7 @@ public sealed record GetActiveLeaseSchedule(int Year, int Month, DateOnly? Attri
 public sealed record LeaseScheduleResponse(IReadOnlyList<LeaseScheduleRow> Rows);
 
 /// <summary>
-/// One row per active lease that overlaps the requested period.
+/// One row per lease effective during the requested period.
 /// </summary>
 /// <param name="LeaseId">The lease's stable id.</param>
 /// <param name="TenantId">FK to tenants.</param>
@@ -65,14 +65,11 @@ internal sealed class GetActiveLeaseScheduleHandler(DbContext db)
             .Select(settings => (int?)settings.RentDueDay)
             .SingleOrDefaultAsync(ct) ?? 1;
 
-        // Active leases whose term overlaps the period, joined to unit → property (for owner) + tenant.
+        // Non-pending leases whose term overlaps the period, joined to unit → property (for owner) + tenant.
         // NotSystem() applied to Unit, Property, Tenant (M5-prep convention — never leak system rows).
         var rows = await (
             from l in db.Set<LeaseLite>().AsNoTracking()
-                        .Where(l => l.Status == LeaseStatus.Active)
-                        // Overlaps: start <= periodEnd AND end >= periodStart (treating null as unbounded).
-                        .Where(l => (l.StartDate == null || l.StartDate <= periodEnd)
-                                 && (l.EndDate == null || l.EndDate >= periodStart))
+                        .EffectiveDuring(periodStart, periodEnd)
             join u in db.Set<Unit>().AsNoTracking().NotSystem() on l.UnitId equals u.Id
             join p in db.Set<Property>().AsNoTracking().NotSystem() on u.PropertyId equals p.Id
             join t in db.Set<Tenant>().AsNoTracking().NotSystem() on l.TenantId equals t.Id

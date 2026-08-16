@@ -12,7 +12,7 @@ namespace LeaseBook.Modules.Accounting.Endpoints;
 /// The M3 ledger <b>write</b> surface (§C.1) — the first write endpoints in the product. Posting and
 /// void are <c>RequirePMStaff</c> (money entry is staff-level, P53); each lambda stays thin (bind →
 /// dispatch the command → <c>TypedResults</c>). Owner/property/unit are never in the body — the command
-/// resolves them from the tenant's active lease (P58). Domain rejections flow to the host's
+/// resolves them from the tenant's lease effective on the accounting date (P58). Domain rejections flow to the host's
 /// <c>AccountingExceptionHandler</c> (422/409, §C.5). The focused ledger CSV (P55) lives here too.
 /// All commands route through the existing engine — M3 adds no journal write path (M3-E1).
 /// </summary>
