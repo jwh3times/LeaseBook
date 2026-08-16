@@ -73,8 +73,8 @@ The dashboard uses four deliberately narrow financial terms:
   settle rent, fees, or an excess prepayment, the product does not relabel this figure “rent
   collected.”
 
-**Scheduled rent** is shown separately: it is the month's rent-run billing amount for overlapping
-active lease terms, with the rent run's actual-days proration. It is a billing baseline, not a
+**Scheduled rent** is shown separately: it is the month's rent-run billing amount for non-pending
+lease terms effective during the period, with the rent run's actual-days proration. It is a billing baseline, not a
 collection target and not the denominator of a collection percentage.
 
 ## Two bases, one set of books
@@ -171,8 +171,9 @@ reconciliation actually uses. A post is rejected if either lock covers it.
 Money first moves through the UI in M3. The tenant-ledger composer never builds journal lines itself —
 it sends a small **command** that the server wraps around the existing posting engine, so there is still
 exactly one write path to the journal. The command carries only a tenant id plus the amount/date/method/
-memo; the owner, property and unit are resolved server-side from the tenant's **active lease** (a post
-for a tenant with no active lease is rejected, never guessed). Each command maps to one business event:
+memo; the owner, property and unit are resolved server-side from the tenant's **lease effective on
+the command's accounting date** (a post with no effective lease is rejected, never guessed). Each
+command maps to one business event:
 
 | Command (endpoint)                                    | Business event                                                                   |
 | ----------------------------------------------------- | -------------------------------------------------------------------------------- |
@@ -216,10 +217,15 @@ the posting template holds it as a prepayment liability until an operator applie
 
 ### Tenant financial attribution
 
-Phase 1 permits one active lease per tenant. That lease supplies the owner, property and unit copied
-onto new tenant-account journal lines; create and update reject a second active lease, and the database
-enforces the same cardinality. Pending and ended leases remain available for future and historical
-records.
+A non-pending lease supplies the owner, property and unit copied onto a new tenant-account journal
+line when its inclusive term contains the event's accounting date. Lifecycle status alone is not the
+selector: an ended lease remains effective historically inside its term, while a future or expired
+active lease is not effective on the event date.
+
+Create, update and activation reject overlapping non-pending terms for the same tenant or unit, and
+PostgreSQL exclusion constraints enforce the same rule under concurrency. Pending terms may overlap
+until activation. Sequential records may both retain an `active` lifecycle status when their terms do
+not overlap.
 
 The property owner is then resolved for the event's accounting date from append-only ownership
 transitions. Recording a transfer changes the current Directory owner and hands off only security
@@ -231,7 +237,7 @@ transferred liability.
 Posted dimensions are immutable historical attribution. A later lease or directory change does not
 move an existing journal line to another owner or property. Simultaneous occupancies require distinct
 tenant accounts until Accounting has persisted per-lease receivable and liability allocation. See
-[ADR-035](adr/ADR-035-single-active-lease-financial-attribution.md) and
+[ADR-037](adr/ADR-037-effective-dated-lease-attribution.md) and
 [ADR-036](adr/ADR-036-effective-dated-property-ownership-transfer.md).
 
 ## Who did it
@@ -368,9 +374,9 @@ and inherited by all three.
 
 ### The three runs
 
-**Monthly rent charge run.** Charges rent for every active lease in the chosen period. Active leases
+**Monthly rent charge run.** Charges rent for every lease effective during the chosen period. Leases
 whose `StartDate` or `EndDate` falls mid-period are **prorated** by actual days occupied (ADR-017):
-daily rate = monthly rent ÷ actual days in month; charge = daily rate × days the lease is active in
+daily rate = monthly rent ÷ actual days in month; charge = daily rate × days the lease is effective in
 the period; half-up rounding to the cent. The run is idempotent: re-running a period marks
 already-charged leases as "already done" and posts only newly eligible ones — never double-charges.
 
@@ -482,7 +488,7 @@ of the M4 reconcile-to-$0 finalize and the M5 statement tie-out.
 Imported deposit liabilities post to `security_deposits_held` — a liability account — exactly as a
 live deposit collection does. They do not hit income. This is the same rule that governs deposits
 collected through the normal workflow: the money belongs to the tenant until it is applied at
-move-out. Import resolves the tenant's active imported lease and records its property and owner on
+move-out. Import resolves the tenant's imported lease effective on the cutover date and records its property and owner on
 the opening position, so a later property sale can hand off the exact liability. Importing from
 AppFolio does not change the classification.
 

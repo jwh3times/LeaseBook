@@ -20,6 +20,20 @@ _Avoid_: tenant, account, company, customer (when naming the isolation boundary)
 A person or named party responsible under a residential lease.
 _Avoid_: renter, resident, leaseholder
 
+**Lease lifecycle status**:
+The operational state of a lease as pending, active, or ended. It does not by itself determine whether
+the lease applies to a date.
+_Avoid_: lease effectiveness, current lease
+
+**Lease effective on a date**:
+A non-pending lease whose inclusive term contains the stated date. An ended lease remains effective
+historically within its term, while a future or expired active lease is not effective on that date.
+_Avoid_: active lease, current lease
+
+**Lease effective during a period**:
+A non-pending lease whose inclusive term overlaps the inclusive period.
+_Avoid_: active lease, lease active in the period
+
 ### Access planes
 
 Every piece of work in the system runs in exactly one access plane, and which one it is determines
@@ -111,7 +125,7 @@ prepayment.
 _Avoid_: collected rent, owner income received
 
 **Scheduled rent**:
-The rent-run billing amount for active leases whose terms overlap a calendar month, including the
+The rent-run billing amount for leases effective during a calendar month, including the
 same actual-days proration used by the rent run. It is a billing baseline, not a collection target or
 a denominator for tenant payments received.
 _Avoid_: collected target, expected collections
@@ -147,9 +161,9 @@ _Avoid_: beta group, segment, audience
 ### Receivables and delinquency
 
 **Tenant financial account**:
-The tenant-level receivable and liability relationship attributed through the tenant's one active
-lease to one unit, property and owner. A tenant may have pending and historical leases, but only the
-active lease supplies current financial attribution.
+The tenant-level receivable and liability relationship attributed through the lease effective on a
+financial event's accounting date to one unit, property and owner. Pending leases never supply
+financial attribution, and posted attribution remains historical.
 _Avoid_: renter balance (a balance is one figure within the account), occupancy account
 
 **Financial attribution**:

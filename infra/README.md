@@ -96,6 +96,13 @@ environment type cannot be changed in place.
 Dev stays public + firewall-gated (Allow Azure Services) so its CI migration job can reach the server
 from a GitHub-hosted runner.
 
+## PostgreSQL extensions
+
+`database.bicep` sets the Flexible Server `azure.extensions` allowlist to `pg_trgm,btree_gist` before
+the migrator runs. Directory search creates `pg_trgm`; the effective-dated lease constraints create
+`btree_gist` so PostgreSQL can combine organization/tenant/unit equality with date-range overlap in
+one exclusion constraint. Keep this allowlist synchronized with every `CREATE EXTENSION` migration.
+
 ## Production migrations
 
 A GitHub-hosted runner cannot reach a server with no public endpoint, so prod migrations do **not**
@@ -166,6 +173,7 @@ them will fail the build, and several fail silently at deploy and only surface l
 | **DNS resolves end to end** — the app resolves `lb-prod-pg.postgres.database.azure.com` to a private IP                                                                                      | Azure no longer validates VNet-link presence at server creation. A missing or wrong link is **silent** at deploy and fails at first connect.                                                                                                                                                       |
 | **The address plan does not overlap** anything the operator already runs                                                                                                                     | Compile has no view of existing networks, hubs, or VPNs.                                                                                                                                                                                                                                           |
 | **The migrator job's first execution** — image pull via AcrPull from inside the VNet, Key Vault reference resolution, and Postgres reachability                                              | Nothing has ever pushed a `leasebook-migrator` image or run this job.                                                                                                                                                                                                                              |
+| **The `azure.extensions` configuration accepts `pg_trgm,btree_gist` before migrations run**                                                                                                  | Bicep validates the resource shape but only the PostgreSQL resource provider confirms the server parameter and extension availability.                                                                                                                                                             |
 | **`az containerapp job start` returns a usable execution name**                                                                                                                              | `deploy-prod.yml` prefers the name the start prints and otherwise adopts the one execution that did not exist a moment earlier (a set difference, never "most recent"). Both halves are untested against the real CLI output.                                                                      |
 | **`:latest` does not exist in ACR** — no workflow ever pushes it; both `deploy-dev` and `deploy-prod` tag only by git SHA                                                                    | Both image tags default to `latest` in the template, so the first apply creates an app revision and two jobs pointing at a tag that is not there. Pass real tags to the first `az deployment sub create`, or accept that no image resolves until the first `deploy-prod` pins a SHA.               |
 | **The capabilities job's first execution** — the app image booting as a one-shot CLI, `ConnectionStrings__Default` resolving, and the verb reaching the platform tables under `app.platform` | Nothing has run the app image with a CLI verb in Azure. Run the bare (`capabilities list`) form first: it is read-only and proves pull, secret resolution and reachability in one go.                                                                                                              |

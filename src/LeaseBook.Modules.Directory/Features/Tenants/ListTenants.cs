@@ -14,7 +14,7 @@ public sealed record ListTenants(int? Page, int? PageSize, string? Q, string? So
 public sealed record TenantListRow(
     Guid Id, string DisplayName, string? UnitLabel, decimal Rent, decimal Balance, string Status);
 
-internal sealed class ListTenantsHandler(DbContext db, ITenantFinancials tenantFinancials)
+internal sealed class ListTenantsHandler(DbContext db, ITenantFinancials tenantFinancials, TimeProvider clock)
     : IQueryHandler<ListTenants, PagedResponse<TenantListRow>>
 {
     public async Task<PagedResponse<TenantListRow>> Handle(ListTenants query, CancellationToken ct)
@@ -41,7 +41,8 @@ internal sealed class ListTenantsHandler(DbContext db, ITenantFinancials tenantF
             .ToListAsync(ct);
         var ids = rows.Select(r => r.Id).ToList();
 
-        var leaseByTenant = await LeaseLookup.ActiveByTenantAsync(db, ids, ct);
+        var today = DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
+        var leaseByTenant = await LeaseLookup.EffectiveByTenantAsync(db, ids, today, ct);
         var balances = await tenantFinancials.BalancesAsync(ct);
 
         var items = rows.Select(r =>
@@ -56,18 +57,18 @@ internal sealed class ListTenantsHandler(DbContext db, ITenantFinancials tenantF
     }
 }
 
-/// <summary>Shared helper: each tenant's active lease projected to its unit label + rent.</summary>
+/// <summary>Shared helper: each tenant's date-effective lease projected to its unit label + rent.</summary>
 internal static class LeaseLookup
 {
-    public sealed record ActiveLease(Guid UnitId, string UnitLabel, decimal Rent);
+    public sealed record EffectiveLease(Guid UnitId, string UnitLabel, decimal Rent);
 
-    public static async Task<Dictionary<Guid, ActiveLease>> ActiveByTenantAsync(
-        DbContext db, IReadOnlyCollection<Guid> tenantIds, CancellationToken ct)
+    public static async Task<Dictionary<Guid, EffectiveLease>> EffectiveByTenantAsync(
+        DbContext db, IReadOnlyCollection<Guid> tenantIds, DateOnly date, CancellationToken ct)
     {
         var rows = await (
-            from l in db.Set<LeaseLite>().AsNoTracking()
+            from l in db.Set<LeaseLite>().AsNoTracking().EffectiveOn(date)
             join u in db.Set<Unit>().AsNoTracking() on l.UnitId equals u.Id
-            where tenantIds.Contains(l.TenantId) && l.Status == LeaseStatus.Active
+            where tenantIds.Contains(l.TenantId)
             select new { l.TenantId, l.UnitId, u.Label, l.Rent })
             .ToListAsync(ct);
 
@@ -76,7 +77,7 @@ internal static class LeaseLookup
             .ToDictionary(g => g.Key, g =>
             {
                 var x = g.First();
-                return new ActiveLease(x.UnitId, x.Label, x.Rent.Amount);
+                return new EffectiveLease(x.UnitId, x.Label, x.Rent.Amount);
             });
     }
 }

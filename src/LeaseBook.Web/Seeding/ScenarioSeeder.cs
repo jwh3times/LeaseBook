@@ -478,7 +478,8 @@ public static class ScenarioSeeder
         public async Task<TenantPostingDimensions> DimsAsync(
             Guid tenantId, DateOnly date, CancellationToken ct) =>
             await Dimensions.GetAsync(tenantId, date, ct)
-            ?? throw new InvalidOperationException($"Scenario seed: tenant {tenantId} has no active lease.");
+            ?? throw new InvalidOperationException(
+                $"Scenario seed: tenant {tenantId} has no lease effective on {date:yyyy-MM-dd}.");
     }
 
     /// <summary>
@@ -598,19 +599,20 @@ public static class ScenarioSeeder
             "Screen door recharge", "scenario:recharge:2026-05:t-s8"), ct);
         await PayAsync(ctx, "Silas Byrd", 95.00m, new(2026, 5, 21), "cash", ct, "recharge");
 
-        // T-S4 move-out disposition. The receivable is exactly the 677.42 proration (Mar/Apr paid
-        // in full), so against-charges consumes it to the cent; damages are unguarded by design;
-        // the refund empties the held deposit to exactly zero (I4 floor).
+        // T-S4 move-out disposition is dated on the inclusive final lease day. The receivable is
+        // exactly the 677.42 proration (Mar/Apr paid in full), so against-charges consumes it to the
+        // cent; damages are unguarded by design; the refund empties the held deposit to exactly zero
+        // (I4 floor). A later date would have no effective lease from which to derive attribution.
         var tS4 = ctx.Tenant("Priya Raman");
         await ctx.Sender.Send(new ApplyDeposit(
-            tS4, 677.42m, new(2026, 5, 16), DepositTrustId, OperatingTrustId,
+            tS4, 677.42m, new(2026, 5, 15), DepositTrustId, OperatingTrustId,
             "against-charges", "Move-out: final prorated rent", "scenario:depapply:charges:t-s4"), ct);
         await ctx.Sender.Send(new ApplyDeposit(
-            tS4, 300.00m, new(2026, 5, 16), DepositTrustId, OperatingTrustId,
+            tS4, 300.00m, new(2026, 5, 15), DepositTrustId, OperatingTrustId,
             "to-owner-income", "Move-out: carpet damage", "scenario:depapply:damages:t-s4"), ct);
-        var tS4Dims = await ctx.DimsAsync(tS4, new(2026, 5, 18), ct);
+        var tS4Dims = await ctx.DimsAsync(tS4, new(2026, 5, 15), ct);
         await ctx.Events.PostAsync(new RefundIssued(
-            tS4, new Money(422.58m), new(2026, 5, 18), DepositTrustId, RefundSource.Deposits,
+            tS4, new Money(422.58m), new(2026, 5, 15), DepositTrustId, RefundSource.Deposits,
             "Deposit refund check #2101 — Raman move-out", "scenario:refund:deposit:t-s4",
             tS4Dims.PropertyId, tS4Dims.OwnerId), ct);
 

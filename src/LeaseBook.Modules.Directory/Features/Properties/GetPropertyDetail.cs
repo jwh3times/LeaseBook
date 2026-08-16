@@ -17,11 +17,15 @@ public sealed record PropertyDetail(
     Guid OwnerId, string OwnerName, int? MgmtFeeBps,
     IReadOnlyList<UnitRow> Units, IReadOnlyList<TenantListRow> Tenants);
 
-internal sealed class GetPropertyDetailHandler(DbContext db, ITenantFinancials tenantFinancials)
+internal sealed class GetPropertyDetailHandler(
+    DbContext db,
+    ITenantFinancials tenantFinancials,
+    TimeProvider clock)
     : IQueryHandler<GetPropertyDetail, PropertyDetail?>
 {
     public async Task<PropertyDetail?> Handle(GetPropertyDetail query, CancellationToken ct)
     {
+        var today = DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
         var property = await db.Set<Property>().AsNoTracking()
             .NotSystem().FirstOrDefaultAsync(p => p.Id == query.Id, ct);
         if (property is null)
@@ -36,13 +40,13 @@ internal sealed class GetPropertyDetailHandler(DbContext db, ITenantFinancials t
             .Where(u => u.PropertyId == property.Id).OrderBy(u => u.Label).ToListAsync(ct);
         var unitRows = units.Select(UnitRow.From).ToList();
 
-        // The property's tenants: those with an active lease on one of this property's units.
+        // The property's tenants: those with a lease effective today on one of its units.
         var unitIds = units.Select(u => u.Id).ToList();
         var tenantRows = await (
-            from l in db.Set<LeaseLite>().AsNoTracking()
+            from l in db.Set<LeaseLite>().AsNoTracking().EffectiveOn(today)
             join t in db.Set<Tenant>().AsNoTracking().NotSystem() on l.TenantId equals t.Id
             join u in db.Set<Unit>().AsNoTracking() on l.UnitId equals u.Id
-            where unitIds.Contains(l.UnitId) && l.Status == LeaseStatus.Active
+            where unitIds.Contains(l.UnitId)
             select new { t.Id, t.DisplayName, t.Status, u.Label, l.Rent })
             .ToListAsync(ct);
 

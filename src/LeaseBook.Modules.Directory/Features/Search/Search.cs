@@ -21,12 +21,13 @@ public sealed class SearchValidator : AbstractValidator<Search>
     }
 }
 
-internal sealed class SearchHandler(DbContext db) : IQueryHandler<Search, IReadOnlyList<SearchResult>>
+internal sealed class SearchHandler(DbContext db, TimeProvider clock) : IQueryHandler<Search, IReadOnlyList<SearchResult>>
 {
     public async Task<IReadOnlyList<SearchResult>> Handle(Search query, CancellationToken ct)
     {
         var limit = Math.Clamp(query.Limit ?? 20, 1, 50);
         var q = query.Q.Trim();
+        var today = DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
 
         // word_similarity (the `<%` operator) finds the query as a fuzzy *substring/word* of the column —
         // so "carter" matches "Jasmine Carter" where whole-string `%` similarity would not. `<%` is
@@ -63,7 +64,11 @@ internal sealed class SearchHandler(DbContext db) : IQueryHandler<Search, IReadO
                 UNION ALL
                 SELECT 'tenant', t.id, t.display_name,
                        COALESCE((SELECT un.label FROM lease_lite l JOIN units un ON un.id = l.unit_id
-                                 WHERE l.tenant_id = t.id AND l.status = 'active' LIMIT 1), ''),
+                                 WHERE l.tenant_id = t.id
+                                   AND l.status <> 'pending'
+                                   AND (l.start_date IS NULL OR l.start_date <= {today})
+                                   AND (l.end_date IS NULL OR l.end_date >= {today})
+                                 LIMIT 1), ''),
                        word_similarity({q}, t.display_name)::float8
                 FROM tenants t
                 WHERE NOT t.is_system AND {q} <% t.display_name

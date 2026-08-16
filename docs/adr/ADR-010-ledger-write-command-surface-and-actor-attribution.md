@@ -1,6 +1,6 @@
 # ADR-010: Ledger write commands wrap the engine; the actor is attributed at the seam
 
-- **Status:** Accepted
+- **Status:** Accepted (amended by ADR-037)
 - **Date:** 2026-06-13
 - **Deciders:** Engineering
 
@@ -33,10 +33,11 @@ Two anti-patterns to avoid:
   (a) resolves the tenant's `(ownerId, propertyId, unitId)`, (b) constructs the matching business-event
   record, and (c) dispatches `IAccountingEvents.PostAsync` / `IReversalService.ReverseAsync`. No command
   constructs a `JournalEntry`/`JournalLine`; the posting service stays the sole write path.
-- **Posting dimensions are resolved server-side** from the tenant's active lease through a
+- **Posting dimensions are resolved server-side** from the tenant's lease effective on the
+  command's accounting date through a
   consumer-owned port `Accounting.Contracts.ITenantPostingDimensions` + a host adapter that delegates to
   a Directory query (ADR-007). The request body carries only the tenant id + amount/date/method/bank. A
-  tenant with no active lease is rejected (a validation failure), never defaulted.
+  tenant with no lease effective on that date is rejected (a validation failure), never defaulted.
 - Endpoints are minimal-API, `RequirePMStaff` (money entry is staff-level; only _settings_ writes are
   admin), thin (bind → dispatch → `TypedResults`), and let the M1 `AccountingExceptionHandler` map
   domain rejections to 422/409. Each submit carries a client-minted `sourceRef` idempotency key, so a
@@ -69,5 +70,5 @@ added.
 
 When the org-aware composite `(org_id, id)` FK rework lands (M4) the posting path and harness reopen;
 re-confirm the command layer and actor stamping still ride a single write path. If a future write needs
-dimensions that aren't on the active lease (e.g. historical re-postings), revisit the
+dimensions that aren't on the lease effective on the accounting date, revisit the
 `ITenantPostingDimensions` contract rather than letting the client supply them.

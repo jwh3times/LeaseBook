@@ -23,17 +23,18 @@ public sealed record RentRollResponse(IReadOnlyList<RentRollRow> Rows);
 /// <param name="Status">Unit status as a lowercase string (e.g. "occupied", "vacant", "unavailable").</param>
 public sealed record RentRollRow(Guid UnitId, string Property, string? Tenant, decimal Rent, string Status);
 
-internal sealed class GetRentRollHandler(DbContext db) : IQueryHandler<GetRentRoll, RentRollResponse>
+internal sealed class GetRentRollHandler(DbContext db, TimeProvider clock) : IQueryHandler<GetRentRoll, RentRollResponse>
 {
     public async Task<RentRollResponse> Handle(GetRentRoll query, CancellationToken ct)
     {
-        // Left-join unit → active lease → tenant. Non-system units/properties only:
+        var today = DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
+
+        // Left-join unit → lease effective today → tenant. Non-system units/properties only:
         // NotSystem() applied to Unit, Property, and Tenant queryables.
         var rows = await (
             from u in db.Set<Unit>().AsNoTracking().NotSystem()
             join p in db.Set<Property>().AsNoTracking().NotSystem() on u.PropertyId equals p.Id
-            join l in db.Set<LeaseLite>().AsNoTracking()
-                            .Where(l => l.Status == LeaseStatus.Active)
+            join l in db.Set<LeaseLite>().AsNoTracking().EffectiveOn(today)
                         on u.Id equals l.UnitId into leases
             from l in leases.DefaultIfEmpty()
             join t in db.Set<Tenant>().AsNoTracking().NotSystem()

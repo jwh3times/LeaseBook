@@ -4,6 +4,8 @@ using LeaseBook.Modules.Directory.Domain;
 using LeaseBook.Modules.Directory.Features.Leases;
 using LeaseBook.Modules.Directory.Features.Owners;
 using LeaseBook.Modules.Directory.Features.Properties;
+using LeaseBook.Modules.Directory.Features.Reporting;
+using LeaseBook.Modules.Directory.Features.Search;
 using LeaseBook.Modules.Directory.Features.Tenants;
 using LeaseBook.Modules.Directory.Features.Units;
 using LeaseBook.SharedKernel;
@@ -60,7 +62,14 @@ public sealed class DirectoryTests(PostgresFixture fixture)
             propertyId = await s.Send(new CreateProperty(ownerId, "412 Oakmont Ave", "Asheville", "NC", "28801", null), ct);
             unitId = await s.Send(new CreateUnit(propertyId, "#2B", 1450m, "occupied"), ct);
             tenantId = await s.Send(new CreateTenant("Jasmine Carter", null, null, "current"), ct);
-            await s.Send(new CreateLease(tenantId, unitId, new DateOnly(2025, 6, 1), new DateOnly(2026, 5, 31), 1450m, 1450m, "active"), ct);
+            await s.Send(new CreateLease(
+                tenantId,
+                unitId,
+                new DateOnly(2025, 6, 1),
+                DateOnly.FromDateTime(DateTime.UtcNow).AddYears(1),
+                1450m,
+                1450m,
+                "active"), ct);
 
             // Hand-post one rent charge through the engine so the tenant nets 1450 (no payment).
             await sp.GetRequiredService<IChartOfAccounts>().ProvisionAsync([], ct);
@@ -83,6 +92,90 @@ public sealed class DirectoryTests(PostgresFixture fixture)
         detail.OwnerName.ShouldBe("Owner");
         detail.Lease.ShouldNotBeNull();
         detail.Lease.Rent.ShouldBe(1450m);
+    }
+
+    [Fact]
+    public async Task Tenant_detail_does_not_present_a_future_active_lease_as_current()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var orgId = await NewOrgAsync(ct);
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+
+        Guid propertyId = default;
+        Guid tenantId = default;
+        await DispatchScopeAsync(orgId, async (s, _) =>
+        {
+            var ownerId = await s.Send(new CreateOwner("Future Owner", null, null, null, 800, 0m), ct);
+            propertyId = await s.Send(
+                new CreateProperty(ownerId, "14 Tomorrow Lane", "Raleigh", "NC", null, null), ct);
+            var unitId = await s.Send(new CreateUnit(propertyId, "1", 1200m, "vacant"), ct);
+            tenantId = await s.Send(new CreateTenant("Future Resident", null, null, "current"), ct);
+            await s.Send(new CreateLease(
+                tenantId,
+                unitId,
+                today.AddDays(30),
+                today.AddYears(1),
+                1200m,
+                1200m,
+                "active"), ct);
+        }, ct);
+
+        var detail = await DispatchAsync(orgId, (s, c) => s.Query(new GetTenantDetail(tenantId), c), ct);
+
+        detail.ShouldNotBeNull();
+        detail.Lease.ShouldBeNull();
+        detail.UnitLabel.ShouldBeNull();
+        detail.PropertyAddress.ShouldBeNull();
+        detail.OwnerId.ShouldBeNull();
+
+        var tenants = await DispatchAsync(orgId, (s, c) => s.Query(new ListTenants(null, null, null, null), c), ct);
+        var tenant = tenants.Items.ShouldHaveSingleItem();
+        tenant.UnitLabel.ShouldBeNull();
+        tenant.Rent.ShouldBe(0m);
+
+        var property = await DispatchAsync(orgId, (s, c) => s.Query(new GetPropertyDetail(propertyId), c), ct);
+        property.ShouldNotBeNull();
+        property.Tenants.ShouldBeEmpty();
+
+        var rentRoll = await DispatchAsync(orgId, (s, c) => s.Query(new GetRentRoll(), c), ct);
+        var unit = rentRoll.Rows.ShouldHaveSingleItem();
+        unit.Tenant.ShouldBeNull();
+        unit.Rent.ShouldBe(1200m);
+
+        var search = await DispatchAsync(orgId, (s, c) => s.Query(new Search("Future Resident", null), c), ct);
+        search.Single(result => result.Type == "tenant").Sublabel.ShouldBe("");
+    }
+
+    [Fact]
+    public async Task Lease_schedule_includes_an_ended_lease_that_was_effective_during_the_period()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var orgId = await NewOrgAsync(ct);
+
+        Guid leaseId = default;
+        await DispatchScopeAsync(orgId, async (s, _) =>
+        {
+            var ownerId = await s.Send(new CreateOwner("Historical Owner", null, null, null, 800, 0m), ct);
+            var propertyId = await s.Send(
+                new CreateProperty(ownerId, "15 Yesterday Lane", "Raleigh", "NC", null, null), ct);
+            var unitId = await s.Send(new CreateUnit(propertyId, "2", 1300m, "vacant"), ct);
+            var tenantId = await s.Send(new CreateTenant("Former Resident", null, null, "past"), ct);
+            leaseId = await s.Send(new CreateLease(
+                tenantId,
+                unitId,
+                new DateOnly(2026, 1, 1),
+                new DateOnly(2026, 6, 30),
+                1300m,
+                1300m,
+                "ended"), ct);
+        }, ct);
+
+        var schedule = await DispatchAsync(
+            orgId,
+            (s, c) => s.Query(new GetActiveLeaseSchedule(2026, 5), c),
+            ct);
+
+        schedule.Rows.ShouldHaveSingleItem().LeaseId.ShouldBe(leaseId);
     }
 
     [Fact]
