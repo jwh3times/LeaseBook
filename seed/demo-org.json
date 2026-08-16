@@ -9,7 +9,7 @@
     "owners": 8
   },
   "banks": [
-    { "id": "oper", "name": "Operating Trust", "bank": "First Citizens", "mask": "4021", "book": 248930.14, "cleared": 254300.14, "uncleared": 5370.00, "unclearedN": 3, "type": "trust" },
+    { "id": "oper", "name": "Operating Trust", "bank": "First Citizens", "mask": "4021", "book": 248930.14, "cleared": 254300.14, "uncleared": -5370.00, "unclearedN": 3, "type": "trust" },
     { "id": "dep", "name": "Security Deposit Trust", "bank": "First Citizens", "mask": "8847", "book": 196450.00, "cleared": 196450.00, "uncleared": 0, "unclearedN": 0, "type": "deposit" },
     { "id": "mgmt", "name": "PM Operating", "bank": "Wells Fargo", "mask": "1190", "book": 38240.55, "type": "operating" }
   ],

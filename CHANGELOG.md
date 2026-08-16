@@ -20,6 +20,20 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Changed
 
+- _Nothing yet._
+
+### Fixed
+
+- _Nothing yet._
+
+### Security
+
+- _Nothing yet._
+
+## [0.5.0] - 2026-08-16
+
+### Changed
+
 - **Unambiguous organization and tenant language** — Public documentation and operator diagnostics
   now call the property-management company and RLS isolation boundary an organization, while tenant
   is reserved for the person or named party responsible under a residential lease. Single-organization
@@ -34,11 +48,12 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Fixed
 
-- _Nothing yet._
-
-### Security
-
-- _Nothing yet._
+- **Canonical dashboard financial metrics** — The dashboard trust total and account panel now exclude
+  PM operating cash; available-to-disburse applies each owner's management fee and reserve floor;
+  tenant payments are counted from `PaymentReceived` cash events rather than every owner-equity
+  credit; and scheduled rent is shown separately as a prorated billing baseline instead of a
+  collection-rate denominator. Owner contributions no longer inflate receipts, while payments of
+  prior-period charges count in the month received.
 
 ## [0.4.0] - 2026-08-13
 
@@ -474,7 +489,8 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.5.0
 [0.4.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.4.0
 [0.3.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.3.0
 [0.2.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.2.0
