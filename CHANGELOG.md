@@ -30,6 +30,19 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 - _Nothing yet._
 
+## [0.6.0] - 2026-08-16
+
+### Changed
+
+- **Effective-dated lease attribution** — Tenant money commands now derive owner, property and unit
+  dimensions from the non-pending lease whose inclusive term contains the command's accounting date.
+  Backdated activity can therefore use an ended historical lease, while future and expired active
+  rows can no longer supply today's posting or Directory context. Current Directory views use the
+  UTC date, and rent scheduling uses the selected period. Non-pending lease terms may not overlap for
+  the same tenant or unit; command validation and PostgreSQL exclusion constraints enforce the rule,
+  while pending terms may overlap until activation. See
+  [ADR-037](docs/adr/ADR-037-effective-dated-lease-attribution.md).
+
 ## [0.5.0] - 2026-08-16
 
 ### Changed
@@ -489,7 +502,8 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.6.0
 [0.5.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.5.0
 [0.4.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.4.0
 [0.3.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.3.0
