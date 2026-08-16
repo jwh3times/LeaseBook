@@ -83,9 +83,10 @@ public sealed class DisbursementRunStrategy(
         foreach (var owner in owners)
         {
             var equity = equityMap.GetValueOrDefault(owner.OwnerId, 0m);
-            var fee = MgmtFee.Compute(equity, owner.DefaultMgmtFeeBps);
-            var netBeforeReserve = equity - fee;
-            var disburse = netBeforeReserve - owner.ReserveAmount;
+            var amounts = DisbursementAmounts.Compute(equity, owner.DefaultMgmtFeeBps, owner.ReserveAmount);
+            var fee = amounts.Fee;
+            var netBeforeReserve = amounts.NetBeforeReserve;
+            var disburse = amounts.AfterReserve;
             var disburseKey = DisburseSourceRef(period, owner.OwnerId);
             var alreadyDone = alreadyPosted.Contains(disburseKey);
 
@@ -157,9 +158,10 @@ public sealed class DisbursementRunStrategy(
             }
 
             var equity = equityMap.GetValueOrDefault(ownerId, 0m);
-            var fee = MgmtFee.Compute(equity, owner.DefaultMgmtFeeBps);
-            var netBeforeReserve = equity - fee;
-            var disburse = netBeforeReserve - owner.ReserveAmount;
+            var amounts = DisbursementAmounts.Compute(equity, owner.DefaultMgmtFeeBps, owner.ReserveAmount);
+            var fee = amounts.Fee;
+            var netBeforeReserve = amounts.NetBeforeReserve;
+            var disburse = amounts.AfterReserve;
 
             if (equity <= 0m)
             {

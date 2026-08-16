@@ -8,7 +8,14 @@ public sealed record GetBankBalances : IQuery<BankBalancesResponse>;
 
 public sealed record BankBalancesResponse(IReadOnlyList<BankBalanceRow> Rows);
 
-public sealed record BankBalanceRow(Guid BankAccountId, string Name, decimal Book, decimal Cleared, decimal Uncleared, int UnclearedCount);
+public sealed record BankBalanceRow(
+    Guid BankAccountId,
+    string Name,
+    decimal Book,
+    decimal Cleared,
+    decimal Uncleared,
+    int UnclearedCount,
+    bool IsTrust);
 
 internal sealed class GetBankBalancesHandler(DbContext db) : IQueryHandler<GetBankBalances, BankBalancesResponse>
 {
@@ -23,6 +30,7 @@ internal sealed class GetBankBalancesHandler(DbContext db) : IQueryHandler<GetBa
             $"""
             SELECT a.bank_account_id,
                    a.name,
+                   a.class = 'trust_bank' AS is_trust,
                    COALESCE(SUM(COALESCE(jl.debit, 0) - COALESCE(jl.credit, 0))
                             FILTER (WHERE jl.basis IN ('cash', 'both')), 0) AS book,
                    COALESCE(SUM(COALESCE(jl.debit, 0) - COALESCE(jl.credit, 0))
@@ -34,16 +42,29 @@ internal sealed class GetBankBalancesHandler(DbContext db) : IQueryHandler<GetBa
             LEFT JOIN journal_lines jl ON jl.account_id = a.id
             LEFT JOIN bank_line_status s ON s.journal_line_id = jl.id
             WHERE a.class IN ('trust_bank', 'pm_operating_bank')
-            GROUP BY a.bank_account_id, a.name
+            GROUP BY a.bank_account_id, a.name, a.class
             ORDER BY a.name
             """).ToListAsync(ct);
 
         var mapped = rows
-            .Select(r => new BankBalanceRow(r.BankAccountId, r.Name, r.Book, r.Cleared, r.Book - r.Cleared, r.UnclearedCount))
+            .Select(r => new BankBalanceRow(
+                r.BankAccountId,
+                r.Name,
+                r.Book,
+                r.Cleared,
+                r.Book - r.Cleared,
+                r.UnclearedCount,
+                r.IsTrust))
             .ToList();
 
         return new BankBalancesResponse(mapped);
     }
 
-    private sealed record BankBalanceSqlRow(Guid BankAccountId, string Name, decimal Book, decimal Cleared, int UnclearedCount);
+    private sealed record BankBalanceSqlRow(
+        Guid BankAccountId,
+        string Name,
+        bool IsTrust,
+        decimal Book,
+        decimal Cleared,
+        int UnclearedCount);
 }

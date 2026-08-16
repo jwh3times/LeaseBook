@@ -117,7 +117,8 @@ public sealed class GoldenFileTests(PostgresFixture fixture)
         banks.Rows.Single(r => r.BankAccountId == DemoIds.OperBank).Book.ShouldBe(248_930.14m);
         banks.Rows.Single(r => r.BankAccountId == DemoIds.DepositBank).Book.ShouldBe(196_450.00m);
         banks.Rows.Single(r => r.BankAccountId == DemoIds.MgmtBank).Book.ShouldBe(38_240.55m);
-        banks.Rows.Sum(r => r.Book).ShouldBe(483_620.69m); // kpis.trustTotal
+        banks.Rows.Where(r => r.IsTrust).Sum(r => r.Book).ShouldBe(445_380.14m); // dashboard trust total
+        banks.Rows.Single(r => r.BankAccountId == DemoIds.MgmtBank).IsTrust.ShouldBeFalse();
 
         // P72: the seed's clearance mix reproduces the prototype register — Operating Trust has 3 uncleared
         // items (the −8,200 owner disbursement + a 1,380 + a 1,450 deposit, net −5,370), so cleared > book;

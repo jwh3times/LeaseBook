@@ -79,6 +79,38 @@ public sealed class ReadModelTests(PostgresFixture fixture)
         bOwners.Rows.ShouldBeEmpty(); // none of A's owner rows leak into B
     }
 
+    [Fact]
+    public async Task Tenant_payments_use_receipt_events_not_owner_equity_credits()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var scope = await ProvisionedScopeAsync(
+            fixture, ct, owners: [Owner], tenants: [Tenant], properties: [Property]);
+
+        await scope.RunAsync(async () =>
+        {
+            var events = Events(scope);
+            // The obligation belongs to May; the cash receipt belongs to June.
+            await events.PostAsync(new RentCharged(
+                Tenant, Property, Owner, null, new Money(1_450m),
+                new DateOnly(2026, 5, 1), "May rent"), ct);
+            await events.PostAsync(new OwnerContribution(
+                Owner, Property, new Money(1_000m),
+                new DateOnly(2026, 6, 2), scope.TrustBankId, "Owner funding"), ct);
+            await events.PostAsync(new PaymentReceived(
+                Tenant, Property, Owner, new Money(1_450m),
+                new DateOnly(2026, 6, 3), PaymentMethod.Ach, scope.TrustBankId, "May rent paid"), ct);
+        }, ct);
+
+        var received = await Query(
+            scope,
+            new GetTenantPaymentsReceivedHandler(scope.Db),
+            new GetTenantPaymentsReceived(2026, 6),
+            ct);
+
+        received.ShouldBe(1_450m,
+            "the June payment counts when cash was received; the owner contribution does not");
+    }
+
     private async Task PostScenarioAsync(OrgScope scope, CancellationToken ct)
     {
         await scope.RunAsync(async () =>

@@ -1,16 +1,6 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router';
-import {
-  Badge,
-  Button,
-  Card,
-  CardHeader,
-  EmptyState,
-  Icon,
-  Money,
-  ProgressBar,
-  StatCard,
-} from '@/design';
+import { Badge, Button, Card, CardHeader, EmptyState, Icon, Money, StatCard } from '@/design';
 import { num } from '@/lib/directory';
 import { useDashboard, type DashboardResponse } from '@/lib/dashboard';
 import { trackInteraction } from '@/lib/telemetry';
@@ -61,11 +51,6 @@ export function DashboardPage() {
   }
 
   const d = query.data;
-  const collectedPct =
-    num(d.kpis.collectedTarget) > 0
-      ? (num(d.kpis.collectedMtd) / num(d.kpis.collectedTarget)) * 100
-      : 0;
-
   return (
     <div className="pf-fade">
       <div className="pf-pagehd">
@@ -100,12 +85,12 @@ export function DashboardPage() {
         <StatCard
           label="Trust total"
           value={<Money value={num(d.kpis.trustTotal)} big />}
-          sub="Across all trust bank books"
+          sub="Fiduciary cash across trust bank books"
         />
         <StatCard
-          label="Owners payable"
-          value={<Money value={num(d.kpis.ownersPayable)} big />}
-          sub="Disbursable this cycle"
+          label="Available to disburse"
+          value={<Money value={num(d.kpis.availableToDisburse)} big />}
+          sub="After management fees and reserve floors"
         />
         <StatCard
           label="Uncleared"
@@ -119,17 +104,13 @@ export function DashboardPage() {
           }
         />
         <StatCard
-          label="Collected this month"
-          value={
-            <div className="col gap8" style={{ width: '100%' }}>
-              <span>
-                <Money value={num(d.kpis.collectedMtd)} />{' '}
-                <span className="t3 fs13">
-                  of <Money value={num(d.kpis.collectedTarget)} />
-                </span>
-              </span>
-              <ProgressBar pct={collectedPct} tone="pos" label="Rent collection progress" />
-            </div>
+          label="Tenant payments received"
+          value={<Money value={num(d.kpis.tenantPaymentsMtd)} big />}
+          sub={
+            <span>
+              This month · scheduled rent <Money value={num(d.kpis.scheduledRent)} /> (billing
+              baseline)
+            </span>
           }
         />
       </div>

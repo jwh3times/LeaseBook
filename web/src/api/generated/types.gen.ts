@@ -82,6 +82,7 @@ export type BankBalanceRow = {
     cleared: number | string;
     uncleared: number | string;
     unclearedCount: number | string;
+    isTrust: boolean;
 };
 
 export type BankBalancesResponse = {
@@ -254,11 +255,11 @@ export type DashboardBankRow = {
 
 export type DashboardKpis = {
     trustTotal: number | string;
-    ownersPayable: number | string;
+    availableToDisburse: number | string;
     uncleared: number | string;
     unclearedCount: number | string;
-    collectedMtd: number | string;
-    collectedTarget: number | string;
+    tenantPaymentsMtd: number | string;
+    scheduledRent: number | string;
     vacancy: number | string;
 };
 

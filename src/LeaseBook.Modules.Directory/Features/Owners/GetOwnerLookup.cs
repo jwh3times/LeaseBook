@@ -8,7 +8,7 @@ namespace LeaseBook.Modules.Directory.Features.Owners;
 /// A lightweight id → (name, isSystem) lookup over <b>all</b> owners (system rows included). Unlike
 /// <c>ListOwners</c> it does not exclude system rows — the dashboard composer (WP-05) needs them so it can
 /// name the hero rows and identify the <c>AggregateOwners</c> roll-up to relabel "All other owners" (P40)
-/// and exclude it from <c>ownersPayable</c> (P41).
+/// and keep it out of non-system owner policies such as available-to-disburse (P41).
 /// </summary>
 public sealed record GetOwnerLookup : IQuery<IReadOnlyList<OwnerLookupRow>>;
 

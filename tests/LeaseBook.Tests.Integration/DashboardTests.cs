@@ -1,4 +1,5 @@
 using LeaseBook.Modules.Accounting.Features.Ledgers;
+using LeaseBook.Modules.Operations.Features.Dashboard;
 using LeaseBook.SharedKernel;
 using LeaseBook.SharedKernel.Cqrs;
 using LeaseBook.SharedKernel.Tenancy;
@@ -15,17 +16,14 @@ namespace LeaseBook.Tests.Integration;
 
 /// <summary>
 /// WP-05: the host-composed dashboard. Against the seeded demo org the KPIs reconcile to the M1 golden
-/// figures (trustTotal 483,620.69; ownersPayable is the P41 computed value, not the prototype's noise),
+/// figures (trustTotal excludes PM operating cash; available-to-disburse follows the Operations
+/// fee-then-reserve policy),
 /// the hero is named with the relabeled roll-up and ties to the bank total, and a second org sees none of
-/// it. <c>collectedMtd</c> is pinned with a fixed clock (June 2026).
+/// it. Tenant payments received are pinned with a fixed clock (June 2026).
 /// </summary>
 [Collection(nameof(DatabaseCollection))]
 public sealed class DashboardTests(PostgresFixture fixture)
 {
-    // P41 canonical figure: Σ max(0, operating) over the 8 non-system owners (o4's −420 → 0; the
-    // AggregateOwners roll-up excluded). Replaces the prototype's 132,447.00 (m1 §C.9 #6).
-    private const decimal OwnersPayable = 111_967.40m;
-
     [Fact]
     public async Task Dashboard_reconciles_to_the_golden_figures_with_a_named_hero()
     {
@@ -36,28 +34,35 @@ public sealed class DashboardTests(PostgresFixture fixture)
         await using var scope = fixture.Api.Services.CreateAsyncScope();
         var executor = scope.ServiceProvider.GetRequiredService<OrgScopedExecutor>();
         var sender = scope.ServiceProvider.GetRequiredService<ISender>();
-        var service = new DashboardService(sender, new FixedClock(new DateTimeOffset(2026, 6, 15, 0, 0, 0, TimeSpan.Zero)));
+        var service = new DashboardService(
+            sender,
+            new FixedClock(new DateTimeOffset(2026, 6, 15, 0, 0, 0, TimeSpan.Zero)),
+            scope.ServiceProvider.GetRequiredService<DashboardMetricsService>());
 
         DashboardResponse dash = null!;
         await executor.RunAsSystemAsync(DemoSeeder.DemoOrgId, "test-harness", async () => dash = await service.ComposeAsync(ct), ct);
 
-        dash.Kpis.TrustTotal.ShouldBe(483_620.69m);
-        dash.Kpis.OwnersPayable.ShouldBe(OwnersPayable);
-        dash.Kpis.CollectedMtd.ShouldBe(1_380m);   // June 2026: only the Pryor payment is cash-collected
+        // Fiduciary cash only: Operating Trust + Security Deposit Trust. PM Operating's $38,240.55
+        // belongs to the management company and must not inflate the trust position.
+        dash.Kpis.TrustTotal.ShouldBe(445_380.14m);
+        dash.Kpis.AvailableToDisburse.ShouldBe(103_010.01m);
+        dash.Kpis.TenantPaymentsMtd.ShouldBe(1_380m); // June receipt, regardless of the charge period
+        dash.Kpis.ScheduledRent.ShouldBe(10_855m);    // June billing baseline, not a receipt denominator
 
         // The KPI is the honest sum across bank accounts (not hardcoded) — proven structurally via a
         // sibling GetBankBalances query (DashboardBankRow carries UnclearedCount, not Uncleared dollar net).
         BankBalancesResponse bal = null!;
         await executor.RunAsSystemAsync(DemoSeeder.DemoOrgId, "test-harness",
             async () => bal = await sender.Query(new GetBankBalances(), ct), ct);
-        dash.Kpis.Uncleared.ShouldBe(bal.Rows.Sum(r => r.Uncleared));
-        dash.Kpis.UnclearedCount.ShouldBe(bal.Rows.Sum(r => r.UnclearedCount));
+        dash.Kpis.Uncleared.ShouldBe(bal.Rows.Where(r => r.IsTrust).Sum(r => r.Uncleared));
+        dash.Kpis.UnclearedCount.ShouldBe(bal.Rows.Where(r => r.IsTrust).Sum(r => r.UnclearedCount));
         // Golden-locked: Operating Trust has 3 uncleared items; the dashboard surfaces a non-zero total now.
         dash.Banks.Rows.Single(b => b.Name == "Operating Trust").UnclearedCount.ShouldBe(3);
         dash.Kpis.UnclearedCount.ShouldBeGreaterThan(0);
 
-        // The banks shown sum to the trustTotal KPI (the hero ties to trustTotal).
+        // The fiduciary banks shown sum to the trustTotal KPI; PM operating is deliberately absent.
         dash.Banks.Rows.Sum(b => b.Book).ShouldBe(dash.Kpis.TrustTotal);
+        dash.Banks.Rows.ShouldNotContain(b => b.Name == "PM Operating");
 
         // Hero: 8 named owners + the "All other owners" roll-up, relabeled and flagged.
         dash.OwnerBalances.Rows.Count.ShouldBe(9);
@@ -82,7 +87,7 @@ public sealed class DashboardTests(PostgresFixture fixture)
         var dash = await ComposeAsync(otherOrg, ct);
 
         dash.Kpis.TrustTotal.ShouldBe(0m);
-        dash.Kpis.OwnersPayable.ShouldBe(0m);
+        dash.Kpis.AvailableToDisburse.ShouldBe(0m);
         dash.OwnerBalances.Rows.ShouldBeEmpty();
         dash.Banks.Rows.ShouldBeEmpty();
     }
@@ -92,7 +97,10 @@ public sealed class DashboardTests(PostgresFixture fixture)
         await using var scope = fixture.Api.Services.CreateAsyncScope();
         var executor = scope.ServiceProvider.GetRequiredService<OrgScopedExecutor>();
         var sender = scope.ServiceProvider.GetRequiredService<ISender>();
-        var service = new DashboardService(sender, new FixedClock(new DateTimeOffset(2026, 6, 15, 0, 0, 0, TimeSpan.Zero)));
+        var service = new DashboardService(
+            sender,
+            new FixedClock(new DateTimeOffset(2026, 6, 15, 0, 0, 0, TimeSpan.Zero)),
+            scope.ServiceProvider.GetRequiredService<DashboardMetricsService>());
 
         DashboardResponse dash = null!;
         await executor.RunAsSystemAsync(orgId, "test-harness", async () => dash = await service.ComposeAsync(ct), ct);

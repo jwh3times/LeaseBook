@@ -19,11 +19,11 @@ test('login lands on the dashboard with owner balances visible at 0 clicks', asy
   await expect(page.getByText('Owner ending balances')).toBeVisible();
   await expect(page.getByText('Hargrove Family Trust')).toBeVisible();
   // Visual regression (CI-only): flagship dashboard + the KPI strip. Mask the wall-clock-relative
-  // "Collected this month" card (DashboardService computes it from `now`).
-  const collectedCard = page.locator('.pf-card').filter({ hasText: 'Collected this month' });
-  await visualSnapshot(page, 'dashboard-full.png', { fullPage: true, mask: [collectedCard] });
+  // Tenant payments received is wall-clock-relative (DashboardService computes it from `now`).
+  const paymentsCard = page.locator('.pf-card').filter({ hasText: 'Tenant payments received' });
+  await visualSnapshot(page, 'dashboard-full.png', { fullPage: true, mask: [paymentsCard] });
   await visualSnapshot(page.locator('.pf-statgrid').first(), 'dashboard-kpi-strip.png', {
-    mask: [collectedCard],
+    mask: [paymentsCard],
   });
 });
 
@@ -38,8 +38,8 @@ test('dashboard renders the flagship layout in the dark theme', async ({ page })
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   await expect(page.getByText('Owner ending balances')).toBeVisible();
   await expect(page.getByText('Hargrove Family Trust')).toBeVisible();
-  const collectedCard = page.locator('.pf-card').filter({ hasText: 'Collected this month' });
-  await visualSnapshot(page, 'dashboard-full-dark.png', { fullPage: true, mask: [collectedCard] });
+  const paymentsCard = page.locator('.pf-card').filter({ hasText: 'Tenant payments received' });
+  await visualSnapshot(page, 'dashboard-full-dark.png', { fullPage: true, mask: [paymentsCard] });
 });
 
 test('⌘K jumps to any tenant in ≤ 2 interactions', async ({ page }) => {

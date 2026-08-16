@@ -3,7 +3,7 @@
 - **Audience:** Contributors, operators, and reviewers
 - **Status:** Living accounting guide
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-08-13
+- **Last reviewed:** 2026-08-16
 
 This is the canonical public explanation of the shipped trust-accounting model, written so a
 property manager, bookkeeper, or attorney can evaluate it without reading C#. The Accounting module
@@ -54,6 +54,28 @@ The generic label is never **trust bank accounts**, because that would incorrect
 operating account. Likewise, **operating account** is not shorthand for the operating trust account:
 the unqualified phrase can be mistaken for the PM operating account. Bank purpose cannot be changed
 after creation because changing it would move an existing account across the fiduciary boundary.
+
+### Dashboard figures keep unlike money separate
+
+The dashboard uses four deliberately narrow financial terms:
+
+- **Trust total** sums only the cash-basis book balances of `trust_bank` accounts. The PM operating
+  account is company cash outside the fiduciary boundary and is excluded from both the total and the
+  dashboard's trust-account panel.
+- **Owner operating balance** is cash-basis owner equity before a prospective fee or reserve. It is
+  shown in the owner table, but it is not called payable or available for disbursement.
+- **Available to disburse** applies the same per-owner policy as the disbursement run: compute the
+  management fee on current cash-basis owner equity, subtract it, retain the configured reserve, and
+  include only a positive remainder. The dashboard sums those per-owner results.
+- **Tenant payments received** is the net trust-bank cash movement from `PaymentReceived` events in
+  the calendar month. A payment counts in the month received even when it settles a prior-month
+  charge; owner contributions and other owner-equity credits do not count. Because one payment may
+  settle rent, fees, or an excess prepayment, the product does not relabel this figure “rent
+  collected.”
+
+**Scheduled rent** is shown separately: it is the month's rent-run billing amount for overlapping
+active lease terms, with the rent run's actual-days proration. It is a billing baseline, not a
+collection target and not the denominator of a collection percentage.
 
 ## Two bases, one set of books
 

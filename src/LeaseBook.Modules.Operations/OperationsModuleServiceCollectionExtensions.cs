@@ -1,3 +1,4 @@
+using LeaseBook.Modules.Operations.Features.Dashboard;
 using LeaseBook.Modules.Operations.Runs;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -16,6 +17,7 @@ public static class OperationsModuleServiceCollectionExtensions
         // Core run engine: resolves strategies keyed by RunType.
         services.AddScoped<IRunPeriodLock, RunPeriodLock>();
         services.AddScoped<RunEngine>();
+        services.AddScoped<DashboardMetricsService>();
 
         // WP-2: Rent charge run + proration (ADR-017 / ADR-019).
         services.AddScoped<IRunStrategy, RentRunStrategy>();
