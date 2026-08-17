@@ -23,6 +23,20 @@ updates:
     commit-message:
       prefix: "build(deps)"
     groups:
+      # --- Peer-locked families — majors only. All minor/patch bumps land in the
+      #     catch-all group at the bottom. ---
+
+      # The xunit.v3 packages ship as one release train and pin each other to an exact
+      # version: xunit.v3.mtp-v2's transitives require `xunit.v3.extensibility.core (= X)`
+      # and `xunit.v3.common (= X)`. Bumping one alone fails restore with NU1608
+      # (warnings are errors here), so the family has to travel in a single PR.
+      xunit:
+        applies-to: version-updates
+        patterns:
+          - "xunit.v3*"
+        update-types:
+          - "major"
+
       dotnet-minor-and-patch:
         applies-to: version-updates
         update-types:

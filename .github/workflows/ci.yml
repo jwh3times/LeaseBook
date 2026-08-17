@@ -54,15 +54,18 @@ jobs:
         run: dotnet ef migrations has-pending-model-changes --project src/LeaseBook.Web --no-build --configuration Release
       # Runs unit, architecture, and Testcontainers-backed integration tests (Docker is on the runner).
       # The schema guard + tenant-isolation pack run here against a fresh Postgres 18 container.
-      # xUnit's MTP v2 TRX reporter writes one result file beneath each test project's output.
+      # xUnit's MTP v2 TRX reporter writes one result file per test project. Pin the destination
+      # with --results-directory rather than relying on the reporter's default: xunit.v3 4.0.0
+      # moved that default out of each project's bin/ output and into a repo-root TestResults/,
+      # which silently emptied the upload glob and failed this job on a fully green test run.
       - name: Run backend tests (Microsoft Testing Platform v2)
-        run: dotnet test -c Release --no-build --report-xunit-trx
+        run: dotnet test -c Release --no-build --report-xunit-trx --results-directory TestResults
       - name: Upload backend test results
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7
         with:
           name: backend-test-results
-          path: tests/**/bin/Release/**/TestResults/*.trx
+          path: TestResults/*.trx
           if-no-files-found: error
           retention-days: 7
 
