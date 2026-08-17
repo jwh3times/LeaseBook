@@ -13,4 +13,12 @@ public interface ITenantFinancials
 
     /// <summary>Tenant id → security deposit currently held (liability, never income until applied).</summary>
     Task<IReadOnlyDictionary<Guid, decimal>> DepositsHeldAsync(CancellationToken ct);
+
+    /// <summary>
+    /// Tenant id → ledger-derived financial standing as of the stated date. Delinquency and unapplied
+    /// credit are independent amounts and may both be positive.
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, TenantFinancialStanding>> StandingAsync(DateOnly asOf, CancellationToken ct);
 }
+
+public sealed record TenantFinancialStanding(decimal DelinquentBalance, decimal UnappliedCredit);

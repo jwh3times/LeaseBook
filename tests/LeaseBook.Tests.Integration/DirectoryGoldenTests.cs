@@ -69,7 +69,8 @@ public sealed class DirectoryGoldenTests(PostgresFixture fixture)
         detail.Address.ShouldBe("412 Oakmont Ave");
         detail.OwnerName.ShouldBe("Hargrove Family Trust");
         detail.Units.Count.ShouldBe(4); // #2B, #1A occupied + 2 vacant fillers
-        detail.Units.Count(u => u.Status == "occupied").ShouldBe(2);
+        detail.Units.Count(u => u.Occupancy == "occupied").ShouldBe(2);
+        detail.Units.ShouldAllBe(u => u.Availability == "available");
         detail.Tenants.Select(t => t.DisplayName).ShouldBe(["Devon Pryor", "Jasmine Carter"], ignoreOrder: true);
     }
 

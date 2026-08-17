@@ -20,7 +20,7 @@ public sealed class Tenant : IOrgScoped, ISystemFlagged
 
     public string? ContactPhone { get; set; }
 
-    public TenantStatus Status { get; set; }
+    public TenantLifecycleStatus LifecycleStatus { get; set; }
 
     public bool IsSystem { get; set; }
 

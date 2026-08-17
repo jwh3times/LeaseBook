@@ -1,5 +1,6 @@
 using LeaseBook.Modules.Directory.Domain;
 using LeaseBook.Modules.Directory.Features.Shared;
+using LeaseBook.Modules.Directory.Persistence;
 using LeaseBook.SharedKernel.Cqrs;
 using Microsoft.EntityFrameworkCore;
 
@@ -14,12 +15,18 @@ public sealed record GetDirectoryKpis : IQuery<DirectoryKpis>;
 
 public sealed record DirectoryKpis(int Vacancy);
 
-internal sealed class GetDirectoryKpisHandler(DbContext db) : IQueryHandler<GetDirectoryKpis, DirectoryKpis>
+internal sealed class GetDirectoryKpisHandler(DbContext db, TimeProvider clock)
+    : IQueryHandler<GetDirectoryKpis, DirectoryKpis>
 {
     public async Task<DirectoryKpis> Handle(GetDirectoryKpis query, CancellationToken ct)
     {
+        var today = DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
         var vacancy = await db.Set<Unit>().AsNoTracking()
-            .NotSystem().CountAsync(u => u.Status == UnitStatus.Vacant, ct);
+            .NotSystem()
+            .CountAsync(
+                unit => !db.Set<LeaseLite>().AsNoTracking().EffectiveOn(today)
+                    .Any(lease => lease.UnitId == unit.Id),
+                ct);
 
         return new DirectoryKpis(vacancy);
     }

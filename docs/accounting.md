@@ -215,6 +215,12 @@ separate unapplied-credit amount and never makes a bucket negative. A payment ov
 the posting template holds it as a prepayment liability until an operator applies it to charges
 (ADR-034).
 
+Directory's tenant financial-standing projection keeps the past-due portion of those open charges
+separate from unapplied credit. The credit amount combines unapplied general credit with held
+prepayment liability as of the same date, so a tenant can correctly show both a delinquent balance
+and credit on file. Neither amount is stored on the tenant row or maintained by an operator
+([ADR-038](adr/ADR-038-derived-financial-standing-and-occupancy.md)).
+
 ### Tenant financial attribution
 
 A non-pending lease supplies the owner, property and unit copied onto a new tenant-account journal

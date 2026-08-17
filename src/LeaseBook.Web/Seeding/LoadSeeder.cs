@@ -417,7 +417,7 @@ public static class LoadSeeder
                 PropertyId = unit.PropertyId,
                 Label = unit.Label,
                 Rent = new Money(unit.Rent),
-                Status = unit.Occupied ? UnitStatus.Occupied : UnitStatus.Vacant,
+                Availability = UnitAvailability.Available,
             });
         }
 
@@ -427,7 +427,7 @@ public static class LoadSeeder
             {
                 Id = lease.TenantId,
                 DisplayName = lease.TenantName,
-                Status = TenantStatus.Current,
+                LifecycleStatus = TenantLifecycleStatus.Current,
             });
 
             db.Set<LeaseLite>().Add(new LeaseLite

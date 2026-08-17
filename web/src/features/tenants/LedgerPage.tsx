@@ -4,7 +4,7 @@ import { useParams, useSearchParams } from 'react-router';
 import { Avatar, Button, Card, EmptyState, Icon, IconButton, Input, Money, Select } from '@/design';
 import { num, useTenantDetail } from '@/lib/directory';
 import { RecordQuickSwitch } from '@/components/RecordQuickSwitch';
-import { TenantStatusBadge } from '@/components/StatusBadge';
+import { TenantFinancialStandingBadges, TenantLifecycleBadge } from '@/components/StatusBadge';
 import { ApplyModal } from './ApplyModal';
 import { AuditDrawer } from './AuditDrawer';
 import { LeaseLateFeeBadge, LeaseLateFeeModal } from './LeaseLateFeeModal';
@@ -30,9 +30,10 @@ function balanceCaption(balance: number): string {
 }
 
 /**
- * The tenant ledger hub (M3 / screen-ledger). Header (identity/unit/lease/status + balance + deposit
- * held "Liability · not income"), the inline-composer slot (WP-05 fills it), and the ledger table — a
- * virtualized, filterable running-balance view with a CSV export and the WP-06 row-action seam.
+ * The tenant ledger hub (M3 / screen-ledger). Header (identity/unit/lease/lifecycle + derived financial
+ * standing + balance + deposit held "Liability · not income"), the inline-composer slot (WP-05 fills
+ * it), and the ledger table — a virtualized, filterable running-balance view with a CSV export and the
+ * WP-06 row-action seam.
  */
 export function LedgerPage() {
   const { id = '' } = useParams();
@@ -143,7 +144,11 @@ export function LedgerPage() {
                 <h2 style={{ margin: 0, fontSize: 22, letterSpacing: '-.02em', fontWeight: 750 }}>
                   {detail.data.displayName}
                 </h2>
-                <TenantStatusBadge status={detail.data.status} />
+                <TenantLifecycleBadge status={detail.data.lifecycleStatus} />
+                <TenantFinancialStandingBadges
+                  delinquentBalance={num(detail.data.financialStanding.delinquentBalance)}
+                  unappliedCredit={num(detail.data.financialStanding.unappliedCredit)}
+                />
               </div>
               <div className="row gap12 t3 fs13" style={{ flexWrap: 'wrap' }}>
                 <span className="row gap6">

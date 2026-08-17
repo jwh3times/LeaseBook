@@ -112,13 +112,13 @@ internal static class AccountingTestHarness
 
         if (units is { Length: > 0 })
         {
-            await UpsertAsync(conn, tx, orgId, ct, "units", "property_id, label, status",
-                [.. units.Distinct().Select(id => (id, $"'{sentinelPropertyId}', 'Test unit {id:N}', 'occupied'"))]);
+            await UpsertAsync(conn, tx, orgId, ct, "units", "property_id, label, availability",
+                [.. units.Distinct().Select(id => (id, $"'{sentinelPropertyId}', 'Test unit {id:N}', 'available'"))]);
         }
 
         if (tenants is { Length: > 0 })
         {
-            await UpsertAsync(conn, tx, orgId, ct, "tenants", "display_name, status",
+            await UpsertAsync(conn, tx, orgId, ct, "tenants", "display_name, lifecycle_status",
                 [.. tenants.Distinct().Select(id => (id, $"'Test tenant {id:N}', 'current'"))]);
         }
 

@@ -58,7 +58,7 @@ public sealed class DirectorySchemaRoundTripTests(PostgresFixture fixture)
                 Id = tenantRowId,
                 DisplayName = "Jasmine Carter",
                 ContactPhone = "919-555-0142",
-                Status = TenantStatus.Current,
+                LifecycleStatus = TenantLifecycleStatus.Current,
             });
             db.Set<Property>().Add(new Property
             {
@@ -76,7 +76,7 @@ public sealed class DirectorySchemaRoundTripTests(PostgresFixture fixture)
                 PropertyId = propertyId,
                 Label = "#2B",
                 Rent = new Money(1450.00m),
-                Status = UnitStatus.Occupied,
+                Availability = UnitAvailability.Available,
             });
             db.Set<LeaseLite>().Add(new LeaseLite
             {
@@ -125,11 +125,11 @@ public sealed class DirectorySchemaRoundTripTests(PostgresFixture fixture)
             var unit = await db.Set<Unit>().AsNoTracking().SingleAsync(u => u.Id == unitId, ct);
             unit.PropertyId.ShouldBe(propertyId);
             unit.Rent.Amount.ShouldBe(1450.00m);
-            unit.Status.ShouldBe(UnitStatus.Occupied);
+            unit.Availability.ShouldBe(UnitAvailability.Available);
 
             var tenantRow = await db.Set<Tenant>().AsNoTracking().SingleAsync(t => t.Id == tenantRowId, ct);
             tenantRow.DisplayName.ShouldBe("Jasmine Carter");
-            tenantRow.Status.ShouldBe(TenantStatus.Current);
+            tenantRow.LifecycleStatus.ShouldBe(TenantLifecycleStatus.Current);
 
             var lease = await db.Set<LeaseLite>().AsNoTracking().SingleAsync(l => l.Id == leaseId, ct);
             lease.TenantId.ShouldBe(tenantRowId);

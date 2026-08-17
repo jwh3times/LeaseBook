@@ -29,7 +29,8 @@ function detailWith(overrides: Partial<NonNullable<TenantDetail['lease']>>): Ten
     id: 't1',
     displayName: 'Jasmine Carter',
     contact: { email: null, phone: null },
-    status: 'current',
+    lifecycleStatus: 'current',
+    financialStanding: { delinquentBalance: 0, unappliedCredit: 0 },
     lease: {
       id: 'l1',
       unitId: 'u1',

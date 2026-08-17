@@ -9,7 +9,9 @@ public sealed class TenantConfiguration : IEntityTypeConfiguration<Tenant>
     public void Configure(EntityTypeBuilder<Tenant> builder)
     {
         builder.ToTable("tenants", t =>
-            t.HasCheckConstraint("ck_tenants_status", $"status IN ({DirectorySql.Quote(TenantStatusConverter.DbValues)})"));
+            t.HasCheckConstraint(
+                "ck_tenants_lifecycle_status",
+                $"lifecycle_status IN ({DirectorySql.Quote(TenantLifecycleStatusConverter.DbValues)})"));
 
         builder.HasKey(e => e.Id);
 
@@ -20,7 +22,7 @@ public sealed class TenantConfiguration : IEntityTypeConfiguration<Tenant>
         builder.Property(e => e.DisplayName).IsRequired();
         builder.Property(e => e.ContactEmail);
         builder.Property(e => e.ContactPhone);
-        builder.Property(e => e.Status).IsRequired().HasConversion<TenantStatusConverter>();
+        builder.Property(e => e.LifecycleStatus).IsRequired().HasConversion<TenantLifecycleStatusConverter>();
         builder.Property(e => e.IsSystem).IsRequired().HasDefaultValue(false);
         builder.Property(e => e.CreatedAt).IsRequired();
 

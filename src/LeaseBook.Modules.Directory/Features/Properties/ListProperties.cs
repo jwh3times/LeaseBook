@@ -1,5 +1,6 @@
 using LeaseBook.Modules.Directory.Domain;
 using LeaseBook.Modules.Directory.Features.Shared;
+using LeaseBook.Modules.Directory.Features.Units;
 using LeaseBook.SharedKernel.Cqrs;
 using Microsoft.EntityFrameworkCore;
 
@@ -12,7 +13,8 @@ public sealed record ListProperties(int? Page, int? PageSize, string? Q, string?
 public sealed record PropertyListRow(
     Guid Id, string Address, string? City, Guid OwnerId, string OwnerName, int Units, int Occupied);
 
-internal sealed class ListPropertiesHandler(DbContext db) : IQueryHandler<ListProperties, PagedResponse<PropertyListRow>>
+internal sealed class ListPropertiesHandler(DbContext db, TimeProvider clock)
+    : IQueryHandler<ListProperties, PagedResponse<PropertyListRow>>
 {
     public async Task<PagedResponse<PropertyListRow>> Handle(ListProperties query, CancellationToken ct)
     {
@@ -42,15 +44,21 @@ internal sealed class ListPropertiesHandler(DbContext db) : IQueryHandler<ListPr
 
         var ownerNames = await db.Set<Owner>().AsNoTracking().Where(o => ownerIds.Contains(o.Id))
             .ToDictionaryAsync(o => o.Id, o => o.Name, ct);
-        var unitStats = await db.Set<Unit>().AsNoTracking().Where(u => ids.Contains(u.PropertyId))
-            .GroupBy(u => u.PropertyId)
-            .Select(g => new
-            {
-                PropertyId = g.Key,
-                Total = g.Count(),
-                Occupied = g.Count(u => u.Status == UnitStatus.Occupied),
-            })
-            .ToDictionaryAsync(x => x.PropertyId, x => x, ct);
+        var units = await db.Set<Unit>().AsNoTracking()
+            .Where(unit => ids.Contains(unit.PropertyId))
+            .Select(unit => new { unit.Id, unit.PropertyId })
+            .ToListAsync(ct);
+        var today = DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
+        var occupiedIds = await UnitOccupancy.OccupiedIdsAsync(db, units.Select(unit => unit.Id).ToList(), today, ct);
+        var unitStats = units
+            .GroupBy(unit => unit.PropertyId)
+            .ToDictionary(
+                group => group.Key,
+                group => new
+                {
+                    Total = group.Count(),
+                    Occupied = group.Count(unit => occupiedIds.Contains(unit.Id)),
+                });
 
         var items = rows.Select(r =>
         {

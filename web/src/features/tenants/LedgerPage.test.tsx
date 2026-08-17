@@ -13,7 +13,8 @@ const DETAIL = {
   id: 't1',
   displayName: 'Jasmine Carter',
   contact: { email: null, phone: '828-555-0100' },
-  status: 'current',
+  lifecycleStatus: 'current',
+  financialStanding: { delinquentBalance: 1450, unappliedCredit: 75 },
   lease: {
     startDate: '2025-06-01',
     endDate: '2026-05-31',
@@ -139,6 +140,8 @@ describe('LedgerPage', () => {
     expect(screen.getByText('Current balance')).toBeInTheDocument();
     expect(screen.getByText('Deposit held')).toBeInTheDocument();
     expect(screen.getByText('Liability · not income')).toBeInTheDocument();
+    expect(screen.getByText('Delinquent')).toBeInTheDocument();
+    expect(screen.getByText('Credit on file')).toBeInTheDocument();
 
     expect(await screen.findByText('Feb rent')).toBeInTheDocument();
     expect(screen.getByText('Rent payment')).toBeInTheDocument();

@@ -166,7 +166,7 @@ public sealed class LedgerPostingTests(PostgresFixture fixture)
         {
             var ownerId = await s.Send(new CreateOwner("Owner", null, null, null, 800, 0m), ct);
             var propertyId = await s.Send(new CreateProperty(ownerId, "412 Oakmont Ave", "Asheville", "NC", "28801", null), ct);
-            var unitId = await s.Send(new CreateUnit(propertyId, "#2B", 1450m, "occupied"), ct);
+            var unitId = await s.Send(new CreateUnit(propertyId, "#2B", 1450m, "available"), ct);
             var tenantId = await s.Send(new CreateTenant("Jasmine Carter", null, null, "current"), ct);
             await s.Send(new CreateLease(tenantId, unitId, new DateOnly(2025, 6, 1), new DateOnly(2026, 5, 31), 1450m, 1450m, "active"), ct);
             var trust = await s.Send(new CreateBankAccount("Operating Trust", null, null, "trust"), ct);

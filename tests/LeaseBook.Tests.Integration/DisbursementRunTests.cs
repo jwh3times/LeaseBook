@@ -233,7 +233,7 @@ public sealed class DisbursementRunTests(PostgresFixture fixture)
 
             ownerId = await s.Send(new CreateOwner("Disbursement Test Owner", null, null, null, mgmtFeeBps, reserve), ct);
             var propId = await s.Send(new CreateProperty(ownerId, "100 Test St", "Raleigh", "NC", null, null), ct);
-            var unitId = await s.Send(new CreateUnit(propId, "#1", rent, "occupied"), ct);
+            var unitId = await s.Send(new CreateUnit(propId, "#1", rent, "available"), ct);
             tenantId = await s.Send(new CreateTenant("Disburse Tenant", null, null, "current"), ct);
             leaseId = await s.Send(new CreateLease(
                 tenantId, unitId,

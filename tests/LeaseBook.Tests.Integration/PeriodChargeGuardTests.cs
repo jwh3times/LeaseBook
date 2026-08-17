@@ -115,7 +115,7 @@ public sealed class PeriodChargeGuardTests(PostgresFixture fixture)
 
             ownerId = await s.Send(new CreateOwner("Guard Test Owner", null, null, null, null, 0m), ct);
             var propId = await s.Send(new CreateProperty(ownerId, "1 Guard St", "Raleigh", "NC", null, null), ct);
-            var unitId = await s.Send(new CreateUnit(propId, "#1", rent, "occupied"), ct);
+            var unitId = await s.Send(new CreateUnit(propId, "#1", rent, "available"), ct);
             tenantId = await s.Send(new CreateTenant("Guard Tenant", null, null, "current"), ct);
             leaseId = await s.Send(new CreateLease(
                 tenantId, unitId,

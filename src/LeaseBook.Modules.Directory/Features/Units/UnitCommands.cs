@@ -8,9 +8,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace LeaseBook.Modules.Directory.Features.Units;
 
-public sealed record CreateUnit(Guid PropertyId, string Label, decimal Rent, string Status) : ICommand<Guid>;
+public sealed record CreateUnit(Guid PropertyId, string Label, decimal Rent, string Availability) : ICommand<Guid>;
 
-public sealed record UpdateUnit(Guid Id, string Label, decimal Rent, string Status) : ICommand<bool>;
+public sealed record UpdateUnit(Guid Id, string Label, decimal Rent, string Availability) : ICommand<bool>;
 
 public sealed class CreateUnitValidator : AbstractValidator<CreateUnit>
 {
@@ -19,8 +19,8 @@ public sealed class CreateUnitValidator : AbstractValidator<CreateUnit>
         RuleFor(x => x.PropertyId).NotEmpty();
         RuleFor(x => x.Label).NotEmpty().MaximumLength(60);
         RuleFor(x => x.Rent).MoneyAmount();
-        RuleFor(x => x.Status).Must(v => UnitStatusConverter.DbValues.Contains(v))
-            .WithMessage($"Status must be one of: {string.Join(", ", UnitStatusConverter.DbValues)}.");
+        RuleFor(x => x.Availability).Must(v => UnitAvailabilityConverter.DbValues.Contains(v))
+            .WithMessage($"Availability must be one of: {string.Join(", ", UnitAvailabilityConverter.DbValues)}.");
     }
 }
 
@@ -31,8 +31,8 @@ public sealed class UpdateUnitValidator : AbstractValidator<UpdateUnit>
         RuleFor(x => x.Id).NotEmpty();
         RuleFor(x => x.Label).NotEmpty().MaximumLength(60);
         RuleFor(x => x.Rent).MoneyAmount();
-        RuleFor(x => x.Status).Must(v => UnitStatusConverter.DbValues.Contains(v))
-            .WithMessage($"Status must be one of: {string.Join(", ", UnitStatusConverter.DbValues)}.");
+        RuleFor(x => x.Availability).Must(v => UnitAvailabilityConverter.DbValues.Contains(v))
+            .WithMessage($"Availability must be one of: {string.Join(", ", UnitAvailabilityConverter.DbValues)}.");
     }
 }
 
@@ -46,7 +46,7 @@ internal sealed class CreateUnitHandler(DbContext db) : ICommandHandler<CreateUn
             PropertyId = command.PropertyId,
             Label = command.Label,
             Rent = new Money(command.Rent),
-            Status = UnitStatusConverter.FromDb(command.Status),
+            Availability = UnitAvailabilityConverter.FromDb(command.Availability),
         };
         db.Set<Unit>().Add(unit);
         await db.SaveChangesAsync(ct);
@@ -66,7 +66,7 @@ internal sealed class UpdateUnitHandler(DbContext db) : ICommandHandler<UpdateUn
 
         unit.Label = command.Label;
         unit.Rent = new Money(command.Rent);
-        unit.Status = UnitStatusConverter.FromDb(command.Status);
+        unit.Availability = UnitAvailabilityConverter.FromDb(command.Availability);
         await db.SaveChangesAsync(ct);
         return true;
     }

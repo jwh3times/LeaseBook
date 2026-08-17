@@ -1,7 +1,12 @@
 import { useNavigate, useParams } from 'react-router';
 import { Card, CardHeader, Money, Table, type TableColumn } from '@/design';
 import { DetailPage } from '@/components/DetailPage';
-import { TenantStatusBadge, UnitStatusBadge } from '@/components/StatusBadge';
+import {
+  TenantFinancialStandingBadges,
+  TenantLifecycleBadge,
+  UnitAvailabilityBadge,
+  UnitOccupancyBadge,
+} from '@/components/StatusBadge';
 import {
   num,
   usePropertyDetail,
@@ -13,7 +18,16 @@ import {
 const unitColumns: TableColumn<UnitRow>[] = [
   { key: 'label', header: 'Unit', render: (r) => <span className="strong">{r.label}</span> },
   { key: 'rent', header: 'Rent', num: true, render: (r) => <Money value={num(r.rent)} /> },
-  { key: 'status', header: 'Status', render: (r) => <UnitStatusBadge status={r.status} /> },
+  {
+    key: 'occupancy',
+    header: 'Occupancy',
+    render: (r) => <UnitOccupancyBadge occupancy={r.occupancy} />,
+  },
+  {
+    key: 'availability',
+    header: 'Availability',
+    render: (r) => <UnitAvailabilityBadge availability={r.availability} />,
+  },
 ];
 
 export function PropertyDetailPage() {
@@ -34,7 +48,21 @@ export function PropertyDetailPage() {
       num: true,
       render: (r) => <Money value={num(r.balance)} colorize />,
     },
-    { key: 'status', header: 'Status', render: (r) => <TenantStatusBadge status={r.status} /> },
+    {
+      key: 'lifecycle',
+      header: 'Lifecycle',
+      render: (r) => <TenantLifecycleBadge status={r.lifecycleStatus} />,
+    },
+    {
+      key: 'standing',
+      header: 'Financial standing',
+      render: (r) => (
+        <TenantFinancialStandingBadges
+          delinquentBalance={num(r.financialStanding.delinquentBalance)}
+          unappliedCredit={num(r.financialStanding.unappliedCredit)}
+        />
+      ),
+    },
   ];
 
   return (

@@ -392,7 +392,7 @@ public sealed class RunCapabilityPeriodTests(PostgresFixture fixture)
 
                 foreach (var n in new[] { 1, 2 })
                 {
-                    var unitId = await sender.Send(new CreateUnit(propId, $"#{n}", 1200m, "occupied"), ct);
+                    var unitId = await sender.Send(new CreateUnit(propId, $"#{n}", 1200m, "available"), ct);
                     var tenantId = await sender.Send(
                         new CreateTenant($"Period Tenant {n}", null, null, "current"), ct);
                     await sender.Send(

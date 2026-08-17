@@ -18,6 +18,25 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
     meta?: keyof ClientMeta extends never ? Record<string, unknown> : ClientMeta;
 };
 
+export const getApiSearch = <ThrowOnError extends boolean = false>(options?: Options<GetApiSearchData, ThrowOnError>): RequestResult<GetApiSearchResponses, unknown, ThrowOnError> => (options?.client ?? client).get<GetApiSearchResponses, unknown, ThrowOnError>({ url: '/api/search', ...options });
+
+export const getApiOnboardingStatus = <ThrowOnError extends boolean = false>(options?: Options<GetApiOnboardingStatusData, ThrowOnError>): RequestResult<GetApiOnboardingStatusResponses, unknown, ThrowOnError> => (options?.client ?? client).get<GetApiOnboardingStatusResponses, unknown, ThrowOnError>({ url: '/api/onboarding/status', ...options });
+
+export const getApiAccountingEntriesByEntryIdAudit = <ThrowOnError extends boolean = false>(options: Options<GetApiAccountingEntriesByEntryIdAuditData, ThrowOnError>): RequestResult<GetApiAccountingEntriesByEntryIdAuditResponses, unknown, ThrowOnError> => (options.client ?? client).get<GetApiAccountingEntriesByEntryIdAuditResponses, unknown, ThrowOnError>({ url: '/api/accounting/entries/{entryId}/audit', ...options });
+
+export const getApiDashboard = <ThrowOnError extends boolean = false>(options?: Options<GetApiDashboardData, ThrowOnError>): RequestResult<GetApiDashboardResponses, unknown, ThrowOnError> => (options?.client ?? client).get<GetApiDashboardResponses, unknown, ThrowOnError>({ url: '/api/dashboard', ...options });
+
+export const getApiHealth = <ThrowOnError extends boolean = false>(options?: Options<GetApiHealthData, ThrowOnError>): RequestResult<GetApiHealthResponses, unknown, ThrowOnError> => (options?.client ?? client).get<GetApiHealthResponses, unknown, ThrowOnError>({ url: '/api/health', ...options });
+
+export const postApiTelemetryBudget = <ThrowOnError extends boolean = false>(options: Options<PostApiTelemetryBudgetData, ThrowOnError>): RequestResult<PostApiTelemetryBudgetResponses, unknown, ThrowOnError> => (options.client ?? client).post<PostApiTelemetryBudgetResponses, unknown, ThrowOnError>({
+    url: '/api/telemetry/budget',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
 export const getApiAccountingTenantsByTenantIdLedger = <ThrowOnError extends boolean = false>(options: Options<GetApiAccountingTenantsByTenantIdLedgerData, ThrowOnError>): RequestResult<GetApiAccountingTenantsByTenantIdLedgerResponses, unknown, ThrowOnError> => (options.client ?? client).get<GetApiAccountingTenantsByTenantIdLedgerResponses, unknown, ThrowOnError>({ url: '/api/accounting/tenants/{tenantId}/ledger', ...options });
 
 export const getApiAccountingOwnersBalances = <ThrowOnError extends boolean = false>(options?: Options<GetApiAccountingOwnersBalancesData, ThrowOnError>): RequestResult<GetApiAccountingOwnersBalancesResponses, unknown, ThrowOnError> => (options?.client ?? client).get<GetApiAccountingOwnersBalancesResponses, unknown, ThrowOnError>({ url: '/api/accounting/owners/balances', ...options });
@@ -257,25 +276,6 @@ export const postApiDirectoryLeases = <ThrowOnError extends boolean = false>(opt
 
 export const putApiDirectoryLeasesById = <ThrowOnError extends boolean = false>(options: Options<PutApiDirectoryLeasesByIdData, ThrowOnError>): RequestResult<PutApiDirectoryLeasesByIdResponses, PutApiDirectoryLeasesByIdErrors, ThrowOnError> => (options.client ?? client).put<PutApiDirectoryLeasesByIdResponses, PutApiDirectoryLeasesByIdErrors, ThrowOnError>({
     url: '/api/directory/leases/{id}',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-export const getApiSearch = <ThrowOnError extends boolean = false>(options?: Options<GetApiSearchData, ThrowOnError>): RequestResult<GetApiSearchResponses, unknown, ThrowOnError> => (options?.client ?? client).get<GetApiSearchResponses, unknown, ThrowOnError>({ url: '/api/search', ...options });
-
-export const getApiOnboardingStatus = <ThrowOnError extends boolean = false>(options?: Options<GetApiOnboardingStatusData, ThrowOnError>): RequestResult<GetApiOnboardingStatusResponses, unknown, ThrowOnError> => (options?.client ?? client).get<GetApiOnboardingStatusResponses, unknown, ThrowOnError>({ url: '/api/onboarding/status', ...options });
-
-export const getApiAccountingEntriesByEntryIdAudit = <ThrowOnError extends boolean = false>(options: Options<GetApiAccountingEntriesByEntryIdAuditData, ThrowOnError>): RequestResult<GetApiAccountingEntriesByEntryIdAuditResponses, unknown, ThrowOnError> => (options.client ?? client).get<GetApiAccountingEntriesByEntryIdAuditResponses, unknown, ThrowOnError>({ url: '/api/accounting/entries/{entryId}/audit', ...options });
-
-export const getApiDashboard = <ThrowOnError extends boolean = false>(options?: Options<GetApiDashboardData, ThrowOnError>): RequestResult<GetApiDashboardResponses, unknown, ThrowOnError> => (options?.client ?? client).get<GetApiDashboardResponses, unknown, ThrowOnError>({ url: '/api/dashboard', ...options });
-
-export const getApiHealth = <ThrowOnError extends boolean = false>(options?: Options<GetApiHealthData, ThrowOnError>): RequestResult<GetApiHealthResponses, unknown, ThrowOnError> => (options?.client ?? client).get<GetApiHealthResponses, unknown, ThrowOnError>({ url: '/api/health', ...options });
-
-export const postApiTelemetryBudget = <ThrowOnError extends boolean = false>(options: Options<PostApiTelemetryBudgetData, ThrowOnError>): RequestResult<PostApiTelemetryBudgetResponses, unknown, ThrowOnError> => (options.client ?? client).post<PostApiTelemetryBudgetResponses, unknown, ThrowOnError>({
-    url: '/api/telemetry/budget',
     ...options,
     headers: {
         'Content-Type': 'application/json',

@@ -25,4 +25,29 @@ internal sealed class TenantFinancialsAdapter(ISender sender) : ITenantFinancial
             .Where(r => r.Kind == "deposit")
             .ToDictionary(r => r.TenantId, r => r.Held);
     }
+
+    public async Task<IReadOnlyDictionary<Guid, TenantFinancialStanding>> StandingAsync(
+        DateOnly asOf,
+        CancellationToken ct)
+    {
+        var aging = await sender.Query(new GetDelinquencyAging(asOf), ct);
+        var held = await sender.Query(new GetDepositRegister(AsOf: asOf), ct);
+
+        var result = aging.Rows.ToDictionary(
+            row => row.TenantId,
+            row => new TenantFinancialStanding(
+                row.D1_30 + row.D31_60 + row.D61_90 + row.Over90,
+                row.UnappliedCredit));
+
+        foreach (var prepayment in held.Rows.Where(row => row.Kind == "prepayment"))
+        {
+            var current = result.GetValueOrDefault(prepayment.TenantId, new TenantFinancialStanding(0m, 0m));
+            result[prepayment.TenantId] = current with
+            {
+                UnappliedCredit = current.UnappliedCredit + prepayment.Held,
+            };
+        }
+
+        return result;
+    }
 }

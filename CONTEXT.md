@@ -34,6 +34,26 @@ _Avoid_: active lease, current lease
 A non-pending lease whose inclusive term overlaps the inclusive period.
 _Avoid_: active lease, lease active in the period
 
+**Tenant lifecycle status**:
+The operational relationship with a tenant party as current, evicting, or past. It is independent of
+the party's leases and financial standing.
+_Avoid_: tenant status, payment status, lease status
+
+**Tenant financial standing**:
+A ledger-derived view as of a stated date containing delinquent balance and unapplied credit as
+independent amounts. Both may be positive at once; financial standing is never manually maintained.
+_Avoid_: tenant status, late status, prepaid status
+
+**Unit occupancy**:
+Whether a unit is occupied or vacant on a stated date, determined only by whether a lease is effective
+for that unit on that date.
+_Avoid_: unit status, manually occupied, manually vacant
+
+**Unit availability**:
+Whether a unit is operationally available or unavailable, independent of occupancy. A leased unit may
+be unavailable, and an available unit may be vacant.
+_Avoid_: unit status, occupancy
+
 ### Access planes
 
 Every piece of work in the system runs in exactly one access plane, and which one it is determines

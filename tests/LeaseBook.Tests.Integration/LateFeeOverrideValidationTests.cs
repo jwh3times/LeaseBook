@@ -216,7 +216,7 @@ public sealed class LateFeeOverrideValidationTests(PostgresFixture fixture)
             {
                 var ownerId = await sender.Send(new CreateOwner("Validate Owner", null, null, null, null, 0m), ct);
                 var propId = await sender.Send(new CreateProperty(ownerId, "1 Validate St", "Raleigh", "NC", null, null), ct);
-                unitId = await sender.Send(new CreateUnit(propId, "#1", 1200m, "occupied"), ct);
+                unitId = await sender.Send(new CreateUnit(propId, "#1", 1200m, "available"), ct);
                 tenantId = await sender.Send(new CreateTenant("Validate Tenant", null, null, "current"), ct);
                 leaseId = await sender.Send(
                     new CreateLease(tenantId, unitId, new DateOnly(2025, 1, 1), new DateOnly(2027, 12, 31),

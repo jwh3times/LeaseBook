@@ -39,7 +39,7 @@ public sealed class FinancialAttributionTests(PostgresFixture fixture)
             var propertyId = await sender.Send(
                 new CreateProperty(ownerId, "1 History Way", "Raleigh", "NC", null, null), ct);
             var unitId = await sender.Send(
-                new CreateUnit(propertyId, "A", 500m, "vacant"), ct);
+                new CreateUnit(propertyId, "A", 500m, "available"), ct);
             var tenantId = await sender.Send(
                 new CreateTenant("Former Tenant", null, null, "past"), ct);
             await sender.Send(new CreateLease(
@@ -88,7 +88,7 @@ public sealed class FinancialAttributionTests(PostgresFixture fixture)
             var propertyId = await sender.Send(
                 new CreateProperty(ownerId, "2 History Way", "Raleigh", "NC", null, null), ct);
             var unitId = await sender.Send(
-                new CreateUnit(propertyId, "B", 700m, "vacant"), ct);
+                new CreateUnit(propertyId, "B", 700m, "available"), ct);
             var tenantId = await sender.Send(
                 new CreateTenant("Expired Tenant", null, null, "past"), ct);
             await sender.Send(new CreateLease(
@@ -124,7 +124,7 @@ public sealed class FinancialAttributionTests(PostgresFixture fixture)
             var propertyId = await sender.Send(
                 new CreateProperty(ownerId, "3 History Way", "Raleigh", "NC", null, null), ct);
             var unitId = await sender.Send(
-                new CreateUnit(propertyId, "C", 900m, "vacant"), ct);
+                new CreateUnit(propertyId, "C", 900m, "available"), ct);
             var tenantId = await sender.Send(
                 new CreateTenant("Future Tenant", null, null, "current"), ct);
             await sender.Send(new CreateLease(
@@ -163,9 +163,9 @@ public sealed class FinancialAttributionTests(PostgresFixture fixture)
             var property = await sender.Send(
                 new CreateProperty(owner, "1 Alpha Ave", "Raleigh", "NC", null, null), ct);
             firstUnit = await sender.Send(
-                new CreateUnit(property, "A", 500m, "occupied"), ct);
+                new CreateUnit(property, "A", 500m, "available"), ct);
             secondUnit = await sender.Send(
-                new CreateUnit(property, "B", 700m, "occupied"), ct);
+                new CreateUnit(property, "B", 700m, "available"), ct);
             tenantId = await sender.Send(
                 new CreateTenant("Jasmine Carter", null, null, "current"), ct);
         }, ct);
@@ -199,7 +199,7 @@ public sealed class FinancialAttributionTests(PostgresFixture fixture)
             var property = await sender.Send(
                 new CreateProperty(owner, "1 Unit Ave", "Raleigh", "NC", null, null), ct);
             unitId = await sender.Send(
-                new CreateUnit(property, "A", 500m, "occupied"), ct);
+                new CreateUnit(property, "A", 500m, "available"), ct);
             firstTenant = await sender.Send(
                 new CreateTenant("First Resident", null, null, "past"), ct);
             secondTenant = await sender.Send(
@@ -236,9 +236,9 @@ public sealed class FinancialAttributionTests(PostgresFixture fixture)
             var propertyBeta = await sender.Send(
                 new CreateProperty(ownerBeta, "2 Beta Ave", "Raleigh", "NC", null, null), ct);
             var unitAlpha = await sender.Send(
-                new CreateUnit(propertyAlpha, "A", 500m, "occupied"), ct);
+                new CreateUnit(propertyAlpha, "A", 500m, "available"), ct);
             var unitBeta = await sender.Send(
-                new CreateUnit(propertyBeta, "B", 700m, "occupied"), ct);
+                new CreateUnit(propertyBeta, "B", 700m, "available"), ct);
             var tenantId = await sender.Send(
                 new CreateTenant("Jasmine Carter", null, null, "current"), ct);
             await sender.Send(new CreateLease(
@@ -270,9 +270,9 @@ public sealed class FinancialAttributionTests(PostgresFixture fixture)
             var property = await sender.Send(
                 new CreateProperty(owner, "4 History Way", "Raleigh", "NC", null, null), ct);
             var firstUnit = await sender.Send(
-                new CreateUnit(property, "A", 500m, "occupied"), ct);
+                new CreateUnit(property, "A", 500m, "available"), ct);
             var secondUnit = await sender.Send(
-                new CreateUnit(property, "B", 700m, "occupied"), ct);
+                new CreateUnit(property, "B", 700m, "available"), ct);
             var tenantId = await sender.Send(
                 new CreateTenant("Returning Resident", null, null, "current"), ct);
             await sender.Send(new CreateLease(
@@ -304,7 +304,7 @@ public sealed class FinancialAttributionTests(PostgresFixture fixture)
             var property = await sender.Send(
                 new CreateProperty(owner, "5 History Way", "Raleigh", "NC", null, null), ct);
             var unitId = await sender.Send(
-                new CreateUnit(property, "A", 500m, "occupied"), ct);
+                new CreateUnit(property, "A", 500m, "available"), ct);
             var formerTenant = await sender.Send(
                 new CreateTenant("Former Resident", null, null, "past"), ct);
             var nextTenant = await sender.Send(
@@ -338,9 +338,9 @@ public sealed class FinancialAttributionTests(PostgresFixture fixture)
             var property = await sender.Send(
                 new CreateProperty(owner, "6 History Way", "Raleigh", "NC", null, null), ct);
             var firstUnit = await sender.Send(
-                new CreateUnit(property, "A", 500m, "occupied"), ct);
+                new CreateUnit(property, "A", 500m, "available"), ct);
             var secondUnit = await sender.Send(
-                new CreateUnit(property, "B", 700m, "occupied"), ct);
+                new CreateUnit(property, "B", 700m, "available"), ct);
             var tenantId = await sender.Send(
                 new CreateTenant("Renewing Resident", null, null, "current"), ct);
 
@@ -369,9 +369,9 @@ public sealed class FinancialAttributionTests(PostgresFixture fixture)
             var property = await sender.Send(
                 new CreateProperty(owner, "7 History Way", "Raleigh", "NC", null, null), ct);
             var firstUnit = await sender.Send(
-                new CreateUnit(property, "A", 500m, "occupied"), ct);
+                new CreateUnit(property, "A", 500m, "available"), ct);
             var secondUnit = await sender.Send(
-                new CreateUnit(property, "B", 700m, "vacant"), ct);
+                new CreateUnit(property, "B", 700m, "available"), ct);
             var tenantId = await sender.Send(
                 new CreateTenant("Pending Resident", null, null, "current"), ct);
             await sender.Send(new CreateLease(
@@ -403,9 +403,9 @@ public sealed class FinancialAttributionTests(PostgresFixture fixture)
             var propertyBeta = await sender.Send(
                 new CreateProperty(ownerBeta, "2 Beta Ave", "Raleigh", "NC", null, null), ct);
             var unitAlpha = await sender.Send(
-                new CreateUnit(propertyAlpha, "A", 500m, "occupied"), ct);
+                new CreateUnit(propertyAlpha, "A", 500m, "available"), ct);
             var unitBeta = await sender.Send(
-                new CreateUnit(propertyBeta, "B", 700m, "occupied"), ct);
+                new CreateUnit(propertyBeta, "B", 700m, "available"), ct);
             var tenantId = await sender.Send(
                 new CreateTenant("Jasmine Carter", null, null, "current"), ct);
             await sender.Send(new CreateLease(

@@ -249,12 +249,12 @@ public sealed class EntityImportService(
                 continue;
             }
 
-            var status = NormaliseUnitStatus(row.Status);
+            var availability = NormaliseUnitAvailability(row.Status);
             Guid leaseBookId;
             try
             {
                 leaseBookId = await sender.Send(
-                    new CreateUnit(propertyId, row.Label, row.Rent, status), ct);
+                    new CreateUnit(propertyId, row.Label, row.Rent, availability), ct);
             }
             catch (Exception ex)
             {
@@ -309,12 +309,12 @@ public sealed class EntityImportService(
             }
 
             // Create Tenant first, then Lease.
-            var tenantStatus = NormaliseTenantStatus(row.Status);
+            var tenantLifecycleStatus = NormaliseTenantLifecycleStatus(row.Status);
             Guid tenantId;
             try
             {
                 tenantId = await sender.Send(
-                    new CreateTenant(row.DisplayName, null, null, tenantStatus), ct);
+                    new CreateTenant(row.DisplayName, null, null, tenantLifecycleStatus), ct);
             }
             catch (Exception ex)
             {
@@ -400,17 +400,14 @@ public sealed class EntityImportService(
     private static string SerializeRaw(object obj) =>
         JsonSerializer.Serialize(obj, JsonOpts);
 
-    private static string NormaliseUnitStatus(string raw) => raw.ToLowerInvariant() switch
+    private static string NormaliseUnitAvailability(string raw) => raw.ToLowerInvariant() switch
     {
-        "occupied" or "rented" => "occupied",
         "unavailable" or "not available" or "offline" => "unavailable",
-        _ => "vacant",
+        _ => "available",
     };
 
-    private static string NormaliseTenantStatus(string raw) => raw.ToLowerInvariant() switch
+    private static string NormaliseTenantLifecycleStatus(string raw) => raw.ToLowerInvariant() switch
     {
-        "late" => "late",
-        "prepaid" => "prepaid",
         "evicting" => "evicting",
         "past" or "former" or "ended" => "past",
         _ => "current",

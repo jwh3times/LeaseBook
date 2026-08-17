@@ -275,9 +275,9 @@ public sealed class OperationsRunsTests(PostgresFixture fixture)
             var propId2 = await s.Send(new CreateProperty(ownerId, "200 Oak Ave", "Asheville", "NC", null, null), ct);
 
             // 3 units.
-            var unitId1 = await s.Send(new CreateUnit(propId1, "#A", 1450m, "occupied"), ct);
-            var unitId2 = await s.Send(new CreateUnit(propId1, "#B", 1380m, "occupied"), ct);
-            var unitId3 = await s.Send(new CreateUnit(propId2, "#1", 1620m, "occupied"), ct);
+            var unitId1 = await s.Send(new CreateUnit(propId1, "#A", 1450m, "available"), ct);
+            var unitId2 = await s.Send(new CreateUnit(propId1, "#B", 1380m, "available"), ct);
+            var unitId3 = await s.Send(new CreateUnit(propId2, "#1", 1620m, "available"), ct);
 
             // 3 tenants.
             var t1 = await s.Send(new CreateTenant("Alice Full", null, null, "current"), ct);

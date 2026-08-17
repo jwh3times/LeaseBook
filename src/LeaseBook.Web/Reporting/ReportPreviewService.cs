@@ -74,7 +74,8 @@ public sealed class ReportPreviewService(ISender sender)
             ["property"] = r.Property,
             ["tenant"] = r.Tenant,
             ["rent"] = r.Rent,
-            ["status"] = r.Status,
+            ["occupancy"] = r.Occupancy,
+            ["availability"] = r.Availability,
         }).ToList<object>();
 
         return new ReportPreviewResult(descriptor.Id, descriptor.Name, descriptor.Category, null, rows);

@@ -88,7 +88,7 @@ public sealed class PropertyOwnershipTransferTests(PostgresFixture fixture)
             var propertyId = await sender.Send(
                 new CreateProperty(sellerId, "1 Reconciled St", "Raleigh", "NC", null, null), ct);
             var unitId = await sender.Send(
-                new CreateUnit(propertyId, "A", 1500m, "occupied"), ct);
+                new CreateUnit(propertyId, "A", 1500m, "available"), ct);
             var tenantId = await sender.Send(
                 new CreateTenant("Jasmine Carter", null, null, "current"), ct);
             await sender.Send(new CreateLease(
@@ -130,7 +130,7 @@ public sealed class PropertyOwnershipTransferTests(PostgresFixture fixture)
             var propertyId = await sender.Send(
                 new CreateProperty(sellerId, "1 Backdate St", "Raleigh", "NC", null, null), ct);
             var unitId = await sender.Send(
-                new CreateUnit(propertyId, "A", 1500m, "occupied"), ct);
+                new CreateUnit(propertyId, "A", 1500m, "available"), ct);
             var tenantId = await sender.Send(
                 new CreateTenant("Jasmine Carter", null, null, "current"), ct);
             await sender.Send(new CreateLease(
@@ -173,7 +173,7 @@ public sealed class PropertyOwnershipTransferTests(PostgresFixture fixture)
             var propertyId = await sender.Send(
                 new CreateProperty(sellerId, "1 Later Deposit St", "Raleigh", "NC", null, null), ct);
             var unitId = await sender.Send(
-                new CreateUnit(propertyId, "A", 1500m, "occupied"), ct);
+                new CreateUnit(propertyId, "A", 1500m, "available"), ct);
             var tenantId = await sender.Send(
                 new CreateTenant("Jasmine Carter", null, null, "current"), ct);
             await sender.Send(new CreateLease(
@@ -268,7 +268,7 @@ public sealed class PropertyOwnershipTransferTests(PostgresFixture fixture)
             var propertyId = await sender.Send(
                 new CreateProperty(sellerId, "1 History St", "Raleigh", "NC", null, null), ct);
             var unitId = await sender.Send(
-                new CreateUnit(propertyId, "A", 1500m, "occupied"), ct);
+                new CreateUnit(propertyId, "A", 1500m, "available"), ct);
             var tenantId = await sender.Send(
                 new CreateTenant("Jasmine Carter", null, null, "current"), ct);
             await sender.Send(new CreateLease(
@@ -310,7 +310,7 @@ public sealed class PropertyOwnershipTransferTests(PostgresFixture fixture)
             var propertyId = await sender.Send(
                 new CreateProperty(sellerId, "1 Rent Run St", "Raleigh", "NC", null, null), ct);
             var unitId = await sender.Send(
-                new CreateUnit(propertyId, "A", 1500m, "occupied"), ct);
+                new CreateUnit(propertyId, "A", 1500m, "available"), ct);
             var tenantId = await sender.Send(
                 new CreateTenant("Jasmine Carter", null, null, "current"), ct);
             await sender.Send(new CreateLease(
@@ -369,7 +369,7 @@ public sealed class PropertyOwnershipTransferTests(PostgresFixture fixture)
             var propertyId = await sender.Send(
                 new CreateProperty(sellerId, "1 Sale St", "Raleigh", "NC", null, null), ct);
             var unitId = await sender.Send(
-                new CreateUnit(propertyId, "A", 1500m, "occupied"), ct);
+                new CreateUnit(propertyId, "A", 1500m, "available"), ct);
             var tenantId = await sender.Send(
                 new CreateTenant("Jasmine Carter", null, null, "current"), ct);
             await sender.Send(new CreateLease(

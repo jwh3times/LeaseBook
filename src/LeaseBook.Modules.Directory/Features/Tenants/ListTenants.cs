@@ -7,12 +7,21 @@ using Microsoft.EntityFrameworkCore;
 
 namespace LeaseBook.Modules.Directory.Features.Tenants;
 
-/// <summary>Paged tenant list (§C.3): name / unit / rent / balance / status. Balance via the port.</summary>
+/// <summary>
+/// Paged tenant list (§C.3): name / unit / rent / balance / lifecycle / financial standing.
+/// Accounting-derived values arrive through the consumer-owned batch port.
+/// </summary>
 public sealed record ListTenants(int? Page, int? PageSize, string? Q, string? Sort)
     : IQuery<PagedResponse<TenantListRow>>;
 
 public sealed record TenantListRow(
-    Guid Id, string DisplayName, string? UnitLabel, decimal Rent, decimal Balance, string Status);
+    Guid Id,
+    string DisplayName,
+    string? UnitLabel,
+    decimal Rent,
+    decimal Balance,
+    string LifecycleStatus,
+    TenantFinancialStanding FinancialStanding);
 
 internal sealed class ListTenantsHandler(DbContext db, ITenantFinancials tenantFinancials, TimeProvider clock)
     : IQueryHandler<ListTenants, PagedResponse<TenantListRow>>
@@ -37,20 +46,23 @@ internal sealed class ListTenantsHandler(DbContext db, ITenantFinancials tenantF
         };
 
         var rows = await tenants.Skip(page.Skip).Take(page.PageSize)
-            .Select(t => new { t.Id, t.DisplayName, t.Status })
+            .Select(t => new { t.Id, t.DisplayName, t.LifecycleStatus })
             .ToListAsync(ct);
         var ids = rows.Select(r => r.Id).ToList();
 
         var today = DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
         var leaseByTenant = await LeaseLookup.EffectiveByTenantAsync(db, ids, today, ct);
         var balances = await tenantFinancials.BalancesAsync(ct);
+        var standing = await tenantFinancials.StandingAsync(today, ct);
 
         var items = rows.Select(r =>
         {
             var lease = leaseByTenant.GetValueOrDefault(r.Id);
             return new TenantListRow(
                 r.Id, r.DisplayName, lease?.UnitLabel, lease?.Rent ?? 0m,
-                balances.GetValueOrDefault(r.Id), TenantStatusConverter.ToDb(r.Status));
+                balances.GetValueOrDefault(r.Id),
+                TenantLifecycleStatusConverter.ToDb(r.LifecycleStatus),
+                standing.GetValueOrDefault(r.Id, new TenantFinancialStanding(0m, 0m)));
         }).ToList();
 
         return new PagedResponse<TenantListRow>(items, total, page.Page, page.PageSize);

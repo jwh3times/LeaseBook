@@ -1,17 +1,19 @@
 import { Badge, type BadgeTone } from '@/design';
 
 // Status is never color-alone (CLAUDE.md UX contract): every badge pairs a dot + the capitalized label.
-const TENANT_TONE: Record<string, BadgeTone> = {
+const TENANT_LIFECYCLE_TONE: Record<string, BadgeTone> = {
   current: 'pos',
-  late: 'warn',
-  prepaid: 'accent',
   evicting: 'neg',
   past: 'neutral',
 };
 
-const UNIT_TONE: Record<string, BadgeTone> = {
+const UNIT_OCCUPANCY_TONE: Record<string, BadgeTone> = {
   occupied: 'pos',
   vacant: 'neutral',
+};
+
+const UNIT_AVAILABILITY_TONE: Record<string, BadgeTone> = {
+  available: 'pos',
   unavailable: 'warn',
 };
 
@@ -25,18 +27,57 @@ function titleCase(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
-export function TenantStatusBadge({ status }: { status: string }) {
+export function TenantLifecycleBadge({ status }: { status: string }) {
   return (
-    <Badge tone={TENANT_TONE[status] ?? 'neutral'} dot>
+    <Badge tone={TENANT_LIFECYCLE_TONE[status] ?? 'neutral'} dot>
       {titleCase(status)}
     </Badge>
   );
 }
 
-export function UnitStatusBadge({ status }: { status: string }) {
+export function TenantFinancialStandingBadges({
+  delinquentBalance,
+  unappliedCredit,
+}: {
+  delinquentBalance: number;
+  unappliedCredit: number;
+}) {
+  if (delinquentBalance <= 0 && unappliedCredit <= 0) {
+    return (
+      <Badge tone="neutral" dot>
+        No alerts
+      </Badge>
+    );
+  }
+
   return (
-    <Badge tone={UNIT_TONE[status] ?? 'neutral'} dot>
-      {titleCase(status)}
+    <span className="row gap4" style={{ flexWrap: 'wrap' }}>
+      {delinquentBalance > 0 && (
+        <Badge tone="warn" dot>
+          Delinquent
+        </Badge>
+      )}
+      {unappliedCredit > 0 && (
+        <Badge tone="accent" dot>
+          Credit on file
+        </Badge>
+      )}
+    </span>
+  );
+}
+
+export function UnitOccupancyBadge({ occupancy }: { occupancy: string }) {
+  return (
+    <Badge tone={UNIT_OCCUPANCY_TONE[occupancy] ?? 'neutral'} dot>
+      {titleCase(occupancy)}
+    </Badge>
+  );
+}
+
+export function UnitAvailabilityBadge({ availability }: { availability: string }) {
+  return (
+    <Badge tone={UNIT_AVAILABILITY_TONE[availability] ?? 'neutral'} dot>
+      {titleCase(availability)}
     </Badge>
   );
 }

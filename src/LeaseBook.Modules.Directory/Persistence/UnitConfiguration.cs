@@ -9,7 +9,9 @@ public sealed class UnitConfiguration : IEntityTypeConfiguration<Unit>
     public void Configure(EntityTypeBuilder<Unit> builder)
     {
         builder.ToTable("units", t =>
-            t.HasCheckConstraint("ck_units_status", $"status IN ({DirectorySql.Quote(UnitStatusConverter.DbValues)})"));
+            t.HasCheckConstraint(
+                "ck_units_availability",
+                $"availability IN ({DirectorySql.Quote(UnitAvailabilityConverter.DbValues)})"));
 
         builder.HasKey(e => e.Id);
 
@@ -20,7 +22,7 @@ public sealed class UnitConfiguration : IEntityTypeConfiguration<Unit>
         builder.Property(e => e.PropertyId).IsRequired();
         builder.Property(e => e.Label).IsRequired();
         builder.Property(e => e.Rent).IsRequired().HasDefaultValueSql("0");
-        builder.Property(e => e.Status).IsRequired().HasConversion<UnitStatusConverter>();
+        builder.Property(e => e.Availability).IsRequired().HasConversion<UnitAvailabilityConverter>();
         builder.Property(e => e.IsSystem).IsRequired().HasDefaultValue(false);
         builder.Property(e => e.CreatedAt).IsRequired();
 

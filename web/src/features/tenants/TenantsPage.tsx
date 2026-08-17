@@ -3,14 +3,18 @@ import { useNavigate } from 'react-router';
 import { Button, Input, Money, Select, type TableColumn } from '@/design';
 import { IndexView } from '@/components/IndexView';
 import { Modal } from '@/components/Modal';
-import { TenantStatusBadge } from '@/components/StatusBadge';
+import { TenantFinancialStandingBadges, TenantLifecycleBadge } from '@/components/StatusBadge';
 import { num, useCreateTenant, useTenants, type TenantListRow } from '@/lib/directory';
 
-const TENANT_STATUSES = ['current', 'late', 'prepaid', 'evicting', 'past'] as const;
+const TENANT_LIFECYCLE_STATUSES = ['current', 'evicting', 'past'] as const;
 
 function tenantMatches(row: TenantListRow, q: string): boolean {
   return (
-    row.displayName.toLowerCase().includes(q) || (row.unitLabel?.toLowerCase().includes(q) ?? false)
+    row.displayName.toLowerCase().includes(q) ||
+    (row.unitLabel?.toLowerCase().includes(q) ?? false) ||
+    row.lifecycleStatus.includes(q) ||
+    (num(row.financialStanding.delinquentBalance) > 0 && 'delinquent late'.includes(q)) ||
+    (num(row.financialStanding.unappliedCredit) > 0 && 'credit prepaid'.includes(q))
   );
 }
 
@@ -24,7 +28,21 @@ const columns: TableColumn<TenantListRow>[] = [
     num: true,
     render: (r) => <Money value={num(r.balance)} colorize />,
   },
-  { key: 'status', header: 'Status', render: (r) => <TenantStatusBadge status={r.status} /> },
+  {
+    key: 'lifecycle',
+    header: 'Lifecycle',
+    render: (r) => <TenantLifecycleBadge status={r.lifecycleStatus} />,
+  },
+  {
+    key: 'standing',
+    header: 'Financial standing',
+    render: (r) => (
+      <TenantFinancialStandingBadges
+        delinquentBalance={num(r.financialStanding.delinquentBalance)}
+        unappliedCredit={num(r.financialStanding.unappliedCredit)}
+      />
+    ),
+  },
 ];
 
 export function TenantsPage() {
@@ -70,7 +88,7 @@ function NewTenantModal({
   const [displayName, setDisplayName] = useState('');
   const [contactEmail, setContactEmail] = useState('');
   const [contactPhone, setContactPhone] = useState('');
-  const [status, setStatus] = useState<string>('current');
+  const [lifecycleStatus, setLifecycleStatus] = useState<string>('current');
   const [error, setError] = useState<string | null>(null);
 
   async function submit(event: React.FormEvent) {
@@ -81,7 +99,7 @@ function NewTenantModal({
         displayName,
         contactEmail: contactEmail || null,
         contactPhone: contactPhone || null,
-        status,
+        lifecycleStatus,
       });
       onCreated(result.id);
     } catch {
@@ -138,9 +156,13 @@ function NewTenantModal({
           />
         </div>
         <div className="pf-formrow">
-          <label htmlFor="t-status">Status</label>
-          <Select id="t-status" value={status} onChange={(e) => setStatus(e.target.value)}>
-            {TENANT_STATUSES.map((s) => (
+          <label htmlFor="t-lifecycle">Lifecycle</label>
+          <Select
+            id="t-lifecycle"
+            value={lifecycleStatus}
+            onChange={(e) => setLifecycleStatus(e.target.value)}
+          >
+            {TENANT_LIFECYCLE_STATUSES.map((s) => (
               <option key={s} value={s}>
                 {s.charAt(0).toUpperCase() + s.slice(1)}
               </option>

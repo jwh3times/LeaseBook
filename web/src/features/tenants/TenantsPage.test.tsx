@@ -16,7 +16,8 @@ const TENANTS = [
     unitLabel: '#2B',
     rent: 1450,
     balance: 1450,
-    status: 'current',
+    lifecycleStatus: 'current',
+    financialStanding: { delinquentBalance: 1450, unappliedCredit: 0 },
   },
   {
     id: 't2',
@@ -24,7 +25,8 @@ const TENANTS = [
     unitLabel: '#1A',
     rent: 1380,
     balance: 0,
-    status: 'current',
+    lifecycleStatus: 'current',
+    financialStanding: { delinquentBalance: 0, unappliedCredit: 0 },
   },
   {
     id: 't3',
@@ -32,7 +34,8 @@ const TENANTS = [
     unitLabel: '#3',
     rent: 1620,
     balance: 1620,
-    status: 'late',
+    lifecycleStatus: 'current',
+    financialStanding: { delinquentBalance: 1620, unappliedCredit: 75 },
   },
 ];
 
@@ -85,6 +88,19 @@ describe('TenantsPage', () => {
     expect(screen.queryByText('Jasmine Carter')).not.toBeInTheDocument();
   });
 
+  it('filters by derived financial standing without collapsing simultaneous facts', async () => {
+    server.use(listHandler());
+    renderTenants();
+    await screen.findByText('Jasmine Carter');
+
+    await userEvent.type(screen.getByLabelText('Filter tenants…'), 'credit');
+
+    expect(screen.getByText('Aisha Bello')).toBeInTheDocument();
+    expect(screen.getByText('Credit on file')).toBeInTheDocument();
+    expect(screen.getByText('Delinquent')).toBeInTheDocument();
+    expect(screen.queryByText('Jasmine Carter')).not.toBeInTheDocument();
+  });
+
   it('navigates to the tenant on row click', async () => {
     server.use(
       listHandler(),
@@ -93,7 +109,8 @@ describe('TenantsPage', () => {
           id: 't1',
           displayName: 'Jasmine Carter',
           contact: { email: null, phone: null },
-          status: 'current',
+          lifecycleStatus: 'current',
+          financialStanding: { delinquentBalance: 1450, unappliedCredit: 0 },
           lease: null,
           unitLabel: '#2B',
           propertyAddress: '412 Oakmont Ave',
@@ -118,7 +135,8 @@ describe('TenantsPage', () => {
           id: 't2',
           displayName: 'Devon Pryor',
           contact: { email: null, phone: null },
-          status: 'current',
+          lifecycleStatus: 'current',
+          financialStanding: { delinquentBalance: 0, unappliedCredit: 0 },
           lease: null,
           unitLabel: '#1A',
           propertyAddress: '412 Oakmont Ave',
@@ -146,7 +164,8 @@ describe('TenantsPage', () => {
           id: 'tNew',
           displayName: 'New Renter',
           contact: { email: null, phone: null },
-          status: 'current',
+          lifecycleStatus: 'current',
+          financialStanding: { delinquentBalance: 0, unappliedCredit: 0 },
           lease: null,
           unitLabel: null,
           propertyAddress: null,

@@ -1,6 +1,8 @@
 using LeaseBook.Modules.Accounting.Contracts;
 using LeaseBook.Modules.Accounting.Features.Posting.Events;
 using LeaseBook.Modules.Directory.Domain;
+using LeaseBook.Modules.Directory.Features.BankAccounts;
+using LeaseBook.Modules.Directory.Features.Dashboard;
 using LeaseBook.Modules.Directory.Features.Leases;
 using LeaseBook.Modules.Directory.Features.Owners;
 using LeaseBook.Modules.Directory.Features.Properties;
@@ -60,7 +62,7 @@ public sealed class DirectoryTests(PostgresFixture fixture)
         {
             ownerId = await s.Send(new CreateOwner("Owner", null, null, null, 800, 0m), ct);
             propertyId = await s.Send(new CreateProperty(ownerId, "412 Oakmont Ave", "Asheville", "NC", "28801", null), ct);
-            unitId = await s.Send(new CreateUnit(propertyId, "#2B", 1450m, "occupied"), ct);
+            unitId = await s.Send(new CreateUnit(propertyId, "#2B", 1450m, "available"), ct);
             tenantId = await s.Send(new CreateTenant("Jasmine Carter", null, null, "current"), ct);
             await s.Send(new CreateLease(
                 tenantId,
@@ -95,6 +97,86 @@ public sealed class DirectoryTests(PostgresFixture fixture)
     }
 
     [Fact]
+    public async Task Tenant_can_be_delinquent_and_hold_unapplied_credit_without_changing_lifecycle()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var orgId = await NewOrgAsync(ct);
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+
+        Guid tenantId = default;
+        await DispatchScopeAsync(orgId, async (sender, services) =>
+        {
+            var ownerId = await sender.Send(new CreateOwner("Owner", null, null, null, 800, 0m), ct);
+            var propertyId = await sender.Send(
+                new CreateProperty(ownerId, "19 Standing Way", "Raleigh", "NC", null, null), ct);
+            var unitId = await sender.Send(new CreateUnit(propertyId, "A", 100m, "available"), ct);
+            tenantId = await sender.Send(new CreateTenant("Standing Tenant", null, null, "current"), ct);
+            var bank = await sender.Send(new CreateBankAccount("Operating Trust", null, "1001", "trust"), ct);
+
+            var events = services.GetRequiredService<IAccountingEvents>();
+            await events.PostAsync(new RentCharged(
+                tenantId,
+                propertyId,
+                ownerId,
+                unitId,
+                new Money(100m),
+                today.AddDays(-15),
+                "Past-due rent",
+                DueDate: today.AddDays(-10)), ct);
+            await events.PostAsync(new PrepaymentReceived(
+                tenantId,
+                propertyId,
+                ownerId,
+                new Money(25m),
+                today.AddDays(-5),
+                bank.Id,
+                "Future rent credit"), ct);
+        }, ct);
+
+        var detail = await DispatchAsync(orgId, (sender, c) => sender.Query(new GetTenantDetail(tenantId), c), ct);
+
+        detail.ShouldNotBeNull();
+        detail.LifecycleStatus.ShouldBe("current");
+        detail.FinancialStanding.DelinquentBalance.ShouldBe(100m);
+        detail.FinancialStanding.UnappliedCredit.ShouldBe(25m);
+        detail.Balance.ShouldBe(75m);
+    }
+
+    [Fact]
+    public async Task Leased_but_unavailable_unit_is_occupied_and_not_vacant()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var orgId = await NewOrgAsync(ct);
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+
+        Guid propertyId = default;
+        await DispatchScopeAsync(orgId, async (sender, _) =>
+        {
+            var ownerId = await sender.Send(new CreateOwner("Owner", null, null, null, 800, 0m), ct);
+            propertyId = await sender.Send(
+                new CreateProperty(ownerId, "20 Maintenance Way", "Raleigh", "NC", null, null), ct);
+            var unitId = await sender.Send(new CreateUnit(propertyId, "A", 1000m, "unavailable"), ct);
+            var tenantId = await sender.Send(new CreateTenant("Maintenance Tenant", null, null, "current"), ct);
+            await sender.Send(new CreateLease(
+                tenantId,
+                unitId,
+                today.AddMonths(-1),
+                today.AddMonths(1),
+                1000m,
+                1000m,
+                "active"), ct);
+        }, ct);
+
+        var units = await DispatchAsync(orgId, (sender, c) => sender.Query(new ListUnits(propertyId), c), ct);
+        var kpis = await DispatchAsync(orgId, (sender, c) => sender.Query(new GetDirectoryKpis(), c), ct);
+
+        var unit = units.ShouldHaveSingleItem();
+        unit.Occupancy.ShouldBe("occupied");
+        unit.Availability.ShouldBe("unavailable");
+        kpis.Vacancy.ShouldBe(0);
+    }
+
+    [Fact]
     public async Task Tenant_detail_does_not_present_a_future_active_lease_as_current()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -108,7 +190,7 @@ public sealed class DirectoryTests(PostgresFixture fixture)
             var ownerId = await s.Send(new CreateOwner("Future Owner", null, null, null, 800, 0m), ct);
             propertyId = await s.Send(
                 new CreateProperty(ownerId, "14 Tomorrow Lane", "Raleigh", "NC", null, null), ct);
-            var unitId = await s.Send(new CreateUnit(propertyId, "1", 1200m, "vacant"), ct);
+            var unitId = await s.Send(new CreateUnit(propertyId, "1", 1200m, "available"), ct);
             tenantId = await s.Send(new CreateTenant("Future Resident", null, null, "current"), ct);
             await s.Send(new CreateLease(
                 tenantId,
@@ -158,7 +240,7 @@ public sealed class DirectoryTests(PostgresFixture fixture)
             var ownerId = await s.Send(new CreateOwner("Historical Owner", null, null, null, 800, 0m), ct);
             var propertyId = await s.Send(
                 new CreateProperty(ownerId, "15 Yesterday Lane", "Raleigh", "NC", null, null), ct);
-            var unitId = await s.Send(new CreateUnit(propertyId, "2", 1300m, "vacant"), ct);
+            var unitId = await s.Send(new CreateUnit(propertyId, "2", 1300m, "available"), ct);
             var tenantId = await s.Send(new CreateTenant("Former Resident", null, null, "past"), ct);
             leaseId = await s.Send(new CreateLease(
                 tenantId,
@@ -215,7 +297,13 @@ public sealed class DirectoryTests(PostgresFixture fixture)
             await s.Send(new CreateOwner("Real Owner", null, null, null, null, 0m), ct);
             var db = sp.GetRequiredService<AppDbContext>();
             db.Set<Owner>().Add(new Owner { Id = UuidV7.NewId(), Name = "All other owners", IsSystem = true });
-            db.Set<Tenant>().Add(new Tenant { Id = UuidV7.NewId(), DisplayName = "Aggregate", Status = TenantStatus.Current, IsSystem = true });
+            db.Set<Tenant>().Add(new Tenant
+            {
+                Id = UuidV7.NewId(),
+                DisplayName = "Aggregate",
+                LifecycleStatus = TenantLifecycleStatus.Current,
+                IsSystem = true,
+            });
             await db.SaveChangesAsync(ct);
         }, ct);
 

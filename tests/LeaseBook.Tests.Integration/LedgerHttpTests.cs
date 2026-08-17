@@ -188,7 +188,7 @@ public sealed class LedgerHttpTests(PostgresFixture fixture)
             {
                 var ownerId = await sender.Send(new CreateOwner("Owner", null, null, null, 800, 0m), ct);
                 var propertyId = await sender.Send(new CreateProperty(ownerId, "412 Oakmont Ave", "Asheville", "NC", "28801", null), ct);
-                var unitId = await sender.Send(new CreateUnit(propertyId, "#2B", 1450m, "occupied"), ct);
+                var unitId = await sender.Send(new CreateUnit(propertyId, "#2B", 1450m, "available"), ct);
                 tenantId = await sender.Send(new CreateTenant("Jasmine Carter", null, null, "current"), ct);
                 await sender.Send(new CreateLease(tenantId, unitId, new DateOnly(2025, 6, 1), new DateOnly(2026, 5, 31), 1450m, 1450m, "active"), ct);
                 trustBankId = (await sender.Send(new CreateBankAccount("Operating Trust", null, null, "trust"), ct)).Id;

@@ -32,7 +32,7 @@ interface DemoRow {
   id: string;
   tenant: string;
   unit: string;
-  status: 'Current' | 'Late' | 'Prepaid';
+  status: 'Current' | 'Evicting' | 'Past';
   balance: number;
 }
 
@@ -48,19 +48,19 @@ const ROWS: DemoRow[] = [
     id: 't3',
     tenant: 'Aisha Bello',
     unit: '1029 Charlotte St · #3',
-    status: 'Late',
+    status: 'Evicting',
     balance: 1620,
   },
   {
     id: 't5',
     tenant: 'The Mercer Family',
     unit: '88 Riverside Dr',
-    status: 'Prepaid',
+    status: 'Past',
     balance: -75,
   },
 ];
 
-const STATUS_TONE = { Current: 'pos', Late: 'neg', Prepaid: 'accent' } as const;
+const STATUS_TONE = { Current: 'pos', Evicting: 'neg', Past: 'neutral' } as const;
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -135,13 +135,13 @@ export function KitchenSink() {
           Current
         </Badge>
         <Badge tone="neg" dot>
-          Late
+          Delinquent
         </Badge>
         <Badge tone="warn" icon="alert">
           Review
         </Badge>
         <Badge tone="accent" dot>
-          Prepaid
+          Credit on file
         </Badge>
         <Badge tone="neutral">Draft</Badge>
       </Section>
@@ -163,7 +163,7 @@ export function KitchenSink() {
         <FilterChip icon="filter" active>
           All
         </FilterChip>
-        <FilterChip>Late only</FilterChip>
+        <FilterChip>Delinquent only</FilterChip>
       </Section>
 
       <Section title="Progress & trend">
@@ -214,7 +214,7 @@ export function KitchenSink() {
             { key: 'unit', header: 'Unit', render: (r) => <span className="muted">{r.unit}</span> },
             {
               key: 'status',
-              header: 'Status',
+              header: 'Lifecycle',
               render: (r) => (
                 <Badge tone={STATUS_TONE[r.status]} dot>
                   {r.status}
