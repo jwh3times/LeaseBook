@@ -97,12 +97,14 @@ jobs:
             ')"
             release_entry="$(printf '%s\n' "$release_body" | grep -E '^- ' | grep -Fvx -- '- _Nothing yet._' || true)"
 
+            # Here-strings keep grep from closing a printf producer early under pipefail. A valid
+            # match near the top of a long changelog must not turn into a broken-pipe failure.
             if [[ "$valid_next_line" == true ]] &&
-               printf '%s\n' "$head_changelog" | grep -Eq "^## \\[${escaped_version}\\] - [0-9]{4}-[0-9]{2}-[0-9]{2}$" &&
-               ! printf '%s\n' "$base_changelog" | grep -Fq "## [$head_version] - " &&
+               grep -Eq "^## \\[${escaped_version}\\] - [0-9]{4}-[0-9]{2}-[0-9]{2}$" <<<"$head_changelog" &&
+               ! grep -Fq "## [$head_version] - " <<<"$base_changelog" &&
                [[ -n "$release_entry" ]] &&
-               printf '%s\n' "$head_changelog" | grep -Fqx "[Unreleased]: https://github.com/${GITHUB_REPOSITORY}/compare/v${head_version}...HEAD" &&
-               printf '%s\n' "$head_changelog" | grep -Fqx "[$head_version]: https://github.com/${GITHUB_REPOSITORY}/releases/tag/v${head_version}"; then
+               grep -Fqx "[Unreleased]: https://github.com/${GITHUB_REPOSITORY}/compare/v${head_version}...HEAD" <<<"$head_changelog" &&
+               grep -Fqx "[$head_version]: https://github.com/${GITHUB_REPOSITORY}/releases/tag/v${head_version}" <<<"$head_changelog"; then
               echo "Valid deliberate release cut from $base_version to $head_version."
               exit 0
             fi
