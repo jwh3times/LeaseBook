@@ -11,50 +11,46 @@ namespace LeaseBook.Modules.Directory.Persistence;
 /// is exposed so other module code can reference the canonical text without re-deriving it. (Mirrors
 /// <c>AccountingEnumConverters</c> — Directory cannot reference the Accounting assembly, ADR-007.)
 /// </summary>
-public sealed class UnitStatusConverter() : ValueConverter<UnitStatus, string>(v => ToDb(v), v => FromDb(v))
+public sealed class UnitAvailabilityConverter()
+    : ValueConverter<UnitAvailability, string>(v => ToDb(v), v => FromDb(v))
 {
-    public static string ToDb(UnitStatus value) => value switch
+    public static string ToDb(UnitAvailability value) => value switch
     {
-        UnitStatus.Occupied => "occupied",
-        UnitStatus.Vacant => "vacant",
-        UnitStatus.Unavailable => "unavailable",
-        _ => throw new ArgumentOutOfRangeException(nameof(value), value, "Unknown unit status."),
+        UnitAvailability.Available => "available",
+        UnitAvailability.Unavailable => "unavailable",
+        _ => throw new ArgumentOutOfRangeException(nameof(value), value, "Unknown unit availability."),
     };
 
-    public static UnitStatus FromDb(string value) => value switch
+    public static UnitAvailability FromDb(string value) => value switch
     {
-        "occupied" => UnitStatus.Occupied,
-        "vacant" => UnitStatus.Vacant,
-        "unavailable" => UnitStatus.Unavailable,
-        _ => throw new ArgumentOutOfRangeException(nameof(value), value, "Unknown unit status text."),
+        "available" => UnitAvailability.Available,
+        "unavailable" => UnitAvailability.Unavailable,
+        _ => throw new ArgumentOutOfRangeException(nameof(value), value, "Unknown unit availability text."),
     };
 
-    public static readonly string[] DbValues = ["occupied", "vacant", "unavailable"];
+    public static readonly string[] DbValues = ["available", "unavailable"];
 }
 
-public sealed class TenantStatusConverter() : ValueConverter<TenantStatus, string>(v => ToDb(v), v => FromDb(v))
+public sealed class TenantLifecycleStatusConverter()
+    : ValueConverter<TenantLifecycleStatus, string>(v => ToDb(v), v => FromDb(v))
 {
-    public static string ToDb(TenantStatus value) => value switch
+    public static string ToDb(TenantLifecycleStatus value) => value switch
     {
-        TenantStatus.Current => "current",
-        TenantStatus.Late => "late",
-        TenantStatus.Prepaid => "prepaid",
-        TenantStatus.Evicting => "evicting",
-        TenantStatus.Past => "past",
-        _ => throw new ArgumentOutOfRangeException(nameof(value), value, "Unknown tenant status."),
+        TenantLifecycleStatus.Current => "current",
+        TenantLifecycleStatus.Evicting => "evicting",
+        TenantLifecycleStatus.Past => "past",
+        _ => throw new ArgumentOutOfRangeException(nameof(value), value, "Unknown tenant lifecycle status."),
     };
 
-    public static TenantStatus FromDb(string value) => value switch
+    public static TenantLifecycleStatus FromDb(string value) => value switch
     {
-        "current" => TenantStatus.Current,
-        "late" => TenantStatus.Late,
-        "prepaid" => TenantStatus.Prepaid,
-        "evicting" => TenantStatus.Evicting,
-        "past" => TenantStatus.Past,
-        _ => throw new ArgumentOutOfRangeException(nameof(value), value, "Unknown tenant status text."),
+        "current" => TenantLifecycleStatus.Current,
+        "evicting" => TenantLifecycleStatus.Evicting,
+        "past" => TenantLifecycleStatus.Past,
+        _ => throw new ArgumentOutOfRangeException(nameof(value), value, "Unknown tenant lifecycle status text."),
     };
 
-    public static readonly string[] DbValues = ["current", "late", "prepaid", "evicting", "past"];
+    public static readonly string[] DbValues = ["current", "evicting", "past"];
 }
 
 public sealed class LeaseStatusConverter() : ValueConverter<LeaseStatus, string>(v => ToDb(v), v => FromDb(v))

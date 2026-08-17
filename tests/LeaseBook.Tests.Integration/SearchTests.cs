@@ -90,7 +90,7 @@ public sealed class SearchTests(PostgresFixture fixture)
             var sender = sp.GetRequiredService<ISender>();
             var ownerId = await sender.Send(new CreateOwner("Hargrove Family Trust", "HF", null, null, 800, 0m), ct);
             var propertyId = await sender.Send(new CreateProperty(ownerId, "412 Oakmont Ave", "Asheville", "NC", "28801", null), ct);
-            var unitId = await sender.Send(new CreateUnit(propertyId, "#2B", 1450m, "occupied"), ct);
+            var unitId = await sender.Send(new CreateUnit(propertyId, "#2B", 1450m, "available"), ct);
             var tenantId = await sender.Send(new CreateTenant("Jasmine Carter", null, null, "current"), ct);
             await sender.Send(new CreateLease(tenantId, unitId, null, null, 1450m, 1450m, "active"), ct);
         }, ct);

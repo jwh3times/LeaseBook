@@ -35,9 +35,10 @@ public sealed record TenantLeaseInfo(
     int? LateFeeRateBpsOverride);
 
 public sealed record TenantDetail(
-    Guid Id, string DisplayName, TenantContact Contact, string Status,
+    Guid Id, string DisplayName, TenantContact Contact, string LifecycleStatus,
     TenantLeaseInfo? Lease, string? UnitLabel, string? PropertyAddress,
-    Guid? OwnerId, string? OwnerName, decimal Balance, decimal DepositHeld);
+    Guid? OwnerId, string? OwnerName, decimal Balance, decimal DepositHeld,
+    TenantFinancialStanding FinancialStanding);
 
 internal sealed class GetTenantDetailHandler(
     DbContext db,
@@ -84,6 +85,7 @@ internal sealed class GetTenantDetailHandler(
 
         var balances = await tenantFinancials.BalancesAsync(ct);
         var deposits = await tenantFinancials.DepositsHeldAsync(ct);
+        var standing = await tenantFinancials.StandingAsync(today, ct);
 
         TenantLeaseInfo? lease = context is null
             ? null
@@ -101,8 +103,10 @@ internal sealed class GetTenantDetailHandler(
 
         return new TenantDetail(
             tenant.Id, tenant.DisplayName, new TenantContact(tenant.ContactEmail, tenant.ContactPhone),
-            TenantStatusConverter.ToDb(tenant.Status), lease, context?.UnitLabel, context?.PropertyAddress,
+            TenantLifecycleStatusConverter.ToDb(tenant.LifecycleStatus),
+            lease, context?.UnitLabel, context?.PropertyAddress,
             context?.OwnerId, context?.OwnerName,
-            balances.GetValueOrDefault(tenant.Id), deposits.GetValueOrDefault(tenant.Id));
+            balances.GetValueOrDefault(tenant.Id), deposits.GetValueOrDefault(tenant.Id),
+            standing.GetValueOrDefault(tenant.Id, new TenantFinancialStanding(0m, 0m)));
     }
 }

@@ -50,7 +50,12 @@ public sealed class AccountingSchemaRoundTripTests(PostgresFixture fixture)
             // carry — materialize them in this org before posting so the FK targets exist.
             db.Set<Owner>().Add(new Owner { Id = ownerId, Name = "Round-trip owner" });
             db.Set<Property>().Add(new Property { Id = propertyId, OwnerId = ownerId, Address = "Round-trip property" });
-            db.Set<Tenant>().Add(new Tenant { Id = tenantId, DisplayName = "Round-trip tenant", Status = TenantStatus.Current });
+            db.Set<Tenant>().Add(new Tenant
+            {
+                Id = tenantId,
+                DisplayName = "Round-trip tenant",
+                LifecycleStatus = TenantLifecycleStatus.Current,
+            });
             await db.SaveChangesAsync(ct);
 
             var entry = JournalEntry.Create(

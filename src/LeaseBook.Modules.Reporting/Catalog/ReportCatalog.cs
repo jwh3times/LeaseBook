@@ -30,7 +30,7 @@ public static class ReportCatalog
         new("trust-ledger",  "Trust account ledger",        "Trust accounting","doc",      "Full activity for any trust account",              YearMonthBank),
         new("bank-rec",      "Bank reconciliation",         "Banking",         "bank",     "Reconciliation detail with cleared status",         YearMonthBank,          Favorite: true),
         new("deposit-liab",  "Security deposit liability",  "Trust accounting","wallet",   "Held deposits by tenant — recognized on application", YearMonth),
-        new("rent-roll",     "Rent roll",                   "Owner",           "building", "Units, tenants, rent & status portfolio-wide",      None),
+        new("rent-roll",     "Rent roll",                   "Owner",           "building", "Units, tenants, rent, occupancy & availability",     None),
         new("delinquency",   "Delinquency",                 "Banking",         "clock",    "Outstanding tenant balances by age",               AsOfDate),
         new("mgmt-fee",      "Management fee income",       "Trust accounting","reports",  "PM income — isolated from owner reporting",        YearMonth),
         new("compliance-pack","Trust compliance pack",      "Compliance",      "doc",      "Audit-ready ZIP — trust ledger, deposit register, reconciliations & audit log for a closed period", BankPeriodRange),

@@ -38,7 +38,7 @@ public sealed class RentRollTests(PostgresFixture fixture)
         var result = await DispatchAsync((s, c) => s.Query(new GetRentRoll(), c), ct);
 
         // 7 occupied units from the seed.
-        var occupied = result.Rows.Where(r => r.Status == "occupied").ToList();
+        var occupied = result.Rows.Where(r => r.Occupancy == "occupied").ToList();
         occupied.Count.ShouldBe(7);
 
         // Occupied rows always have a tenant name.
@@ -49,7 +49,8 @@ public sealed class RentRollTests(PostgresFixture fixture)
         jasmine.ShouldNotBeNull();
         jasmine!.Property.ShouldBe("412 Oakmont Ave");
         jasmine.Rent.ShouldBe(1450m);
-        jasmine.Status.ShouldBe("occupied");
+        jasmine.Occupancy.ShouldBe("occupied");
+        jasmine.Availability.ShouldBe("available");
     }
 
     [Fact]
@@ -60,7 +61,7 @@ public sealed class RentRollTests(PostgresFixture fixture)
 
         var result = await DispatchAsync((s, c) => s.Query(new GetRentRoll(), c), ct);
 
-        var vacant = result.Rows.Where(r => r.Status == "vacant").ToList();
+        var vacant = result.Rows.Where(r => r.Occupancy == "vacant").ToList();
         // 13 vacant units (20 − 7 occupied).
         vacant.Count.ShouldBe(13);
         vacant.ShouldAllBe(r => r.Tenant == null);

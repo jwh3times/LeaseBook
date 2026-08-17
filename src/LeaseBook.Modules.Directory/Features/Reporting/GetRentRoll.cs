@@ -8,7 +8,8 @@ namespace LeaseBook.Modules.Directory.Features.Reporting;
 
 /// <summary>
 /// Rent roll: all non-system units with their property address, current tenant name (if occupied), lease
-/// rent, and unit status (§M5 report #6). Pure Directory data — no Accounting tables touched (ADR-007).
+/// rent, derived occupancy, and operational availability (§M5 report #6). Pure Directory data — no
+/// Accounting tables touched (ADR-007).
 /// EF LINQ over Directory's own DbSets (org query filter applies for free).
 /// </summary>
 public sealed record GetRentRoll : IQuery<RentRollResponse>;
@@ -18,10 +19,17 @@ public sealed record RentRollResponse(IReadOnlyList<RentRollRow> Rows);
 /// <summary>One row per non-system unit.</summary>
 /// <param name="UnitId">The unit's stable id.</param>
 /// <param name="Property">Property address string.</param>
-/// <param name="Tenant">Current tenant display name, or null when vacant/unavailable.</param>
-/// <param name="Rent">Lease rent for occupied units; unit scheduled rent for vacant/unavailable units.</param>
-/// <param name="Status">Unit status as a lowercase string (e.g. "occupied", "vacant", "unavailable").</param>
-public sealed record RentRollRow(Guid UnitId, string Property, string? Tenant, decimal Rent, string Status);
+/// <param name="Tenant">Tenant display name, or null when vacant.</param>
+/// <param name="Rent">Lease rent for occupied units; unit scheduled rent for vacant units.</param>
+/// <param name="Occupancy">Derived as "occupied" or "vacant" from the lease effective today.</param>
+/// <param name="Availability">Stored operational availability as "available" or "unavailable".</param>
+public sealed record RentRollRow(
+    Guid UnitId,
+    string Property,
+    string? Tenant,
+    decimal Rent,
+    string Occupancy,
+    string Availability);
 
 internal sealed class GetRentRollHandler(DbContext db, TimeProvider clock) : IQueryHandler<GetRentRoll, RentRollResponse>
 {
@@ -46,7 +54,8 @@ internal sealed class GetRentRollHandler(DbContext db, TimeProvider clock) : IQu
                 p.Address,
                 t == null ? null : t.DisplayName,
                 l == null ? u.Rent.Amount : l.Rent.Amount,
-                UnitStatusConverter.ToDb(u.Status)))
+                l == null ? "vacant" : "occupied",
+                UnitAvailabilityConverter.ToDb(u.Availability)))
             .ToListAsync(ct);
 
         return new RentRollResponse(rows);

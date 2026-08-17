@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living decision index
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-08-16
+- **Last reviewed:** 2026-08-17
 
 An **Architecture Decision Record** captures a single significant or non-obvious engineering
 decision — the context that forced it, the choice made, and the consequences accepted — so it can be
@@ -62,6 +62,7 @@ form, write it, and add a row to the index below. When a decision is replaced, m
 | [035](ADR-035-single-active-lease-financial-attribution.md)          | One active lease supplies tenant financial attribution                          | Superseded by ADR-037         | 2026-08-13 |
 | [036](ADR-036-effective-dated-property-ownership-transfer.md)        | Effective-dated property ownership transfers preserve deposit responsibility    | Accepted                      | 2026-08-13 |
 | [037](ADR-037-effective-dated-lease-attribution.md)                  | Effective-dated lease attribution and non-overlapping terms                     | Accepted                      | 2026-08-16 |
+| [038](ADR-038-derived-financial-standing-and-occupancy.md)           | Derive tenant financial standing and unit occupancy                             | Accepted                      | 2026-08-17 |
 
 ## Status legend
 

@@ -345,7 +345,7 @@ public sealed class LateFeeRunTests(PostgresFixture fixture)
 
             ownerId = await s.Send(new CreateOwner("Fee Test Owner", null, null, null, 800, 0m), ct);
             propId = await s.Send(new CreateProperty(ownerId, "100 Fee Ln", "Raleigh", "NC", null, null), ct);
-            unitId = await s.Send(new CreateUnit(propId, "#A", rent, "occupied"), ct);
+            unitId = await s.Send(new CreateUnit(propId, "#A", rent, "available"), ct);
             tenantId = await s.Send(new CreateTenant("Late Fee Tenant", null, null, "current"), ct);
 
             leaseId = await s.Send(new CreateLease(
@@ -373,8 +373,8 @@ public sealed class LateFeeRunTests(PostgresFixture fixture)
             trustBankId = trust.Id;
             ownerId = await s.Send(new CreateOwner("Two Lease Owner", null, null, null, 800, 0m), ct);
             propId = await s.Send(new CreateProperty(ownerId, "200 Fee Ave", "Durham", "NC", null, null), ct);
-            var u1 = await s.Send(new CreateUnit(propId, "#1", 1200m, "occupied"), ct);
-            var u2 = await s.Send(new CreateUnit(propId, "#2", 1300m, "occupied"), ct);
+            var u1 = await s.Send(new CreateUnit(propId, "#1", 1200m, "available"), ct);
+            var u2 = await s.Send(new CreateUnit(propId, "#2", 1300m, "available"), ct);
             t1 = await s.Send(new CreateTenant("Tenant Alpha", null, null, "current"), ct);
             t2 = await s.Send(new CreateTenant("Tenant Beta", null, null, "current"), ct);
             l1 = await s.Send(new CreateLease(t1, u1, new DateOnly(2025, 1, 1), new DateOnly(2027, 12, 31),

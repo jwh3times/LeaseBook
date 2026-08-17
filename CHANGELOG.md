@@ -30,6 +30,19 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 - _Nothing yet._
 
+## [0.7.0] - 2026-08-17
+
+### Changed
+
+- **Derived tenant standing and unit occupancy** — Tenant lifecycle now records only the operational
+  relationship (`current`, `evicting`, or `past`), while delinquent balance and unapplied credit are
+  derived independently from Accounting and may coexist. Unit occupancy is now derived from the lease
+  effective on the requested date, separately from stored operational availability (`available` or
+  `unavailable`), so a leased unit can remain occupied while unavailable. Existing `late`/`prepaid`
+  tenant rows migrate to `current`, existing `occupied`/`vacant` unit rows migrate to `available`, and
+  the API, imports, reports, generated client, and UI expose the independent concepts. See
+  [ADR-038](docs/adr/ADR-038-derived-financial-standing-and-occupancy.md).
+
 ## [0.6.0] - 2026-08-16
 
 ### Changed
@@ -502,7 +515,8 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.7.0
 [0.6.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.6.0
 [0.5.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.5.0
 [0.4.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.4.0

@@ -97,16 +97,16 @@ internal static class DemoDirectorySeed
             {
                 Id = DemoIds.T1,
                 DisplayName = "Jasmine Carter",
-                Status = TenantStatus.Current,
+                LifecycleStatus = TenantLifecycleStatus.Current,
                 ContactEmail = "jcarter@email.com",
                 ContactPhone = "(828) 555-0148",
             },
-            new Tenant { Id = DemoIds.T2, DisplayName = "Devon Pryor", Status = TenantStatus.Current },
-            new Tenant { Id = DemoIds.T3, DisplayName = "Aisha Bello", Status = TenantStatus.Late },
-            new Tenant { Id = DemoIds.T4, DisplayName = "Cole Ramsey", Status = TenantStatus.Current },
-            new Tenant { Id = DemoIds.T5, DisplayName = "The Mercer Family", Status = TenantStatus.Prepaid },
-            new Tenant { Id = DemoIds.T6, DisplayName = "Lena Vasquez", Status = TenantStatus.Late },
-            new Tenant { Id = DemoIds.T7, DisplayName = "Brandon Tate", Status = TenantStatus.Current });
+            new Tenant { Id = DemoIds.T2, DisplayName = "Devon Pryor", LifecycleStatus = TenantLifecycleStatus.Current },
+            new Tenant { Id = DemoIds.T3, DisplayName = "Aisha Bello", LifecycleStatus = TenantLifecycleStatus.Current },
+            new Tenant { Id = DemoIds.T4, DisplayName = "Cole Ramsey", LifecycleStatus = TenantLifecycleStatus.Current },
+            new Tenant { Id = DemoIds.T5, DisplayName = "The Mercer Family", LifecycleStatus = TenantLifecycleStatus.Current },
+            new Tenant { Id = DemoIds.T6, DisplayName = "Lena Vasquez", LifecycleStatus = TenantLifecycleStatus.Current },
+            new Tenant { Id = DemoIds.T7, DisplayName = "Brandon Tate", LifecycleStatus = TenantLifecycleStatus.Current });
 
         // System tenant rows backing the journal's deposit aggregates (§C.2) — FK targets only, hidden.
         Tenant System(Guid id, string label) => new() { Id = id, DisplayName = label, IsSystem = true };
@@ -171,32 +171,32 @@ internal static class DemoDirectorySeed
     {
         // One unit per distinct tenant unit string (occupied), plus filler vacant units up to each
         // property's count (data.jsx: p1=4, p2=1, p3=6, p4=3, p5=4, p6=2 → 20 units, 7 occupied; §C.10).
-        (Guid Property, string Label, decimal Rent, UnitStatus Status, Guid? Tenant)[] specs =
+        (Guid Property, string Label, decimal Rent, Guid? Tenant)[] specs =
         [
-            (DemoIds.P1, "#2B", 1450m, UnitStatus.Occupied, DemoIds.T1), // Jasmine Carter
-            (DemoIds.P1, "#1A", 1380m, UnitStatus.Occupied, DemoIds.T2), // Devon Pryor
-            (DemoIds.P1, "#3C", 1400m, UnitStatus.Vacant, null),
-            (DemoIds.P1, "#4D", 1400m, UnitStatus.Vacant, null),
-            (DemoIds.P2, "88 Riverside Dr", 2150m, UnitStatus.Occupied, DemoIds.T5), // The Mercer Family (whole home)
-            (DemoIds.P3, "#3", 1620m, UnitStatus.Occupied, DemoIds.T3), // Aisha Bello
-            (DemoIds.P3, "#5", 1550m, UnitStatus.Occupied, DemoIds.T7), // Brandon Tate
-            (DemoIds.P3, "#1", 1500m, UnitStatus.Vacant, null),
-            (DemoIds.P3, "#2", 1500m, UnitStatus.Vacant, null),
-            (DemoIds.P3, "#4", 1500m, UnitStatus.Vacant, null),
-            (DemoIds.P3, "#6", 1500m, UnitStatus.Vacant, null),
-            (DemoIds.P4, "#2", 1410m, UnitStatus.Occupied, DemoIds.T6), // Lena Vasquez
-            (DemoIds.P4, "#1", 1400m, UnitStatus.Vacant, null),
-            (DemoIds.P4, "#3", 1400m, UnitStatus.Vacant, null),
-            (DemoIds.P5, "#B", 1295m, UnitStatus.Occupied, DemoIds.T4), // Cole Ramsey
-            (DemoIds.P5, "#A", 1300m, UnitStatus.Vacant, null),
-            (DemoIds.P5, "#C", 1300m, UnitStatus.Vacant, null),
-            (DemoIds.P5, "#D", 1300m, UnitStatus.Vacant, null),
-            (DemoIds.P6, "#1", 1200m, UnitStatus.Vacant, null),
-            (DemoIds.P6, "#2", 1200m, UnitStatus.Vacant, null),
+            (DemoIds.P1, "#2B", 1450m, DemoIds.T1), // Jasmine Carter
+            (DemoIds.P1, "#1A", 1380m, DemoIds.T2), // Devon Pryor
+            (DemoIds.P1, "#3C", 1400m, null),
+            (DemoIds.P1, "#4D", 1400m, null),
+            (DemoIds.P2, "88 Riverside Dr", 2150m, DemoIds.T5), // The Mercer Family (whole home)
+            (DemoIds.P3, "#3", 1620m, DemoIds.T3), // Aisha Bello
+            (DemoIds.P3, "#5", 1550m, DemoIds.T7), // Brandon Tate
+            (DemoIds.P3, "#1", 1500m, null),
+            (DemoIds.P3, "#2", 1500m, null),
+            (DemoIds.P3, "#4", 1500m, null),
+            (DemoIds.P3, "#6", 1500m, null),
+            (DemoIds.P4, "#2", 1410m, DemoIds.T6), // Lena Vasquez
+            (DemoIds.P4, "#1", 1400m, null),
+            (DemoIds.P4, "#3", 1400m, null),
+            (DemoIds.P5, "#B", 1295m, DemoIds.T4), // Cole Ramsey
+            (DemoIds.P5, "#A", 1300m, null),
+            (DemoIds.P5, "#C", 1300m, null),
+            (DemoIds.P5, "#D", 1300m, null),
+            (DemoIds.P6, "#1", 1200m, null),
+            (DemoIds.P6, "#2", 1200m, null),
         ];
 
         var unitByTenant = new Dictionary<Guid, (Guid UnitId, decimal Rent)>();
-        foreach (var (property, label, rent, status, tenant) in specs)
+        foreach (var (property, label, rent, tenant) in specs)
         {
             var unit = new Unit
             {
@@ -204,7 +204,7 @@ internal static class DemoDirectorySeed
                 PropertyId = property,
                 Label = label,
                 Rent = new Money(rent),
-                Status = status,
+                Availability = UnitAvailability.Available,
             };
             db.Set<Unit>().Add(unit);
             if (tenant is { } tenantId)

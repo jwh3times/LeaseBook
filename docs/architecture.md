@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living architecture guide
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-08-13
+- **Last reviewed:** 2026-08-17
 
 This is the canonical public map of the system **as implemented**. It explains how the pieces fit
 together and links the decisions that shaped them without reproducing every invariant. Accepted
@@ -46,6 +46,13 @@ and the host adapter dispatches the producing module's command inside the ambien
 property ownership transfer uses this path from Directory to Accounting so its append-only ownership
 transition, current Directory owner and deposit-responsibility handoff commit or roll back together. See
 [ADR-036](adr/ADR-036-effective-dated-property-ownership-transfer.md).
+
+Directory does not persist snapshots of facts already owned by those sources. Tenant financial
+standing is a batch projection from Accounting's journal-derived aging and held-prepayment reads, and
+unit occupancy is derived from the lease effective on the requested date. Tenant rows retain only
+operational lifecycle; unit rows retain only operational availability. This lets delinquency coexist
+with credit on file and lets an occupied unit be unavailable without either source contradicting the
+other. See [ADR-038](adr/ADR-038-derived-financial-standing-and-occupancy.md).
 
 ## The accounting core
 

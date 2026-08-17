@@ -169,7 +169,7 @@ public sealed class ActorAuditTests(PostgresFixture fixture)
             await sp.GetRequiredService<IChartOfAccounts>().ProvisionAsync([], c);
             var ownerId = await s.Send(new CreateOwner("Owner", null, null, null, 800, 0m), c);
             var propertyId = await s.Send(new CreateProperty(ownerId, "412 Oakmont Ave", "Asheville", "NC", "28801", null), c);
-            var unitId = await s.Send(new CreateUnit(propertyId, "#2B", 1450m, "occupied"), c);
+            var unitId = await s.Send(new CreateUnit(propertyId, "#2B", 1450m, "available"), c);
             tenantId = await s.Send(new CreateTenant("Jasmine Carter", null, null, "current"), c);
             await s.Send(new CreateLease(tenantId, unitId, new DateOnly(2025, 6, 1), new DateOnly(2026, 5, 31), 1450m, 1450m, "active"), c);
             return 0;

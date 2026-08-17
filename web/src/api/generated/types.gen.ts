@@ -232,14 +232,14 @@ export type CreateTenant = {
     displayName: string;
     contactEmail: null | string;
     contactPhone: null | string;
-    status: string;
+    lifecycleStatus: string;
 };
 
 export type CreateUnit = {
     propertyId: string;
     label: string;
     rent: number | string;
-    status: string;
+    availability: string;
 };
 
 export type CreatedId = {
@@ -807,7 +807,7 @@ export type TenantDetail = {
     id: string;
     displayName: string;
     contact: TenantContact;
-    status: string;
+    lifecycleStatus: string;
     lease: null | TenantLeaseInfo;
     unitLabel: null | string;
     propertyAddress: null | string;
@@ -815,6 +815,12 @@ export type TenantDetail = {
     ownerName: null | string;
     balance: number | string;
     depositHeld: number | string;
+    financialStanding: TenantFinancialStanding;
+};
+
+export type TenantFinancialStanding = {
+    delinquentBalance: number | string;
+    unappliedCredit: number | string;
 };
 
 export type TenantLeaseInfo = {
@@ -858,7 +864,8 @@ export type TenantListRow = {
     unitLabel: null | string;
     rent: number | string;
     balance: number | string;
-    status: string;
+    lifecycleStatus: string;
+    financialStanding: TenantFinancialStanding;
 };
 
 export type TransferPropertyOwnershipRequest = {
@@ -886,7 +893,8 @@ export type UnitRow = {
     propertyId: string;
     label: string;
     rent: number | string;
-    status: string;
+    occupancy: string;
+    availability: string;
 };
 
 export type UnlockReconciliation = {
@@ -957,14 +965,14 @@ export type UpdateTenant = {
     displayName: string;
     contactEmail: null | string;
     contactPhone: null | string;
-    status: string;
+    lifecycleStatus: string;
 };
 
 export type UpdateUnit = {
     id: string;
     label: string;
     rent: number | string;
-    status: string;
+    availability: string;
 };
 
 export type VarianceLine = {

@@ -8,10 +8,19 @@ using Microsoft.EntityFrameworkCore;
 
 namespace LeaseBook.Modules.Directory.Features.Tenants;
 
-public sealed record CreateTenant(string DisplayName, string? ContactEmail, string? ContactPhone, string Status)
+public sealed record CreateTenant(
+    string DisplayName,
+    string? ContactEmail,
+    string? ContactPhone,
+    string LifecycleStatus)
     : ICommand<Guid>;
 
-public sealed record UpdateTenant(Guid Id, string DisplayName, string? ContactEmail, string? ContactPhone, string Status)
+public sealed record UpdateTenant(
+    Guid Id,
+    string DisplayName,
+    string? ContactEmail,
+    string? ContactPhone,
+    string LifecycleStatus)
     : ICommand<bool>;
 
 public sealed class CreateTenantValidator : AbstractValidator<CreateTenant>
@@ -20,8 +29,9 @@ public sealed class CreateTenantValidator : AbstractValidator<CreateTenant>
     {
         RuleFor(x => x.DisplayName).NotEmpty().MaximumLength(200);
         RuleFor(x => x.ContactEmail).EmailAddress().When(x => !string.IsNullOrWhiteSpace(x.ContactEmail));
-        RuleFor(x => x.Status).Must(v => TenantStatusConverter.DbValues.Contains(v))
-            .WithMessage($"Status must be one of: {string.Join(", ", TenantStatusConverter.DbValues)}.");
+        RuleFor(x => x.LifecycleStatus).Must(v => TenantLifecycleStatusConverter.DbValues.Contains(v))
+            .WithMessage(
+                $"Lifecycle status must be one of: {string.Join(", ", TenantLifecycleStatusConverter.DbValues)}.");
     }
 }
 
@@ -32,8 +42,9 @@ public sealed class UpdateTenantValidator : AbstractValidator<UpdateTenant>
         RuleFor(x => x.Id).NotEmpty();
         RuleFor(x => x.DisplayName).NotEmpty().MaximumLength(200);
         RuleFor(x => x.ContactEmail).EmailAddress().When(x => !string.IsNullOrWhiteSpace(x.ContactEmail));
-        RuleFor(x => x.Status).Must(v => TenantStatusConverter.DbValues.Contains(v))
-            .WithMessage($"Status must be one of: {string.Join(", ", TenantStatusConverter.DbValues)}.");
+        RuleFor(x => x.LifecycleStatus).Must(v => TenantLifecycleStatusConverter.DbValues.Contains(v))
+            .WithMessage(
+                $"Lifecycle status must be one of: {string.Join(", ", TenantLifecycleStatusConverter.DbValues)}.");
     }
 }
 
@@ -47,7 +58,7 @@ internal sealed class CreateTenantHandler(DbContext db) : ICommandHandler<Create
             DisplayName = command.DisplayName,
             ContactEmail = command.ContactEmail,
             ContactPhone = command.ContactPhone,
-            Status = TenantStatusConverter.FromDb(command.Status),
+            LifecycleStatus = TenantLifecycleStatusConverter.FromDb(command.LifecycleStatus),
         };
         db.Set<Tenant>().Add(tenant);
         await db.SaveChangesAsync(ct);
@@ -68,7 +79,7 @@ internal sealed class UpdateTenantHandler(DbContext db) : ICommandHandler<Update
         tenant.DisplayName = command.DisplayName;
         tenant.ContactEmail = command.ContactEmail;
         tenant.ContactPhone = command.ContactPhone;
-        tenant.Status = TenantStatusConverter.FromDb(command.Status);
+        tenant.LifecycleStatus = TenantLifecycleStatusConverter.FromDb(command.LifecycleStatus);
         await db.SaveChangesAsync(ct);
         return true;
     }

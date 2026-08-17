@@ -22,7 +22,7 @@ public sealed class Unit : IOrgScoped, ISystemFlagged
     /// <summary>Scheduled rent for the unit.</summary>
     public Money Rent { get; set; }
 
-    public UnitStatus Status { get; set; }
+    public UnitAvailability Availability { get; set; }
 
     public bool IsSystem { get; set; }
 
