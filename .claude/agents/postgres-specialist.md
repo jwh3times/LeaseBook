@@ -151,7 +151,17 @@ migrationBuilder.Sql("""
 
 Restore `FORCE` in the same block. Postgres DDL is transactional and EF wraps each migration in a transaction, so any failure rolls back with `FORCE` intact and the window never outlives the migration. `Down` needs the same treatment — a reversal that rewrites data hits the identical wall.
 
-Empty databases hide all of it: every other container test migrates an empty schema to head, where a no-op backfill looks healthy. `MigrationReplayTests` is the guard — it seeds the demo org, rolls the newest migration back, and re-applies it, so a missing `NO FORCE` fails a build instead of a deploy.
+Empty databases hide all of it: every other container test migrates an empty schema to head, where a no-op backfill looks healthy. Two guards cover it, and they cover different halves:
+
+- `MigrationReplayTests` (integration) seeds the demo org, rolls the newest migration back, and re-applies it. It proves the SQL actually rewrites rows — but it goes blind whenever `Down` drops the table `Up` created, since the replay then runs against an empty table again.
+- `MigrationBackfillRlsTests` (architecture) reads migration source instead of a database, so nothing is hidden from it by absent data. It requires every `UPDATE`/`DELETE` naming an RLS-forced table — and every `INSERT … SELECT` reading one — to sit between `ALTER TABLE <t> NO FORCE ROW LEVEL SECURITY` and `ALTER TABLE <t> FORCE ROW LEVEL SECURITY` **in the same `Sql` block**, for every forced table the statement names, not just the target.
+
+Two consequences for how you write a backfill:
+
+- **Raw SQL only.** EF's `InsertData`/`UpdateData`/`DeleteData` builders are rejected outright. Each emits its statement alone, so no block exists in which the lift could bracket it — the bracketing and the write have to be one reviewable unit.
+- **A missing restore fails too**, not just a missing lift. Leaving `FORCE` off is the worse bug: the table stays unprotected against its own owner afterwards, and no data-level test would notice.
+
+A plain `INSERT … VALUES` into a forced table is deliberately out of scope — its `WITH CHECK` raises `42501` and aborts the migration at the mistake. Only statements RLS filters *silently* are the hazard.
 
 ### Immutable tables (journal / audit)
 
