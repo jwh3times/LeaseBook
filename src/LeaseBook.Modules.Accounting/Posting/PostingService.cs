@@ -15,9 +15,27 @@ namespace LeaseBook.Modules.Accounting.Posting;
 /// </summary>
 internal sealed class PostingService(
     DbContext db, ITenantContext tenant, IAccountingPeriods periods,
-    IActorContext? actor = null, IReconciliationLock? reconciliationLock = null) : IPostingService
+    IActorContext actor, IReconciliationLock? reconciliationLock = null) : IPostingService
 {
     private static readonly EntryBasis[] BalancedBases = [EntryBasis.Cash, EntryBasis.Accrual];
+
+    /// <summary>
+    /// Who the entry is attributed to. ADR-039 makes this durable, so it is required: a journal entry
+    /// is the money record, and an unattributable one cannot be reconstructed after the fact. The
+    /// check mirrors the organization-context check above — both come from the same
+    /// <c>OrgScopedExecutor</c> call, so an absent actor means the caller is outside a unit of work.
+    /// <para>
+    /// The constructor parameter is required too, not merely checked. While it was optional, the
+    /// accounting test harness simply did not pass one and every entry it posted was attributed to
+    /// nobody — which is the same class of silence ADR-039 exists to remove.
+    /// </para>
+    /// </summary>
+    private Actor PostingActor() =>
+        actor.Actor
+        ?? throw new InvalidOperationException(
+            "PostingService requires a declared actor — Actor.User(id) for a signed-in user, " +
+            "Actor.System(process) for a named process. The journal records who posted every entry " +
+            "(ADR-039), so posting with no actor is refused rather than stamped null.");
 
     public async Task<Guid> PostAsync(PostEntryRequest request, CancellationToken ct)
     {
@@ -29,6 +47,10 @@ internal sealed class PostingService(
             throw new InvalidOperationException(
                 "PostingService requires an ambient organization context (request middleware or OrgScopedExecutor).");
         }
+
+        // (a2) and who is accountable — checked here beside the org context, because both come from
+        // the same OrgScopedExecutor call and neither is recoverable from the row afterwards.
+        var postedBy = PostingActor();
 
         if (request.Lines.Count == 0)
         {
@@ -179,7 +201,7 @@ internal sealed class PostingService(
         var entry = JournalEntry.Create(
             request.EntryDate, request.EventType, request.EventSubtype, request.Description,
             request.SourceRef, request.ReversesEntryId,
-            createdBy: actor?.UserId, postedAt: DateTime.UtcNow,
+            createdBy: postedBy, postedAt: DateTime.UtcNow,
             assessesEntryId: request.AssessesEntryId,
             dueDate: request.DueDate);
         foreach (var line in lines)

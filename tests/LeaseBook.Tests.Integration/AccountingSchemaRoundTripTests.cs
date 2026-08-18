@@ -30,8 +30,9 @@ public sealed class AccountingSchemaRoundTripTests(PostgresFixture fixture)
         await CreateOrgAsync(orgId, ct);
 
         var tenant = new TenantContext();
-        await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
-        var executor = new OrgScopedExecutor(db, tenant, new ActorContext());
+        var actor = new ActorContext();
+        await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant, actor);
+        var executor = new OrgScopedExecutor(db, tenant, actor);
 
         // A genuine two-decimal amount — the point is that scale 2 survives the NUMERIC(14,2) round-trip.
         var amount = new Money(1234.56m);
@@ -60,7 +61,7 @@ public sealed class AccountingSchemaRoundTripTests(PostgresFixture fixture)
 
             var entry = JournalEntry.Create(
                 new DateOnly(2026, 2, 1), "RentCharged", null, "Round-trip test", sourceRef: null,
-                reversesEntryId: null, createdBy: null, postedAt: DateTime.UtcNow);
+                reversesEntryId: null, createdBy: Actor.System("test-harness"), postedAt: DateTime.UtcNow);
             entry.AddLine(JournalLine.Create(
                 receivable.Id, AccountClass.TenantReceivable, debit: amount, credit: null, EntryBasis.Accrual,
                 propertyId: propertyId, ownerId: ownerId, tenantId: tenantId));

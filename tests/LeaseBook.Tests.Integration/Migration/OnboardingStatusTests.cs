@@ -312,8 +312,9 @@ public sealed class OnboardingStatusTests(PostgresFixture fixture)
         Guid orgId, CancellationToken ct)
     {
         var tenant = new TenantContext { OrgId = orgId };
-        await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
-        var executor = new OrgScopedExecutor(db, tenant, new ActorContext());
+        var actor = new ActorContext();
+        await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant, actor);
+        var executor = new OrgScopedExecutor(db, tenant, actor);
 
         Guid trustId = default;
         Guid depositId = default;

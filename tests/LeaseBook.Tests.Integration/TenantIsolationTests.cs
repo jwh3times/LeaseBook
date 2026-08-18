@@ -98,8 +98,9 @@ public sealed class TenantIsolationTests(PostgresFixture fixture)
     {
         var ct = TestContext.Current.CancellationToken;
         var tenant = new TenantContext();
-        await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
-        var executor = new OrgScopedExecutor(db, tenant, new ActorContext());
+        var actor = new ActorContext();
+        await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant, actor);
+        var executor = new OrgScopedExecutor(db, tenant, actor);
 
         var executed = false;
         await Should.ThrowAsync<ArgumentException>(async () =>
@@ -142,8 +143,9 @@ public sealed class TenantIsolationTests(PostgresFixture fixture)
         var ct = TestContext.Current.CancellationToken;
         var orgA = UuidV7.NewId();
         var tenant = new TenantContext();
-        await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
-        var executor = new OrgScopedExecutor(db, tenant, new ActorContext());
+        var actor = new ActorContext();
+        await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant, actor);
+        var executor = new OrgScopedExecutor(db, tenant, actor);
 
         var id = UuidV7.NewId();
         await executor.RunAsSystemAsync(orgA, "test-harness", async () =>
@@ -181,10 +183,11 @@ public sealed class TenantIsolationTests(PostgresFixture fixture)
     {
         var ct = TestContext.Current.CancellationToken;
         var tenant = new TenantContext();
-        await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
+        var actor = new ActorContext();
+        await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant, actor);
         await using var outer = await db.Database.BeginTransactionAsync(ct);
 
-        var executor = new OrgScopedExecutor(db, tenant, new ActorContext());
+        var executor = new OrgScopedExecutor(db, tenant, actor);
         var executed = false;
 
         var ex = await Should.ThrowAsync<InvalidOperationException>(async () =>
@@ -245,9 +248,10 @@ public sealed class TenantIsolationTests(PostgresFixture fixture)
         var ct = TestContext.Current.CancellationToken;
         var orgA = UuidV7.NewId();
         var tenant = new TenantContext();
-        await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
+        var actor = new ActorContext();
+        await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant, actor);
 
-        var org = await new OrgScopedExecutor(db, tenant, new ActorContext())
+        var org = await new OrgScopedExecutor(db, tenant, actor)
             .RunAsSystemAsync(orgA, "test-harness", () => Task.FromResult(tenant.OrgId), ct);
         org.ShouldBe(orgA, "the organization plane sets context before the work runs, and returns its result");
 

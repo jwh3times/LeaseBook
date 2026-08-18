@@ -97,8 +97,9 @@ public sealed class VerificationSignoffTests(PostgresFixture fixture)
 
         // --- Assert: signed row exists AND audit_events row with entity_type = 'migration-signed-off' ---
         var tenant = new TenantContext { OrgId = setup.OrgId };
-        await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
-        var executor = new OrgScopedExecutor(db, tenant, new ActorContext());
+        var actor = new ActorContext();
+        await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant, actor);
+        var executor = new OrgScopedExecutor(db, tenant, actor);
 
         await executor.RunAsSystemAsync(setup.OrgId, "test-harness", async () =>
         {
@@ -170,8 +171,9 @@ public sealed class VerificationSignoffTests(PostgresFixture fixture)
 
         // --- Gate-before-side-effect: assert NO audit row and NO signed row were written ---
         var tenant = new TenantContext { OrgId = setup.OrgId };
-        await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
-        var executor = new OrgScopedExecutor(db, tenant, new ActorContext());
+        var actor = new ActorContext();
+        await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant, actor);
+        var executor = new OrgScopedExecutor(db, tenant, actor);
 
         await executor.RunAsSystemAsync(setup.OrgId, "test-harness", async () =>
         {
@@ -304,8 +306,9 @@ public sealed class VerificationSignoffTests(PostgresFixture fixture)
 
         // --- No signed row, no audit row: the gate fired before any side effect ---
         var tenant = new TenantContext { OrgId = setup.OrgId };
-        await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
-        var executor = new OrgScopedExecutor(db, tenant, new ActorContext());
+        var actor = new ActorContext();
+        await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant, actor);
+        var executor = new OrgScopedExecutor(db, tenant, actor);
 
         await executor.RunAsSystemAsync(setup.OrgId, "test-harness", async () =>
         {
@@ -481,8 +484,9 @@ public sealed class VerificationSignoffTests(PostgresFixture fixture)
 
         // --- Gate-before-side-effect: NO signed row and NO audit row were written ---
         var tenant = new TenantContext { OrgId = setup.OrgId };
-        await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
-        var executor = new OrgScopedExecutor(db, tenant, new ActorContext());
+        var actor = new ActorContext();
+        await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant, actor);
+        var executor = new OrgScopedExecutor(db, tenant, actor);
 
         await executor.RunAsSystemAsync(setup.OrgId, "test-harness", async () =>
         {
@@ -621,8 +625,9 @@ public sealed class VerificationSignoffTests(PostgresFixture fixture)
         Guid orgId, CancellationToken ct)
     {
         var tenant = new TenantContext { OrgId = orgId };
-        await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
-        var executor = new OrgScopedExecutor(db, tenant, new ActorContext());
+        var actor = new ActorContext();
+        await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant, actor);
+        var executor = new OrgScopedExecutor(db, tenant, actor);
 
         Guid trustId = default;
         Guid depositId = default;

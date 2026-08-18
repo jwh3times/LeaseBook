@@ -90,10 +90,19 @@ report CSVs, and on-demand statement downloads are streamed to the requester and
 ### 2.5 Audit trail
 
 `audit_events` records a before/after snapshot of every money- or entity-touching change, with the
-acting user, entity, action, and timestamp. Because it stores full row snapshots, it transitively
+actor, entity, action, and timestamp. Because it stores full row snapshots, it transitively
 retains historical copies of the personal and financial fields above — this is deliberate: the audit
 trail is the tamper-evident fiduciary record. Credential tables are excluded by construction. The
 audit table is append-only (§4).
+
+The actor is either the acting user or a **named system process** — a seeder, a scheduled job, a CLI
+verb — and the row says which, so an automated change is attributable to the process that made it
+rather than collapsing into an anonymous "System"
+([ADR-039](../adr/ADR-039-durable-actor-attribution.md)). A change with no declared actor is refused
+before it is written. Rows written before that decision carry no process name and remain attributed
+only as the system; they are deliberately not backfilled, because the process that wrote them is
+precisely the fact that was never recorded. The money-touching audit extract in the trust compliance
+pack renders the same attribution.
 
 ### 2.6 Telemetry
 

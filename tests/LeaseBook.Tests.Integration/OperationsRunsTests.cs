@@ -336,8 +336,9 @@ public sealed class OperationsRunsTests(PostgresFixture fixture)
     private async Task ClosePeriodAsync(Guid orgId, int year, int month, CancellationToken ct)
     {
         var tenant = new LeaseBook.SharedKernel.Tenancy.TenantContext();
-        await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
-        var executor = new OrgScopedExecutor(db, tenant, new ActorContext());
+        var actor = new ActorContext();
+        await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant, actor);
+        var executor = new OrgScopedExecutor(db, tenant, actor);
         await executor.RunAsSystemAsync(orgId, "test-harness", () => new AccountingPeriods(db).CloseAsync(year, month, ct), ct);
     }
 }

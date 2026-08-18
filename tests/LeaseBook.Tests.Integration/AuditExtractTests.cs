@@ -36,6 +36,34 @@ public sealed class AuditExtractTests(PostgresFixture fixture)
     private const string Password = "Tarheel-Trust-2026!";
     private static readonly DateOnly Feb1 = new(2026, 2, 1);
 
+    /// <summary>
+    /// ADR-039 in the document an examiner actually reads. The extract used to render every automated
+    /// write as a bare "System", so the demo seeder, the nightly sweep and a CLI verb were one
+    /// indistinguishable actor in the compliance pack. Persisting the process is only half the fix —
+    /// this pins the other half, that the read surfaces it.
+    /// </summary>
+    [Fact]
+    public async Task Extract_names_the_system_process_behind_an_automated_write()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var orgId = await NewOrgAsync(ct);
+        var tenantId = await SetupTenantAsync(orgId, ct);
+
+        // No user: the unit of work declares a named process, exactly as a job or seeder does.
+        await AsActorAsync(orgId, null,
+            (_, s, c) => s.Send(new AddCharge(tenantId, 1450m, Feb1, "rent", null, Key()), c), ct);
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var extract = await AsActorAsync(orgId, null, (sp, _, c) =>
+            new AuditExtractReader(sp.GetRequiredService<AppDbContext>(), sp.GetRequiredService<ITenantContext>())
+                .GetAsync(today.AddDays(-1), today.AddDays(1), c), ct);
+
+        var posting = extract.Rows.Where(r => r.EntityType == "journal_entries").ToList();
+        posting.ShouldNotBeEmpty();
+        posting.ShouldAllBe(r => r.ActorName == "System (test-harness)");
+        posting.ShouldAllBe(r => r.ActorEmail == null);
+    }
+
     [Fact]
     public async Task Extract_returns_money_touching_events_in_period_and_excludes_the_rest()
     {

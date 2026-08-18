@@ -30,8 +30,9 @@ public sealed class DirectorySchemaRoundTripTests(PostgresFixture fixture)
         await CreateOrgAsync(orgId, ct);
 
         var tenant = new TenantContext();
-        await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
-        var executor = new OrgScopedExecutor(db, tenant, new ActorContext());
+        var actor = new ActorContext();
+        await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant, actor);
+        var executor = new OrgScopedExecutor(db, tenant, actor);
 
         var ownerId = UuidV7.NewId();
         var propertyId = UuidV7.NewId();
@@ -158,8 +159,9 @@ public sealed class DirectorySchemaRoundTripTests(PostgresFixture fixture)
         await CreateOrgAsync(orgId, ct);
 
         var tenant = new TenantContext();
-        await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
-        var executor = new OrgScopedExecutor(db, tenant, new ActorContext());
+        var actor = new ActorContext();
+        await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant, actor);
+        var executor = new OrgScopedExecutor(db, tenant, actor);
 
         await executor.RunAsSystemAsync(orgId, "test-harness", async () =>
         {

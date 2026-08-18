@@ -8,7 +8,11 @@ namespace LeaseBook.Web.Audit;
 /// <summary>The per-entry audit trail (§C.3 / P56): who/when/what for a journal entry and its reversal.</summary>
 public sealed record EntryAuditResponse(IReadOnlyList<AuditRow> Rows);
 
-/// <summary>One audit row, newest-first. <see cref="ActorName"/> is "System" for seeder/job writes.</summary>
+/// <summary>
+/// One audit row, newest-first. <see cref="ActorName"/> names the system process for automated
+/// writes — <c>System (invariant-sweep)</c> — and plain <c>System</c> for rows written before
+/// ADR-039, which recorded no process.
+/// </summary>
 public sealed record AuditRow(DateTime OccurredAt, string Action, string ActorName, string? ActorEmail);
 
 /// <summary>
@@ -16,7 +20,7 @@ public sealed record AuditRow(DateTime OccurredAt, string Action, string ActorNa
 /// org-scoped by RLS + the EF filter) for the entry <b>and any entry that reverses it</b>, then resolves
 /// each <c>actor_user_id</c> to a display name/email via an <b>explicit org-filtered</b> <c>asp_net_users</c>
 /// lookup — the identity soft-spot carries no RLS, so the org filter is the isolation boundary here
-/// (M3-E6). A null/unknown actor renders as "System". Lives in the host because it joins host
+/// (M3-E6). A system actor renders through <see cref="AuditActorLabel"/>. Lives in the host because it joins host
 /// (audit/identity) and Accounting (the reversal link) data — the composition root's job.
 /// </summary>
 public sealed class EntryAuditReader(AppDbContext db, ITenantContext tenant)
@@ -37,7 +41,7 @@ public sealed class EntryAuditReader(AppDbContext db, ITenantContext tenant)
         var events = await db.AuditEvents.AsNoTracking()
             .Where(a => a.EntityType == "journal_entries" && entryIds.Contains(a.EntityId))
             .OrderByDescending(a => a.OccurredAt)
-            .Select(a => new { a.ActorUserId, a.Action, a.OccurredAt })
+            .Select(a => new { a.ActorUserId, a.ActorProcess, a.Action, a.OccurredAt })
             .ToListAsync(ct);
 
         var actorIds = events.Where(e => e.ActorUserId is not null)
@@ -55,7 +59,8 @@ public sealed class EntryAuditReader(AppDbContext db, ITenantContext tenant)
             {
                 var actor = e.ActorUserId is { } id && byId.TryGetValue(id, out var u) ? u : null;
                 return new AuditRow(
-                    e.OccurredAt, e.Action, actor?.DisplayName ?? actor?.Email ?? "System", actor?.Email);
+                    e.OccurredAt, e.Action,
+                    AuditActorLabel.For(actor?.DisplayName, actor?.Email, e.ActorProcess), actor?.Email);
             })
             .ToList();
 

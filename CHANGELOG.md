@@ -24,13 +24,41 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Fixed
 
+- _Nothing yet._
+
+### Security
+
+- _Nothing yet._
+
+## [0.8.0] - 2026-08-18
+
+### Added
+
+- **The audit trail now names the system process behind automated activity.** Journal entries and
+  audit events record the acting person or the responsible process — the demo seeder, the nightly
+  invariant sweep, a CLI verb — and both the per-entry trail and the compliance pack's audit extract
+  show it as `System (invariant-sweep)` instead of a bare `System`. Previously every automated write
+  looked identical to every other one, and identical to a write with no recorded actor at all, so
+  neither an operator nor an examiner could tell them apart. Records written before this release keep
+  their blank attribution and still read as plain `System` — they are now distinguishable from a
+  modern row rather than blending in.
+
+### Changed
+
+- **A write that does not say who is accountable is refused.** Recording activity without a declared
+  actor now fails immediately instead of saving an unattributable row. Every path in the application
+  already declares one, so this changes no existing workflow.
+
+### Fixed
+
 - **Upgrading a database that already holds tenants or units** — the 0.7.0 migration that renamed
   `units.status` to `availability` and `tenants.status` to `lifecycle_status` had its data backfill
   filtered out by row-level security, so it rewrote no rows and the check constraint it added
   immediately afterwards rejected every pre-existing value. An empty database was unaffected, which
   is why the release shipped; any installation carrying real data could not migrate past it. New
-  migrations are now replayed against a seeded database in CI, so a backfill that quietly touches
-  nothing fails the build instead of the upgrade.
+  migrations are now replayed against a seeded database in CI, and their source is scanned for the
+  same mistake in the cases a replay cannot reach, so a backfill that quietly touches nothing fails
+  the build instead of the upgrade.
 
 ### Security
 
@@ -521,7 +549,8 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.8.0
 [0.7.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.7.0
 [0.6.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.6.0
 [0.5.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.5.0

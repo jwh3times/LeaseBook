@@ -17,11 +17,13 @@ namespace LeaseBook.Tests.Common;
 /// </summary>
 public sealed class OrgScope : IAsyncDisposable
 {
-    private OrgScope(Guid orgId, AppDbContext db, TenantContext tenant, OrgScopedExecutor executor)
+    private OrgScope(
+        Guid orgId, AppDbContext db, TenantContext tenant, ActorContext actor, OrgScopedExecutor executor)
     {
         OrgId = orgId;
         Db = db;
         Tenant = tenant;
+        Actor = actor;
         Executor = executor;
     }
 
@@ -31,6 +33,14 @@ public sealed class OrgScope : IAsyncDisposable
     public AppDbContext Db { get; }
 
     public TenantContext Tenant { get; }
+
+    /// <summary>
+    /// The one actor context <see cref="Db"/> reads and <see cref="Executor"/> writes. Services built
+    /// over this scope must be given <b>this</b> instance — a fresh <c>ActorContext</c> would be
+    /// written by the unit of work and read by nobody, which is how the harness spent M1–M8 posting
+    /// entries attributed to no one (ADR-039).
+    /// </summary>
+    public ActorContext Actor { get; }
 
     public OrgScopedExecutor Executor { get; }
 
@@ -66,8 +76,9 @@ public sealed class OrgScope : IAsyncDisposable
         }
 
         var tenant = new TenantContext();
-        var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
-        return new OrgScope(orgId, db, tenant, new OrgScopedExecutor(db, tenant, new ActorContext()));
+        var actor = new ActorContext();
+        var db = fixture.CreateContext(fixture.AppConnectionString, tenant, actor);
+        return new OrgScope(orgId, db, tenant, actor, new OrgScopedExecutor(db, tenant, actor));
     }
 
     /// <summary>

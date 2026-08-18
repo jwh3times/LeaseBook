@@ -123,7 +123,10 @@ schema), `leasebook_app` (runtime, `FORCE ROW LEVEL SECURITY`), and `leasebook_o
 runtime role holds no DDL privilege in `public` and none on the database; its single exception is the
 `hangfire` job-storage schema it owns, described under Background work below. Every
 org-scoped table is created through the migrations RLS helper (column + `USING`/`WITH CHECK` policy +
-`FORCE` in one call), and a schema-guard test fails CI if any `org_id` table lacks its policy. Portal
+`FORCE` in one call), and a schema-guard test fails CI if any `org_id` table lacks its policy.
+`FORCE` binds the migrator role too, so a migration that rewrites existing rows must lift and restore
+it around the statement; an architecture test reads migration source and fails the build on an
+unbracketed data rewrite, which would otherwise match no rows in silence. Portal
 sub-org visibility (an owner sees only their properties) is enforced at the application layer rather
 than by stacking more RLS policies — see [ADR-003](adr/ADR-003-portal-suborg-scoping-at-app-layer.md).
 
@@ -160,7 +163,9 @@ applied by the `leasebook_migrator` role through a one-shot migrator image — *
 startup**. Money is `decimal` in C# and `NUMERIC(14,2)` in Postgres, end to end, never floating
 point. The journal, audit, and property-ownership-transition tables are append-only: the runtime role
 holds no `UPDATE`/`DELETE` grant on them, so corrections can only ever be linked reversals or later
-transitions.
+transitions. Every journal entry and audit row also carries a durable actor — a user id, or the name
+of the system process that acted — and a write that declares neither is refused rather than stored
+unattributed; see [ADR-039](adr/ADR-039-durable-actor-attribution.md).
 
 ## Test execution
 

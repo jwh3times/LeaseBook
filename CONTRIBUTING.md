@@ -75,6 +75,12 @@ minimum bar, not the goal.
 - **Money is `decimal` (C#) / `NUMERIC(14,2)` (Postgres). Never `float`/`double`.**
 - **Every new org-scoped table** goes through the migrations row-level-security helper (column +
   `USING`/`WITH CHECK` policy + `FORCE ROW LEVEL SECURITY`); a schema-guard test fails CI otherwise.
+- **A migration that rewrites existing rows** writes raw `migrationBuilder.Sql` and brackets the
+  statement with `ALTER TABLE … NO FORCE ROW LEVEL SECURITY` / `… FORCE ROW LEVEL SECURITY` in the
+  same block — `FORCE` binds the migrator role too, so an unbracketed backfill silently matches no
+  rows instead of failing. EF's `InsertData`/`UpdateData`/`DeleteData` builders are rejected outright
+  because they leave no block to bracket; an architecture test fails CI on a missing lift, a missing
+  restore, or a data builder.
 
 ### Frontend (React / TypeScript)
 
