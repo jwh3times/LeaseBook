@@ -20,7 +20,15 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Changed
 
-- _Nothing yet._
+- **Statement delivery now keeps a history instead of a single status.** A statement is issued once as
+  an immutable document; each attempt to send it is recorded separately, and what became of that
+  attempt — queued, accepted by the email provider, delivered to the recipient, bounced, or failed
+  before it ever reached the provider — is appended as its own entry. Previously one record carried one
+  status that was overwritten as things changed, and the status `Sent` meant only that the provider had
+  accepted the message, which read as success even when nothing reached the owner. Now a message the
+  provider accepted and the recipient's server then bounced shows both facts, and resending is a fresh
+  attempt at the same document rather than an edit to the old one — so an owner who eventually receives
+  a statement provably received the same one that bounced.
 
 ### Fixed
 

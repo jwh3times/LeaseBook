@@ -45,15 +45,15 @@ global-class.
 
 ### 2.1 Nonpublic personal information
 
-| Data                                                | Where it lives                     | Notes                                               |
-| --------------------------------------------------- | ---------------------------------- | --------------------------------------------------- |
-| Owner name, email, phone                            | `owners` (Directory)               | Contact detail for statement recipients             |
-| Tenant name, email, phone                           | `tenants` (Directory)              |                                                     |
-| Property street address, city, state, ZIP           | `properties` (Directory)           |                                                     |
-| Managing brokerage legal name, address, phone       | `org_settings` (Directory)         | Firm identity rendered on statements                |
-| User email, phone, username, display name           | `asp_net_users` (host)             | Application login accounts                          |
-| Recipient email of a delivered statement            | `statement_deliveries` (Reporting) | Delivery record for a sent statement                |
-| Verbatim imported records (names, emails, balances) | `import_rows` (Onboarding)         | Raw and mapped migration data, kept as import audit |
+| Data                                                | Where it lives                            | Notes                                               |
+| --------------------------------------------------- | ----------------------------------------- | --------------------------------------------------- |
+| Owner name, email, phone                            | `owners` (Directory)                      | Contact detail for statement recipients             |
+| Tenant name, email, phone                           | `tenants` (Directory)                     |                                                     |
+| Property street address, city, state, ZIP           | `properties` (Directory)                  |                                                     |
+| Managing brokerage legal name, address, phone       | `org_settings` (Directory)                | Firm identity rendered on statements                |
+| User email, phone, username, display name           | `asp_net_users` (host)                    | Application login accounts                          |
+| Recipient email of a statement send                 | `statement_delivery_attempts` (Reporting) | One row per send of a statement artifact            |
+| Verbatim imported records (names, emails, balances) | `import_rows` (Onboarding)                | Raw and mapped migration data, kept as import audit |
 
 ### 2.2 Financial information
 

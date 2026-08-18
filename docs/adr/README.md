@@ -64,6 +64,7 @@ form, write it, and add a row to the index below. When a decision is replaced, m
 | [037](ADR-037-effective-dated-lease-attribution.md)                  | Effective-dated lease attribution and non-overlapping terms                     | Accepted                               | 2026-08-16 |
 | [038](ADR-038-derived-financial-standing-and-occupancy.md)           | Derive tenant financial standing and unit occupancy                             | Accepted                               | 2026-08-17 |
 | [039](ADR-039-durable-actor-attribution.md)                          | Actor attribution is durable                                                    | Accepted                               | 2026-08-18 |
+| [040](ADR-040-statement-delivery-history.md)                         | Statement delivery is an append-only history                                    | Accepted                               | 2026-08-18 |
 
 ## Status legend
 
