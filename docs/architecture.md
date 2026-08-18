@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living architecture guide
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-08-17
+- **Last reviewed:** 2026-08-18
 
 This is the canonical public map of the system **as implemented**. It explains how the pieces fit
 together and links the decisions that shaped them without reproducing every invariant. Accepted
@@ -161,11 +161,16 @@ context (one database, one transaction per request — the RLS boundary). See
 [ADR-004](adr/ADR-004-single-appdbcontext-in-host.md). Migrations are authored in the host and
 applied by the `leasebook_migrator` role through a one-shot migrator image — **never at app
 startup**. Money is `decimal` in C# and `NUMERIC(14,2)` in Postgres, end to end, never floating
-point. The journal, audit, and property-ownership-transition tables are append-only: the runtime role
-holds no `UPDATE`/`DELETE` grant on them, so corrections can only ever be linked reversals or later
-transitions. Every journal entry and audit row also carries a durable actor — a user id, or the name
-of the system process that acted — and a write that declares neither is refused rather than stored
-unattributed; see [ADR-039](adr/ADR-039-durable-actor-attribution.md).
+point. The journal, audit, property-ownership-transition, and statement-delivery tables are
+append-only: the runtime role holds no `UPDATE`/`DELETE` grant on them, so a correction can only ever
+be a linked reversal, a later transition, or a later recorded fact. Statement delivery is modeled that
+way end to end — an immutable rendered artifact, the attempts that send it, and the append-only events
+that say what became of each attempt — so current delivery status is computed from an attempt's latest
+event rather than stored, and a provider acceptance followed by a bounce keeps both facts; see
+[ADR-040](adr/ADR-040-statement-delivery-history.md). Every journal entry and audit row also carries a
+durable actor — a user id, or the name of the system process that acted — and a write that declares
+neither is refused rather than stored unattributed; see
+[ADR-039](adr/ADR-039-durable-actor-attribution.md).
 
 ## Test execution
 

@@ -18,7 +18,8 @@ Phase 1 supports property-management staff operating a single organization with:
 - A double-entry, dual-basis trust-accounting journal with append-only corrections.
 - Tenant charges, payments, credits, deposits, prepayments, and applications.
 - Bank registers, statement import, matching, reconciliation, and accounting-period locks.
-- Owner statements, operational reports, PDF/CSV output, and delivery records.
+- Owner statements, operational reports, PDF/CSV output, and an append-only statement delivery
+  history.
 - Preview-confirm-post bulk runs for rent, late fees, and owner disbursements.
 - Staged migration imports, balance-forward opening entries, verification, sign-off, and onboarding.
 - Role-based staff access, PostgreSQL row-level-security organization isolation, audit events, and MFA capability.
