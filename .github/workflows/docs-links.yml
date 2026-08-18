@@ -24,6 +24,8 @@ jobs:
   lychee:
     name: Link check (lychee)
     runs-on: ubuntu-latest
+    # Typically ~10 s, but it is the one job here that talks to arbitrary third-party hosts.
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
       - name: Prepare current-release link exclusions

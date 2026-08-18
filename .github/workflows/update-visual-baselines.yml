@@ -13,6 +13,8 @@ jobs:
   update-baselines:
     name: Regenerate + commit visual baselines
     runs-on: ubuntu-latest
+    # Typically ~5.4 min. Installs Playwright like the e2e job, so it shares that hang exposure.
+    timeout-minutes: 20
     services:
       postgres:
         image: postgres:18

@@ -34,6 +34,11 @@ jobs:
       ${{ github.event_name == 'workflow_dispatch' ||
       (github.event.workflow_run.conclusion == 'success' && vars.ACR_NAME != '') }}
     runs-on: ubuntu-latest
+    # Unmeasured — this workflow is still operator-gated and has never run, so this is a ceiling
+    # rather than a fitted bound. An image build, an ACR push, `dotnet ef database update`, and a
+    # revision update have no unbounded wait between them. Waiting for environment approval is not
+    # charged against this. See ci.yml for why every job carries a bound.
+    timeout-minutes: 30
     environment: dev
     steps:
       - uses: actions/checkout@v7

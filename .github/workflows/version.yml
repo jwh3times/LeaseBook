@@ -30,6 +30,8 @@ jobs:
   release:
     name: Tag and release
     runs-on: ubuntu-latest
+    # Typically ~10 s. See ci.yml for why every job carries a bound.
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
         with:

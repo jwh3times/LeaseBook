@@ -17,6 +17,15 @@ permissions:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    # Deliberately generous, and NOT to be tightened toward the other jobs' numbers. The migration
+    # step below polls its Container Apps job execution on a 2100s (35 min) deadline, set just above
+    # the job's own 1800s replicaTimeout so a platform timeout is reported as a migration failure
+    # rather than as a poll timeout. A job timeout at or under that would kill the runner mid-poll
+    # and destroy exactly that distinction — on the one workflow where "a migration may be in
+    # flight" is the thing you most need to know. 60 leaves the 35 min poll intact with room for the
+    # image build, the revision update, and the smoke check. Environment approval wait is not
+    # charged against it.
+    timeout-minutes: 60
     environment: prod # required reviewers gate this deployment
     steps:
       - uses: actions/checkout@v7
