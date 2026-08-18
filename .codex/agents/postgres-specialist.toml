@@ -128,6 +128,28 @@ Never use `autoincrement`/`SERIAL` for primary keys — use `gen_random_uuid()` 
 - Enum-valued columns: use a `VARCHAR` with a `CHECK` constraint, not a Postgres `ENUM` type (ENUM requires DDL to add values; VARCHAR + CHECK is migration-safe).
 - Timestamps: `TIMESTAMPTZ` (not `TIMESTAMP`) for all date-time columns; `DATEONLY` maps to `DATE`.
 
+### Data backfills must lift FORCE RLS
+
+`FORCE ROW LEVEL SECURITY` binds the schema owner, so a migration's DML runs as `leasebook_migrator` **subject to** each table's org-isolation policy. A migration transaction sets no `app.org_id`, so the predicate is NULL and the write matches **zero rows**. It does not raise — RLS filters `UPDATE`/`DELETE` rather than rejecting them. The failure surfaces later and somewhere else, usually as a `23514` from a `CHECK` constraint added after the backfill, naming the constraint and never the cause.
+
+Bracket every backfill that has to reach all orgs:
+
+```csharp
+migrationBuilder.Sql("""
+    ALTER TABLE units NO FORCE ROW LEVEL SECURITY;
+
+    UPDATE units
+    SET availability = 'available'
+    WHERE availability IN ('occupied', 'vacant');
+
+    ALTER TABLE units FORCE ROW LEVEL SECURITY;
+    """);
+```
+
+Restore `FORCE` in the same block. Postgres DDL is transactional and EF wraps each migration in a transaction, so any failure rolls back with `FORCE` intact and the window never outlives the migration. `Down` needs the same treatment — a reversal that rewrites data hits the identical wall.
+
+Empty databases hide all of it: every other container test migrates an empty schema to head, where a no-op backfill looks healthy. `MigrationReplayTests` is the guard — it seeds the demo org, rolls the newest migration back, and re-applies it, so a missing `NO FORCE` fails a build instead of a deploy.
+
 ### Immutable tables (journal / audit)
 
 `leasebook_app` has no UPDATE or DELETE grant on `journal_entries`, `journal_lines`, or `audit_events`. Migrations must never add such grants. Corrections are linked reversal entries; no mutation path exists by design.
