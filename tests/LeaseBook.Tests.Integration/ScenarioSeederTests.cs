@@ -23,8 +23,8 @@ namespace LeaseBook.Tests.Integration;
 /// <summary>
 /// WP-13: the scenario seeder provisions the all-scenario org — post-sign-off through the real M7
 /// import path, four months through the engine — idempotently, with the live role matrix (2 PMAdmin,
-/// one TOTP-enrolled + 2 PMStaff), recorded run exclusions, the Reopened → re-finalized April, all
-/// three delivery states, a demoable locked-period rejection, and the PMAdmin-only compliance pack.
+/// one TOTP-enrolled + 2 PMStaff), recorded run exclusions, the Reopened → re-finalized April, every
+/// statement-delivery outcome, a demoable locked-period rejection, and the PMAdmin-only compliance pack.
 /// </summary>
 [Collection(nameof(DatabaseCollection))]
 public sealed class ScenarioSeederTests(PostgresFixture fixture)
@@ -140,17 +140,50 @@ public sealed class ScenarioSeederTests(PostgresFixture fixture)
                     "Locked-period probe", "scenario-test:locked-period-probe"), ct), ct));
     }
 
+    /// <summary>
+    /// The scenario org carries every <see cref="DeliveryEventKind"/> in real rows (ADR-040), including
+    /// the two histories the flat model could not express: an acceptance followed by a bounce, and the
+    /// retry that then delivered <b>the same artifact</b>.
+    /// </summary>
     [Fact]
-    public async Task Statement_deliveries_carry_all_three_states_with_stored_artifacts()
+    public async Task Statement_deliveries_carry_every_outcome_with_stored_artifacts()
     {
         var ct = TestContext.Current.CancellationToken;
         await ScenarioSeeder.SeedAsync(fixture.Api.Services, ct);
 
-        var deliveries = await QueryAsync(db => db.Set<StatementDeliveryRecord>().ToListAsync(ct), ct);
-        deliveries.Count.ShouldBe(3);
-        deliveries.Select(d => d.State).ShouldBe(
-            [DeliveryState.Queued, DeliveryState.Sent, DeliveryState.Failed], ignoreOrder: true);
-        deliveries.ShouldAllBe(d => d.ArtifactKey.EndsWith(".pdf"));
+        var artifacts = await QueryAsync(
+            db => db.Set<StatementArtifact>()
+                .Include(a => a.Attempts).ThenInclude(t => t.Events)
+                .ToListAsync(ct),
+            ct);
+
+        artifacts.Count.ShouldBe(3, "O-S1 May, O-S2 April, O-S5 April");
+        artifacts.ShouldAllBe(a => a.ArtifactKey.EndsWith(".pdf"));
+        artifacts.ShouldAllBe(a => a.Basis == "accrual");
+
+        var attempts = artifacts.SelectMany(a => a.Attempts).ToList();
+        attempts.Count.ShouldBe(4, "the bounced O-S2 send was retried");
+
+        // Every kind is represented, so a demo can show each one against real rows.
+        attempts.SelectMany(t => t.Events).Select(e => e.Kind).Distinct().ShouldBe(
+            [
+                DeliveryEventKind.Queued, DeliveryEventKind.Accepted, DeliveryEventKind.Delivered,
+                DeliveryEventKind.Bounced, DeliveryEventKind.Failed,
+            ],
+            ignoreOrder: true);
+
+        // The retried artifact: two attempts, the first bounced, the second delivered — and both
+        // point at one artifact, so the owner received exactly the document that first bounced.
+        var retried = artifacts.Single(a => a.Attempts.Count == 2);
+        retried.Attempts
+            .OrderBy(t => t.CreatedAt).ThenBy(t => t.Id)
+            .Select(DeliveryStatus.Of)
+            .ShouldBe([DeliveryEventKind.Bounced, DeliveryEventKind.Delivered]);
+
+        // The other two: one still pending, one that never reached the provider.
+        artifacts.Where(a => a.Attempts.Count == 1)
+            .Select(a => DeliveryStatus.Of(a.Attempts[0]))
+            .ShouldBe([DeliveryEventKind.Queued, DeliveryEventKind.Failed], ignoreOrder: true);
     }
 
     [Fact]

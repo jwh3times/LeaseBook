@@ -240,8 +240,9 @@ public sealed class ReportingEndpoints : IEndpointModule
                 });
 
         // POST /api/statements/{ownerId}/deliver?propertyId=&year=&month=&basis=&toEmail=
-        // Renders the statement PDF, stores an immutable artifact, and records a DeliveryRecord
-        // with state Queued. The actual ACS email send is deferred to M8. Returns 409 when the
+        // Issues the statement: renders the PDF, stores the immutable artifact, opens the first
+        // delivery attempt, and records that attempt's Queued event (ADR-040). The provider send and
+        // the accepted/delivered/bounced events that follow it are Track B. Returns 409 when the
         // statement's fiduciary tie-out is not balanced (StatementNotBalancedException).
         group.MapPost("/statements/{ownerId:guid}/deliver",
                 async (Guid ownerId, Guid? propertyId, int? year, int? month, string? basis,

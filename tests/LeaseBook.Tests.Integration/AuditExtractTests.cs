@@ -138,13 +138,15 @@ public sealed class AuditExtractTests(PostgresFixture fixture)
     // cutover-only money types (bank_reconciliations, accounting_periods, statement_matches,
     // statement_imports, migration-signed-off) are covered by the allowlist per the design-gate source
     // verification but are not exercised here — extending this guard to the cutover seed is a follow-up.
-    // "statement_deliveries" (WP-5): a delivery-record state (queued/sent/failed) for an
-    // already-computed statement, not a money movement — surfaced when Security/DeliverTelemetryTests
-    // exercised the real deliver endpoint against the demo org in the same test collection.
+    // The three statement-delivery types (WP-5, reshaped by ADR-040): issuing and sending an
+    // already-computed statement, and recording what the provider did with it — none of which moves
+    // money. Surfaced when Security/DeliverTelemetryTests exercises the real deliver endpoint against
+    // the demo org in the same test collection.
     private static readonly string[] KnownNonMoneyEntityTypes =
     [
         "accounts", "bank_accounts", "lease_lite", "org-provisioned", "org_settings",
-        "owners", "properties", "statement_deliveries", "tenants", "units",
+        "owners", "properties", "statement_artifacts", "statement_delivery_attempts",
+        "statement_delivery_events", "tenants", "units",
     ];
 
     private static string Key() => UuidV7.NewId().ToString();

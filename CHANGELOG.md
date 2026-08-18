@@ -30,6 +30,28 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 - _Nothing yet._
 
+## [0.9.0] - 2026-08-18
+
+### Changed
+
+- **Statement delivery now keeps a history instead of a single status.** A statement is issued once as
+  an immutable document; each attempt to send it is recorded separately, and what became of that
+  attempt — queued, accepted by the email provider, delivered to the recipient, bounced, or failed
+  before it ever reached the provider — is appended as its own entry. Previously one record carried one
+  status that was overwritten as things changed, and the status `Sent` meant only that the provider had
+  accepted the message, which read as success even when nothing reached the owner. Now a message the
+  provider accepted and the recipient's server then bounced shows both facts, and resending is a fresh
+  attempt at the same document rather than an edit to the old one — so an owner who eventually receives
+  a statement provably received the same one that bounced.
+
+### Security
+
+- **A statement's delivery history can no longer be altered or erased by the application.** Every
+  record of what was issued, what was sent, and what the email provider reported is append-only at the
+  database level — the running application holds no permission to update or delete any of it. The
+  previous delivery record deliberately kept an update permission so its status could be rewritten in
+  place, which meant the record of a delivery attempt was, by design, editable after the fact.
+
 ## [0.8.0] - 2026-08-18
 
 ### Added
@@ -549,7 +571,8 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.9.0
 [0.8.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.8.0
 [0.7.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.7.0
 [0.6.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.6.0

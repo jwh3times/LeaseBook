@@ -270,3 +270,42 @@ record this target as skipped or excluded for this reason. It is per-run-type kn
 else — it holds no loop, no posting and no persistence, and it is what a run type contributes beyond
 its preview.
 _Avoid_: batch (a plan is not sized or chunked), work list, queue, job
+
+### Statement delivery
+
+**Statement artifact**:
+The immutable rendered statement for one owner, period and basis — the bytes an owner is entitled to
+receive. Rendering the same owner and period again produces a different artifact, not a new version of
+this one.
+_Avoid_: statement (that is the assembled view), delivery record, PDF
+
+**Delivery attempt**:
+One request to send one statement artifact to one destination. A second send of the same artifact is a
+second attempt, never a change to the first.
+_Avoid_: delivery, send, delivery record
+
+**Delivery event**:
+One recorded fact about a delivery attempt — that it was queued, accepted, delivered, bounced or
+failed. Events are appended and never corrected in place; an attempt's whole history is its events.
+_Avoid_: state transition, status change, delivery status
+
+**Delivery status**:
+The kind of an attempt's latest recorded event, computed rather than stored. Ordering is by the
+recorded sequence, not by the timestamp the reporter supplied.
+_Avoid_: delivery state, current state (nothing stores one)
+
+**Provider accepted**:
+The email provider took the message for delivery. It says nothing about whether the recipient received
+it, and it is never called _sent_ — that word claimed the recipient's side while meaning only this one.
+_Avoid_: sent, delivered, successful
+
+**Delivered**:
+The recipient's mail server accepted the message. This is the only outcome that speaks for the
+recipient's side.
+_Avoid_: sent, received, read
+
+**Retry**:
+A new delivery attempt against an artifact that was already issued, optionally to a corrected
+destination. The artifact is not re-rendered, so a retry always carries the same figures as the attempt
+it follows.
+_Avoid_: resend (ambiguous between this and re-issuing), redelivery, reattempt of an event

@@ -3,7 +3,7 @@
 - **Audience:** Contributors, operators, and reviewers
 - **Status:** Living accounting guide
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-08-16
+- **Last reviewed:** 2026-08-18
 
 This is the canonical public explanation of the shipped trust-accounting model, written so a
 property manager, bookkeeper, or attorney can evaluate it without reading C#. The Accounting module
@@ -359,6 +359,13 @@ not static copy:
 
 If the variance check fails, the statement is still shown (for diagnosis) but marked unbalanced, the
 panel flag is set, and delivery is blocked until the underlying journal discrepancy is resolved.
+
+The gate governs _issuing_ a statement. A statement that passes it is stored as an immutable
+artifact, and each send of that artifact is a separate attempt whose outcome — queued, accepted by
+the provider, delivered, bounced, or failed — is recorded as an append-only event; the current status
+is read from an attempt's latest event, never stored. A resend is a new attempt against the same
+artifact, so it cannot present different figures than the send it follows and the tie-out does not
+run again. See [ADR-040](adr/ADR-040-statement-delivery-history.md).
 
 ### The ADR-016 read-layer boundary
 

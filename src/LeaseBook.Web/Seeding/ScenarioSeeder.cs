@@ -181,7 +181,7 @@ public static class ScenarioSeeder
             await PostAprilAsync(ctx, ct);
             await PostMayAsync(sp, ctx, ct);
             await PostJuneAsync(ctx, ct);
-            await SeedDeliveryStatesAsync(sp, db, ids, ct);
+            await SeedDeliveryHistoriesAsync(sp, db, ids, ct);
 
             await VerifyPinsAsync(sp, db, ct);
         }, ct);
@@ -652,12 +652,13 @@ public static class ScenarioSeeder
         await ReconcileAndFinalizeAsync(ctx, 2026, 5, ct);
 
         // Deliver O-S1's May consolidated statement through the real seam: tie-out gate → PDF →
-        // immutable artifact → Queued record. Sent/Failed are seeded later (design §7 D1).
+        // immutable artifact → first attempt → Queued event. This one stays pending; the April
+        // histories seeded later carry the provider outcomes (design §7 D1, ADR-040).
         var assembler = sp.GetRequiredService<StatementAssembler>();
         var views = await assembler.BuildAsync([oS1], null, 2026, 5, "accrual", ct);
         var delivery = await sp.GetRequiredService<IStatementDelivery>()
             .DeliverAsync(views[0], "harborview@scenario.test", ct);
-        Assert(delivery.State == DeliveryState.Queued, "scenario delivery: expected Queued");
+        Assert(delivery.Status == DeliveryEventKind.Queued, "scenario delivery: expected Queued");
         ctx.Db.ChangeTracker.Clear();
     }
 
@@ -788,45 +789,65 @@ public static class ScenarioSeeder
     }
 
     /// <summary>
-    /// The Track-B delivery states the local seam cannot reach (design §7 D1): render + store the
-    /// April statements for O-S2 (Sent) and O-S5 (Failed) exactly as the real seam would, then
-    /// insert the records directly with the terminal states. The ACS transition (Queued → Sent |
-    /// Failed) supersedes these placeholder rows when Track B lands.
+    /// The provider outcomes the local seam cannot produce on its own (design §7 D1, ADR-040): the
+    /// April statements for O-S2 and O-S5, issued through the real seam and then walked through the
+    /// delivery histories a demo needs to show.
+    /// <list type="bullet">
+    /// <item>
+    /// <b>O-S2</b> — the acceptance-then-bounce case, and the retry that fixes it. The provider
+    /// accepted attempt 1 and the recipient's server then bounced it; a second attempt against the
+    /// <b>same artifact</b> was accepted and delivered. Both attempts survive, so the run history
+    /// shows that the owner did eventually receive exactly the document the first attempt carried.
+    /// </item>
+    /// <item>
+    /// <b>O-S5</b> — the send that never reached the provider at all: one attempt, one Failed event.
+    /// </item>
+    /// </list>
+    /// Together with O-S1's still-Queued May attempt, the scenario org carries every
+    /// <see cref="DeliveryEventKind"/> in real rows. Nothing here is hand-inserted — the pre-ADR-040
+    /// seeder had to fabricate terminal rows because the seam had no way to express them.
     /// </summary>
-    private static async Task SeedDeliveryStatesAsync(
+    private static async Task SeedDeliveryHistoriesAsync(
         IServiceProvider sp, AppDbContext db, DirectoryIds ids, CancellationToken ct)
     {
         var assembler = sp.GetRequiredService<StatementAssembler>();
-        var artifacts = sp.GetRequiredService<IArtifactStore>();
+        var delivery = sp.GetRequiredService<IStatementDelivery>();
 
-        (string Owner, string Email, DeliveryState State)[] plan =
-        [
-            ("Beacon Ridge LLC", "beaconridge@scenario.test", DeliveryState.Sent),
-            ("Cypress Grove Partners", "cypressgrove@scenario.test", DeliveryState.Failed),
-        ];
+        // ── O-S2: accepted → bounced, then a retry that is accepted → delivered ──────────
+        var beaconView = (await assembler.BuildAsync(
+            [ids.Owners["Beacon Ridge LLC"]], null, 2026, 4, "accrual", ct))[0];
 
-        foreach (var (ownerName, email, state) in plan)
-        {
-            var ownerId = ids.Owners[ownerName];
-            var view = (await assembler.BuildAsync([ownerId], null, 2026, 4, "accrual", ct))[0];
-            var deliveryId = UuidV7.NewId();
-            var artifactKey = $"{deliveryId:N}.pdf";
-            await artifacts.PutAsync(StatementPdf.Render(view), artifactKey, ct);
+        var bounced = await delivery.DeliverAsync(beaconView, "beaconridge@scenario.test", ct);
+        await delivery.RecordEventAsync(
+            bounced.AttemptId, DeliveryEventKind.Accepted,
+            new DateTime(2026, 5, 1, 14, 2, 0, DateTimeKind.Utc),
+            "scenario-msg-beaconridge-1", null, ct);
+        await delivery.RecordEventAsync(
+            bounced.AttemptId, DeliveryEventKind.Bounced,
+            new DateTime(2026, 5, 1, 14, 9, 0, DateTimeKind.Utc),
+            "scenario-msg-beaconridge-1", "550 5.1.1 mailbox unavailable", ct);
 
-            db.Set<StatementDeliveryRecord>().Add(new StatementDeliveryRecord
-            {
-                Id = deliveryId,
-                OwnerId = ownerId,
-                PeriodYear = 2026,
-                PeriodMonth = 4,
-                ToEmail = email,
-                State = state,
-                ArtifactKey = artifactKey,
-                CreatedAt = DateTime.UtcNow,
-            });
-        }
+        // The retry names the artifact, not the attempt: the owner gets the identical April PDF.
+        var retry = await delivery.RetryAsync(bounced.ArtifactId, "accounts@beaconridge.scenario.test", ct);
+        await delivery.RecordEventAsync(
+            retry.AttemptId, DeliveryEventKind.Accepted,
+            new DateTime(2026, 5, 2, 9, 15, 0, DateTimeKind.Utc),
+            "scenario-msg-beaconridge-2", null, ct);
+        await delivery.RecordEventAsync(
+            retry.AttemptId, DeliveryEventKind.Delivered,
+            new DateTime(2026, 5, 2, 9, 16, 0, DateTimeKind.Utc),
+            "scenario-msg-beaconridge-2", null, ct);
 
-        await db.SaveChangesAsync(ct);
+        // ── O-S5: never reached the provider ─────────────────────────────────────────────
+        var cypressView = (await assembler.BuildAsync(
+            [ids.Owners["Cypress Grove Partners"]], null, 2026, 4, "accrual", ct))[0];
+
+        var failed = await delivery.DeliverAsync(cypressView, "cypressgrove@scenario.test", ct);
+        await delivery.RecordEventAsync(
+            failed.AttemptId, DeliveryEventKind.Failed,
+            new DateTime(2026, 5, 1, 14, 2, 0, DateTimeKind.Utc),
+            null, "provider unreachable", ct);
+
         db.ChangeTracker.Clear();
     }
 

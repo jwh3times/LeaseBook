@@ -31,7 +31,8 @@ Superuser `postgres` password (dev): `dev_postgres_pw`. **All dev-only** — rea
 in Key Vault.
 
 Default privileges are configured so every table the migrator creates automatically grants DML to
-`leasebook_app` and SELECT to `leasebook_ops`. Append-only tables (`audit_events`, `journal_*`)
+`leasebook_app` and SELECT to `leasebook_ops`. Append-only tables — `audit_events`, `journal_*`, the
+property-ownership transitions, and the statement-delivery artifact/attempt/event tables among them —
 additionally revoke UPDATE/DELETE in their migration.
 
 The one exception to migrator-owns-everything is the `hangfire` schema, which `bootstrap.sql`

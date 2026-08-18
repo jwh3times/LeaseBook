@@ -45,15 +45,15 @@ global-class.
 
 ### 2.1 Nonpublic personal information
 
-| Data                                                | Where it lives                     | Notes                                               |
-| --------------------------------------------------- | ---------------------------------- | --------------------------------------------------- |
-| Owner name, email, phone                            | `owners` (Directory)               | Contact detail for statement recipients             |
-| Tenant name, email, phone                           | `tenants` (Directory)              |                                                     |
-| Property street address, city, state, ZIP           | `properties` (Directory)           |                                                     |
-| Managing brokerage legal name, address, phone       | `org_settings` (Directory)         | Firm identity rendered on statements                |
-| User email, phone, username, display name           | `asp_net_users` (host)             | Application login accounts                          |
-| Recipient email of a delivered statement            | `statement_deliveries` (Reporting) | Delivery record for a sent statement                |
-| Verbatim imported records (names, emails, balances) | `import_rows` (Onboarding)         | Raw and mapped migration data, kept as import audit |
+| Data                                                | Where it lives                            | Notes                                               |
+| --------------------------------------------------- | ----------------------------------------- | --------------------------------------------------- |
+| Owner name, email, phone                            | `owners` (Directory)                      | Contact detail for statement recipients             |
+| Tenant name, email, phone                           | `tenants` (Directory)                     |                                                     |
+| Property street address, city, state, ZIP           | `properties` (Directory)                  |                                                     |
+| Managing brokerage legal name, address, phone       | `org_settings` (Directory)                | Firm identity rendered on statements                |
+| User email, phone, username, display name           | `asp_net_users` (host)                    | Application login accounts                          |
+| Recipient email of a statement send                 | `statement_delivery_attempts` (Reporting) | One row per send of a statement artifact            |
+| Verbatim imported records (names, emails, balances) | `import_rows` (Onboarding)                | Raw and mapped migration data, kept as import audit |
 
 ### 2.2 Financial information
 
@@ -81,9 +81,11 @@ trail (§2.5).
 
 ### 2.4 Artifacts (generated documents)
 
-Delivered owner-statement PDFs are written to an immutable, write-once artifact store
-(`IArtifactStore`) so the stored copy is exactly what the owner received; these PDFs contain owner
-name, property address, and financial figures. The store is a local filesystem today and moves to
+Issued owner-statement PDFs are written to an immutable, write-once artifact store
+(`IArtifactStore`) so the stored copy is exactly what was sent to the owner; these PDFs contain owner
+name, property address, and financial figures. A resend reuses the stored artifact rather than
+re-rendering it, so every send of a statement — including one that bounced and the retry that
+followed — refers to the same bytes (ADR-040). The store is a local filesystem today and moves to
 Azure Blob Storage at go-live (two containers — `statements` and `documents`). Compliance packs,
 report CSVs, and on-demand statement downloads are streamed to the requester and **not** persisted.
 
@@ -149,8 +151,9 @@ SECURITY` and an `org_id` isolation policy applied through one migration helper;
   install and upgrade its own tables; that schema contains no organization data, no customer records,
   and no credentials, and the runtime role holds no schema-creation right on the database or on the
   application schema.
-- **Append-only ledger and audit.** The runtime role has no `UPDATE` or `DELETE` grant on the journal
-  and audit tables; corrections are linked reversals, never edits or deletions.
+- **Append-only ledger, audit, and delivery history.** The runtime role has no `UPDATE` or `DELETE`
+  grant on the journal, audit, and statement-delivery tables; corrections are linked reversals or
+  later recorded facts, never edits or deletions.
 - **PM income is structurally invisible to owner-facing reads.** Management-fee income cannot appear
   in an owner statement or export by construction — a trust-accounting invariant, not a display
   filter.
@@ -175,9 +178,11 @@ The windows above are the technical defaults in the authored infrastructure. Two
 - **Trust-record retention minimum — `[LEGAL REVIEW]`.** NCREC Rule 58A .0116 governs how long trust
   records must be retained. The compliance review sets the required minimum; the journal and audit
   trail are append-only and are not purged today, but no enforced retention floor is yet encoded.
-- **Artifact and audit-log lifecycle.** Delivered-statement artifacts and `audit_events` have no
-  lifecycle policy today (retained indefinitely). A retention and disposal policy for both is a
-  tracked gap, to be set consistent with the trust-record minimum above.
+- **Artifact and audit-log lifecycle.** Issued statement artifacts, the delivery history recording
+  where each was sent, and `audit_events` have no lifecycle policy today (retained indefinitely);
+  the delivery tables are append-only, so the recipient addresses they hold cannot be edited or
+  purged by the runtime role. A retention and disposal policy for all three is a tracked gap, to be
+  set consistent with the trust-record minimum above.
 
 ## 6. Data lifecycle: onboarding and offboarding
 
@@ -188,9 +193,9 @@ The windows above are the technical defaults in the authored infrastructure. Two
   implemented.** Available today are narrower exports: the trust compliance pack (per trust account
   and period), owner statements, and per-report CSV/PDF downloads.
 - **Deletion and offboarding.** A documented hard-delete path with retention rules is **designed but
-  not yet implemented.** The append-only grant model deliberately prevents routine deletion of ledger
-  and audit data, so a compliant offboarding or erasure path requires a privileged, audited,
-  out-of-band mechanism and will be recorded in its own ADR. Both the export and the deletion path are
+  not yet implemented.** The append-only grant model deliberately prevents routine deletion of
+  ledger, audit, and statement-delivery data, so a compliant offboarding or erasure path requires a
+  privileged, audited, out-of-band mechanism and will be recorded in its own ADR. Both the export and the deletion path are
   prerequisites for the beta customer-trust commitment and are tracked as unbuilt work.
 
 ## 7. Governance and references
