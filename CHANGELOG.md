@@ -24,7 +24,13 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Fixed
 
-- _Nothing yet._
+- **Upgrading a database that already holds tenants or units** — the 0.7.0 migration that renamed
+  `units.status` to `availability` and `tenants.status` to `lifecycle_status` had its data backfill
+  filtered out by row-level security, so it rewrote no rows and the check constraint it added
+  immediately afterwards rejected every pre-existing value. An empty database was unaffected, which
+  is why the release shipped; any installation carrying real data could not migrate past it. New
+  migrations are now replayed against a seeded database in CI, so a backfill that quietly touches
+  nothing fails the build instead of the upgrade.
 
 ### Security
 
