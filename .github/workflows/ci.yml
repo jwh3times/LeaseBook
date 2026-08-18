@@ -18,10 +18,20 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Every job below sets `timeout-minutes`. GitHub's default is 360 (six hours), which is not a
+# useful bound for anything here: a step that hangs on a network read — `playwright install`
+# reaching a CDN or apt mirror, a NuGet/npm restore, a docker pull — occupies a runner for the rest
+# of the day and leaves the PR "pending" rather than red, so nothing tells you to look. The numbers
+# are roughly 3-8x each job's observed maximum over recent successful runs, floored at 10 minutes,
+# so ordinary slowness (cold cache, busy runner) never trips them and a hang fails in minutes.
+# Re-measure before tightening one: a timeout that fires on a healthy run is worse than no timeout,
+# because it teaches you to re-run red checks without reading them.
 jobs:
   backend:
     name: Backend (build + test)
     runs-on: ubuntu-latest
+    # Typically ~3.5 min; the widest variance here is NuGet restore and Testcontainers image pulls.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
         with:
@@ -72,6 +82,8 @@ jobs:
   web:
     name: Web (lint + test + build)
     runs-on: ubuntu-latest
+    # Typically ~1 min.
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: web
@@ -104,6 +116,8 @@ jobs:
   schema-drift:
     name: API client matches OpenAPI contract
     runs-on: ubuntu-latest
+    # Typically ~1 min.
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v6
@@ -140,6 +154,8 @@ jobs:
   migration-check:
     name: Migrations apply to a blank DB
     runs-on: ubuntu-latest
+    # Typically ~1.2 min.
+    timeout-minutes: 10
     services:
       postgres:
         image: postgres:18
@@ -176,6 +192,8 @@ jobs:
   load-fixture:
     name: Load fixture seeds + pin holds
     runs-on: ubuntu-latest
+    # Typically ~3.2 min; seeds 300 units, so it grows with the fixture.
+    timeout-minutes: 15
     services:
       postgres:
         image: postgres:18
@@ -212,6 +230,11 @@ jobs:
   e2e:
     name: E2E (Playwright + a11y)
     runs-on: ubuntu-latest
+    # Typically ~6 min, the slowest job here. This is the one that motivated the policy: on
+    # 2026-08-18 `npx playwright install --with-deps chromium` hung for 65 minutes against a
+    # 34-second baseline, with no GitHub incident and the Playwright CDN reachable, and would
+    # have held the runner for six hours.
+    timeout-minutes: 20
     services:
       postgres:
         image: postgres:18
@@ -273,6 +296,8 @@ jobs:
   secret-scan:
     name: Secret scan
     runs-on: ubuntu-latest
+    # Typically ~10 s.
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
         with:
@@ -294,6 +319,8 @@ jobs:
   bicep:
     name: Bicep templates compile
     runs-on: ubuntu-latest
+    # Typically ~1 min.
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
       - name: Build main template
@@ -328,6 +355,8 @@ jobs:
   container:
     name: Container build + full-stack smoke
     runs-on: ubuntu-latest
+    # Typically ~2.4 min; the image build dominates and is the part most exposed to registry stalls.
+    timeout-minutes: 15
     env:
       # Host port the `app` service publishes; the container always listens on 8080. Matches the
       # README port map's default so CI exercises the same mapping a developer gets.

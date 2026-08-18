@@ -28,6 +28,9 @@ jobs:
   check:
     name: Run the Hey API generator under the SPA TypeScript major
     runs-on: ubuntu-latest
+    # Typically ~20 s. It installs a floating dependency range on purpose, so its install step is
+    # the part most likely to stall on a registry.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
 

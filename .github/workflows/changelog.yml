@@ -24,6 +24,8 @@ jobs:
   changelog:
     name: CHANGELOG [Unreleased] updated
     runs-on: ubuntu-latest
+    # Typically ~5 s (a checkout and a diff). See ci.yml for why every job carries a bound.
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
         with:
