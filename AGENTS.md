@@ -289,6 +289,12 @@ Violating these is a correctness bug, not a style issue.
 - Every new org-scoped table goes through the migrations RLS helper: column, `USING`/`WITH CHECK`
   policy, and `FORCE ROW LEVEL SECURITY` in one call.
 - A schema guard test fails CI if any `org_id` table lacks its policy.
+- `FORCE ROW LEVEL SECURITY` binds the migrator too, so a migration that rewrites data must bracket
+  its DML with `ALTER TABLE <t> NO FORCE ROW LEVEL SECURITY` / `... FORCE ROW LEVEL SECURITY` in the
+  same `Sql` block — for every forced table the statement names, not just the target. Without the
+  lift the write silently matches zero rows; without the restore the table stays unprotected. EF's
+  `InsertData`/`UpdateData`/`DeleteData` builders are not usable for this, since no block can bracket
+  them. A source-scanning architecture test fails CI on all three.
 - One deliberate exception to org-only policies: the four platform capability tables are gated on
   `SET LOCAL app.platform` (ADR-028), in three different shapes. `entitlements` and
   `capability_cohorts` keep `org_id` and an org read policy **plus** a platform escape — an escape

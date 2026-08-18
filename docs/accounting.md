@@ -261,7 +261,9 @@ belonging to the earlier era rather than backfilled with a guess.
 
 The per-entry audit trail (`GET /entries/{id}/audit`) returns the entry's and its reversal's rows
 newest-first, resolving each actor to a name/email — an org-scoped identity lookup, so one company can
-never see another's users.
+never see another's users. An automated write shows as `System (<process>)`; a row from before
+ADR-039, which recorded no process, still shows as plain `System`. The compliance pack's audit
+extract uses the same label.
 
 ## Banking: the register, clearing & reconciliation (M4)
 

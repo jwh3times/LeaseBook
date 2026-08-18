@@ -49,15 +49,25 @@ inconsistent one.
 4. A database check constraint pairs the columns on both tables: `user` names a user and no process,
    `system` names a process and no user.
 
-5. **Rows written before this ADR keep a null `actor_kind`,** which the constraint admits as its
+5. The audit reads name the process. `ActorName` renders `System (<process>)` for an automated write,
+   through one shared label so the per-entry trail and the compliance extract cannot describe the
+   same row two different ways. The response shape is unchanged — this is a value, not a new field.
+
+6. **Rows written before this ADR keep a null `actor_kind`,** which the constraint admits as its
    third arm. There is no backfill.
 
 ## Consequences
 
-An audit read can group by process, so "what did the nightly sweep touch" and "what did a human do"
-are separable questions for the first time. `IActorContext.UserId` survives as a convenience for
-domain fields that genuinely record a human — who signed off a verification, who finalized a
-reconciliation — where null is a meaningful answer rather than lost information.
+An audit read can distinguish processes, so "what did the nightly sweep touch" and "what did a human
+do" are separable questions for the first time. Both readers surface it: the per-entry trail and the
+compliance pack's audit extract render an automated write as `System (invariant-sweep)` rather than
+the bare `System` that collapsed every seeder, job and CLI verb into one actor. Persisting the fact
+without surfacing it would have left the claim true of the database and false of the document an
+examiner reads.
+
+`IActorContext.UserId` survives as a convenience for domain fields that genuinely record a human —
+who signed off a verification, who finalized a reconciliation — where null is a meaningful answer
+rather than lost information.
 
 The refusal is a behavior change on any path that writes org-scoped rows outside `OrgScopedExecutor`.
 No such path exists in `src/` today; one written later now fails loudly instead of writing an

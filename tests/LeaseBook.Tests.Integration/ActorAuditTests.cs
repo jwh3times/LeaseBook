@@ -220,6 +220,27 @@ public sealed class ActorAuditTests(PostgresFixture fixture)
         stamps[userEntry].ActorKind.ShouldBe("user");
     }
 
+    /// <summary>
+    /// The per-entry trail's half of ADR-039: the row an operator reads names the process, instead of
+    /// flattening every automated write to one "System".
+    /// </summary>
+    [Fact]
+    public async Task The_audit_trail_names_the_system_process_behind_an_automated_write()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var orgId = await NewOrgAsync(ct);
+        var tenantId = await SetupTenantAsync(orgId, ct);
+
+        var charge = await AsActorAsync(orgId, null,
+            (_, s, c) => s.Send(new AddCharge(tenantId, 1450m, Feb1, "rent", null, Key()), c), ct);
+
+        var trail = await AsActorAsync(orgId, null,
+            (sp, _, c) => sp.GetRequiredService<EntryAuditReader>().GetAsync(charge.EntryId, c), ct);
+
+        trail.Rows.ShouldNotBeEmpty();
+        trail.Rows.ShouldAllBe(r => r.ActorName == "System (test-harness)");
+    }
+
     [Fact]
     public async Task The_audit_trail_is_isolated_across_orgs()
     {

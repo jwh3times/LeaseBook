@@ -7,7 +7,12 @@ namespace LeaseBook.Web.Audit;
 /// <summary>The compliance-pack audit extract: money-touching audit events over a period, newest-first.</summary>
 public sealed record AuditExtractResponse(IReadOnlyList<AuditExtractRow> Rows);
 
-/// <summary>One audit-trail row. <see cref="ActorName"/> is "System" for seeder/job writes.</summary>
+/// <summary>
+/// One audit-trail row. <see cref="ActorName"/> names the system process for automated writes —
+/// <c>System (seed:demo)</c> — and plain <c>System</c> for rows written before ADR-039, which
+/// recorded no process. An examiner reading this extract can therefore tell the nightly sweep from a
+/// seeder from a CLI verb.
+/// </summary>
 public sealed record AuditExtractRow(
     DateTime OccurredAt, string EntityType, Guid EntityId, string Action, string ActorName, string? ActorEmail);
 
@@ -50,7 +55,7 @@ public sealed class AuditExtractReader(AppDbContext db, ITenantContext tenant)
             .Where(a => MoneyTouchingEntityTypes.Contains(a.EntityType)
                         && a.OccurredAt >= start && a.OccurredAt < endExclusive)
             .OrderByDescending(a => a.OccurredAt)
-            .Select(a => new { a.ActorUserId, a.EntityType, a.EntityId, a.Action, a.OccurredAt })
+            .Select(a => new { a.ActorUserId, a.ActorProcess, a.EntityType, a.EntityId, a.Action, a.OccurredAt })
             .ToListAsync(ct);
 
         var actorIds = events.Where(e => e.ActorUserId is not null)
@@ -69,7 +74,7 @@ public sealed class AuditExtractReader(AppDbContext db, ITenantContext tenant)
                 var actor = e.ActorUserId is { } id && byId.TryGetValue(id, out var u) ? u : null;
                 return new AuditExtractRow(
                     e.OccurredAt, e.EntityType, e.EntityId, e.Action,
-                    actor?.DisplayName ?? actor?.Email ?? "System", actor?.Email);
+                    AuditActorLabel.For(actor?.DisplayName, actor?.Email, e.ActorProcess), actor?.Email);
             })
             .ToList();
 
