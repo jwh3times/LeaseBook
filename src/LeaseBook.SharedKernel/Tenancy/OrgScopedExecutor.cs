@@ -11,12 +11,13 @@ namespace LeaseBook.SharedKernel.Tenancy;
 /// empty rows: a <see cref="Guid.Empty"/> org id throws <b>before</b> any database access.
 /// <para>
 /// <b>Every call states who is accountable.</b> There is no actor-less overload, deliberately: this
-/// executor writes <see cref="ActorContext"/>, which stamps <c>journal_entries.created_by</c> and
-/// <c>audit_events.actor_user_id</c>, and a default would mean an unattributed fiduciary write could
-/// happen by saying nothing. Use <see cref="RunAsync{T}(Guid, Actor, Func{Task{T}}, CancellationToken)"/>
-/// when a user is accountable and
-/// <see cref="RunAsSystemAsync{T}(Guid, string, Func{Task{T}}, CancellationToken)"/> when a named
-/// process is. Both stamp the same column; only one of them can be written without thinking about it.
+/// executor writes <see cref="ActorContext"/>, which stamps <c>actor_kind</c> plus either the user
+/// column or <c>actor_process</c> on <c>journal_entries</c> and <c>audit_events</c>, and a default
+/// would mean an unattributed fiduciary write could happen by saying nothing. Use
+/// <see cref="RunAsync{T}(Guid, Actor, Func{Task{T}}, CancellationToken)"/> when a user is
+/// accountable and <see cref="RunAsSystemAsync{T}(Guid, string, Func{Task{T}}, CancellationToken)"/>
+/// when a named process is. Since ADR-039 the two are distinguishable in the persisted row, not only
+/// at the call site — a system write records which process wrote it.
 /// </para>
 /// <para>
 /// The transaction bracket itself — including the refusal to nest — lives in
@@ -44,17 +45,18 @@ public sealed class OrgScopedExecutor(
     }
 
     /// <summary>
-    /// Runs <paramref name="work"/> as the system, for the named <paramref name="reason"/>. The
-    /// stamped actor is null either way; naming the process is what stops that null being accidental.
+    /// Runs <paramref name="work"/> as the system, acting as the named <paramref name="process"/>.
+    /// The name is persisted, so it must be a stable process identifier — see
+    /// <see cref="Actor.System"/>, which rejects anything else.
     /// </summary>
     public Task RunAsSystemAsync(
-        Guid orgId, string reason, Func<Task> work, CancellationToken ct = default) =>
-        RunAsync(orgId, Actor.System(reason), work, ct);
+        Guid orgId, string process, Func<Task> work, CancellationToken ct = default) =>
+        RunAsync(orgId, Actor.System(process), work, ct);
 
     /// <inheritdoc cref="RunAsSystemAsync(Guid, string, Func{Task}, CancellationToken)"/>
     public Task<T> RunAsSystemAsync<T>(
-        Guid orgId, string reason, Func<Task<T>> work, CancellationToken ct = default) =>
-        RunAsync(orgId, Actor.System(reason), work, ct);
+        Guid orgId, string process, Func<Task<T>> work, CancellationToken ct = default) =>
+        RunAsync(orgId, Actor.System(process), work, ct);
 
     /// <summary>Value-returning form. See <see cref="RunAsync(Guid, Actor, Func{Task}, CancellationToken)"/>.</summary>
     public async Task<T> RunAsync<T>(
@@ -73,7 +75,7 @@ public sealed class OrgScopedExecutor(
         }
 
         var previousOrg = tenantContext.OrgId;
-        var previousActor = actorContext.UserId;
+        var previousActor = actorContext.Actor;
         try
         {
             return await TransactionalUnitOfWork.RunAsync(
@@ -86,7 +88,7 @@ public sealed class OrgScopedExecutor(
                     await db.Database.ExecuteSqlAsync(
                         $"SELECT set_config('app.org_id', {orgId.ToString()}, true)", token);
                     tenantContext.OrgId = orgId;
-                    actorContext.UserId = actor.UserId;
+                    actorContext.Actor = actor;
                 },
                 work,
                 ct);
@@ -95,7 +97,7 @@ public sealed class OrgScopedExecutor(
         {
             // Both mirror the DB's transaction-local context: they die with the unit of work.
             tenantContext.OrgId = previousOrg;
-            actorContext.UserId = previousActor;
+            actorContext.Actor = previousActor;
         }
     }
 }

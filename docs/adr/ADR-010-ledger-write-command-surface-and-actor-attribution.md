@@ -1,6 +1,6 @@
 # ADR-010: Ledger write commands wrap the engine; the actor is attributed at the seam
 
-- **Status:** Accepted (amended by ADR-037)
+- **Status:** Accepted (amended by ADR-037, ADR-039)
 - **Date:** 2026-06-13
 - **Deciders:** Engineering
 

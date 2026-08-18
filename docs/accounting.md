@@ -248,11 +248,20 @@ tenant accounts until Accounting has persisted per-lease receivable and liabilit
 
 ## Who did it
 
-Every posted entry now records the acting user. The authenticated user's id is stamped onto the journal
-entry (`created_by`) and onto each `audit_events` row (`actor_user_id`); a reversal carries the user who
-voided. The seeder and background jobs write as the system (a null actor, by design). The per-entry audit
-trail (`GET /entries/{id}/audit`) returns the entry's and its reversal's rows newest-first, resolving each
-actor to a name/email — an org-scoped identity lookup, so one company can never see another's users.
+Every posted entry records who is accountable, and the record is durable
+([ADR-039](adr/ADR-039-durable-actor-attribution.md)). The authenticated user's id is stamped onto the
+journal entry (`created_by`) and onto each `audit_events` row (`actor_user_id`); a reversal carries the
+user who voided. The seeder and background jobs write as the **system**, which names the process that
+acted — `seed:demo`, `invariant-sweep` — in `actor_process`, with `actor_kind` saying which of the two
+cases a row is. A write that declares no actor at all is refused rather than saved.
+
+Entries and audit rows written before ADR-039 carry a null `actor_kind`. That is the honest reading:
+for those rows the acting process is exactly the fact that was never recorded, so they are marked as
+belonging to the earlier era rather than backfilled with a guess.
+
+The per-entry audit trail (`GET /entries/{id}/audit`) returns the entry's and its reversal's rows
+newest-first, resolving each actor to a name/email — an org-scoped identity lookup, so one company can
+never see another's users.
 
 ## Banking: the register, clearing & reconciliation (M4)
 

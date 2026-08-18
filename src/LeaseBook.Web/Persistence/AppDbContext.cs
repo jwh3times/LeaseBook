@@ -33,8 +33,9 @@ public sealed class AppDbContext(
 {
     private readonly ITenantContext _tenant = tenantContext ?? NullTenantContext.Instance;
 
-    // The acting user for audit stamping (P52). Null for the seeder/jobs and any context built without
-    // one (tests, design-time) — a system write, stamped null without throwing.
+    // Who is accountable, for audit stamping (P52). Absent only on contexts built outside DI
+    // (design-time, the migrator) — which never write org-scoped rows. Since ADR-039 an org-scoped
+    // write with no declared actor throws rather than stamping an unattributed row.
     private readonly IActorContext? _actor = actorContext;
 
     // F6: present only when the host resolves it via DI. The migrator/design-time/test-fixture paths
@@ -141,6 +142,16 @@ public sealed class AppDbContext(
                 "An org-scoped write was attempted with no organization context. Org-scoped DB work must " +
                 "run inside the request middleware or OrgScopedExecutor, which set app.org_id (§C.4).");
 
+        // ADR-039: attribution is durable, so a missing actor is a bug to report here rather than a
+        // null to persist. It is exactly as recoverable as the org context checked above — both are
+        // set together by OrgScopedExecutor, and neither can be reconstructed from the row later.
+        var actor = _actor?.Actor
+            ?? throw new InvalidOperationException(
+                "An org-scoped write was attempted with no declared actor. Org-scoped DB work must run " +
+                "inside the request middleware or OrgScopedExecutor, which declares who is accountable " +
+                "— Actor.User(id) for a signed-in user, Actor.System(process) for a named process " +
+                "(ADR-039).");
+
         var audits = new List<AuditEvent>(changes.Count);
         foreach (var entry in changes)
         {
@@ -167,7 +178,7 @@ public sealed class AppDbContext(
             // ...but never audit the audit log itself (no recursion; audit_events is append-only).
             if (entry.Entity is not AuditEvent)
             {
-                audits.Add(BuildAuditEvent(entry, orgId, _actor?.UserId));
+                audits.Add(BuildAuditEvent(entry, orgId, actor));
             }
         }
 
@@ -178,7 +189,7 @@ public sealed class AppDbContext(
         new($"Cross-org write blocked: {entry.Entity.GetType().Name} carries org {entityOrg} but the " +
             $"current organization context is {contextOrg}.");
 
-    private static AuditEvent BuildAuditEvent(EntityEntry entry, Guid orgId, Guid? actorUserId)
+    private static AuditEvent BuildAuditEvent(EntityEntry entry, Guid orgId, Actor actor)
     {
         var action = entry.State switch
         {
@@ -192,7 +203,11 @@ public sealed class AppDbContext(
         {
             Id = UuidV7.NewId(),
             OrgId = orgId,
-            ActorUserId = actorUserId, // The acting user from the auth claim (P52); null for system writes.
+            // The acting user from the auth claim (P52), null for a system write — with actor_kind
+            // and actor_process saying which, so the two are distinguishable afterwards (ADR-039).
+            ActorUserId = actor.UserId,
+            ActorKind = actor.Kind,
+            ActorProcess = actor.Process,
             EntityType = entry.Metadata.GetTableName() ?? entry.Metadata.ClrType.Name,
             EntityId = entry.Property("Id").CurrentValue is Guid id ? id : Guid.Empty,
             Action = action,

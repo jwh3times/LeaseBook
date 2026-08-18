@@ -61,12 +61,20 @@ public sealed class PostgresFixture : IAsyncLifetime
         new(BuildOptions(connectionString));
 
     /// <summary>
-    /// AppDbContext bound to an organization context — what the EF query filter and org stamping read.
-    /// Pass the same <paramref name="tenant"/> to an <see cref="OrgScopedExecutor"/> so the SET LOCAL
-    /// it issues and the in-process ergonomics agree.
+    /// AppDbContext bound to an organization context and an actor — what the EF query filter, the org
+    /// stamping and the audit pass read. Pass the same <paramref name="tenant"/> and
+    /// <paramref name="actor"/> to an <see cref="OrgScopedExecutor"/> so the SET LOCAL it issues and
+    /// the in-process ergonomics agree.
+    /// <para>
+    /// <paramref name="actor"/> is required rather than optional, and that is the whole point. While it
+    /// was optional, every harness here built its executor over a freshly constructed
+    /// <c>ActorContext</c> — one the executor wrote and the DbContext never read — so roughly a hundred tests
+    /// wrote rows attributed to nobody and none of them noticed. ADR-039 made that throw; a required
+    /// parameter is what stops it being rebuilt.
+    /// </para>
     /// </summary>
-    public AppDbContext CreateContext(string connectionString, ITenantContext tenant) =>
-        new(BuildOptions(connectionString), tenant);
+    public AppDbContext CreateContext(string connectionString, ITenantContext tenant, IActorContext actor) =>
+        new(BuildOptions(connectionString), tenant, actor);
 
     /// <summary>An open raw connection as the RLS-subject app role — the isolation pack drives the
     /// database directly through this so it proves RLS, not the EF query filter (pitfall E2).</summary>

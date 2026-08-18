@@ -1,4 +1,5 @@
 using LeaseBook.SharedKernel;
+using LeaseBook.SharedKernel.Tenancy;
 
 namespace LeaseBook.Modules.Accounting.Domain;
 
@@ -28,7 +29,7 @@ public sealed class JournalEntry : IOrgScoped
         Guid? reversesEntryId,
         Guid? assessesEntryId,
         DateOnly? dueDate,
-        Guid? createdBy,
+        Actor createdBy,
         DateTime postedAt)
     {
         Id = UuidV7.NewId();
@@ -40,7 +41,9 @@ public sealed class JournalEntry : IOrgScoped
         ReversesEntryId = reversesEntryId;
         AssessesEntryId = assessesEntryId;
         DueDate = dueDate;
-        CreatedBy = createdBy;
+        CreatedBy = createdBy.UserId;
+        ActorKind = createdBy.Kind;
+        ActorProcess = createdBy.Process;
         PostedAt = postedAt;
     }
 
@@ -71,8 +74,23 @@ public sealed class JournalEntry : IOrgScoped
     /// <summary>The contractual due date for a charge; null for non-charge activity.</summary>
     public DateOnly? DueDate { get; private set; }
 
-    /// <summary>Acting user id; null for the seeder and background jobs.</summary>
+    /// <summary>
+    /// Acting user id; null when <see cref="ActorKind"/> is <c>system</c>, and null on rows that
+    /// predate ADR-039.
+    /// </summary>
     public Guid? CreatedBy { get; private set; }
+
+    /// <summary>
+    /// <c>user</c> or <c>system</c> (ADR-039). Null only on entries posted before ADR-039, where
+    /// accountability genuinely cannot be recovered.
+    /// </summary>
+    public string? ActorKind { get; private set; }
+
+    /// <summary>
+    /// The system process that posted this entry — <c>seed:demo</c>, <c>invariant-sweep</c>, a CLI
+    /// verb. Null when a user posted it, and null on pre-ADR-039 rows.
+    /// </summary>
+    public string? ActorProcess { get; private set; }
 
     public DateTime PostedAt { get; private set; }
 
@@ -89,7 +107,7 @@ public sealed class JournalEntry : IOrgScoped
         string? description,
         string? sourceRef,
         Guid? reversesEntryId,
-        Guid? createdBy,
+        Actor createdBy,
         DateTime postedAt,
         Guid? assessesEntryId = null,
         DateOnly? dueDate = null) =>

@@ -833,8 +833,9 @@ public sealed class BalanceSupersedeTests(PostgresFixture fixture)
     private async Task ReadAsync(Guid orgId, Func<DbContext, Task> read, CancellationToken ct)
     {
         var tenant = new TenantContext { OrgId = orgId };
-        await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
-        var executor = new OrgScopedExecutor(db, tenant, new ActorContext());
+        var actor = new ActorContext();
+        await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant, actor);
+        var executor = new OrgScopedExecutor(db, tenant, actor);
         await executor.RunAsSystemAsync(orgId, "test-harness", () => read(db), ct);
     }
 

@@ -158,7 +158,7 @@ Two consequences for how you write a backfill:
 - **Raw SQL only.** EF's `InsertData`/`UpdateData`/`DeleteData` builders are rejected outright. Each emits its statement alone, so no block exists in which the lift could bracket it — the bracketing and the write have to be one reviewable unit.
 - **A missing restore fails too**, not just a missing lift. Leaving `FORCE` off is the worse bug: the table stays unprotected against its own owner afterwards, and no data-level test would notice.
 
-A plain `INSERT … VALUES` into a forced table is deliberately out of scope — its `WITH CHECK` raises `42501` and aborts the migration at the mistake. Only statements RLS filters *silently* are the hazard.
+A plain `INSERT … VALUES` into a forced table is deliberately out of scope — its `WITH CHECK` raises `42501` and aborts the migration at the mistake. Only statements RLS filters _silently_ are the hazard.
 
 ### Immutable tables (journal / audit)
 

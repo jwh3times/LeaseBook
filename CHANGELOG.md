@@ -16,11 +16,18 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Added
 
-- _Nothing yet._
+- **Audit records now name the system process that wrote them.** Journal entries and audit events
+  carry the acting user or the responsible process — the demo seeder, the nightly invariant sweep, a
+  CLI verb — rather than leaving system activity blank. Previously any automated write looked
+  identical to a write with no recorded actor at all, so an audit read could not tell the two apart.
+  Records written before this release keep their blank attribution, which is now distinguishable from
+  a modern row rather than blending in.
 
 ### Changed
 
-- _Nothing yet._
+- **A write that does not say who is accountable is refused.** Recording activity without a declared
+  actor now fails immediately instead of saving an unattributable row. Every path in the application
+  already declares one, so this changes no existing workflow.
 
 ### Fixed
 

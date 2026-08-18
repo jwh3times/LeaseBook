@@ -87,9 +87,11 @@ of work itself)
 ### Accountability
 
 **Actor**:
-Who is accountable for a unit of work — either a named person, or the system acting for a stated
-reason. There is no third case: work no person is accountable for must still name the process that
-did it. "Unknown" is not an answer the language admits.
+Who is accountable for a unit of work — either a named person, or the system acting as a named
+process. There is no third case: work no person is accountable for must still name the process that
+did it. "Unknown" is not an answer the language admits — and since ADR-039 not one the data admits
+either, because the process name is persisted rather than living only at the call site. A process
+name is a stable identifier (`seed:demo`, `invariant-sweep`), not a description of the occasion.
 _Avoid_: user (a person is a person; an actor is the role a person **or** the system fills),
 author, created-by
 

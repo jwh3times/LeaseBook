@@ -15,8 +15,23 @@ public sealed class AuditEvent : IOrgScoped
 
     public Guid OrgId { get; set; }
 
-    /// <summary>The acting user. Nullable until WP-06 (Identity) supplies it from the claim seam.</summary>
+    /// <summary>
+    /// The acting user; null when <see cref="ActorKind"/> is <c>system</c>, and null on rows written
+    /// before ADR-039.
+    /// </summary>
     public Guid? ActorUserId { get; set; }
+
+    /// <summary>
+    /// <c>user</c> or <c>system</c> (ADR-039). Null only on rows that predate ADR-039 — the ones
+    /// where a null actor genuinely cannot say whether a process acted or nobody was recorded.
+    /// </summary>
+    public string? ActorKind { get; set; }
+
+    /// <summary>
+    /// The system process accountable for this write — <c>seed:demo</c>, <c>invariant-sweep</c>, a
+    /// CLI verb. Null when a user acted, and null on pre-ADR-039 rows.
+    /// </summary>
+    public string? ActorProcess { get; set; }
 
     public required string EntityType { get; set; }
 

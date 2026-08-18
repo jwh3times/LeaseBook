@@ -1,4 +1,5 @@
 using LeaseBook.Modules.Accounting.Domain;
+using LeaseBook.SharedKernel.Tenancy;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -8,7 +9,20 @@ public sealed class JournalEntryConfiguration : IEntityTypeConfiguration<Journal
 {
     public void Configure(EntityTypeBuilder<JournalEntry> builder)
     {
-        builder.ToTable("journal_entries");
+        builder.ToTable("journal_entries", t =>
+        {
+            // ADR-039: attribution is durable, and the two cases are mutually exclusive — a user
+            // entry names a user and no process, a system entry names a process and no user. The
+            // null arm is legacy only: entries posted before ADR-039, where accountability cannot be
+            // recovered and pretending otherwise would be worse than admitting it.
+            t.HasCheckConstraint(
+                "ck_journal_entries_actor_attribution",
+                """
+                actor_kind IS NULL
+                OR (actor_kind = 'user' AND created_by IS NOT NULL AND actor_process IS NULL)
+                OR (actor_kind = 'system' AND created_by IS NULL AND actor_process IS NOT NULL)
+                """);
+        });
 
         builder.HasKey(e => e.Id);
         builder.HasAlternateKey(e => new { e.OrgId, e.Id });
@@ -22,6 +36,8 @@ public sealed class JournalEntryConfiguration : IEntityTypeConfiguration<Journal
         builder.Property(e => e.ReversesEntryId);
         builder.Property(e => e.AssessesEntryId);
         builder.Property(e => e.CreatedBy);
+        builder.Property(e => e.ActorKind).HasMaxLength(8);
+        builder.Property(e => e.ActorProcess).HasMaxLength(Actor.MaxProcessLength);
         builder.Property(e => e.PostedAt).IsRequired();
         builder.Property(e => e.CreatedAt).IsRequired();
 

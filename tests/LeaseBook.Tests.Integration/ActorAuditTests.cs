@@ -1,6 +1,7 @@
 using LeaseBook.Modules.Accounting.Contracts;
 using LeaseBook.Modules.Accounting.Domain;
 using LeaseBook.Modules.Accounting.Features.LedgerPosting;
+using LeaseBook.Modules.Directory.Domain;
 using LeaseBook.Modules.Directory.Features.Leases;
 using LeaseBook.Modules.Directory.Features.Owners;
 using LeaseBook.Modules.Directory.Features.Properties;
@@ -27,8 +28,14 @@ namespace LeaseBook.Tests.Integration;
 /// WP-02 (P52/P56): actor attribution + the per-entry audit trail. A post made by an authenticated
 /// user stamps <c>journal_entries.created_by</c> and <c>audit_events.actor_user_id</c>; the audit-trail
 /// read resolves the actor's name/email (org-filtered identity lookup, M3-E6) and covers the reversal;
-/// a system write (no actor) stamps null without throwing; and another org cannot read the trail.
-/// The actor is set in-process here (as the middleware does from the claim); the over-HTTP path is WP-03.
+/// and another org cannot read the trail. The actor is set in-process here (as the middleware does
+/// from the claim); the over-HTTP path is WP-03.
+/// <para>
+/// ADR-039 changed what a system write leaves behind. It used to stamp a null and rely on the call
+/// site to remember which process acted; it now records <c>actor_kind</c> = <c>system</c> and the
+/// process name, so these tests read the persisted row rather than the in-memory
+/// <see cref="Actor"/> — the whole point of the ADR is that the two can no longer disagree.
+/// </para>
 /// </summary>
 [Collection(nameof(DatabaseCollection))]
 public sealed class ActorAuditTests(PostgresFixture fixture)
@@ -51,15 +58,21 @@ public sealed class ActorAuditTests(PostgresFixture fixture)
         var (createdBy, auditActor) = await AsActorAsync(orgId, null, async (sp, _, c) =>
         {
             var db = sp.GetRequiredService<AppDbContext>();
-            var cb = await db.Set<JournalEntry>().Where(e => e.Id == posted.EntryId).Select(e => e.CreatedBy).SingleAsync(c);
+            var cb = await db.Set<JournalEntry>()
+                .Where(e => e.Id == posted.EntryId)
+                .Select(e => new { e.CreatedBy, e.ActorKind, e.ActorProcess }).SingleAsync(c);
             var actor = await db.AuditEvents
                 .Where(a => a.EntityType == "journal_entries" && a.EntityId == posted.EntryId)
-                .Select(a => a.ActorUserId).FirstAsync(c);
+                .Select(a => new { a.ActorUserId, a.ActorKind, a.ActorProcess }).FirstAsync(c);
             return (cb, actor);
         }, ct);
 
-        createdBy.ShouldBe(userId);
-        auditActor.ShouldBe(userId);
+        createdBy.CreatedBy.ShouldBe(userId);
+        createdBy.ActorKind.ShouldBe("user");
+        createdBy.ActorProcess.ShouldBeNull("a user actor names no process — the check constraint agrees");
+        auditActor.ActorUserId.ShouldBe(userId);
+        auditActor.ActorKind.ShouldBe("user");
+        auditActor.ActorProcess.ShouldBeNull();
     }
 
     [Fact]
@@ -84,21 +97,86 @@ public sealed class ActorAuditTests(PostgresFixture fixture)
         trail.Rows[0].OccurredAt.ShouldBeGreaterThanOrEqualTo(trail.Rows[1].OccurredAt); // newest first
     }
 
+    /// <summary>
+    /// The ADR-039 case. Before it, this test asserted only that a system write stamped null without
+    /// throwing — which is precisely the reading an auditor could not act on, since a null is also
+    /// what a forgotten actor leaves. The row now names the process, on both the journal and the
+    /// audit trail.
+    /// </summary>
     [Fact]
-    public async Task A_system_write_with_no_actor_stamps_null_without_throwing()
+    public async Task A_system_write_records_which_process_acted()
     {
         var ct = TestContext.Current.CancellationToken;
         var orgId = await NewOrgAsync(ct);
         var tenantId = await SetupTenantAsync(orgId, ct);
 
-        // No actor set on the scope (the seeder/job path).
+        // The seeder/job path: a named system process, not an absent actor.
         var posted = await AsActorAsync(orgId, null,
             (_, s, c) => s.Send(new AddCharge(tenantId, 1450m, Feb1, "rent", null, Key()), c), ct);
 
-        var createdBy = await AsActorAsync(orgId, null, (sp, _, c) =>
-            sp.GetRequiredService<AppDbContext>().Set<JournalEntry>()
-                .Where(e => e.Id == posted.EntryId).Select(e => e.CreatedBy).SingleAsync(c), ct);
-        createdBy.ShouldBeNull();
+        var (entry, audit) = await AsActorAsync(orgId, null, async (sp, _, c) =>
+        {
+            var db = sp.GetRequiredService<AppDbContext>();
+            var e = await db.Set<JournalEntry>()
+                .Where(j => j.Id == posted.EntryId)
+                .Select(j => new { j.CreatedBy, j.ActorKind, j.ActorProcess }).SingleAsync(c);
+            var a = await db.AuditEvents
+                .Where(x => x.EntityType == "journal_entries" && x.EntityId == posted.EntryId)
+                .Select(x => new { x.ActorUserId, x.ActorKind, x.ActorProcess }).FirstAsync(c);
+            return (e, a);
+        }, ct);
+
+        entry.CreatedBy.ShouldBeNull("no human is accountable for a system write");
+        entry.ActorKind.ShouldBe("system");
+        entry.ActorProcess.ShouldBe("test-harness");
+
+        audit.ActorUserId.ShouldBeNull();
+        audit.ActorKind.ShouldBe("system");
+        audit.ActorProcess.ShouldBe("test-harness");
+    }
+
+    /// <summary>
+    /// Fail closed. ADR-039's rule only holds if an absent actor is refused rather than written as a
+    /// null, so this drives the one state the executor cannot produce: organization context set, no
+    /// unit of work, therefore no declared actor.
+    /// </summary>
+    [Fact]
+    public async Task A_write_with_no_declared_actor_is_refused_before_it_reaches_the_database()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var orgId = await NewOrgAsync(ct);
+
+        await using var scope = fixture.Api.Services.CreateAsyncScope();
+        var sp = scope.ServiceProvider;
+
+        // Organization context by hand, deliberately without OrgScopedExecutor — which is the only
+        // thing that declares an actor. This is the shape a background job written the wrong way has.
+        sp.GetRequiredService<TenantContext>().OrgId = orgId;
+        var db = sp.GetRequiredService<AppDbContext>();
+        db.Set<Owner>().Add(new Owner { Name = "Unattributed" });
+
+        var ex = await Should.ThrowAsync<InvalidOperationException>(() => db.SaveChangesAsync(ct));
+        ex.Message.ShouldContain("no declared actor");
+    }
+
+    /// <summary>
+    /// The same refusal on the money path, checked beside the organization context so it fires before
+    /// any posting work rather than after a partial read.
+    /// </summary>
+    [Fact]
+    public async Task Posting_with_no_declared_actor_is_refused()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var orgId = await NewOrgAsync(ct);
+
+        await using var scope = fixture.Api.Services.CreateAsyncScope();
+        var sp = scope.ServiceProvider;
+        sp.GetRequiredService<TenantContext>().OrgId = orgId;
+
+        var ex = await Should.ThrowAsync<InvalidOperationException>(
+            () => sp.GetRequiredService<IPostingService>().PostAsync(
+                new PostEntryRequest(Feb1, "RentCharged", null, null, null, []), ct));
+        ex.Message.ShouldContain("declared actor");
     }
 
     // The unit of work's actor parameter is what decides attribution — not an ambient value a caller
@@ -119,7 +197,7 @@ public sealed class ActorAuditTests(PostgresFixture fixture)
         var sender = sp.GetRequiredService<ISender>();
 
         // A caller sets the context by hand, the old way, and then declares a system unit of work.
-        sp.GetRequiredService<ActorContext>().UserId = userId;
+        sp.GetRequiredService<ActorContext>().Actor = Actor.User(userId);
 
         var systemEntry = Guid.Empty;
         await executor.RunAsSystemAsync(orgId, "nightly-job", async () =>
@@ -132,11 +210,14 @@ public sealed class ActorAuditTests(PostgresFixture fixture)
         var stamps = await AsActorAsync(orgId, null, (s, _, c) =>
             s.GetRequiredService<AppDbContext>().Set<JournalEntry>()
                 .Where(e => e.Id == systemEntry || e.Id == userEntry)
-                .ToDictionaryAsync(e => e.Id, e => e.CreatedBy, c), ct);
+                .ToDictionaryAsync(e => e.Id, e => new { e.CreatedBy, e.ActorKind, e.ActorProcess }, c), ct);
 
-        stamps[systemEntry].ShouldBeNull(
+        stamps[systemEntry].CreatedBy.ShouldBeNull(
             "the unit of work declared a system actor, so a value set before it must not survive into the posting");
-        stamps[userEntry].ShouldBe(userId);
+        stamps[systemEntry].ActorKind.ShouldBe("system");
+        stamps[systemEntry].ActorProcess.ShouldBe("nightly-job");
+        stamps[userEntry].CreatedBy.ShouldBe(userId);
+        stamps[userEntry].ActorKind.ShouldBe("user");
     }
 
     [Fact]

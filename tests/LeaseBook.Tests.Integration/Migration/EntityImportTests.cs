@@ -53,8 +53,9 @@ public sealed class EntityImportTests(PostgresFixture fixture)
         // Verify that two owners actually exist in the Directory (direct DB assertion, app role + RLS).
         var tenant = new TenantContext();
         tenant.OrgId = orgId;
-        await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
-        var executor = new OrgScopedExecutor(db, tenant, new ActorContext());
+        var actor = new ActorContext();
+        await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant, actor);
+        var executor = new OrgScopedExecutor(db, tenant, actor);
 
         List<Owner> owners = null!;
         await executor.RunAsSystemAsync(orgId, "test-harness", async () =>
@@ -115,8 +116,9 @@ public sealed class EntityImportTests(PostgresFixture fixture)
         // Exactly one owner was created in Directory.
         var tenant = new TenantContext();
         tenant.OrgId = orgId;
-        await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
-        var executor = new OrgScopedExecutor(db, tenant, new ActorContext());
+        var actor = new ActorContext();
+        await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant, actor);
+        var executor = new OrgScopedExecutor(db, tenant, actor);
 
         await executor.RunAsSystemAsync(orgId, "test-harness", async () =>
         {
@@ -176,8 +178,9 @@ public sealed class EntityImportTests(PostgresFixture fixture)
 
         var tenant = new TenantContext();
         tenant.OrgId = orgId;
-        await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
-        var executor = new OrgScopedExecutor(db, tenant, new ActorContext());
+        var actor = new ActorContext();
+        await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant, actor);
+        var executor = new OrgScopedExecutor(db, tenant, actor);
 
         await executor.RunAsSystemAsync(orgId, "test-harness", async () =>
         {
@@ -220,8 +223,9 @@ public sealed class EntityImportTests(PostgresFixture fixture)
 
         var tenant = new TenantContext();
         tenant.OrgId = orgId;
-        await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant);
-        var executor = new OrgScopedExecutor(db, tenant, new ActorContext());
+        var actor = new ActorContext();
+        await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant, actor);
+        var executor = new OrgScopedExecutor(db, tenant, actor);
 
         await executor.RunAsSystemAsync(orgId, "test-harness", async () =>
         {
