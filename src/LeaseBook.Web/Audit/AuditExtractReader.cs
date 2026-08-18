@@ -24,7 +24,7 @@ public sealed record AuditExtractRow(
 /// filter is the isolation boundary, M3-E6). A null/unknown actor renders as "System". PMAdmin gating is
 /// applied at the endpoint, not here.
 /// </summary>
-public sealed class AuditExtractReader(AppDbContext db, ITenantContext tenant)
+public sealed class AuditExtractReader(AppDbContext db, IOrgContext tenant)
 {
     /// <summary>
     /// The <c>entity_type</c>s that count as money-touching for the compliance pack. <c>entity_type</c> is

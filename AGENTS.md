@@ -103,7 +103,7 @@ the configs it cites in sync when a port changes.
 - Build: `dotnet build LeaseBook.slnx -c Debug`
 - All tests: `dotnet test LeaseBook.slnx`
 - One project: `dotnet test tests/LeaseBook.Tests.Integration/LeaseBook.Tests.Integration.csproj`
-- One test class, xUnit v3/MTP: `dotnet test <proj> --filter-class '*TenantIsolationTests'`
+- One test class, xUnit v3/MTP: `dotnet test <proj> --filter-class '*OrgIsolationTests'`
 - One test method, xUnit v3/MTP: `dotnet test <proj> --filter-method '*Reads_under_an_org_context_see_only_that_orgs_rows'`
 - Format check: `dotnet format --verify-no-changes --exclude src/LeaseBook.Web/Migrations`
 - Run API on `:5080`: `$env:ASPNETCORE_ENVIRONMENT='Development'; dotnet run --project src/LeaseBook.Web`

@@ -16,7 +16,7 @@ namespace LeaseBook.Tests.Integration;
 /// other tests are simply invisible (which is itself the property under test).
 /// </summary>
 [Collection(nameof(DatabaseCollection))]
-public sealed class TenantIsolationTests(PostgresFixture fixture)
+public sealed class OrgIsolationTests(PostgresFixture fixture)
 {
     // T1 — reads are scoped to the active organization context.
     [Fact]
@@ -97,7 +97,7 @@ public sealed class TenantIsolationTests(PostgresFixture fixture)
     public async Task OrgScopedExecutor_throws_on_empty_org_before_touching_the_database()
     {
         var ct = TestContext.Current.CancellationToken;
-        var tenant = new TenantContext();
+        var tenant = new OrgContext();
         var actor = new ActorContext();
         await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant, actor);
         var executor = new OrgScopedExecutor(db, tenant, actor);
@@ -142,7 +142,7 @@ public sealed class TenantIsolationTests(PostgresFixture fixture)
     {
         var ct = TestContext.Current.CancellationToken;
         var orgA = UuidV7.NewId();
-        var tenant = new TenantContext();
+        var tenant = new OrgContext();
         var actor = new ActorContext();
         await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant, actor);
         var executor = new OrgScopedExecutor(db, tenant, actor);
@@ -182,7 +182,7 @@ public sealed class TenantIsolationTests(PostgresFixture fixture)
     public async Task Org_scoped_work_refuses_to_nest_on_a_context_that_is_already_in_a_transaction()
     {
         var ct = TestContext.Current.CancellationToken;
-        var tenant = new TenantContext();
+        var tenant = new OrgContext();
         var actor = new ActorContext();
         await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant, actor);
         await using var outer = await db.Database.BeginTransactionAsync(ct);
@@ -247,7 +247,7 @@ public sealed class TenantIsolationTests(PostgresFixture fixture)
     {
         var ct = TestContext.Current.CancellationToken;
         var orgA = UuidV7.NewId();
-        var tenant = new TenantContext();
+        var tenant = new OrgContext();
         var actor = new ActorContext();
         await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant, actor);
 

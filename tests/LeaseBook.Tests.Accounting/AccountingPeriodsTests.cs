@@ -59,12 +59,12 @@ public sealed class AccountingPeriodsTests(PostgresFixture fixture)
         }
 
         // Two independent app-role connections racing to create the same month's period.
-        var tenant1 = new TenantContext();
+        var tenant1 = new OrgContext();
         var actor1 = new ActorContext();
         await using var db1 = fixture.CreateContext(fixture.AppConnectionString, tenant1, actor1);
         var ex1 = new OrgScopedExecutor(db1, tenant1, actor1);
 
-        var tenant2 = new TenantContext();
+        var tenant2 = new OrgContext();
         var actor2 = new ActorContext();
         await using var db2 = fixture.CreateContext(fixture.AppConnectionString, tenant2, actor2);
         var ex2 = new OrgScopedExecutor(db2, tenant2, actor2);

@@ -26,7 +26,7 @@ namespace LeaseBook.SharedKernel.Tenancy;
 /// </para>
 /// </summary>
 public sealed class OrgScopedExecutor(
-    DbContext db, TenantContext tenantContext, ActorContext actorContext)
+    DbContext db, OrgContext orgContext, ActorContext actorContext)
 {
     /// <summary>Runs <paramref name="work"/> for <paramref name="orgId"/>, attributed to <paramref name="actor"/>.</summary>
     public Task RunAsync(Guid orgId, Actor actor, Func<Task> work, CancellationToken ct = default)
@@ -66,7 +66,7 @@ public sealed class OrgScopedExecutor(
         ArgumentNullException.ThrowIfNull(work);
 
         // Before the nesting check and before any database access: an empty org id is a caller
-        // mistake, and TenantIsolationTests pins that it is reported without touching the database.
+        // mistake, and OrgIsolationTests pins that it is reported without touching the database.
         if (orgId == Guid.Empty)
         {
             throw new ArgumentException(
@@ -74,7 +74,7 @@ public sealed class OrgScopedExecutor(
                 "context would let RLS silently return empty results.", nameof(orgId));
         }
 
-        var previousOrg = tenantContext.OrgId;
+        var previousOrg = orgContext.OrgId;
         var previousActor = actorContext.Actor;
         try
         {
@@ -87,7 +87,7 @@ public sealed class OrgScopedExecutor(
                     // with ::uuid.
                     await db.Database.ExecuteSqlAsync(
                         $"SELECT set_config('app.org_id', {orgId.ToString()}, true)", token);
-                    tenantContext.OrgId = orgId;
+                    orgContext.OrgId = orgId;
                     actorContext.Actor = actor;
                 },
                 work,
@@ -96,7 +96,7 @@ public sealed class OrgScopedExecutor(
         finally
         {
             // Both mirror the DB's transaction-local context: they die with the unit of work.
-            tenantContext.OrgId = previousOrg;
+            orgContext.OrgId = previousOrg;
             actorContext.Actor = previousActor;
         }
     }

@@ -151,7 +151,7 @@ public sealed class ActorAuditTests(PostgresFixture fixture)
 
         // Organization context by hand, deliberately without OrgScopedExecutor — which is the only
         // thing that declares an actor. This is the shape a background job written the wrong way has.
-        sp.GetRequiredService<TenantContext>().OrgId = orgId;
+        sp.GetRequiredService<OrgContext>().OrgId = orgId;
         var db = sp.GetRequiredService<AppDbContext>();
         db.Set<Owner>().Add(new Owner { Name = "Unattributed" });
 
@@ -171,7 +171,7 @@ public sealed class ActorAuditTests(PostgresFixture fixture)
 
         await using var scope = fixture.Api.Services.CreateAsyncScope();
         var sp = scope.ServiceProvider;
-        sp.GetRequiredService<TenantContext>().OrgId = orgId;
+        sp.GetRequiredService<OrgContext>().OrgId = orgId;
 
         var ex = await Should.ThrowAsync<InvalidOperationException>(
             () => sp.GetRequiredService<IPostingService>().PostAsync(

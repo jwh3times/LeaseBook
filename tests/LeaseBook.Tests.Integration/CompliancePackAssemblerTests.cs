@@ -62,7 +62,7 @@ public sealed class CompliancePackAssemblerTests(PostgresFixture fixture)
         {
             var assembler = new CompliancePackAssembler(
                 sp.GetRequiredService<ISender>(),
-                new AuditExtractReader(sp.GetRequiredService<AppDbContext>(), sp.GetRequiredService<ITenantContext>()));
+                new AuditExtractReader(sp.GetRequiredService<AppDbContext>(), sp.GetRequiredService<IOrgContext>()));
             pack = await assembler.AssembleAsync(bankId, from, to, ct);
         }, ct);
         return pack;

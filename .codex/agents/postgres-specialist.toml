@@ -76,7 +76,7 @@ This ensures a line's `org_id` matches its referenced entity's `org_id` at the c
 
 ### Soft spot: `asp_net_users`
 
-`asp_net_users` carries `org_id` but is **RLS-exempt** (login precedes org context). Any read or write against users must filter by `org_id` explicitly in code, and must ship a cross-org isolation test. The numbered `TenantIsolationTests` pack and schema guard won't catch a mistake here — none of its cases touch this table.
+`asp_net_users` carries `org_id` but is **RLS-exempt** (login precedes org context). Any read or write against users must filter by `org_id` explicitly in code, and must ship a cross-org isolation test. The numbered `OrgIsolationTests` pack and schema guard won't catch a mistake here — none of its cases touch this table.
 
 ---
 

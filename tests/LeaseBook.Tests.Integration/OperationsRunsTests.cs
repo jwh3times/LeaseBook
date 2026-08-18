@@ -335,7 +335,7 @@ public sealed class OperationsRunsTests(PostgresFixture fixture)
     /// </summary>
     private async Task ClosePeriodAsync(Guid orgId, int year, int month, CancellationToken ct)
     {
-        var tenant = new LeaseBook.SharedKernel.Tenancy.TenantContext();
+        var tenant = new LeaseBook.SharedKernel.Tenancy.OrgContext();
         var actor = new ActorContext();
         await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant, actor);
         var executor = new OrgScopedExecutor(db, tenant, actor);

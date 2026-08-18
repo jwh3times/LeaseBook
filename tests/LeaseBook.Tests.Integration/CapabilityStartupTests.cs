@@ -169,7 +169,7 @@ public sealed class CapabilityStartupTests(PostgresFixture fixture)
         services.AddLogging();
 
         // A bare DbContext, which is all the validator resolves. AppDbContext would drag in
-        // ITenantContext and the rest of the host's graph for no benefit here.
+        // IOrgContext and the rest of the host's graph for no benefit here.
         services.AddDbContext<DbContext>(options => options
             .UseNpgsql(Unreachable, npgsql => npgsql.SetPostgresVersion(18, 0))
             .UseSnakeCaseNamingConvention());

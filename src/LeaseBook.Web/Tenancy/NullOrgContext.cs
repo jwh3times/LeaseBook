@@ -8,11 +8,11 @@ namespace LeaseBook.Web.Tenancy;
 /// the EF query filter on org-scoped entities matches nothing — the same fail-closed behavior the
 /// database enforces when <c>app.org_id</c> is unset.
 /// </summary>
-internal sealed class NullTenantContext : ITenantContext
+internal sealed class NullOrgContext : IOrgContext
 {
-    public static readonly NullTenantContext Instance = new();
+    public static readonly NullOrgContext Instance = new();
 
-    private NullTenantContext()
+    private NullOrgContext()
     {
     }
 

@@ -55,7 +55,7 @@ public sealed class AuditExtractTests(PostgresFixture fixture)
 
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var extract = await AsActorAsync(orgId, null, (sp, _, c) =>
-            new AuditExtractReader(sp.GetRequiredService<AppDbContext>(), sp.GetRequiredService<ITenantContext>())
+            new AuditExtractReader(sp.GetRequiredService<AppDbContext>(), sp.GetRequiredService<IOrgContext>())
                 .GetAsync(today.AddDays(-1), today.AddDays(1), c), ct);
 
         var posting = extract.Rows.Where(r => r.EntityType == "journal_entries").ToList();
@@ -80,7 +80,7 @@ public sealed class AuditExtractTests(PostgresFixture fixture)
         var (extract, rawCount) = await AsActorAsync(orgId, null, async (sp, _, c) =>
         {
             var db = sp.GetRequiredService<AppDbContext>();
-            var reader = new AuditExtractReader(db, sp.GetRequiredService<ITenantContext>());
+            var reader = new AuditExtractReader(db, sp.GetRequiredService<IOrgContext>());
             var result = await reader.GetAsync(today.AddDays(-1), today.AddDays(1), c);
             var total = await db.AuditEvents.CountAsync(c);
             return (result, total);
@@ -107,7 +107,7 @@ public sealed class AuditExtractTests(PostgresFixture fixture)
 
         // Every audit row occurred "now"; a 2020 window contains none of them.
         var extract = await AsActorAsync(orgId, null, (sp, _, c) =>
-            new AuditExtractReader(sp.GetRequiredService<AppDbContext>(), sp.GetRequiredService<ITenantContext>())
+            new AuditExtractReader(sp.GetRequiredService<AppDbContext>(), sp.GetRequiredService<IOrgContext>())
                 .GetAsync(new DateOnly(2020, 1, 1), new DateOnly(2020, 12, 31), c), ct);
 
         extract.Rows.ShouldBeEmpty();

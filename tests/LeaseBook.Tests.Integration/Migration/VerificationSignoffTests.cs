@@ -96,7 +96,7 @@ public sealed class VerificationSignoffTests(PostgresFixture fixture)
         signoffResult.SignedOffAt.ShouldNotBe(default);
 
         // --- Assert: signed row exists AND audit_events row with entity_type = 'migration-signed-off' ---
-        var tenant = new TenantContext { OrgId = setup.OrgId };
+        var tenant = new OrgContext { OrgId = setup.OrgId };
         var actor = new ActorContext();
         await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant, actor);
         var executor = new OrgScopedExecutor(db, tenant, actor);
@@ -170,7 +170,7 @@ public sealed class VerificationSignoffTests(PostgresFixture fixture)
         problem.CorrelationId.ShouldNotBeNullOrWhiteSpace();
 
         // --- Gate-before-side-effect: assert NO audit row and NO signed row were written ---
-        var tenant = new TenantContext { OrgId = setup.OrgId };
+        var tenant = new OrgContext { OrgId = setup.OrgId };
         var actor = new ActorContext();
         await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant, actor);
         var executor = new OrgScopedExecutor(db, tenant, actor);
@@ -305,7 +305,7 @@ public sealed class VerificationSignoffTests(PostgresFixture fixture)
         problem.CorrelationId.ShouldNotBeNullOrWhiteSpace();
 
         // --- No signed row, no audit row: the gate fired before any side effect ---
-        var tenant = new TenantContext { OrgId = setup.OrgId };
+        var tenant = new OrgContext { OrgId = setup.OrgId };
         var actor = new ActorContext();
         await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant, actor);
         var executor = new OrgScopedExecutor(db, tenant, actor);
@@ -483,7 +483,7 @@ public sealed class VerificationSignoffTests(PostgresFixture fixture)
         problem.CorrelationId.ShouldNotBeNullOrWhiteSpace();
 
         // --- Gate-before-side-effect: NO signed row and NO audit row were written ---
-        var tenant = new TenantContext { OrgId = setup.OrgId };
+        var tenant = new OrgContext { OrgId = setup.OrgId };
         var actor = new ActorContext();
         await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant, actor);
         var executor = new OrgScopedExecutor(db, tenant, actor);
@@ -624,7 +624,7 @@ public sealed class VerificationSignoffTests(PostgresFixture fixture)
     private async Task<(Guid TrustBankId, Guid DepositBankId)> ResolveBankIdsAsync(
         Guid orgId, CancellationToken ct)
     {
-        var tenant = new TenantContext { OrgId = orgId };
+        var tenant = new OrgContext { OrgId = orgId };
         var actor = new ActorContext();
         await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant, actor);
         var executor = new OrgScopedExecutor(db, tenant, actor);

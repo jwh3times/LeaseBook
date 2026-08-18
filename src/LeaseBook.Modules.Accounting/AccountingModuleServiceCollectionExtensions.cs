@@ -11,7 +11,7 @@ namespace LeaseBook.Modules.Accounting;
 /// <summary>
 /// Registers the Accounting module's services with the host container. Called once from
 /// <c>Program.cs</c>. Services depend on the ambient <c>DbContext</c> (the host registers it as the
-/// base type) + <c>ITenantContext</c>; later WPs append the posting engine and event catalog here.
+/// base type) + <c>IOrgContext</c>; later WPs append the posting engine and event catalog here.
 /// </summary>
 public static class AccountingModuleServiceCollectionExtensions
 {

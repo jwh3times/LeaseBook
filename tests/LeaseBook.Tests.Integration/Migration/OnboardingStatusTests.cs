@@ -311,7 +311,7 @@ public sealed class OnboardingStatusTests(PostgresFixture fixture)
     private async Task<(Guid TrustBankId, Guid DepositBankId)> ResolveBankIdsAsync(
         Guid orgId, CancellationToken ct)
     {
-        var tenant = new TenantContext { OrgId = orgId };
+        var tenant = new OrgContext { OrgId = orgId };
         var actor = new ActorContext();
         await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant, actor);
         var executor = new OrgScopedExecutor(db, tenant, actor);

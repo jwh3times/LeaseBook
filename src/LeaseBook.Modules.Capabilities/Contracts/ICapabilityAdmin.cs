@@ -54,7 +54,7 @@ public interface ICapabilityAdmin
     /// <summary>
     /// Adds a cohort rule — org-wide when <paramref name="userId"/> is null, otherwise for that user.
     /// A named user is checked against the named organization first: <c>asp_net_users</c> is
-    /// RLS-exempt, so nothing in the database would stop a rule naming another tenant's user.
+    /// RLS-exempt, so nothing in the database would stop a rule naming another organization's user.
     /// </summary>
     Task<DateTime> AddToCohortAsync(
         string capability, Guid orgId, Guid? userId, string actor, CancellationToken ct = default);

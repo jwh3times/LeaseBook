@@ -15,7 +15,7 @@ namespace LeaseBook.Web.Adapters;
 /// </para>
 /// <para>
 /// Both predicates are load-bearing. <c>asp_net_users</c> is RLS-exempt, so the org comparison is the
-/// only thing standing between a cohort rule and a user from another tenant; matching on id alone
+/// only thing standing between a cohort rule and a user from another organization; matching on id alone
 /// would authorize exactly that.
 /// </para>
 /// </summary>

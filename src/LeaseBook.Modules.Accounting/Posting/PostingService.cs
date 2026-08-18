@@ -14,7 +14,7 @@ namespace LeaseBook.Modules.Accounting.Posting;
 /// SaveChanges savepoint the idempotency backstop relies on.
 /// </summary>
 internal sealed class PostingService(
-    DbContext db, ITenantContext tenant, IAccountingPeriods periods,
+    DbContext db, IOrgContext tenant, IAccountingPeriods periods,
     IActorContext actor, IReconciliationLock? reconciliationLock = null) : IPostingService
 {
     private static readonly EntryBasis[] BalancedBases = [EntryBasis.Cash, EntryBasis.Accrual];

@@ -134,7 +134,7 @@ public sealed class StatementDeliveryTests(PostgresFixture fixture)
         // calls we drive the org scope manually via OrgScopedExecutor (which issues SET LOCAL
         // app.org_id, the same mechanism the middleware uses for HTTP requests).
         using var scope = fixture.Api.Services.CreateScope();
-        var tenantContext = scope.ServiceProvider.GetRequiredService<LeaseBook.SharedKernel.Tenancy.TenantContext>();
+        var orgContext = scope.ServiceProvider.GetRequiredService<LeaseBook.SharedKernel.Tenancy.OrgContext>();
 
         // Resolve the demo org id from the seeded admin user via migrator connection (bypasses RLS).
         await using var migratorDb = fixture.CreateContext(fixture.MigratorConnectionString);
@@ -143,7 +143,7 @@ public sealed class StatementDeliveryTests(PostgresFixture fixture)
         var orgId = adminUser!.OrgId;
 
         // Set the in-process organization context (EF global filter).
-        tenantContext.OrgId = orgId;
+        orgContext.OrgId = orgId;
 
         var executor = scope.ServiceProvider.GetRequiredService<LeaseBook.SharedKernel.Tenancy.OrgScopedExecutor>();
         var delivery = scope.ServiceProvider.GetRequiredService<IStatementDelivery>();
@@ -485,8 +485,8 @@ public sealed class StatementDeliveryTests(PostgresFixture fixture)
         await DemoSeeder.SeedAsync(fixture.Api.Services, ct);
 
         using var scope = fixture.Api.Services.CreateScope();
-        var tenantContext = scope.ServiceProvider
-            .GetRequiredService<LeaseBook.SharedKernel.Tenancy.TenantContext>();
+        var orgContext = scope.ServiceProvider
+            .GetRequiredService<LeaseBook.SharedKernel.Tenancy.OrgContext>();
 
         // Resolve the demo org id via the migrator connection (bypasses the EF filter, not RLS).
         await using var migratorDb = fixture.CreateContext(fixture.MigratorConnectionString);
@@ -494,7 +494,7 @@ public sealed class StatementDeliveryTests(PostgresFixture fixture)
         adminUser.ShouldNotBeNull("demo admin user must be seeded");
         var orgId = adminUser!.OrgId;
 
-        tenantContext.OrgId = orgId;
+        orgContext.OrgId = orgId;
 
         var executor = scope.ServiceProvider
             .GetRequiredService<LeaseBook.SharedKernel.Tenancy.OrgScopedExecutor>();

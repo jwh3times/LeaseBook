@@ -7,7 +7,7 @@ namespace LeaseBook.Modules.Accounting.Posting;
 /// Takes <c>pg_advisory_xact_lock(hashtextextended('lb:acct:' || org_id, 0))</c> (P31) on the ambient
 /// connection, serializing this org's guarded postings for the rest of the transaction.
 /// </summary>
-internal sealed class PostingLock(DbContext db, ITenantContext tenant) : IPostingLock
+internal sealed class PostingLock(DbContext db, IOrgContext tenant) : IPostingLock
 {
     public async Task AcquireAsync(CancellationToken ct)
     {

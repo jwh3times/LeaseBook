@@ -73,7 +73,7 @@ public sealed class PostgresFixture : IAsyncLifetime
     /// parameter is what stops it being rebuilt.
     /// </para>
     /// </summary>
-    public AppDbContext CreateContext(string connectionString, ITenantContext tenant, IActorContext actor) =>
+    public AppDbContext CreateContext(string connectionString, IOrgContext tenant, IActorContext actor) =>
         new(BuildOptions(connectionString), tenant, actor);
 
     /// <summary>An open raw connection as the RLS-subject app role — the isolation pack drives the
