@@ -58,11 +58,11 @@ await db.Database.ExecuteSqlAsync(
 
 The surrounding transaction lives in `SharedKernel/Tenancy/TransactionalUnitOfWork.cs`, shared with the platform plane and refusing to nest. Do not open your own — resolve a scope and use the executor.
 
-**Never `SET app.org_id`** (session-level) — pooled connections would leak context to the next tenant. `SET LOCAL` scopes to the transaction and clears on commit/rollback. Missing context fails closed: `current_setting('app.org_id', true)` → NULL → policies match no rows.
+**Never `SET app.org_id`** (session-level) — pooled connections would leak context to the next organization. `SET LOCAL` scopes to the transaction and clears on commit/rollback. Missing context fails closed: `current_setting('app.org_id', true)` → NULL → policies match no rows.
 
 ### Check WITH CHECK, not just USING
 
-`USING` filters reads; `WITH CHECK` guards writes. Verify both in every policy. A policy with only `USING` allows a tenant to insert rows with a foreign `org_id` if `WITH CHECK` is absent.
+`USING` filters reads; `WITH CHECK` guards writes. Verify both in every policy. A policy with only `USING` allows an organization to insert rows with a foreign `org_id` if `WITH CHECK` is absent.
 
 ### composite `(org_id, id)` FKs for journal dimensions
 
@@ -224,7 +224,7 @@ foreach (var orgId in await GetActiveOrgIdsAsync(ct))
 
 Never issue a cross-org query without enumerating orgs and scoping each transaction separately. A missing org context that returns empty rows silently is a bug — the job should throw.
 
-The shipped reference implementation is `src/LeaseBook.Web/Jobs/InvariantSweepRunner.cs` (the nightly invariant sweep, ADR-001's first scheduled job). Prefer its shape over hand-rolled `SET LOCAL` above: it takes the **root** `IServiceProvider` and opens one DI scope per org, so each org gets its own `OrgScopedExecutor` transaction and org context — reusing a single scope across orgs would reuse a single transaction, and therefore a single `app.org_id`. Enumerating `orgs` itself is the one legitimate pre-context read (`orgs` is global-class: no `org_id`, no RLS, the org _is_ the tenant); every read after it is org-scoped.
+The shipped reference implementation is `src/LeaseBook.Web/Jobs/InvariantSweepRunner.cs` (the nightly invariant sweep, ADR-001's first scheduled job). Prefer its shape over hand-rolled `SET LOCAL` above: it takes the **root** `IServiceProvider` and opens one DI scope per org, so each org gets its own `OrgScopedExecutor` transaction and org context — reusing a single scope across orgs would reuse a single transaction, and therefore a single `app.org_id`. Enumerating `orgs` itself is the one legitimate pre-context read (`orgs` is global-class: no `org_id`, no RLS, the org _is_ the isolation boundary); every read after it is org-scoped.
 
 ---
 
