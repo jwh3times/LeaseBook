@@ -18,10 +18,16 @@ public interface IRunStrategy
     RunType RunType { get; }
 
     /// <summary>
-    /// Returns a preview of what would be posted for <paramref name="period"/> — all eligible targets
-    /// with amounts, already-done flags, and exclusion reasons. No mutations occur.
+    /// Returns what would be posted for <paramref name="period"/> — all eligible targets with amounts,
+    /// already-done flags, and exclusion reasons. No mutations occur.
+    /// <para>
+    /// Returns a <see cref="StrategyPreview"/> rather than a <see cref="RunPreview"/>, and the
+    /// difference is load-bearing: a preview carries the capability-version token the operator echoes
+    /// back on confirm, which only <see cref="RunEngine.PreviewAsync"/> can resolve. A strategy that
+    /// could return a <c>RunPreview</c> could return an unstamped one.
+    /// </para>
     /// </summary>
-    Task<RunPreview> PreviewAsync(RunPeriod period, CancellationToken ct);
+    Task<StrategyPreview> PreviewAsync(RunPeriod period, CancellationToken ct);
 
     /// <summary>
     /// Decides what the run should do for each of <paramref name="selectedTargetIds"/>, as one

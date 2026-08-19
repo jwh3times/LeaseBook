@@ -32,42 +32,39 @@ public sealed record PreviewRow(
     IReadOnlyDictionary<string, string> Detail);
 
 /// <summary>
-/// The result of <see cref="IRunStrategy.PreviewAsync"/> — the full picture of what a run would do,
-/// before the operator commits.
+/// What a strategy computes for a period: the rows, and any exceptions it hit while computing them.
+/// <para>
+/// This is deliberately <b>not</b> a <see cref="RunPreview"/>. A preview carries the capability-version
+/// token the operator must echo back on confirm, and that token is a property of the ENGINE's
+/// resolution — a strategy has no way to know it and no business inventing one. Splitting the two
+/// types is what makes an unstamped preview unconstructible rather than merely discouraged.
+/// </para>
+/// </summary>
+public sealed record StrategyPreview(
+    IReadOnlyList<PreviewRow> Rows,
+    IReadOnlyList<string> Exceptions);
+
+/// <summary>
+/// The full picture of what a run would do, before the operator commits — a strategy's
+/// <see cref="StrategyPreview"/> plus the run's identity and the engine's capability-version token.
+/// <para>
+/// <b>Only <see cref="RunEngine.PreviewAsync"/> can build one</b>, because
+/// <see cref="CapabilitiesVersion"/> is a required constructor argument and the engine is the only
+/// place that resolves it. That is the point of the shape: this record previously defaulted the token
+/// to the empty string and relied on the engine remembering to stamp it afterwards through a
+/// <c>with</c> expression. The empty default failed closed — a confirm carrying it was rejected rather
+/// than silently unguarded — but "safe when someone forgets" is a weaker guarantee than "impossible to
+/// forget", and the rejection it produced was not cheap: over HTTP the SPA branches on
+/// <c>capabilities_changed</c> only, so a blank token yields a
+/// <b>400 <c>capabilities_version_required</c></b> the operator cannot clear by reloading.
+/// </para>
 /// </summary>
 public sealed record RunPreview(
     RunType RunType,
     RunPeriod Period,
     IReadOnlyList<PreviewRow> Rows,
-    IReadOnlyList<string> Exceptions)
-{
-    /// <summary>
-    /// The opaque capability-version token the operator's confirm must echo back (ADR-028). A
-    /// strategy never sets this — it is a property of the ENGINE's resolution, not of the row
-    /// computation — so <see cref="RunEngine.PreviewAsync"/> stamps it on the way out.
-    /// <para>
-    /// The default is empty rather than a sentinel meaning "skip the check", and that direction is
-    /// deliberate: an engine path that forgot to stamp it yields a token that matches nothing, so a
-    /// confirm carrying it is REJECTED rather than silently unguarded.
-    /// </para>
-    /// <para>
-    /// <b>What that rejection actually is, in each of the two paths.</b> Over HTTP an unstamped token
-    /// never reaches the engine: <c>POST /runs/{type}/confirm</c> rejects a blank
-    /// <c>capabilitiesVersion</c> with <b>400 <c>capabilities_version_required</c></b>. That is a
-    /// client-contract violation, not a state change, and the SPA does not recover from it — it
-    /// branches on <c>capabilities_changed</c> only, so it will not re-preview and the operator is
-    /// shown a message that reloading cannot clear. In process, a caller passing the empty string
-    /// reaches the version comparison and gets <c>CapabilitiesChangedException</c>, because empty
-    /// equals no resolved version; passing <c>null</c> is the documented way to say "there is no
-    /// preview to honour" and skips the comparison entirely.
-    /// </para>
-    /// <para>
-    /// Both are the safe direction — nothing posts — but neither is a cheap re-preview, so a forgotten
-    /// stamp is a bug to fix in the engine, not a cost to absorb at the keyboard.
-    /// </para>
-    /// </summary>
-    public string CapabilitiesVersion { get; init; } = string.Empty;
-}
+    IReadOnlyList<string> Exceptions,
+    string CapabilitiesVersion);
 
 /// <summary>
 /// The result returned by <see cref="RunEngine.ConfirmAsync"/> — the persisted run's id plus the

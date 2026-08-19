@@ -36,7 +36,7 @@ public sealed class RentRunStrategy(
     public RunType RunType => RunType.Rent;
 
     /// <inheritdoc />
-    public async Task<RunPreview> PreviewAsync(RunPeriod period, CancellationToken ct)
+    public async Task<StrategyPreview> PreviewAsync(RunPeriod period, CancellationToken ct)
     {
         var rows = await schedule.GetActiveAsync(period.Year, period.Month, ct);
 
@@ -94,7 +94,7 @@ public sealed class RentRunStrategy(
                 Detail: detail));
         }
 
-        return new RunPreview(RunType.Rent, period, previewRows, exceptions);
+        return new StrategyPreview(previewRows, exceptions);
     }
 
     /// <inheritdoc />

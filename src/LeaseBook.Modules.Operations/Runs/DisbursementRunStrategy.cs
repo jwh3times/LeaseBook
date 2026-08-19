@@ -61,12 +61,12 @@ public sealed class DisbursementRunStrategy(
     public RunType RunType => RunType.Disbursement;
 
     /// <inheritdoc />
-    public async Task<RunPreview> PreviewAsync(RunPeriod period, CancellationToken ct)
+    public async Task<StrategyPreview> PreviewAsync(RunPeriod period, CancellationToken ct)
     {
         var owners = await ownerData.GetAsync(ct);
         if (owners.Count == 0)
         {
-            return new RunPreview(RunType.Disbursement, period, [], []);
+            return new StrategyPreview([], []);
         }
 
         var ownerIds = owners.Select(o => o.OwnerId).ToList();
@@ -124,7 +124,7 @@ public sealed class DisbursementRunStrategy(
                 Detail: detail));
         }
 
-        return new RunPreview(RunType.Disbursement, period, previewRows, []);
+        return new StrategyPreview(previewRows, []);
     }
 
     /// <inheritdoc />

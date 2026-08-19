@@ -439,7 +439,7 @@ file sealed class PlanEveryTargetStrategy(Guid[] targets) : IRunStrategy
 {
     public RunType RunType => RunType.Rent;
 
-    public Task<RunPreview> PreviewAsync(RunPeriod period, CancellationToken ct)
+    public Task<StrategyPreview> PreviewAsync(RunPeriod period, CancellationToken ct)
     {
         var rows = targets
             .Select(t => new PreviewRow(
@@ -447,7 +447,7 @@ file sealed class PlanEveryTargetStrategy(Guid[] targets) : IRunStrategy
                 new Dictionary<string, string>()))
             .ToList();
 
-        return Task.FromResult(new RunPreview(RunType.Rent, period, rows, []));
+        return Task.FromResult(new StrategyPreview(rows, []));
     }
 
     public Task<IReadOnlyList<RunPlanItem>> PlanAsync(
