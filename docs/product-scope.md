@@ -3,7 +3,7 @@
 - **Audience:** Evaluators, contributors, and maintainers
 - **Status:** Living public scope
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-07-09
+- **Last reviewed:** 2026-08-19
 
 LeaseBook is property-management software for small residential property managers. Its defining
 requirement is correct trust accounting with low interaction cost for recurring operational work.

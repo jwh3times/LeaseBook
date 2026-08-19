@@ -85,6 +85,112 @@ export function missingMetadata(markdown) {
   );
 }
 
+/**
+ * Documents the docs-updater agent is expected to know about: every committed markdown at the repo
+ * root, under `docs/`, under `infra/`, or in `.claude/agents/`. Individual ADR records are excluded
+ * because the ADR-index rule below already reconciles them one by one, and listing 40+ of them in the
+ * topology would bury the rest.
+ */
+export function canonicalDocs(files) {
+  return files.filter((file) => {
+    if (
+      file.startsWith(".agents/") ||
+      file.startsWith(".claude/skills/") ||
+      file.startsWith(".github/") ||
+      file.startsWith("docs/superpowers/")
+    ) {
+      return false;
+    }
+
+    if (/^docs\/adr\/ADR-\d{3}-.+\.md$/.test(file)) {
+      return false;
+    }
+
+    return (
+      file.startsWith("docs/") ||
+      file.startsWith("infra/") ||
+      file.startsWith(".claude/agents/") ||
+      !file.includes("/")
+    );
+  });
+}
+
+/**
+ * Canonical docs absent from the agent's topology block. An omission there is invisible in a way a
+ * missing file is not: the agent simply never audits what it was not told exists. `diagnostics.md`
+ * sat outside that block for months and every audit skipped it.
+ */
+export function docsMissingFromTopology(topology, canonical) {
+  // Anchored to the start of a line, not a bare substring match. A prose mention of a path — this
+  // section's own intro names `docs/runbooks/diagnostics.md` as the cautionary example — would
+  // otherwise satisfy the rule for a document the list does not actually carry, which is how a gate
+  // becomes theatre. Only a real entry counts.
+  const listed = new Set(
+    topology
+      .split(/\r?\n/)
+      .map((line) => line.trim().split(/\s/, 1)[0])
+      .filter(Boolean),
+  );
+
+  return canonical.filter((file) => !listed.has(file));
+}
+
+/** The topology block: everything between its heading and the next horizontal rule. */
+export function extractTopology(agentMarkdown) {
+  const start = agentMarkdown.indexOf("## Documentation topology");
+  if (start === -1) {
+    return null;
+  }
+
+  const rest = agentMarkdown.slice(start);
+  const offset = rest.search(/^---/m);
+  return offset === -1 ? rest : rest.slice(0, offset);
+}
+
+/**
+ * True when a document was edited after the date it claims to have been reviewed.
+ *
+ * One day of tolerance, deliberately: a commit authored either side of midnight UTC would otherwise
+ * fail a document whose author did review it. The gaps worth catching are weeks wide — this rule
+ * exists because six living documents were edited between one and six weeks after their stated
+ * review, two of which were describing behaviour that had since changed.
+ */
+export function reviewIsStale(reviewedOn, lastCommitOn, toleranceDays = 1) {
+  if (!reviewedOn || !lastCommitOn) {
+    return false;
+  }
+
+  const day = 24 * 60 * 60 * 1000;
+  const drift = (Date.parse(lastCommitOn) - Date.parse(reviewedOn)) / day;
+  return Number.isFinite(drift) && drift > toleranceDays;
+}
+
+/**
+ * Documents whose `Last reviewed` tracks something other than an engineering edit, so the rule above
+ * does not apply. Both compliance drafts are dated by the EXTERNAL review that gates them; bumping
+ * them because a link or a table cell changed would overstate their standing.
+ */
+const reviewDateExempt = new Set([
+  "docs/compliance/data-handling.md",
+  "docs/compliance/privacy-notice-draft.md",
+  // A locked pre-M0 baseline that accepted ADRs supersede. The repository has deliberately decided
+  // NOT to refresh it for later changes — its `ITenantContext` mention survives #194 on purpose — so
+  // a review date tracking engineering edits would only ever nag toward the wrong action.
+  "docs/blueprint.md",
+]);
+
+function lastCommitDate(root, file) {
+  try {
+    const out = execFileSync("git", ["log", "-1", "--format=%cs", "--", file], {
+      cwd: root,
+      encoding: "utf8",
+    }).trim();
+    return out || null;
+  } catch {
+    return null;
+  }
+}
+
 function listMarkdownFiles(root) {
   const result = execFileSync(
     "git",
@@ -235,6 +341,60 @@ export function validateRepository(root = defaultRoot, suppliedFiles) {
             "Living document contains an obsolete canonical-authority claim.",
         });
       }
+    }
+  }
+
+  // ── Topology coverage (docs-updater must be told what exists) ──────────────
+  const agentFile = ".claude/agents/docs-updater.md";
+  const agentContent = contents.get(agentFile);
+  if (agentContent) {
+    const topology = extractTopology(agentContent);
+    if (topology === null) {
+      errors.push({
+        file: agentFile,
+        line: 1,
+        message: "Documentation topology section is missing.",
+      });
+    } else {
+      for (const missing of docsMissingFromTopology(
+        topology,
+        canonicalDocs(files),
+      )) {
+        errors.push({
+          file: agentFile,
+          line: 1,
+          message:
+            `Canonical document is absent from the documentation topology: ${missing}. ` +
+            "The docs-updater agent audits what this block lists, so an omission here is a " +
+            "document nothing ever checks. Add a line for it.",
+        });
+      }
+    }
+  }
+
+  // ── Review-date staleness (a doc edited after it was last reviewed) ─────────
+  for (const [file, content] of contents) {
+    if (!isLivingDoc(file) || reviewDateExempt.has(file)) {
+      continue;
+    }
+
+    const reviewed = content.match(
+      /- \*\*Last reviewed:\*\*\s*(\d{4}-\d{2}-\d{2})/,
+    );
+    if (!reviewed) {
+      continue; // absence is already reported by the metadata rule above
+    }
+
+    const committed = lastCommitDate(root, file);
+    if (reviewIsStale(reviewed[1], committed)) {
+      errors.push({
+        file,
+        line: lineOf(content, reviewed.index),
+        message:
+          `Document was edited on ${committed} but claims it was last reviewed on ${reviewed[1]}. ` +
+          "Re-read it against what changed, then bump the date — or add it to reviewDateExempt in " +
+          "scripts/check-docs.mjs if its review date tracks something other than an engineering edit.",
+      });
     }
   }
 

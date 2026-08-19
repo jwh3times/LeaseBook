@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living policy
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-08-13
+- **Last reviewed:** 2026-08-19
 
 This policy keeps LeaseBook documentation public-safe, navigable, and maintainable. It applies to
 Markdown, runbooks, diagrams, planning artifacts, and documentation embedded in source or automation.
@@ -78,6 +78,15 @@ formats and do not need this metadata block.
 Review dates are evidence of a real content review, not a timestamp to update mechanically. A draft
 must state what blocks acceptance. A historical document must identify the living document or ADR that
 supersedes it.
+
+The date records when a review was **recorded**, so it cannot predate the commit that records it —
+writing the date down is itself an edit. Back-dating a review to the day it happened is therefore not
+possible, and not the point: what the field asserts is "someone confirmed this was accurate, and here
+is when they said so". `scripts/check-docs.mjs` fails a living document that was committed after its
+stated review date, which is what stops an edit from quietly outliving the last time anyone checked
+the document was still true. A document whose date tracks something other than an engineering edit —
+the compliance drafts wait on an external review, `blueprint.md` is a frozen baseline nobody refreshes
+— is listed in that script's `reviewDateExempt` set with its reason.
 
 ## Link And Path Rules
 
