@@ -89,6 +89,12 @@ jobs:
         working-directory: web
     steps:
       - uses: actions/checkout@v7
+        with:
+          # docs:check compares each living document's `Last reviewed` date against the last commit
+          # that touched it. A shallow clone has exactly one commit, so `git log -1 -- <file>` would
+          # report TODAY for every document and fail nearly all of them — the rule needs real history
+          # to be either correct or quiet.
+          fetch-depth: 0
       - uses: actions/setup-node@v7
         with:
           node-version: '26'

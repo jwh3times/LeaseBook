@@ -8,33 +8,97 @@ You maintain the LeaseBook documentation ecosystem. Your job is to ensure that c
 
 ## Documentation topology
 
+**Every committed canonical document is listed here, and that is enforced.** `scripts/check-docs.mjs`
+fails the build when a canonical doc is missing from this block — because an omission here is
+invisible: you cannot audit a file you were never told exists. `docs/runbooks/diagnostics.md` was
+absent from this list for months and was silently skipped by every audit in that window.
+
+Canonical = every committed `*.md` at the repo root, under `docs/`, under `infra/`, or in
+`.claude/agents/`, except the individual `docs/adr/ADR-*.md` records (the ADR index rule covers
+those). Add a line here in the same change that adds a document.
+
+### The contract and its adapters
+
 ```
-README.md                      — public-facing overview; port map is authoritative
-AGENTS.md                      — canonical cross-agent contract
-CLAUDE.md                      — Claude Code adapter; imports AGENTS.md
-docs/
-  README.md                    — documentation index
-  documentation-policy.md     — classification, ownership, lifecycle rules
-  product-scope.md             — public product boundary and non-goals
-  adr/                         — Architecture Decision Records (ADR-000 → ADR-021+)
-    template.md                — canonical ADR format
-    README.md                  — ADR index
-  ROADMAP.md                   — public high-level product direction
-  architecture.md              — module dependency diagram + data flow overview
-  blueprint.md                 — historical pre-M0 architecture baseline
-  accounting.md                — double-entry model, trust equation, event catalog
-  runbooks/
-    local-dev.md               — dev commands, seed workflow, common ops; links to README port map
-    restore.md                 — disaster recovery / PITR runbook
-  migration/
-    parallel-run.md            — public parallel-run checklist
-private/                       — gitignored; local only
-  TODO.md                      — master build plan; source of truth for milestone state
-  roadmap.md                   — detailed engineering roadmap
-  appfolio.md                  — unvalidated AppFolio migration research
-  planning/
-    m{N}_plan.md               — per-milestone implementation plans
-    m{N}_retro.md              — per-milestone retrospectives
+AGENTS.md                     — canonical cross-agent contract; invariants, commands, ownership
+CLAUDE.md                     — Claude Code adapter; imports AGENTS.md
+CONTEXT.md                    — glossary; the ubiquitous language. A term settles here or nowhere
+CONTRIBUTING.md               — Definition of Done, local workflow, review expectations
+README.md                     — public overview; the port map here is authoritative
+CHANGELOG.md                  — SHIP-SKILL OWNED. Never edit during a docs audit
+```
+
+### Public product and architecture
+
+```
+docs/README.md                — documentation index
+docs/documentation-policy.md  — classification, ownership, lifecycle rules
+docs/product-scope.md         — public product boundary and non-goals
+docs/ROADMAP.md               — public shipped state and broad direction
+docs/architecture.md          — canonical public map of the system AS IMPLEMENTED
+docs/blueprint.md             — HISTORICAL pre-M0 baseline; superseded by ADRs. Do not refresh it
+docs/accounting.md            — double-entry model, trust equation, event catalog
+docs/perf.md                  — read-path p95 method and the recorded numbers
+```
+
+### ADRs
+
+```
+docs/adr/README.md            — ADR index; must list EVERY ADR-*.md file (see the ADR rules below)
+docs/adr/template.md          — canonical ADR format
+docs/adr/ADR-*.md             — the records themselves; historical, not rewritten for terminology
+```
+
+### Runbooks and operations
+
+```
+docs/runbooks/local-dev.md    — dev commands, seed workflow, common ops; cites the README port map
+docs/runbooks/restore.md      — disaster recovery / PITR
+docs/runbooks/diagnostics.md  — error contract, event-id catalog, triage. DENSEST bulk-run prose
+docs/migration/parallel-run.md — public parallel-run checklist
+infra/README.md               — Azure topology, env-var contract, first-apply table
+infra/db/azure-bootstrap.md   — Postgres role bootstrap against a live server
+```
+
+### Compliance and research
+
+```
+docs/compliance/data-handling.md        — GLBA/PII data handling. Its Last reviewed tracks the
+                                          EXTERNAL review, not engineering edits — do not bump it
+docs/compliance/privacy-notice-draft.md — privacy notice skeleton; same review-date rule
+docs/research/azure-monitor-opentelemetry-distro.md — point-in-time vendor research, not guidance
+```
+
+### Agent guidance (authored; mirrored to `.codex/agents/` by the sync script)
+
+```
+.claude/agents/docs-updater.md          — this file
+.claude/agents/dotnet-api.md            — backend patterns, CQRS slices, module boundaries
+.claude/agents/react-frontend.md        — SPA design system, query hooks
+.claude/agents/postgres-specialist.md   — RLS, migrations, DDL conventions, the three-role model
+.claude/agents/trust-accounting.md      — posting templates, dual basis, the trust equation
+.claude/agents/code-reviewer.md         — pre-merge invariant review
+.claude/agents/azure-infrastructure.md  — Bicep, deploy workflows, Key Vault, PITR
+```
+
+### Community and policy files
+
+```
+CODE_OF_CONDUCT.md            — community standards
+SECURITY.md                   — vulnerability reporting; NEVER add finding detail here
+SUPPORT.md                    — where to ask for help
+docs/agents/domain.md         — domain-docs layout convention
+docs/agents/issue-tracker.md  — GitHub Issues conventions
+docs/agents/triage-labels.md  — the five canonical triage labels
+```
+
+### Private — gitignored, local only, never edited by an audit
+
+```
+private/TODO.md               — master build plan; source of truth for milestone state
+private/roadmap.md            — detailed engineering roadmap
+private/security-review-findings.md — weakness detail lives ONLY here
+private/planning/m{N}_*.md    — per-milestone plans and retrospectives
 ```
 
 ---

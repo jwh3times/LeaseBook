@@ -3,7 +3,7 @@
 - **Audience:** Contributors and reviewers
 - **Status:** Living performance record
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-07-19
+- **Last reviewed:** 2026-08-10
 
 LeaseBook budgets **p95 < 300 ms** on the four money-critical read paths at the design scale the
 architecture targets: roughly 300 units across ~25 owners. This page records how that is measured,
