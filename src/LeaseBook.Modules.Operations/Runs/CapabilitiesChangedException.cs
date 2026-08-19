@@ -3,7 +3,7 @@ namespace LeaseBook.Modules.Operations.Runs;
 /// <summary>
 /// The confirm carried a capability-version token that no longer matches the set resolved at confirm
 /// entry (ADR-028). Raised by <see cref="RunEngine.ConfirmAsync"/> before the strategy runs, so a
-/// rejected confirm posts nothing.
+/// rejected run confirmation posts nothing.
 /// <para>
 /// <b>Typed, not a bare <c>InvalidOperationException</c>.</b> ADR-025's terminal handler suppresses
 /// an untyped message entirely and returns an uncoded 500, which would turn a recoverable
@@ -14,7 +14,7 @@ namespace LeaseBook.Modules.Operations.Runs;
 /// <para>
 /// <b>The message carries no diagnostic detail on purpose.</b> Neither version token appears in it.
 /// They are opaque digests that mean nothing to an operator, and ADR-025's error-content rule keeps
-/// internal identifiers off the wire; the confirm's telemetry span already tags the resolved version
+/// internal identifiers off the wire; the run confirmation's telemetry span already tags the resolved version
 /// for the engineer side, and the log line the handler writes carries the correlation id.
 /// </para>
 /// </summary>

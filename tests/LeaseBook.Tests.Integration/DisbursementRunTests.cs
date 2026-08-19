@@ -28,7 +28,7 @@ namespace LeaseBook.Tests.Integration;
 /// Test coverage:
 /// <list type="bullet">
 ///   <item>Full disbursement run: fee + disburse entries posted, total matches golden.</item>
-///   <item>Owner below reserve floor is Excluded with reason in preview and confirm.</item>
+///   <item>Owner below reserve floor is Excluded with reason in preview and run confirmation.</item>
 ///   <item>Trust equation holds after fee + disbursement.</item>
 ///   <item>Idempotent re-run: second confirm → Skipped.</item>
 /// </list>
@@ -104,7 +104,7 @@ public sealed class DisbursementRunTests(PostgresFixture fixture)
         RunResult? result = null;
         await RunAsync(ctx.OrgId, async (engine, _) =>
         {
-            // No preview in this transaction to honour — this confirm is deliberately made cold.
+            // No preview in this transaction to honour — this run confirmation is deliberately made cold.
             result = await engine.ConfirmAsync(
                 RunType.Disbursement, Period, [ctx.OwnerId], expectedCapabilitiesVersion: null,
                 acknowledgeCapabilityChange: false, ct);

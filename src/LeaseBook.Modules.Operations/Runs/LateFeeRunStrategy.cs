@@ -24,7 +24,7 @@ namespace LeaseBook.Modules.Operations.Runs;
 /// </para>
 /// <para>
 /// <b>Eligibility exclusions:</b> preview surfaces these as exceptions rather than chargeable rows;
-/// planning re-establishes the same rules from its confirm-time data and records a selected target as
+/// planning re-establishes the same rules from its confirmation-time data and records a selected target as
 /// <see cref="RunItemStatus.Excluded"/> rather than posting it.
 /// <list type="bullet">
 ///   <item>Lease before its late-fee eligibility date.</item>

@@ -14,7 +14,7 @@ namespace LeaseBook.Modules.Operations.Runs;
 ///   <item><c>netBeforeReserve = equity − fee</c>.</item>
 ///   <item><c>disburse = netBeforeReserve − reserve</c>.</item>
 /// </list>
-/// <b>Exclusions (preview + confirm):</b>
+/// <b>Exclusions (preview + run confirmation):</b>
 /// <list type="bullet">
 ///   <item><c>equity ≤ 0</c> → <c>"non_positive_equity"</c>.</item>
 ///   <item><c>disburse ≤ 0</c> → <c>"below_reserve_floor"</c>.</item>
@@ -45,7 +45,7 @@ namespace LeaseBook.Modules.Operations.Runs;
 /// <b>Posting refusals, recorded per-item by the engine.</b> The strategy sees none of them: the
 /// posting port returns a <see cref="Contracts.PostStatus"/> and <see cref="RunEngine"/> maps it.
 /// <see cref="Contracts.PostStatus.ReserveFloor"/> is the one of these that is disbursement-specific
-/// — the posting-time backstop for equity that moved between preview and confirm, where the
+/// — the posting-time backstop for equity that moved between preview and run confirmation, where the
 /// <c>disburse &lt;= 0</c> exclusion above is the same rule applied to the data the plan was built on.
 /// </para>
 /// </summary>
@@ -133,7 +133,7 @@ public sealed class DisbursementRunStrategy(
         IReadOnlyList<Guid> selectedTargetIds,
         CancellationToken ct)
     {
-        // Re-fetch owner data and equity at confirm time (preview may be stale).
+        // Re-fetch owner data and equity at confirmation time (preview may be stale).
         var allOwners = await ownerData.GetAsync(ct);
         var byOwnerId = allOwners.ToDictionary(o => o.OwnerId);
 

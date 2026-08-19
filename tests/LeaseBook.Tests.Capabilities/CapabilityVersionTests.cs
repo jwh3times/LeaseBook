@@ -26,7 +26,7 @@ public sealed class CapabilityVersionTests
     /// The cross-<i>host</i> half of the property is
     /// <c>CapabilityPropagationTests.Two_hosts_resolving_the_same_state_agree_on_the_version</c>; this
     /// is the cross-<i>time</i> half. Both matter, because Task 10 compares a preview's token against
-    /// a confirm's, and the two can differ in either dimension.
+    /// a run confirmation's, and the two can differ in either dimension.
     /// </para>
     /// </summary>
     [Fact]
@@ -56,7 +56,7 @@ public sealed class CapabilityVersionTests
     /// <summary>
     /// The encoding must be injective: <c>{"a=1\nb": true}</c> and <c>{"a": true, "b": true}</c> are
     /// different sets, and without length-prefixed fields they serialize to identical bytes — two
-    /// different sets sharing a version, which is the direction that lets a confirm post under
+    /// different sets sharing a version, which is the direction that lets a run confirmation post under
     /// capabilities the preview never saw. Unreachable through the registry, but Compute is public
     /// and its doc promises the property for any dictionary.
     /// </summary>
@@ -91,7 +91,7 @@ public sealed class CapabilityVersionTests
 
     /// <summary>
     /// The direction that actually causes harm if it breaks: two genuinely different sets comparing
-    /// equal lets a confirm post under capabilities the preview never saw.
+    /// equal lets a run confirmation post under capabilities the preview never saw.
     /// </summary>
     [Fact]
     public void A_changed_value_changes_the_version()

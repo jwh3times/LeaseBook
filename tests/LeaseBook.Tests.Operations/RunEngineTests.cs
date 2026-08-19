@@ -130,7 +130,7 @@ public sealed class RunEngineTests(PostgresFixture fixture)
                 acknowledgeCapabilityChange: false, ct);
         }, ct);
 
-        snapshot.Resolves.ShouldBe(1, "one confirm, one resolve — the token is compared, not re-read");
+        snapshot.Resolves.ShouldBe(1, "one run confirmation, one resolve — the token is compared, not re-read");
     }
 
     [Fact]
@@ -180,7 +180,7 @@ public sealed class RunEngineTests(PostgresFixture fixture)
         }, ct);
 
         thrown.ShouldNotBeNull();
-        strategy.Plans.ShouldBe(0, "a rejected confirm must not even plan, let alone post");
+        strategy.Plans.ShouldBe(0, "a rejected run confirmation must not even plan, let alone post");
 
         // Neither opaque digest may reach the operator — ADR-025's error-content rule.
         thrown!.Message.ShouldNotContain("v1.");

@@ -416,8 +416,8 @@ computed from each lease's own rent when the run values the fee, so a configured
 charged at the cap. Operators review the preview and pick which delinquent ledgers to charge before
 confirming; the run is never silent. Eligibility is calculated from the contractual rent due date,
 not the rent journal date: the next calendar day is late day one, and charging begins on late day
-five or the later configured threshold. Preview and confirm use the real server date, confirm posts
-on that assessment date, and no operator-supplied future assessment date exists. The fee entry's
+five or the later configured threshold. Preview and run confirmation both use the real server date,
+and the confirmation posts on that assessment date, and no operator-supplied future assessment date exists. The fee entry's
 `assesses_entry_id` points to the exact `RentCharged` entry, with a unique org-scoped constraint that
 permits only one fee for that rent obligation. Receivable reductions apply oldest-charge-first when
 the run decides whether that rent remains open, so an unrelated open charge cannot revive settled
@@ -450,7 +450,7 @@ fee for the same rental payment even if another caller supplies a different sour
 The `source_ref` is checked by the existing `(org_id, source_ref)` partial unique index on
 `journal_entries` before and after posting. A second run for the same target and period raises
 `DuplicateSourceRefException`, which the run engine catches per-item and records as `Skipped` (not
-an error). This guarantees no double-posting even under concurrent confirms.
+an error). This guarantees no double-posting even under concurrent run confirmations.
 
 ### Cross-module boundary (ADR-019)
 
@@ -472,7 +472,7 @@ for the organization, most recent first.
 ### Period locking
 
 A locked accounting period (from a finalized bank reconciliation) surfaces as `Excluded` items in
-the run preview and confirm, not as a run-level failure. The run posts what it can and records the
+the run preview and the run confirmation, not as a run-level failure. The run posts what it can and records the
 locked-period targets as excluded with a reason, so a partially locked month is handled gracefully.
 
 See also: **ADR-017** (rent proration method), **ADR-018** (management-fee rounding), **ADR-019**

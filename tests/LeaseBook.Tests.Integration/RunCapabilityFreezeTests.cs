@@ -24,9 +24,9 @@ namespace LeaseBook.Tests.Integration;
 /// <para>
 /// <b>Why the state moves twice.</b> Two failure modes matter and a single flip cannot tell them
 /// apart. Resolving at TRANSACTION start is the wrong entry point - OrgContextMiddleware opens the
-/// transaction before the endpoint handler ever runs, so a snapshot taken there predates the confirm.
+/// transaction before the endpoint handler ever runs, so a snapshot taken there predates the run confirmation.
 /// Re-resolving PER ITEM loses the freeze outright. So the state here goes OFF (transaction start),
-/// ON (confirm entry), OFF (mid-run): only a snapshot taken exactly at confirm entry answers "on" for
+/// ON (run-confirmation entry), OFF (mid-run): only a snapshot taken exactly at run-confirmation entry answers "on" for
 /// every item, and each wrong answer is distinguishable rather than a shared "false".
 /// </para>
 /// <para>
@@ -92,7 +92,7 @@ public sealed class RunCapabilityFreezeTests(PostgresFixture fixture)
             // re-resolve could pass vacuously because nothing observable had changed.
             //
             // The hook fires from inside the ENGINE's posting loop, between item 1 and item 2. That is
-            // where a re-resolve would now have to live, and it is later in the confirm than the old
+            // where a re-resolve would now have to live, and it is later in the run confirmation than the old
             // strategy-side hook could reach.
             var posting = new HookedBatchPosting(afterFirstPost: async () =>
             {
@@ -122,7 +122,7 @@ public sealed class RunCapabilityFreezeTests(PostgresFixture fixture)
                         .ShouldBeFalse("negative control - the transaction opens with the capability off");
                     offVersion = atTransactionStart.Version;
 
-                    // Flip ON after the transaction is open but before confirm entry. A snapshot
+                    // Flip ON after the transaction is open but before run-confirmation entry. A snapshot
                     // taken at transaction start would answer "off" here and fail below.
                     await WriteFlagAsync(enabled: true, ct);
                     var atConfirmEntry = await snapshot.ResolveDurableAsync(ct);
@@ -136,9 +136,9 @@ public sealed class RunCapabilityFreezeTests(PostgresFixture fixture)
                     // cache-served path still answers with the pre-flip value at this instant.
                     (await cache.GetAsync(org, null, ct))
                         .IsEnabled(CapabilityCatalog.ConsolidatedStatements)
-                        .ShouldBeFalse("the cache must still be stale at the moment of the confirm");
+                        .ShouldBeFalse("the cache must still be stale at the moment of the run confirmation");
 
-                    // No echoed token: this suite is about the freeze WITHIN one confirm, and the
+                    // No echoed token: this suite is about the freeze WITHIN one run confirmation, and the
                     // flips above are exactly what the preview/confirm guard rejects. Passing a
                     // token here would make the run 409 before the freeze could be observed at all.
                     result = await engine.ConfirmAsync(

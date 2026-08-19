@@ -75,7 +75,7 @@ public sealed class PeriodChargeGuardTests(PostgresFixture fixture)
         result.Skipped.ShouldBe(1, "already-charged lease must be Skipped, not double-charged");
 
         // DB-level proof: exactly 1 RentCharged entry exists for the tenant in the period.
-        // (Guard prevented the confirm from posting a second one.)
+        // (Guard prevented the run confirmation from posting a second one.)
         int rentChargedCount = 0;
         await DispatchAsync(ctx.OrgId, async (_, sp) =>
         {
