@@ -18,7 +18,7 @@ namespace LeaseBook.Web.Persistence;
 /// and stamps <c>created_at</c> on insert.
 /// <para>
 /// Tenancy (WP-05) is layered on as <b>ergonomics over the RLS boundary</b>: a global query filter
-/// scopes every <see cref="IOrgScoped"/> entity to the current <see cref="ITenantContext"/>, and the
+/// scopes every <see cref="IOrgScoped"/> entity to the current <see cref="IOrgContext"/>, and the
 /// SaveChanges pass stamps <c>org_id</c> on inserts, refuses cross-org writes, and emits one
 /// <see cref="AuditEvent"/> per change. None of this replaces the Postgres policy — it just fails
 /// loudly in-process before a bug reaches the database.
@@ -26,12 +26,12 @@ namespace LeaseBook.Web.Persistence;
 /// </summary>
 public sealed class AppDbContext(
     DbContextOptions<AppDbContext> options,
-    ITenantContext? tenantContext = null,
+    IOrgContext? orgContext = null,
     IActorContext? actorContext = null,
     IDataProtectionProvider? dataProtection = null)
     : IdentityDbContext<AppUser, IdentityRole<Guid>, Guid>(options)
 {
-    private readonly ITenantContext _tenant = tenantContext ?? NullTenantContext.Instance;
+    private readonly IOrgContext _org = orgContext ?? NullOrgContext.Instance;
 
     // Who is accountable, for audit stamping (P52). Absent only on contexts built outside DI
     // (design-time, the migrator) — which never write org-scoped rows. Since ADR-039 an org-scoped
@@ -93,7 +93,7 @@ public sealed class AppDbContext(
     }
 
     private void SetOrgFilter<TEntity>(ModelBuilder modelBuilder) where TEntity : class, IOrgScoped =>
-        modelBuilder.Entity<TEntity>().HasQueryFilter(e => e.OrgId == _tenant.OrgId);
+        modelBuilder.Entity<TEntity>().HasQueryFilter(e => e.OrgId == _org.OrgId);
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
@@ -137,7 +137,7 @@ public sealed class AppDbContext(
             return;
         }
 
-        var orgId = _tenant.OrgId
+        var orgId = _org.OrgId
             ?? throw new InvalidOperationException(
                 "An org-scoped write was attempted with no organization context. Org-scoped DB work must " +
                 "run inside the request middleware or OrgScopedExecutor, which set app.org_id (§C.4).");

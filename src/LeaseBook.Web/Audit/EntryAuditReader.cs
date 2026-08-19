@@ -23,7 +23,7 @@ public sealed record AuditRow(DateTime OccurredAt, string Action, string ActorNa
 /// (M3-E6). A system actor renders through <see cref="AuditActorLabel"/>. Lives in the host because it joins host
 /// (audit/identity) and Accounting (the reversal link) data — the composition root's job.
 /// </summary>
-public sealed class EntryAuditReader(AppDbContext db, ITenantContext tenant)
+public sealed class EntryAuditReader(AppDbContext db, IOrgContext tenant)
 {
     public async Task<EntryAuditResponse> GetAsync(Guid entryId, CancellationToken ct)
     {

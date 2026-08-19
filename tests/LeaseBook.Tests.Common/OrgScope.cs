@@ -12,13 +12,13 @@ namespace LeaseBook.Tests.Common;
 /// <b>fresh org</b> — created via a migrator insert into <c>orgs</c> — so generated/property cases are
 /// disjoint by RLS and need no cleanup (the append-only journal tables can't be truncated by the app
 /// role anyway, pitfall M-E1). It hands back the org id, an app-role <see cref="AppDbContext"/> bound to
-/// a live <see cref="TenantContext"/>, and an <see cref="OrgScopedExecutor"/> over them; <see cref="RunAsync"/>
+/// a live <see cref="OrgContext"/>, and an <see cref="OrgScopedExecutor"/> over them; <see cref="RunAsync"/>
 /// is the convenience wrapper that opens the unit-of-work transaction and sets <c>app.org_id</c>.
 /// </summary>
 public sealed class OrgScope : IAsyncDisposable
 {
     private OrgScope(
-        Guid orgId, AppDbContext db, TenantContext tenant, ActorContext actor, OrgScopedExecutor executor)
+        Guid orgId, AppDbContext db, OrgContext tenant, ActorContext actor, OrgScopedExecutor executor)
     {
         OrgId = orgId;
         Db = db;
@@ -32,7 +32,7 @@ public sealed class OrgScope : IAsyncDisposable
     /// <summary>App-role context (RLS-subject), bound to <see cref="Tenant"/>.</summary>
     public AppDbContext Db { get; }
 
-    public TenantContext Tenant { get; }
+    public OrgContext Tenant { get; }
 
     /// <summary>
     /// The one actor context <see cref="Db"/> reads and <see cref="Executor"/> writes. Services built
@@ -75,7 +75,7 @@ public sealed class OrgScope : IAsyncDisposable
             await migratorDb.SaveChangesAsync(ct);
         }
 
-        var tenant = new TenantContext();
+        var tenant = new OrgContext();
         var actor = new ActorContext();
         var db = fixture.CreateContext(fixture.AppConnectionString, tenant, actor);
         return new OrgScope(orgId, db, tenant, actor, new OrgScopedExecutor(db, tenant, actor));

@@ -12,7 +12,7 @@ namespace LeaseBook.Modules.Accounting.Posting;
 /// swapped, dimensions and basis preserved) and posts it through <see cref="IPostingService"/> dated
 /// <c>asOfDate</c> — so the correction lands in the open period, never the original's locked one.
 /// </summary>
-internal sealed class ReversalService(DbContext db, ITenantContext tenant, IPostingService posting) : IReversalService
+internal sealed class ReversalService(DbContext db, IOrgContext tenant, IPostingService posting) : IReversalService
 {
     public Task<Guid> ReverseAsync(Guid entryId, string reason, DateOnly asOfDate, CancellationToken ct) =>
         ReverseAsync(entryId, reason, asOfDate, sourceRef: null, ct);

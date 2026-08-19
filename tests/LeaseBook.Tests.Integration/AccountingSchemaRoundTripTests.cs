@@ -29,7 +29,7 @@ public sealed class AccountingSchemaRoundTripTests(PostgresFixture fixture)
         var orgId = UuidV7.NewId();
         await CreateOrgAsync(orgId, ct);
 
-        var tenant = new TenantContext();
+        var tenant = new OrgContext();
         var actor = new ActorContext();
         await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant, actor);
         var executor = new OrgScopedExecutor(db, tenant, actor);

@@ -17,7 +17,7 @@ public sealed record ApplyClearances(IReadOnlyCollection<Guid> JournalLineIds, b
 
 public sealed record ClearancesResult(int Affected);
 
-internal sealed class ApplyClearancesHandler(DbContext db, ITenantContext tenant)
+internal sealed class ApplyClearancesHandler(DbContext db, IOrgContext tenant)
     : ICommandHandler<ApplyClearances, ClearancesResult>
 {
     public async Task<ClearancesResult> Handle(ApplyClearances command, CancellationToken ct)

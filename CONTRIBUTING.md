@@ -33,8 +33,8 @@ Visual Studio Test Explorer requires Visual Studio 2022 17.14 or later; no VSTes
 packages are retained. MTP filters replace the former VSTest `FullyQualifiedName` expressions:
 
 ```bash
-# Class-level equivalent of: --filter "FullyQualifiedName~TenantIsolationTests"
-dotnet test tests/LeaseBook.Tests.Integration/LeaseBook.Tests.Integration.csproj --filter-class '*TenantIsolationTests'
+# Class-level equivalent of: --filter "FullyQualifiedName~OrgIsolationTests"
+dotnet test tests/LeaseBook.Tests.Integration/LeaseBook.Tests.Integration.csproj --filter-class '*OrgIsolationTests'
 
 # One method
 dotnet test tests/LeaseBook.Tests.Integration/LeaseBook.Tests.Integration.csproj --filter-method '*Reads_under_an_org_context_see_only_that_orgs_rows'

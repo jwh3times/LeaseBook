@@ -41,7 +41,7 @@ public sealed class ImportStatementValidator : AbstractValidator<ImportStatement
 }
 
 internal sealed class ImportStatementHandler(
-    DbContext db, ITenantContext tenant, IActorContext actor, IStatementParser parser)
+    DbContext db, IOrgContext tenant, IActorContext actor, IStatementParser parser)
     : ICommandHandler<ImportStatement, ImportResult>
 {
     public async Task<ImportResult> Handle(ImportStatement command, CancellationToken ct)

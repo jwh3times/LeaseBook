@@ -7,7 +7,7 @@ namespace LeaseBook.SharedKernel.Tenancy;
 /// nothing (fail closed). This is the ergonomic layer that drives the EF query filter and stamping;
 /// the Postgres <c>SET LOCAL app.org_id</c> transaction is the actual security boundary (§C.4).
 /// </summary>
-public interface ITenantContext
+public interface IOrgContext
 {
     Guid? OrgId { get; }
 }

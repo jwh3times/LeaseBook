@@ -159,11 +159,11 @@ builder.Services.AddRateLimiter(options =>
     };
 });
 
-// Organization-isolation ergonomics: one request-scoped TenantContext, exposed read-only as ITenantContext (which
+// Organization-isolation ergonomics: one request-scoped OrgContext, exposed read-only as IOrgContext (which
 // the DbContext query filter reads). DbContext is also resolvable as its base type so the
 // scheduler-agnostic OrgScopedExecutor can open the unit-of-work transaction.
-builder.Services.AddScoped<TenantContext>();
-builder.Services.AddScoped<ITenantContext>(sp => sp.GetRequiredService<TenantContext>());
+builder.Services.AddScoped<OrgContext>();
+builder.Services.AddScoped<IOrgContext>(sp => sp.GetRequiredService<OrgContext>());
 // Actor context (P52): the auth middleware populates it from the user-id claim; PostingService and the
 // AppDbContext audit pass read it to stamp created_by / actor_user_id. Null for seeder/job writes.
 builder.Services.AddScoped<ActorContext>();
@@ -182,7 +182,7 @@ builder.Services.AddScoped<PlatformScopedExecutor>();
 builder.Services.AddCapabilitiesModule();
 builder.Services.AddScoped<LeaseBook.Modules.Capabilities.Contracts.IPlatformScope, PlatformScopeAdapter>();
 // Identity is host-owned, so "is this user in this org?" is also a port (ADR-007). asp_net_users is
-// RLS-exempt, which makes this the only thing stopping a cohort rule naming another tenant's user.
+// RLS-exempt, which makes this the only thing stopping a cohort rule naming another organization's user.
 builder.Services.AddScoped<LeaseBook.Modules.Capabilities.Contracts.IOrgMembership, OrgMembershipAdapter>();
 
 // The seam's two hosted services are host-owned. The LISTEN/NOTIFY listener holds a raw Npgsql
@@ -226,7 +226,7 @@ builder.Services.AddHealthChecks()
     .AddCheck<RoleSeedingReadinessCheck>(RoleSeedingReadinessCheck.Name, tags: [CapabilityReadinessCheck.ReadyTag]);
 
 // Accounting module services (chart-of-accounts provisioning, period lifecycle; the posting engine
-// and event catalog register here in later WPs). They consume the ambient DbContext + ITenantContext.
+// and event catalog register here in later WPs). They consume the ambient DbContext + IOrgContext.
 builder.Services.AddAccountingModule();
 
 // Directory module services (settings/bank/fee config; CQRS handlers are auto-discovered). The host

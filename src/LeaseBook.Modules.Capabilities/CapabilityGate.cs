@@ -26,7 +26,7 @@ namespace LeaseBook.Modules.Capabilities;
 internal sealed class CapabilityGate(
     CapabilityCache cache,
     CapabilityStateReader reader,
-    ITenantContext tenant,
+    IOrgContext tenant,
     IActorContext actor) : ICapabilityGate
 {
     /// <inheritdoc />

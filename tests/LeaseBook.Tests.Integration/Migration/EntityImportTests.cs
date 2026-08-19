@@ -51,7 +51,7 @@ public sealed class EntityImportTests(PostgresFixture fixture)
         result.BatchId.ShouldNotBe(Guid.Empty);
 
         // Verify that two owners actually exist in the Directory (direct DB assertion, app role + RLS).
-        var tenant = new TenantContext();
+        var tenant = new OrgContext();
         tenant.OrgId = orgId;
         var actor = new ActorContext();
         await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant, actor);
@@ -114,7 +114,7 @@ public sealed class EntityImportTests(PostgresFixture fixture)
         result.Errors.ShouldHaveSingleItem().Field.ShouldBe("name");
 
         // Exactly one owner was created in Directory.
-        var tenant = new TenantContext();
+        var tenant = new OrgContext();
         tenant.OrgId = orgId;
         var actor = new ActorContext();
         await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant, actor);
@@ -176,7 +176,7 @@ public sealed class EntityImportTests(PostgresFixture fixture)
         propsResult.RowCount.ShouldBe(1);
         propsResult.Errors.ShouldBeEmpty();
 
-        var tenant = new TenantContext();
+        var tenant = new OrgContext();
         tenant.OrgId = orgId;
         var actor = new ActorContext();
         await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant, actor);
@@ -221,7 +221,7 @@ public sealed class EntityImportTests(PostgresFixture fixture)
         result.RowCount.ShouldBe(4);
         result.ErrorCount.ShouldBe(2);
 
-        var tenant = new TenantContext();
+        var tenant = new OrgContext();
         tenant.OrgId = orgId;
         var actor = new ActorContext();
         await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant, actor);
