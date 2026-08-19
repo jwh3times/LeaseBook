@@ -93,7 +93,7 @@ filter on `customDimensions.EventId` (or the trace message) instead of matching 
 | 1101 | `HeldFeesShapeRejected`     | Warning     | A balance-import row's pm_income opening violated the held-fees shape at post time — never a 500. What follows depends on the caller; see below.                |
 | 1200 | `InvariantViolation`        | Error       | The nightly sweep found a trust-accounting invariant violated for one org. Fiduciary incorrectness — never routine noise; see below.                            |
 | 1201 | `InvariantSweepCompleted`   | Information | The nightly sweep finished with no violations. Its **absence** is itself a signal: a silent night means the job did not run.                                    |
-| 1300 | `CapabilityVersionConflict` | Warning     | A bulk-run confirm was rejected (409) because the capability set moved after its preview. Expected and recoverable; a sustained rate is the signal — see below. |
+| 1300 | `CapabilityVersionConflict` | Warning     | A run confirmation was rejected (409) because the capability set moved after its preview. Expected and recoverable; a sustained rate is the signal — see below. |
 
 1000-1099 is reserved for host/error plumbing; 1100-1199 is the import-supersede/held-fees domain
 (WP-7 — the first block claimed under ADR-025's 1100+ convention); 1200-1299 is scheduled jobs
@@ -135,8 +135,8 @@ against the `hangfire` schema.
 
 ## Diagnosing a capability-version conflict (1300)
 
-A bulk run's confirm echoes back the capability-version token its preview handed out, and the server
-compares it against the set it resolves at confirm entry. A mismatch is answered with a 409
+A run confirmation echoes back the capability-version token its preview handed out, and the server
+compares it against the set it resolves at run-confirmation entry. A mismatch is answered with a 409
 `capabilities_changed`; the operator reloads the preview and confirms again, and nothing is posted.
 
 One of these is not an incident — it is the guard working. What is worth acting on is a **rate**:
@@ -154,8 +154,8 @@ Two causes look identical in the log and are separated by asking when the last d
   scheduling differently.
 - **Replicas disagree.** The token covers the shape of the source-code capability registry as well as
   the resolved values, so during a rolling deploy that changed the registry, two replicas produce
-  different tokens for identical database state. Every preview/confirm pair that spans the two builds
-  is rejected. That is the safe direction — the alternative is a confirm posting under a set the
+  different tokens for identical database state. Every preview/confirmation pair that spans the two builds
+  is rejected. That is the safe direction — the alternative is a run confirmation posting under a set the
   preview never saw — and it clears on its own once the rollout finishes. A burst that begins at a
   deploy and ends when it completes needs no action.
 
@@ -184,9 +184,9 @@ Only two things clear it, and both are decisions rather than retries:
 
 - **Restore the earlier state — available only when the same capabilities exist in both releases.**
   Put the money-path capability back the way it was for the run that already posted, and the next
-  confirm agrees with it. This is unavailable whenever the _set_ of money-path capabilities changed
+  run confirmation agrees with it. This is unavailable whenever the _set_ of money-path capabilities changed
   between the two runs; the error message says which case you are in.
-- **Acknowledge deliberately.** The confirm accepts `acknowledgeCapabilityChange: true`, which is
+- **Acknowledge deliberately.** The run confirmation accepts `acknowledgeCapabilityChange: true`, which is
   recorded in the new run's `summary_json` as `capabilityChangeAcknowledged`, together with the state
   it overrode in `capabilityChangeFrom`. That is the audit trail for a period computed two ways on
   purpose; there is no way to override this guard without leaving it.
@@ -444,7 +444,7 @@ treat that as the guarantee, though: the 30-second per-replica cache TTL is the 
 `NOTIFY` is only a latency optimization, so a replica whose listener has dropped still converges, just
 by the slower route. **Wait out the TTL before concluding a flip did not take.** It does **not** reach
 a bulk run already in flight: the run engine freezes
-its capability set at preview and rejects a confirm whose set has moved, which is the 1300 above.
+its capability set at preview and rejects a run confirmation whose set has moved, which is the 1300 above.
 Flipping a money-path capability mid-rollout is what produces that burst.
 
 ## Production caution: Npgsql `Include Error Detail`

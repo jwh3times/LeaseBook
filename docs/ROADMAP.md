@@ -3,7 +3,7 @@
 - **Audience:** Evaluators, contributors, and maintainers
 - **Status:** Living public direction
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-08-01
+- **Last reviewed:** 2026-08-19
 
 LeaseBook is pre-release software. This page communicates shipped capabilities and broad product
 direction; it is not an implementation plan or a commitment to specific dates. Detailed sequencing,
@@ -34,9 +34,10 @@ Hardening and beta readiness are in progress. Shipped so far:
   visual-regression coverage for money-critical states, and a boot check that starts the released
   container stack rather than only building the image.
 - **Security.** A hardening pass (security headers and a content-security policy, enforced admin
-  MFA, authentication rate limiting, encrypted MFA secrets at rest, and production startup
-  configuration guards), production safeguards for development seed data, and CSV
-  formula-injection protection.
+  MFA, authentication rate limiting, encrypted MFA secrets at rest — with the keys protecting them
+  stored durably rather than alongside the running process, and wrapped by a managed key where a
+  deployment supplies one — and production startup configuration guards), production safeguards for
+  development seed data, and CSV formula-injection protection.
 - **Diagnostics.** A uniform API error contract with machine-readable codes and support-reference
   correlation ids, safe user-facing error messages, and application logging wired to Application
   Insights — see the error diagnostics runbook and ADR-025.
