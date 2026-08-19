@@ -46,7 +46,7 @@ public sealed class LateFeeRunStrategy(
     public RunType RunType => RunType.LateFee;
 
     /// <inheritdoc />
-    public async Task<RunPreview> PreviewAsync(RunPeriod period, CancellationToken ct)
+    public async Task<StrategyPreview> PreviewAsync(RunPeriod period, CancellationToken ct)
     {
         var assessmentDate = CurrentDate();
 
@@ -55,7 +55,7 @@ public sealed class LateFeeRunStrategy(
 
         if (delinquentRows.Count == 0)
         {
-            return new RunPreview(RunType.LateFee, period, [], []);
+            return new StrategyPreview([], []);
         }
 
         var leaseIds = delinquentRows.Select(r => r.LeaseId).ToList();
@@ -135,7 +135,7 @@ public sealed class LateFeeRunStrategy(
                 Detail: detail));
         }
 
-        return new RunPreview(RunType.LateFee, period, previewRows, exceptions);
+        return new StrategyPreview(previewRows, exceptions);
     }
 
     /// <inheritdoc />

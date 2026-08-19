@@ -86,9 +86,12 @@ public sealed class RunEngine(
         // token served from a 30-second cache would disagree with the run confirmation's durable read for up
         // to that long after any flip, rejecting confirms for a change that had already settled.
         var capabilities = await capabilitySnapshot.ResolveDurableAsync(ct);
-        var preview = await strategy.PreviewAsync(period, ct);
+        var computed = await strategy.PreviewAsync(period, ct);
 
-        return preview with { CapabilitiesVersion = capabilities.Version };
+        // The engine, and only the engine, turns a strategy's rows into a preview — the token is a
+        // required argument here, so there is no path that produces an unstamped one.
+        return new RunPreview(
+            runType, period, computed.Rows, computed.Exceptions, capabilities.Version);
     }
 
     /// <summary>

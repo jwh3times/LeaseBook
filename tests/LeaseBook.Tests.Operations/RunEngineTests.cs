@@ -335,7 +335,7 @@ file sealed class NoOpStrategy(Guid[] targets) : IRunStrategy
     /// <summary>How many times the engine reached the strategy — 0 proves a rejection came first.</summary>
     public int Plans { get; private set; }
 
-    public Task<RunPreview> PreviewAsync(RunPeriod period, CancellationToken ct)
+    public Task<StrategyPreview> PreviewAsync(RunPeriod period, CancellationToken ct)
     {
         var rows = targets
             .Select(t => new PreviewRow(
@@ -348,7 +348,7 @@ file sealed class NoOpStrategy(Guid[] targets) : IRunStrategy
                 Detail: new Dictionary<string, string>()))
             .ToList();
 
-        return Task.FromResult(new RunPreview(RunType.Rent, period, rows, []));
+        return Task.FromResult(new StrategyPreview(rows, []));
     }
 
     public Task<IReadOnlyList<RunPlanItem>> PlanAsync(
@@ -377,8 +377,8 @@ file sealed class PlanFromStrategy(RunPlanItem[] plan) : IRunStrategy
 {
     public RunType RunType => RunType.Rent;
 
-    public Task<RunPreview> PreviewAsync(RunPeriod period, CancellationToken ct) =>
-        Task.FromResult(new RunPreview(RunType.Rent, period, [], []));
+    public Task<StrategyPreview> PreviewAsync(RunPeriod period, CancellationToken ct) =>
+        Task.FromResult(new StrategyPreview([], []));
 
     public Task<IReadOnlyList<RunPlanItem>> PlanAsync(
         RunPeriod period, IReadOnlyList<Guid> selectedTargetIds, CancellationToken ct) =>
