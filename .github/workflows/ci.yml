@@ -283,6 +283,28 @@ jobs:
       - name: Install web dependencies
         working-directory: web
         run: npm ci
+      # `playwright install --with-deps` shells out to apt, and the hosted runners' Azure Ubuntu
+      # mirror stalls: three consecutive runs on 2026-08-19 (04:37, 04:59, 19:57 UTC) fetched their
+      # InRelease files, then sat in silence on the package indices until the job's 20-minute bound
+      # cancelled them. No test ever ran. Two mitigations, both narrow:
+      #
+      #   1. Point apt at the canonical archive instead of the Azure mirror. Noble uses the deb822
+      #      `ubuntu.sources`; the legacy `sources.list` is rewritten too if present, and neither
+      #      being there is not an error.
+      #   2. Bound the fetch. Without this apt hangs rather than failing, which is what turned a
+      #      mirror outage into a 20-minute nothing — the same "make it fail fast and legibly"
+      #      posture as the timeout-minutes policy at the top of this file.
+      #
+      # REVERT WHEN the mirror is healthy: this is runner infrastructure, not a repository problem,
+      # and (2) is the half worth keeping if only one survives.
+      - name: Work around the hosted runner's stalling apt mirror
+        run: |
+          sudo sed -i 's|azure.archive.ubuntu.com|archive.ubuntu.com|g' /etc/apt/sources.list.d/ubuntu.sources || true
+          sudo sed -i 's|azure.archive.ubuntu.com|archive.ubuntu.com|g' /etc/apt/sources.list || true
+          conf=/etc/apt/apt.conf.d/99-leasebook-timeouts
+          echo 'Acquire::Retries "3";' | sudo tee "$conf" > /dev/null
+          echo 'Acquire::http::Timeout "20";' | sudo tee -a "$conf" > /dev/null
+          echo 'Acquire::https::Timeout "20";' | sudo tee -a "$conf" > /dev/null
       - name: Install Playwright browser
         working-directory: web
         run: npx playwright install --with-deps chromium
