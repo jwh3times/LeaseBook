@@ -107,8 +107,8 @@ public sealed class RentRunStrategy(
         var allRows = await schedule.GetActiveAsync(period.Year, period.Month, ct);
         var byLeaseId = allRows.ToDictionary(r => r.LeaseId);
 
-        // Re-run the structural cross-source period guard at confirm time (prevents double-charge
-        // even when a manual charge was posted between preview and confirm).
+        // Re-run the structural cross-source period guard at confirmation time (prevents double-charge
+        // even when a manual charge was posted between preview and run confirmation).
         var tenantIdsInScope = selectedTargetIds
             .Where(id => byLeaseId.ContainsKey(id))
             .Select(id => byLeaseId[id].TenantId)

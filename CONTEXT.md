@@ -257,12 +257,16 @@ _Avoid_: negative delinquency, negative aging
 
 ### Bulk runs
 
-**Confirm**:
+**Run confirmation**:
 The operator's decision to execute a previewed run over a selection of targets, and the one
-transaction that carries it out. It names the whole act — not a step within it. Until 2026-08-09 the
-word also named the method each run type used to do its own posting, so "confirm" meant two things one
-call apart; it now means only the first.
-_Avoid_: commit (that is the transaction's own word), submit, apply, execute
+transaction that carries it out, recording every resulting outcome. It names the whole act — not a
+step within it. Until 2026-08-09 the word also named the method each run type used to do its own
+posting, so it meant two things one call apart; it now means only the first. The noun carries `run`
+because the product confirms other things too — bank-statement matches (`Confirm & clear`) and MFA
+enrollment — and those uses are correct: `confirm` is an ordinary verb qualified by its object, and
+only the bulk-run act has a reserved noun.
+_Avoid_: confirm as a bare noun (it does not say which act), commit (that is the transaction's own
+word), submit, apply, execute
 
 **Run plan**:
 What a run intends to do for each selected target, decided before anything is posted: post this, or

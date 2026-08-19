@@ -32,7 +32,7 @@ public interface IRunStrategy
     /// property — <see cref="RunEngine.ConfirmAsync"/> resolves the set exactly once, at its own
     /// entry, and both capability guards reject above this call — so a capability can decide whether a
     /// run happens and never what it produces. Passing the set down here would widen the surface that
-    /// could re-resolve it without making any guarantee stronger; under the chunked confirm ADR-019's
+    /// could re-resolve it without making any guarantee stronger; under the chunked run confirmation ADR-019's
     /// revisit trigger contemplates, the engine is what resumes and therefore what must carry the
     /// snapshot across a chunk boundary.
     /// </para>

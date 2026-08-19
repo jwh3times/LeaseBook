@@ -21,7 +21,7 @@ using OrgEntity = LeaseBook.Web.Persistence.Org;
 namespace LeaseBook.Tests.Integration;
 
 /// <summary>
-/// Fix E: HTTP-level validation tests for the M6 bulk-run preview and confirm endpoints.
+/// Fix E: HTTP-level validation tests for the M6 bulk-run preview and run confirmation endpoints.
 /// Ensures that out-of-range month or year values return 400 (invalid_period) rather than
 /// a 500 from <c>DateOnly</c> throwing on construction.
 /// </summary>

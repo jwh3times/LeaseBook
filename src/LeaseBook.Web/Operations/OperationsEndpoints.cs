@@ -233,7 +233,7 @@ public sealed class OperationsEndpoints : IEndpointModule
 
 /// <summary>Body for POST /api/operations/runs/{type}/confirm.</summary>
 /// <param name="CapabilitiesVersion">
-/// The token from the preview this confirm came from (ADR-028). Nullable in the CONTRACT only so an
+/// The token from the preview this run confirmation came from (ADR-028). Nullable in the CONTRACT only so an
 /// omitted field deserializes to null and can be answered with a clear 400 — the endpoint requires
 /// it. Modelling it as non-nullable would surface an old client as an unhelpful framework-level bind
 /// failure instead.

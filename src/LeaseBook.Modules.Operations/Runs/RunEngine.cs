@@ -24,16 +24,16 @@ namespace LeaseBook.Modules.Operations.Runs;
 /// entry, and nothing downstream resolves it again. One run therefore decides every item under one
 /// set even if an operator flips a flag mid-run — and since the strategy is never handed the set at
 /// all (ADR-019 §4a, amended 2026-08-09), a capability can decide whether a run happens and never what
-/// it produces. Under a future chunked confirm (ADR-019's revisit trigger) this method is what
+/// it produces. Under a future chunked run confirmation (ADR-019's revisit trigger) this method is what
 /// resumes, so it is also what must carry the snapshot across a chunk boundary.
 /// </para>
 /// <para>
-/// <b>The preview → confirm window.</b> The freeze above makes one confirm internally consistent; it
+/// <b>The preview → run confirmation window.</b> The freeze above makes one run confirmation internally consistent; it
 /// says nothing about the gap before it. <c>PreviewAsync</c> stamps the resolved version onto the
-/// <see cref="RunPreview"/>, the confirm echoes it back, and <c>ConfirmAsync</c> compares it against
+/// <see cref="RunPreview"/>, the run confirmation echoes it back, and <c>ConfirmAsync</c> compares it against
 /// the set it resolves itself — optimistic concurrency, the same shape as an ETag. The operator
 /// selected target <i>ids</i>, but the <i>amounts</i> they approved were the preview's, so a set that
-/// moved in between makes the confirm a different operation from the one they authorized. Nothing
+/// moved in between makes the run confirmation a different operation from the one they authorized. Nothing
 /// about the preview is persisted to support this: the token is derived from state, not stored.
 /// </para>
 /// <para>
@@ -43,7 +43,7 @@ namespace LeaseBook.Modules.Operations.Runs;
 /// 1 confirms a selection while a money-path capability is off, the flag flips, and run 2 confirms
 /// the remainder while it is on — both internally consistent, the period not. <c>ConfirmAsync</c>
 /// therefore reads the money-path state recorded by the most recent prior run for the same
-/// <c>(org, run type, period)</c> and rejects a confirm that would disagree with it, unless the
+/// <c>(org, run type, period)</c> and rejects a run confirmation that would disagree with it, unless the
 /// caller explicitly acknowledges the change — in which case the acknowledgement, and the state it
 /// overrode, are recorded in <c>summary_json</c>.
 /// </para>
@@ -82,8 +82,8 @@ public sealed class RunEngine(
     {
         var strategy = ResolveStrategy(runType);
 
-        // Same port, same derivation, as the confirm below. Deliberately NOT the cached member: a
-        // token served from a 30-second cache would disagree with the confirm's durable read for up
+        // Same port, same derivation, as the run confirmation below. Deliberately NOT the cached member: a
+        // token served from a 30-second cache would disagree with the run confirmation's durable read for up
         // to that long after any flip, rejecting confirms for a change that had already settled.
         var capabilities = await capabilitySnapshot.ResolveDurableAsync(ct);
         var preview = await strategy.PreviewAsync(period, ct);
@@ -113,7 +113,7 @@ public sealed class RunEngine(
     /// <param name="acknowledgeCapabilityChange">
     /// The operator's explicit "run it anyway" — for the CROSS-RUN check only. It does not weaken
     /// the preview/confirm comparison above, which is always the caller's own mistake to re-take.
-    /// When a prior run for this period recorded a different money-path state, true lets the confirm
+    /// When a prior run for this period recorded a different money-path state, true lets the run confirmation
     /// proceed and records both the acknowledgement and the state it overrode in <c>summary_json</c>.
     /// <para>
     /// No default, like the token above, so every call site states which it is. In-process callers
@@ -164,11 +164,11 @@ public sealed class RunEngine(
         //
         // The resolve is at CONFIRM ENTRY, not at transaction start. Those are different instants:
         // OrgContextMiddleware opens the transaction before the endpoint handler runs, so a snapshot
-        // taken there would predate the confirm the operator actually asked for.
+        // taken there would predate the run confirmation the operator actually asked for.
         var capabilities = await capabilitySnapshot.ResolveDurableAsync(ct);
         activity?.SetTag("capabilities_version", capabilities.Version);
 
-        // Close the preview → confirm window, against the ONE set resolved above. No second resolve:
+        // Close the preview → run confirmation window, against the ONE set resolved above. No second resolve:
         // the freeze is that confirm reads the capability state exactly once, and a comparison that
         // re-read it would both break that and compare a value against itself.
         //
@@ -189,7 +189,7 @@ public sealed class RunEngine(
         // a stale preview would authorize amounts they never saw.
         //
         // A READ, not a resolve: the set frozen above is still the only capability read in this
-        // method (RunEngineTests pins that count at one per confirm). bulk_runs is Operations' own
+        // method (RunEngineTests pins that count at one per run confirmation). bulk_runs is Operations' own
         // table and the query runs on the ambient RLS transaction, so it sees this org's runs and no
         // other org's without a predicate this method could forget.
         var moneyPathState = capabilities.MoneyPathState();

@@ -79,7 +79,7 @@ code**, never rows — the database stores state only.
 Capabilities gate **reachability**, never money: a capability may decide whether a posting path runs
 at all, but never what an accounting event produces. Money-affecting parameters live in `OrgSettings`.
 Architecture tests keep the seam out of `Accounting` and out of `SharedKernel`, and a bulk run freezes
-its capability set once at confirm entry so one run cannot straddle a toggle. Cheap reads are served
+its capability set once at run-confirmation entry so one run cannot straddle a toggle. Cheap reads are served
 from a short-lived in-process cache invalidated by a Postgres `NOTIFY`; money-path reads bypass it and
 resolve inside the ambient transaction. The platform tables use an RLS platform escape rather than no
 RLS, so a forgotten scope returns zero rows rather than another organization's. See

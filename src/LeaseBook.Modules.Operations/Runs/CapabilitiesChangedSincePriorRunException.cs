@@ -2,8 +2,8 @@ namespace LeaseBook.Modules.Operations.Runs;
 
 /// <summary>
 /// An earlier committed run for the SAME (org, run type, period) recorded a different money-path
-/// capability state than the one resolved at this confirm's entry (ADR-028). Raised by
-/// <see cref="RunEngine.ConfirmAsync"/> before the strategy runs, so a rejected confirm posts
+/// capability state than the one resolved at this run confirmation's entry (ADR-028). Raised by
+/// <see cref="RunEngine.ConfirmAsync"/> before the strategy runs, so a rejected run confirmation posts
 /// nothing.
 /// <para>
 /// <b>The hazard this closes, which the freeze and the preview guard do not.</b> Both of those make

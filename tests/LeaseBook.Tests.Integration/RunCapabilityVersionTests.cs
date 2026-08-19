@@ -28,16 +28,16 @@ using OrgEntity = LeaseBook.Web.Persistence.Org;
 namespace LeaseBook.Tests.Integration;
 
 /// <summary>
-/// The preview → confirm window (ADR-028 / Task 10). The freeze proven by
-/// <see cref="RunCapabilityFreezeTests"/> makes one confirm internally consistent; it says nothing
-/// about the gap BEFORE the confirm. An operator previews, reads amounts off the screen, and clicks
-/// Confirm; if the capability set moved in between, the confirm would post under a set the operator
+/// The preview → run confirmation window (ADR-028 / Task 10). The freeze proven by
+/// <see cref="RunCapabilityFreezeTests"/> makes one run confirmation internally consistent; it says nothing
+/// about the gap BEFORE the run confirmation. An operator previews, reads amounts off the screen, and clicks
+/// Confirm; if the capability set moved in between, the run confirmation would post under a set the operator
 /// never saw. The operator selected target <i>ids</i> — the <i>amounts</i> they approved were the
 /// preview's.
 /// <para>
 /// <b>Why an echoed token is not "trusting client input".</b> The client carries an opaque value back
 /// and the SERVER compares it against what it resolves itself — the same shape as an ETag /
-/// If-Match. A forged token can only cause the server to reject a confirm it would otherwise accept,
+/// If-Match. A forged token can only cause the server to reject a run confirmation it would otherwise accept,
 /// never the reverse: the guard's only privilege is to say no.
 /// </para>
 /// <para>
@@ -95,7 +95,7 @@ public sealed class RunCapabilityVersionTests(PostgresFixture fixture)
 
             response.StatusCode.ShouldBe(
                 HttpStatusCode.Conflict,
-                "a capability set that moved between preview and confirm must reject the confirm");
+                "a capability set that moved between preview and run confirmation must reject the run confirmation");
 
             var problem = await response.Content.ReadFromJsonAsync<JsonElement>(ct);
             problem.GetProperty("code").GetString().ShouldBe("capabilities_changed");
@@ -103,7 +103,7 @@ public sealed class RunCapabilityVersionTests(PostgresFixture fixture)
                 "the rejection must travel on the ADR-025 contract, not a hand-rolled shape");
 
             // Nothing posted: the guard runs before the strategy, and the throw rolls the request
-            // transaction back. A rejected confirm that half-posted would be worse than no guard.
+            // transaction back. A rejected run confirmation that half-posted would be worse than no guard.
             (await RunCountAsync(setup.OrgId, ct)).ShouldBe(0);
         }
         finally

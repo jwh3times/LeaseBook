@@ -172,7 +172,7 @@ public sealed class RunCapabilityPeriodTests(PostgresFixture fixture)
                 "the rejection must travel on the ADR-025 contract, not a hand-rolled shape");
 
             // Run 1 committed; run 2 posted nothing at all. The guard runs before the strategy and the
-            // throw rolls the request transaction back — a rejected confirm that half-posted would be
+            // throw rolls the request transaction back — a rejected run confirmation that half-posted would be
             // worse than no guard.
             (await RunCountAsync(setup.OrgId, ct)).ShouldBe(1);
         }
