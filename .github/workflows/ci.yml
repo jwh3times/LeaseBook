@@ -61,7 +61,7 @@ jobs:
       # it compares the model to the last migration's snapshot — and reuses the Release build above.
       - run: dotnet tool restore
       - name: Verify no EF model changes are missing a migration
-        run: dotnet ef migrations has-pending-model-changes --project src/LeaseBook.Web --no-build --configuration Release
+        run: dotnet ef migrations has-pending-model-changes --project src/LeaseBook.Web --context AppDbContext --no-build --configuration Release
       # Runs unit, architecture, and Testcontainers-backed integration tests (Docker is on the runner).
       # The schema guard + tenant-isolation pack run here against a fresh Postgres 18 container.
       # xUnit's MTP v2 TRX reporter writes one result file per test project. Pin the destination
@@ -180,7 +180,7 @@ jobs:
       # project.assets.json exists (the design-time build does not restore on its own).
       - run: dotnet restore src/LeaseBook.Web
       - name: Apply migrations as the migrator role
-        run: dotnet ef database update --project src/LeaseBook.Web
+        run: dotnet ef database update --project src/LeaseBook.Web --context AppDbContext
         env:
           ConnectionStrings__Migrations: Host=localhost;Port=5432;Database=leasebook;Username=leasebook_migrator;Password=dev_migrator_pw
 
@@ -219,7 +219,7 @@ jobs:
       - run: dotnet tool restore
       - run: dotnet restore src/LeaseBook.Web
       - name: Apply migrations as the migrator role
-        run: dotnet ef database update --project src/LeaseBook.Web
+        run: dotnet ef database update --project src/LeaseBook.Web --context AppDbContext
         env:
           ConnectionStrings__Migrations: Host=localhost;Port=5432;Database=leasebook;Username=leasebook_migrator;Password=dev_migrator_pw
       - name: Seed the load fixture (app role; the pm_income pin verifies inside the seeder)
@@ -267,7 +267,7 @@ jobs:
       - run: dotnet tool restore
       - run: dotnet restore src/LeaseBook.Web
       - name: Apply migrations as the migrator role
-        run: dotnet ef database update --project src/LeaseBook.Web
+        run: dotnet ef database update --project src/LeaseBook.Web --context AppDbContext
         env:
           ConnectionStrings__Migrations: Host=localhost;Port=5432;Database=leasebook;Username=leasebook_migrator;Password=dev_migrator_pw
       - name: Seed demo + cutover orgs (app role)

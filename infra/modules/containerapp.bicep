@@ -29,9 +29,16 @@ param migrationsSecretUri string = ''
 @description('Full Key Vault secret URI holding the leasebook_app connection string, e.g. https://lb-prod-kv.vault.azure.net/secrets/connectionstrings-default. Consumed by the capabilities job (ADR-028), which runs the app image as the app role. Empty until the operator has bootstrapped the Postgres roles and stored the secret — see infra/db/azure-bootstrap.md.')
 param defaultSecretUri string = ''
 
+// F8 / ADR-041: versionless Key Vault key URI that wraps the Data Protection keyring. Empty leaves
+// the keyring durable but unwrapped, which the app warns about at boot in Production.
+param dataProtectionKeyUri string = ''
+
 var isProd = env == 'prod'
 var acrPullRoleId = '7f951dda-4ed3-4680-a7ca-43fe172d538d'
 var keyVaultSecretsUserRoleId = '4633458b-17de-408a-b874-0445c86b69e6'
+// Key Vault Crypto User — wrap/unwrap only. Deliberately not Crypto Officer: the app must be able to
+// use the key and never to create, rotate or delete one.
+var keyVaultCryptoUserRoleId = '12338af0-0e69-4776-bea7-57ae8d297424'
 var usePrivateNetworking = !empty(infrastructureSubnetId)
 var haveMigrationsSecret = !empty(migrationsSecretUri)
 var haveDefaultSecret = !empty(defaultSecretUri)
@@ -91,6 +98,16 @@ resource keyVaultSecretsUser 'Microsoft.Authorization/roleAssignments@2022-04-01
   name: guid(keyVault.id, identity.id, keyVaultSecretsUserRoleId)
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', keyVaultSecretsUserRoleId)
+    principalId: identity.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource keyVaultCryptoUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  scope: keyVault
+  name: guid(keyVault.id, identity.id, keyVaultCryptoUserRoleId)
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', keyVaultCryptoUserRoleId)
     principalId: identity.properties.principalId
     principalType: 'ServicePrincipal'
   }
@@ -180,12 +197,21 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             cpu: json('0.5')
             memory: '1Gi'
           }
-          env: [
+          env: concat([
             {
               name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
               secretRef: 'appinsights-connection-string'
             }
-          ]
+          ], empty(dataProtectionKeyUri) ? [] : [
+            // F8 / ADR-041. Not a secret: a key URI is an identifier, and reaching the key still
+            // requires the managed identity's Key Vault Crypto User grant. Absent, the app still
+            // persists its keyring durably to Postgres — it just warns at boot that the key material
+            // is unwrapped.
+            {
+              name: 'DataProtection__KeyVaultKeyUri'
+              value: dataProtectionKeyUri
+            }
+          ])
           // All three probe types, declared explicitly. Two endpoints, three jobs.
           //
           // /api/health/ready is 503 until BOTH of its preconditions hold (ADR-028 §9): the capability

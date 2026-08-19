@@ -65,6 +65,7 @@ form, write it, and add a row to the index below. When a decision is replaced, m
 | [038](ADR-038-derived-financial-standing-and-occupancy.md)           | Derive tenant financial standing and unit occupancy                             | Accepted                               | 2026-08-17 |
 | [039](ADR-039-durable-actor-attribution.md)                          | Actor attribution is durable                                                    | Accepted                               | 2026-08-18 |
 | [040](ADR-040-statement-delivery-history.md)                         | Statement delivery is an append-only history                                    | Accepted                               | 2026-08-18 |
+| [041](ADR-041-durable-keyring-and-proxy-trust.md)                    | The keyring is durable, and proxy trust is declared                             | Accepted                               | 2026-08-18 |
 
 ## Status legend
 

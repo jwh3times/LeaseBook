@@ -88,7 +88,7 @@ This ensures a line's `org_id` matches its referenced entity's `org_id` at the c
 ### Naming
 
 ```
-dotnet ef migrations add <MilestonePrefix>_<DescriptiveName>
+dotnet ef migrations add <MilestonePrefix>_<DescriptiveName> --project src/LeaseBook.Web --context AppDbContext
 # Examples:
 # M5_AddStatementDeliveryTable
 # M8_AddMfaRequiredColumn

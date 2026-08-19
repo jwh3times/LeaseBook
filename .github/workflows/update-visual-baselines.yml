@@ -47,7 +47,7 @@ jobs:
       - run: dotnet tool restore
       - run: dotnet restore src/LeaseBook.Web
       - name: Apply migrations as the migrator role
-        run: dotnet ef database update --project src/LeaseBook.Web
+        run: dotnet ef database update --project src/LeaseBook.Web --context AppDbContext
         env:
           ConnectionStrings__Migrations: Host=localhost;Port=5432;Database=leasebook;Username=leasebook_migrator;Password=dev_migrator_pw
       - name: Seed demo + cutover orgs

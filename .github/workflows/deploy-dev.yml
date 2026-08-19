@@ -67,7 +67,7 @@ jobs:
         run: |
           dotnet tool restore
           dotnet restore src/LeaseBook.Web
-          dotnet ef database update --project src/LeaseBook.Web
+          dotnet ef database update --project src/LeaseBook.Web --context AppDbContext
         env:
           ConnectionStrings__Migrations: ${{ secrets.MIGRATIONS_CONNECTION_STRING }}
 

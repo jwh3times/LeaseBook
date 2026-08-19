@@ -28,7 +28,17 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Security
 
-- _Nothing yet._
+- **Two-factor enrollment now survives a redeploy.** The keys that encrypt authenticator secrets and
+  recovery codes are stored with the rest of the data instead of inside the running container, so
+  restarting or redeploying the application no longer risks making every enrolled user's second factor
+  unreadable — which would have locked those accounts out of sign-in with no way back. Where the
+  deployment supplies one, a separate managed key now protects those keys in turn, so they are not
+  readable from the database alone.
+- **Per-client sign-in throttling can now be configured correctly behind a proxy.** The application can
+  be told which proxy to believe about a request's origin, which is what lets the sign-in rate limit
+  count each client separately rather than lumping everyone together. It is off until a deployment
+  names its proxy, refuses to start if it is switched on without one, and says so at startup while it
+  remains unset.
 
 ## [0.9.0] - 2026-08-18
 
