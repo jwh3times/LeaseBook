@@ -47,6 +47,9 @@ a Key Vault secret (resolved via the app's managed identity):
 | `APPLICATIONINSIGHTS_CONNECTION_STRING` | App Insights (module output)         | telemetry exporter                                                        |
 | `AllowedHosts`                          | app setting, supplied at deploy time | ASP.NET Core host filtering (`HostFilteringMiddleware`)                   |
 | `LEASEBOOK_OPERATOR`                    | supplied per job execution           | the capabilities job — names the accountable party on every audit row     |
+| `DataProtection__KeyVaultKeyUri`        | Key Vault key (module output)        | wraps the Data Protection keyring (ADR-041)                               |
+| `ForwardedHeaders__Enabled`             | app setting, supplied at deploy time | whether to honour `X-Forwarded-*` from the ingress (ADR-041)              |
+| `ForwardedHeaders__KnownNetworks__0`    | app setting, supplied at deploy time | the ingress network, CIDR — required when the above is `true`             |
 
 The two connection strings are **different credentials and must stay so**: the migrator job holds
 schema-owner rights on `public`, the capabilities job holds only the app role's DML under RLS's
@@ -62,6 +65,19 @@ Real role passwords live in Key Vault only; `infra/db/bootstrap.sql` dev passwor
 `AllowedHosts` in `appsettings.Production.json` ships as an empty placeholder — the real deploy must
 set it to the production hostname(s), semicolon-separated (e.g. `app.leasebook.com;www.leasebook.com`),
 as a Container Apps app setting / env var.
+
+Two more settings follow that same supplied-at-deploy-time pattern (ADR-041):
+
+`DataProtection__KeyVaultKeyUri` is wired from the vault module's output, so a full `main.bicep` apply
+sets it. It wraps the Data Protection keyring, which persists to Postgres either way — so the app
+starts without it, and logs a Production startup warning naming what is missing.
+
+`ForwardedHeaders__Enabled` ships **false** and must stay false until the ingress network is named in
+`ForwardedHeaders__KnownNetworks__0` (CIDR). Enabling it without naming anything is refused at
+startup rather than accepted, because the framework would then trust only loopback and quietly ignore
+the ingress. The app logs a Production startup warning while it is off. **First-apply step:** set both
+together, then confirm the auth rate limit partitions per client by exercising it from two distinct
+source addresses — the deployed topology is the only place that can be checked.
 
 ## Production networking
 

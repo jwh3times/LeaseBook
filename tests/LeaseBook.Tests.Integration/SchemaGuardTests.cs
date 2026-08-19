@@ -30,6 +30,10 @@ public sealed class SchemaGuardTests(PostgresFixture fixture)
                                  // that is asserted by ExpectedPlatformPolicies below. The other three
                                  // capability tables DO carry org_id and get real RLS with a platform
                                  // escape — they pass the org-scoped arm above and need no entry here.
+        "data_protection_keys",  // global-class (F8 / ADR-041): the Data Protection keyring belongs to
+                                 // the deployment, not to an organization, so it has no org_id and no
+                                 // RLS. It stores wrapped key material and its metadata — never
+                                 // organization data — and is read/written only by KeyringDbContext.
     };
 
     // The three predicates the capability migration emits, as Postgres normalizes and stores them:

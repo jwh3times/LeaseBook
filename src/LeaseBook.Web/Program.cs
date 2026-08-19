@@ -25,6 +25,8 @@ using LeaseBook.Web.Reporting;
 using LeaseBook.Web.Security;
 using LeaseBook.Web.Seeding;
 using LeaseBook.Web.Tenancy;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -116,9 +118,80 @@ builder.Services.AddDbContext<AppDbContext>(options => options
 // Identity, cookie auth, antiforgery, deny-by-default authorization (P12).
 builder.Services.AddLeaseBookIdentity(builder.Environment);
 
-// F6: keyring for the Identity token-store encryption converter (EncryptedStringConverter). Dev/test
-// use the default persisted keyring; at go-live the keys move to Key Vault (infra follow-up).
-builder.Services.AddDataProtection();
+// F6/F8 (ADR-041): keyring for the Identity token-store encryption converter
+// (EncryptedStringConverter). It persists to Postgres in EVERY environment, because the default
+// filesystem keyring does not survive a container recreate — and losing it makes every enrolled
+// user's TOTP secret permanently undecryptable. KeyringDbContext is deliberately its own context;
+// see its class doc for the two reasons AppDbContext cannot be one.
+builder.Services.AddDbContext<KeyringDbContext>(options => options
+    .UseNpgsql(builder.Configuration.GetConnectionString("Default"),
+        npgsql => npgsql.SetPostgresVersion(18, 0))
+    .UseSnakeCaseNamingConvention());
+
+var dataProtection = builder.Services.AddDataProtection()
+    // Pinned rather than derived from the content root: the discriminator must stay identical across
+    // container revisions or a new revision silently starts a fresh keyring and cannot read the old
+    // rows — the same lockout this whole change exists to prevent.
+    .SetApplicationName("LeaseBook");
+
+// The isOpenApiBuild carve-out covers the WHOLE keyring, not just the Key Vault wrap. The ADR-012
+// schema-drift build runs Program to app.Run() with no ASPNETCORE_ENVIRONMENT — so
+// appsettings.Production.json applies with no connection string and no Azure identity — and startup
+// does read the key ring. Persisting to Postgres there fails with "an error occurred while reading
+// the key ring" rather than emitting a document. That build produces a schema and needs no durable
+// keys, so it keeps the in-memory default.
+if (!isOpenApiBuild)
+{
+    dataProtection.PersistKeysToDbContext<KeyringDbContext>();
+
+    // Wrapping the persisted keys with a Key Vault key is supplied by deployment config. Without it
+    // the key XML sits in the same database as the ciphertext it protects — acceptable for dev and
+    // test, and NOT for production, which is why an unset URI warns at boot (see below, ADR-041).
+    var keyVaultKeyUri = builder.Configuration["DataProtection:KeyVaultKeyUri"];
+    if (!string.IsNullOrWhiteSpace(keyVaultKeyUri))
+    {
+        dataProtection.ProtectKeysWithAzureKeyVault(
+            new Uri(keyVaultKeyUri), new Azure.Identity.DefaultAzureCredential());
+    }
+}
+
+// F9 (ADR-041): whom to believe for X-Forwarded-*. Off by default — a direct-connect environment
+// must not honour a header the client itself can set. Resolve() throws on an enabled-but-empty
+// configuration rather than degrading to loopback-only, which would leave the per-IP rate-limit
+// partition collapsed while looking configured.
+// isOpenApiBuild short-circuit for the same reason as the Key Vault wrap above: that build resolves
+// as Production, and Resolve() is deliberately throwing rather than forgiving.
+var forwardedHeaders = isOpenApiBuild
+    ? new ForwardedHeadersSettings()
+    : builder.Configuration
+        .GetSection(ForwardedHeadersSettings.SectionName)
+        .Get<ForwardedHeadersSettings>() ?? new ForwardedHeadersSettings();
+var (knownProxies, knownNetworks) = forwardedHeaders.Resolve();
+
+if (forwardedHeaders.Enabled)
+{
+    builder.Services.Configure<ForwardedHeadersOptions>(options =>
+    {
+        // Proto as well as For: the app must know the original scheme to emit secure cookies and
+        // correct redirects behind TLS termination.
+        options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+        options.ForwardLimit = forwardedHeaders.ForwardLimit;
+
+        // Replace the defaults rather than adding to them: the framework pre-trusts loopback, and
+        // leaving that in place would widen the trust set beyond what deployment config named.
+        options.KnownProxies.Clear();
+        options.KnownIPNetworks.Clear();
+        foreach (var proxy in knownProxies)
+        {
+            options.KnownProxies.Add(proxy);
+        }
+
+        foreach (var network in knownNetworks)
+        {
+            options.KnownIPNetworks.Add(network);
+        }
+    });
+}
 
 // WP-5 F3b: config-gated MFA enforcement for PMAdmin (default off; Production turns it on).
 builder.Services.Configure<LeaseBook.Web.Auth.AuthOptions>(builder.Configuration.GetSection("Auth"));
@@ -408,6 +481,38 @@ if (!isOpenApiBuild && builder.Configuration.GetValue<bool>("Jobs:Enabled"))
 }
 
 var app = builder.Build();
+
+// F9: must run before anything that reads RemoteIpAddress — the rate limiter partitions on it.
+if (forwardedHeaders.Enabled)
+{
+    app.UseForwardedHeaders();
+}
+
+// Both F8's key wrap and F9's proxy trust are supplied by deployment config, not by a committed
+// file — the same posture as AllowedHosts. Neither can be validated before an environment exists,
+// so say so at boot instead of letting a half-configured production look healthy. An unconfigured
+// gap that nothing announces is the failure mode both findings were opened for.
+if (app.Environment.IsProduction() && !isOpenApiBuild)
+{
+    var startupLog = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Startup");
+
+    if (string.IsNullOrWhiteSpace(app.Configuration["DataProtection:KeyVaultKeyUri"]))
+    {
+        startupLog.LogWarning(
+            "DataProtection:KeyVaultKeyUri is not set. The keyring is durable (it persists to " +
+            "Postgres) but its key material is unwrapped, so it sits in the same database as the " +
+            "data it protects. Set the Key Vault key URI before go-live.");
+    }
+
+    if (!forwardedHeaders.Enabled)
+    {
+        startupLog.LogWarning(
+            "{Section}:Enabled is false in Production. Per-client rate-limit partitioning falls back " +
+            "to the connection address, which behind an ingress proxy is the proxy — one shared " +
+            "partition for every client. Name the ingress before go-live.",
+            ForwardedHeadersSettings.SectionName);
+    }
+}
 
 app.UseExceptionHandler();
 

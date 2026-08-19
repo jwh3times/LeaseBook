@@ -1,4 +1,5 @@
 using LeaseBook.Web.Persistence;
+using LeaseBook.Web.Security;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -39,6 +40,16 @@ public sealed class ApiFactory(
             services.RemoveAll<DbContextOptions<AppDbContext>>();
             services.RemoveAll<DbContextOptions>();
             services.AddDbContext<AppDbContext>(options => options
+                .UseNpgsql(appConnectionString, npgsql => npgsql.SetPostgresVersion(18, 0))
+                .UseSnakeCaseNamingConvention());
+
+            // The Data Protection keyring context (F8 / ADR-041) needs the same redirection, and for
+            // the same reason as the Hangfire caveat above: Program registers it from
+            // ConnectionStrings:Default, so without this the booted host encrypts against the
+            // developer's local database while every other read goes to the container. That is not a
+            // test-only wart — it silently splits the keyring from the data it protects.
+            services.RemoveAll<DbContextOptions<KeyringDbContext>>();
+            services.AddDbContext<KeyringDbContext>(options => options
                 .UseNpgsql(appConnectionString, npgsql => npgsql.SetPostgresVersion(18, 0))
                 .UseSnakeCaseNamingConvention());
         });

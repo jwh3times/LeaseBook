@@ -4,6 +4,9 @@
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
     <PackageReference Include="EFCore.NamingConventions" />
     <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" />
+    <PackageReference Include="Azure.Extensions.AspNetCore.DataProtection.Keys" />
+    <PackageReference Include="Azure.Identity" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
     <!-- Align Relational with the pinned EF Core 10.0.9 (provider floor is lower). -->
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />

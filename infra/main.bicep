@@ -113,6 +113,8 @@ module app 'modules/containerapp.bicep' = {
     acrLoginServer: registry.outputs.loginServer
     acrName: registry.outputs.name
     keyVaultName: vault.outputs.name
+    // F8 / ADR-041: wraps the Postgres-persisted Data Protection keyring.
+    dataProtectionKeyUri: vault.outputs.dataProtectionKeyUri
     appInsightsConnectionString: monitoring.outputs.appInsightsConnectionString
     logAnalyticsCustomerId: monitoring.outputs.logAnalyticsCustomerId
     logAnalyticsWorkspaceId: monitoring.outputs.logAnalyticsWorkspaceId

@@ -48,15 +48,19 @@ public sealed class StatementDeliveryBackfillTests : IAsyncLifetime
 
         await using var db = fixture.CreateContext(fixture.MigratorConnectionString);
         var migrations = db.Database.GetMigrations().ToList();
-        var newest = migrations[^1];
-        var previous = migrations[^2];
 
-        newest.ShouldEndWith(
-            "M8_SplitStatementDeliveryIntoArtifactAttemptEvents",
-            customMessage: "this test hand-writes the pre-ADR-040 statement_deliveries shape, so it is only " +
-            "meaningful while that migration is the newest one. Once a later migration lands, either " +
-            "pin this to the ADR-040 migration by name or retire it — do not let it silently assert " +
-            "against someone else's schema.");
+        // Pinned by NAME, not by position. This test hand-writes the pre-ADR-040 statement_deliveries
+        // shape, so it must roll to exactly the migration that consumed it — an earlier version keyed
+        // off "newest" and started failing the moment an unrelated migration landed on top, which is
+        // the guard working rather than a flake.
+        var target = migrations.SingleOrDefault(
+            m => m.EndsWith("M8_SplitStatementDeliveryIntoArtifactAttemptEvents", StringComparison.Ordinal));
+        target.ShouldNotBeNull(
+            "the ADR-040 migration is gone from the history; retire this test with it");
+
+        var index = migrations.IndexOf(target!);
+        index.ShouldBeGreaterThan(0, "the ADR-040 migration must have a predecessor to roll back to");
+        var previous = migrations[index - 1];
 
         var migrator = db.GetService<IMigrator>();
         await migrator.MigrateAsync(previous, ct);
@@ -93,8 +97,8 @@ public sealed class StatementDeliveryBackfillTests : IAsyncLifetime
         }
 
         await Should.NotThrowAsync(
-            () => migrator.MigrateAsync(newest, ct),
-            $"'{newest}' failed to apply over existing statement_deliveries rows.");
+            () => migrator.MigrateAsync(target!, ct),
+            $"'{target}' failed to apply over existing statement_deliveries rows.");
 
         // ── Read back through the app role under org context ──────────────────────────────
         await using var connection = await fixture.OpenAppConnectionAsync(ct);

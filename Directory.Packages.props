@@ -29,6 +29,11 @@
     <PackageVersion Include="EFCore.NamingConventions" Version="10.0.1" />
     <!-- ASP.NET Core Identity EF stores (P12). Identity runtime itself is in the shared framework. -->
     <PackageVersion Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.11" />
+    <!-- F8: the Data Protection keyring persists to Postgres (ADR-041) so it survives a container
+         recreate; the Azure package wraps those keys with a Key Vault key in Production only. -->
+    <PackageVersion Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" Version="10.0.11" />
+    <PackageVersion Include="Azure.Extensions.AspNetCore.DataProtection.Keys" Version="1.6.4" />
+    <PackageVersion Include="Azure.Identity" Version="1.21.0" />
     <!-- Built-in OpenAPI document (P11); the SPA generates its TS client from it (WP-08). -->
     <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.11" />
     <!-- Transitive of Microsoft.AspNetCore.OpenApi. Pinned to 2.7.5 (the patched release) to clear

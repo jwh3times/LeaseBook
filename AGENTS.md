@@ -115,8 +115,8 @@ Run `dotnet tool restore` once for `dotnet-ef`.
 
 - Local Postgres: `./scripts/dev.ps1 up`, `down`, `reset-db`, or `psql`
 - Full stack in Docker: `./scripts/dev.ps1 app-up`, `app-down`, or `app-logs`
-- Add migration: `dotnet ef migrations add <Name> --project src/LeaseBook.Web`
-- Apply migrations as migrator role: `dotnet ef database update --project src/LeaseBook.Web`
+- Add migration: `dotnet ef migrations add <Name> --project src/LeaseBook.Web --context AppDbContext`
+- Apply migrations as migrator role: `dotnet ef database update --project src/LeaseBook.Web --context AppDbContext`
 - Seed demo org: `$env:ASPNETCORE_ENVIRONMENT='Development'; dotnet run --project src/LeaseBook.Web -- seed --org demo`
 - Check invariants: `$env:ASPNETCORE_ENVIRONMENT='Development'; dotnet run --project src/LeaseBook.Web -- check-invariants --org demo`
 - Check all org invariants: `$env:ASPNETCORE_ENVIRONMENT='Development'; dotnet run --project src/LeaseBook.Web -- check-invariants --all`
