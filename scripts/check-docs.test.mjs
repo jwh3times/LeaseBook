@@ -165,3 +165,12 @@ test("reviewIsStale flags an edit after the review date but tolerates a one-day 
   assert.equal(reviewIsStale(null, "2026-08-18"), false);
   assert.equal(reviewIsStale("2026-08-18", null), false);
 });
+
+test("a review date cannot be back-dated, because recording it is itself an edit", () => {
+  // Learned the hard way: the first version of this change set perf.md's date to 2026-08-10, the day
+  // its content was actually corrected. That commit touched the file, so its last-commit date became
+  // the day the date was written — and the rule failed the very document it had just been told was
+  // reviewed. `Last reviewed` records when a review was RECORDED, never when it happened.
+  assert.equal(reviewIsStale("2026-08-10", "2026-08-19"), true);
+  assert.equal(reviewIsStale("2026-08-19", "2026-08-19"), false);
+});
