@@ -40,17 +40,24 @@ them directly; do not trust summaries, including this one, for current progress.
   - The platform capability seam (ADR-028): feature flags plus per-org entitlements and cohorts behind
     one gate, resolved over a source-code registry, gating reachability only and never money. Its
     write surface is the `capabilities` CLI verb — no endpoint, no UI — which production reaches
-    through a manual-trigger Container Apps job. Bulk runs freeze their capability set at confirm
-    entry, and `/api/health/ready` splits readiness from liveness. Nothing in it is
+    through a manual-trigger Container Apps job. Bulk runs freeze their capability set at
+    run-confirmation entry, and `/api/health/ready` splits readiness from liveness. Nothing in it is
     deployment-validated; Azure stays operator-gated.
+  - The durable Data Protection keyring and declarable proxy trust (ADR-041). The keyring persists to
+    Postgres in every environment and is wrapped by a Key Vault key wherever deployment config names
+    one, so it is not tied to a container's filesystem. `ForwardedHeaders` trust is declared in
+    configuration, refused at startup when enabled without a named proxy, and ships off until an
+    operator names the ingress. Neither the wrap nor the ingress naming is deployment-validated.
 
   Remaining M8 work is summarized publicly in `docs/ROADMAP.md`; detailed sequencing lives in
   `private/roadmap.md` and `private/TODO.md`, with `private/TODO.md` canonical where they disagree.
 
 - Operator-gated remainder is deferred and is not ordinary engineering work: Azure OIDC federation,
   ACR, enabling the authored `deploy-dev`/`deploy-prod` workflows, live Key Vault and managed
-  identity, the first PITR drill, and deployment-dependent telemetry and alerting — including alert
-  delivery for the sweep's violation events.
+  identity, the first PITR drill, deployment-dependent telemetry and alerting — including alert
+  delivery for the sweep's violation events — and the two ADR-041 first-apply steps: naming the
+  ingress network so forwarded-header trust can be enabled and verified, and confirming the keyring's
+  Key Vault wrap engages.
 - `Accounting`, `Directory`, `Banking`, `Reporting`, `Operations`, `Capabilities`, and `Migrator` are
   built. `Payments` is the remaining scaffolded shell for Phase 2.
 

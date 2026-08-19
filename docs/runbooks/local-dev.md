@@ -105,9 +105,11 @@ Notes:
 - **Port already in use?** Override with `LEASEBOOK_APP_PORT` (app) or `LEASEBOOK_DB_PORT` (db), e.g.
   `$env:LEASEBOOK_APP_PORT='8090'; ./scripts/dev.ps1 app-up`.
 - **Rebuild after code changes:** `app-up` always passes `--build`, so re-running it picks up changes.
-- **Auth across restarts:** DataProtection keys are ephemeral in the container, so the auth/antiforgery
-  cookies reset when the app container is recreated — just sign in again. (Real environments persist
-  keys; not worth the volume-permission friction for a local demo.)
+- **Auth across restarts:** the Data Protection keyring persists to Postgres in every environment
+  ([ADR-041](../adr/ADR-041-durable-keyring-and-proxy-trust.md)), so auth/antiforgery cookies survive
+  an app-container recreate — but not a `reset-db`, which drops the keyring with the rest of the
+  schema. Sign in again after a reset. Wrapping the keys with a Key Vault key is deployment config
+  (`DataProtection:KeyVaultKeyUri`) and is unset locally.
 - The full stack is **dev-only** and uses the placeholder passwords from `infra/db/bootstrap.sql`. Real
   environments use Azure Flexible Server + Key Vault + managed identity (`infra/`).
 
@@ -138,7 +140,7 @@ Restore the local tool manifest once (`dotnet tool restore`), then apply migrati
 **migrator** role (the design-time factory uses `ConnectionStrings:Migrations`):
 
 ```bash
-dotnet ef database update --project src/LeaseBook.Web
+dotnet ef database update --project src/LeaseBook.Web --context AppDbContext
 ```
 
 Seed the demo org (`Tarheel Property Group`) and its admin — idempotent, safe to re-run:

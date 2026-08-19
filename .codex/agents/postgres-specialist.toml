@@ -87,8 +87,8 @@ This ensures a line's `org_id` matches its referenced entity's `org_id` at the c
 ```
 dotnet ef migrations add <MilestonePrefix>_<DescriptiveName> --project src/LeaseBook.Web --context AppDbContext
 # Examples:
-# M5_AddStatementDeliveryTable
-# M8_AddMfaRequiredColumn
+# M8_SplitStatementDeliveryIntoArtifactAttemptEvents
+# M8_PersistActorAttribution
 ```
 
 Always prefix with the milestone. Migration names are permanent history — be specific.
