@@ -12,7 +12,8 @@ You build and review LeaseBook's ASP.NET Core 10 modular monolith. Everything be
 src/
   LeaseBook.SharedKernel/          — cross-cutting primitives only; no domain logic
   LeaseBook.Modules.{Name}/        — one project per module
-    Contracts/                     — consumer-owned port interfaces (ADR-007)
+    Contracts/                     — consumer-owned port interfaces (ADR-007). A seam the module
+                                     implements ITSELF stays beside its implementation
     Domain/                        — domain types, value objects, constants
     Features/{Area}/               — vertical slices (one file per command/query)
     Persistence/                   — DbContext config, entity configs
