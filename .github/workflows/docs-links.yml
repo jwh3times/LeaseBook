@@ -24,7 +24,8 @@ jobs:
   lychee:
     name: Link check (lychee)
     runs-on: ubuntu-latest
-    # Typically ~10 s, but it is the one job here that talks to arbitrary third-party hosts.
+    # Talks to arbitrary third-party hosts, so it is the one job whose failures can originate
+    # outside the repository. See the concurrency note on the args below.
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
@@ -57,9 +58,26 @@ jobs:
           # Explicit include list = the tracked docs set (never node_modules/bin/obj strays).
           # --include-fragments validates intra-repo #anchor links.
           # localhost/loopback URLs are dev-runbook examples, not checkable links.
+          # --max-concurrency: lychee defaults to 128, firing every link at once. Several docs
+          # cite the same host repeatedly (CODE_OF_CONDUCT.md alone has five contributor-covenant.org
+          # links), so the default turns one host into a burst of simultaneous connections from a
+          # datacenter IP — which reads as scraping and gets the TCP connection reset rather than a
+          # 429 we could accept. That is the failure this cap addresses: `Connection reset by peer
+          # (os error 104)`, which failed three of four runs on PRs #233/#234 while the same URL
+          # answered 301 from a laptop. 16 keeps the sweep well under a minute.
+          #
+          # --retry-wait-time: lychee already retries 3x, but at 1 s apart all three land inside the
+          # same throttling window. 3 s spreads them across ~9 s instead.
+          #
+          # Deliberately NOT an --exclude: muting the URL would also stop reporting it when it
+          # genuinely rots, and this repository does not add open-ended ignores without an un-mute
+          # signal. If resets persist despite this, the next step is a scoped exclude PLUS a check
+          # that fails when the excluded link starts working again.
           args: >-
             --no-progress
             --include-fragments
+            --max-concurrency 16
+            --retry-wait-time 3
             --accept '200..=299, 429'
             --exclude '^https?://(localhost|127\.0\.0\.1)'
             --exclude '${{ steps.release-links.outputs.compare }}'

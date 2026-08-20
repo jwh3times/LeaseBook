@@ -137,7 +137,7 @@ Contributor Covenant is stewarded by the Organization for Ethical Source and lic
 [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
 
 For answers to common questions about Contributor Covenant, see the
-[FAQ](https://www.contributor-covenant.org/faq).
-[Translations](https://www.contributor-covenant.org/translations) are also available, along with
-additional [enforcement and community guideline resources](https://www.contributor-covenant.org/resources).
+[FAQ](https://www.contributor-covenant.org/faq/).
+[Translations](https://www.contributor-covenant.org/translations/) are also available, along with
+additional [enforcement and community guideline resources](https://www.contributor-covenant.org/resources/).
 The enforcement ladder was inspired by the work of Mozilla's code of conduct team.
