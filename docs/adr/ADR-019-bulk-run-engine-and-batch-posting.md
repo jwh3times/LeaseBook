@@ -168,6 +168,45 @@ Accounting's reserve-floor guard runs on `OwnerDisbursed` and nothing else; the 
 reaching a rent or late-fee posting would mean something is wrong in the layer below, and a
 uniformly-applied catch would file that away as an ordinary per-item exclusion on the money path.
 
+### 4c. A strategy states each rule once; preview and plan project it (amendment, 2026-08-20)
+
+§4b removed the duplication _between_ strategies. This removes the duplication _inside_ one: rent and
+late fee each derived eligibility twice — once in `PreviewAsync`, once in `PlanAsync` — and the two
+copies had to be kept in step by hand. Each now has a private, pure `Decide(...)` that takes
+already-fetched data and returns a closed two-case decision (charge, or ineligible), which both paths
+project.
+
+**What this is not.** It is emphatically not "compute once and reuse". Confirm must still evaluate
+fresh data, and it does: each path fetches independently and hands the result to `Decide`. The
+function is pure precisely so that sharing the _rules_ cannot become sharing the _data_ — a canonical
+decision that cached its inputs would reintroduce the staleness the re-fetch exists to prevent.
+
+**Why it was worth doing.** The duplication was not theoretical. ADR-033 added the NC §42-46 clamp
+`Math.Max(5, policy.GraceDays)` to both paths by hand in a single commit, and the test suite drove
+only one of them: deleting the clamp from the _preview_ copy left 75 unit and 7 integration tests
+green while the operator was shown a lease as chargeable four days before it legally was. The same
+held for rent's zero-rent test. Both are now single statements, and the pre-existing plan-side tests
+fail when either is broken.
+
+**Scope, and why disbursement was left alone.** Disbursement already had the property — one
+`DisbursementAmounts.Compute` shared by both paths, and the same reason strings on both sides — and
+its preview branches were already test-pinned. It is the in-repo precedent this amendment generalizes
+rather than a third site to change.
+
+**Two things deliberately kept out of the decision.** The _amount_ was already canonical everywhere
+(`Proration.Charge`, `LateFeeCalculator.Compute`, `DisbursementAmounts.Compute`). The _source ref_
+stays strategy-owned for the reason §2 already gives — deriving prefixes from `RunType` would rewrite
+two of the four keys and break idempotency against committed runs, silently, as duplicate postings.
+Rent's already-charged test also stays per-path: preview reports the `source_ref` hit as well as the
+cross-source guard so the operator sees "this will be skipped" before selecting, while plan leaves
+that half to the unique index. Both converge on `Skipped`; only the display is eager.
+
+**The vocabulary is part of the decision.** An ineligible result carries the machine `code` the run
+log records _and_ the sentence the operator reads, constructed together at the point the condition is
+recognised. They had drifted into two parallel vocabularies stated in two loops — preview emitting
+prose and dropping the row, plan emitting a snake_case code and recording it — which is how one path
+can start disagreeing with the other without either looking wrong on its own.
+
 ### 5. Audit seam
 
 The run engine does **not** call any explicit audit API. `AppDbContext.SaveChangesAsync` writes one

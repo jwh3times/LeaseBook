@@ -12,6 +12,16 @@ namespace LeaseBook.Modules.Operations.Runs;
 /// owns the posting loop, the outcome-to-status mapping, item construction and persistence
 /// (ADR-019 §4, amended 2026-08-09).
 /// </para>
+/// <para>
+/// <b>State each rule once (ADR-019 §4c).</b> The two methods are two projections of one set of
+/// rules, not two implementations of them. Give the strategy a private, pure <c>Decide(...)</c> over
+/// already-fetched data and let both methods project its result — including the exclusion vocabulary,
+/// where the machine code and the operator-facing sentence belong to the same construction.
+/// <see cref="PlanAsync"/> must still read its own fresh data and hand it in; sharing the rules must
+/// never become sharing the data. Written twice instead, the copies drift: the NC §42-46 clamp was
+/// added to both paths by hand and only one of them was under test, so deleting the other left the
+/// suite green while the preview offered a lease that was not yet chargeable.
+/// </para>
 /// </summary>
 public interface IRunStrategy
 {

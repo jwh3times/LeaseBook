@@ -76,51 +76,28 @@ public sealed class LateFeeRunStrategy(
 
         foreach (var row in delinquentRows)
         {
-            Guid rentObligationEntryId;
-            switch (row.Attribution)
-            {
-                case DelinquencyAttribution.AttributedToLease attributed:
-                    rentObligationEntryId = attributed.RentObligationEntryId;
-                    break;
-                case DelinquencyAttribution.NoRentObligation:
-                    exceptions.Add($"{row.TenantName}: no open rent obligation found for {period.Key} — skipped.");
-                    continue;
-                default:
-                    throw new InvalidOperationException(
-                        $"Unknown delinquency attribution case '{row.Attribution.GetType().Name}'.");
-            }
+            policyMap.TryGetValue(row.LeaseId, out var policy);
 
-            if (!policyMap.TryGetValue(row.LeaseId, out var policy))
+            var decision = Decide(row, policy, assessmentDate, period);
+            if (decision is IneligibleForLateFee ineligible)
             {
-                exceptions.Add($"{row.TenantName}: no late-fee policy found — skipped.");
+                // Preview surfaces an ineligible lease as prose and omits the row entirely, so it
+                // cannot be selected. The wording is the decision's, not this loop's.
+                exceptions.Add(ineligible.Explanation);
                 continue;
             }
 
-            var dueDate = new DateOnly(period.Year, period.Month, policy.RentDueDay);
-            var contractualThreshold = Math.Max(5, policy.GraceDays);
-            var eligibilityDate = dueDate.AddDays(contractualThreshold);
-            var daysLate = assessmentDate.DayNumber - dueDate.DayNumber;
-
-            if (assessmentDate < eligibilityDate)
-            {
-                exceptions.Add($"{row.TenantName}: not eligible until {eligibilityDate:yyyy-MM-dd} " +
-                    $"({daysLate} late days, threshold {contractualThreshold}) — skipped.");
-                continue;
-            }
-
-            var amount = LateFeeCalculator.Compute(policy, row.Rent);
-            var key = SourceRef(rentObligationEntryId);
-            var alreadyDone = alreadyPosted.Contains(key);
+            var charge = (ChargeLateFee)decision;
 
             var detail = new Dictionary<string, string>
             {
                 ["unit"] = row.UnitLabel,
                 ["balance"] = row.Balance.ToString("F2"),
-                ["daysLate"] = daysLate.ToString(),
-                ["dueDate"] = dueDate.ToString("yyyy-MM-dd"),
+                ["daysLate"] = charge.DaysLate.ToString(),
+                ["dueDate"] = charge.DueDate.ToString("yyyy-MM-dd"),
                 ["assessmentDate"] = assessmentDate.ToString("yyyy-MM-dd"),
-                ["eligibilityDate"] = eligibilityDate.ToString("yyyy-MM-dd"),
-                ["feeKind"] = policy.Kind.ToString(),
+                ["eligibilityDate"] = charge.EligibilityDate.ToString("yyyy-MM-dd"),
+                ["feeKind"] = charge.Kind.ToString(),
                 ["monthlyRent"] = row.Rent.ToString("F2"),
             };
 
@@ -128,8 +105,8 @@ public sealed class LateFeeRunStrategy(
                 TargetKind: RunTargetKind.Lease,
                 TargetId: row.LeaseId,
                 Label: row.TenantName,
-                Amount: amount,
-                AlreadyDone: alreadyDone,
+                Amount: charge.Amount,
+                AlreadyDone: alreadyPosted.Contains(SourceRef(charge.RentObligationEntryId)),
                 ExcludedReason: null,
                 Detail: detail));
         }
@@ -164,49 +141,28 @@ public sealed class LateFeeRunStrategy(
                 continue;
             }
 
-            Guid rentObligationEntryId;
-            switch (row.Attribution)
-            {
-                case DelinquencyAttribution.AttributedToLease attributed:
-                    rentObligationEntryId = attributed.RentObligationEntryId;
-                    break;
-                case DelinquencyAttribution.NoRentObligation:
-                    plan.Add(Exclude(leaseId, RunItemStatus.Excluded, "rent_obligation_not_found"));
-                    continue;
-                default:
-                    throw new InvalidOperationException(
-                        $"Unknown delinquency attribution case '{row.Attribution.GetType().Name}'.");
-            }
+            policyMap.TryGetValue(leaseId, out var policy);
 
-            if (!policyMap.TryGetValue(leaseId, out var policy))
+            // The same decision the preview projected, re-derived from confirmation-time data. The
+            // rules are not restated here; only the recording vocabulary differs.
+            var decision = Decide(row, policy, assessmentDate, period);
+            if (decision is IneligibleForLateFee ineligible)
             {
-                plan.Add(Exclude(leaseId, RunItemStatus.Excluded, "no_policy"));
+                plan.Add(Exclude(leaseId, RunItemStatus.Excluded, ineligible.Code));
                 continue;
             }
 
-            var dueDate = new DateOnly(period.Year, period.Month, policy.RentDueDay);
-            var contractualThreshold = Math.Max(5, policy.GraceDays);
-            var eligibilityDate = dueDate.AddDays(contractualThreshold);
-
-            // Eligibility is re-established at confirmation from the contractual due date. The day
-            // after due is late day one, so due + 5 is the first statutory charge date; a lease may
-            // extend that threshold but cannot shorten it.
-            if (assessmentDate < eligibilityDate)
-            {
-                plan.Add(Exclude(leaseId, RunItemStatus.Excluded, "before_late_fee_eligibility"));
-                continue;
-            }
-
-            var amount = LateFeeCalculator.Compute(policy, row.Rent);
+            var charge = (ChargeLateFee)decision;
+            var amount = charge.Amount;
             var description = $"Late fee {period.Key} — {row.TenantName} {row.UnitLabel}";
-            var sourceRef = SourceRef(rentObligationEntryId);
+            var sourceRef = SourceRef(charge.RentObligationEntryId);
 
             plan.Add(new PlannedPosting(
                 TargetKind: RunTargetKind.Lease,
                 TargetId: leaseId,
                 Intent: new LateFeeIntent(
                     LeaseId: leaseId,
-                    RentObligationEntryId: rentObligationEntryId,
+                    RentObligationEntryId: charge.RentObligationEntryId,
                     TenantId: row.TenantId,
                     PropertyId: row.PropertyId,
                     OwnerId: row.OwnerId,
@@ -232,6 +188,109 @@ public sealed class LateFeeRunStrategy(
         static PlannedExclusion Exclude(Guid leaseId, RunItemStatus status, string reason) =>
             new(RunTargetKind.Lease, leaseId, status,
                 new Dictionary<string, object?>(StringComparer.Ordinal) { ["reason"] = reason });
+    }
+
+    // ── the decision ─────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// What this run should do about one delinquent lease. A closed hierarchy of exactly two cases,
+    /// so the cast in each caller is exhaustive in fact and not merely by convention (the same
+    /// reasoning as <see cref="RunPlanItem"/>).
+    /// </summary>
+    private abstract record LateFeeDecision
+    {
+        private protected LateFeeDecision() { }
+    }
+
+    /// <summary>Charge this lease. Carries every derived fact either projection needs.</summary>
+    private sealed record ChargeLateFee(
+        Guid RentObligationEntryId,
+        decimal Amount,
+        DateOnly DueDate,
+        DateOnly EligibilityDate,
+        int DaysLate,
+        LateFeeKind Kind) : LateFeeDecision;
+
+    /// <summary>
+    /// Do not charge this lease, and why — in <b>both</b> vocabularies at once.
+    /// <para>
+    /// <paramref name="Code"/> is the machine reason the run log records; <paramref name="Explanation"/>
+    /// is the sentence the operator reads in the preview. They are constructed together, at the single
+    /// point the condition is recognised, precisely because they had drifted into two parallel
+    /// vocabularies stated in two different loops (#199).
+    /// </para>
+    /// </summary>
+    private sealed record IneligibleForLateFee(string Code, string Explanation) : LateFeeDecision;
+
+    /// <summary>
+    /// The one statement of late-fee eligibility and amount, projected by <see cref="PreviewAsync"/>
+    /// and by <see cref="PlanAsync"/>.
+    /// <para>
+    /// <b>Pure by construction.</b> It takes data and returns a decision — it fetches nothing. That is
+    /// what lets both paths share the rules while each still reads its own data: confirm re-fetches
+    /// delinquency and policy at confirmation time and hands them here, so a canonical decision never
+    /// becomes a cached one (ADR-019).
+    /// </para>
+    /// <para>
+    /// <b>Why it exists.</b> Preview and plan previously derived the NC §42-46 threshold, the
+    /// eligibility date and the amount independently — the statutory clamp was written twice by hand,
+    /// in the same commit (ADR-033, <c>69df023</c>). Deleting <c>Math.Max(5, …)</c> from the preview
+    /// copy left the entire suite green, because every eligibility test drove the plan path. One
+    /// statement means the plan-side tests now pin what the operator is shown as well.
+    /// </para>
+    /// </summary>
+    private static LateFeeDecision Decide(
+        DelinquentLedgerRow row,
+        LateFeePolicy? policy,
+        DateOnly assessmentDate,
+        RunPeriod period)
+    {
+        var rentObligationEntryId = row.Attribution switch
+        {
+            DelinquencyAttribution.AttributedToLease attributed => attributed.RentObligationEntryId,
+            DelinquencyAttribution.NoRentObligation => (Guid?)null,
+            _ => throw new InvalidOperationException(
+                $"Unknown delinquency attribution case '{row.Attribution.GetType().Name}'."),
+        };
+
+        if (rentObligationEntryId is null)
+        {
+            return new IneligibleForLateFee(
+                "rent_obligation_not_found",
+                $"{row.TenantName}: no open rent obligation found for {period.Key} — skipped.");
+        }
+
+        if (policy is null)
+        {
+            return new IneligibleForLateFee(
+                "no_policy",
+                $"{row.TenantName}: no late-fee policy found — skipped.");
+        }
+
+        var dueDate = new DateOnly(period.Year, period.Month, policy.RentDueDay);
+
+        // NC §42-46: the day after the contractual due date is late day one, so due + 5 is the
+        // earliest permitted assessment. A lease may extend that threshold and cannot shorten it —
+        // which is what the clamp says, and why it must not be possible to state it on only one path.
+        var contractualThreshold = Math.Max(5, policy.GraceDays);
+        var eligibilityDate = dueDate.AddDays(contractualThreshold);
+        var daysLate = assessmentDate.DayNumber - dueDate.DayNumber;
+
+        if (assessmentDate < eligibilityDate)
+        {
+            return new IneligibleForLateFee(
+                "before_late_fee_eligibility",
+                $"{row.TenantName}: not eligible until {eligibilityDate:yyyy-MM-dd} " +
+                $"({daysLate} late days, threshold {contractualThreshold}) — skipped.");
+        }
+
+        return new ChargeLateFee(
+            RentObligationEntryId: rentObligationEntryId.Value,
+            Amount: LateFeeCalculator.Compute(policy, row.Rent),
+            DueDate: dueDate,
+            EligibilityDate: eligibilityDate,
+            DaysLate: daysLate,
+            Kind: policy.Kind);
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────
