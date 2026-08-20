@@ -10,7 +10,7 @@ import {
   primeCsrf,
   type PostResult,
 } from '@/api';
-import { toApiError, type ApiError } from '@/lib/apiError';
+import { toApiError, type ApiError } from '@/api';
 
 export type { PostResult };
 

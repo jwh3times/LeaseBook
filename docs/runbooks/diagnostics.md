@@ -3,7 +3,7 @@
 - **Audience:** Operators and maintainers
 - **Status:** Living runbook; canonical error-diagnosis reference
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-08-19
+- **Last reviewed:** 2026-08-20
 
 How to turn the reference an operator sees on screen into the full server-side detail in
 Application Insights. See [ADR-025](../adr/ADR-025-error-contract-and-observability.md) for the
@@ -40,8 +40,8 @@ logged) the underlying exception.
 
 ## Step 1 — find the reference on screen
 
-Every mutation-error alert in the product renders the mapped error message plus, when the server
-supplied one, a small monospace line:
+Every error alert in the product — mutations, and the read surfaces that render the same alert —
+shows the mapped error message plus, when the server supplied one, a small monospace line:
 
 ```
 Reference: 4bf92f3577b34da6a3ce929d0e0e4736
@@ -55,6 +55,22 @@ One specific case is worth recognizing on sight: if the message reads **"Somethi
 our end. Nothing was saved."**, the server's terminal exception handler caught something
 unplanned (an `internal_error`, not a typed rejection). The reference is the only way to find out
 what happened — nothing about the cause is in the response.
+
+**When a failed page load shows no reference.** Since ADR-025's 2026-08-20 amendment, failed _reads_
+carry the same `code` and `correlationId` as mutations — every SPA call runs through one success rule
+in `web/src/api` — so a read surface that renders the standard alert shows the reference too (the
+banking import wizard's match preview, for example). Many read-error branches still render a plain
+empty-state description and never display what they received, so the absence of a reference on a
+failed load means "this surface does not render one yet", not "the server did not send one". Fall
+back to searching by route and time window:
+
+```kusto
+requests
+| where success == false and timestamp between (ago(1h) .. now())
+| order by timestamp desc
+```
+
+Take `operation_Id` from the matching row and continue at Step 2.
 
 ## Step 2 — turn it into an Application Insights query
 

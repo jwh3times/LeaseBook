@@ -1,8 +1,10 @@
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import {
+  download,
   getApiAccountingEntriesByEntryIdAudit,
   getApiAccountingTenantsByTenantIdLedger,
   getApiAccountingTenantsByTenantIdLedgerCsv,
+  unwrap,
   type AuditRow,
   type EntryAuditResponse,
   type TenantLedgerEntry,
@@ -17,13 +19,11 @@ export const tenantLedgerKey = (id: string) => ['tenant-ledger', id] as const;
 export function useTenantLedger(id: string): UseQueryResult<TenantLedgerResponse> {
   return useQuery({
     queryKey: tenantLedgerKey(id),
-    queryFn: async () => {
-      const { data, error } = await getApiAccountingTenantsByTenantIdLedger({
-        path: { tenantId: id },
-      });
-      if (error || !data) throw new Error('Failed to load the ledger');
-      return data;
-    },
+    queryFn: () =>
+      unwrap(
+        getApiAccountingTenantsByTenantIdLedger({ path: { tenantId: id } }),
+        'Failed to load the ledger',
+      ),
   });
 }
 
@@ -35,13 +35,11 @@ export function useEntryAudit(
   return useQuery({
     queryKey: ['entry-audit', entryId],
     enabled,
-    queryFn: async () => {
-      const { data, error } = await getApiAccountingEntriesByEntryIdAudit({
-        path: { entryId },
-      });
-      if (error || !data) throw new Error('Failed to load the history');
-      return data;
-    },
+    queryFn: () =>
+      unwrap(
+        getApiAccountingEntriesByEntryIdAudit({ path: { entryId } }),
+        'Failed to load the history',
+      ),
   });
 }
 
@@ -50,21 +48,9 @@ export function useEntryAudit(
  * anchor. The server builds the CSV from the same projection the table renders.
  */
 export async function downloadLedgerCsv(tenantId: string): Promise<void> {
-  const { data, error } = await getApiAccountingTenantsByTenantIdLedgerCsv({
-    path: { tenantId },
-    parseAs: 'blob',
-  });
-  if (error || !(data instanceof Blob)) {
-    throw new Error('Failed to export the ledger');
-  }
-
-  const blob = data;
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = `tenant-${tenantId}-ledger.csv`;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  URL.revokeObjectURL(url);
+  await download(
+    () => getApiAccountingTenantsByTenantIdLedgerCsv({ path: { tenantId }, parseAs: 'blob' }),
+    `tenant-${tenantId}-ledger.csv`,
+    'Failed to export the ledger',
+  );
 }

@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react';
 import { Icon } from '@/design';
-import type { ApiError } from '@/lib/apiError';
+import type { ApiError } from '@/api';
 
 export interface ApiErrorNoticeProps {
   error: ApiError | null;
@@ -11,8 +11,10 @@ export interface ApiErrorNoticeProps {
 }
 
 /**
- * The one mutation-error alert (ADR-025): the mapped message — or the distinct internal_error
- * copy — plus the selectable support reference when the server supplied one.
+ * The one API-error alert (ADR-025): the mapped message — or the distinct internal_error copy —
+ * plus the selectable support reference when the server supplied one. Mutations only, until the
+ * 2026-08-20 amendment put reads through the same success rule; a failed read now arrives here
+ * carrying the same `code` and `correlationId`.
  */
 export function ApiErrorNotice({
   error,

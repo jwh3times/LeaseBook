@@ -20,7 +20,11 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Changed
 
-- _Nothing yet._
+- **When a screen fails to load, it now says what went wrong and gives you a reference to quote.**
+  Pages that could not load their data used to show the same generic message whatever the cause, and
+  the support reference the server had already generated was thrown away before anything could show
+  it. The explanation the server sends is now displayed, along with that reference — the same
+  treatment saving and submitting already had.
 
 ### Removed
 

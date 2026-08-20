@@ -12,6 +12,8 @@ internal sealed class RepositorySource
     private static readonly Lazy<RepositorySource?> Located = new(Locate);
     private static readonly HashSet<string> CodeExtensions =
         new([".cs", ".sql"], StringComparer.OrdinalIgnoreCase);
+    private static readonly HashSet<string> WebExtensions =
+        new([".ts", ".tsx"], StringComparer.OrdinalIgnoreCase);
 
     private readonly string root;
 
@@ -35,6 +37,32 @@ internal sealed class RepositorySource
         }
 
         return new RepositoryFile(fullPath, normalized);
+    }
+
+    /// <summary>
+    /// Hand-authored SPA sources under <c>web/src</c>, excluding the generated client and test files.
+    /// Kept separate from <see cref="CodeFilesUnder"/> so adding TypeScript here cannot silently widen
+    /// what the C#/SQL guards scan.
+    /// </summary>
+    public IReadOnlyList<RepositoryFile> WebSourceFiles()
+    {
+        var (fullRoot, _) = Resolve("web/src");
+        if (!Directory.Exists(fullRoot))
+        {
+            throw new DirectoryNotFoundException("Repository directory not found: web/src");
+        }
+
+        return
+        [
+            .. Directory.EnumerateFiles(fullRoot, "*", SearchOption.AllDirectories)
+                .Where(path => WebExtensions.Contains(Path.GetExtension(path)))
+                .Where(path => !IsGenerated(path))
+                .Where(path => !path.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                    .Contains("generated", StringComparer.OrdinalIgnoreCase))
+                .Where(path => !Path.GetFileName(path).Contains(".test.", StringComparison.OrdinalIgnoreCase))
+                .Select(path => new RepositoryFile(path, Path.GetRelativePath(root, path)))
+                .OrderBy(file => file.RelativePath, StringComparer.Ordinal),
+        ];
     }
 
     public IReadOnlyList<RepositoryFile> CodeFilesUnder(params string[] relativeRoots)
@@ -130,7 +158,7 @@ internal readonly record struct RepositoryLine(string RelativePath, int Number, 
         {
             var marker = Path.GetExtension(RelativePath).ToLowerInvariant() switch
             {
-                ".cs" => "//",
+                ".cs" or ".ts" or ".tsx" => "//",
                 ".sql" => "--",
                 ".yaml" or ".yml" => "#",
                 _ => null,

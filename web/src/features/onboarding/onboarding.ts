@@ -11,6 +11,9 @@ import {
   postApiOnboardingVerification,
   postApiOnboardingVerificationByIdSignoff,
   primeCsrf,
+  toApiError,
+  unwrap,
+  type ApiError,
   type BalanceImportRequest,
   type BankBalanceDto,
   type EntityImportRequest,
@@ -22,7 +25,6 @@ import {
   type VerificationReport,
   type VerificationRequestDto,
 } from '@/api';
-import { toApiError, type ApiError } from '@/lib/apiError';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -54,15 +56,6 @@ export const onboardingStatusKey = () => ['onboarding', 'status'] as const;
 // ─── Error types ──────────────────────────────────────────────────────────────
 
 export type OnboardingError = ApiError;
-const toOnboardingError = toApiError;
-
-async function unwrap<T>(
-  call: Promise<{ data?: T; error?: unknown; response?: Response }>,
-): Promise<T> {
-  const { data, error, response } = await call;
-  if (data !== undefined && data !== null) return data;
-  throw toOnboardingError(error, response?.status ?? 0);
-}
 
 // ─── Queries ──────────────────────────────────────────────────────────────────
 
@@ -70,11 +63,7 @@ async function unwrap<T>(
 export function useOnboardingStatus(): UseQueryResult<OnboardingStatusResponse> {
   return useQuery({
     queryKey: onboardingStatusKey(),
-    queryFn: async () => {
-      const { data, error } = await getApiOnboardingStatus();
-      if (error || !data) throw new Error('Failed to load onboarding status');
-      return data;
-    },
+    queryFn: () => unwrap(getApiOnboardingStatus(), 'Failed to load onboarding status'),
   });
 }
 
@@ -87,10 +76,8 @@ export function useImportEntities(kind: EntityKind) {
     mutationFn: async (body) => {
       await primeCsrf();
       return unwrap(
-        postApiOnboardingImportByKind({
-          path: { kind },
-          body,
-        }),
+        postApiOnboardingImportByKind({ path: { kind }, body }),
+        `Failed to import ${kind}`,
       );
     },
     onSuccess: () => {
@@ -106,10 +93,8 @@ export function useImportBalances(kind: BalanceKind) {
     mutationFn: async (body) => {
       await primeCsrf();
       return unwrap(
-        postApiOnboardingImportBalancesByKind({
-          path: { kind },
-          body,
-        }),
+        postApiOnboardingImportBalancesByKind({ path: { kind }, body }),
+        `Failed to import ${kind}`,
       );
     },
     onSuccess: () => {
@@ -125,10 +110,8 @@ export function useSupersedeBalances(kind: BalanceKind) {
     mutationFn: async (body) => {
       await primeCsrf();
       return unwrap(
-        postApiOnboardingImportBalancesByKindSupersede({
-          path: { kind },
-          body,
-        }),
+        postApiOnboardingImportBalancesByKindSupersede({ path: { kind }, body }),
+        `Failed to re-import ${kind}`,
       );
     },
     onSuccess: () => {
@@ -143,7 +126,7 @@ export function useVerify() {
   return useMutation<VerificationReport, OnboardingError, VerificationRequestDto>({
     mutationFn: async (body) => {
       await primeCsrf();
-      return unwrap(postApiOnboardingVerification({ body }));
+      return unwrap(postApiOnboardingVerification({ body }), 'Verification failed');
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: onboardingStatusKey() });
@@ -161,7 +144,7 @@ export function useSignoff() {
         path: { id },
       });
       if (!error && response?.ok) return;
-      throw toOnboardingError(error, response?.status ?? 0);
+      throw toApiError(error, response?.status ?? 0, 'Sign-off failed');
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: onboardingStatusKey() });

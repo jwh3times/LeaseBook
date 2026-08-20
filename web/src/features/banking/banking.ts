@@ -1,5 +1,6 @@
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import {
+  download,
   getApiAccountingBanksBalances,
   getApiAccountingBanksByBankAccountIdRegister,
   getApiAccountingReconciliations,
@@ -14,6 +15,8 @@ import {
   postApiBankingBanksByBankAccountIdMappings,
   postApiBankingImportsByImportIdConfirm,
   primeCsrf,
+  unwrap,
+  type ApiError,
   type BankBalanceRow,
   type ColumnMap,
   type ColumnMappingView,
@@ -29,7 +32,6 @@ import {
 } from '@/api';
 import type { BadgeTone } from '@/design';
 import { num } from '@/lib/directory';
-import { toApiError, type ApiError } from '@/lib/apiError';
 
 export type {
   BankBalanceRow,
@@ -76,11 +78,8 @@ export function useBankBalances(
   return useQuery({
     queryKey: ['bank-balances'],
     enabled: opts.enabled ?? true,
-    queryFn: async () => {
-      const { data, error } = await getApiAccountingBanksBalances();
-      if (error || !data) throw new Error('Failed to load bank balances');
-      return data.rows;
-    },
+    queryFn: async () =>
+      (await unwrap(getApiAccountingBanksBalances(), 'Failed to load bank balances')).rows,
   });
 }
 
@@ -91,14 +90,14 @@ export function useBankRegister(bankAccountId: string): UseQueryResult<RegisterR
   return useQuery({
     queryKey: bankRegisterKey(bankAccountId),
     enabled: bankAccountId !== '',
-    queryFn: async () => {
-      const { data, error } = await getApiAccountingBanksByBankAccountIdRegister({
-        path: { bankAccountId },
-        query: { pageSize: 200 },
-      });
-      if (error || !data) throw new Error('Failed to load the register');
-      return data;
-    },
+    queryFn: () =>
+      unwrap(
+        getApiAccountingBanksByBankAccountIdRegister({
+          path: { bankAccountId },
+          query: { pageSize: 200 },
+        }),
+        'Failed to load the register',
+      ),
   });
 }
 
@@ -111,13 +110,13 @@ export function useReconciliationHistory(
   return useQuery({
     queryKey: reconciliationHistoryKey(bankAccountId),
     enabled: bankAccountId !== '',
-    queryFn: async () => {
-      const { data, error } = await getApiAccountingReconciliations({
-        query: { bankAccountId },
-      });
-      if (error || !data) throw new Error('Failed to load reconciliation history');
-      return data.rows;
-    },
+    queryFn: async () =>
+      (
+        await unwrap(
+          getApiAccountingReconciliations({ query: { bankAccountId } }),
+          'Failed to load reconciliation history',
+        )
+      ).rows,
   });
 }
 
@@ -125,13 +124,13 @@ export function useColumnMappings(bankAccountId: string): UseQueryResult<ColumnM
   return useQuery({
     queryKey: ['csv-mappings', bankAccountId],
     enabled: bankAccountId !== '',
-    queryFn: async () => {
-      const { data, error } = await getApiBankingBanksByBankAccountIdMappings({
-        path: { bankAccountId },
-      });
-      if (error || !data) throw new Error('Failed to load saved mappings');
-      return data.mappings;
-    },
+    queryFn: async () =>
+      (
+        await unwrap(
+          getApiBankingBanksByBankAccountIdMappings({ path: { bankAccountId } }),
+          'Failed to load saved mappings',
+        )
+      ).mappings,
   });
 }
 
@@ -139,22 +138,12 @@ export function useColumnMappings(bankAccountId: string): UseQueryResult<ColumnM
 
 /** A normalized failure from a banking write: the domain `code` (409) or a validation message (400). */
 export type BankingError = ApiError;
-const toBankingError = toApiError;
-
-async function unwrap<T>(
-  call: Promise<{ data?: T; error?: unknown; response?: Response }>,
-): Promise<T> {
-  const { data, error, response } = await call;
-  if (data !== undefined && data !== null) return data;
-  throw toBankingError(error, response?.status ?? 0);
-}
 
 export async function applyClearances(journalLineIds: string[], cleared = true): Promise<void> {
   await primeCsrf();
   await unwrap(
-    postApiAccountingBanksClearances({
-      body: { journalLineIds, cleared },
-    }),
+    postApiAccountingBanksClearances({ body: { journalLineIds, cleared } }),
+    'Failed to update cleared status',
   );
 }
 
@@ -165,15 +154,17 @@ export async function startReconciliation(input: {
   statementEndingBalance: number;
 }): Promise<ReconciliationView> {
   await primeCsrf();
-  return unwrap(postApiAccountingReconciliations({ body: input }));
+  return unwrap(
+    postApiAccountingReconciliations({ body: input }),
+    'Failed to start the reconciliation',
+  );
 }
 
 export async function finalizeReconciliation(id: string): Promise<ReconciliationView> {
   await primeCsrf();
   return unwrap(
-    postApiAccountingReconciliationsByIdFinalize({
-      path: { id },
-    }),
+    postApiAccountingReconciliationsByIdFinalize({ path: { id } }),
+    'Failed to finalize the reconciliation',
   );
 }
 
@@ -194,6 +185,7 @@ export async function recordBankAdjustment(
       path: { bankAccountId },
       body: { bankAccountId, toBankAccountId: input.toBankAccountId ?? null, ...input },
     }),
+    'Failed to record the adjustment',
   );
 }
 
@@ -207,15 +199,15 @@ export async function importStatement(
       path: { bankAccountId },
       body: { bankAccountId, ...input },
     }),
+    'Failed to import the statement',
   );
 }
 
 export async function fetchMatchPreview(importId: string): Promise<MatchPreviewResponse> {
-  const { data, error } = await getApiBankingImportsByImportIdMatches({
-    path: { importId },
-  });
-  if (error || !data) throw new Error('Failed to load the match preview');
-  return data;
+  return unwrap(
+    getApiBankingImportsByImportIdMatches({ path: { importId } }),
+    'Failed to load the match preview',
+  );
 }
 
 export interface ConfirmDecision {
@@ -230,10 +222,8 @@ export async function confirmMatches(
 ): Promise<ConfirmMatchesResult> {
   await primeCsrf();
   return unwrap(
-    postApiBankingImportsByImportIdConfirm({
-      path: { importId },
-      body: { importId, decisions },
-    }),
+    postApiBankingImportsByImportIdConfirm({ path: { importId }, body: { importId, decisions } }),
+    'Failed to confirm the matches',
   );
 }
 
@@ -247,6 +237,7 @@ export async function saveColumnMapping(
       path: { bankAccountId },
       body: { bankAccountId, ...input },
     }),
+    'Failed to save the column mapping',
   );
 }
 
@@ -256,17 +247,20 @@ export async function saveColumnMapping(
  * named.
  */
 export async function downloadReconciliationReport(id: string): Promise<void> {
-  const { data, error } = await getApiAccountingReconciliationsByIdReport({
-    path: { id },
-  });
-  if (error || !data) throw new Error('Failed to download the reconciliation report');
-  const blob = new Blob([data.reportJson ?? '{}'], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = `reconciliation-${id}.json`;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  URL.revokeObjectURL(url);
+  // The only download whose body is not already a blob: the route returns the stored snapshot as
+  // JSON, so the thunk adapts it before the shared helper sees it.
+  await download(
+    async () => {
+      const { data, error, response } = await getApiAccountingReconciliationsByIdReport({
+        path: { id },
+      });
+      return {
+        data: data ? new Blob([data.reportJson ?? '{}'], { type: 'application/json' }) : undefined,
+        error,
+        response,
+      };
+    },
+    `reconciliation-${id}.json`,
+    'Failed to download the reconciliation report',
+  );
 }

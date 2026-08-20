@@ -2,7 +2,7 @@ import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Avatar, Button, Card, Icon, Money } from '@/design';
 import { ApiErrorNotice } from '@/components/ApiErrorNotice';
-import { asApiError } from '@/lib/apiError';
+import { asApiError } from '@/api';
 import {
   deliverStatement,
   downloadStatement,

@@ -91,4 +91,40 @@ describe('ImportWizard', () => {
       { statementLineId: 's1', journalLineId: 'jl1', kind: 'matched' },
     ]);
   });
+
+  // The match preview is a read, and reads used to throw `new Error('Failed to load the match
+  // preview')` — discarding the ProblemDetails the host had already sent. `unwrap` carries them, so
+  // the operator sees what actually went wrong plus the reference support needs (ADR-025).
+  it('surfaces the server detail and support reference when the match preview fails', async () => {
+    server.use(
+      http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 })),
+      http.get('/api/banking/banks/:id/mappings', () => HttpResponse.json({ mappings: [] })),
+      http.post('/api/banking/banks/:id/imports', () =>
+        HttpResponse.json({ importId: 'imp1', imported: 1, skippedDuplicates: 0, errors: [] }),
+      ),
+      http.get('/api/banking/imports/:importId/matches', () =>
+        HttpResponse.json(
+          {
+            title: 'internal_error',
+            detail: 'The matching index is rebuilding. Try again shortly.',
+            correlationId: 'op-4821',
+          },
+          { status: 500 },
+        ),
+      ),
+    );
+    renderWizard();
+
+    const file = new File([CSV], 'statement.csv', { type: 'text/csv' });
+    await userEvent.upload(screen.getByLabelText('Statement CSV'), file);
+    await userEvent.selectOptions(await screen.findByLabelText('Date column'), 'Date');
+    await userEvent.selectOptions(screen.getByLabelText('Description column'), 'Description');
+    await userEvent.selectOptions(screen.getByLabelText('Amount column'), 'Amount');
+    await userEvent.click(screen.getByRole('button', { name: 'Preview matches' }));
+
+    const alert = await screen.findByRole('alert');
+    // `internal_error` has its own copy in ApiErrorNotice; the reference is what read paths lacked.
+    expect(alert).toHaveTextContent(/Nothing was saved/i);
+    expect(alert).toHaveTextContent('Reference: op-4821');
+  });
 });

@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living architecture guide
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-08-18
+- **Last reviewed:** 2026-08-20
 
 This is the canonical public map of the system **as implemented**. It explains how the pieces fit
 together and links the decisions that shaped them without reproducing every invariant. Accepted
@@ -152,6 +152,15 @@ build-time copy of the contract and fails CI if the committed files are stale, s
 backend contracts cannot silently diverge — see
 [ADR-012](adr/ADR-012-openapi-client-drift-gate.md) and
 [ADR-030](adr/ADR-030-hey-api-and-typescript-7.md).
+
+`web/src/api` owns request **execution** as well as the generated client: one success rule
+(`unwrap`) that turns a failed call into the mapped `ApiError`, one file-download helper
+(`download`), and the error vocabulary the UI renders. Because reads run through that rule rather
+than a hand-written throw, a failed read carries the server's `code` and `correlationId` into the UI
+instead of a hardcoded string. A source-scanning architecture test fails the build if the success
+rule, `createObjectURL`, a `document.cookie` read, or a raw `fetch(` appears under `web/src` outside
+`web/src/api` — see the 2026-08-20 amendment to
+[ADR-025](adr/ADR-025-error-contract-and-observability.md).
 
 ## Data and persistence
 

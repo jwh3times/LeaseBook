@@ -1,5 +1,6 @@
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import {
+  download,
   getApiReports,
   getApiReportsByIdCsv,
   getApiReportsByIdPreview,
@@ -9,6 +10,9 @@ import {
   getApiStatementsByOwnerIdPdf,
   postApiStatementsByOwnerIdDeliver,
   primeCsrf,
+  toApiError,
+  unwrap,
+  type ApiError,
   type FiduciaryPanel,
   type PmBrandingRow,
   type ReconciliationSnapshotRow,
@@ -18,7 +22,6 @@ import {
   type StatementView,
 } from '@/api';
 import { num } from '@/lib/directory';
-import { toApiError, type ApiError } from '@/lib/apiError';
 
 export type {
   FiduciaryPanel,
@@ -84,17 +87,18 @@ export function useStatement(
     queryKey: statementKey(ownerId, filters),
     enabled: !!ownerId,
     queryFn: async () => {
-      const { data, error } = await getApiStatementsByOwnerId({
-        path: { ownerId },
-        query: {
-          basis: filters.basis,
-          year: filters.year,
-          month: filters.month,
-          propertyId: filters.propertyId,
-        },
-      });
-      if (error || !data) throw new Error('Failed to load owner statement');
-      return data;
+      return unwrap(
+        getApiStatementsByOwnerId({
+          path: { ownerId },
+          query: {
+            basis: filters.basis,
+            year: filters.year,
+            month: filters.month,
+            propertyId: filters.propertyId,
+          },
+        }),
+        'Failed to load owner statement',
+      );
     },
   });
 }
@@ -102,11 +106,7 @@ export function useStatement(
 export function useReportCatalog(): UseQueryResult<ReportDescriptor[]> {
   return useQuery({
     queryKey: reportCatalogKey(),
-    queryFn: async () => {
-      const { data, error } = await getApiReports();
-      if (error || !data) throw new Error('Failed to load report catalog');
-      return data;
-    },
+    queryFn: () => unwrap(getApiReports(), 'Failed to load report catalog'),
   });
 }
 
@@ -130,18 +130,20 @@ export function useReportPreview(
     queryFn: async () => {
       // The preview endpoint is now annotated with Produces<PreviewSpaResponse> (WP-6/M6), so
       // the generated client types the response correctly. Use the typed api client directly.
-      const { data, error } = await getApiReportsByIdPreview({
-        path: { id },
-        query: {
-          year: filters.year,
-          month: filters.month,
-          asOf: filters.asOf,
-          ownerId: filters.ownerId,
-          propertyId: filters.propertyId,
-          bankAccountId: filters.bankAccountId,
-        },
-      });
-      if (error || !data) throw new Error(`Preview failed`);
+      const data = await unwrap(
+        getApiReportsByIdPreview({
+          path: { id },
+          query: {
+            year: filters.year,
+            month: filters.month,
+            asOf: filters.asOf,
+            ownerId: filters.ownerId,
+            propertyId: filters.propertyId,
+            bankAccountId: filters.bankAccountId,
+          },
+        }),
+        'Preview failed',
+      );
       // The schema types rows as unknown[]; cast to the expected row shape for the preview table.
       return {
         columns: data.columns,
@@ -156,14 +158,6 @@ export function useReportPreview(
 // ---- Mutations ---------------------------------------------------------------
 
 export type ReportsError = ApiError;
-const toReportsError = toApiError;
-
-interface ProblemBody {
-  code?: string;
-  detail?: string;
-  title?: string;
-  correlationId?: string;
-}
 
 export async function deliverStatement(
   ownerId: string,
@@ -181,7 +175,9 @@ export async function deliverStatement(
       toEmail,
     },
   });
-  if (error || !response?.ok) throw toReportsError(error, response?.status ?? 0);
+  if (error || !response?.ok) {
+    throw toApiError(error, response?.status ?? 0, 'Failed to deliver the statement');
+  }
 }
 
 /** Triggers a browser download for PDF or CSV through the authenticated generated client. */
@@ -200,22 +196,14 @@ export async function downloadStatement(
     },
     parseAs: 'blob' as const,
   };
-  const result =
-    format === 'pdf'
-      ? await getApiStatementsByOwnerIdPdf(options)
-      : await getApiStatementsByOwnerIdCsv(options);
-  if (result.error || !(result.data instanceof Blob)) {
-    throw toApiError(result.error, result.response?.status ?? 0);
-  }
-  const blob = result.data;
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = `statement-${ownerId}-${filters.year}-${String(filters.month).padStart(2, '0')}.${format}`;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  URL.revokeObjectURL(url);
+  await download(
+    () =>
+      format === 'pdf'
+        ? getApiStatementsByOwnerIdPdf(options)
+        : getApiStatementsByOwnerIdCsv(options),
+    `statement-${ownerId}-${filters.year}-${String(filters.month).padStart(2, '0')}.${format}`,
+    'Failed to download the statement',
+  );
 }
 
 // ---- Compliance pack (WP-8) --------------------------------------------------
@@ -230,97 +218,45 @@ export interface CompliancePackRange {
 }
 
 /**
- * Maps a failed compliance-pack response to a clear, human error. The RFC7807 problem body carries
- * the domain code in `title` (`period_not_closed`, `invalid_period`); we key off status + title so
- * the message never depends on color alone (WCAG 1.4.1) and reads sensibly for each failure.
- */
-export function compliancePackError(body: ProblemBody, status: number): ReportsError {
-  const code = body.code ?? body.title;
-  const correlationId = body.correlationId;
-  if (status === 422 || code === 'period_not_closed') {
-    return {
-      code: 'period_not_closed',
-      message:
-        "This period isn't closed yet — finalize the reconciliation for every month in the range first.",
-      correlationId,
-    };
-  }
-  if (status === 404) {
-    return {
-      code: 'bank_not_found',
-      message: 'That trust account could not be found.',
-      correlationId,
-    };
-  }
-  if (status === 400 || code === 'invalid_period') {
-    return {
-      code: 'invalid_period',
-      message: 'The start date must be on or before the end date.',
-      correlationId,
-    };
-  }
-  return {
-    code,
-    message: body.detail ?? body.title ?? `Download failed (${status}).`,
-    correlationId,
-  };
-}
-
-/**
- * Triggers a browser download of the trust compliance pack ZIP for one trust account and period
- * (authenticated client → blob → anchor click, matching downloadStatement / downloadReportCsv). On a
- * non-2xx it throws a {@link ReportsError} with a friendly, code-aware message (see
- * {@link compliancePackError}); the caller renders `.message` in a non-color-only alert.
+ * Triggers a browser download of the trust compliance pack ZIP for one trust account and period.
+ * On a non-2xx it throws a {@link ReportsError} carrying the server's `code`, `status` and
+ * `correlationId`; `CompliancePackPanel` turns those into the operator-facing copy.
+ *
+ * The status-to-copy map used to live here, and was the last bespoke survivor of ADR-025's five-way
+ * consolidation. It sat in the wrong layer: four other surfaces already key friendly wording off
+ * `err.code` in the component, and report-specific wording does not belong in a transport module.
  */
 export async function downloadCompliancePack(
   bankAccountId: string,
   from: string,
   to: string,
 ): Promise<void> {
-  const { data, error, response } = await getApiReportsCompliancePack({
-    query: { bankAccountId, from, to },
-    parseAs: 'blob',
-  });
-  if (error || !(data instanceof Blob)) {
-    throw compliancePackError(error ?? {}, response?.status ?? 0);
-  }
-  const blob = data;
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = `compliance-pack-${from}-${to}.zip`;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  URL.revokeObjectURL(url);
+  await download(
+    () => getApiReportsCompliancePack({ query: { bankAccountId, from, to }, parseAs: 'blob' }),
+    `compliance-pack-${from}-${to}.zip`,
+    'Download failed.',
+  );
 }
 
 /** Triggers a browser download for a report's CSV export. */
 export async function downloadReportCsv(id: string, filters: ReportFilters): Promise<void> {
-  const { data, error, response } = await getApiReportsByIdCsv({
-    path: { id },
-    query: {
-      year: filters.year,
-      month: filters.month,
-      asOf: filters.asOf,
-      propertyId: filters.propertyId,
-      ownerId: filters.ownerId,
-      bankAccountId: filters.bankAccountId,
-    },
-    parseAs: 'blob',
-  });
-  if (error || !(data instanceof Blob)) {
-    throw toApiError(error, response?.status ?? 0);
-  }
-  const blob = data;
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = `report-${id}.csv`;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  URL.revokeObjectURL(url);
+  await download(
+    () =>
+      getApiReportsByIdCsv({
+        path: { id },
+        query: {
+          year: filters.year,
+          month: filters.month,
+          asOf: filters.asOf,
+          propertyId: filters.propertyId,
+          ownerId: filters.ownerId,
+          bankAccountId: filters.bankAccountId,
+        },
+        parseAs: 'blob',
+      }),
+    `report-${id}.csv`,
+    'Failed to export the report',
+  );
 }
 
 // Month label helper used in multiple components.
