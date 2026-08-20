@@ -45,16 +45,16 @@ public sealed class RentRunStrategy(
             .Select(r => SourceRef(period, r.LeaseId))
             .ToList();
 
-        var alreadyPosted = allKeys.Count > 0
-            ? await postedRefs.GetExistingAsync(allKeys, ct)
-            : (IReadOnlySet<string>)new HashSet<string>();
+        var alreadyPosted = await BatchRead.SetOrEmptyAsync(
+            allKeys, keys => postedRefs.GetExistingAsync(keys, ct));
 
         // Structural cross-source period guard: detect RentCharged entries posted by any means
         // (manual composer, seed, import) so we never double-charge a tenant in a period.
         var allTenantIds = rows.Select(r => r.TenantId).ToList();
-        var alreadyChargedTenants = allTenantIds.Count > 0
-            ? await periodGuard.GetChargedTenantsAsync("RentCharged", null, period.Year, period.Month, allTenantIds, ct)
-            : (IReadOnlySet<Guid>)new HashSet<Guid>();
+        var alreadyChargedTenants = await BatchRead.SetOrEmptyAsync(
+            allTenantIds,
+            ids => periodGuard.GetChargedTenantsAsync(
+                "RentCharged", null, period.Year, period.Month, ids, ct));
 
         var previewRows = new List<PreviewRow>(rows.Count);
         var exceptions = new List<string>();
@@ -114,9 +114,10 @@ public sealed class RentRunStrategy(
             .Select(id => byLeaseId[id].TenantId)
             .Distinct()
             .ToList();
-        var alreadyChargedTenants = tenantIdsInScope.Count > 0
-            ? await periodGuard.GetChargedTenantsAsync("RentCharged", null, period.Year, period.Month, tenantIdsInScope, ct)
-            : (IReadOnlySet<Guid>)new HashSet<Guid>();
+        var alreadyChargedTenants = await BatchRead.SetOrEmptyAsync(
+            tenantIdsInScope,
+            ids => periodGuard.GetChargedTenantsAsync(
+                "RentCharged", null, period.Year, period.Month, ids, ct));
 
         var plan = new List<RunPlanItem>(selectedTargetIds.Count);
         var chargeDate = new DateOnly(period.Year, period.Month, 1);

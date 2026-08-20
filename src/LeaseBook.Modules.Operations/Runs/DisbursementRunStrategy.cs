@@ -74,9 +74,8 @@ public sealed class DisbursementRunStrategy(
 
         // Check already-posted disbursement source refs (the authoritative idempotency leg).
         var disburseKeys = owners.Select(o => DisburseSourceRef(period, o.OwnerId)).ToList();
-        var alreadyPosted = disburseKeys.Count > 0
-            ? await postedRefs.GetExistingAsync(disburseKeys, ct)
-            : (IReadOnlySet<string>)new HashSet<string>();
+        var alreadyPosted = await BatchRead.SetOrEmptyAsync(
+            disburseKeys, keys => postedRefs.GetExistingAsync(keys, ct));
 
         var previewRows = new List<PreviewRow>(owners.Count);
 
@@ -138,9 +137,8 @@ public sealed class DisbursementRunStrategy(
         var byOwnerId = allOwners.ToDictionary(o => o.OwnerId);
 
         var ownerIdsInScope = selectedTargetIds.Where(id => byOwnerId.ContainsKey(id)).ToList();
-        var equityMap = ownerIdsInScope.Count > 0
-            ? await equityBalances.GetAsync(ownerIdsInScope, Basis, ct)
-            : (IReadOnlyDictionary<Guid, decimal>)new Dictionary<Guid, decimal>();
+        var equityMap = await BatchRead.MapOrEmptyAsync(
+            ownerIdsInScope, ids => equityBalances.GetAsync(ids, Basis, ct));
 
         var (operatingBankId, _) = await bankInfo.GetOperatingTrustAsync(ct);
         var chargeDate = new DateOnly(period.Year, period.Month, 1);

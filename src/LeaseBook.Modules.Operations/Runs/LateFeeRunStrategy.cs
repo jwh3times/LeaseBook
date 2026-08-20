@@ -68,9 +68,8 @@ public sealed class LateFeeRunStrategy(
             .OfType<DelinquencyAttribution.AttributedToLease>()
             .Select(a => SourceRef(a.RentObligationEntryId))
             .ToList();
-        var alreadyPosted = allKeys.Count > 0
-            ? await postedRefs.GetExistingAsync(allKeys, ct)
-            : (IReadOnlySet<string>)new HashSet<string>();
+        var alreadyPosted = await BatchRead.SetOrEmptyAsync(
+            allKeys, keys => postedRefs.GetExistingAsync(keys, ct));
 
         var previewRows = new List<PreviewRow>(delinquentRows.Count);
         var exceptions = new List<string>();
@@ -152,9 +151,8 @@ public sealed class LateFeeRunStrategy(
         var selectedInSchedule = selectedTargetIds
             .Where(id => byLeaseId.ContainsKey(id))
             .ToList();
-        var policyMap = selectedInSchedule.Count > 0
-            ? await policies.GetAsync(selectedInSchedule, ct)
-            : (IReadOnlyDictionary<Guid, LateFeePolicy>)new Dictionary<Guid, LateFeePolicy>();
+        var policyMap = await BatchRead.MapOrEmptyAsync(
+            selectedInSchedule, ids => policies.GetAsync(ids, ct));
 
         var plan = new List<RunPlanItem>(selectedTargetIds.Count);
 
