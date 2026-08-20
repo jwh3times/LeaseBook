@@ -284,7 +284,7 @@ organization, and never edited by a property manager.
 _Avoid_: report list, report registry, saved reports (nothing is saved)
 
 **Filter control**:
-One filter the report builder offers for a given report — an owner, a property, a trust account, a
+One filter the report builder offers for a given report — an owner, a property, a bank account, a
 period. A report offers only the controls its catalog entry declares, and each control is named for
 the query parameter it sets. Declaring a control decides what a property manager can narrow a report
 by; it does not decide what the server will accept.
