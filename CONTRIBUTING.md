@@ -96,6 +96,12 @@ minimum bar, not the goal.
   CI's `schema-drift` job enforces this (ADR-012): it regenerates the client from a build-time copy
   of the contract and fails if the committed file is stale. It's excluded from Prettier/`Oxlint`, so
   leave it exactly as the generator emits it.
+- `web/src/api` owns request execution too. Run every call — read or write — through `unwrap` from
+  `@/api`, and every file download through `download`; never hand-write
+  `if (error || !data) throw new Error(...)`, never call `fetch` directly, and never read
+  `document.cookie` outside the api module. `SpaRequestExecutionTests` fails the build on any of
+  those outside `web/src/api` (ADR-025), because a literal throw discards the `code` and
+  `correlationId` the server already sent.
 
 ### Architecture decisions
 

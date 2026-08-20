@@ -105,7 +105,10 @@ export function useRecordPayment(tenantId: string) {
     mutationFn: async (body) => {
       await primeCsrf();
       return unwrap(
-        postApiAccountingTenantsByTenantIdPayments({ path: { tenantId }, body }),
+        postApiAccountingTenantsByTenantIdPayments({
+          path: { tenantId },
+          body,
+        }),
         "Failed to record the payment",
       );
     },
@@ -291,7 +294,7 @@ test("records a payment", async () => {
 | Hardcoded color values                      | CSS tokens: `var(--text)`, `var(--surface)`, etc.            |
 | Color as sole status indicator              | `<Badge tone={…} dot>` (always `dot` or `icon`)              |
 | `fetch(…)` for API calls                    | Generated named SDK functions from `@/api`                   |
-| `if (error \|\| !data) throw new Error(…)`     | `unwrap(call, fallbackMessage)` from `@/api`                 |
+| `if (error \|\| !data) throw new Error(…)`  | `unwrap(call, fallbackMessage)` from `@/api`                 |
 | `URL.createObjectURL` + anchor click        | `download(call, filename)` from `@/api`                      |
 | `document.cookie` reads outside `api/`      | The XSRF interceptor in `api/client.ts`                      |
 | Hand-written API types                      | Generated named model types from `@/api`                     |
