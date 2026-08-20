@@ -59,8 +59,12 @@ export function parseAdr(markdown) {
   const heading = markdown.match(/^# ADR-(?<number>\d{3}): (?<title>.+)$/m);
   const status = markdown.match(/^- \*\*Status:\*\* (?<value>.+)$/m);
   const date = markdown.match(/^- \*\*Date:\*\* (?<value>\d{4}-\d{2}-\d{2})$/m);
+  // An ADR may be amended more than once, and the header then wraps: the second link sits on a
+  // continuation line, and prose naming the same ADRs follows the last one. Capture only the
+  // leading comma-separated run of links, across line breaks, so the index row can name every
+  // amender (the legend's `Accepted (amended by ADR-037, ADR-039)` form) instead of just the first.
   const amendedBy = markdown.match(
-    /^- \*\*Amended by:\*\* \[(?<number>ADR-\d{3})\]/m,
+    /^- \*\*Amended by:\*\* (?<value>\[ADR-\d{3}\]\([^)]+\)(?:,\s+\[ADR-\d{3}\]\([^)]+\))*)/m,
   );
 
   if (!heading || !status || !date) {
@@ -74,7 +78,10 @@ export function parseAdr(markdown) {
     date: date.groups.value,
   };
   if (amendedBy) {
-    adr.amendedBy = amendedBy.groups.number;
+    // Read the link labels only; the target file name repeats the number.
+    adr.amendedBy = [...amendedBy.groups.value.matchAll(/\[(ADR-\d{3})\]/g)]
+      .map((match) => match[1])
+      .join(", ");
   }
   return adr;
 }
