@@ -38,7 +38,7 @@ public sealed class CapabilityAgeTests
     [Fact]
     public async Task No_money_path_capability_exceeds_the_policy_window()
     {
-        var report = await CapabilityAge.ResolveAsync(TestContext.Current.CancellationToken);
+        var report = await CapabilityAgeProbe.ResolveAsync(TestContext.Current.CancellationToken);
         if (!report.IsAvailable)
         {
             SkipUnlessCi($"capability age gate NOT ARMED: {report.UnavailableReason}");
@@ -139,7 +139,7 @@ public sealed class CapabilityAgeTests
 
         _ = source.File(CapabilityAge.RegistryRelativePath);
 
-        var report = await CapabilityAge.ResolveAsync(TestContext.Current.CancellationToken);
+        var report = await CapabilityAgeProbe.ResolveAsync(TestContext.Current.CancellationToken);
         if (!report.IsAvailable)
         {
             SkipUnlessCi($"capability age probe NOT ARMED: {report.UnavailableReason}");
