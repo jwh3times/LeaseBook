@@ -7,7 +7,15 @@ using CapabilityCatalog = LeaseBook.Modules.Capabilities.Registry.Capabilities;
 namespace LeaseBook.Web.Capabilities;
 
 /// <summary>
-/// How old each capability is, and whether a money-path one has outlived the policy window (ADR-028).
+/// Reads each capability's introduction date out of git history (ADR-028, F-a).
+/// <para>
+/// <b>The policy this serves lives in the module</b>, as
+/// <see cref="CapabilityAge.PolicyWindow"/>, <see cref="CapabilityAge.IsStale"/> and
+/// <see cref="CapabilityAge.RegistryRelativePath"/>. What stayed here is the digging: walking up the
+/// filesystem for the repository root and shelling out to <c>git</c>. That is
+/// development-environment plumbing, and no module in this solution starts a subprocess — keeping the
+/// probe host-side is what let the policy move without making Capabilities the first one that does.
+/// </para>
 /// <para>
 /// <b>The registry carries no timestamp, deliberately — the age comes from git history.</b>
 /// <see cref="Capability"/> is a record of five booleans and a name; adding an <c>IntroducedOn</c>
@@ -22,40 +30,13 @@ namespace LeaseBook.Web.Capabilities;
 /// do it: the test database is empty, so it would enumerate nothing and pass vacuously forever.
 /// </para>
 /// <para>
-/// <b>Both consumers share this one implementation on purpose.</b> <c>capabilities list --stale</c>
-/// reports the ages and <c>CapabilityAgeTests</c> fails CI on them; if the two computed staleness
-/// separately they could disagree, and the operator-facing report saying "within window" while CI says
-/// otherwise (or worse, the reverse) would discredit both. <see cref="IsStale"/> is the single
-/// definition.
-/// </para>
-/// <para>
 /// <b>It degrades to UNKNOWN, never to "fresh".</b> See <see cref="CapabilityAgeReport"/> — every
 /// caller has to handle an unavailable report explicitly, because the failure mode that matters here
 /// is a probe that quietly answers "nothing is stale" in an environment where it cannot see anything.
 /// </para>
 /// </summary>
-public static class CapabilityAge
+public static class CapabilityAgeProbe
 {
-    /// <summary>
-    /// How long a money-path capability may live. Money-path capabilities are short-lived BY POLICY —
-    /// created for a rollout, deleted after — and the whole design's tolerance for gating a posting
-    /// path on a flag rests on that. One that lives on is standing risk on the books.
-    /// </summary>
-    public static readonly TimeSpan PolicyWindow = TimeSpan.FromDays(90);
-
-    /// <summary>
-    /// The file the probe reads history for, relative to the repository root, in git's own forward-slash
-    /// form (git accepts it as a pathspec on Windows too).
-    /// <para>
-    /// Pinned as a constant and asserted to exist by <c>CapabilityAgeTests</c>, because the pathspec is
-    /// how this whole mechanism goes quiet: move or rename the registry without updating this string and
-    /// every probe returns "no history", every capability becomes unknown, and the gate skips forever
-    /// while looking perfectly healthy.
-    /// </para>
-    /// </summary>
-    public const string RegistryRelativePath =
-        "src/LeaseBook.Modules.Capabilities/Registry/Capabilities.cs";
-
     private static readonly TimeSpan GitTimeout = TimeSpan.FromSeconds(15);
 
     /// <summary>
@@ -66,24 +47,6 @@ public static class CapabilityAge
     /// </summary>
     private static readonly Regex SafeCapabilityName = new(
         "^[a-z0-9][a-z0-9-]*$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
-
-    /// <summary>
-    /// The one definition of "stale", shared by the CLI report and the CI gate.
-    /// <para>
-    /// <b><see cref="Capability.IsFixture"/> is exempt, and that exemption is why the field exists.</b>
-    /// <c>money-path-fixture</c> is permanent by design — it exists so the money-path machinery has
-    /// something real to exercise — so without this it would arm the gate 90 days after it was added
-    /// and fail CI on an unrelated PR, for a fixture doing exactly its job.
-    /// </para>
-    /// </summary>
-    public static bool IsStale(Capability capability, DateTimeOffset introducedAt, DateTimeOffset now)
-    {
-        ArgumentNullException.ThrowIfNull(capability);
-
-        return capability.IsMoneyPath
-            && !capability.IsFixture
-            && now - introducedAt > PolicyWindow;
-    }
 
     /// <summary>
     /// Resolves the introduction date of every registry capability from git history, or explains why it
@@ -100,12 +63,12 @@ public static class CapabilityAge
                 "container — including the capabilities ACA job — cannot report it.");
         }
 
-        if (!File.Exists(Path.Combine(repoRoot, RegistryRelativePath.Replace('/', Path.DirectorySeparatorChar))))
+        if (!File.Exists(Path.Combine(repoRoot, CapabilityAge.RegistryRelativePath.Replace('/', Path.DirectorySeparatorChar))))
         {
             return CapabilityAgeReport.Unavailable(
-                $"the capability registry is not at {RegistryRelativePath}. Age is probed by pathspec, " +
+                $"the capability registry is not at {CapabilityAge.RegistryRelativePath}. Age is probed by pathspec, " +
                 "so a moved or renamed registry silently resolves nothing — update " +
-                $"{nameof(CapabilityAge)}.{nameof(RegistryRelativePath)} to the new path.");
+                $"{nameof(CapabilityAge)}.{nameof(CapabilityAge.RegistryRelativePath)} to the new path.");
         }
 
         // Asked BEFORE any history is read, because a shallow clone does not fail — it LIES. Every
@@ -163,7 +126,7 @@ public static class CapabilityAge
             //     and the dates are merely younger.
             var log = await GitAsync(
                 repoRoot,
-                ["log", "--follow", "--format=%aI", "-S", capability.Name, "--", RegistryRelativePath],
+                ["log", "--follow", "--format=%aI", "-S", capability.Name, "--", CapabilityAge.RegistryRelativePath],
                 ct);
 
             if (!log.Ok)
@@ -273,19 +236,4 @@ public static class CapabilityAge
     {
         public static GitResult Failed(string failure) => new(false, string.Empty, failure);
     }
-}
-
-/// <summary>
-/// What the age probe saw. Either an introduction date per capability, or a reason it saw nothing —
-/// never a silent empty map, because "no stale capabilities" and "I could not look" are the two
-/// answers this mechanism must never confuse.
-/// </summary>
-public sealed record CapabilityAgeReport(
-    IReadOnlyDictionary<string, DateTimeOffset> IntroducedAt,
-    string? UnavailableReason)
-{
-    public bool IsAvailable => UnavailableReason is null;
-
-    public static CapabilityAgeReport Unavailable(string reason) =>
-        new(new Dictionary<string, DateTimeOffset>(StringComparer.Ordinal), reason);
 }

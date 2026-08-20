@@ -3,6 +3,7 @@ using System.Text.Json;
 using LeaseBook.Modules.Capabilities.Caching;
 using LeaseBook.Modules.Capabilities.Contracts;
 using LeaseBook.Modules.Capabilities.Domain;
+using LeaseBook.Modules.Capabilities.Registry;
 using LeaseBook.SharedKernel;
 using LeaseBook.Web.Cli;
 using LeaseBook.Web.Tenancy;
@@ -342,7 +343,7 @@ public static class CapabilitiesCommand
     /// </summary>
     private static async Task ReportAgeAsync(CancellationToken ct)
     {
-        var report = await CapabilityAge.ResolveAsync(ct);
+        var report = await CapabilityAgeProbe.ResolveAsync(ct);
         var now = DateTimeOffset.UtcNow;
         var window = (int)CapabilityAge.PolicyWindow.TotalDays;
 
