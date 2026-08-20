@@ -14,7 +14,7 @@ const REPORT: ReportDescriptor = {
   description: 'Audit-ready ZIP for a closed period',
   favorite: false,
   icon: 'doc',
-  acceptedFilters: ['bankAccountId', 'from', 'to'],
+  filterControls: ['bankAccountId', 'from', 'to'],
 };
 
 const BANKS_RESPONSE = {

@@ -275,6 +275,27 @@ else — it holds no loop, no posting and no persistence, and it is what a run t
 its preview.
 _Avoid_: batch (a plan is not sized or chunked), work list, queue, job
 
+### Reports
+
+**Report catalog**:
+The fixed set of reports the product offers. Each entry names the report, the category it is filed
+under and the filter controls its builder presents. It is authored in source, identical for every
+organization, and never edited by a property manager.
+_Avoid_: report list, report registry, saved reports (nothing is saved)
+
+**Filter control**:
+One filter the report builder offers for a given report — an owner, a property, a trust account, a
+period. A report offers only the controls its catalog entry declares, and each control is named for
+the query parameter it sets. Declaring a control decides what a property manager can narrow a report
+by; it does not decide what the server will accept.
+_Avoid_: accepted filter (nothing rejects one), filter key, query param
+
+**Accounting basis**:
+Cash or accrual — which of the two views of the same journal a figure is drawn from. Every figure the
+product shows is on exactly one basis, and which one is always stated rather than implied, because
+the same period reads differently under each.
+_Avoid_: mode, view, accounting method
+
 ### Statement delivery
 
 **Statement artifact**:

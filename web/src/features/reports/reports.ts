@@ -49,11 +49,16 @@ export function currentPeriodFilters(): StatementFilters {
 
 // ---- Report filters ----------------------------------------------------------
 
+/**
+ * The filters the report builder sends to the preview and CSV routes. These are exactly the query
+ * parameters those routes bind — there is deliberately no `basis` here. Owner statements are
+ * basis-aware and carry it on {@link StatementFilters}; the generic preview queries have no basis
+ * dimension, so offering one would refetch and return identical figures (#229, #230).
+ */
 export interface ReportFilters {
   year?: number;
   month?: number;
   asOf?: string;
-  basis?: 'cash' | 'accrual';
   propertyId?: string;
   ownerId?: string;
   bankAccountId?: string;

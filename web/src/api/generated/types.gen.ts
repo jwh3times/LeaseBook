@@ -700,7 +700,7 @@ export type ReportDescriptor = {
     category: string;
     icon: string;
     description: string;
-    acceptedFilters: Array<string>;
+    filterControls: Array<string>;
     favorite?: boolean;
 };
 

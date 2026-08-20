@@ -8,15 +8,15 @@ namespace LeaseBook.Modules.Reporting.Catalog;
 /// </summary>
 public static class ReportCatalog
 {
-    // Filters common to several reports.
+    // Filter controls common to several reports. Every key is the literal query parameter the
+    // preview endpoint binds; see ReportDescriptor.FilterControls.
     private static readonly IReadOnlyList<string> YearMonth = ["year", "month"];
-    private static readonly IReadOnlyList<string> YearMonthOwnerProperty = ["year", "month", "owner", "property"];
-    private static readonly IReadOnlyList<string> YearMonthBank = ["year", "month", "bank"];
+    private static readonly IReadOnlyList<string> YearMonthOwnerProperty = ["year", "month", "ownerId", "propertyId"];
+    private static readonly IReadOnlyList<string> YearMonthBank = ["year", "month", "bankAccountId"];
     private static readonly IReadOnlyList<string> AsOfDate = ["asOf"];
     private static readonly IReadOnlyList<string> None = [];
 
     // WP-8: the compliance pack is a trust-account × from/to range export (a ZIP, not a preview).
-    // The filter keys are the literal query params the endpoint binds (GET /api/reports/compliance-pack).
     private static readonly IReadOnlyList<string> BankPeriodRange = ["bankAccountId", "from", "to"];
 
     /// <summary>
