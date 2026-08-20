@@ -22,9 +22,20 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 - _Nothing yet._
 
+### Removed
+
+- **The report builder's cash/accrual switch is gone.** It never changed the figures it appeared to
+  control: switching it reloaded the report and returned exactly the same numbers, so it could read as
+  confirmation that a total was on the accrual basis when it was on the cash basis. Owner statements
+  are unaffected and keep their own working basis switch, which does change what it shows. Letting the
+  other reports be read on either basis is planned separately.
+
 ### Fixed
 
-- _Nothing yet._
+- **Reports can now be narrowed by owner, property and bank account.** Several reports are meant to be
+  filtered that way, but the controls never appeared — only the period filter did — so those reports
+  could only be run across everything at once. The right controls now show for each report, and
+  choosing one narrows both the preview on screen and the exported CSV.
 
 ### Security
 

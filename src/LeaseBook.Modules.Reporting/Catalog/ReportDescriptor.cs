@@ -8,9 +8,16 @@ namespace LeaseBook.Modules.Reporting.Catalog;
 /// <param name="Category">Category tag: "Owner", "Trust accounting", or "Banking".</param>
 /// <param name="Icon">Design-system icon name from screen-reports.jsx.</param>
 /// <param name="Description">Short description for the catalog card.</param>
-/// <param name="AcceptedFilters">
-/// Filter keys this report accepts (e.g. ["year", "month", "owner", "property"]).
-/// Used by the preview endpoint to validate incoming query params.
+/// <param name="FilterControls">
+/// The filter controls the report builder should offer for this report, keyed by the literal query
+/// parameter each one binds to (e.g. ["year", "month", "ownerId", "propertyId"]).
+/// <para>
+/// This is a UI affordance contract, not a validation gate: nothing server-side reads it, and the
+/// preview endpoint binds its query parameters regardless of what this list says. The SPA tests
+/// membership against these exact strings to decide which chips to render, so a key that does not
+/// match a bound parameter name silently hides a control. <c>FilterControlVocabularyTests</c>
+/// enforces the match.
+/// </para>
 /// </param>
 /// <param name="Favorite">Whether this report is starred in the prototype.</param>
 public sealed record ReportDescriptor(
@@ -19,5 +26,5 @@ public sealed record ReportDescriptor(
     string Category,
     string Icon,
     string Description,
-    IReadOnlyList<string> AcceptedFilters,
+    IReadOnlyList<string> FilterControls,
     bool Favorite = false);

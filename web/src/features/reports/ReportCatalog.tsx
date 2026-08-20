@@ -110,40 +110,7 @@ function periodLabel(year: number, month: number): string {
   return `${MONTHS[month - 1] ?? 'Month'} ${year}`;
 }
 
-// ---- Basis toggle -----------------------------------------------------------
-
-type Basis = 'cash' | 'accrual';
-
-interface BasisToggleProps {
-  basis: Basis;
-  onChange: (b: Basis) => void;
-}
-
-function BasisToggle({ basis, onChange }: BasisToggleProps) {
-  return (
-    <div className="pf-basis-toggle" aria-label="Accounting basis">
-      <span className="pf-fchip-label" style={{ marginRight: 4 }}>
-        Basis
-      </span>
-      {(['cash', 'accrual'] as const).map((b) => (
-        <button
-          key={b}
-          className={`pf-basis-btn${basis === b ? ' active' : ''}`}
-          aria-pressed={basis === b}
-          onClick={() => onChange(b)}
-          type="button"
-        >
-          {b === 'cash' ? 'Cash' : 'Accrual'}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 // ---- Builder panel ----------------------------------------------------------
-
-// Reports whose preview supports a basis toggle (cash/accrual).
-const BASIS_SENSITIVE = ['owner-stmt', 'trust-ledger', 'owner-bal'];
 
 interface BuilderPanelProps {
   report: ReportDescriptor;
@@ -155,18 +122,18 @@ const CURRENT_MONTH = new Date().getMonth() + 1;
 function BuilderPanel({ report }: BuilderPanelProps) {
   const [year, setYear] = useState(CURRENT_YEAR);
   const [month, setMonth] = useState(CURRENT_MONTH);
-  const [basis, setBasis] = useState<Basis>('cash');
   const [propertyId, setPropertyId] = useState<string | null>(null);
   const [ownerId, setOwnerId] = useState<string | null>(null);
   const [bankAccountId, setBankAccountId] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<ReportsError | null>(null);
   const [periodOpen, setPeriodOpen] = useState(false);
 
-  const af = (report.acceptedFilters as string[] | undefined) ?? [];
-  const showBasisToggle = BASIS_SENSITIVE.includes(report.id);
-  const showProperty = af.includes('propertyId');
-  const showOwner = af.includes('ownerId');
-  const showBank = af.includes('bankAccountId');
+  // The catalog declares which filter controls to offer, keyed by the query parameter each one
+  // binds. FilterControlVocabularyTests keeps these strings matching the endpoint's parameters.
+  const controls = report.filterControls;
+  const showProperty = controls.includes('propertyId');
+  const showOwner = controls.includes('ownerId');
+  const showBank = controls.includes('bankAccountId');
 
   // Only fetch lists when the corresponding filter chip is shown for the selected report.
   const ownersQuery = useOwners({ enabled: showOwner });
@@ -189,7 +156,6 @@ function BuilderPanel({ report }: BuilderPanelProps) {
   const filters: ReportFilters = {
     year,
     month,
-    ...(showBasisToggle ? { basis } : {}),
     ...(showProperty && propertyId ? { propertyId } : {}),
     ...(showOwner && ownerId ? { ownerId } : {}),
     ...(showBank && bankAccountId ? { bankAccountId } : {}),
@@ -314,7 +280,7 @@ function BuilderPanel({ report }: BuilderPanelProps) {
           )}
         </div>
 
-        {/* Owner chip — shown when report.acceptedFilters includes 'ownerId' */}
+        {/* Owner chip — shown when report.filterControls includes 'ownerId' */}
         {showOwner && (
           <SelectChip
             label="Owner"
@@ -325,7 +291,7 @@ function BuilderPanel({ report }: BuilderPanelProps) {
           />
         )}
 
-        {/* Property chip — shown when report.acceptedFilters includes 'propertyId' */}
+        {/* Property chip — shown when report.filterControls includes 'propertyId' */}
         {showProperty && (
           <SelectChip
             label="Property"
@@ -336,7 +302,7 @@ function BuilderPanel({ report }: BuilderPanelProps) {
           />
         )}
 
-        {/* Bank chip — shown when report.acceptedFilters includes 'bankAccountId' */}
+        {/* Bank chip — shown when report.filterControls includes 'bankAccountId' */}
         {showBank && (
           <SelectChip
             label="Bank"
@@ -347,9 +313,6 @@ function BuilderPanel({ report }: BuilderPanelProps) {
           />
         )}
       </div>
-
-      {/* Basis toggle (for applicable reports) */}
-      {showBasisToggle && <BasisToggle basis={basis} onChange={setBasis} />}
 
       <ApiErrorNotice error={downloadError} style={{ padding: '8px var(--card-pad)' }} />
 

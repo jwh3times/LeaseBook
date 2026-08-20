@@ -15,7 +15,7 @@ const CATALOG = [
     description: 'Every owner balance with per-bank breakdown',
     favorite: true,
     icon: 'dashboard',
-    acceptedFilters: ['year', 'month'],
+    filterControls: ['year', 'month'],
   },
   {
     id: 'trust-ledger',
@@ -24,7 +24,7 @@ const CATALOG = [
     description: 'Full activity for any trust account',
     favorite: false,
     icon: 'doc',
-    acceptedFilters: ['year', 'month', 'bankAccountId'],
+    filterControls: ['year', 'month', 'bankAccountId'],
   },
   {
     id: 'bank-rec',
@@ -33,7 +33,7 @@ const CATALOG = [
     description: 'Reconciliation detail with cleared status',
     favorite: true,
     icon: 'bank',
-    acceptedFilters: ['year', 'month', 'bankAccountId'],
+    filterControls: ['year', 'month', 'bankAccountId'],
   },
   {
     id: 'owner-stmt',
@@ -42,7 +42,7 @@ const CATALOG = [
     description: 'Monthly statement for a specific owner',
     favorite: false,
     icon: 'owners',
-    acceptedFilters: ['year', 'month', 'ownerId'],
+    filterControls: ['year', 'month', 'ownerId'],
   },
 ];
 
@@ -261,16 +261,6 @@ describe('ReportCatalog', () => {
     expect(await screen.findByRole('table', { name: 'Report preview' })).toBeInTheDocument();
   });
 
-  it('shows basis toggle on reports that accept basis filter', async () => {
-    server.use(...baseHandlers());
-    renderCatalog();
-
-    await screen.findAllByText('All owner ending balances');
-
-    // owner-bal is auto-selected — it is BASIS_SENSITIVE so the toggle should appear.
-    expect(screen.getByLabelText('Accounting basis')).toBeInTheDocument();
-  });
-
   it('re-queries preview with new period params after changing the month', async () => {
     const previewRequests: URLSearchParams[] = [];
     server.use(
@@ -308,47 +298,13 @@ describe('ReportCatalog', () => {
     });
   });
 
-  it('re-queries preview when toggling Cash/Accrual (basis is a cache-key differentiator)', async () => {
-    // The typed client sends basis-insensitive params (basis is a TanStack Query cache-key
-    // differentiator, not a backend query param — the backend report previews are basis-aware
-    // only via the statement endpoint). Toggling basis changes the query key and triggers a
-    // second request; we assert that at least two requests fire.
-    let requestCount = 0;
-    server.use(
-      http.get('/api/reports', () => HttpResponse.json(CATALOG)),
-      http.get('/api/reports/:id/preview', () => {
-        requestCount++;
-        return HttpResponse.json(PREVIEW_RESPONSE);
-      }),
-      http.get('/api/directory/owners', () => HttpResponse.json(OWNERS_RESPONSE)),
-      http.get('/api/directory/properties', () =>
-        HttpResponse.json({ items: [], page: 1, pageSize: 200, total: 0 }),
-      ),
-      http.get('/api/accounting/banks/balances', () => HttpResponse.json(BANKS_RESPONSE)),
-    );
-    renderCatalog();
-
-    await screen.findAllByText('All owner ending balances');
-    await screen.findByRole('table', { name: 'Report preview' });
-
-    const initialCount = requestCount;
-
-    // owner-bal is BASIS_SENSITIVE; click Accrual — changes the query key, fires a new request.
-    const basisGroup = screen.getByLabelText('Accounting basis');
-    await userEvent.click(within(basisGroup).getByRole('button', { name: 'Accrual' }));
-
-    await vi.waitFor(() => {
-      expect(requestCount).toBeGreaterThan(initialCount);
-    });
-  });
-
-  it('renders bank filter chip on reports with bankAccountId in acceptedFilters', async () => {
+  it('renders bank filter chip on reports with bankAccountId in filterControls', async () => {
     server.use(...baseHandlers());
     renderCatalog();
 
     await screen.findAllByText('All owner ending balances');
 
-    // Select trust-ledger which has bankAccountId in acceptedFilters.
+    // Select trust-ledger which has bankAccountId in filterControls.
     const list = screen.getByRole('list', { name: 'Available reports' });
     await userEvent.click(within(list).getByRole('button', { name: /Trust account ledger/ }));
 
@@ -396,13 +352,13 @@ describe('ReportCatalog', () => {
     });
   });
 
-  it('renders owner filter chip on reports with ownerId in acceptedFilters', async () => {
+  it('renders owner filter chip on reports with ownerId in filterControls', async () => {
     server.use(...baseHandlers());
     renderCatalog();
 
     await screen.findAllByText('All owner ending balances');
 
-    // Select owner-stmt which has ownerId in acceptedFilters.
+    // Select owner-stmt which has ownerId in filterControls.
     const list = screen.getByRole('list', { name: 'Available reports' });
     await userEvent.click(within(list).getByRole('button', { name: /Owner statement/ }));
 

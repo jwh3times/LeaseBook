@@ -268,6 +268,50 @@ test.describe.serial('M5 reports', () => {
     await page.screenshot({ path: 'e2e-results/m5-filter-changed.png', fullPage: true });
   });
 
+  // Regression guard for #229. The catalog declared its filter controls as "owner"/"property" while
+  // the preview endpoint bound ownerId/propertyId, so every membership test in the builder was
+  // permanently false: these chips never rendered and no report could be filtered by owner, property
+  // or bank at all. FilterControlVocabularyTests catches the vocabulary drift at build time; only a
+  // real browser proves the control is reachable and that choosing an owner reaches the wire.
+  test('owner statement builder offers the owner filter and sends ownerId to the preview', async ({
+    page,
+  }) => {
+    await login(page);
+    await page.goto('/reports');
+    await expect(page.getByText('Rent roll')).toBeVisible({ timeout: 15_000 });
+
+    const ownerStmtCard = page
+      .locator('.pf-report-card')
+      .filter({ hasText: 'Owner statement' })
+      .first();
+    await ownerStmtCard.click();
+    await expect(
+      page.locator('.pf-builder').locator('h3').filter({ hasText: 'Owner statement' }),
+    ).toBeVisible({ timeout: 8_000 });
+
+    // Both chips owner-stmt declares must be offered. Scoped to the filter strip because "Owner" is
+    // also a report category label on the cards behind it.
+    const filters = page.getByRole('group', { name: 'Report filters' });
+    const ownerChip = filters.locator('button').filter({ hasText: 'Owner' }).first();
+    await expect(ownerChip).toBeVisible();
+    await expect(filters.locator('button').filter({ hasText: 'Property' }).first()).toBeVisible();
+
+    // Choosing an owner must reach the preview request as ownerId — the endpoint's own parameter
+    // name. Asserting the chip renders is not enough: the bug this guards was a name mismatch.
+    const previewWithOwner = page.waitForRequest(
+      (request) =>
+        request.url().includes('/api/reports/owner-stmt/preview') &&
+        new URL(request.url()).searchParams.get('ownerId') === O5_ID,
+      { timeout: 20_000 },
+    );
+
+    await ownerChip.click();
+    const ownerPopover = page.getByRole('dialog', { name: 'Select Owner' });
+    await ownerPopover.getByRole('button', { name: O5_NAME }).click();
+
+    await previewWithOwner;
+  });
+
   test('report catalog Export CSV button returns a CSV file', async ({ page }) => {
     await login(page);
     await page.goto('/reports');
