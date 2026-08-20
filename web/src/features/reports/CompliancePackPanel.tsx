@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Badge, Button, Card, CardHeader, EmptyState, Icon, Input } from '@/design';
 import { ApiErrorNotice } from '@/components/ApiErrorNotice';
-import { asApiError } from '@/lib/apiError';
+import { asApiError, type ApiError } from '@/api';
 import { useBankBalances } from '@/features/banking/banking';
 import { SelectChip, type SelectChipOption } from './chips';
 import { downloadCompliancePack, type ReportDescriptor, type ReportsError } from './reports';
@@ -13,6 +13,24 @@ function currentYearStart(): string {
 }
 function today(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+/**
+ * Operator-facing copy for the pack's three known failures. This keys off status as well as `code`
+ * because the server states the domain code in `title` on some of these and not at all on a 404 —
+ * an empty 404 body still means "that trust account is gone". The branch order is the one the
+ * transport-layer mapper used before ADR-025's consolidation reached this surface: status wins for
+ * 422, code wins for the rest.
+ */
+function compliancePackMessage(e: ApiError): string | undefined {
+  if (e.status === 422 || e.code === 'period_not_closed') {
+    return "This period isn't closed yet — finalize the reconciliation for every month in the range first.";
+  }
+  if (e.status === 404) return 'That trust account could not be found.';
+  if (e.status === 400 || e.code === 'invalid_period') {
+    return 'The start date must be on or before the end date.';
+  }
+  return undefined;
 }
 
 interface CompliancePackPanelProps {
@@ -56,7 +74,8 @@ export function CompliancePackPanel({ report, isAdmin }: CompliancePackPanelProp
       await downloadCompliancePack(bankAccountId, from, to);
       setDone(true);
     } catch (e) {
-      setError(asApiError(e, 'Download failed. Please retry.'));
+      const err = asApiError(e, 'Download failed. Please retry.');
+      setError({ ...err, message: compliancePackMessage(err) ?? err.message });
     } finally {
       setBusy(false);
     }

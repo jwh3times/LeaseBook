@@ -1,5 +1,5 @@
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
-import { getApiSearch, type SearchResult } from '@/api';
+import { getApiSearch, unwrap, type SearchResult } from '@/api';
 
 export type { SearchResult };
 
@@ -7,11 +7,7 @@ export type { SearchResult };
 export function useSearch(q: string): UseQueryResult<SearchResult[]> {
   return useQuery({
     queryKey: ['search', q],
-    queryFn: async () => {
-      const { data, error } = await getApiSearch({ query: { q, limit: 20 } });
-      if (error || !data) throw new Error('Search failed');
-      return data;
-    },
+    queryFn: () => unwrap(getApiSearch({ query: { q, limit: 20 } }), 'Search failed'),
     enabled: q.trim().length >= 1,
     staleTime: 10_000,
   });

@@ -10,7 +10,8 @@ You build and review LeaseBook's React 19 + TypeScript + Vite SPA in `web/`. Eve
 
 ```
 web/src/
-  api/           — generated Hey API SDK/models plus hand-authored runtime and XSRF setup
+  api/           — the request-execution module: generated Hey API SDK/models plus hand-authored
+                   runtime, XSRF setup, `unwrap`, `download`, and the `ApiError` vocabulary
   design/        — design system primitives (prototype-ported): tokens.css, Money.tsx, Badge.tsx, EmptyState.tsx, …
   components/    — app-level shared components above the primitives: Modal.tsx, IndexView.tsx, DetailPage.tsx, StatusBadge.tsx, recordNav.tsx, …
   features/      — feature modules: tenants/, owners/, banking/, reports/, operations/, palette/, …
@@ -87,13 +88,13 @@ export function useTenantLedger(
 ): UseQueryResult<TenantLedgerResponse> {
   return useQuery({
     queryKey: tenantLedgerKey(id),
-    queryFn: async () => {
-      const { data, error } = await getApiAccountingTenantsByTenantIdLedger({
-        path: { tenantId: id },
-      });
-      if (error || !data) throw new Error("Failed to load the ledger");
-      return data;
-    },
+    // unwrap throws an ApiError carrying the server's code and correlationId; the string is only
+    // the fallback for a response body that explains nothing.
+    queryFn: () =>
+      unwrap(
+        getApiAccountingTenantsByTenantIdLedger({ path: { tenantId: id } }),
+        "Failed to load the ledger",
+      ),
   });
 }
 
@@ -103,12 +104,10 @@ export function useRecordPayment(tenantId: string) {
   return useMutation<PostResult, LedgerPostError, RecordPaymentRequest>({
     mutationFn: async (body) => {
       await primeCsrf();
-      const { data, error } = await postApiAccountingTenantsByTenantIdPayments({
-        path: { tenantId },
-        body,
-      });
-      if (error) throw error;
-      return data!;
+      return unwrap(
+        postApiAccountingTenantsByTenantIdPayments({ path: { tenantId }, body }),
+        "Failed to record the payment",
+      );
     },
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: tenantLedgerKey(tenantId) }),
@@ -124,7 +123,11 @@ export function useRecordPayment(tenantId: string) {
 
 Rules:
 
-- Always throw on `error || !data` — never silently return null from a queryFn
+- Always run reads through `unwrap(call, fallbackMessage)` from `@/api` — never hand-write
+  `if (error || !data) throw new Error(...)`, and never silently return null from a queryFn.
+  `SpaRequestExecutionTests` fails the build on a hand-written success rule outside `web/src/api`
+  (ADR-025): a literal throw discards the `code` and `correlationId` the server already sent, which
+  is exactly what kept failed reads from ever rendering a support reference.
 - Export the key fn so mutations can invalidate by the same key
 - Handle domain error codes (e.g., `'account_period_locked'`, `'duplicate_source_ref'`, `'insufficient_receivable'`) in `onError`, not via generic toast
 
@@ -134,22 +137,38 @@ Rules:
 
 ```ts
 import {
+  download,
   getApiAccountingBanksByBankAccountIdRegister,
   postApiAccountingTenantsByTenantIdPayments,
+  unwrap,
   type RegisterResponse,
 } from "@/api";
 
-// GET
-const { data, error } = await getApiAccountingBanksByBankAccountIdRegister({
-  path: { bankAccountId },
-  query: { from, to },
-});
+// GET — unwrap returns the body or throws an ApiError (code + correlationId + status)
+const register = await unwrap(
+  getApiAccountingBanksByBankAccountIdRegister({
+    path: { bankAccountId },
+    query: { from, to },
+  }),
+  "Failed to load the register",
+);
 
-// POST
-const { data, error } = await postApiAccountingTenantsByTenantIdPayments({
-  path: { tenantId },
-  body: { amount, date, memo },
-});
+// POST — same rule
+const result = await unwrap(
+  postApiAccountingTenantsByTenantIdPayments({
+    path: { tenantId },
+    body: { amount, date, memo },
+  }),
+  "Failed to record the payment",
+);
+
+// File download — the thunk absorbs which generated function and options; the helper owns the
+// success check, the Blob guard, and the anchor dance
+await download(
+  () => getApiReportsByIdCsv({ path: { id }, parseAs: "blob" }),
+  `report-${id}.csv`,
+  "Failed to export the report",
+);
 
 // Types
 type BankRegister = RegisterResponse;
@@ -158,7 +177,11 @@ type BankRegister = RegisterResponse;
 - The client is generated via `npm run api:generate` into `src/api/generated` — import named SDK
   functions and models through `@/api`; never edit generated files or hand-write API types
 - XSRF cookie → `X-XSRF-TOKEN` header is handled automatically by the client middleware
-- Never call `fetch` directly for API requests
+- Never call `fetch` directly for API requests, and never read `document.cookie` outside
+  `api/client.ts` — that is one statement of security policy, and a second copy fails silently
+- `web/src/api` owns request execution end to end (ADR-025). `SpaRequestExecutionTests` fails the
+  build if the success rule, `createObjectURL`, a `document.cookie` read, or a raw `fetch(` appears
+  under `web/src` outside it
 
 ---
 
@@ -268,6 +291,9 @@ test("records a payment", async () => {
 | Hardcoded color values                      | CSS tokens: `var(--text)`, `var(--surface)`, etc.            |
 | Color as sole status indicator              | `<Badge tone={…} dot>` (always `dot` or `icon`)              |
 | `fetch(…)` for API calls                    | Generated named SDK functions from `@/api`                   |
+| `if (error \|\| !data) throw new Error(…)`     | `unwrap(call, fallbackMessage)` from `@/api`                 |
+| `URL.createObjectURL` + anchor click        | `download(call, filename)` from `@/api`                      |
+| `document.cookie` reads outside `api/`      | The XSRF interceptor in `api/client.ts`                      |
 | Hand-written API types                      | Generated named model types from `@/api`                     |
 | Relative import paths `../../`              | `@/design`, `@/components`, `@/api`, `@/lib`, `@/features/…` |
 | Ad-hoc `font-variant-numeric`               | `<td className="num">` / `<Money>` / `className="pf-num"`    |

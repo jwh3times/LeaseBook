@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Badge, Button, Card, CardHeader, EmptyState, Icon } from '@/design';
 import { ApiErrorNotice } from '@/components/ApiErrorNotice';
-import { asApiError } from '@/lib/apiError';
+import { asApiError } from '@/api';
 import { useOwners, useProperties } from '@/lib/directory';
 import { useBankBalances } from '@/features/banking/banking';
 import { useSession } from '@/features/auth/useSession';

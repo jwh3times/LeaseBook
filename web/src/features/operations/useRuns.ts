@@ -8,6 +8,8 @@ import {
   getApiOperationsRunsByTypePreview,
   postApiOperationsRunsByTypeConfirm,
   primeCsrf,
+  unwrap,
+  type ApiError,
   type BulkRunDetailResponse,
   type BulkRunSpa,
   type ConfirmRunRequest,
@@ -16,7 +18,6 @@ import {
   type RunPreviewSpaResponse,
   type RunResultSpaResponse,
 } from '@/api';
-import { toApiError, type ApiError } from '@/lib/apiError';
 
 // ─── Types mirroring the SPA-response records ─────────────────────────────────
 
@@ -49,14 +50,11 @@ export function useRunPreview(
 ): UseQueryResult<RunPreviewSpaResponse> {
   return useQuery({
     queryKey: runPreviewKey(type, year, month),
-    queryFn: async () => {
-      const { data, error } = await getApiOperationsRunsByTypePreview({
-        path: { type },
-        query: { year, month },
-      });
-      if (error || !data) throw new Error(`Failed to load ${type} preview`);
-      return data;
-    },
+    queryFn: () =>
+      unwrap(
+        getApiOperationsRunsByTypePreview({ path: { type }, query: { year, month } }),
+        `Failed to load ${type} preview`,
+      ),
   });
 }
 
@@ -64,11 +62,7 @@ export function useRunPreview(
 export function useRunHistory(): UseQueryResult<RunHistoryResponse> {
   return useQuery({
     queryKey: runHistoryKey(),
-    queryFn: async () => {
-      const { data, error } = await getApiOperationsRuns();
-      if (error || !data) throw new Error('Failed to load run history');
-      return data;
-    },
+    queryFn: () => unwrap(getApiOperationsRuns(), 'Failed to load run history'),
   });
 }
 
@@ -76,15 +70,6 @@ export function useRunHistory(): UseQueryResult<RunHistoryResponse> {
 
 /** Error shape from the operations API (400 / 409 / 500 ProblemDetails). */
 export type RunError = ApiError;
-const toRunError = toApiError;
-
-async function unwrap<T>(
-  call: Promise<{ data?: T; error?: unknown; response?: Response }>,
-): Promise<T> {
-  const { data, error, response } = await call;
-  if (data !== undefined && data !== null) return data;
-  throw toRunError(error, response?.status ?? 0);
-}
 
 /** The 409 the server raises when the capability set moved between preview and confirm. */
 export const CAPABILITIES_CHANGED = 'capabilities_changed';
@@ -120,6 +105,7 @@ export function useConfirmRun(type: RunType) {
             acknowledgeCapabilityChange: false,
           },
         }),
+        `Failed to confirm the ${type} run`,
       );
     },
     onSuccess: () => {

@@ -6,6 +6,7 @@ import {
   primeCsrf,
   putApiSettingsBanksByIdActive,
   putApiSettingsOrg,
+  unwrap,
   type BankAccountResponse,
   type CreateBankAccount,
   type OrgSettingsResponse,
@@ -22,11 +23,7 @@ export const orgSettingsKey = ['org-settings'] as const;
 export function useOrgSettings(): UseQueryResult<OrgSettings> {
   return useQuery({
     queryKey: orgSettingsKey,
-    queryFn: async () => {
-      const { data, error } = await getApiSettingsOrg();
-      if (error || !data) throw new Error('Failed to load settings');
-      return data;
-    },
+    queryFn: () => unwrap(getApiSettingsOrg(), 'Failed to load settings'),
     staleTime: 60_000,
   });
 }
@@ -36,9 +33,7 @@ export function useUpdateOrgSettings() {
   return useMutation({
     mutationFn: async (body: UpdateOrgBody) => {
       await primeCsrf();
-      const { data, error } = await putApiSettingsOrg({ body });
-      if (error || !data) throw new Error('Failed to save settings');
-      return data;
+      return unwrap(putApiSettingsOrg({ body }), 'Failed to save settings');
     },
     onSuccess: (data) => qc.setQueryData(orgSettingsKey, data),
   });
@@ -47,13 +42,11 @@ export function useUpdateOrgSettings() {
 export function useBankAccounts(activeOnly = false): UseQueryResult<BankAccount[]> {
   return useQuery({
     queryKey: ['bank-accounts', { activeOnly }],
-    queryFn: async () => {
-      const { data, error } = await getApiSettingsBanks({
-        query: activeOnly ? { activeOnly: true } : {},
-      });
-      if (error || !data) throw new Error('Failed to load bank accounts');
-      return data;
-    },
+    queryFn: () =>
+      unwrap(
+        getApiSettingsBanks({ query: activeOnly ? { activeOnly: true } : {} }),
+        'Failed to load bank accounts',
+      ),
   });
 }
 
@@ -62,12 +55,10 @@ export function useSetBankAccountActive() {
   return useMutation({
     mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) => {
       await primeCsrf();
-      const { data, error } = await putApiSettingsBanksByIdActive({
-        path: { id },
-        body: { isActive },
-      });
-      if (error || !data) throw error ?? new Error('Failed to update the bank account');
-      return data;
+      return unwrap(
+        putApiSettingsBanksByIdActive({ path: { id }, body: { isActive } }),
+        'Failed to update the bank account',
+      );
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['bank-accounts'] }),
   });
@@ -78,9 +69,7 @@ export function useCreateBankAccount() {
   return useMutation({
     mutationFn: async (body: CreateBankBody) => {
       await primeCsrf();
-      const { data, error } = await postApiSettingsBanks({ body });
-      if (error || !data) throw new Error('Failed to create the bank account');
-      return data;
+      return unwrap(postApiSettingsBanks({ body }), 'Failed to create the bank account');
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['bank-accounts'] }),
   });

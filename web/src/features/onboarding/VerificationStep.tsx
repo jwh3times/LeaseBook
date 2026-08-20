@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Button, Card, CardHeader, Icon, Money } from '@/design';
 import { ApiErrorNotice } from '@/components/ApiErrorNotice';
-import { asApiError } from '@/lib/apiError';
+import { asApiError } from '@/api';
 import {
   type OnboardingError,
   useSignoff,

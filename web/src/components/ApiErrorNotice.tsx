@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react';
 import { Icon } from '@/design';
-import type { ApiError } from '@/lib/apiError';
+import type { ApiError } from '@/api';
 
 export interface ApiErrorNoticeProps {
   error: ApiError | null;

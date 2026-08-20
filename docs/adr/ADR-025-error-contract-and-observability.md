@@ -218,6 +218,67 @@ registration behind the connection-string gate, retain the custom source and EF 
 sampling and offline-storage policy deliberately, and run the telemetry security suite before
 deployment.
 
+### 2026-08-20 amendment — the SPA error contract reaches read paths
+
+This ADR's frontend half consolidated five ProblemDetails **mappers** into one. It did not consolidate
+the **success rule** that decides when a mapper runs at all, and that gap quietly reintroduced the
+problem the consolidation set out to solve.
+
+Twenty-one read sites across eight files each wrote `if (error || !data) throw new Error('<literal>')`.
+Twenty of them discarded the ProblemDetails body entirely and substituted a hardcoded string, so the
+`code` and `correlationId` this ADR guarantees on every response never reached the SPA — and
+`ApiErrorNotice`, built here to render `Reference: <32-hex>`, had never once been fed by a failed
+read. The contract held on the wire and was thrown away on arrival. Nothing was red, because a
+hand-written throw is not a defect at any individual site; only the aggregate was.
+
+**What changed.**
+
+- `unwrap(call, fallbackMessage)` in `web/src/api/request.ts` is now the one success rule. It throws
+  an `ApiError` built by `toApiError`, so `code` and `correlationId` survive on read paths as they
+  already did on writes. The site's former literal survives as `fallbackMessage` and is used only when
+  the server body carries no `detail`, `title`, or validation entry — "Failed to load the register"
+  is better copy than `Request failed (500).` on an empty body, and worse than the server's own
+  explanation when there is one. Three modules (banking, onboarding, operations) had independently
+  converged on a byte-identical private `unwrap`; those three are now this one.
+- `ApiError` gained `status`. Domain copy sometimes keys off status rather than a body code — an
+  empty 404 still means "not found" — and without it that mapping could only live in the transport
+  layer, which is what kept `compliancePackError` there.
+- `download(call, filename, fallbackMessage)` owns the blob-to-anchor tail that stood at five sites
+  with four different error contracts above it. It is deliberately the only export: a lower-level
+  `download(blob, filename)` is what would let those four contracts grow back, and no caller needs it.
+- `lib/apiError.ts` moved to `web/src/api/apiError.ts`. The old split — transport in `api/`, error
+  vocabulary in `lib/` — is what let `lib/telemetry.ts` re-implement transport policy in `lib/`
+  without anything saying otherwise. `@/api` is now one import site for everything about talking to
+  the host.
+- `lib/telemetry.ts` uses the generated `postApiTelemetryBudget` instead of a raw `fetch` with a
+  hand-rolled `readCookie` and `X-XSRF-TOKEN` header. Its justifying comment claimed the budget
+  endpoint was host-owned and therefore had no generated function; it is in `sdk.gen.ts` and always was. The
+  argument is not deduplication at n=1 — it is that a second copy of _security_ policy works today
+  and fails silently forever if the XSRF contract moves. The fire-and-forget swallow is kept: a
+  UX-metrics ping that can surface errors into the UI is worse than one that cannot.
+- `compliancePackError` retired to `CompliancePackPanel.tsx`. It was the last bespoke survivor of the
+  five-way consolidation and the outlier: four other surfaces already key friendly copy off
+  `err.code` in the component. Report-specific wording does not belong in a transport module. Its
+  branch order is preserved exactly, including status-wins-over-code for 422.
+- The four vestigial aliases (`toBankingError`, `toOnboardingError`, `toRunError`, `toReportsError`,
+  all bare `= toApiError`) are deleted.
+
+**Enforced, not conventional.** `SpaRequestExecutionTests` fails the build when the success rule,
+`createObjectURL`, a `document.cookie` read, or a raw `fetch(` appears anywhere under `web/src`
+outside `web/src/api`. It is source-scanned because TypeScript offers the C# guards no IL, and it
+carries a vacuity control asserting the api module's own occurrences are still found — a rename that
+turned the scan green would otherwise read as compliance. `RepositorySource.WebSourceFiles()` is
+deliberately separate from `CodeFilesUnder` so adding TypeScript here cannot widen what the C#/SQL
+guards scan.
+
+**Known limit, stated rather than implied.** The mechanism now carries `detail` and `correlationId` to
+every read failure, and the surfaces that already render `ApiErrorNotice` show them — the banking
+import wizard's match preview is covered end to end by test. Roughly 28 other read-error branches
+across 18 components still render a hardcoded `EmptyState` description and discard `query.error`
+before it reaches the DOM. Wiring those is a UX decision (does every error empty-state grow a support
+reference, and what does it look like?), not a transport one, so it is deliberately not in this
+change. The data is there when that decision is made.
+
 **Residual holes — stated so "nothing fails silently" is an honest claim, not overstated:**
 
 - **Streamed responses.** Every current file download (`/api/reports/{id}/csv`,
@@ -258,9 +319,11 @@ deployment.
   build the moment a new direct `Results.Problem`/`TypedResults.Problem`/`Results.ValidationProblem`
   call appears anywhere under `src/`, at the cost of the two named, accepted scan limitations.
 - Frontend error handling collapsed from five independently drifted, hand-rolled mappers to one
-  (`web/src/lib/apiError.ts` + `web/src/components/ApiErrorNotice.tsx`), fixing `reports.ts`'s
+  (`web/src/api/apiError.ts` + `web/src/components/ApiErrorNotice.tsx`), fixing `reports.ts`'s
   silently-dropped validation branch as a side effect of consolidation rather than a separately scoped
-  fix.
+  fix. Extended 2026-08-20 (see the amendment above): the success rule and the blob download joined
+  it, so the contract now reaches read paths and is guarded by `SpaRequestExecutionTests` rather than
+  by convention.
 - Operators get an actionable 409 instead of an opaque 500 for the one reclassified case
   (`no_trust_account`); every other status code is unchanged, so this WP introduces no other
   behavioral surprise on the error path.
