@@ -6,11 +6,14 @@ namespace LeaseBook.Modules.Accounting.Features.Ledgers;
 /// <summary>
 /// All-owner balances: owner equity (operating) + deposit attribution per owner (§C.6).
 /// <para>
-/// <paramref name="Basis"/> selects which owner-equity lines count. This is the one preview whose
-/// figures genuinely move with basis: <c>owner_equity</c> is credited <c>accrual</c> when rent is
-/// charged (<c>RentCharged</c>) and <c>cash</c> when the money arrives (<c>PaymentReceived</c>), so
-/// the two bases answer different questions — earned vs. collected. Deposits do not move: every
+/// <paramref name="Basis"/> selects which owner-equity lines count. This is the one report read
+/// where choosing a basis changes the answer: <c>owner_equity</c> is the only account class holding
+/// both cash-only and accrual-only lines — credited <c>accrual</c> when rent is charged
+/// (<c>RentCharged</c>) and <c>cash</c> when the money arrives (<c>PaymentReceived</c>) — so the two
+/// bases answer different questions, earned vs. collected. Deposits do not move: every
 /// <c>deposit_liability</c> line is tagged <c>both</c>, so that column is identical either way.
+/// (<c>tenant_receivable</c> is also single-basis, but accrual-only, so it is fixed by
+/// non-existence on cash rather than offering a choice — see <c>GetDelinquencyAging</c>.)
 /// </para>
 /// </summary>
 /// <param name="Basis">"cash" (default) or "accrual"; any other value is treated as cash.</param>

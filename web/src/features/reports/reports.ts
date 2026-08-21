@@ -55,11 +55,14 @@ export function currentPeriodFilters(): StatementFilters {
  * The filters the report builder sends to the preview and CSV routes. These are exactly the query
  * parameters those routes bind.
  *
- * `basis` is carried for `owner-bal` only. The blanket claim that previews have no basis dimension
- * held for every report but that one: `owner_equity` is credited `accrual` on RentCharged and
- * `cash` on PaymentReceived, so its Operating column genuinely differs, while every other preview
- * reads account classes whose lines are all tagged `both`. The catalog's `filterControls` decides
- * where the control appears, so a basis chip cannot reappear on a report it would not move (#230).
+ * `basis` is carried for `owner-bal` only, because it is the one preview where choosing a basis
+ * changes the answer: `owner_equity` is credited `accrual` on RentCharged and `cash` on
+ * PaymentReceived, so its Operating column genuinely differs. Every other preview is fixed-basis
+ * for one of two reasons — its lines are all tagged `both` and read identically either way (bank
+ * registers, held deposits, PM income), or the figure exists on one basis only (a receivable is
+ * accrual by nature, which is why delinquency is accrual-only). The catalog's `filterControls`
+ * decides where the control appears, so a basis chip cannot reappear on a report it would not
+ * move (#230).
  */
 export type ReportBasis = 'cash' | 'accrual';
 
