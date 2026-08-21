@@ -9,7 +9,6 @@ import {
   getApiStatementsByOwnerIdCsv,
   getApiStatementsByOwnerIdPdf,
   postApiStatementsByOwnerIdDeliver,
-  primeCsrf,
   toApiError,
   unwrap,
   type ApiError,
@@ -164,7 +163,6 @@ export async function deliverStatement(
   filters: StatementFilters,
   toEmail?: string,
 ): Promise<void> {
-  await primeCsrf();
   const { error, response } = await postApiStatementsByOwnerIdDeliver({
     path: { ownerId },
     query: {

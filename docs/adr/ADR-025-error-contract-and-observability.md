@@ -305,6 +305,38 @@ change. The data is there when that decision is made.
   new id in the reserved 1100+ range) rather than inventing its own. Recorded here so WP-11 inherits
   this contract explicitly instead of designing its error handling independently.
 
+### 2026-08-21 amendment — XSRF priming absorbed into the request path
+
+The 2026-08-20 amendment consolidated the success rule, the download tail, and the error vocabulary
+into `web/src/api`, and left one request-execution policy outstanding (recorded as issue #237):
+25 manual `await primeCsrf()` calls across seven feature files, each a precondition the author of a
+new mutation had to remember, and each failing as an antiforgery rejection rather than anything
+visible at the call site — the same shape as the three policies already absorbed.
+
+**Why the calls existed.** The antiforgery request token is user-bound: a token minted signed-out is
+invalid once signed in, and vice versa. Priming before every mutation guaranteed freshness by brute
+force — at the cost of a serial `GET /api/auth/csrf` round-trip inside every mutation.
+
+**What changed.** The client interceptors in `web/src/api/client.ts` now own token freshness in two
+layers, and all 25 call-site primes are deleted:
+
+- **Prime on demand.** The request interceptor, on an unsafe method with no readable `XSRF-TOKEN`
+  cookie (first-ever mutation, or the session cookie evicted while the 8-hour auth cookie lives on),
+  fetches a token before sending. Concurrent unprimed mutations share one refresh. Best-effort: a
+  failed prime lets the request proceed to the server's verdict.
+- **Replay once on rejection.** Cookie presence cannot detect a _stale_ token — present but minted
+  for a different signed-in state. The server can: `ApiAntiforgeryMiddleware` rejects with the stable
+  `antiforgery_rejected` code this ADR's contract guarantees. On that code (and only that code) the
+  response interceptor refreshes the token and replays a pristine pre-send clone of the request
+  exactly once; a second rejection surfaces as the error it is. This is the first consumer of the
+  machine-readable `code` inside the transport layer itself, which is why the mechanism lives here.
+
+`primeCsrf` remains exported for auth-state changes only — `LoginPage` primes on mount (refreshing
+the anonymous token) and after sign-in (refreshing the user-bound one), which is latency hiding on
+the sign-in path, not correctness; the interceptors are the correctness. The sign-out path carries
+no manual prime at all. Mutations get one round-trip faster in the common case, and the
+"remember to prime" precondition is gone rather than renamed — the outcome #237 required.
+
 ## Consequences
 
 - Every error response an operator can screenshot now carries a `Reference: <32-hex>` string they can
