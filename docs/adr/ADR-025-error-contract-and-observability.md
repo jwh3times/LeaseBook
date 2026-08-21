@@ -327,9 +327,23 @@ layers, and all 25 call-site primes are deleted:
 - **Replay once on rejection.** Cookie presence cannot detect a _stale_ token — present but minted
   for a different signed-in state. The server can: `ApiAntiforgeryMiddleware` rejects with the stable
   `antiforgery_rejected` code this ADR's contract guarantees. On that code (and only that code) the
-  response interceptor refreshes the token and replays a pristine pre-send clone of the request
-  exactly once; a second rejection surfaces as the error it is. This is the first consumer of the
-  machine-readable `code` inside the transport layer itself, which is why the mechanism lives here.
+  response interceptor refreshes the token and replays the request exactly once; a second rejection
+  surfaces as the error it is. A refreshed token identical to the one already sent is treated as
+  "not staleness" and not replayed — a mutation is not something to repeat on a guess. This is the
+  first consumer of the machine-readable `code` inside the transport layer itself, which is why the
+  mechanism lives here.
+
+  **The replay must never be built with `Request.clone()`,** and the first attempt at this was.
+  Cloning tees the body into a `ReadableStream`, which mutates the _original_ request as much as the
+  copy: the browser then sends every mutation as a chunked upload with no retrievable body. Nothing
+  functional broke — the server still parsed the body, and 76 of 79 e2e specs passed — but
+  `request.postData()` went `null`, which is how the two budget-telemetry specs
+  (`keyboard-only.spec.ts`, `m3-ledger.spec.ts`) caught it. Those two specs are the regression guard
+  here; the failure is invisible to the unit layer, because MSW reads a tee'd stream perfectly well.
+  The replay instead rebuilds its request from the client's own resolved `options`, through the same
+  `getValidRequestBody` the client used to build the original, and issues it through the resolved
+  fetch — bypassing the interceptor chain, so it cannot replay again. Nothing consumes or tees the
+  in-flight request.
 
 `primeCsrf` remains exported for auth-state changes only — `LoginPage` primes on mount (refreshing
 the anonymous token) and after sign-in (refreshing the user-bound one), which is latency hiding on
