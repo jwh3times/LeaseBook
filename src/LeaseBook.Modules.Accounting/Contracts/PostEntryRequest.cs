@@ -10,7 +10,7 @@ namespace LeaseBook.Modules.Accounting.Contracts;
 /// org-filtered context (so a cross-org code is invisible, not an FK that bypasses RLS — pitfall M-E5)
 /// and denormalizes each account's class onto the line itself.
 /// </summary>
-public sealed record PostEntryRequest(
+internal sealed record PostEntryRequest(
     DateOnly EntryDate,
     string EventType,
     string? EventSubtype,
@@ -26,7 +26,7 @@ public sealed record PostEntryRequest(
 /// strictly positive. <c>account_class</c> is intentionally absent — the service sets it from the
 /// resolved account, never from the caller (pitfall M-E4).
 /// </summary>
-public sealed record PostLineRequest(
+internal sealed record PostLineRequest(
     string AccountCode,
     Money? Debit,
     Money? Credit,

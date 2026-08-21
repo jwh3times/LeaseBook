@@ -14,7 +14,7 @@ namespace LeaseBook.Modules.Accounting.Features.Reconciliation;
 /// </summary>
 public sealed record FinalizeReconciliation(Guid ReconciliationId) : ICommand<ReconciliationView>;
 
-internal sealed class FinalizeReconciliationHandler(DbContext db, IActorContext? actor = null)
+internal sealed class FinalizeReconciliationHandler(DbContext db, IActorContext actor)
     : ICommandHandler<FinalizeReconciliation, ReconciliationView>
 {
     public async Task<ReconciliationView> Handle(FinalizeReconciliation command, CancellationToken ct)
@@ -58,7 +58,17 @@ internal sealed class FinalizeReconciliationHandler(DbContext db, IActorContext?
             finalizedAt = DateTime.UtcNow,
         });
 
-        recon.Finalize(actor?.UserId, snapshot, DateTime.UtcNow);
+        // Two different nulls live here and only one of them is legitimate. A system actor has no
+        // human to record, so FinalizedBy stays nullable — that is a meaningful answer. No declared
+        // actor at all is not: finalizing locks the period, and `actor?.UserId` recorded both cases
+        // as the same null. Fail closed on the second, exactly as PostingService does (ADR-039).
+        var declared = actor.Actor
+            ?? throw new InvalidOperationException(
+                "Finalizing a reconciliation requires a declared actor — Actor.User(id) for a signed-in " +
+                "user, Actor.System(process) for a named process. Finalizing locks the (account, month) " +
+                "against further bank postings (ADR-039), so it is refused rather than recorded null.");
+
+        recon.Finalize(declared.UserId, snapshot, DateTime.UtcNow);
         await db.SaveChangesAsync(ct);
 
         return await ReconciliationSql.BuildAsync(db, recon, ct);

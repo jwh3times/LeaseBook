@@ -4,6 +4,7 @@ using LeaseBook.Modules.Accounting.Features.Banking;
 using LeaseBook.Modules.Accounting.Features.Posting.Events;
 using LeaseBook.Modules.Accounting.Features.Reconciliation;
 using LeaseBook.SharedKernel;
+using LeaseBook.SharedKernel.Tenancy;
 using LeaseBook.Tests.Common;
 using Microsoft.EntityFrameworkCore;
 using Shouldly;
@@ -93,6 +94,39 @@ public sealed class ReconciliationTests(PostgresFixture fixture)
         after!.ReportJson.ShouldBe(before.ReportJson);
     }
 
+    /// <summary>
+    /// Finalizing locks the (account, month), so who did it is part of the money record (ADR-039).
+    /// Nothing asserted that until now: the suite finalized through a handler built with no actor
+    /// context at all, which recorded a null finalizer and could not tell that apart from a system
+    /// actor legitimately having no human. Finalize as a signed-in user so the column has a value
+    /// to carry, and pin it.
+    /// </summary>
+    [Fact]
+    public async Task Finalize_records_the_acting_user()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var scope = await ProvisionedScopeAsync(fixture, ct, owners: [_owner], properties: [_property]);
+
+        await scope.RunAsync(() => Events(scope).PostAsync(
+            new OwnerContribution(_owner, _property, new Money(1000m), Feb(1), scope.TrustBankId, "attribution"), ct), ct);
+        await ClearAsync(scope, [await TrustLineAsync(scope, ct)], ct);
+
+        var view = await StartAsync(scope, scope.TrustBankId, 2026, 2, 1000m, ct);
+        view.Difference.ShouldBe(0m);
+
+        // Executor directly with an explicit actor, per OrgScope: RunAsync attributes to a system
+        // actor, whose null UserId would make this assertion vacuous.
+        var user = UuidV7.NewId();
+        await scope.Executor.RunAsync(scope.OrgId, Actor.User(user), () =>
+            new FinalizeReconciliationHandler(scope.Db, scope.Actor)
+                .Handle(new FinalizeReconciliation(view.Id), ct), ct);
+
+        Guid? finalizedBy = null;
+        await scope.RunAsync(async () => finalizedBy = await scope.Db.Set<BankReconciliation>().AsNoTracking()
+            .Where(r => r.Id == view.Id).Select(r => r.FinalizedBy).SingleAsync(ct), ct);
+        finalizedBy.ShouldBe(user);
+    }
+
     private static async Task<Guid> TrustLineAsync(OrgScope scope, CancellationToken ct)
     {
         Guid id = default;
@@ -114,7 +148,7 @@ public sealed class ReconciliationTests(PostgresFixture fixture)
     private static async Task<ReconciliationView> FinalizeAsync(OrgScope scope, Guid id, CancellationToken ct)
     {
         ReconciliationView view = null!;
-        await scope.RunAsync(async () => view = await new FinalizeReconciliationHandler(scope.Db)
+        await scope.RunAsync(async () => view = await new FinalizeReconciliationHandler(scope.Db, scope.Actor)
             .Handle(new FinalizeReconciliation(id), ct), ct);
         return view;
     }

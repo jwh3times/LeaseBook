@@ -56,6 +56,15 @@ inconsistent one.
 6. **Rows written before this ADR keep a null `actor_kind`,** which the constraint admits as its
    third arm. There is no backfill.
 
+7. **The rule generalizes: an invariant collaborator may be absent only if its absence throws**
+   (added 2026-08-21). Optionality is not the hazard — silent degradation is. A collaborator that can
+   be null is a check that can quietly not run, and a check that did not run is indistinguishable
+   from a check that passed. `AppDbContext` may still take its actor, org and data-protection
+   collaborators optionally, because it is constructed outside DI by the migrator, by EF at design
+   time and by test fixtures; it earns that by failing closed (`_actor?.Actor ?? throw`) rather than
+   by degrading. Anything that cannot fail closed takes its collaborators as required parameters, so
+   the wiring is a compile error. `OptionalCollaboratorTests` enforces both halves.
+
 ## Consequences
 
 An audit read can distinguish processes, so "what did the nightly sweep touch" and "what did a human
@@ -90,6 +99,17 @@ constructed `PostingService` without one at all. Both seams took the actor as op
 neither was noticed. Both parameters are now required, so the wiring is a compile error rather than a
 silent null. The finding is itself the argument for the ADR: an attribution seam that tolerates
 absence will be left absent.
+
+**Two more instances surfaced afterwards (2026-08-21), which is what prompted decision 7.**
+`PostingService` still took `IReconciliationLock` optionally, and its absence skipped the
+reconciliation period-lock check in full — a skipped lock and an open period are the same observable.
+`FinalizeReconciliationHandler` still took `IActorContext` optionally and wrote `actor?.UserId`,
+which conflated two different nulls: a system actor legitimately having no human to record, and no
+actor being declared at all. The accounting suite finalized reconciliations — the act that locks a
+period — through a handler built with no actor context, so the second null was never exercised and
+no test asserted `FinalizedBy` at all. Neither was a production defect: DI supplied both
+collaborators everywhere. Both are now required, the acting user is asserted, and the pattern is
+guarded rather than left to the next reader to notice.
 
 ## Revisit trigger
 
