@@ -15,7 +15,7 @@ namespace LeaseBook.Modules.Accounting.Posting;
 /// </summary>
 internal sealed class PostingService(
     DbContext db, IOrgContext tenant, IAccountingPeriods periods,
-    IActorContext actor, IReconciliationLock? reconciliationLock = null) : IPostingService
+    IActorContext actor, IReconciliationLock reconciliationLock) : IPostingService
 {
     private static readonly EntryBasis[] BalancedBases = [EntryBasis.Cash, EntryBasis.Accrual];
 
@@ -131,16 +131,16 @@ internal sealed class PostingService(
         // (g2) reconciliation lock (M4 / P63): a bank-account line into a finalized (account, month) is
         // rejected. Only lines whose account IS a bank (not attribution lines that merely carry the
         // bank dimension) move the bank book, so only those are gated.
-        if (reconciliationLock is not null)
+        // The collaborator is required, not optional: while it was optional this whole check vanished
+        // for any PostingService built without one, and a skipped period lock looks exactly like a
+        // period that was open. Same reasoning as the actor above (ADR-039).
+        foreach (var bankId in lines
+            .Where(l => l.BankAccountId is not null
+                && (l.AccountClass == AccountClass.TrustBank || l.AccountClass == AccountClass.PmOperatingBank))
+            .Select(l => l.BankAccountId!.Value)
+            .Distinct())
         {
-            foreach (var bankId in lines
-                .Where(l => l.BankAccountId is not null
-                    && (l.AccountClass == AccountClass.TrustBank || l.AccountClass == AccountClass.PmOperatingBank))
-                .Select(l => l.BankAccountId!.Value)
-                .Distinct())
-            {
-                await reconciliationLock.EnsureOpenAsync(bankId, request.EntryDate, ct);
-            }
+            await reconciliationLock.EnsureOpenAsync(bankId, request.EntryDate, ct);
         }
 
         // (h) idempotency: a present source_ref must be unique per org. Pre-check the common case; the
