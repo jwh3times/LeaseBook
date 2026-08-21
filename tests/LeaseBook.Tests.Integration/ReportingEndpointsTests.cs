@@ -222,6 +222,88 @@ public sealed class ReportingEndpointsTests(PostgresFixture fixture)
         }
     }
 
+    // ─── basis (#230) ──────────────────────────────────────────────────────────
+    // owner-bal is the only preview whose figures move with basis: owner_equity is credited
+    // 'accrual' on RentCharged and 'cash' on PaymentReceived, so the two bases answer different
+    // questions. Everything else a preview reads (trust_bank, pm_operating_bank, deposit_liability,
+    // pm_income) is posted 'both', so a basis there would reload and return the same numbers —
+    // the dead-toggle defect #229 removed. These assertions are structural rather than
+    // seed-dependent: they hold for any org's data.
+
+    [Fact]
+    public async Task Preview_owner_bal_echoes_the_basis_it_applied()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await DemoSeeder.SeedAsync(fixture.Api.Services, ct);
+        var client = await DemoClientAsync(ct);
+
+        var byDefault = await GetAsync<PreviewSpaResponse>(client, "/api/reports/owner-bal/preview", ct);
+        var accrual = await GetAsync<PreviewSpaResponse>(
+            client, "/api/reports/owner-bal/preview?basis=accrual", ct);
+        var nonsense = await GetAsync<PreviewSpaResponse>(
+            client, "/api/reports/owner-bal/preview?basis=sideways", ct);
+
+        // The echo is what the SPA labels the figures with, so it must be the resolved basis rather
+        // than whatever the client sent.
+        byDefault.Basis.ShouldBe("cash", "cash is the default basis");
+        accrual.Basis.ShouldBe("accrual");
+        nonsense.Basis.ShouldBe("cash", "an unrecognised basis resolves to cash, never to an error");
+    }
+
+    [Fact]
+    public async Task Preview_owner_bal_deposits_are_identical_on_both_bases()
+    {
+        // Deposits are liabilities until applied, identically in both bases: every deposit_liability
+        // line is posted 'both'. Only the Operating column may move.
+        var ct = TestContext.Current.CancellationToken;
+        await DemoSeeder.SeedAsync(fixture.Api.Services, ct);
+        var client = await DemoClientAsync(ct);
+
+        var cash = await GetAsync<PreviewSpaResponse>(client, "/api/reports/owner-bal/preview?basis=cash", ct);
+        var accrual = await GetAsync<PreviewSpaResponse>(
+            client, "/api/reports/owner-bal/preview?basis=accrual", ct);
+
+        static Dictionary<Guid, decimal> DepositsByOwner(PreviewSpaResponse r) =>
+            r.Rows.OfType<System.Text.Json.JsonElement>()
+                .ToDictionary(
+                    row => row.GetProperty("ownerId").GetGuid(),
+                    row => row.GetProperty("deposits").GetDecimal());
+
+        var cashDeposits = DepositsByOwner(cash);
+        cashDeposits.ShouldNotBeEmpty("the demo org has owners with attributed deposits");
+        foreach (var (ownerId, deposits) in DepositsByOwner(accrual))
+        {
+            cashDeposits.ShouldContainKey(ownerId);
+            cashDeposits[ownerId].ShouldBe(deposits,
+                $"deposits for owner {ownerId} must not move with basis");
+        }
+    }
+
+    [Fact]
+    public async Task Preview_trust_ledger_has_no_basis_dimension()
+    {
+        // The guard against re-adding a decorative control: a bank register is a cash record by
+        // construction, so asking for accrual must change nothing and must not claim a basis.
+        var ct = TestContext.Current.CancellationToken;
+        await DemoSeeder.SeedAsync(fixture.Api.Services, ct);
+        var client = await DemoClientAsync(ct);
+
+        var plain = await GetAsync<PreviewSpaResponse>(client, "/api/reports/trust-ledger/preview", ct);
+        var accrual = await GetAsync<PreviewSpaResponse>(
+            client, "/api/reports/trust-ledger/preview?basis=accrual", ct);
+
+        plain.Basis.ShouldBeNull("a report with no basis dimension must echo null, not a basis");
+        accrual.Basis.ShouldBeNull("asking for a basis does not give the report one");
+
+        static List<Guid> LineIds(PreviewSpaResponse r) =>
+            [.. r.Rows.OfType<System.Text.Json.JsonElement>()
+                .Select(row => row.GetProperty("journalLineId").GetGuid())];
+
+        plain.Rows.ShouldNotBeEmpty();
+        LineIds(accrual).ShouldBe(LineIds(plain), ignoreOrder: false,
+            "every trust_bank line is posted 'both', so both bases select identical rows");
+    }
+
     [Fact]
     public async Task Preview_bank_rec_returns_rows_for_seeded_finalized_reconciliation()
     {

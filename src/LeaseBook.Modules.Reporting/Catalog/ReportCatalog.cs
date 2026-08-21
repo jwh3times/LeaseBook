@@ -18,6 +18,7 @@ public static class ReportCatalog
 
     // WP-8: the compliance pack is a trust-account × from/to range export (a ZIP, not a preview).
     private static readonly IReadOnlyList<string> BankPeriodRange = ["bankAccountId", "from", "to"];
+    private static readonly IReadOnlyList<string> YearMonthBasis = ["year", "month", "basis"];
 
     /// <summary>
     /// All report descriptors in the prototype's priority order (screen-reports.jsx <c>REPORTS</c>
@@ -26,7 +27,10 @@ public static class ReportCatalog
     public static readonly IReadOnlyList<ReportDescriptor> All =
     [
         new("owner-stmt",    "Owner statement",             "Owner",           "owners",   "Complete fiduciary story per property & period",   YearMonthOwnerProperty, Favorite: true),
-        new("owner-bal",     "All owner ending balances",   "Owner",           "dashboard","Every owner balance with per-bank breakdown",       YearMonth,              Favorite: true),
+        // "basis" is deliberately on this report alone: owner_equity is the only account class a
+        // preview reads that carries single-basis lines, so a basis control anywhere else would
+        // reload and return identical figures — the dead-toggle defect #229 removed (#230).
+        new("owner-bal",     "All owner ending balances",   "Owner",           "dashboard","Every owner balance with per-bank breakdown",       YearMonthBasis,         Favorite: true),
         new("trust-ledger",  "Trust account ledger",        "Trust accounting","doc",      "Full activity for any trust account",              YearMonthBank),
         new("bank-rec",      "Bank reconciliation",         "Banking",         "bank",     "Reconciliation detail with cleared status",         YearMonthBank,          Favorite: true),
         new("deposit-liab",  "Security deposit liability",  "Trust accounting","wallet",   "Held deposits by tenant — recognized on application", YearMonth),

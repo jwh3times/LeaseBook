@@ -27,9 +27,12 @@ public sealed class AccountingEndpoints : IEndpointModule
                     TypedResults.Ok(await sender.Query(new GetTenantLedger(tenantId), ct)))
             .Produces<TenantLedgerResponse>();
 
+        // Explicit "cash": this route is the distributable-cash read (banking, dashboard). The
+        // basis-selectable view is the owner-bal report preview, which binds its own parameter and
+        // echoes back what it applied (#230).
         group.MapGet("/owners/balances",
                 async (ISender sender, CancellationToken ct) =>
-                    TypedResults.Ok(await sender.Query(new GetOwnerBalances(), ct)))
+                    TypedResults.Ok(await sender.Query(new GetOwnerBalances("cash"), ct)))
             .Produces<OwnerBalancesResponse>();
 
         group.MapGet("/owners/{ownerId:guid}/ledger",

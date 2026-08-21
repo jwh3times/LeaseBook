@@ -45,6 +45,8 @@ internal sealed class GetManagementFeeIncomeHandler(DbContext db)
             JOIN journal_entries e ON e.id = jl.entry_id
             LEFT JOIN journal_entries orig ON orig.id = e.reverses_entry_id
             WHERE jl.account_class = 'pm_income'
+              -- Not a basis choice: every pm_income line is posted 'both', so the other basis
+              -- returns the identical figures (#230).
               AND jl.basis IN ('cash', 'both')
               AND e.entry_date >= {start}
               AND e.entry_date < {end}

@@ -565,6 +565,7 @@ export type PreviewSpaResponse = {
     rows: Array<unknown>;
     totalRows: number | string;
     message: null | string;
+    basis?: null | string;
 };
 
 export type ProblemDetails = {
@@ -2185,6 +2186,7 @@ export type GetApiReportsByIdPreviewData = {
         propertyId?: string;
         bankAccountId?: string;
         asOf?: string;
+        basis?: string;
     };
     url: '/api/reports/{id}/preview';
 };
@@ -2210,6 +2212,7 @@ export type GetApiReportsByIdCsvData = {
         propertyId?: string;
         bankAccountId?: string;
         asOf?: string;
+        basis?: string;
     };
     url: '/api/reports/{id}/csv';
 };

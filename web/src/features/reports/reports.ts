@@ -53,10 +53,16 @@ export function currentPeriodFilters(): StatementFilters {
 
 /**
  * The filters the report builder sends to the preview and CSV routes. These are exactly the query
- * parameters those routes bind — there is deliberately no `basis` here. Owner statements are
- * basis-aware and carry it on {@link StatementFilters}; the generic preview queries have no basis
- * dimension, so offering one would refetch and return identical figures (#229, #230).
+ * parameters those routes bind.
+ *
+ * `basis` is carried for `owner-bal` only. The blanket claim that previews have no basis dimension
+ * held for every report but that one: `owner_equity` is credited `accrual` on RentCharged and
+ * `cash` on PaymentReceived, so its Operating column genuinely differs, while every other preview
+ * reads account classes whose lines are all tagged `both`. The catalog's `filterControls` decides
+ * where the control appears, so a basis chip cannot reappear on a report it would not move (#230).
  */
+export type ReportBasis = 'cash' | 'accrual';
+
 export interface ReportFilters {
   year?: number;
   month?: number;
@@ -64,6 +70,12 @@ export interface ReportFilters {
   propertyId?: string;
   ownerId?: string;
   bankAccountId?: string;
+  /**
+   * Only meaningful on reports whose `filterControls` include 'basis' — today that is `owner-bal`
+   * alone. Sending it elsewhere is harmless but changes nothing: no other preview reads an account
+   * class that carries single-basis lines (#230).
+   */
+  basis?: ReportBasis;
 }
 
 // ---- Query keys --------------------------------------------------------------
@@ -116,6 +128,12 @@ export interface PreviewResponse {
   totalRows: number;
   /** Backend-supplied contextual message (e.g. redirect hint, no-data explanation). */
   message?: string | null;
+  /**
+   * The basis the server actually computed on, or null when the report has no basis dimension.
+   * Render this rather than local state: a label driven by the client's own toggle is exactly how
+   * the builder used to claim a basis nothing had applied (#229).
+   */
+  basis?: string | null;
 }
 
 export function useReportPreview(
@@ -139,6 +157,7 @@ export function useReportPreview(
             ownerId: filters.ownerId,
             propertyId: filters.propertyId,
             bankAccountId: filters.bankAccountId,
+            basis: filters.basis,
           },
         }),
         'Preview failed',
@@ -149,6 +168,7 @@ export function useReportPreview(
         rows: data.rows as Record<string, unknown>[],
         totalRows: Number(data.totalRows),
         message: data.message,
+        basis: data.basis,
       };
     },
   });
@@ -249,6 +269,9 @@ export async function downloadReportCsv(id: string, filters: ReportFilters): Pro
           propertyId: filters.propertyId,
           ownerId: filters.ownerId,
           bankAccountId: filters.bankAccountId,
+          // Same filters as the preview: an export that disagrees with the screen is worse than
+          // no export.
+          basis: filters.basis,
         },
         parseAs: 'blob',
       }),

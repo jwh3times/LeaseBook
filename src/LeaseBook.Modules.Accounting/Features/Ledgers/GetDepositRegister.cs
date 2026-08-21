@@ -29,6 +29,9 @@ internal sealed class GetDepositRegisterHandler(DbContext db) : IQueryHandler<Ge
             JOIN accounts a ON a.id = jl.account_id
             JOIN journal_entries e ON e.id = jl.entry_id
             WHERE a.code IN ('security_deposits_held', 'tenant_prepayments')
+              -- Not a basis choice: deposit_liability lines are always posted 'both' (deposits are
+              -- liabilities until applied, identically in both bases), so the other basis returns
+              -- the identical figures (#230).
               AND jl.tenant_id IS NOT NULL AND jl.basis IN ('cash', 'both')
               AND ({query.BankAccountId}::uuid IS NULL OR jl.bank_account_id = {query.BankAccountId})
               AND ({query.AsOf}::date IS NULL OR e.entry_date <= {query.AsOf})

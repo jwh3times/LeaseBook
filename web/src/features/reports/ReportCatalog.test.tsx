@@ -15,7 +15,7 @@ const CATALOG = [
     description: 'Every owner balance with per-bank breakdown',
     favorite: true,
     icon: 'dashboard',
-    filterControls: ['year', 'month'],
+    filterControls: ['year', 'month', 'basis'],
   },
   {
     id: 'trust-ledger',
@@ -389,5 +389,97 @@ describe('ReportCatalog', () => {
     expect(await screen.findByText(BACKEND_MESSAGE)).toBeInTheDocument();
     // The generic fallback must NOT appear.
     expect(screen.queryByText('No data for this period')).not.toBeInTheDocument();
+  });
+
+  // #230: the basis control exists on owner-bal alone, and the label it drives must come from the
+  // server's echo. A chip that renders local state is how the removed toggle (#229) claimed a basis
+  // nothing had applied.
+  it('renders the basis chip only on reports that declare it', async () => {
+    server.use(...baseHandlers());
+    renderCatalog();
+
+    await screen.findAllByText('All owner ending balances');
+
+    // owner-bal is selected by default and declares 'basis'.
+    const filtersGroup = screen.getByRole('group', { name: 'Report filters' });
+    expect(within(filtersGroup).getByText('Basis')).toBeInTheDocument();
+
+    // trust-ledger does not declare it, so the chip must disappear.
+    const list = screen.getByRole('list', { name: 'Available reports' });
+    await userEvent.click(within(list).getByRole('button', { name: /Trust account ledger/ }));
+    expect(
+      within(screen.getByRole('group', { name: 'Report filters' })).queryByText('Basis'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('re-queries the preview with the chosen basis', async () => {
+    const previewRequests: URLSearchParams[] = [];
+    server.use(
+      http.get('/api/reports', () => HttpResponse.json(CATALOG)),
+      http.get('/api/reports/:id/preview', ({ request }) => {
+        previewRequests.push(new URL(request.url).searchParams);
+        return HttpResponse.json({ ...PREVIEW_RESPONSE, basis: 'accrual' });
+      }),
+      http.get('/api/directory/owners', () => HttpResponse.json(OWNERS_RESPONSE)),
+      http.get('/api/directory/properties', () =>
+        HttpResponse.json({ items: [], page: 1, pageSize: 200, total: 0 }),
+      ),
+      http.get('/api/accounting/banks/balances', () => HttpResponse.json(BANKS_RESPONSE)),
+    );
+    renderCatalog();
+
+    await screen.findAllByText('All owner ending balances');
+    await vi.waitFor(() => expect(previewRequests.at(-1)?.get('basis')).toBe('cash'));
+
+    const filtersGroup = screen.getByRole('group', { name: 'Report filters' });
+    await userEvent.click(within(filtersGroup).getByText('Basis').closest('button')!);
+    const dialog = screen.getByRole('dialog', { name: 'Select Basis' });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Accrual' }));
+
+    await vi.waitFor(() => expect(previewRequests.at(-1)?.get('basis')).toBe('accrual'));
+  });
+
+  it('labels the preview with the basis the server echoed, not the local selection', async () => {
+    // The server insists on cash while the client asked for accrual. The label must follow the
+    // server, so a basis the server did not apply can never be rendered as though it had been.
+    server.use(
+      http.get('/api/reports', () => HttpResponse.json(CATALOG)),
+      http.get('/api/reports/:id/preview', () =>
+        HttpResponse.json({ ...PREVIEW_RESPONSE, basis: 'cash' }),
+      ),
+      http.get('/api/directory/owners', () => HttpResponse.json(OWNERS_RESPONSE)),
+      http.get('/api/directory/properties', () =>
+        HttpResponse.json({ items: [], page: 1, pageSize: 200, total: 0 }),
+      ),
+      http.get('/api/accounting/banks/balances', () => HttpResponse.json(BANKS_RESPONSE)),
+    );
+    renderCatalog();
+
+    await screen.findAllByText('All owner ending balances');
+    expect(await screen.findByText(/Cash basis/i)).toBeInTheDocument();
+
+    const filtersGroup = screen.getByRole('group', { name: 'Report filters' });
+    await userEvent.click(within(filtersGroup).getByText('Basis').closest('button')!);
+    const dialog = screen.getByRole('dialog', { name: 'Select Basis' });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Accrual' }));
+
+    // Still "Cash": the server never echoed accrual.
+    expect(await screen.findByText(/Cash basis/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Accrual basis/i)).not.toBeInTheDocument();
+  });
+
+  it('shows no basis label for a report with no basis dimension', async () => {
+    // trust-ledger echoes null; the bar must fall back to its plain caption rather than inventing
+    // a basis for a report whose figures do not move with one.
+    server.use(...baseHandlers());
+    renderCatalog();
+
+    await screen.findAllByText('All owner ending balances');
+    const list = screen.getByRole('list', { name: 'Available reports' });
+    await userEvent.click(within(list).getByRole('button', { name: /Trust account ledger/ }));
+
+    await vi.waitFor(() => {
+      expect(screen.queryByText(/basis/i)).not.toBeInTheDocument();
+    });
   });
 });

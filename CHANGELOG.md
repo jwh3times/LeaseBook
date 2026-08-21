@@ -16,7 +16,15 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Added
 
-- _Nothing yet._
+- **The all-owner balances report can now be read on a cash or accrual basis.** A Basis control on
+  that report switches between what owners have been _paid_ (cash) and what they have _earned_
+  (accrual) — the two genuinely differ, because rent counts toward an owner when it is charged on
+  the accrual basis and when the money arrives on the cash basis. Held deposits are the same figure
+  either way and do not move. The label above the preview reports the basis the server actually
+  used, and CSV exports match what is on screen. No other report offers the control, because no
+  other report's figures change with it — the previous switch was removed for exactly that reason.
+  Owner disbursements, management fees and the dashboard are unaffected and remain on the cash
+  basis: money is only ever paid out against cash actually received.
 
 ### Changed
 

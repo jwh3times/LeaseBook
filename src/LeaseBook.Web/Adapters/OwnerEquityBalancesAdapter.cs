@@ -15,7 +15,12 @@ internal sealed class OwnerEquityBalancesAdapter(ISender sender) : IOwnerEquityB
     public async Task<IReadOnlyDictionary<Guid, decimal>> GetAsync(
         IReadOnlyList<Guid> ownerIds, string basis, CancellationToken ct)
     {
-        var response = await sender.Query(new GetOwnerBalances(), ct);
+        // "cash" is passed explicitly and the port's `basis` is deliberately NOT forwarded, even
+        // though GetOwnerBalances now accepts one (#230). Disbursement pays out this figure: accrual
+        // equity counts rent that has been charged but not collected, so forwarding an accrual basis
+        // here would disburse money the trust account has not received. The basis a report may be
+        // *read* on is not the basis money may be *moved* on.
+        var response = await sender.Query(new GetOwnerBalances("cash"), ct);
         var ownerSet = new HashSet<Guid>(ownerIds);
         return response.Rows
             .Where(r => ownerSet.Contains(r.OwnerId))
