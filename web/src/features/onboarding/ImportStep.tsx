@@ -40,11 +40,20 @@ export function EntityImportStep({ title, description, kinds, onContinue }: Enti
     setErrors([]);
     setResult(null);
     const csvContent = await file.text();
-    const res = await mutation.mutateAsync({
-      csvContent,
-      filename: file.name,
-      mappingProfile: null,
-    });
+    // `.catch(() => null)`, not a silent swallow: the mutation's isError/error (read live by
+    // ApiErrorNotice, below) is already updated by react-query before this rejection reaches us.
+    // Without this, a real mutation failure escapes as an unhandled promise rejection — handleFile
+    // is invoked fire-and-forget (`void handleChange(e)` / `void handleDrop(e)`), so nothing else
+    // in the call chain awaits this promise. BalanceImportStep has carried this guard; this twin
+    // did not.
+    const res = await mutation
+      .mutateAsync({
+        csvContent,
+        filename: file.name,
+        mappingProfile: null,
+      })
+      .catch(() => null);
+    if (!res) return;
     const errorCount = Number(res.errorCount);
     setResult({ rowCount: Number(res.rowCount), errorCount });
     setErrors(res.errors ?? []);
@@ -90,6 +99,14 @@ export function EntityImportStep({ title, description, kinds, onContinue }: Enti
                     setFilename(null);
                     setResult(null);
                     setErrors([]);
+                    // `mutation` is a single shared useMutation instance across every kind (the
+                    // mutationFn closes over `selectedKind`, but the observer's own isError/error
+                    // state is NOT keyed by kind). The three resets above clear the success banner
+                    // and the row-level error list — the notice below reads the mutation's live
+                    // isError/error, which is a fourth piece of state they do not touch. Without
+                    // this, a failed upload for the previous kind kept rendering its error notice
+                    // against a kind that was never uploaded.
+                    mutation.reset();
                   }}
                 />
                 {label}

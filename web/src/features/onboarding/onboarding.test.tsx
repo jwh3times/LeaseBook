@@ -550,6 +550,65 @@ describe('BalanceImportStep — mutation error state resets on kind and mode swi
   });
 });
 
+// ─── (b6) EntityImportStep — stale mutation error state on kind switch ──────
+//
+// The entity-side twin of (b5), and the reason this test exists at all: (b5) was found, fixed and
+// pinned on the balance side while the identical defect stayed live here (#245). `EntityImportStep`
+// renders its notice from `mutation.isError`, and `useImportEntities(selectedKind)` is a single
+// shared observer across all four entity kinds — the kind switch reset `filename`/`result`/`errors`
+// but not the mutation, so a failed upload kept its notice on screen attributed to a kind that was
+// never uploaded. `OnboardingPage` renders this step with four kinds, so the radio group is live in
+// production.
+//
+// The fix carries a second half this test does not assert directly: the twin also lacked the
+// `.catch(() => null)` on `mutateAsync`, so a rejected import escaped as an unhandled rejection
+// (handleFile is invoked fire-and-forget via `void handleChange(e)`). Asserting that needs Node's
+// `process.on('unhandledRejection')`, and this tsconfig excludes Node globals on purpose — the
+// scenario below is what exercises the rejecting path.
+
+describe('EntityImportStep — mutation error state resets on kind switch', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '';
+    server.use(http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 })));
+  });
+
+  test('switching entity kind clears a stale error notice', async () => {
+    server.use(
+      http.post('/api/onboarding/import/owners', () =>
+        HttpResponse.json(
+          { code: 'validation_failed', detail: 'The CSV could not be processed.' },
+          { status: 400 },
+        ),
+      ),
+    );
+    render(
+      withRouter(
+        <EntityImportStep
+          title="Import entities"
+          description="Upload a CSV for each entity type"
+          kinds={[
+            { kind: 'owners', label: 'Owners' },
+            { kind: 'properties', label: 'Properties' },
+          ]}
+        />,
+      ),
+    );
+
+    const file = new File(['name,email\nX,x@example.com\n'], 'owners.csv', { type: 'text/csv' });
+    await userEvent.upload(screen.getByLabelText('CSV file'), file);
+
+    expect(await screen.findByText(/the csv could not be processed/i)).toBeInTheDocument();
+
+    // Switch to a different kind WITHOUT re-uploading — the owners failure must not carry over
+    // and misattribute to properties.
+    await userEvent.click(screen.getByLabelText('Properties'));
+
+    expect(screen.queryByText(/the csv could not be processed/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+});
+
 // ─── (c) VerificationStep sign-off button ────────────────────────────────────
 
 describe('VerificationStep sign-off button', () => {
