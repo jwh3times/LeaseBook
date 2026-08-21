@@ -61,34 +61,39 @@ public sealed class RentRunStrategy(
 
         foreach (var row in rows)
         {
-            // Exception: no rent set.
-            if (row.Rent == 0m)
+            var decision = Decide(row, period);
+            if (decision is IneligibleForRent ineligible)
             {
-                exceptions.Add($"{row.TenantName}: rent is 0 — skipped.");
+                exceptions.Add(ineligible.Explanation);
                 continue;
             }
 
-            var amount = Proration.Charge(row.Rent, period.Year, period.Month, row.StartDate, row.EndDate);
-            var prorated = amount != row.Rent;
-            var key = SourceRef(period, row.LeaseId);
-            var alreadyDone = alreadyPosted.Contains(key) || alreadyChargedTenants.Contains(row.TenantId);
+            var charge = (ChargeRent)decision;
+
+            // Preview's already-done test is deliberately wider than plan's: it reports the
+            // source_ref hit as well as the cross-source guard, so the operator sees "this will be
+            // skipped" before selecting. Plan leaves the source_ref half to the unique index and
+            // records the refusal the engine maps. Both converge on Skipped; only the display is
+            // eager, which is why this is not part of the shared decision.
+            var alreadyDone = alreadyPosted.Contains(SourceRef(period, row.LeaseId))
+                || alreadyChargedTenants.Contains(row.TenantId);
 
             var detail = new Dictionary<string, string>
             {
                 ["unit"] = row.UnitLabel,
                 ["monthlyRent"] = row.Rent.ToString("F2"),
             };
-            if (prorated)
+            if (charge.Prorated)
             {
                 detail["prorated"] = "true";
-                detail["proratedAmount"] = amount.ToString("F2");
+                detail["proratedAmount"] = charge.Amount.ToString("F2");
             }
 
             previewRows.Add(new PreviewRow(
                 TargetKind: RunTargetKind.Lease,
                 TargetId: row.LeaseId,
                 Label: row.TenantName,
-                Amount: amount,
+                Amount: charge.Amount,
                 AlreadyDone: alreadyDone,
                 ExcludedReason: null,
                 Detail: detail));
@@ -130,9 +135,13 @@ public sealed class RentRunStrategy(
                 continue;
             }
 
-            if (row.Rent == 0m)
+            // The same decision the preview projected, re-derived from confirmation-time data.
+            // Evaluated before the already-charged guard so a zero-rent lease that was also charged
+            // by another route still records rent_zero, exactly as it did before.
+            var decision = Decide(row, period);
+            if (decision is IneligibleForRent ineligible)
             {
-                plan.Add(Exclude(leaseId, RunItemStatus.Excluded, "rent_zero"));
+                plan.Add(Exclude(leaseId, RunItemStatus.Excluded, ineligible.Code));
                 continue;
             }
 
@@ -144,8 +153,9 @@ public sealed class RentRunStrategy(
                 continue;
             }
 
-            var amount = Proration.Charge(row.Rent, period.Year, period.Month, row.StartDate, row.EndDate);
-            var prorated = amount != row.Rent;
+            var charge = (ChargeRent)decision;
+            var amount = charge.Amount;
+            var prorated = charge.Prorated;
             var description = prorated
                 ? $"Rent {period.Key} — {row.TenantName} {row.UnitLabel} (prorated)"
                 : $"Rent {period.Key} — {row.TenantName} {row.UnitLabel}";
@@ -184,6 +194,51 @@ public sealed class RentRunStrategy(
         static PlannedExclusion Exclude(Guid leaseId, RunItemStatus status, string reason) =>
             new(RunTargetKind.Lease, leaseId, status,
                 new Dictionary<string, object?>(StringComparer.Ordinal) { ["reason"] = reason });
+    }
+
+    // ── the decision ─────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// What this run should do about one scheduled lease. Closed hierarchy of exactly two cases, so
+    /// each caller's cast is exhaustive in fact (the same reasoning as <see cref="RunPlanItem"/>).
+    /// </summary>
+    private abstract record RentDecision
+    {
+        private protected RentDecision() { }
+    }
+
+    /// <summary>Charge this lease, at the prorated amount when its term does not span the month.</summary>
+    private sealed record ChargeRent(decimal Amount, bool Prorated) : RentDecision;
+
+    /// <summary>
+    /// Do not charge this lease, and why — in <b>both</b> vocabularies at once. <paramref name="Code"/>
+    /// is what the run log records; <paramref name="Explanation"/> is what the operator reads in the
+    /// preview. Built together so the two cannot drift apart (#199).
+    /// </summary>
+    private sealed record IneligibleForRent(string Code, string Explanation) : RentDecision;
+
+    /// <summary>
+    /// The one statement of rent chargeability and amount, projected by <see cref="PreviewAsync"/>
+    /// and by <see cref="PlanAsync"/>.
+    /// <para>
+    /// Pure by construction: it takes a schedule row and returns a decision, fetching nothing. Both
+    /// paths still read their own data — confirm re-fetches the schedule and hands it here — so the
+    /// canonical decision never becomes a cached one (ADR-019).
+    /// </para>
+    /// <para>
+    /// The zero-rent test previously lived in both loops, and deleting the preview copy left the whole
+    /// suite green: every test of the rule drove the plan path. It is now stated once.
+    /// </para>
+    /// </summary>
+    private static RentDecision Decide(LeaseScheduleRow row, RunPeriod period)
+    {
+        if (row.Rent == 0m)
+        {
+            return new IneligibleForRent("rent_zero", $"{row.TenantName}: rent is 0 — skipped.");
+        }
+
+        var amount = Proration.Charge(row.Rent, period.Year, period.Month, row.StartDate, row.EndDate);
+        return new ChargeRent(amount, Prorated: amount != row.Rent);
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────

@@ -136,6 +136,84 @@ public sealed class LateFeeRunStrategyTests
         preview.Exceptions.ShouldHaveSingleItem().ShouldContain("threshold 7");
     }
 
+    // The NC §42-46 floor used to be derived twice — once per path — and the only preview test of it
+    // used grace days above 5, where the clamp is a no-op. Deleting Math.Max(5, …) from the preview
+    // copy therefore left the whole suite green while the operator was shown a lease as chargeable
+    // four days before it legally was (#199). These two drive the preview side of the same rules the
+    // plan-side tests above drive.
+    [Theory]
+    [InlineData(19, false)] // March 19 is late day 4 for rent due March 15 — inside the statutory floor.
+    [InlineData(20, true)]  // March 20 is late day 5.
+    public async Task Preview_applies_the_statutory_floor_to_a_lease_that_grants_no_grace(
+        int assessmentDay,
+        bool eligible)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var leaseId = Guid.NewGuid();
+        var strategy = BuildStrategy(
+            [DelinquentLease(leaseId)],
+            [(leaseId, new LateFeePolicy(15, 0, LateFeeKind.Flat, 50m, 0))],
+            new DateOnly(2026, 3, assessmentDay));
+
+        var preview = await strategy.PreviewAsync(Period, ct);
+
+        if (eligible)
+        {
+            preview.Rows.ShouldHaveSingleItem().TargetId.ShouldBe(leaseId);
+            preview.Exceptions.ShouldBeEmpty();
+        }
+        else
+        {
+            // Not merely absent from the rows — the operator is told why, and cannot select it.
+            preview.Rows.ShouldBeEmpty();
+            preview.Exceptions.ShouldHaveSingleItem().ShouldContain("not eligible until 2026-03-20");
+        }
+    }
+
+    [Theory]
+    [InlineData(19)] // Inside the statutory floor.
+    [InlineData(20)] // Past it.
+    public async Task Preview_and_plan_reach_the_same_verdict_for_the_same_lease(int assessmentDay)
+    {
+        // The property #199 is really about: one rule set, two projections. A lease the preview
+        // refuses to offer must be a lease the plan refuses to post, and vice versa — on identical
+        // data. Re-splitting the two paths fails here even if each side stays self-consistent.
+        var ct = TestContext.Current.CancellationToken;
+        var leaseId = Guid.NewGuid();
+        var strategy = BuildStrategy(
+            [DelinquentLease(leaseId)],
+            [(leaseId, new LateFeePolicy(15, 0, LateFeeKind.Flat, 50m, 0))],
+            new DateOnly(2026, 3, assessmentDay));
+
+        var preview = await strategy.PreviewAsync(Period, ct);
+        var plan = await strategy.PlanAsync(Period, [leaseId], ct);
+
+        var offeredInPreview = preview.Rows.Count == 1;
+        var postedByPlan = plan.ShouldHaveSingleItem() is PlannedPosting;
+        postedByPlan.ShouldBe(offeredInPreview);
+    }
+
+    [Fact]
+    public async Task A_lease_with_no_resolvable_policy_is_refused_by_both_projections()
+    {
+        // Neither projection of this branch had any coverage before #199 — it could have been
+        // deleted outright without turning the suite red. A missing policy means the fee has no
+        // defined amount or due day, so it must never be offered and never be posted.
+        var ct = TestContext.Current.CancellationToken;
+        var leaseId = Guid.NewGuid();
+        var strategy = BuildStrategy([DelinquentLease(leaseId)], policies: []);
+
+        var preview = await strategy.PreviewAsync(Period, ct);
+        var plan = await strategy.PlanAsync(Period, [leaseId], ct);
+
+        preview.Rows.ShouldBeEmpty();
+        preview.Exceptions.ShouldHaveSingleItem().ShouldContain("no late-fee policy found");
+
+        var exclusion = plan.ShouldHaveSingleItem().ShouldBeOfType<PlannedExclusion>();
+        exclusion.Status.ShouldBe(RunItemStatus.Excluded);
+        exclusion.Detail["reason"].ShouldBe("no_policy");
+    }
+
     private static LateFeeRunStrategy BuildStrategy(
         IReadOnlyList<DelinquentLedgerRow> rows,
         IReadOnlyList<(Guid LeaseId, LateFeePolicy Policy)> policies,

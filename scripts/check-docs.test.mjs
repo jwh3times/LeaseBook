@@ -49,6 +49,20 @@ test("parseAdr returns index metadata from a valid ADR", () => {
   });
 });
 
+test("parseAdr reads every amender from a wrapped Amended by line", () => {
+  const markdown = [
+    "# ADR-019: Bulk run engine and batch posting",
+    "",
+    "- **Status:** Accepted",
+    "- **Date:** 2026-06-23",
+    "- **Amended by:** [ADR-028](ADR-028-platform-capability-model.md),",
+    "  [ADR-033](ADR-033-late-fee-eligibility.md). ADR-028 adds the capability",
+    "  snapshot; ADR-033 replaces the late-fee source-ref row.",
+  ].join("\n");
+  // Both amenders, in header order, and the trailing prose naming them again contributes nothing.
+  assert.equal(parseAdr(markdown).amendedBy, "ADR-028, ADR-033");
+});
+
 test("validateRepository rejects links to private content", (context) => {
   const root = mkdtempSync(path.join(tmpdir(), "leasebook-docs-"));
   context.after(() => rmSync(root, { recursive: true, force: true }));

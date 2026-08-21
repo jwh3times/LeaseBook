@@ -65,6 +65,39 @@ public sealed class RentRunStrategyTests
         plan.ShouldAllBe(item => item is PlannedExclusion);
     }
 
+    // The zero-rent test used to be written on both paths and covered only on the plan side, so
+    // breaking the preview copy left the suite green (#199). These drive the preview projection of
+    // the same rule, and the agreement between the two projections directly.
+    [Fact]
+    public async Task Preview_omits_a_zero_rent_lease_and_says_why()
+    {
+        var ct = TestContext.Current.CancellationToken;
+
+        var preview = await BuildStrategy([ActiveLease(rent: 0m)]).PreviewAsync(Period, ct);
+
+        preview.Rows.ShouldBeEmpty();
+        preview.Exceptions.ShouldHaveSingleItem().ShouldContain("rent is 0");
+    }
+
+    [Theory]
+    [InlineData(0)]     // Not chargeable.
+    [InlineData(1_500)] // Chargeable.
+    public async Task Preview_and_plan_reach_the_same_verdict_for_the_same_lease(decimal rent)
+    {
+        // One rule set, two projections: a lease the preview declines to offer is a lease the plan
+        // declines to post, on identical data.
+        var ct = TestContext.Current.CancellationToken;
+        var lease = ActiveLease(rent);
+        var strategy = BuildStrategy([lease]);
+
+        var preview = await strategy.PreviewAsync(Period, ct);
+        var plan = await strategy.PlanAsync(Period, [lease.LeaseId], ct);
+
+        var offeredInPreview = preview.Rows.Count == 1;
+        var postedByPlan = plan.ShouldHaveSingleItem() is PlannedPosting;
+        postedByPlan.ShouldBe(offeredInPreview);
+    }
+
     private static RentRunStrategy BuildStrategy(
         IReadOnlyList<LeaseScheduleRow> rows,
         IReadOnlySet<Guid>? chargedTenants = null) =>
