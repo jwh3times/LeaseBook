@@ -76,6 +76,7 @@
     "pretraining",
     "QuestPDF",
     "recordkeeping",
+    "regenerable",
     "Renée",
     "Rentec",
     "repoint",
@@ -95,6 +96,7 @@
     "tsvector",
     "TypeScript",
     "undisbursed",
+    "unpushed",
     "unvalidated",
     "unsuperseded",
     "upserted",
@@ -106,6 +108,7 @@
     "Wayfinding",
     "WebAuthn",
     "workpapers",
+    "worktrees",
     "Wrangler",
     "xorshift",
     "xUnit"
