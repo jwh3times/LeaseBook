@@ -16,6 +16,20 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Added
 
+- _Nothing yet._
+
+### Changed
+
+- _Nothing yet._
+
+### Fixed
+
+- _Nothing yet._
+
+## [0.10.0] - 2026-08-21
+
+### Added
+
 - **The all-owner balances report can now be read on a cash or accrual basis.** A Basis control on
   that report switches between what owners have been _paid_ (cash) and what they have _earned_
   (accrual) — the two genuinely differ, because rent counts toward an owner when it is charged on
@@ -609,7 +623,8 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.10.0
 [0.9.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.9.0
 [0.8.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.8.0
 [0.7.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.7.0
