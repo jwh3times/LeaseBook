@@ -100,20 +100,18 @@ export function useTenantLedger(
   });
 }
 
-// 3. Mutation
+// 3. Mutation — no XSRF ceremony: the client primes on demand and replays once on a stale token
 export function useRecordPayment(tenantId: string) {
   const queryClient = useQueryClient();
   return useMutation<PostResult, LedgerPostError, RecordPaymentRequest>({
-    mutationFn: async (body) => {
-      await primeCsrf();
-      return unwrap(
+    mutationFn: (body) =>
+      unwrap(
         postApiAccountingTenantsByTenantIdPayments({
           path: { tenantId },
           body,
         }),
         "Failed to record the payment",
-      );
-    },
+      ),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: tenantLedgerKey(tenantId) }),
     onError: (err) => {
@@ -181,7 +179,11 @@ type BankRegister = RegisterResponse;
 
 - The client is generated via `npm run api:generate` into `src/api/generated` — import named SDK
   functions and models through `@/api`; never edit generated files or hand-write API types
-- XSRF cookie → `X-XSRF-TOKEN` header is handled automatically by the client middleware
+- XSRF is handled entirely by the client interceptors in `api/client.ts`: the cookie is echoed as
+  the `X-XSRF-TOKEN` header, an unprimed session fetches a token before its first mutation, and a
+  stale token is refreshed and the request replayed once on the server's `antiforgery_rejected`
+  code. Never call `primeCsrf()` before a mutation — it is not a precondition; the only remaining
+  callers are the auth-state changes in `LoginPage.tsx` (latency hiding, not correctness)
 - Never call `fetch` directly for API requests, and never read `document.cookie` outside
   `api/client.ts` — that is one statement of security policy, and a second copy fails silently
 - `web/src/api` owns request execution end to end (ADR-025). `SpaRequestExecutionTests` fails the

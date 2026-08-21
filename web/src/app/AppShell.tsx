@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router';
-import { postApiAuthLogout, primeCsrf } from '@/api';
+import { postApiAuthLogout } from '@/api';
 import {
   AppLayout,
   Avatar,
@@ -50,7 +50,6 @@ export function AppShell() {
   const displayName = session?.name ?? session?.email ?? 'User';
 
   async function signOut() {
-    await primeCsrf();
     await postApiAuthLogout();
     await queryClient.invalidateQueries({ queryKey: sessionQueryKey });
     void navigate('/login', { replace: true });

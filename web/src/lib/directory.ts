@@ -9,7 +9,6 @@ import {
   postApiDirectoryOwners,
   postApiDirectoryProperties,
   postApiDirectoryTenants,
-  primeCsrf,
   putApiDirectoryLeasesById,
   type CreateOwner,
   type CreateProperty,
@@ -120,7 +119,6 @@ export function useUpdateLease(tenantId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, ...body }: UpdateLeaseBody & { id: string }) => {
-      await primeCsrf();
       const { error } = await putApiDirectoryLeasesById({
         path: { id },
         body: body as UpdateLeaseBody,
@@ -135,7 +133,6 @@ export function useCreateTenant() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (body: CreateTenantBody) => {
-      await primeCsrf();
       return unwrap(await postApiDirectoryTenants({ body }), 'tenant create');
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['tenants'] }),
@@ -146,7 +143,6 @@ export function useCreateOwner() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (body: CreateOwnerBody) => {
-      await primeCsrf();
       return unwrap(await postApiDirectoryOwners({ body }), 'owner create');
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['owners'] }),
@@ -157,7 +153,6 @@ export function useCreateProperty() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (body: CreatePropertyBody) => {
-      await primeCsrf();
       return unwrap(await postApiDirectoryProperties({ body }), 'property create');
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['properties'] }),

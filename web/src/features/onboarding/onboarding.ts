@@ -10,7 +10,6 @@ import {
   postApiOnboardingImportByKind,
   postApiOnboardingVerification,
   postApiOnboardingVerificationByIdSignoff,
-  primeCsrf,
   toApiError,
   unwrap,
   type ApiError,
@@ -74,7 +73,6 @@ export function useImportEntities(kind: EntityKind) {
   const queryClient = useQueryClient();
   return useMutation<ImportBatchResult, OnboardingError, EntityImportRequest>({
     mutationFn: async (body) => {
-      await primeCsrf();
       return unwrap(
         postApiOnboardingImportByKind({ path: { kind }, body }),
         `Failed to import ${kind}`,
@@ -91,7 +89,6 @@ export function useImportBalances(kind: BalanceKind) {
   const queryClient = useQueryClient();
   return useMutation<ImportBatchResult, OnboardingError, BalanceImportRequest>({
     mutationFn: async (body) => {
-      await primeCsrf();
       return unwrap(
         postApiOnboardingImportBalancesByKind({ path: { kind }, body }),
         `Failed to import ${kind}`,
@@ -108,7 +105,6 @@ export function useSupersedeBalances(kind: BalanceKind) {
   const queryClient = useQueryClient();
   return useMutation<ImportBatchResult, OnboardingError, BalanceImportRequest>({
     mutationFn: async (body) => {
-      await primeCsrf();
       return unwrap(
         postApiOnboardingImportBalancesByKindSupersede({ path: { kind }, body }),
         `Failed to re-import ${kind}`,
@@ -125,7 +121,6 @@ export function useVerify() {
   const queryClient = useQueryClient();
   return useMutation<VerificationReport, OnboardingError, VerificationRequestDto>({
     mutationFn: async (body) => {
-      await primeCsrf();
       return unwrap(postApiOnboardingVerification({ body }), 'Verification failed');
     },
     onSuccess: () => {
@@ -139,7 +134,6 @@ export function useSignoff() {
   const queryClient = useQueryClient();
   return useMutation<void, OnboardingError, { id: string }>({
     mutationFn: async ({ id }) => {
-      await primeCsrf();
       const { error, response } = await postApiOnboardingVerificationByIdSignoff({
         path: { id },
       });

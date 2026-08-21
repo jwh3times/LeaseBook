@@ -7,7 +7,6 @@ import {
   getApiOperationsRuns,
   getApiOperationsRunsByTypePreview,
   postApiOperationsRunsByTypeConfirm,
-  primeCsrf,
   unwrap,
   type ApiError,
   type BulkRunDetailResponse,
@@ -90,7 +89,6 @@ export function useConfirmRun(type: RunType) {
     { year: number; month: number; selectedTargetIds: string[]; capabilitiesVersion: string }
   >({
     mutationFn: async ({ year, month, selectedTargetIds, capabilitiesVersion }) => {
-      await primeCsrf();
       return unwrap(
         postApiOperationsRunsByTypeConfirm({
           path: { type },

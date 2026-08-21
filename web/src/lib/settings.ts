@@ -3,7 +3,6 @@ import {
   getApiSettingsBanks,
   getApiSettingsOrg,
   postApiSettingsBanks,
-  primeCsrf,
   putApiSettingsBanksByIdActive,
   putApiSettingsOrg,
   unwrap,
@@ -32,7 +31,6 @@ export function useUpdateOrgSettings() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (body: UpdateOrgBody) => {
-      await primeCsrf();
       return unwrap(putApiSettingsOrg({ body }), 'Failed to save settings');
     },
     onSuccess: (data) => qc.setQueryData(orgSettingsKey, data),
@@ -54,7 +52,6 @@ export function useSetBankAccountActive() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) => {
-      await primeCsrf();
       return unwrap(
         putApiSettingsBanksByIdActive({ path: { id }, body: { isActive } }),
         'Failed to update the bank account',
@@ -68,7 +65,6 @@ export function useCreateBankAccount() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (body: CreateBankBody) => {
-      await primeCsrf();
       return unwrap(postApiSettingsBanks({ body }), 'Failed to create the bank account');
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['bank-accounts'] }),

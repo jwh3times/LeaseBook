@@ -7,7 +7,6 @@ import {
   postApiAccountingTenantsByTenantIdPayments,
   postApiAccountingTenantsByTenantIdPrepaymentApplications,
   postApiAccountingTenantsByTenantIdPrepayments,
-  primeCsrf,
   type PostResult,
 } from '@/api';
 import { toApiError, type ApiError } from '@/api';
@@ -101,7 +100,6 @@ export async function submitLedgerEntry(
   tenantId: string,
   input: LedgerEntryInput,
 ): Promise<PostResult> {
-  await primeCsrf();
   const { category, amount, date, memo, method, bankAccountId, sourceRef } = input;
   const trimmed = memo.trim();
   const memoOrNull = trimmed === '' ? null : trimmed;
@@ -166,7 +164,6 @@ export async function voidEntry(
   reason: string,
   sourceRef: string,
 ): Promise<PostResult> {
-  await primeCsrf();
   return unwrap(
     postApiAccountingEntriesByEntryIdVoid({
       path: { entryId },
@@ -189,7 +186,6 @@ export async function applyDeposit(
   tenantId: string,
   input: ApplyDepositInput,
 ): Promise<PostResult> {
-  await primeCsrf();
   return unwrap(
     postApiAccountingTenantsByTenantIdDepositApplications({
       path: { tenantId },
@@ -219,7 +215,6 @@ export async function applyPrepayment(
   tenantId: string,
   input: ApplyPrepaymentInput,
 ): Promise<PostResult> {
-  await primeCsrf();
   const memo = input.memo.trim();
   return unwrap(
     postApiAccountingTenantsByTenantIdPrepaymentApplications({

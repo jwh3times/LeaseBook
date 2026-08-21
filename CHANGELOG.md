@@ -20,6 +20,11 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Changed
 
+- **Saving is a little faster, and an expired security token can no longer fail a save.** Every
+  action that records something — a payment, an adjustment, an import — used to fetch a fresh
+  security token before sending, adding a round-trip to each save. The app now sends saves directly
+  and refreshes the token only when it is actually missing or expired, retrying the save once
+  automatically in that case instead of showing an error.
 - **When a screen fails to load, it now says what went wrong and gives you a reference to quote.**
   Pages that could not load their data used to show the same generic message whatever the cause, and
   the support reference the server had already generated was thrown away before anything could show

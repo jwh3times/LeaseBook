@@ -14,7 +14,6 @@ import {
   postApiBankingBanksByBankAccountIdImports,
   postApiBankingBanksByBankAccountIdMappings,
   postApiBankingImportsByImportIdConfirm,
-  primeCsrf,
   unwrap,
   type ApiError,
   type BankBalanceRow,
@@ -140,7 +139,6 @@ export function useColumnMappings(bankAccountId: string): UseQueryResult<ColumnM
 export type BankingError = ApiError;
 
 export async function applyClearances(journalLineIds: string[], cleared = true): Promise<void> {
-  await primeCsrf();
   await unwrap(
     postApiAccountingBanksClearances({ body: { journalLineIds, cleared } }),
     'Failed to update cleared status',
@@ -153,7 +151,6 @@ export async function startReconciliation(input: {
   month: number;
   statementEndingBalance: number;
 }): Promise<ReconciliationView> {
-  await primeCsrf();
   return unwrap(
     postApiAccountingReconciliations({ body: input }),
     'Failed to start the reconciliation',
@@ -161,7 +158,6 @@ export async function startReconciliation(input: {
 }
 
 export async function finalizeReconciliation(id: string): Promise<ReconciliationView> {
-  await primeCsrf();
   return unwrap(
     postApiAccountingReconciliationsByIdFinalize({ path: { id } }),
     'Failed to finalize the reconciliation',
@@ -179,7 +175,6 @@ export async function recordBankAdjustment(
     sourceRef: string;
   },
 ): Promise<{ entryId: string }> {
-  await primeCsrf();
   return unwrap(
     postApiAccountingBanksByBankAccountIdAdjustments({
       path: { bankAccountId },
@@ -193,7 +188,6 @@ export async function importStatement(
   bankAccountId: string,
   input: { filename: string; csvContent: string; columnMap: ColumnMap },
 ): Promise<ImportResult> {
-  await primeCsrf();
   return unwrap(
     postApiBankingBanksByBankAccountIdImports({
       path: { bankAccountId },
@@ -220,7 +214,6 @@ export async function confirmMatches(
   importId: string,
   decisions: ConfirmDecision[],
 ): Promise<ConfirmMatchesResult> {
-  await primeCsrf();
   return unwrap(
     postApiBankingImportsByImportIdConfirm({ path: { importId }, body: { importId, decisions } }),
     'Failed to confirm the matches',
@@ -231,7 +224,6 @@ export async function saveColumnMapping(
   bankAccountId: string,
   input: { name: string; columnMap: ColumnMap },
 ): Promise<{ id: string }> {
-  await primeCsrf();
   return unwrap(
     postApiBankingBanksByBankAccountIdMappings({
       path: { bankAccountId },

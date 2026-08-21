@@ -15,12 +15,17 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // Prime the XSRF cookie so the login POST carries the X-XSRF-TOKEN header.
+  // Auth-state priming: the antiforgery token is user-bound, so each side of the sign-in
+  // transition needs its own. Mount refreshes the anonymous token (a signed-out cookie may still
+  // hold the previous user's); sign-in success refreshes it again for the new user so the first
+  // mutation does not pay a rejection replay. Both are latency hiding, not correctness — the api
+  // client primes on demand and replays once on a stale token.
   useEffect(() => {
     void primeCsrf();
   }, []);
 
   async function finishSignIn() {
+    void primeCsrf();
     await queryClient.invalidateQueries({ queryKey: sessionQueryKey });
     void navigate('/dashboard', { replace: true });
   }
