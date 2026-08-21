@@ -107,9 +107,9 @@ reconciliation period-lock check in full — a skipped lock and an open period a
 which conflated two different nulls: a system actor legitimately having no human to record, and no
 actor being declared at all. The accounting suite finalized reconciliations — the act that locks a
 period — through a handler built with no actor context, so the second null was never exercised and
-`FinalizedBy` went unasserted. Neither was a production defect: DI supplied both collaborators
-everywhere. Both are now required, the finalizer is asserted, and the pattern is guarded rather than
-left to the next reader to notice.
+no test asserted `FinalizedBy` at all. Neither was a production defect: DI supplied both
+collaborators everywhere. Both are now required, the acting user is asserted, and the pattern is
+guarded rather than left to the next reader to notice.
 
 ## Revisit trigger
 
