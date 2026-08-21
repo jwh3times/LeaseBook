@@ -24,7 +24,11 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Fixed
 
-- _Nothing yet._
+- **An import error message no longer sticks to the wrong import type.** On the onboarding import
+  step, if a CSV upload failed and you then picked a different import type without uploading
+  anything, the failure message stayed on screen — reading as though the type you had just selected
+  was the one that failed. Switching type now clears it, so a message on screen always refers to the
+  file you actually uploaded.
 
 ## [0.10.0] - 2026-08-21
 
