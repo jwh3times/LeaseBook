@@ -78,6 +78,9 @@ internal sealed class GetBankRegisterHandler(DbContext db) : IQueryHandler<GetBa
                   -- the register is lines posted to the bank ACCOUNT, not every line that merely carries
                   -- the bank dimension for attribution (owner-equity / pm-income lines do too).
                   AND jl.account_class IN ('trust_bank', 'pm_operating_bank')
+                  -- Not a basis choice: every trust_bank / pm_operating_bank line is posted
+                  -- 'both', so ('accrual','both') selects the identical rows. A bank register is
+                  -- a cash record by construction (#230).
                   AND jl.basis IN ('cash', 'both')
                   AND ({query.PropertyId}::uuid IS NULL OR jl.property_id = {query.PropertyId})
                   AND ({query.From}::date IS NULL OR e.entry_date >= {query.From})

@@ -96,3 +96,48 @@ export function SelectChip({ label, value, options, loading, onSelect }: SelectC
     </div>
   );
 }
+
+interface BasisChipProps {
+  value: 'cash' | 'accrual';
+  onSelect: (basis: 'cash' | 'accrual') => void;
+}
+
+/**
+ * Accounting-basis chip. Deliberately not a {@link SelectChip}: that control always offers "All",
+ * which is meaningless for a basis — a figure is on one basis or the other. Mirrors the owner
+ * statement's basis toggle (`pf-basis-btn` + `aria-pressed`), the one basis control that has always
+ * worked end to end.
+ */
+export function BasisChip({ value, onSelect }: BasisChipProps) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="pf-filter-wrap">
+      <FilterChipBuilder
+        label="Basis"
+        value={value === 'accrual' ? 'Accrual' : 'Cash'}
+        active={open}
+        onClick={() => setOpen((v) => !v)}
+      />
+      {open && (
+        <div className="pf-filter-popover" role="dialog" aria-label="Select Basis">
+          <div className="row gap6">
+            {(['cash', 'accrual'] as const).map((b) => (
+              <button
+                key={b}
+                className={`pf-basis-btn${value === b ? ' active' : ''}`}
+                type="button"
+                aria-pressed={value === b}
+                onClick={() => {
+                  onSelect(b);
+                  setOpen(false);
+                }}
+              >
+                {b === 'cash' ? 'Cash' : 'Accrual'}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

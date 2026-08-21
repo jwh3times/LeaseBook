@@ -3,7 +3,7 @@
 - **Audience:** Contributors, operators, and reviewers
 - **Status:** Living accounting guide
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-08-18
+- **Last reviewed:** 2026-08-21
 
 This is the canonical public explanation of the shipped trust-accounting model, written so a
 property manager, bookkeeper, or attorney can evaluate it without reading C#. The Accounting module
@@ -89,6 +89,20 @@ Every line is tagged **cash**, **accrual**, or **both**:
 Because the basis is just a tag, the cash and accrual views are two readings of the **same** journal —
 they can never disagree about the past. (Technical note for implementers: a `both` line belongs to
 each basis, so a balance is "this basis plus both," never a blind sum of all three tags.)
+
+**Where a basis is chosen, and where it is not.** Choosing a basis only means something where the two
+readings differ. Owner equity is the figure that moves: it is credited when rent is _charged_ on the
+accrual basis and when the money _arrives_ on the cash basis, so the owner statement and the
+all-owner balances report each let you pick one — and each labels the basis the figures were actually
+computed on rather than the one that was asked for. Nothing else on offer moves: bank balances, held
+deposits and management-fee income are posted `both` and read identically either way, and a
+receivable exists only on the accrual basis. Offering a basis for any of those would assert a
+difference that does not exist.
+
+Money movement is never a choice. Owner disbursements, the folded management fee, and the dashboard's
+available-to-disburse figure are all decided on the **cash** basis, because the trust account can only
+pay out money it has actually received. The basis a figure may be _read_ on is not a basis money may
+be _moved_ on.
 
 ## A worked month
 

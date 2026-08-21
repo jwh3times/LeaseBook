@@ -13,7 +13,8 @@ internal sealed class OwnerFinancialsAdapter(ISender sender) : IOwnerFinancials
 {
     public async Task<IReadOnlyDictionary<Guid, OwnerFinancialsRow>> BalancesAsync(CancellationToken ct)
     {
-        var response = await sender.Query(new GetOwnerBalances(), ct);
+        // Explicit "cash": this port reports distributable owner cash, not earned revenue (#230).
+        var response = await sender.Query(new GetOwnerBalances("cash"), ct);
         return response.Rows.ToDictionary(r => r.OwnerId, r => new OwnerFinancialsRow(r.Operating, r.Deposits));
     }
 }

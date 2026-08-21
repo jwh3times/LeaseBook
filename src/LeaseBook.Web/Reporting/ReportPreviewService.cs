@@ -34,7 +34,7 @@ public sealed class ReportPreviewService(ISender sender)
         {
             "owner-stmt" => new ReportPreviewResult(descriptor.Id, descriptor.Name, descriptor.Category,
                 "Owner statements have a dedicated endpoint: GET /api/statements/{ownerId}", []),
-            "owner-bal" => await PreviewOwnerBalancesAsync(descriptor, ct),
+            "owner-bal" => await PreviewOwnerBalancesAsync(descriptor, filters, ct),
             "rent-roll" => await PreviewRentRollAsync(descriptor, ct),
             "delinquency" => await PreviewDelinquencyAsync(descriptor, filters, ct),
             "mgmt-fee" => await PreviewMgmtFeeAsync(descriptor, filters, ct),
@@ -49,10 +49,17 @@ public sealed class ReportPreviewService(ISender sender)
 
     // --- per-report preview implementations ---
 
+    /// <summary>
+    /// The only basis-aware preview. Owner equity is credited on a different event per basis
+    /// (<c>RentCharged</c> accrual / <c>PaymentReceived</c> cash), so Operating genuinely differs;
+    /// Deposits does not, because every <c>deposit_liability</c> line is tagged <c>both</c>. The
+    /// resolved basis is echoed back rather than trusted from the client.
+    /// </summary>
     private async Task<ReportPreviewResult> PreviewOwnerBalancesAsync(
-        ReportDescriptor descriptor, CancellationToken ct)
+        ReportDescriptor descriptor, ReportFilters filters, CancellationToken ct)
     {
-        var response = await sender.Query(new GetOwnerBalances(), ct);
+        var basis = ResolveBasis(filters.Basis);
+        var response = await sender.Query(new GetOwnerBalances(basis), ct);
         var rows = response.Rows.Select(r => new Dictionary<string, object?>
         {
             ["ownerId"] = r.OwnerId,
@@ -61,8 +68,12 @@ public sealed class ReportPreviewService(ISender sender)
             ["total"] = r.Total,
         }).ToList<object>();
 
-        return new ReportPreviewResult(descriptor.Id, descriptor.Name, descriptor.Category, null, rows);
+        return new ReportPreviewResult(descriptor.Id, descriptor.Name, descriptor.Category, null, rows, basis);
     }
+
+    /// <summary>Same normalization the statement endpoints use: anything but "accrual" is cash.</summary>
+    private static string ResolveBasis(string? requested) =>
+        requested?.ToLowerInvariant() is "accrual" ? "accrual" : "cash";
 
     private async Task<ReportPreviewResult> PreviewRentRollAsync(
         ReportDescriptor descriptor, CancellationToken ct)

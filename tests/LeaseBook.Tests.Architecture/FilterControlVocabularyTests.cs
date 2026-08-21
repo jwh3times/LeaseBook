@@ -95,7 +95,9 @@ public sealed class FilterControlVocabularyTests
         // A source scan that stops matching goes green, not red. These anchors are the parameters
         // whose absence means the parse broke rather than the endpoint changed.
         BoundQueryParameters(PreviewRoute)
-            .ShouldBe(["year", "month", "ownerId", "propertyId", "bankAccountId", "asOf"], ignoreOrder: true);
+            .ShouldBe(
+                ["year", "month", "ownerId", "propertyId", "bankAccountId", "asOf", "basis"],
+                ignoreOrder: true);
         BoundQueryParameters(CompliancePackRoute)
             .ShouldBe(["bankAccountId", "from", "to"], ignoreOrder: true);
     }

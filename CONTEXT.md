@@ -129,8 +129,10 @@ _Avoid_: total bank cash, all bank balances
 
 **Owner operating balance**:
 An owner's cash-basis owner-equity balance before a prospective management fee or reserve floor is
-applied. It can be positive without all of it being available for disbursement.
-_Avoid_: owners payable, balance available for disbursement
+applied. It can be positive without all of it being available for disbursement. Owner equity read on
+the accrual basis — offered by the all-owner balances report — is what the owner has earned, not this
+figure, and no money is ever moved against it.
+_Avoid_: owners payable, balance available for disbursement, accrual owner equity
 
 **Available to disburse**:
 For one owner, the positive remainder after the management fee computed on the current owner
@@ -284,16 +286,20 @@ organization, and never edited by a property manager.
 _Avoid_: report list, report registry, saved reports (nothing is saved)
 
 **Filter control**:
-One filter the report builder offers for a given report — an owner, a property, a bank account, a
-period. A report offers only the controls its catalog entry declares, and each control is named for
-the query parameter it sets. Declaring a control decides what a property manager can narrow a report
-by; it does not decide what the server will accept.
+One control the report builder offers for a given report — an owner, a property, a bank account, a
+period, or the accounting basis a report is read on (the one control that changes the reading rather
+than narrowing it). A report offers only the controls its catalog entry declares, and each control is
+named for the query parameter it sets. Declaring a control decides what a property manager can vary a
+report by; it does not decide what the server will accept.
 _Avoid_: accepted filter (nothing rejects one), filter key, query param
 
 **Accounting basis**:
 Cash or accrual — which of the two views of the same journal a figure is drawn from. Every figure the
 product shows is on exactly one basis, and which one is always stated rather than implied, because
-the same period reads differently under each.
+the same period reads differently under each. A figure is offered as a choice only where the two
+readings actually differ; where they cannot differ — every line tagged both, or a figure that exists
+under one basis only — the basis is fixed and naming it as a choice would claim a difference that
+does not exist.
 _Avoid_: mode, view, accounting method
 
 ### Statement delivery

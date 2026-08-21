@@ -22,7 +22,8 @@ public sealed class DashboardService(
 {
     public async Task<DashboardResponse> ComposeAsync(CancellationToken ct)
     {
-        var ownerBalances = await sender.Query(new GetOwnerBalances(), ct);
+        // Explicit "cash": the dashboard's owner ending balances are distributable cash (#230).
+        var ownerBalances = await sender.Query(new GetOwnerBalances("cash"), ct);
         var ownerLookup = (await sender.Query(new GetOwnerLookup(), ct)).ToDictionary(o => o.Id);
         var bankBalances = await sender.Query(new GetBankBalances(), ct);
         var deposits = await sender.Query(new GetDepositRegister(), ct);

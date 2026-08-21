@@ -7,6 +7,7 @@ import { useBankBalances } from '@/features/banking/banking';
 import { useSession } from '@/features/auth/useSession';
 import {
   downloadReportCsv,
+  type ReportBasis,
   type ReportDescriptor,
   type ReportFilters,
   type ReportsError,
@@ -15,7 +16,7 @@ import {
 } from './reports';
 import { ReportPreviewTable } from './ReportPreview';
 import { CompliancePackPanel } from './CompliancePackPanel';
-import { FilterChipBuilder, SelectChip, type SelectChipOption } from './chips';
+import { BasisChip, FilterChipBuilder, SelectChip, type SelectChipOption } from './chips';
 
 // The compliance pack is a PMAdmin-only ZIP export (it carries the audit-log extract), so it is
 // gated out of the catalog for non-admins and rendered by its own panel rather than the generic
@@ -125,6 +126,7 @@ function BuilderPanel({ report }: BuilderPanelProps) {
   const [propertyId, setPropertyId] = useState<string | null>(null);
   const [ownerId, setOwnerId] = useState<string | null>(null);
   const [bankAccountId, setBankAccountId] = useState<string | null>(null);
+  const [basis, setBasis] = useState<ReportBasis>('cash');
   const [downloadError, setDownloadError] = useState<ReportsError | null>(null);
   const [periodOpen, setPeriodOpen] = useState(false);
 
@@ -134,6 +136,8 @@ function BuilderPanel({ report }: BuilderPanelProps) {
   const showProperty = controls.includes('propertyId');
   const showOwner = controls.includes('ownerId');
   const showBank = controls.includes('bankAccountId');
+  // Only owner-bal declares 'basis'. See ReportCatalog.cs: it is the one report whose figures move.
+  const showBasis = controls.includes('basis');
 
   // Only fetch lists when the corresponding filter chip is shown for the selected report.
   const ownersQuery = useOwners({ enabled: showOwner });
@@ -159,6 +163,7 @@ function BuilderPanel({ report }: BuilderPanelProps) {
     ...(showProperty && propertyId ? { propertyId } : {}),
     ...(showOwner && ownerId ? { ownerId } : {}),
     ...(showBank && bankAccountId ? { bankAccountId } : {}),
+    ...(showBasis ? { basis } : {}),
   };
 
   const iconName =
@@ -178,6 +183,11 @@ function BuilderPanel({ report }: BuilderPanelProps) {
       : 'doc';
 
   const preview = useReportPreview(report.id, filters);
+
+  // Server-echoed basis, capitalised for display. Absent on every report without a basis dimension.
+  const echoedBasis = preview.data?.basis;
+  const previewBasisLabel =
+    echoedBasis === 'accrual' ? 'Accrual' : echoedBasis === 'cash' ? 'Cash' : null;
 
   const handleCsv = async () => {
     setDownloadError(null);
@@ -312,6 +322,9 @@ function BuilderPanel({ report }: BuilderPanelProps) {
             onSelect={setBankAccountId}
           />
         )}
+
+        {/* Basis chip — shown when report.filterControls includes 'basis' (owner-bal only). */}
+        {showBasis && <BasisChip value={basis} onSelect={setBasis} />}
       </div>
 
       <ApiErrorNotice error={downloadError} style={{ padding: '8px var(--card-pad)' }} />
@@ -320,7 +333,13 @@ function BuilderPanel({ report }: BuilderPanelProps) {
       <div className="pf-builder-preview">
         <div className="pf-preview-bar">
           <span className="pf-eyebrow">Live preview</span>
-          <span className="t3 fs12">Updates as you change filters</span>
+          {/* The basis label comes from the server's echo, never from `basis` above: rendering local
+              state is how the old toggle claimed a basis nothing had applied (#229). */}
+          <span className="t3 fs12">
+            {previewBasisLabel
+              ? `${previewBasisLabel} basis · updates as you change filters`
+              : 'Updates as you change filters'}
+          </span>
         </div>
 
         {preview.isPending ? (

@@ -20,6 +20,28 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Changed
 
+- _Nothing yet._
+
+### Fixed
+
+- _Nothing yet._
+
+## [0.10.0] - 2026-08-21
+
+### Added
+
+- **The all-owner balances report can now be read on a cash or accrual basis.** A Basis control on
+  that report switches between what owners have been _paid_ (cash) and what they have _earned_
+  (accrual) — the two genuinely differ, because rent counts toward an owner when it is charged on
+  the accrual basis and when the money arrives on the cash basis. Held deposits are the same figure
+  either way and do not move. The label above the preview reports the basis the server actually
+  used, and CSV exports match what is on screen. No other report offers the control, because no
+  other report's figures change with it — the previous switch was removed for exactly that reason.
+  Owner disbursements, management fees and the dashboard are unaffected and remain on the cash
+  basis: money is only ever paid out against cash actually received.
+
+### Changed
+
 - **Saving is a little faster, and an expired security token can no longer fail a save.** Every
   action that records something — a payment, an adjustment, an import — used to fetch a fresh
   security token before sending, adding a round-trip to each save. The app now sends saves directly
@@ -601,7 +623,8 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.10.0
 [0.9.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.9.0
 [0.8.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.8.0
 [0.7.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.7.0
