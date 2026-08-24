@@ -7,7 +7,7 @@
  * (c) VerificationStep sign-off button is disabled until isTied is true (and enabled when true).
  */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { delay, http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
@@ -254,7 +254,12 @@ describe('EntityImportStep — explicit "Continue" advancement', () => {
     expect(await screen.findByText(/imported 2 rows successfully/i)).toBeInTheDocument();
     expect(onContinue).not.toHaveBeenCalled();
 
-    // Continue is now enabled; clicking it advances explicitly.
+    // Per-upload state follows the selected kind, while completed-kind progress stays in the shell.
+    await userEvent.click(screen.getByLabelText('Properties'));
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Owners').closest('label')?.querySelector('svg')).not.toBeNull();
+
+    // Continue remains enabled across the kind switch; clicking it advances explicitly.
     expect(continueBtn).toBeEnabled();
     await userEvent.click(continueBtn);
     expect(onContinue).toHaveBeenCalledTimes(1);
@@ -408,20 +413,21 @@ describe('BalanceImportStep — corrected re-import (supersede)', () => {
   });
 });
 
-// ─── (b4) BalanceImportStep — banner reflects the mode that produced it ──────
+// ─── (b4) BalanceImportStep — result lifetime follows the selected mode ──────
 //
 // Regression coverage for the reviewer finding: the success banner used to key its content off
 // the LIVE `supersede` checkbox rather than which mode actually produced the displayed
 // result/counts, so toggling the checkbox after a result landed (without re-uploading)
-// instantly relabeled a stale result under the wrong mode.
+// instantly relabeled a stale result under the wrong mode. The mode-keyed body now discards that
+// stale result entirely, so there is nothing available to mislabel.
 
-describe('BalanceImportStep — banner reflects the mode that produced the result', () => {
+describe('BalanceImportStep — result lifetime follows the selected mode', () => {
   beforeEach(() => {
     document.body.innerHTML = '';
     server.use(http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 })));
   });
 
-  test('plain import success then toggling supersede does not relabel the banner', async () => {
+  test('enabling supersede clears a plain-import result', async () => {
     server.use(
       http.post('/api/onboarding/import-balances/owner_balances', () =>
         HttpResponse.json({
@@ -429,8 +435,8 @@ describe('BalanceImportStep — banner reflects the mode that produced the resul
           rowCount: 3,
           errorCount: 0,
           // Nonzero counts on a *plain* import response: ImportBatchResult.counts is populated on
-          // every response, plain or supersede, so a plain import's counts alone can't be trusted
-          // to gate the "corrected" copy — only resultMode can.
+          // every response, plain or supersede. A mode change must discard this result rather than
+          // reinterpret those counts as a corrected import.
           counts: {
             posted: 3,
             alreadyPosted: 0,
@@ -450,16 +456,12 @@ describe('BalanceImportStep — banner reflects the mode that produced the resul
     // Toggle supersede WITHOUT uploading again.
     await userEvent.click(screen.getByLabelText('This is a corrected re-import (supersede)'));
 
-    // Scoped to the role="status" banner itself: the checkbox's own always-present label text
-    // ("This is a corrected re-import (supersede)") also contains "corrected", so an unscoped
-    // queryByText(/corrected/i) would false-positive on a "multiple elements found" error rather
-    // than actually asserting on the banner's content.
-    const banner = screen.getByRole('status');
-    expect(within(banner).getByText(/imported 3 rows successfully/i)).toBeInTheDocument();
-    expect(within(banner).queryByText(/corrected/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(screen.getByText(/drop a csv here or click to browse/i)).toBeInTheDocument();
+    expect(screen.getByLabelText('This is a corrected re-import (supersede)')).toHaveFocus();
   });
 
-  test('supersede success then unchecking does not revert the banner', async () => {
+  test('returning to plain import clears a supersede result', async () => {
     server.use(
       http.post('/api/onboarding/import-balances/owner_balances/supersede', () =>
         HttpResponse.json({
@@ -486,9 +488,9 @@ describe('BalanceImportStep — banner reflects the mode that produced the resul
     // Uncheck supersede WITHOUT uploading again.
     await userEvent.click(screen.getByLabelText('This is a corrected re-import (supersede)'));
 
-    const banner = screen.getByRole('status');
-    expect(within(banner).getByText(/1 corrected, 2 unchanged/)).toBeInTheDocument();
-    expect(within(banner).queryByText(/imported/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(screen.getByText(/drop a csv here or click to browse/i)).toBeInTheDocument();
+    expect(screen.getByLabelText('This is a corrected re-import (supersede)')).toHaveFocus();
   });
 });
 
@@ -529,6 +531,51 @@ describe('BalanceImportStep — mutation error state resets on kind and mode swi
 
     expect(screen.queryByText(/the csv could not be processed/i)).not.toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
+  test('switching balance kind preserves cutover date and completed-kind progress', async () => {
+    server.use(
+      http.post('/api/onboarding/import-balances/owner_balances', () =>
+        HttpResponse.json({ batchId: 'b7', rowCount: 1, errorCount: 0, errors: [] }),
+      ),
+    );
+
+    const onContinue = vi.fn();
+    render(
+      withRouter(
+        <BalanceImportStep
+          title="Import balances"
+          description="Upload balance CSVs"
+          kinds={BALANCE_KINDS}
+          defaultCutoverDate="2025-12-31"
+          onContinue={onContinue}
+        />,
+      ),
+    );
+
+    const cutoverDate = screen.getByLabelText('Cutover date');
+    fireEvent.change(cutoverDate, { target: { value: '2026-01-31' } });
+    await uploadCsv('Owner ID,Owner Name,Cash Balance,Accrual Balance\nO-1,X,450.00,450.00\n');
+
+    expect(await screen.findByText(/imported 1 row successfully/i)).toBeInTheDocument();
+    expect(
+      screen.getByLabelText('Owner balances').closest('label')?.querySelector('svg'),
+    ).not.toBeNull();
+    expect(screen.getByRole('button', { name: /continue/i })).toBeEnabled();
+
+    const supersede = screen.getByLabelText('This is a corrected re-import (supersede)');
+    await userEvent.click(supersede);
+    expect(screen.getByLabelText('This is a corrected re-import (supersede)')).toBeChecked();
+
+    await userEvent.click(screen.getByLabelText('Deposit liabilities'));
+
+    expect(cutoverDate).toHaveValue('2026-01-31');
+    expect(
+      screen.getByLabelText('Owner balances').closest('label')?.querySelector('svg'),
+    ).not.toBeNull();
+    expect(screen.getByRole('button', { name: /continue/i })).toBeEnabled();
+    expect(screen.getByLabelText('This is a corrected re-import (supersede)')).not.toBeChecked();
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 
