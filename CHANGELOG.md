@@ -24,6 +24,11 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Fixed
 
+- **Onboarding import results now stay with the selection that produced them.** Switching an entity
+  or balance type, or toggling corrected re-import mode, now starts a clean upload view so an old
+  result cannot appear under the new selection. Completed-import progress and the chosen balance
+  cutover date stay intact, and keyboard focus remains on the corrected re-import control after its
+  mode changes.
 - **An import error message no longer sticks to the wrong import type.** On the onboarding import
   step, if a CSV upload failed and you then picked a different import type without uploading
   anything, the failure message stayed on screen — reading as though the type you had just selected

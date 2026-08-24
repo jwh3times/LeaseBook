@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 import { Button, Card, CardHeader, EmptyState, Icon } from '@/design';
 import { ApiErrorNotice } from '@/components/ApiErrorNotice';
 import {
@@ -26,55 +26,9 @@ interface EntityImportStepProps {
 
 export function EntityImportStep({ title, description, kinds, onContinue }: EntityImportStepProps) {
   const [selectedKind, setSelectedKind] = useState<EntityKind>(kinds[0]!.kind);
-  const [filename, setFilename] = useState<string | null>(null);
-  const [errors, setErrors] = useState<ImportBatchError[]>([]);
-  const [result, setResult] = useState<{ rowCount: number; errorCount: number } | null>(null);
   // Tracks which kinds imported cleanly, so the "Continue" affordance only appears once the
   // operator has imported at least one kind on this step.
   const [importedKinds, setImportedKinds] = useState<Set<EntityKind>>(new Set());
-  const fileRef = useRef<HTMLInputElement>(null);
-  const mutation = useImportEntities(selectedKind);
-
-  async function handleFile(file: File) {
-    setFilename(file.name);
-    setErrors([]);
-    setResult(null);
-    const csvContent = await file.text();
-    // `.catch(() => null)`, not a silent swallow: the mutation's isError/error (read live by
-    // ApiErrorNotice, below) is already updated by react-query before this rejection reaches us.
-    // Without this, a real mutation failure escapes as an unhandled promise rejection — handleFile
-    // is invoked fire-and-forget (`void handleChange(e)` / `void handleDrop(e)`), so nothing else
-    // in the call chain awaits this promise. BalanceImportStep has carried this guard; this twin
-    // did not.
-    const res = await mutation
-      .mutateAsync({
-        csvContent,
-        filename: file.name,
-        mappingProfile: null,
-      })
-      .catch(() => null);
-    if (!res) return;
-    const errorCount = Number(res.errorCount);
-    setResult({ rowCount: Number(res.rowCount), errorCount });
-    setErrors(res.errors ?? []);
-    if (errorCount === 0) {
-      setImportedKinds((prev) => new Set(prev).add(selectedKind));
-    }
-  }
-
-  async function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (file) await handleFile(file);
-  }
-
-  async function handleDrop(e: React.DragEvent) {
-    e.preventDefault();
-    const file = e.dataTransfer.files[0];
-    if (file) await handleFile(file);
-  }
-
-  const hasErrors = errors.length > 0;
-  const isSuccess = result !== null && !hasErrors;
   const canContinue = importedKinds.size > 0;
 
   return (
@@ -92,22 +46,7 @@ export function EntityImportStep({ title, description, kinds, onContinue }: Enti
                   name="entity-kind"
                   value={kind}
                   checked={selectedKind === kind}
-                  onChange={() => {
-                    setSelectedKind(kind);
-                    // Reset the per-import banner/error state so a prior kind's "Imported N rows"
-                    // banner doesn't carry over to the newly-selected kind.
-                    setFilename(null);
-                    setResult(null);
-                    setErrors([]);
-                    // `mutation` is a single shared useMutation instance across every kind (the
-                    // mutationFn closes over `selectedKind`, but the observer's own isError/error
-                    // state is NOT keyed by kind). The three resets above clear the success banner
-                    // and the row-level error list — the notice below reads the mutation's live
-                    // isError/error, which is a fourth piece of state they do not touch. Without
-                    // this, a failed upload for the previous kind kept rendering its error notice
-                    // against a kind that was never uploaded.
-                    mutation.reset();
-                  }}
+                  onChange={() => setSelectedKind(kind)}
                 />
                 {label}
                 {importedKinds.has(kind) && (
@@ -119,6 +58,86 @@ export function EntityImportStep({ title, description, kinds, onContinue }: Enti
         </fieldset>
       )}
 
+      {/* Deliberate lifetime seam: upload state and its mutation must not outlive the kind. */}
+      <EntityImportBody
+        key={selectedKind}
+        kind={selectedKind}
+        onImported={(kind) => setImportedKinds((prev) => new Set(prev).add(kind))}
+      />
+
+      {onContinue && (
+        <div className="ob-step-actions row gap8 align-center mt16">
+          <Button
+            variant="primary"
+            onClick={onContinue}
+            disabled={!canContinue}
+            aria-disabled={!canContinue}
+          >
+            Continue →
+          </Button>
+          {!canContinue && (
+            <span className="fs12 muted">Import at least one entity type to continue.</span>
+          )}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+interface EntityImportBodyProps {
+  kind: EntityKind;
+  onImported: (kind: EntityKind) => void;
+}
+
+function EntityImportBody({ kind, onImported }: EntityImportBodyProps) {
+  const [filename, setFilename] = useState<string | null>(null);
+  const [errors, setErrors] = useState<ImportBatchError[]>([]);
+  const [result, setResult] = useState<{ rowCount: number; errorCount: number } | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const mutation = useImportEntities(kind);
+
+  async function handleFile(file: File) {
+    setFilename(file.name);
+    setErrors([]);
+    setResult(null);
+    const csvContent = await file.text();
+    // `.catch(() => null)`, not a silent swallow: the mutation's isError/error (read live by
+    // ApiErrorNotice, below) is already updated by react-query before this rejection reaches us.
+    // Without this, a real mutation failure escapes as an unhandled promise rejection — handleFile
+    // is invoked fire-and-forget (`void handleChange(e)` / `void handleDrop(e)`), so nothing else
+    // in the call chain awaits this promise.
+    const res = await mutation
+      .mutateAsync({
+        csvContent,
+        filename: file.name,
+        mappingProfile: null,
+      })
+      .catch(() => null);
+    if (!res) return;
+    const errorCount = Number(res.errorCount);
+    setResult({ rowCount: Number(res.rowCount), errorCount });
+    setErrors(res.errors ?? []);
+    if (errorCount === 0) {
+      onImported(kind);
+    }
+  }
+
+  async function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) await handleFile(file);
+  }
+
+  async function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    const file = e.dataTransfer.files[0];
+    if (file) await handleFile(file);
+  }
+
+  const hasErrors = errors.length > 0;
+  const isSuccess = result !== null && !hasErrors;
+
+  return (
+    <>
       {/* File input BEFORE (not inside) the dropzone button: nesting <input type="file"> inside
           role="button" triggers axe nested-interactive (WCAG 4.1.2) because AT can focus file
           inputs even with tabIndex=-1/aria-hidden when inside a button context.
@@ -209,23 +228,7 @@ export function EntityImportStep({ title, description, kinds, onContinue }: Enti
           </table>
         </div>
       )}
-
-      {onContinue && (
-        <div className="ob-step-actions row gap8 align-center mt16">
-          <Button
-            variant="primary"
-            onClick={onContinue}
-            disabled={!canContinue}
-            aria-disabled={!canContinue}
-          >
-            Continue →
-          </Button>
-          {!canContinue && (
-            <span className="fs12 muted">Import at least one entity type to continue.</span>
-          )}
-        </div>
-      )}
-    </Card>
+    </>
   );
 }
 
@@ -282,76 +285,9 @@ export function BalanceImportStep({
   const today = new Date().toISOString().slice(0, 10);
   const [selectedKind, setSelectedKind] = useState<BalanceKind>(kinds[0]!.kind);
   const [cutoverDate, setCutoverDate] = useState(defaultCutoverDate ?? today);
-  const [filename, setFilename] = useState<string | null>(null);
-  const [errors, setErrors] = useState<ImportBatchError[]>([]);
-  const [result, setResult] = useState<{ rowCount: number; errorCount: number } | null>(null);
-  // Corrected re-import (supersede): operator opts in per-upload when a previously-imported
-  // balance kind needs correcting rather than a first-time import. `counts` holds the per-outcome
-  // breakdown from the last import/supersede response so the success banner can differentiate.
-  const [supersede, setSupersede] = useState(false);
-  const [counts, setCounts] = useState<ImportOutcomeCounts | null>(null);
-  // Which mode actually produced the current `result`/`counts` — NOT the live `supersede`
-  // checkbox. The success banner must key off this, never off `supersede` directly: `isSuccess`
-  // stays true until the next upload, so if the banner read the live checkbox, toggling it after
-  // a result had already landed (without re-uploading) would instantly relabel that stale result
-  // under the wrong mode.
-  const [resultMode, setResultMode] = useState<'import' | 'supersede' | null>(null);
   // Tracks which balance kinds imported cleanly, so the "Continue" affordance only appears once
   // the operator has imported at least one kind on this step.
   const [importedKinds, setImportedKinds] = useState<Set<BalanceKind>>(new Set());
-  const fileRef = useRef<HTMLInputElement>(null);
-  const mutation = useImportBalances(selectedKind);
-  const supersedeMutation = useSupersedeBalances(selectedKind);
-  const activeMutation = supersede ? supersedeMutation : mutation;
-  const isPending = mutation.isPending || supersedeMutation.isPending;
-
-  async function handleFile(file: File) {
-    setFilename(file.name);
-    setErrors([]);
-    setResult(null);
-    setCounts(null);
-    setResultMode(null);
-    // Captured before the awaits below (not read again afterwards) so a mid-flight toggle of the
-    // checkbox can't skew which mode this request's result gets attributed to.
-    const mode = supersede ? 'supersede' : 'import';
-    const csvContent = await file.text();
-    // `.catch(() => null)`, not a silent swallow: activeMutation's isError/error (read live by
-    // ApiErrorNotice, below) is already updated by react-query before this rejection reaches us.
-    // Without this, a real mutation failure escapes as an unhandled promise rejection — handleFile
-    // is invoked fire-and-forget (`void handleChange(e)` / `void handleDrop(e)`), so nothing else
-    // in the call chain awaits this promise.
-    const res = await activeMutation
-      .mutateAsync({
-        csvContent,
-        filename: file.name,
-        cutoverDate,
-        mappingProfile: null,
-      })
-      .catch(() => null);
-    if (!res) return;
-    const errorCount = Number(res.errorCount);
-    setResult({ rowCount: Number(res.rowCount), errorCount });
-    setErrors(res.errors ?? []);
-    setCounts(res.counts ?? null);
-    setResultMode(mode);
-    if (errorCount === 0) {
-      setImportedKinds((prev) => new Set(prev).add(selectedKind));
-    }
-  }
-
-  async function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (file) await handleFile(file);
-  }
-
-  async function handleDrop(e: React.DragEvent) {
-    e.preventDefault();
-    const file = e.dataTransfer.files[0];
-    if (file) await handleFile(file);
-  }
-
-  const hasErrors = errors.length > 0;
-  const isSuccess = result !== null && !hasErrors;
   const canContinue = importedKinds.size > 0;
 
   return (
@@ -369,30 +305,7 @@ export function BalanceImportStep({
                   name="balance-kind"
                   value={kind}
                   checked={selectedKind === kind}
-                  onChange={() => {
-                    setSelectedKind(kind);
-                    // Reset the per-import banner/error state so a prior kind's "Imported N rows"
-                    // banner doesn't carry over to the newly-selected kind. Supersede is also
-                    // reset: it's a per-kind, per-upload intent ("I'm correcting this balance
-                    // kind's already-imported figures"), and a kind switch usually means the
-                    // operator is now importing a *different* kind for the first time — leaving
-                    // supersede checked would silently route that first-time import to the
-                    // supersede endpoint, which 409s with nothing_to_supersede.
-                    setFilename(null);
-                    setResult(null);
-                    setErrors([]);
-                    setSupersede(false);
-                    setCounts(null);
-                    setResultMode(null);
-                    // `mutation`/`supersedeMutation` are single shared useMutation instances across
-                    // every kind (the mutationFn closes over `selectedKind`, but the observer's own
-                    // isError/error state is NOT keyed by kind). Without resetting both here, a
-                    // failed upload for the previous kind would keep rendering its error notice
-                    // after switching to this kind, since ApiErrorNotice reads activeMutation's
-                    // live isError/error.
-                    mutation.reset();
-                    supersedeMutation.reset();
-                  }}
+                  onChange={() => setSelectedKind(kind)}
                 />
                 {label}
                 {importedKinds.has(kind) && (
@@ -418,26 +331,160 @@ export function BalanceImportStep({
         />
       </div>
 
+      {/* Cutover/progress stay in this shell; only kind-owned upload state remounts. */}
+      <BalanceImportBody
+        key={selectedKind}
+        kind={selectedKind}
+        cutoverDate={cutoverDate}
+        onImported={(kind) => setImportedKinds((prev) => new Set(prev).add(kind))}
+      />
+
+      {onContinue && (
+        <div className="ob-step-actions row gap8 align-center mt16">
+          <Button
+            variant="primary"
+            onClick={onContinue}
+            disabled={!canContinue}
+            aria-disabled={!canContinue}
+          >
+            Continue →
+          </Button>
+          {!canContinue && (
+            <span className="fs12 muted">Import at least one balance type to continue.</span>
+          )}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+type BalanceImportMode = 'import' | 'supersede';
+
+interface BalanceImportBodyProps {
+  kind: BalanceKind;
+  cutoverDate: string;
+  onImported: (kind: BalanceKind) => void;
+}
+
+function BalanceImportBody({ kind, cutoverDate, onImported }: BalanceImportBodyProps) {
+  // Supersede is a per-kind, per-upload assertion. This body is keyed by kind, so selecting a new
+  // kind resets the assertion instead of carrying it onto a first-time import.
+  const [supersede, setSupersede] = useState(false);
+  const mode: BalanceImportMode = supersede ? 'supersede' : 'import';
+  const modeControlRef = useRef<HTMLInputElement>(null);
+  const restoreModeFocus = useRef(false);
+
+  useEffect(() => {
+    if (!restoreModeFocus.current) return;
+    restoreModeFocus.current = false;
+    modeControlRef.current?.focus();
+  }, [mode]);
+
+  function handleModeChange(nextSupersede: boolean) {
+    restoreModeFocus.current = true;
+    setSupersede(nextSupersede);
+  }
+
+  // A mode change gets a fresh mutation/result lifetime, so an old result cannot be relabelled.
+  return (
+    <BalanceUploadBody
+      key={mode}
+      kind={kind}
+      cutoverDate={cutoverDate}
+      mode={mode}
+      modeControlRef={modeControlRef}
+      onModeChange={handleModeChange}
+      onImported={onImported}
+    />
+  );
+}
+
+interface BalanceUploadBodyProps {
+  kind: BalanceKind;
+  cutoverDate: string;
+  mode: BalanceImportMode;
+  modeControlRef: RefObject<HTMLInputElement | null>;
+  onModeChange: (supersede: boolean) => void;
+  onImported: (kind: BalanceKind) => void;
+}
+
+function BalanceUploadBody({
+  kind,
+  cutoverDate,
+  mode,
+  modeControlRef,
+  onModeChange,
+  onImported,
+}: BalanceUploadBodyProps) {
+  const [filename, setFilename] = useState<string | null>(null);
+  const [errors, setErrors] = useState<ImportBatchError[]>([]);
+  const [result, setResult] = useState<{ rowCount: number; errorCount: number } | null>(null);
+  const [counts, setCounts] = useState<ImportOutcomeCounts | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const mutation = useImportBalances(kind);
+  const supersedeMutation = useSupersedeBalances(kind);
+  const activeMutation = mode === 'supersede' ? supersedeMutation : mutation;
+  const isPending = activeMutation.isPending;
+
+  async function handleFile(file: File) {
+    setFilename(file.name);
+    setErrors([]);
+    setResult(null);
+    setCounts(null);
+    const csvContent = await file.text();
+    // `.catch(() => null)`, not a silent swallow: activeMutation's isError/error (read live by
+    // ApiErrorNotice, below) is already updated by react-query before this rejection reaches us.
+    // Without this, a real mutation failure escapes as an unhandled promise rejection — handleFile
+    // is invoked fire-and-forget (`void handleChange(e)` / `void handleDrop(e)`), so nothing else
+    // in the call chain awaits this promise.
+    const res = await activeMutation
+      .mutateAsync({
+        csvContent,
+        filename: file.name,
+        cutoverDate,
+        mappingProfile: null,
+      })
+      .catch(() => null);
+    if (!res) return;
+    const errorCount = Number(res.errorCount);
+    setResult({ rowCount: Number(res.rowCount), errorCount });
+    setErrors(res.errors ?? []);
+    setCounts(res.counts ?? null);
+    if (errorCount === 0) {
+      onImported(kind);
+    }
+  }
+
+  async function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) await handleFile(file);
+  }
+
+  async function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    const file = e.dataTransfer.files[0];
+    if (file) await handleFile(file);
+  }
+
+  const hasErrors = errors.length > 0;
+  const isSuccess = result !== null && !hasErrors;
+
+  return (
+    <>
       <div className="ob-field">
         <label className="fs13 row gap8 align-center">
           <input
+            ref={modeControlRef}
             type="checkbox"
-            checked={supersede}
-            onChange={(e) => {
-              setSupersede(e.target.checked);
-              // Same rationale as the kind-switch reset above: mutation/supersedeMutation are
-              // shared instances, so flipping which one is "active" — without re-uploading — could
-              // otherwise resurface a stale error left over from before the toggle.
-              mutation.reset();
-              supersedeMutation.reset();
-            }}
+            checked={mode === 'supersede'}
+            onChange={(e) => onModeChange(e.target.checked)}
             disabled={isPending}
             aria-disabled={isPending}
             aria-label="This is a corrected re-import (supersede)"
           />
           This is a corrected re-import (supersede)
         </label>
-        {supersede && (
+        {mode === 'supersede' && (
           <p className="fs12 muted mt4">
             Only figures that changed are corrected (reversal + corrected entry). Rows left out of
             the file are untouched; submit a row with $0.00 to remove its position. Re-run
@@ -505,7 +552,7 @@ export function BalanceImportStep({
         <div className="ob-success-banner" role="status">
           <Icon name="check" size={16} />
           <span>
-            {resultMode === 'supersede' && counts
+            {mode === 'supersede' && counts
               ? supersedeBannerText(counts)
               : `Imported ${result.rowCount} row${result.rowCount !== 1 ? 's' : ''} successfully.`}
           </span>
@@ -540,23 +587,7 @@ export function BalanceImportStep({
           </table>
         </div>
       )}
-
-      {onContinue && (
-        <div className="ob-step-actions row gap8 align-center mt16">
-          <Button
-            variant="primary"
-            onClick={onContinue}
-            disabled={!canContinue}
-            aria-disabled={!canContinue}
-          >
-            Continue →
-          </Button>
-          {!canContinue && (
-            <span className="fs12 muted">Import at least one balance type to continue.</span>
-          )}
-        </div>
-      )}
-    </Card>
+    </>
   );
 }
 
