@@ -45,12 +45,12 @@ namespace LeaseBook.Web.Seeding;
 /// drives rent/late-fee/disbursement, <see cref="ISender"/> commands drive everything a command
 /// exists for, and <see cref="IAccountingEvents"/> covers only the four commandless events
 /// (<c>PMFeesSwept</c>, <c>OwnerContribution</c>, <c>VendorPaid</c>, <c>RefundIssued</c>).
-/// Design note: <c>docs/superpowers/specs/2026-07-31-wp-13-scenario-org-inventory-design.md</c>.
+/// Maintained fixture contract: <c>docs/runbooks/local-dev.md</c>, "Seeded fixture organizations".
 /// </para>
 ///
 /// <para>
 /// Load-bearing hand-authored tripwires (any posting-template or rounding change moves them —
-/// that is the point; see the design note §13 R1):
+/// that is the point; see <c>ScenarioGoldenTests</c>):
 /// <list type="bullet">
 /// <item>O-S3 parked exactly at the reserve floor: 1,052.63 − fee 52.63 = reserve 1,000.00 →
 /// <c>below_reserve_floor</c> every disbursement run, no posting, equity never moves.</item>

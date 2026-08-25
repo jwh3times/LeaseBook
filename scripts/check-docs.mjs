@@ -103,8 +103,7 @@ export function canonicalDocs(files) {
     if (
       file.startsWith(".agents/") ||
       file.startsWith(".claude/skills/") ||
-      file.startsWith(".github/") ||
-      file.startsWith("docs/superpowers/")
+      file.startsWith(".github/")
     ) {
       return false;
     }
@@ -284,10 +283,7 @@ export function validateRepository(root = defaultRoot, suppliedFiles) {
       }
 
       const normalizedTarget = normalizePath(pathPart);
-      if (
-        /(^|\/)(private|\.superpowers)(\/|$)/.test(normalizedTarget) ||
-        normalizedTarget.startsWith("docs/superpowers/")
-      ) {
+      if (/(^|\/)(private|\.superpowers)(\/|$)/.test(normalizedTarget)) {
         errors.push({
           file,
           line,

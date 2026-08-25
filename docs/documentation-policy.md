@@ -10,13 +10,13 @@ Markdown, runbooks, diagrams, planning artifacts, and documentation embedded in 
 
 ## Classifications
 
-| Classification     | Purpose                                                                                   | Location                                       | Maintenance rule                                                    |
-| ------------------ | ----------------------------------------------------------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------- |
-| Public living      | Current product, engineering, contributor, and operator guidance                          | Root or `docs/`                                | Update with the behavior it describes                               |
-| Public historical  | Accepted decisions and released history                                                   | `docs/adr/`, `CHANGELOG.md`                    | Preserve history; supersede or append instead of rewriting outcomes |
-| Private living     | Detailed plans, commercial scope, customer work, security findings, compliance workpapers | `private/`                                     | Gitignored; may inform public-safe projections                      |
-| Private historical | Retrospectives, implementation plans, design-session artifacts                            | `private/planning/` or another private archive | Gitignored; do not treat as current behavior                        |
-| Generated          | Output derived from code or another canonical input                                       | Beside its consumer                            | Do not hand-edit; document the generation command                   |
+| Classification     | Purpose                                                                                   | Location                                       | Maintenance rule                                                           |
+| ------------------ | ----------------------------------------------------------------------------------------- | ---------------------------------------------- | -------------------------------------------------------------------------- |
+| Public living      | Current product, engineering, contributor, and operator guidance                          | Root or `docs/`                                | Update with the behavior it describes                                      |
+| Public historical  | Accepted decisions and released history                                                   | `docs/adr/`, `CHANGELOG.md`                    | Preserve history; supersede or append instead of rewriting outcomes        |
+| Private living     | Detailed plans, commercial scope, customer work, security findings, compliance workpapers | `private/`                                     | Ignored publicly; versioned separately; may inform public-safe projections |
+| Private historical | Retrospectives, implementation plans, design-session artifacts                            | `private/planning/` or another private archive | Ignored publicly; versioned separately; not current behavior               |
+| Generated          | Output derived from code or another canonical input                                       | Beside its consumer                            | Do not hand-edit; document the generation command                          |
 
 Public documents must not contain pricing, customer identity, confidential strategy, active security
 findings, private infrastructure values, real credentials, or internal analysis. A secret scanner does

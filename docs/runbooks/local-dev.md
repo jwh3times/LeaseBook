@@ -9,6 +9,8 @@
 
 - **Docker Desktop** running (Postgres runs in a container).
 - **.NET 10 SDK** and **Node 26** (`.nvmrc` pins 26; the repo also builds on Node 22.14+).
+- **Authorized maintainers:** 1Password desktop app and CLI for runtime-only injection of
+  repository-specific local credentials. Public clones can use the safe Compose defaults.
 - **OneDrive hazard:** this repo lives under OneDrive. OneDrive file locks intermittently break
   builds and Docker bind-mounts. Either move the repo outside OneDrive, or exclude `bin/`, `obj/`,
   `node_modules/`, `.vite/`, and `TestResults/` from OneDrive sync. If you see `EBUSY`/locked-file
@@ -81,6 +83,19 @@ runs everything.
 ./scripts/dev.ps1 app-logs    # tail the app
 ./scripts/dev.ps1 app-down    # stop (keeps data; `reset-db` wipes it)
 ```
+
+The preferred authenticated-maintainer path injects local pgAdmin credentials from 1Password into
+the script's child process. The reference file belongs to the separately versioned private checkout
+and contains `op://` references, never values:
+
+```powershell
+op run --env-file='./private/config/leasebook.local.env.op' -- `
+  pwsh -File ./scripts/dev.ps1 app-up
+```
+
+The public `.env.example` documents the optional variable names and Compose's safe local defaults.
+Do not copy real credentials into a repository `.env` or transfer a plaintext `.env` between
+computers. A public clone can omit the file entirely and use the defaults in `docker-compose.yml`.
 
 The stack is four services wired by `depends_on` conditions so they start in the only safe order:
 

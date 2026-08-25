@@ -56,5 +56,6 @@ summaries elsewhere should link here rather than restating mutable detail.
   participation.
 
 Internal plans, customer-specific material, security workpapers, and unvalidated research live under
-the gitignored `private/` tree and are not required to build, run, test, or understand the public
-engineering contract.
+the `private/` tree, which this public repository ignores and authorized maintainers version
+separately. Its source is intentionally unnamed here. The private checkout is not required to build,
+run, test, or understand the public engineering contract.
