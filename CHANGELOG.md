@@ -20,7 +20,11 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Changed
 
-- _Nothing yet._
+- **Authorized maintainer workspaces are now portable without exposing confidential material.** The
+  public clone remains self-contained, while maintainers can restore a separately versioned private
+  checkout and inject repository-specific local credentials from 1Password at runtime. A public
+  `.env.example` documents safe local defaults; real `.env` files are not transferred between
+  computers.
 
 ### Fixed
 

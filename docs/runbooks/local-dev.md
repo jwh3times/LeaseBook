@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living runbook; canonical development command reference
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-08-19
+- **Last reviewed:** 2026-08-25
 
 ## Prerequisites
 
@@ -93,7 +93,8 @@ op run --env-file='./private/config/leasebook.local.env.op' -- `
   pwsh -File ./scripts/dev.ps1 app-up
 ```
 
-The public `.env.example` documents the optional variable names and Compose's safe local defaults.
+The public [`.env.example`](../../.env.example) documents the optional variable names and Compose's
+safe local defaults.
 Do not copy real credentials into a repository `.env` or transfer a plaintext `.env` between
 computers. A public clone can omit the file entirely and use the defaults in `docker-compose.yml`.
 
@@ -130,7 +131,7 @@ Notes:
 
 ## Connecting as each role
 
-From the host (TCP, password auth — these connection strings live in `appsettings.Development.json`;
+From the host (TCP, password auth — these connection strings live in the development configuration;
 note the offset host port from the README port map):
 
 ```bash
@@ -178,7 +179,7 @@ Re-running is idempotent (both steps skip if already seeded).
 not enrolled (enroll on first login). Real environments provision operators by invite; passwords
 never live in the repo.
 
-### The four fixture orgs
+### Seeded fixture organizations
 
 Operator verb options are strict: unknown or repeated options, missing option values, and incompatible
 combinations fail with a usage error before the process attempts its first database call.
