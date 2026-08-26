@@ -1,4 +1,4 @@
-# Company Private Project Files (confidential, local-only — see CLAUDE.md)
+# Separately versioned confidential checkout; never tracked by the public repository
 /private/
 
 # .NET build output
@@ -38,4 +38,3 @@ Thumbs.db
 
 # Superpowers
 .superpowers/
-docs/superpowers/

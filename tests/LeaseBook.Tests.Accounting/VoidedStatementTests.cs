@@ -12,7 +12,8 @@ namespace LeaseBook.Tests.Accounting;
 /// <summary>
 /// The WP-7 §0.3 defect pair, deterministic: an in-period void and an in-period opening position
 /// must not reach StatementSectionMap (which throws on both by design — the map is the loud guard,
-/// the SQL is the fix). See docs/superpowers/specs/2026-07-19-wp-7-import-supersede-held-fees-design.md §1.
+/// the SQL is the fix). See docs/accounting.md, "How the engine categorizes owner-equity lines into
+/// sections", and ADR-016.
 /// </summary>
 [Collection(nameof(DatabaseCollection))]
 public sealed class VoidedStatementTests(PostgresFixture fixture)

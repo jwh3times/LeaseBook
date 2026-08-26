@@ -61,8 +61,9 @@ them directly; do not trust summaries, including this one, for current progress.
 - `Accounting`, `Directory`, `Banking`, `Reporting`, `Operations`, `Capabilities`, and `Migrator` are
   built. `Payments` is the remaining scaffolded shell for Phase 2.
 
-The `private/` directory is gitignored, confidential, and local-only. It may be absent in a public
-clone. It holds:
+The `private/` directory is gitignored by the public repository and is a separately versioned
+confidential checkout for authorized maintainers. Its repository locator and bootstrap details live
+outside the public repository, and it may be absent in a public clone. It holds:
 
 - `private/TODO.md`: master build plan for unpublished sequencing and product decisions; its original
   architecture baseline and Definition of Done have public counterparts in `docs/blueprint.md` and
@@ -72,8 +73,9 @@ clone. It holds:
   design/product analysis
 
 Anything confidential, including pricing, strategy, customer identity, and internal analysis, belongs
-in `private/` and must never be added to committed files. If `private/` is absent and the task depends
-on it, ask the user for the relevant build-plan or PRD context before starting milestone work.
+in `private/` and must never be added to the public repository. Commit and push public and private
+changes independently. If `private/` is absent and the task depends on it, ask the user for the
+relevant build-plan or PRD context before starting milestone work.
 
 ## Ground Rules
 
@@ -370,5 +372,5 @@ These flows are instrumented in telemetry; regressions fail the release checklis
 - Prefer existing repo patterns, helpers, tests, and design primitives over new abstractions.
 - Add tests proportional to risk. Money, organization isolation, RLS, posting, and migration changes require higher
   confidence than presentational changes.
-- Do not put confidential `private/` details into committed files, PR descriptions, public docs, or
+- Do not put confidential `private/` details into public commits, PR descriptions, public docs, or
   generated output.

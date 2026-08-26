@@ -134,8 +134,10 @@ Key design decisions (each recorded as an ADR in [`docs/adr/`](docs/adr)):
 └─ LeaseBook.slnx          the solution
 ```
 
-> A local-only `private/` directory (product planning and design sources) is intentionally **gitignored**
-> and absent from public clones; nothing in it is required to build, run, or test the application.
+> A confidential `private/` checkout (product planning and design sources) is intentionally
+> **gitignored by this public repository** and absent from public clones. Authorized maintainers may
+> restore it from a separately versioned private source whose locator is kept outside this repository;
+> nothing in it is required to build, run, or test the application.
 
 ---
 

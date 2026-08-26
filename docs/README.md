@@ -3,7 +3,7 @@
 - **Audience:** Evaluators, contributors, operators, and maintainers
 - **Status:** Living index
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-08-13
+- **Last reviewed:** 2026-08-25
 
 Use this page to find the maintained source for a question. Documents intentionally have one owner;
 summaries elsewhere should link here rather than restating mutable detail.
@@ -56,5 +56,6 @@ summaries elsewhere should link here rather than restating mutable detail.
   participation.
 
 Internal plans, customer-specific material, security workpapers, and unvalidated research live under
-the gitignored `private/` tree and are not required to build, run, test, or understand the public
-engineering contract.
+the `private/` tree, which this public repository ignores and authorized maintainers version
+separately. Its source is intentionally unnamed here. The private checkout is not required to build,
+run, test, or understand the public engineering contract.
