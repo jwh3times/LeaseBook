@@ -94,7 +94,7 @@ docs/agents/issue-tracker.md  — GitHub Issues conventions
 docs/agents/triage-labels.md  — the five canonical triage labels
 ```
 
-### Private — gitignored, local only, never edited by an audit
+### Private — ignored publicly, versioned separately, never edited by a public docs audit
 
 ```
 private/TODO.md               — master build plan; source of truth for milestone state
@@ -245,4 +245,5 @@ For each `⚠️` item, either fix it yourself (if the change is mechanical) or 
 - Do **not** update `private/TODO.md` checkboxes — that's the developer's job during task work.
 - Keep planning-session artifacts and milestone retrospectives under `private/`; do not publish them.
 - Do **not** rewrite ADRs that are already accepted — add a superseding ADR if a decision changes.
-- The `private/` directory is gitignored and local-only. Read it for context; never commit changes to it.
+- The public repository ignores `private/`. Read it for context; commit any intentional private
+  updates in its nested repository separately and never expose its contents or locator publicly.
