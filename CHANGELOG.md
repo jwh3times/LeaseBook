@@ -16,7 +16,9 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Added
 
-- _Nothing yet._
+- **One-command private workspace restore for authorized maintainers.** `npm run bootstrap:private`
+  (from `web/`) reads the confidential repository locator from 1Password at run time and clones it
+  into `private/`, refusing to overwrite a non-Git directory and never printing the locator.
 
 ### Changed
 

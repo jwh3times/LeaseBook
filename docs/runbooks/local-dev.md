@@ -97,6 +97,14 @@ op run --env-file='./private/config/leasebook.local.env.op' -- `
 op run --env-file=./private/config/leasebook.local.env.op -- ./scripts/dev.sh app-up
 ```
 
+Authorized maintainers restore the private checkout itself with one command from `web/`, which reads
+the repository locator from 1Password at run time and clones it into `private/`
+(`scripts/bootstrap-private.mjs`; it is a no-op when `private/.git` already exists):
+
+```bash
+npm run bootstrap:private
+```
+
 The public [`.env.example`](../../.env.example) documents the optional variable names and Compose's
 safe local defaults.
 Do not copy real credentials into a repository `.env` or transfer a plaintext `.env` between
