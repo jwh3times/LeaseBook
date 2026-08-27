@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living runbook; canonical development command reference
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-08-25
+- **Last reviewed:** 2026-08-27
 
 ## Prerequisites
 
@@ -91,6 +91,10 @@ and contains `op://` references, never values:
 ```powershell
 op run --env-file='./private/config/leasebook.local.env.op' -- `
   pwsh -File ./scripts/dev.ps1 app-up
+```
+
+```bash
+op run --env-file=./private/config/leasebook.local.env.op -- ./scripts/dev.sh app-up
 ```
 
 The public [`.env.example`](../../.env.example) documents the optional variable names and Compose's
