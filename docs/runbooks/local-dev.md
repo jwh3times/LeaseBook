@@ -93,6 +93,10 @@ op run --env-file='./private/config/leasebook.local.env.op' -- `
   pwsh -File ./scripts/dev.ps1 app-up
 ```
 
+```bash
+op run --env-file=./private/config/leasebook.local.env.op -- ./scripts/dev.sh app-up
+```
+
 The public [`.env.example`](../../.env.example) documents the optional variable names and Compose's
 safe local defaults.
 Do not copy real credentials into a repository `.env` or transfer a plaintext `.env` between
