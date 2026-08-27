@@ -21,6 +21,7 @@
     "docs:policy:test": "node --test ../scripts/check-docs.test.mjs",
     "docs:check": "npm run docs:format:check && npm run docs:lint && npm run docs:spell && npm run docs:policy:test && npm run docs:policy",
     "sync:agents": "node ../scripts/sync-agent-mirrors.mjs",
+    "bootstrap:private": "node ../scripts/bootstrap-private.mjs",
     "typecheck": "tsc -b",
     "test": "vitest run",
     "test:watch": "vitest",
