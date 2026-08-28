@@ -99,10 +99,11 @@ op run --env-file=./private/config/leasebook.local.env.op -- ./scripts/dev.sh ap
 
 Authorized maintainers restore the private checkout itself with one command from `web/`, which reads
 the repository locator from 1Password at run time and clones it into `private/`
-(`scripts/bootstrap-private.mjs`; it is a no-op when `private/.git` already exists):
+(`scripts/bootstrap-private.mjs`; it is a no-op when `private/.git` already exists). On a fresh
+worktree use `npm ci`, not `npm install`, so the dependency tree matches the committed lockfile:
 
 ```bash
-npm run bootstrap:private
+cd web && npm ci && npm run bootstrap:private
 ```
 
 The public [`.env.example`](../../.env.example) documents the optional variable names and Compose's
