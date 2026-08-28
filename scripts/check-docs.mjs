@@ -283,7 +283,7 @@ export function validateRepository(root = defaultRoot, suppliedFiles) {
       }
 
       const normalizedTarget = normalizePath(pathPart);
-      if (/(^|\/)(private|\.superpowers)(\/|$)/.test(normalizedTarget)) {
+      if (/(^|\/)private(\/|$)/.test(normalizedTarget)) {
         errors.push({
           file,
           line,

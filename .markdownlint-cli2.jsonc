@@ -11,10 +11,5 @@
     "MD041": false,
     "MD060": false,
   },
-  "ignores": [
-    "private/**",
-    ".superpowers/**",
-    "docs/superpowers/**",
-    "web/node_modules/**",
-  ],
+  "ignores": ["private/**", "web/node_modules/**"],
 }
