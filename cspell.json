@@ -11,7 +11,7 @@
     ".claude/agents/**/*.md",
     ".agents/**/*.md"
   ],
-  "ignorePaths": ["private/**", ".superpowers/**", "web/node_modules/**"],
+  "ignorePaths": ["private/**", "web/node_modules/**"],
   "ignoreRegExpList": ["/`[^`]*`/g", "/```[\\s\\S]*?```/g"],
   "words": [
     "AppFolio",

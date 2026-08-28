@@ -35,6 +35,3 @@ e2e-results/
 .DS_Store
 Thumbs.db
 *.swp
-
-# Superpowers
-.superpowers/
