@@ -3,17 +3,18 @@
 - **Audience:** Coding agents and maintainers configuring engineering skills
 - **Status:** Living configuration
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-08-08
+- **Last reviewed:** 2026-08-28
 
 How the engineering skills should consume this repo's domain documentation when exploring the codebase.
 
 ## Before exploring, read these
 
-- **`CONTEXT.md`** at the repo root, or
-- **`CONTEXT-MAP.md`** at the repo root if it exists — it points at one `CONTEXT.md` per context. Read each one relevant to the topic.
-- **`docs/adr/`** — read ADRs that touch the area you're about to work in. In multi-context repos, also check `src/<context>/docs/adr/` for context-scoped decisions.
+- **`CONTEXT.md`** at the repo root — the settled domain glossary.
+- **`docs/adr/`** — read the ADRs that touch the area you're about to work in.
 
-If any of these files don't exist, **proceed silently**. Don't flag their absence; don't suggest creating them upfront. The `/domain-modeling` skill (reached via `/grill-with-docs` and `/improve-codebase-architecture`) creates them lazily when terms or decisions actually get resolved.
+Both exist here. This repository has no `CONTEXT-MAP.md` and should not grow one — see the structure
+note below. The `/domain-modeling` skill (reached via `/grill-with-docs` and
+`/improve-codebase-architecture`) extends both lazily, when terms or decisions actually get resolved.
 
 ## File structure
 
@@ -23,10 +24,15 @@ Single-context repo (this repo):
 /
 ├── CONTEXT.md
 ├── docs/adr/
-│   ├── 0001-event-sourced-orders.md
-│   └── 0002-postgres-for-write-model.md
+│   ├── README.md                                  ← the ADR index
+│   ├── template.md
+│   ├── ADR-001-background-job-scheduler.md
+│   └── ADR-041-durable-keyring-and-proxy-trust.md
 └── src/
 ```
+
+ADRs are named `ADR-<zero-padded number>-<kebab-case-title>.md` and numbered sequentially from 001.
+`docs/adr/README.md` indexes every accepted record and is kept consistent by `npm run docs:check`.
 
 LeaseBook is a modular monolith (`src/LeaseBook.Modules.*`), but it is one product with decisions
 recorded centrally under `docs/adr/` — not a multi-context repo. There is no per-module

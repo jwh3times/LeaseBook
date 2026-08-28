@@ -3,7 +3,7 @@
 - **Audience:** Coding agents and maintainers configuring engineering skills
 - **Status:** Living configuration
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-08-08
+- **Last reviewed:** 2026-08-28
 
 Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all operations.
 
@@ -20,9 +20,11 @@ Infer the repo from `git remote -v` — `gh` does this automatically when run in
 
 ## Pull requests as a triage surface
 
-**PRs as a request surface: no.** _(Set to `yes` if this repo treats external PRs as feature requests; `/triage` reads this flag.)_
+**PRs as a request surface: no.** External PRs are not treated as feature requests here, and
+`/triage` skips them. The repository is solo-maintained with Dependabot as the only routine PR
+author, so the triage queue is issues only.
 
-When set to `yes`, PRs run through the same labels and states as issues, using the `gh pr` equivalents:
+Should that change, the `gh pr` equivalents are:
 
 - **Read a PR**: `gh pr view <number> --comments` and `gh pr diff <number>` for the diff.
 - **List external PRs for triage**: `gh pr list --state open --json number,title,body,labels,author,authorAssociation,comments` then keep only `authorAssociation` of `CONTRIBUTOR`, `FIRST_TIME_CONTRIBUTOR`, or `NONE` (drop `OWNER`/`MEMBER`/`COLLABORATOR`).
