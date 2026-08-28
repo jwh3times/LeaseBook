@@ -49,7 +49,7 @@
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.5",
     "@vitejs/plugin-react": "^6.1.0",
-    "cspell": "10.1.0",
+    "cspell": "10.1.1",
     "jsdom": "^30.0.1",
     "markdownlint-cli2": "0.23.2",
     "msw": "^2.15.0",
