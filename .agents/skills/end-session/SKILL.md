@@ -24,12 +24,17 @@ discoveries land in different ones:
   — cross-session orientation. Local to the machine, never committed.
 - **GitHub issues** — the issue tracker per [`docs/agents/issue-tracker.md`](../../../docs/agents/issue-tracker.md).
   **This repo is public.** Anything written here is published.
-- **`private/`** — gitignored, confidential, local-only. `private/TODO.md` and
-  `private/planning/*_retro.md` are the live source of truth for progress; CI can never see them, so
-  this ritual is the only thing that keeps them honest.
-- **The working tree** — build output, scratch files, stray branches, running containers.
+- **`private/`** — confidential, ignored by the public repository, and **a separate versioned
+  checkout with its own remote**. Not local-only: it is committed and pushed independently, per
+  `private/README.md` § Two-repository workflow. `private/TODO.md` and `private/planning/*_retro.md`
+  are the live source of truth for progress. The **public** CI can never see it; the private
+  repository runs its own documentation gate (`private/scripts/check-docs.mjs`,
+  `.github/workflows/docs.yml`), which checks structure, not whether the content is current — that
+  is still this ritual's job.
+- **The working tree** — build output, scratch files, stray branches, running containers. **Two
+  repositories to sweep**, not one.
 
-None of this is enforced by CI. `/ship` covers the public docs and changelog for a _branch_;
+Public CI enforces none of this. `/ship` covers the public docs and changelog for a _branch_;
 this skill covers the _session_, including everything `/ship` is forbidden to touch (`private/`) and
 everything that never reaches a commit (memory, issues, workspace).
 
@@ -41,13 +46,17 @@ skill does not open PRs.
 ### 1. Reconstruct the session
 
 Before writing anything, establish what actually happened. Do not rely on recollection alone —
-check the tree:
+check **both** trees, since a session usually moves both:
 
 ```
-git status --short
+git status --short --branch
 git branch --show-current
 git log --oneline -15
 git log --oneline origin/main..HEAD
+
+git -C private status --short --branch
+git -C private log --oneline -10
+git -C private log --oneline origin/main..HEAD
 ```
 
 Then list, for yourself, the session's candidate outputs in four buckets:
@@ -128,47 +137,71 @@ The repo is public. Those go to `private/security-review-findings.md` instead.
 
 ### 4. `private/` docs
 
-Gitignored and local-only. **Skip this whole step if `private/` is absent** (public clone) — do not
-warn about the missing tree.
+A separate versioned checkout, ignored by the public repository. **Skip this whole step if
+`private/` is absent** (public clone) — do not warn about the missing tree. `private/README.md`
+indexes every document there and is the authority on which one owns what; the list below is the
+subset a session close-out usually touches.
 
 Match the update to the kind of thing learned:
 
-- **`private/TODO.md`** — the master build plan and canonical where it disagrees with anything else.
-  Tick the boxes this session completed. A scope change is an _edit to the plan_, not a note
-  elsewhere. `GATE` items block everything below them; if the session cleared one, say so here.
-- **`private/roadmap.md`** — detailed sequencing. Its §10 ("Keeping this document honest") requires
-  a completed item to tick its own checkbox **and** update the §1 evidence and §2 status lines in the
-  same change. Check §1's verified-open-positions list, §2's remaining table and its counts, and §3's
-  execution-order markers. `/ship` only _warns_ about this drift; here you fix it.
-- **`private/planning/m{N}_plan.md` / `m{N}_retro.md`** — milestone overlays. M8's plan exists;
-  there is no `m8_retro.md` yet. Deviations from the plan, known limitations, and what the next
-  milestone must absorb belong in the retro, written at milestone close, not invented mid-milestone.
+- **`private/TODO.md`** — the master build plan, canonical for **what is done**. Tick the boxes this
+  session completed. A scope change is an _edit to the plan_, not a note elsewhere. `GATE` items
+  block everything below them; if the session cleared one, say so here.
+- **`private/roadmap.md`** — the single M8 engineering document and canonical for **what the work
+  is**: Track A/B/C in §3/§4/§5, exit criteria §10, open operator decisions §11. Its §12 ("Keeping
+  this document honest") requires a completed item to tick its own checkbox **and** update the §1
+  evidence and §2 status lines in the same change. Check §1's verified-open-positions list, §2's
+  remaining table and its counts, and §3's execution-order markers. `/ship` only _warns_ about this
+  drift; here you fix it. (The former `planning/m8_plan.md` overlay was folded into this file and
+  deleted on 2026-08-28 — do not recreate a second M8 document.)
+- **`private/planning/m{N}_plan.md` / `m{N}_retro.md`** — milestone overlays for M0–M7. There is no
+  `m8_retro.md` yet. Deviations from the plan, known limitations, and what the next milestone must
+  absorb belong in the retro, written at milestone close, not invented mid-milestone.
 - **`private/security-review-findings.md`** — the only home for weakness and exploit detail, patched
   or not.
 - **`private/architecture-review-findings.md`** — architecture-debt findings and their disposition,
   including "shipped a different fix than the finding asked for", which is the common case.
+- **`private/planning/design-history/`** — historical design specs and implementation plans
+  (renamed from `superpowers/` on 2026-08-28). Archive: read it, never update it. Its links rot by
+  design.
 
-Two hard rules:
+Then commit the private repository, and verify the boundary held:
 
-- **Never `git add`, commit, or stage anything under `private/`.** It is gitignored; a `git add -f`
-  here would publish confidential material.
-- **Never copy `private/` content into a committed file, a public doc, a PR body, or a GitHub issue.**
+```
+node private/scripts/check-docs.mjs     # from the repo root, or scripts/check-docs.mjs from private/
+git ls-files private                    # MUST return nothing
+```
+
+Three hard rules:
+
+- **Never stage a `private/` path into the _public_ repository.** `git ls-files private` must return
+  nothing; a `git add -f` there would publish confidential material. This is the rule that matters,
+  and the private gate asserts it too.
+- **Do commit and push inside the private checkout**, as its own repository — that is the documented
+  workflow in `private/README.md`. Public first, then record the public PR number or SHA in the
+  private plan, then commit the private update. The two histories stay independent.
+- **Never copy `private/` content into a committed public file, a public doc, a PR body, or a GitHub
+  issue.**
 
 ### 5. Clean the local workspace
 
 Work outward from the tree. **List before you delete, and confirm anything that is not obviously
 regenerable build output.**
 
-Uncommitted work first — this is the one that loses real work:
+Uncommitted work first — this is the one that loses real work, and there are **two** repositories to
+check:
 
 ```
 git status --short
 git stash list
+git -C private status --short
+git -C private stash list
 ```
 
 For each untracked or modified file, decide out loud: commit it, stash it, or delete it. **Do not
 delete or discard uncommitted changes without the user's explicit yes.** If a change belongs on a
-branch that is ready, that is `/ship`, not this skill.
+branch that is ready, that is `/ship`, not this skill. Uncommitted work in `private/` is committed
+there directly (step 4) — it never waits on a PR.
 
 Regenerable output safe to sweep once identified (all gitignored; confirm the list first):
 
@@ -199,13 +232,20 @@ Then the rest of the local environment:
   Leave them running only if the user says they are coming back to them. `reset-db` is destructive
   and is **not** part of cleanup — never run it here.
 
-- **Branches and worktrees.** Report unpushed commits (`git log --oneline origin/main..HEAD`) and
-  list merged local branches, but **do not delete a branch without confirmation**:
+- **Branches and worktrees.** Report unpushed commits in **both** repositories
+  (`git log --oneline origin/main..HEAD`, and the same with `-C private`) and list merged local
+  branches, but **do not delete a branch without confirmation**:
 
   ```
   git worktree list
   git branch --merged main
+  git cherry origin/main origin/<branch>   # before deleting any remote branch
   ```
+
+  **`git branch --merged` does not prove a branch is drained.** This repo squash-merges, so a
+  merged branch's commits were never ancestors of `main` and every one of them looks unmerged.
+  `git cherry` is the real check: `-` is merged-equivalent, `+` is genuinely unlanded. A `+` line
+  usually means a commit was pushed to the branch _after_ its PR merged, which nothing warns about.
 
 - **Scratchpad.** Session scratch files live in the OS temp scratchpad, not the repo. Leave them;
   they are already outside the working tree.
@@ -216,9 +256,10 @@ Close with a short, honest account:
 
 - Memories written, updated, or deleted — by slug.
 - Issues commented, closed, labelled, or filed — by number, with URLs.
-- `private/` files updated, and the confirmation that none of them were staged or committed.
+- `private/` files updated, whether the private repository was committed and pushed, and the
+  confirmation that `git ls-files private` from the public root still returns nothing.
 - Workspace: what was deleted, what was left alone and why, container and branch state, and any
-  uncommitted work still sitting in the tree.
+  uncommitted work still sitting in **either** tree.
 - **Anything deliberately not recorded** — an unresolved question, a finding too raw to file. Say it
   plainly so it does not silently evaporate at the end of the session.
 
@@ -227,7 +268,8 @@ If a branch is still unshipped, say so and point at `/ship`; do not ship it as a
 ## Do not
 
 - Open, update, or merge a PR — that is `/ship`.
-- Commit, stage, or quote anything under `private/`.
+- Stage a `private/` path into the **public** repository, or quote `private/` content anywhere
+  public. (Committing **inside** the private checkout is expected — see step 4.)
 - Publish private figures, strategy, or unpatched-security detail to a GitHub issue or any committed
   file.
 - Delete uncommitted changes, stashes, or branches without explicit confirmation.
