@@ -67,7 +67,8 @@ feature and endpoint naming).
   cross-module SQL), builds the line-by-line variance report, persists a `migration_verifications`
   row, and enforces the hard sign-off gate (see §5 below).
 - **`OnboardingStatusEndpoints`** — derives the six-flag wizard state from existing data on the
-  ambient RLS transaction (no dedicated status table).
+  ambient RLS transaction and returns the canonical cutover date derived from Accounting's immutable
+  opening entries (no dedicated status table).
 
 ### 3. Staging tables
 
@@ -121,6 +122,12 @@ staging org is the M8/operator step that the research spike unblocks.
 
 The import endpoints accept `{ entityKind, mappingProfile, filename, cutoverDate, csvContent }`
 as a JSON body, where `csvContent` is the CSV text as a JSON string.
+
+`cutoverDate` is required but is not independent per upload. The first balance position that posts
+establishes one journal-derived organization cutover date (ADR-020 §6); later balance imports,
+supersedes, and verification must match it or receive HTTP 409 `cutover_date_mismatch`. Before the
+first posting the UI leaves the field blank and required rather than defaulting it to today; afterward
+the onboarding-status response restores it as read-only.
 
 **Why not multipart/form-data:** JSON bodies are typed in the OpenAPI schema; the generated
 TypeScript client (`api:generate`) produces a strongly-typed `ImportEntitiesRequest` that the

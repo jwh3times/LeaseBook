@@ -302,6 +302,14 @@ under one basis only — the basis is fixed and naming it as a choice would clai
 does not exist.
 _Avoid_: mode, view, accounting method
 
+### Migration
+
+**Cutover date**:
+The single accounting date shared by every opening position in one organization's migration. It is
+not established until an opening position posts and cannot differ by balance kind, upload, or
+verification.
+_Avoid_: import date, upload date, default date
+
 ### Statement delivery
 
 **Statement artifact**:

@@ -15,12 +15,14 @@ namespace LeaseBook.Web.Onboarding;
 /// the AppFolio default profile, resolves external ids to LeaseBook ids, and posts one opening
 /// position per row via <see cref="IBalanceForward.PostOpeningPositionAsync"/>. Returns an
 /// <see cref="ImportBatchResult"/> with per-row error detail. Non-tying imports succeed (clearing
-/// accumulates the residual; WP-4 verification blocks go-live, not this endpoint).
+/// accumulates the residual; WP-4 verification blocks go-live, not this endpoint). Both import
+/// routes enforce the journal-derived organization cutover date; a mismatch returns 409 before any
+/// write.
 ///
 /// <c>POST /api/onboarding/import-balances/{kind}/supersede</c> — the WP-7 pre-sign-off corrected
 /// re-import (<see cref="BalanceImportService.SupersedeAsync"/>): same request/response shape, but
-/// diffs the corrected CSV against the live opening positions instead of posting fresh. The three
-/// §2 guards surface as a 409 problem via <see cref="SupersedeConflictException"/>. A held-fees shape
+/// diffs the corrected CSV against the live opening positions instead of posting fresh. Its
+/// lifecycle guards surface as a 409 problem via <see cref="SupersedeConflictException"/>. A held-fees shape
 /// violation (<see cref="InvalidOpeningPositionException"/>) also becomes a 409, but by propagating to
 /// <c>AccountingExceptionHandler</c> rather than being caught here — it aborts the whole corrected
 /// re-import rather than becoming a row error, and the rollback lives in the middleware it has to reach.
@@ -48,18 +50,30 @@ public sealed class ImportBalancesEndpoints : IEndpointModule
                     var csvBytes = System.Text.Encoding.UTF8.GetBytes(body.CsvContent!);
                     await using var csvStream = new MemoryStream(csvBytes);
 
-                    var result = await service.ImportAsync(
-                        balanceKind,
-                        "appfolio-default",
-                        body.Filename ?? $"{kind}.csv",
-                        cutoverDate,
-                        csvStream,
-                        ct);
+                    try
+                    {
+                        var result = await service.ImportAsync(
+                            balanceKind,
+                            "appfolio-default",
+                            body.Filename ?? $"{kind}.csv",
+                            cutoverDate,
+                            csvStream,
+                            ct);
 
-                    return TypedResults.Ok(result);
+                        return TypedResults.Ok(result);
+                    }
+                    catch (OnboardingConflictException ex)
+                    {
+                        return ProblemResults.Problem(
+                            httpContext,
+                            code: ex.Code,
+                            detail: ex.Message,
+                            status: StatusCodes.Status409Conflict);
+                    }
                 })
             .Produces<ImportBatchResult>()
-            .Produces(StatusCodes.Status400BadRequest);
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status409Conflict);
 
         group.MapPost("/import-balances/{kind}/supersede",
                 async (
@@ -82,7 +96,7 @@ public sealed class ImportBalancesEndpoints : IEndpointModule
                             cutoverDate, csvStream, ct);
                         return TypedResults.Ok(result);
                     }
-                    catch (SupersedeConflictException ex)
+                    catch (OnboardingConflictException ex)
                     {
                         return ProblemResults.Problem(
                             httpContext,

@@ -30,6 +30,10 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Fixed
 
+- **Migration opening balances can no longer land on different cutover dates.** The first opening
+  balance that posts establishes one date for the organization; every later balance import,
+  corrected re-import, and verification must match it. The onboarding wizard now requires an
+  explicit date instead of silently choosing today, then restores the established date as read-only.
 - **Onboarding import results now stay with the selection that produced them.** Switching an entity
   or balance type, or toggling corrected re-import mode, now starts a clean upload view so an old
   result cannot appear under the new selection. Completed-import progress and the chosen balance

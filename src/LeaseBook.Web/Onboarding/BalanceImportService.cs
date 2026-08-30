@@ -38,6 +38,7 @@ public sealed class BalanceImportService(
     ExternalIdResolver resolver,
     ISender sender,
     IReversalService reversal,
+    MigrationCutoverDate migrationCutoverDate,
     ILogger<BalanceImportService> logger)
 {
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
@@ -50,6 +51,8 @@ public sealed class BalanceImportService(
         Stream csvStream,
         CancellationToken ct)
     {
+        await migrationCutoverDate.EnsureMatchesAsync(cutoverDate, ct);
+
         var plan = await PlanAsync(kind, cutoverDate, csvStream, ct);
         var rowOutcomes = new List<BalanceRowOutcome>(plan.ResolutionErrors);
 
@@ -165,8 +168,8 @@ public sealed class BalanceImportService(
     /// reversal dated at <paramref name="cutoverDate"/> (never today, R1) then a corrected revision at
     /// the next <c>#r{N}</c>; a correction to $0.00 posts the reversal only. Everything runs on the
     /// ambient RLS transaction with one terminal <c>SaveChanges</c> — a mid-way throw rolls back whole.
-    /// The three §2 guards throw <see cref="SupersedeConflictException"/> before any write, so a blocked
-    /// path leaves no batch, audit, or journal row.
+    /// The lifecycle and canonical-cutover guards throw <see cref="OnboardingConflictException"/>
+    /// before any write, so a blocked path leaves no batch, audit, or journal row.
     /// <para>
     /// A held-fees shape violation (<see cref="InvalidOpeningPositionException"/>) is likewise allowed to
     /// escape rather than becoming a row error — unlike in <see cref="ImportAsync"/>. A reversal and its
@@ -207,20 +210,10 @@ public sealed class BalanceImportService(
         // #r{N} count is derived from THIS journal read, never from the request (R3). Voids never appear.
         var live = await sender.Query(new GetOpeningPositions(), ct);
 
-        // Guard 3 (§2.9): the base refs embed the cutover date; a different date would match no family
-        // and double-post every position as new. The date is read from the journal, never trusted.
-        var existingDates = live.Entries
-            .Select(e => e.SourceRef.Split(':'))
-            .Where(parts => parts.Length >= 3 && parts[0] == "opening")
-            .Select(parts => parts[1])
-            .Distinct()
-            .ToList();
-        var requestDate = cutoverDate.ToString("yyyy-MM-dd");
-        if (existingDates.Count > 0 && !existingDates.Contains(requestDate))
-        {
-            throw new SupersedeConflictException("cutover_date_mismatch",
-                $"The corrected file's cutover date ({requestDate}) does not match the imported cutover date ({existingDates[0]}). Changing the cutover date requires re-provisioning.");
-        }
+        // Guard 3 (§2.9): a different date would produce a different source-ref family and double-post
+        // every corrected position as new. The shared guard reads the immutable entry date and also
+        // serializes ordinary imports against this corrected re-import.
+        await migrationCutoverDate.EnsureMatchesAsync(cutoverDate, ct);
 
         // Family map keyed by base ref (strip a trailing #r{N}); the live member is the unreversed entry.
         // Snapshotted before any reversal, so 1 + family.Count is the pre-supersede revision count.
@@ -1030,13 +1023,16 @@ public sealed class BalanceImportService(
 }
 
 /// <summary>
-/// A typed pre-flight conflict raised by <see cref="BalanceImportService.SupersedeAsync"/> before any
-/// write (the §2 guards). The onboarding endpoint (WP-7 Task 6) maps <see cref="Code"/> to a 409
-/// ProblemDetails; the message is display-safe (dates and instructions only — no ids, account codes,
-/// or table names), so technical detail belongs in the log, not here.
+/// A typed onboarding conflict detected before any write. The onboarding endpoints map
+/// <see cref="Code"/> to a 409 ProblemDetails response; the message is display-safe (dates and
+/// instructions only — no ids, account codes, or table names), so technical detail belongs in the
+/// log, not here.
 /// </summary>
-public sealed class SupersedeConflictException(string code, string detail) : Exception(detail)
+public class OnboardingConflictException(string code, string detail) : Exception(detail)
 {
-    /// <summary><c>already_signed_off</c> | <c>nothing_to_supersede</c> | <c>cutover_date_mismatch</c>.</summary>
     public string Code { get; } = code;
 }
+
+/// <summary>A conflict specific to the corrected re-import lifecycle.</summary>
+public sealed class SupersedeConflictException(string code, string detail)
+    : OnboardingConflictException(code, detail);

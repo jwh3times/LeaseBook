@@ -51,6 +51,7 @@ public sealed class OnboardingStatusTests(PostgresFixture fixture)
         status.Verified.ShouldBeFalse();
         status.SignedOff.ShouldBeFalse();
         status.HasJournalData.ShouldBeFalse("a fresh org has no journal entries");
+        status.CutoverDate.ShouldBeNull("no opening position has established a cutover date");
     }
 
     // ──────────────────────────────────────────────────────────────────────────────────────────────
@@ -121,6 +122,7 @@ public sealed class OnboardingStatusTests(PostgresFixture fixture)
         status.Verified.ShouldBeFalse();
         status.SignedOff.ShouldBeFalse();
         status.HasJournalData.ShouldBeTrue("a $500 opening bank balance posts an opening journal entry");
+        status.CutoverDate.ShouldBe(Cutover);
     }
 
     // ──────────────────────────────────────────────────────────────────────────────────────────────

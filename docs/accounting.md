@@ -3,7 +3,7 @@
 - **Audience:** Contributors, operators, and reviewers
 - **Status:** Living accounting guide
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-08-21
+- **Last reviewed:** 2026-08-30
 
 This is the canonical public explanation of the shipped trust-accounting model, written so a
 property manager, bookkeeper, or attorney can evaluate it without reading C#. The Accounting module
@@ -536,6 +536,11 @@ The engine posts one journal entry per imported row, dated at the cutover bounda
 synthetic per-month historical entries, no reconstructed ledger activity. Every owner statement,
 tenant ledger, and bank register for dates after the cutover is a projection of real LeaseBook
 activity, starting from these opening positions. Dates before the cutover are in AppFolio.
+
+Every opening position in an organization shares one cutover date. The first position that posts
+establishes it from the immutable journal; later balance kinds, corrected imports, and verification
+must use that same date. Until a position posts the field is blank and required — never silently
+today — and afterward the onboarding wizard shows the journal-derived value as read-only.
 
 ### Idempotency and re-import
 

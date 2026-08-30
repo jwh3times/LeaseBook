@@ -87,6 +87,12 @@ async function uploadFixtureCsv(page: Page, filename: string) {
   await fileInput.setInputFiles(filePath);
 }
 
+async function expectCanonicalCutoverDate(page: Page) {
+  const input = page.getByLabel('Cutover date');
+  await expect(input).toHaveValue(CUTOVER_DATE);
+  await expect(input).toHaveAttribute('readonly', '');
+}
+
 /**
  * Prime the XSRF cookie (GET /api/auth/csrf) and return the token from document.cookie.
  * Used in the server-side gate assertion for the non-tying path.
@@ -203,10 +209,10 @@ test.describe.serial('M7 onboarding wizard', () => {
     await page.locator('input[type="radio"][value="owner_balances"]').check();
     await uploadFixtureCsv(page, 'owner_balances.csv');
     await expect(page.getByRole('status')).toContainText(/imported 2 rows/i, { timeout: 15_000 });
+    await expectCanonicalCutoverDate(page);
     await page.screenshot({ path: 'e2e-results/m7-08-owner-balances.png', fullPage: true });
 
     // Deposit liabilities (3 rows).
-    await page.getByLabel('Cutover date').fill(CUTOVER_DATE);
     await page.locator('input[type="radio"][value="deposit_liabilities"]').check();
     await uploadFixtureCsv(page, 'deposit_liabilities.csv');
     await expect(page.getByRole('status')).toContainText(/imported 3 rows/i, { timeout: 15_000 });
@@ -215,7 +221,6 @@ test.describe.serial('M7 onboarding wizard', () => {
     // Bank balances (2 rows) — matched by name against the seeded cutover bank accounts. The
     // Operating Trust figure (8700.00) is raised $200.00 over owner equity (8500.00) — the held-fees
     // upload below accounts for exactly that $200.00 still sitting inside the account (WP-7 Task 14).
-    await page.getByLabel('Cutover date').fill(CUTOVER_DATE);
     await page.locator('input[type="radio"][value="bank_balances"]').check();
     await uploadFixtureCsv(page, 'bank_balances.csv');
     await expect(page.getByRole('status')).toContainText(/imported 2 rows/i, { timeout: 15_000 });
@@ -224,7 +229,6 @@ test.describe.serial('M7 onboarding wizard', () => {
     // Held PM fees (1 row) — WP-7 Task 14: unremitted PM fees still sitting inside the Operating
     // Trust bank. Names the same trust bank as bank_balances.csv above; the $200.00 here is exactly
     // the amount that account's book balance was raised by, so the run still ties.
-    await page.getByLabel('Cutover date').fill(CUTOVER_DATE);
     await page.locator('input[type="radio"][value="held_pm_fees"]').check();
     await uploadFixtureCsv(page, 'held_pm_fees.csv');
     await expect(page.getByRole('status')).toContainText(/imported 1 row\b/i, { timeout: 15_000 });
@@ -252,7 +256,7 @@ test.describe.serial('M7 onboarding wizard', () => {
     });
 
     // Enter WRONG figures: owner equity = $1.00 (should be $8,500.00) → variance ≠ 0 → NOT TIED.
-    await page.getByLabel('Cutover date').fill(CUTOVER_DATE);
+    await expectCanonicalCutoverDate(page);
     await page.getByLabel('Owner equity total from AppFolio').fill('1.00');
     await page.getByLabel('Deposit liability total from AppFolio').fill('1.00');
     // Do not provide bank rows → imported banks are flagged as "unexpected" (non-zero variance).
@@ -360,9 +364,8 @@ test.describe.serial('M7 onboarding wizard', () => {
     });
 
     // Corrected owner balances (2 rows): O-C1 back to $5,000.00 (was $4,950.00), O-C2 unchanged at
-    // $3,500.00. The cutover date must match the original import exactly, or supersede 409s
-    // (cutover_date_mismatch) — the field defaults to today on this fresh mount, so it must be re-set.
-    await page.getByLabel('Cutover date').fill(CUTOVER_DATE);
+    // $3,500.00. The cutover date is restored from the immutable opening entries and stays read-only.
+    await expectCanonicalCutoverDate(page);
     await page.locator('input[type="radio"][value="owner_balances"]').check();
     await page.getByLabel('This is a corrected re-import (supersede)').check();
     await uploadFixtureCsv(page, 'owner_balances_corrected.csv');
@@ -396,7 +399,7 @@ test.describe.serial('M7 onboarding wizard', () => {
     // step superseded O-C1 back to $5,000.00). Held PM fees ($200.00) is the amount imported against
     // the Operating Trust bank — attesting it (rather than leaving it blank) is what makes the "Held
     // PM Fees (Cash)" variance line appear and tie, per D5/§3b in VerificationService.
-    await page.getByLabel('Cutover date').fill(CUTOVER_DATE);
+    await expectCanonicalCutoverDate(page);
     await page.getByLabel('Owner equity total from AppFolio').fill(OWNER_EQUITY_TOTAL);
     await page.getByLabel('Deposit liability total from AppFolio').fill(DEPOSIT_LIABILITY_TOTAL);
     await page.getByLabel('Held PM fees total from AppFolio').fill(HELD_PM_FEES_TOTAL);

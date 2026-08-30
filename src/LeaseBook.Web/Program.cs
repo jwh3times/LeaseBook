@@ -379,6 +379,7 @@ builder.Services.AddScoped<LeaseBook.Modules.Banking.Contracts.IBankClearing, Ba
 // BalanceImportService (3.2): posts opening positions via IBalanceForward; persists staging rows.
 builder.Services.AddScoped<LeaseBook.Web.Onboarding.ExternalIdResolver>();
 builder.Services.AddScoped<LeaseBook.Web.Onboarding.EntityImportService>();
+builder.Services.AddScoped<LeaseBook.Web.Onboarding.MigrationCutoverDate>();
 builder.Services.AddScoped<LeaseBook.Web.Onboarding.BalanceImportService>();
 
 // M7 WP-4: verification + sign-off. VerificationService dispatches the Accounting
