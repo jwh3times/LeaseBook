@@ -10,6 +10,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { delay, http, HttpResponse } from 'msw';
+import { useState } from 'react';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { server } from '@/test/mocks/server';
@@ -52,6 +53,7 @@ const STATUS_DONE = {
   verified: true,
   signedOff: true,
   hasJournalData: true,
+  cutoverDate: '2026-01-31',
 };
 
 const STATUS_PARTIAL = {
@@ -61,6 +63,7 @@ const STATUS_PARTIAL = {
   verified: false,
   signedOff: false,
   hasJournalData: false,
+  cutoverDate: null,
 };
 
 // ─── (a) OnboardingChecklist step states ──────────────────────────────────────
@@ -282,6 +285,7 @@ function renderBalanceStep() {
         title="Import balances"
         description="Upload balance CSVs"
         kinds={BALANCE_KINDS}
+        establishedCutoverDate="2026-01-31"
       />,
     ),
   );
@@ -292,6 +296,73 @@ async function uploadCsv(csv: string) {
   const input = screen.getByLabelText('CSV file');
   await userEvent.upload(input, file);
 }
+
+describe('BalanceImportStep — canonical cutover date', () => {
+  test('requires an explicit date before the first balance upload', () => {
+    render(
+      withRouter(
+        <BalanceImportStep
+          title="Import balances"
+          description="Upload balance CSVs"
+          kinds={BALANCE_KINDS}
+        />,
+      ),
+    );
+
+    expect(screen.getByLabelText('Cutover date')).toHaveValue('');
+    expect(screen.getByLabelText('Cutover date')).toBeRequired();
+    expect(screen.getByLabelText('CSV file')).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Upload CSV file' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+  });
+
+  test('renders an established cutover date as read-only', () => {
+    render(
+      withRouter(
+        <BalanceImportStep
+          title="Import balances"
+          description="Upload balance CSVs"
+          kinds={BALANCE_KINDS}
+          establishedCutoverDate="2026-01-31"
+        />,
+      ),
+    );
+
+    expect(screen.getByLabelText('Cutover date')).toHaveValue('2026-01-31');
+    expect(screen.getByLabelText('Cutover date')).toHaveAttribute('readonly');
+  });
+
+  test('adopts the canonical date when status establishes it after mount', async () => {
+    function Harness() {
+      const [established, setEstablished] = useState<string>();
+      return (
+        <>
+          <button type="button" onClick={() => setEstablished('2026-01-31')}>
+            Refresh status
+          </button>
+          <BalanceImportStep
+            title="Import balances"
+            description="Upload balance CSVs"
+            kinds={BALANCE_KINDS}
+            establishedCutoverDate={established}
+          />
+        </>
+      );
+    }
+
+    render(withRouter(<Harness />));
+    fireEvent.change(screen.getByLabelText('Cutover date'), {
+      target: { value: '2026-02-28' },
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Refresh status' }));
+
+    expect(screen.getByLabelText('Cutover date')).toHaveValue('2026-01-31');
+    expect(screen.getByLabelText('Cutover date')).toHaveAttribute('readonly');
+  });
+});
 
 describe('BalanceImportStep — corrected re-import (supersede)', () => {
   beforeEach(() => {
@@ -548,7 +619,6 @@ describe('BalanceImportStep — mutation error state resets on kind and mode swi
           title="Import balances"
           description="Upload balance CSVs"
           kinds={BALANCE_KINDS}
-          defaultCutoverDate="2025-12-31"
           onContinue={onContinue}
         />,
       ),
@@ -689,13 +759,42 @@ describe('VerificationStep sign-off button', () => {
     ],
   };
 
+  it('requires the canonical cutover date before verification can run', () => {
+    render(withRouter(<VerificationStep />));
+
+    expect(screen.getByLabelText('Cutover date')).toHaveValue('');
+    expect(screen.getByLabelText('Cutover date')).toBeRequired();
+    expect(screen.getByRole('button', { name: /run verification/i })).toBeDisabled();
+  });
+
+  it('adopts the canonical date when status establishes it after mount', async () => {
+    function Harness() {
+      const [established, setEstablished] = useState<string>();
+      return (
+        <>
+          <button type="button" onClick={() => setEstablished('2026-01-31')}>
+            Refresh status
+          </button>
+          <VerificationStep cutoverDate={established} />
+        </>
+      );
+    }
+
+    render(withRouter(<Harness />));
+    await userEvent.click(screen.getByRole('button', { name: 'Refresh status' }));
+
+    expect(screen.getByLabelText('Cutover date')).toHaveValue('2026-01-31');
+    expect(screen.getByLabelText('Cutover date')).toHaveAttribute('readonly');
+    expect(screen.getByRole('button', { name: /run verification/i })).toBeEnabled();
+  });
+
   it('disables sign-off button when isTied is false', async () => {
     server.use(
       http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 })),
       http.post('/api/onboarding/verification', () => HttpResponse.json(NOT_TIED_REPORT)),
     );
 
-    render(withRouter(<VerificationStep />));
+    render(withRouter(<VerificationStep cutoverDate="2026-01-31" />));
 
     // Fill in minimal form and run verification
     await userEvent.type(screen.getByLabelText('Owner equity total from AppFolio'), '4850');
@@ -714,7 +813,7 @@ describe('VerificationStep sign-off button', () => {
       http.post('/api/onboarding/verification', () => HttpResponse.json(TIED_REPORT)),
     );
 
-    render(withRouter(<VerificationStep />));
+    render(withRouter(<VerificationStep cutoverDate="2026-01-31" />));
 
     await userEvent.type(screen.getByLabelText('Owner equity total from AppFolio'), '5000');
     await userEvent.type(screen.getByLabelText('Deposit liability total from AppFolio'), '0');
@@ -741,11 +840,12 @@ describe('VerificationStep sign-off button', () => {
           verified: true,
           signedOff: true,
           hasJournalData: true,
+          cutoverDate: '2026-01-31',
         }),
       ),
     );
 
-    render(withRouter(<VerificationStep />));
+    render(withRouter(<VerificationStep cutoverDate="2026-01-31" />));
 
     await userEvent.type(screen.getByLabelText('Owner equity total from AppFolio'), '5000');
     await userEvent.type(screen.getByLabelText('Deposit liability total from AppFolio'), '0');
@@ -780,11 +880,12 @@ describe('VerificationStep sign-off button', () => {
           verified: true,
           signedOff: true,
           hasJournalData: true,
+          cutoverDate: '2026-01-31',
         }),
       ),
     );
 
-    render(withRouter(<VerificationStep />));
+    render(withRouter(<VerificationStep cutoverDate="2026-01-31" />));
 
     await userEvent.type(screen.getByLabelText('Owner equity total from AppFolio'), '5000');
     await userEvent.type(screen.getByLabelText('Deposit liability total from AppFolio'), '0');
@@ -836,7 +937,7 @@ describe('VerificationStep held-fees attestation field', () => {
       }),
     );
 
-    render(withRouter(<VerificationStep />));
+    render(withRouter(<VerificationStep cutoverDate="2026-01-31" />));
 
     await userEvent.type(screen.getByLabelText('Owner equity total from AppFolio'), '500');
     await userEvent.type(screen.getByLabelText('Deposit liability total from AppFolio'), '500');
@@ -858,7 +959,7 @@ describe('VerificationStep held-fees attestation field', () => {
       }),
     );
 
-    render(withRouter(<VerificationStep />));
+    render(withRouter(<VerificationStep cutoverDate="2026-01-31" />));
 
     await userEvent.type(screen.getByLabelText('Owner equity total from AppFolio'), '500');
     await userEvent.type(screen.getByLabelText('Deposit liability total from AppFolio'), '500');

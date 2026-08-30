@@ -31,7 +31,8 @@ namespace LeaseBook.Web.Onboarding.Verification;
 public sealed class VerificationService(
     DbContext db,
     ISender sender,
-    IActorContext actor)
+    IActorContext actor,
+    MigrationCutoverDate migrationCutoverDate)
 {
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
 
@@ -45,6 +46,8 @@ public sealed class VerificationService(
         VerificationRequest request,
         CancellationToken ct)
     {
+        await migrationCutoverDate.EnsureMatchesAsync(request.CutoverDate, ct);
+
         // 1. Read imported subledger totals + clearing residuals from the *current* journal, then
         //    compute the line-by-line variance + tie-out against the operator's figures.
         var tieOut = await ComputeTieOutAsync(request, ct);

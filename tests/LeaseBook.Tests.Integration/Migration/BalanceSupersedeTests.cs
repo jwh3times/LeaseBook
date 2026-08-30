@@ -30,9 +30,9 @@ namespace LeaseBook.Tests.Integration.Migration;
 /// The engine diffs a corrected CSV against the live opening positions (per family, keyed by base
 /// source_ref) and, per changed family, posts a linked reversal dated at the cutover then a corrected
 /// revision at the next <c>#r{N}</c>; identical figures are left untouched (S3 idempotency); a
-/// correction to $0.00 reverses without re-posting. The three §2 guards
-/// (already_signed_off / nothing_to_supersede / cutover_date_mismatch) throw a typed
-/// <see cref="SupersedeConflictException"/> before any write.
+/// correction to $0.00 reverses without re-posting. The lifecycle guards throw
+/// <see cref="SupersedeConflictException"/> and the shared canonical-date guard throws
+/// <see cref="OnboardingConflictException"/> before any write.
 ///
 /// Arrange drives the real HTTP import path; the engine itself is invoked through a scoped provider
 /// inside <see cref="OrgScopedExecutor"/> (the ambient RLS transaction), mirroring a request unit-of-work.
@@ -272,7 +272,7 @@ public sealed class BalanceSupersedeTests(PostgresFixture fixture)
 
         var (journalBefore, batchesBefore) = await CountsAsync(setup.OrgId, ct);
 
-        var ex = await Should.ThrowAsync<SupersedeConflictException>(async () =>
+        var ex = await Should.ThrowAsync<OnboardingConflictException>(async () =>
             await SupersedeInScopeAsync(setup.OrgId, EntityKind.OwnerBalances,
                 "Owner ID,Owner Name,Cash Balance,Accrual Balance\nO-1,Chain Owner LLC,450.00,450.00\n",
                 new DateOnly(2026, 7, 31), ct));

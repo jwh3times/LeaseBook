@@ -413,6 +413,7 @@ export type OnboardingStatusResponse = {
     verified: boolean;
     signedOff: boolean;
     hasJournalData: boolean;
+    cutoverDate: null | string;
 };
 
 export type OrgSettingsResponse = {
@@ -2429,6 +2430,10 @@ export type PostApiOnboardingImportBalancesByKindErrors = {
      * Bad Request
      */
     400: unknown;
+    /**
+     * Conflict
+     */
+    409: unknown;
 };
 
 export type PostApiOnboardingImportBalancesByKindResponses = {
@@ -2506,6 +2511,10 @@ export type PostApiOnboardingVerificationErrors = {
      * Bad Request
      */
     400: unknown;
+    /**
+     * Conflict
+     */
+    409: unknown;
 };
 
 export type PostApiOnboardingVerificationResponses = {

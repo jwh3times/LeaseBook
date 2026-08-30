@@ -155,11 +155,12 @@ export function OnboardingPage() {
                 { kind: 'tenant_receivables', label: 'Tenant receivables' },
                 { kind: 'held_pm_fees', label: 'Held PM fees' },
               ]}
+              establishedCutoverDate={status.cutoverDate ?? undefined}
               onContinue={goToNextStep}
             />
           )}
 
-          {activeStep === 3 && <VerificationStep />}
+          {activeStep === 3 && <VerificationStep cutoverDate={status.cutoverDate ?? undefined} />}
 
           {activeStep === 4 && (
             <Card pad>

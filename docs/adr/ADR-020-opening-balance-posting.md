@@ -144,6 +144,26 @@ must commit together or the live position would be removed with nothing put back
 supplies the basis, bank, and owner dimensions structurally, the only rule a corrected re-import can
 actually trip is the `trust_bank`-class check — a chart-of-accounts divergence, not a fixable row.
 
+## §6 — One journal-derived cutover date (added 2026-08-30)
+
+Every per-position opening entry in an organization carries the same `entry_date`. The first opening
+position that actually posts establishes the **cutover date**; before that, no canonical date exists
+and the operator must enter one explicitly. The SPA never defaults this money-dating field to today.
+
+The immutable opening journal entries are the source of truth. A separate mutable migration-state
+row was rejected because it would duplicate the accounting date already recorded on every opening
+position and create two values that could drift. `GET /api/onboarding/status` returns the distinct
+opening-entry date so a reload and the verification step resume with the same value; once established,
+the SPA renders it read-only.
+
+Ordinary balance imports, corrected re-imports, and verification compare their requested date with
+the established value before writing. A mismatch returns HTTP 409 `cutover_date_mismatch`. The
+first-import race is serialized per organization with a transaction-scoped PostgreSQL advisory lock,
+so two concurrent imports cannot establish different dates.
+
+The batched seed-only balance-forward seam remains outside this production-import contract. An
+already signed-off migration remains append-only and is corrected through normal ledger reversals.
+
 ## Revisit trigger
 
 If a future import source (Buildium, Rentec) requires per-position semantics that differ materially

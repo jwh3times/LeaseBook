@@ -138,6 +138,68 @@ public sealed class BalanceImportTests(PostgresFixture fixture)
         }, ct);
     }
 
+    [Fact]
+    public async Task Different_balance_kinds_cannot_use_different_cutover_dates()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var setup = await SetupAsync("CutoverMismatch", ct);
+
+        await PostImportAsync<ImportBatchResult>(setup.Client, "owners",
+            new
+            {
+                csvContent = "Owner ID,Owner Name,Reserve\nO-1,Cutover Owner LLC,0\n",
+                filename = "owners.csv",
+            }, ct);
+
+        var bankCsv = $"Account ID,Account Name,Book Balance\n" +
+                      $"B-TRUST,{setup.TrustBankName},500.00\n";
+        await PostBalanceImportAsync<ImportBatchResult>(setup.Client, "bank_balances",
+            new { csvContent = bankCsv, cutoverDate = CutoverStr, filename = "banks.csv" }, ct);
+
+        const string ownerBalancesCsv =
+            "Owner ID,Owner Name,Cash Balance,Accrual Balance\n" +
+            "O-1,Cutover Owner LLC,500.00,500.00\n";
+        var response = await PostBalanceImportRawAsync(setup.Client, "owner_balances",
+            new
+            {
+                csvContent = ownerBalancesCsv,
+                cutoverDate = "2026-07-01",
+                filename = "owner_balances.csv",
+            }, ct);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Conflict,
+            await response.Content.ReadAsStringAsync(ct));
+        var problem = (await response.Content.ReadFromJsonAsync<ProblemWithCode>(ct))!;
+        problem.Code.ShouldBe("cutover_date_mismatch");
+    }
+
+    [Fact]
+    public async Task Verification_must_use_the_imported_cutover_date()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var setup = await SetupAsync("VerificationCutoverMismatch", ct);
+
+        var bankCsv = $"Account ID,Account Name,Book Balance\n" +
+                      $"B-TRUST,{setup.TrustBankName},500.00\n";
+        await PostBalanceImportAsync<ImportBatchResult>(setup.Client, "bank_balances",
+            new { csvContent = bankCsv, cutoverDate = CutoverStr, filename = "banks.csv" }, ct);
+
+        var response = await setup.Client.PostAsJsonAsync(
+            "/api/onboarding/verification",
+            new
+            {
+                cutoverDate = "2026-07-01",
+                ownerEquityTotal = 0m,
+                depositLiabilityTotal = 0m,
+                bankBookBalances = Array.Empty<object>(),
+            }, ct);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Conflict,
+            await response.Content.ReadAsStringAsync(ct));
+        var problem = (await response.Content.ReadFromJsonAsync<ProblemWithCode>(ct))!;
+        problem.Code.ShouldBe("cutover_date_mismatch");
+    }
+
     // -------------------------------------------------------------------------
     // Idempotent re-import: re-posting the same rows yields "already-posted" rows,
     // no second journal entries, and the clearing stays at $0

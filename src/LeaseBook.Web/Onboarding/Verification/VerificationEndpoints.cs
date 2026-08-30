@@ -12,7 +12,8 @@ namespace LeaseBook.Web.Onboarding.Verification;
 /// <item>
 ///   <c>POST /api/onboarding/verification</c> — submit operator AppFolio closing figures, compute
 ///   the line-by-line variance report, persist a <c>migration_verifications</c> row, and return the
-///   report. Re-verification appends a new row (never upsert).
+///   report. Re-verification appends a new row (never upsert). A cutover-date mismatch returns 409
+///   before the snapshot is written.
 /// </item>
 /// <item>
 ///   <c>POST /api/onboarding/verification/{id}/signoff</c> — if <c>IsTied == false</c> → HTTP 409
@@ -56,11 +57,23 @@ public sealed class VerificationEndpoints : IEndpointModule
                         banks,
                         body.HeldPmFeesTotal);
 
-                    var report = await service.VerifyAsync(request, ct);
-                    return TypedResults.Ok(report);
+                    try
+                    {
+                        var report = await service.VerifyAsync(request, ct);
+                        return TypedResults.Ok(report);
+                    }
+                    catch (OnboardingConflictException ex)
+                    {
+                        return ProblemResults.Problem(
+                            httpContext,
+                            code: ex.Code,
+                            detail: ex.Message,
+                            status: StatusCodes.Status409Conflict);
+                    }
                 })
             .Produces<VerificationReport>()
-            .Produces(StatusCodes.Status400BadRequest);
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status409Conflict);
 
         // POST /api/onboarding/verification/{id}/signoff
         // Returns: SignoffResult (200) or 409 not_tied (if IsTied == false)

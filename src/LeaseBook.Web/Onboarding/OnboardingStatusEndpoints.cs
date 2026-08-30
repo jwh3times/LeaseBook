@@ -13,8 +13,9 @@ namespace LeaseBook.Web.Onboarding;
 /// <summary>
 /// WP-5 Task 5.2: derived onboarding wizard state (M7).
 ///
-/// <c>GET /api/onboarding/status</c> — returns a six-flag snapshot of wizard progress, each
-/// flag computed from existing data on the ambient RLS transaction (no dedicated status table).
+/// <c>GET /api/onboarding/status</c> — returns a six-flag snapshot of wizard progress plus the
+/// journal-derived cutover date. Each value is computed from existing data on the ambient RLS
+/// transaction (no dedicated status table).
 /// The SPA checklist drives its step-gating from this response; the OpenAPI client types the
 /// response record after regen. <c>HasJournalData</c> is the empty-dashboard-takeover gate: the
 /// wizard only hijacks an org with no journal data, so an org with operational activity (e.g. the
@@ -25,7 +26,11 @@ public sealed class OnboardingStatusEndpoints : IEndpointModule
     public void MapEndpoints(IEndpointRouteBuilder app)
     {
         app.MapGet("/api/onboarding/status",
-                async (ISender sender, DbContext db, CancellationToken ct) =>
+                async (
+                    ISender sender,
+                    DbContext db,
+                    MigrationCutoverDate migrationCutoverDate,
+                    CancellationToken ct) =>
                 {
                     // banksConfigured: org has ≥1 bank account (active or inactive — any configured).
                     // Dispatches through the existing Directory ListBankAccounts query (ADR-007 boundary).
@@ -67,6 +72,7 @@ public sealed class OnboardingStatusEndpoints : IEndpointModule
                     // hasJournalData: ≥1 journal entry of any kind (the empty-dashboard-takeover gate).
                     // Dispatched to Accounting via ISender (ADR-007 — no cross-module journal SQL here).
                     var hasJournalData = await sender.Query(new HasJournalEntries(), ct);
+                    var cutoverDate = await migrationCutoverDate.GetAsync(ct);
 
                     return TypedResults.Ok(new OnboardingStatusResponse(
                         banksConfigured,
@@ -74,7 +80,8 @@ public sealed class OnboardingStatusEndpoints : IEndpointModule
                         balancesImported,
                         verified,
                         signedOff,
-                        hasJournalData));
+                        hasJournalData,
+                        cutoverDate));
                 })
             .RequireAuthorization("RequirePMStaff")
             .WithTags("Onboarding")
@@ -83,8 +90,8 @@ public sealed class OnboardingStatusEndpoints : IEndpointModule
 }
 
 /// <summary>
-/// Derived wizard-step state for the M7 import-first onboarding checklist.
-/// Each flag is computed from existing data; no dedicated status table exists.
+/// Derived wizard-step state and canonical cutover date for the M7 import-first onboarding
+/// checklist. Every value is computed from existing data; no dedicated status table exists.
 /// </summary>
 public sealed record OnboardingStatusResponse(
     /// <summary>True when the org has ≥1 configured bank account.</summary>
@@ -98,4 +105,6 @@ public sealed record OnboardingStatusResponse(
     /// <summary>True when ≥1 migration verification has been signed off.</summary>
     bool SignedOff,
     /// <summary>True when the org has ≥1 journal entry (any posted financial activity). The empty-dashboard-takeover gate: the wizard only appears for an org with no journal data.</summary>
-    bool HasJournalData);
+    bool HasJournalData,
+    /// <summary>The immutable accounting date established by the first ADR-020 opening position, or null before any position posts.</summary>
+    DateOnly? CutoverDate);

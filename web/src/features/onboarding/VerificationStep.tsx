@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button, Card, CardHeader, Icon, Money } from '@/design';
 import { ApiErrorNotice } from '@/components/ApiErrorNotice';
 import { asApiError } from '@/api';
@@ -45,14 +45,16 @@ function VarianceRow({ line }: { line: VarianceLine }) {
 interface VerificationStepProps {
   verificationId?: string;
   initialReport?: VerificationReport;
+  /** The date established by the posted opening positions. Immutable once present. */
+  cutoverDate?: string;
 }
 
 export function VerificationStep({
   verificationId: initialId,
   initialReport,
+  cutoverDate: establishedCutoverDate,
 }: VerificationStepProps) {
-  const today = new Date().toISOString().slice(0, 10);
-  const [cutoverDate, setCutoverDate] = useState(today);
+  const [cutoverDate, setCutoverDate] = useState(establishedCutoverDate ?? '');
   const [ownerEquity, setOwnerEquity] = useState('');
   const [depositLiability, setDepositLiability] = useState('');
   const [heldPmFees, setHeldPmFees] = useState('');
@@ -63,6 +65,12 @@ export function VerificationStep({
   const [reportId, setReportId] = useState<string | null>(initialId ?? null);
   const [signoffError, setSignoffError] = useState<OnboardingError | null>(null);
   const [signedOff, setSignedOff] = useState(false);
+
+  useEffect(() => {
+    if (establishedCutoverDate !== undefined) {
+      setCutoverDate(establishedCutoverDate);
+    }
+  }, [establishedCutoverDate]);
 
   const verify = useVerify();
   const signoff = useSignoff();
@@ -147,6 +155,8 @@ export function VerificationStep({
           className="ob-date-input"
           value={cutoverDate}
           onChange={(e) => setCutoverDate(e.target.value)}
+          readOnly={establishedCutoverDate !== undefined}
+          required
           aria-label="Cutover date"
         />
       </div>
@@ -241,7 +251,7 @@ export function VerificationStep({
           onClick={() => {
             void handleVerify();
           }}
-          disabled={verify.isPending}
+          disabled={verify.isPending || !cutoverDate}
         >
           {verify.isPending ? 'Running…' : 'Run verification'}
         </Button>

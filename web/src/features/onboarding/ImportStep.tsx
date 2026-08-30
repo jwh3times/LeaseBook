@@ -238,7 +238,8 @@ interface BalanceImportStepProps {
   title: string;
   description: string;
   kinds: { kind: BalanceKind; label: string }[];
-  defaultCutoverDate?: string;
+  /** The date already established by a posted opening position. Immutable once present. */
+  establishedCutoverDate?: string;
   /**
    * Advances the wizard to the next step. Rendered as an explicit "Continue →" button so the
    * operator imports each balance kind before moving on — the step never auto-advances.
@@ -279,16 +280,21 @@ export function BalanceImportStep({
   title,
   description,
   kinds,
-  defaultCutoverDate,
+  establishedCutoverDate,
   onContinue,
 }: BalanceImportStepProps) {
-  const today = new Date().toISOString().slice(0, 10);
   const [selectedKind, setSelectedKind] = useState<BalanceKind>(kinds[0]!.kind);
-  const [cutoverDate, setCutoverDate] = useState(defaultCutoverDate ?? today);
+  const [cutoverDate, setCutoverDate] = useState(establishedCutoverDate ?? '');
   // Tracks which balance kinds imported cleanly, so the "Continue" affordance only appears once
   // the operator has imported at least one kind on this step.
   const [importedKinds, setImportedKinds] = useState<Set<BalanceKind>>(new Set());
   const canContinue = importedKinds.size > 0;
+
+  useEffect(() => {
+    if (establishedCutoverDate !== undefined) {
+      setCutoverDate(establishedCutoverDate);
+    }
+  }, [establishedCutoverDate]);
 
   return (
     <Card pad>
@@ -327,6 +333,8 @@ export function BalanceImportStep({
           className="ob-date-input"
           value={cutoverDate}
           onChange={(e) => setCutoverDate(e.target.value)}
+          readOnly={establishedCutoverDate !== undefined}
+          required
           aria-label="Cutover date"
         />
       </div>
@@ -425,8 +433,11 @@ function BalanceUploadBody({
   const supersedeMutation = useSupersedeBalances(kind);
   const activeMutation = mode === 'supersede' ? supersedeMutation : mutation;
   const isPending = activeMutation.isPending;
+  const canUpload = cutoverDate !== '' && !isPending;
 
   async function handleFile(file: File) {
+    if (!cutoverDate) return;
+
     setFilename(file.name);
     setErrors([]);
     setResult(null);
@@ -503,6 +514,7 @@ function BalanceUploadBody({
         accept=".csv,text/csv"
         aria-label="CSV file"
         tabIndex={-1}
+        disabled={!canUpload}
         style={{ display: 'none' }}
         onChange={(e) => {
           void handleChange(e);
@@ -512,20 +524,25 @@ function BalanceUploadBody({
         className={['ob-dropzone', isPending ? 'ob-dropzone--loading' : '']
           .filter(Boolean)
           .join(' ')}
-        onDragOver={(e) => e.preventDefault()}
-        onDrop={(e) => {
-          void handleDrop(e);
+        onDragOver={(e) => {
+          if (canUpload) e.preventDefault();
         }}
-        onClick={() => fileRef.current?.click()}
+        onDrop={(e) => {
+          if (canUpload) void handleDrop(e);
+        }}
+        onClick={() => {
+          if (canUpload) fileRef.current?.click();
+        }}
         onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
+          if (canUpload && (e.key === 'Enter' || e.key === ' ')) {
             e.preventDefault();
             fileRef.current?.click();
           }
         }}
         role="button"
-        tabIndex={0}
+        tabIndex={canUpload ? 0 : -1}
         aria-label="Upload CSV file"
+        aria-disabled={!canUpload}
       >
         {isPending ? (
           <EmptyState icon="arrowUpRight" title="Importing…" description="Processing your CSV." />
@@ -535,6 +552,12 @@ function BalanceUploadBody({
             <span className="fw6">{filename}</span>
             <span className="fs12 muted">Click or drop to replace</span>
           </div>
+        ) : !cutoverDate ? (
+          <EmptyState
+            icon="clock"
+            title="Enter the cutover date first"
+            description="Opening balances cannot be uploaded without an accounting date."
+          />
         ) : (
           <EmptyState
             icon="arrowUpRight"
