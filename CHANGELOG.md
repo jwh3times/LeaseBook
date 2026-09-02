@@ -16,12 +16,30 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Added
 
+- _Nothing yet._
+
+### Changed
+
+- _Nothing yet._
+
+### Fixed
+
+- _Nothing yet._
+
+## [0.11.0] - 2026-09-02
+
+### Added
+
 - **One-command private workspace restore for authorized maintainers.** `npm run bootstrap:private`
   (from `web/`) reads the confidential repository locator from 1Password at run time and clones it
   into `private/`, refusing to overwrite a non-Git directory and never printing the locator.
 
 ### Changed
 
+- **Downloaded report CSVs now identify the filters that actually produced their figures.** The
+  export records resolved basis, as-of date, period, or bank account as applicable, including server
+  defaults. A requested filter that the report does not use is omitted rather than presented as
+  evidence that it narrowed the data. Filenames include a period only when the report applied one.
 - **Authorized maintainer workspaces are now portable without exposing confidential material.** The
   public clone remains self-contained, while maintainers can restore a separately versioned private
   checkout and inject repository-specific local credentials from 1Password at runtime. A public
@@ -649,7 +667,8 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.11.0
 [0.10.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.10.0
 [0.9.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.9.0
 [0.8.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.8.0

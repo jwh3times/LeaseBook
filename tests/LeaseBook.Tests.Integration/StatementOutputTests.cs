@@ -235,6 +235,40 @@ public sealed class StatementOutputTests(PostgresFixture fixture)
         csv.ShouldContain("All owner ending balances");
     }
 
+    [Fact]
+    public async Task Report_csv_records_only_filters_the_server_applied()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await DemoSeeder.SeedAsync(fixture.Api.Services, ct);
+        var client = await DemoClientAsync(ct);
+
+        var response = await client.GetAsync(
+            "/api/reports/owner-bal/csv?year=2024&month=2&basis=accrual", ct);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var csv = await response.Content.ReadAsStringAsync(ct);
+        csv.ShouldContain("basis,accrual");
+        csv.ShouldNotContain("year,2024");
+        csv.ShouldNotContain("month,2");
+        response.Content.Headers.ContentDisposition?.FileNameStar.ShouldBe("owner-bal.csv");
+    }
+
+    [Fact]
+    public async Task Report_csv_records_resolved_period_and_names_file_from_it()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await DemoSeeder.SeedAsync(fixture.Api.Services, ct);
+        var client = await DemoClientAsync(ct);
+
+        var response = await client.GetAsync("/api/reports/mgmt-fee/csv?year=2026&month=5", ct);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var csv = await response.Content.ReadAsStringAsync(ct);
+        csv.ShouldContain("year,2026");
+        csv.ShouldContain("month,5");
+        response.Content.Headers.ContentDisposition?.FileNameStar.ShouldBe("mgmt-fee-2026-05.csv");
+    }
+
     /// <summary>
     /// Finding 1 regression guard: the CSV endpoint must include actual DATA rows, not just the
     /// descriptor header. Before the fix, <c>ProjectToStringTable</c> called

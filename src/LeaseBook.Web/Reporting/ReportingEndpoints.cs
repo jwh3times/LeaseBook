@@ -103,9 +103,14 @@ public sealed class ReportingEndpoints : IEndpointModule
                     // then format each row's values in that order (empty string when key absent).
                     var descriptor = ReportCatalog.Find(id)!; // non-null: not-found returned 404 above
                     var (columns, stringRows) = ProjectToStringTable(result.Rows);
-                    var bytes = ReportCsv.Write(descriptor, columns, stringRows);
+                    var bytes = ReportCsv.Write(descriptor, columns, stringRows, result.AppliedFilters);
 
-                    var fileName = $"{id}-{(year ?? DateTime.UtcNow.Year)}-{(month ?? DateTime.UtcNow.Month):D2}.csv";
+                    var appliedYear = result.AppliedFilters?.FirstOrDefault(filter => filter.Name == "year")?.Value;
+                    var appliedMonth = result.AppliedFilters?.FirstOrDefault(filter => filter.Name == "month")?.Value;
+                    var periodSuffix = appliedYear is not null && appliedMonth is not null
+                        ? $"-{appliedYear}-{int.Parse(appliedMonth, CultureInfo.InvariantCulture):D2}"
+                        : "";
+                    var fileName = $"{id}{periodSuffix}.csv";
                     return Results.File(bytes, "text/csv", fileName);
                 });
 

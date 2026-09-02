@@ -4,6 +4,7 @@ using LeaseBook.Modules.Directory.Features.BankAccounts;
 using LeaseBook.Modules.Directory.Features.Properties;
 using LeaseBook.Modules.Directory.Features.Reporting;
 using LeaseBook.Modules.Reporting.Catalog;
+using LeaseBook.Modules.Reporting.Rendering;
 using LeaseBook.SharedKernel.Cqrs;
 
 namespace LeaseBook.Web.Reporting;
@@ -68,7 +69,8 @@ public sealed class ReportPreviewService(ISender sender)
             ["total"] = r.Total,
         }).ToList<object>();
 
-        return new ReportPreviewResult(descriptor.Id, descriptor.Name, descriptor.Category, null, rows, basis);
+        return new ReportPreviewResult(descriptor.Id, descriptor.Name, descriptor.Category, null, rows, basis,
+            [new ReportCsvMetadata("basis", basis)]);
     }
 
     /// <summary>Same normalization the statement endpoints use: anything but "accrual" is cash.</summary>
@@ -109,7 +111,8 @@ public sealed class ReportPreviewService(ISender sender)
             ["unappliedCredit"] = r.UnappliedCredit,
         }).ToList<object>();
 
-        return new ReportPreviewResult(descriptor.Id, descriptor.Name, descriptor.Category, null, rows);
+        return new ReportPreviewResult(descriptor.Id, descriptor.Name, descriptor.Category, null, rows,
+            AppliedFilters: [new ReportCsvMetadata("asOf", asOf.ToString("yyyy-MM-dd"))]);
     }
 
     private async Task<ReportPreviewResult> PreviewMgmtFeeAsync(
@@ -126,7 +129,12 @@ public sealed class ReportPreviewService(ISender sender)
             ["amount"] = r.Amount,
         }).ToList<object>();
 
-        return new ReportPreviewResult(descriptor.Id, descriptor.Name, descriptor.Category, null, rows);
+        return new ReportPreviewResult(descriptor.Id, descriptor.Name, descriptor.Category, null, rows,
+            AppliedFilters:
+            [
+                new ReportCsvMetadata("year", year.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+                new ReportCsvMetadata("month", month.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+            ]);
     }
 
     private async Task<ReportPreviewResult> PreviewDepositLiabAsync(
@@ -167,7 +175,8 @@ public sealed class ReportPreviewService(ISender sender)
             ["status"] = r.Status.ToString(),
         }).ToList<object>();
 
-        return new ReportPreviewResult(descriptor.Id, descriptor.Name, descriptor.Category, null, rows);
+        return new ReportPreviewResult(descriptor.Id, descriptor.Name, descriptor.Category, null, rows,
+            AppliedFilters: [new ReportCsvMetadata("bankAccountId", bankId.Value.ToString())]);
     }
 
     private async Task<ReportPreviewResult> PreviewBankRecAsync(
@@ -192,7 +201,8 @@ public sealed class ReportPreviewService(ISender sender)
         if (finalized.Count == 0)
         {
             return new ReportPreviewResult(descriptor.Id, descriptor.Name, descriptor.Category,
-                "No finalized reconciliation found for this bank account.", []);
+                "No finalized reconciliation found for this bank account.", [],
+                AppliedFilters: [new ReportCsvMetadata("bankAccountId", bankId.Value.ToString())]);
         }
 
         var rows = finalized.Select(r => new Dictionary<string, object?>
@@ -204,7 +214,8 @@ public sealed class ReportPreviewService(ISender sender)
             ["finalizedAt"] = r.FinalizedAt,
         }).ToList<object>();
 
-        return new ReportPreviewResult(descriptor.Id, descriptor.Name, descriptor.Category, null, rows);
+        return new ReportPreviewResult(descriptor.Id, descriptor.Name, descriptor.Category, null, rows,
+            AppliedFilters: [new ReportCsvMetadata("bankAccountId", bankId.Value.ToString())]);
     }
 
     /// <summary>
