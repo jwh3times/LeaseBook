@@ -4,7 +4,7 @@
 // time from the 1Password `LeaseBook Workspace` item (secret reference below), so a fresh clone
 // of the public repository can be completed with one command:
 //
-//   cd web && npm run bootstrap:private
+//   npm run bootstrap:private
 //
 // The locator may be `owner/name` (cloned with `gh repo clone`, reusing the GitHub CLI login) or a
 // credential-free GitHub HTTPS/SSH URL (cloned with `git clone`). Nothing here prints the locator,

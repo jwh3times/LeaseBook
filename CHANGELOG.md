@@ -16,7 +16,12 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Added
 
-- _Nothing yet._
+- **Root-level workspace commands.** `npm run sync:main` fetches and prunes both the public and
+  private checkouts, switches each clean working tree to `main`, and fast-forwards it to
+  `origin/main`. Dirty or diverged repositories fail safely; a missing optional private checkout is
+  skipped, and `npm run sync:main -- --skip-private` updates only the public tree. The private
+  workspace restore command is now also run from the repository root as
+  `npm run bootstrap:private`.
 
 ### Changed
 
