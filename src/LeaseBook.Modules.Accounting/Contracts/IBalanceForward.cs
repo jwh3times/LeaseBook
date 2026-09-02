@@ -7,7 +7,7 @@ namespace LeaseBook.Modules.Accounting.Contracts;
 /// Posts cutover opening positions (P27 / §C.3 BalanceForward). Deliberately separate from
 /// <see cref="IAccountingEvents"/>' business-event catalog — it takes an arbitrary balanced line set
 /// (every line basis <c>both</c>) and is consumed only by seed/import code (WP-08, M7), never by the
-/// product's event flows.
+/// product's event flows. <c>BalanceForwardCallSiteTests</c> enforces that consumer allowlist.
 /// </summary>
 public interface IBalanceForward
 {
