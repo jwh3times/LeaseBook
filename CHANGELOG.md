@@ -45,6 +45,13 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   was the one that failed. Switching type now clears it, so a message on screen always refers to the
   file you actually uploaded.
 
+### Security
+
+- **Product money flows are now guarded from using the migration-only balance-forward path.** A
+  build-time architecture check restricts the journal interface that accepts arbitrary opening
+  positions to the seed fixtures and migration importer, so future features must use the reviewed
+  business-event posting templates instead of bypassing their accounting guards.
+
 ## [0.10.0] - 2026-08-21
 
 ### Added
