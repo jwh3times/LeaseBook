@@ -97,14 +97,28 @@ op run --env-file='./private/config/leasebook.local.env.op' -- `
 op run --env-file=./private/config/leasebook.local.env.op -- ./scripts/dev.sh app-up
 ```
 
-Authorized maintainers restore the private checkout itself with one command from `web/`, which reads
-the repository locator from 1Password at run time and clones it into `private/`
-(`scripts/bootstrap-private.mjs`; it is a no-op when `private/.git` already exists). On a fresh
-worktree use `npm ci`, not `npm install`, so the dependency tree matches the committed lockfile:
+Authorized maintainers restore the private checkout itself with one command from the repository
+root, which reads the repository locator from 1Password at run time and clones it into `private/`
+(`scripts/bootstrap-private.mjs`; it is a no-op when `private/.git` already exists):
 
 ```bash
-cd web && npm ci && npm run bootstrap:private
+npm run bootstrap:private
 ```
+
+The root command has no package dependencies. Before running web tasks in a fresh worktree, install
+the locked web dependency tree separately with `cd web && npm ci`.
+
+Once installed, update both the public checkout and the private companion from the public repository
+root:
+
+```powershell
+npm run sync:main
+```
+
+The command requires both working trees to be clean, switches each to `main`, and fast-forwards it to
+`origin/main`. It never stashes changes or creates merge commits. A missing private checkout is
+skipped; use `npm run sync:main -- --skip-private` to update only the public repository
+intentionally.
 
 The public [`.env.example`](../../.env.example) documents the optional variable names and Compose's
 safe local defaults.

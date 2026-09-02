@@ -1,0 +1,12 @@
+{
+  "name": "leasebook-workspace",
+  "private": true,
+  "version": "0.0.0",
+  "engines": {
+    "node": ">=26.0.0"
+  },
+  "scripts": {
+    "bootstrap:private": "node ./scripts/bootstrap-private.mjs",
+    "sync:main": "node ./scripts/sync-main.mjs"
+  }
+}
