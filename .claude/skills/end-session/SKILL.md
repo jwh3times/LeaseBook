@@ -240,13 +240,26 @@ Then the rest of the local environment:
   ```
   git worktree list
   git branch --merged main
-  git cherry origin/main origin/<branch>   # before deleting any remote branch
+  gh pr view <number> --json state,mergedAt,mergeCommit,headRefName,baseRefName
+  git diff --stat origin/main origin/<branch>
+  git rev-parse <merge-commit>^{tree}
+  git rev-parse origin/<branch>^{tree}
+  git diff --exit-code <merge-commit> origin/<branch> --
+  git cherry origin/main origin/<branch>   # supporting evidence only
   ```
 
   **`git branch --merged` does not prove a branch is drained.** This repo squash-merges, so a
   merged branch's commits were never ancestors of `main` and every one of them looks unmerged.
-  `git cherry` is the real check: `-` is merged-equivalent, `+` is genuinely unlanded. A `+` line
-  usually means a commit was pushed to the branch _after_ its PR merged, which nothing warns about.
+  `git cherry` is not conclusive either: it compares patches one commit at a time, so several branch
+  commits combined into one squash commit can all appear as `+` even when the branch and merged PR
+  have identical trees.
+
+  Classify branch work as landed only after the PR reports `MERGED` and a direct tree/diff comparison
+  shows no branch-only content. Compare the branch tip with the PR's `mergeCommit` when `main` has
+  advanced since the merge; otherwise an empty `origin/main`-to-branch diff and matching tree ids are
+  equivalent evidence. A remaining diff must be inspected before cleanup: it may be a post-merge
+  branch commit, or merely newer work on `main`. Treat `git cherry` as supporting patch-equivalence
+  evidence, never as the verdict.
 
 - **Scratchpad.** Session scratch files live in the OS temp scratchpad, not the repo. Leave them;
   they are already outside the working tree.
