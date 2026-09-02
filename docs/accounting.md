@@ -400,7 +400,10 @@ span module boundaries (the ADR-007 cross-module exception). The rule is documen
 The report catalog (`/reports`) follows the same pattern: each report preview is dispatched
 through `ISender` to the appropriate Accounting or Directory handler; the host's
 `ReportPreviewService` aggregates the generic row payload the SPA renders. CSV and (for statements)
-PDF exports use the same data path — no separate re-query for a different output format.
+PDF exports use the same data path — no separate re-query for a different output format. A generic
+report CSV records the filters the server actually applied as key/value rows above its column header;
+ignored request parameters are omitted, and the filename includes a period only when the report
+applied one.
 
 ## Bulk operations (M6)
 

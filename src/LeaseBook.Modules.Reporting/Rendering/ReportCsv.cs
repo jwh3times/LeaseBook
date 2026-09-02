@@ -27,7 +27,8 @@ public static class ReportCsv
     public static byte[] Write(
         ReportDescriptor descriptor,
         IReadOnlyList<string> columns,
-        IReadOnlyList<IReadOnlyList<string>> rows)
+        IReadOnlyList<IReadOnlyList<string>> rows,
+        IReadOnlyList<ReportCsvMetadata>? appliedFilters = null)
     {
         ArgumentNullException.ThrowIfNull(descriptor);
         ArgumentNullException.ThrowIfNull(columns);
@@ -40,6 +41,13 @@ public static class ReportCsv
             csv.WriteField(descriptor.Name);
             csv.WriteField(descriptor.Category);
             csv.NextRecord();
+
+            foreach (var filter in appliedFilters ?? [])
+            {
+                csv.WriteField(filter.Name);
+                csv.WriteField(CsvFormulaGuard.Neutralize(filter.Value));
+                csv.NextRecord();
+            }
 
             // Column header row
             foreach (var col in columns)
@@ -65,3 +73,5 @@ public static class ReportCsv
         return Encoding.UTF8.GetBytes(buffer.ToString());
     }
 }
+
+public sealed record ReportCsvMetadata(string Name, string Value);

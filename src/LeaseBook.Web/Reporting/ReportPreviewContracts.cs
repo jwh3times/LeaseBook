@@ -1,3 +1,5 @@
+using LeaseBook.Modules.Reporting.Rendering;
+
 namespace LeaseBook.Web.Reporting;
 
 /// <summary>Filter bag for report preview requests.</summary>
@@ -28,7 +30,8 @@ public sealed record ReportPreviewResult(
     string Category,
     string? Message,
     IReadOnlyList<object> Rows,
-    string? Basis = null);
+    string? Basis = null,
+    IReadOnlyList<ReportCsvMetadata>? AppliedFilters = null);
 
 /// <summary>
 /// The shape the SPA's <c>useReportPreview</c> hook and <c>ReportPreviewTable</c> expect:
