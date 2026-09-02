@@ -24,7 +24,9 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Fixed
 
-- _Nothing yet._
+- **Empty report results now keep their column headers.** Generic report previews and CSV exports use
+  the same declared column definition, so a report with no matching rows still describes its shape
+  and the two output paths cannot silently drift apart.
 
 ## [0.11.0] - 2026-09-02
 

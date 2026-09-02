@@ -25,6 +25,34 @@ namespace LeaseBook.Tests.Integration;
 [Collection(nameof(DatabaseCollection))]
 public sealed class StatementOutputTests(PostgresFixture fixture)
 {
+    [Fact]
+    public void ReportTable_retains_declared_columns_when_result_is_empty()
+    {
+        var table = ReportTable.Project<TestReportRow>([],
+            new ReportColumn<TestReportRow>("id", row => row.Id),
+            new ReportColumn<TestReportRow>("amount", row => row.Amount));
+
+        table.Columns.ShouldBe(["id", "amount"]);
+        table.Rows.ShouldBeEmpty();
+        table.CsvRows.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void ReportTable_uses_one_definition_for_preview_and_csv_projection()
+    {
+        var id = Guid.Parse("018f0000-0000-7000-8000-000000000001");
+        var table = ReportTable.Project(
+            new[] { new TestReportRow(id, 12.50m) },
+            new ReportColumn<TestReportRow>("id", row => row.Id),
+            new ReportColumn<TestReportRow>("amount", row => row.Amount));
+
+        table.Columns.ShouldBe(["id", "amount"]);
+        var preview = table.Rows.ShouldHaveSingleItem().ShouldBeOfType<Dictionary<string, object?>>();
+        preview["id"].ShouldBe(id);
+        preview["amount"].ShouldBe(12.50m);
+        table.CsvRows.ShouldHaveSingleItem().ShouldBe([id.ToString(), "12.50"]);
+    }
+
     // ─── StatementPdf (unit-style, no HTTP) ────────────────────────────────────
 
     [Fact]
@@ -578,3 +606,5 @@ public sealed class StatementOutputTests(PostgresFixture fixture)
         return client;
     }
 }
+
+file sealed record TestReportRow(Guid Id, decimal Amount);

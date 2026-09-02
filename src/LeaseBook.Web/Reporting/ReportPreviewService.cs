@@ -34,7 +34,7 @@ public sealed class ReportPreviewService(ISender sender)
         return reportId switch
         {
             "owner-stmt" => new ReportPreviewResult(descriptor.Id, descriptor.Name, descriptor.Category,
-                "Owner statements have a dedicated endpoint: GET /api/statements/{ownerId}", []),
+                "Owner statements have a dedicated endpoint: GET /api/statements/{ownerId}", EmptyTable),
             "owner-bal" => await PreviewOwnerBalancesAsync(descriptor, filters, ct),
             "rent-roll" => await PreviewRentRollAsync(descriptor, ct),
             "delinquency" => await PreviewDelinquencyAsync(descriptor, filters, ct),
@@ -44,7 +44,7 @@ public sealed class ReportPreviewService(ISender sender)
             "bank-rec" => await PreviewBankRecAsync(descriptor, filters, ct),
             _ => new ReportPreviewResult(descriptor.Id, descriptor.Name, descriptor.Category,
                 "Preview not yet implemented for this report type. Use the dedicated endpoint for full output.",
-                []),
+                EmptyTable),
         };
     }
 
@@ -61,15 +61,13 @@ public sealed class ReportPreviewService(ISender sender)
     {
         var basis = ResolveBasis(filters.Basis);
         var response = await sender.Query(new GetOwnerBalances(basis), ct);
-        var rows = response.Rows.Select(r => new Dictionary<string, object?>
-        {
-            ["ownerId"] = r.OwnerId,
-            ["operating"] = r.Operating,
-            ["deposits"] = r.Deposits,
-            ["total"] = r.Total,
-        }).ToList<object>();
+        var table = ReportTable.Project(response.Rows,
+            new ReportColumn<OwnerBalanceRow>("ownerId", row => row.OwnerId),
+            new ReportColumn<OwnerBalanceRow>("operating", row => row.Operating),
+            new ReportColumn<OwnerBalanceRow>("deposits", row => row.Deposits),
+            new ReportColumn<OwnerBalanceRow>("total", row => row.Total));
 
-        return new ReportPreviewResult(descriptor.Id, descriptor.Name, descriptor.Category, null, rows, basis,
+        return new ReportPreviewResult(descriptor.Id, descriptor.Name, descriptor.Category, null, table, basis,
             [new ReportCsvMetadata("basis", basis)]);
     }
 
@@ -81,17 +79,15 @@ public sealed class ReportPreviewService(ISender sender)
         ReportDescriptor descriptor, CancellationToken ct)
     {
         var response = await sender.Query(new GetRentRoll(), ct);
-        var rows = response.Rows.Select(r => new Dictionary<string, object?>
-        {
-            ["unitId"] = r.UnitId,
-            ["property"] = r.Property,
-            ["tenant"] = r.Tenant,
-            ["rent"] = r.Rent,
-            ["occupancy"] = r.Occupancy,
-            ["availability"] = r.Availability,
-        }).ToList<object>();
+        var table = ReportTable.Project(response.Rows,
+            new ReportColumn<RentRollRow>("unitId", row => row.UnitId),
+            new ReportColumn<RentRollRow>("property", row => row.Property),
+            new ReportColumn<RentRollRow>("tenant", row => row.Tenant),
+            new ReportColumn<RentRollRow>("rent", row => row.Rent),
+            new ReportColumn<RentRollRow>("occupancy", row => row.Occupancy),
+            new ReportColumn<RentRollRow>("availability", row => row.Availability));
 
-        return new ReportPreviewResult(descriptor.Id, descriptor.Name, descriptor.Category, null, rows);
+        return new ReportPreviewResult(descriptor.Id, descriptor.Name, descriptor.Category, null, table);
     }
 
     private async Task<ReportPreviewResult> PreviewDelinquencyAsync(
@@ -99,19 +95,17 @@ public sealed class ReportPreviewService(ISender sender)
     {
         var asOf = filters.AsOf ?? DateOnly.FromDateTime(DateTime.UtcNow);
         var response = await sender.Query(new GetDelinquencyAging(asOf), ct);
-        var rows = response.Rows.Select(r => new Dictionary<string, object?>
-        {
-            ["tenantId"] = r.TenantId,
-            ["current"] = r.Current,
-            ["d1_30"] = r.D1_30,
-            ["d31_60"] = r.D31_60,
-            ["d61_90"] = r.D61_90,
-            ["over90"] = r.Over90,
-            ["total"] = r.Total,
-            ["unappliedCredit"] = r.UnappliedCredit,
-        }).ToList<object>();
+        var table = ReportTable.Project(response.Rows,
+            new ReportColumn<DelinquencyRow>("tenantId", row => row.TenantId),
+            new ReportColumn<DelinquencyRow>("current", row => row.Current),
+            new ReportColumn<DelinquencyRow>("d1_30", row => row.D1_30),
+            new ReportColumn<DelinquencyRow>("d31_60", row => row.D31_60),
+            new ReportColumn<DelinquencyRow>("d61_90", row => row.D61_90),
+            new ReportColumn<DelinquencyRow>("over90", row => row.Over90),
+            new ReportColumn<DelinquencyRow>("total", row => row.Total),
+            new ReportColumn<DelinquencyRow>("unappliedCredit", row => row.UnappliedCredit));
 
-        return new ReportPreviewResult(descriptor.Id, descriptor.Name, descriptor.Category, null, rows,
+        return new ReportPreviewResult(descriptor.Id, descriptor.Name, descriptor.Category, null, table,
             AppliedFilters: [new ReportCsvMetadata("asOf", asOf.ToString("yyyy-MM-dd"))]);
     }
 
@@ -123,13 +117,11 @@ public sealed class ReportPreviewService(ISender sender)
         var month = filters.Month ?? now.Month;
 
         var response = await sender.Query(new GetManagementFeeIncome(year, month), ct);
-        var rows = response.Rows.Select(r => new Dictionary<string, object?>
-        {
-            ["propertyId"] = r.PropertyId,
-            ["amount"] = r.Amount,
-        }).ToList<object>();
+        var table = ReportTable.Project(response.Rows,
+            new ReportColumn<MgmtFeeIncomeRow>("propertyId", row => row.PropertyId),
+            new ReportColumn<MgmtFeeIncomeRow>("amount", row => row.Amount));
 
-        return new ReportPreviewResult(descriptor.Id, descriptor.Name, descriptor.Category, null, rows,
+        return new ReportPreviewResult(descriptor.Id, descriptor.Name, descriptor.Category, null, table,
             AppliedFilters:
             [
                 new ReportCsvMetadata("year", year.ToString(System.Globalization.CultureInfo.InvariantCulture)),
@@ -141,14 +133,12 @@ public sealed class ReportPreviewService(ISender sender)
         ReportDescriptor descriptor, CancellationToken ct)
     {
         var response = await sender.Query(new GetDepositRegister(), ct);
-        var rows = response.Rows.Select(r => new Dictionary<string, object?>
-        {
-            ["tenantId"] = r.TenantId,
-            ["kind"] = r.Kind,
-            ["held"] = r.Held,
-        }).ToList<object>();
+        var table = ReportTable.Project(response.Rows,
+            new ReportColumn<DepositRegisterRow>("tenantId", row => row.TenantId),
+            new ReportColumn<DepositRegisterRow>("kind", row => row.Kind),
+            new ReportColumn<DepositRegisterRow>("held", row => row.Held));
 
-        return new ReportPreviewResult(descriptor.Id, descriptor.Name, descriptor.Category, null, rows);
+        return new ReportPreviewResult(descriptor.Id, descriptor.Name, descriptor.Category, null, table);
     }
 
     private async Task<ReportPreviewResult> PreviewTrustLedgerAsync(
@@ -160,22 +150,14 @@ public sealed class ReportPreviewService(ISender sender)
         if (bankId is null)
         {
             return new ReportPreviewResult(descriptor.Id, descriptor.Name, descriptor.Category,
-                "No trust bank account found for this org.", []);
+                "No trust bank account found for this org.", TrustLedgerTable([]));
         }
 
         // Preview is a sample (first page, up to 50 rows) — not the full ledger.
         var response = await sender.Query(new GetBankRegister(bankId.Value, PageSize: 50), ct);
-        var rows = response.Rows.Select(r => new Dictionary<string, object?>
-        {
-            ["journalLineId"] = r.JournalLineId,
-            ["date"] = r.Date,
-            ["description"] = r.Description,
-            ["deposit"] = r.Deposit,
-            ["withdrawal"] = r.Withdrawal,
-            ["status"] = r.Status.ToString(),
-        }).ToList<object>();
+        var table = TrustLedgerTable(response.Rows);
 
-        return new ReportPreviewResult(descriptor.Id, descriptor.Name, descriptor.Category, null, rows,
+        return new ReportPreviewResult(descriptor.Id, descriptor.Name, descriptor.Category, null, table,
             AppliedFilters: [new ReportCsvMetadata("bankAccountId", bankId.Value.ToString())]);
     }
 
@@ -188,7 +170,7 @@ public sealed class ReportPreviewService(ISender sender)
         if (bankId is null)
         {
             return new ReportPreviewResult(descriptor.Id, descriptor.Name, descriptor.Category,
-                "No trust bank account found for this org.", []);
+                "No trust bank account found for this org.", ReconciliationTable([]));
         }
 
         // Reuse the GetReconciliationHistory query (same path as ReconciliationSnapshotsAdapter).
@@ -201,20 +183,13 @@ public sealed class ReportPreviewService(ISender sender)
         if (finalized.Count == 0)
         {
             return new ReportPreviewResult(descriptor.Id, descriptor.Name, descriptor.Category,
-                "No finalized reconciliation found for this bank account.", [],
+                "No finalized reconciliation found for this bank account.", ReconciliationTable([]),
                 AppliedFilters: [new ReportCsvMetadata("bankAccountId", bankId.Value.ToString())]);
         }
 
-        var rows = finalized.Select(r => new Dictionary<string, object?>
-        {
-            ["bankAccountId"] = r.BankAccountId,
-            ["year"] = r.Year,
-            ["month"] = r.Month,
-            ["statementEndingBalance"] = r.StatementEndingBalance,
-            ["finalizedAt"] = r.FinalizedAt,
-        }).ToList<object>();
+        var table = ReconciliationTable(finalized);
 
-        return new ReportPreviewResult(descriptor.Id, descriptor.Name, descriptor.Category, null, rows,
+        return new ReportPreviewResult(descriptor.Id, descriptor.Name, descriptor.Category, null, table,
             AppliedFilters: [new ReportCsvMetadata("bankAccountId", bankId.Value.ToString())]);
     }
 
@@ -228,4 +203,23 @@ public sealed class ReportPreviewService(ISender sender)
         var banks = await sender.Query(new ListBankAccounts(ActiveOnly: true), ct);
         return banks.FirstOrDefault(b => b.Purpose == "trust")?.Id;
     }
+
+    private static ReportTable TrustLedgerTable(IReadOnlyList<RegisterRow> rows) =>
+        ReportTable.Project(rows,
+            new ReportColumn<RegisterRow>("journalLineId", row => row.JournalLineId),
+            new ReportColumn<RegisterRow>("date", row => row.Date),
+            new ReportColumn<RegisterRow>("description", row => row.Description),
+            new ReportColumn<RegisterRow>("deposit", row => row.Deposit),
+            new ReportColumn<RegisterRow>("withdrawal", row => row.Withdrawal),
+            new ReportColumn<RegisterRow>("status", row => row.Status.ToString()));
+
+    private static ReportTable ReconciliationTable(IReadOnlyList<ReconciliationSummary> rows) =>
+        ReportTable.Project(rows,
+            new ReportColumn<ReconciliationSummary>("bankAccountId", row => row.BankAccountId),
+            new ReportColumn<ReconciliationSummary>("year", row => row.Year),
+            new ReportColumn<ReconciliationSummary>("month", row => row.Month),
+            new ReportColumn<ReconciliationSummary>("statementEndingBalance", row => row.StatementEndingBalance),
+            new ReportColumn<ReconciliationSummary>("finalizedAt", row => row.FinalizedAt));
+
+    private static readonly ReportTable EmptyTable = new([], [], []);
 }
