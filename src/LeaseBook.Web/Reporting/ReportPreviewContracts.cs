@@ -14,7 +14,7 @@ public sealed record ReportFilters(
 
 /// <summary>
 /// Internal result from <see cref="ReportPreviewService"/> — carries the report metadata,
-/// an optional message, and the raw rows. The endpoint projects this to <see cref="PreviewSpaResponse"/>
+/// an optional message, and the projected table. The endpoint maps this to <see cref="PreviewSpaResponse"/>
 /// before serializing so the SPA receives the <c>{ columns, rows, totalRows }</c> shape it expects.
 /// </summary>
 /// <param name="Basis">
@@ -29,7 +29,7 @@ public sealed record ReportPreviewResult(
     string Name,
     string Category,
     string? Message,
-    IReadOnlyList<object> Rows,
+    ReportTable Table,
     string? Basis = null,
     IReadOnlyList<ReportCsvMetadata>? AppliedFilters = null);
 

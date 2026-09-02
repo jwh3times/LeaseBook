@@ -46,8 +46,8 @@ public sealed class ReportingEndpoints : IEndpointModule
 
         // GET /api/reports/{id}/preview?year=&month=&ownerId=&propertyId=&bankAccountId=&asOf=&basis=
         // Returns { columns, rows, totalRows, message } — the shape the SPA's useReportPreview hook
-        // expects. Columns are derived from the first row's key names (all preview rows share the same
-        // keys). Annotated with Produces<PreviewSpaResponse> so the OpenAPI generator types the response
+        // expects. Columns and rows come from one typed report definition. Annotated with
+        // Produces<PreviewSpaResponse> so the OpenAPI generator types the response
         // (removing the raw-fetch workaround that was needed when the response mapped to `never`).
         group.MapGet("/reports/{id}/preview",
                 async (string id, int? year, int? month, Guid? ownerId, Guid? propertyId,
@@ -65,14 +65,10 @@ public sealed class ReportingEndpoints : IEndpointModule
                             status: StatusCodes.Status404NotFound);
                     }
 
-                    // Extract column names from the dictionary keys (all preview rows share the same schema).
-                    var columns = result.Rows is [Dictionary<string, object?> first, ..]
-                        ? (IReadOnlyList<string>)first.Keys.ToList()
-                        : [];
                     // result.Basis, not the bound `basis`: a report with no basis dimension echoes
                     // null, so the SPA cannot label figures with a basis the server never applied.
                     return Results.Ok(new PreviewSpaResponse(
-                        columns, result.Rows, result.Rows.Count, result.Message, result.Basis));
+                        result.Table.Columns, result.Table.Rows, result.Table.Rows.Count, result.Message, result.Basis));
                 })
             .Produces<PreviewSpaResponse>();
 
@@ -98,12 +94,9 @@ public sealed class ReportingEndpoints : IEndpointModule
                             status: StatusCodes.Status404NotFound);
                     }
 
-                    // The preview rows are generic objects; project them to string rows for the CSV
-                    // renderer (which is column-agnostic). We collect distinct key names as columns
-                    // then format each row's values in that order (empty string when key absent).
                     var descriptor = ReportCatalog.Find(id)!; // non-null: not-found returned 404 above
-                    var (columns, stringRows) = ProjectToStringTable(result.Rows);
-                    var bytes = ReportCsv.Write(descriptor, columns, stringRows, result.AppliedFilters);
+                    var bytes = ReportCsv.Write(
+                        descriptor, result.Table.Columns, result.Table.CsvRows, result.AppliedFilters);
 
                     var appliedYear = result.AppliedFilters?.FirstOrDefault(filter => filter.Name == "year")?.Value;
                     var appliedMonth = result.AppliedFilters?.FirstOrDefault(filter => filter.Name == "month")?.Value;
@@ -321,115 +314,4 @@ public sealed class ReportingEndpoints : IEndpointModule
         }
     }
 
-    // ─── helper: project preview rows (generic objects) to a string table ─────
-
-    /// <summary>
-    /// Projects the preview rows to a (columns, rows) pair suitable for <see cref="ReportCsv.Write"/>.
-    /// Handles both in-process <c>Dictionary&lt;string, object?&gt;</c> rows (CSV path, where
-    /// <see cref="ReportPreviewService"/> returns boxed dictionaries directly) and
-    /// <c>JsonElement</c> rows (if the rows ever reach this method after a JSON round-trip).
-    /// Each unique key across all rows becomes a column (first-seen order); values are coerced
-    /// to invariant-culture strings — <c>decimal</c> exact, <c>DateOnly</c>/<c>DateTime</c> ISO,
-    /// <c>bool</c> lowercase, <c>null</c> empty.
-    /// </summary>
-    private static (IReadOnlyList<string> Columns, IReadOnlyList<IReadOnlyList<string>> Rows)
-        ProjectToStringTable(IReadOnlyList<object> rows)
-    {
-        if (rows.Count == 0)
-        {
-            return ([], []);
-        }
-
-        // ── In-process path: ReportPreviewService returns Dictionary<string, object?> rows ──
-        var dictRows = rows.OfType<Dictionary<string, object?>>().ToList();
-        if (dictRows.Count == rows.Count)
-        {
-            // Collect all unique keys preserving first-seen order across all rows.
-            var columns = new List<string>();
-            var seen = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var row in dictRows)
-            {
-                foreach (var key in row.Keys)
-                {
-                    if (seen.Add(key))
-                    {
-                        columns.Add(key);
-                    }
-                }
-            }
-
-            var stringRows = dictRows.Select(row =>
-                (IReadOnlyList<string>)columns.Select(col =>
-                {
-                    row.TryGetValue(col, out var val);
-                    return CoerceObjectToString(val);
-                }).ToList()
-            ).ToList();
-
-            return (columns, stringRows);
-        }
-
-        // ── JSON round-trip path: rows are JsonElement dictionaries ──
-        var jsonRows = rows.OfType<System.Text.Json.JsonElement>().ToList();
-        if (jsonRows.Count == 0)
-        {
-            return ([], []);
-        }
-
-        {
-            var columns = new List<string>();
-            var seen = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var row in jsonRows)
-            {
-                foreach (var prop in row.EnumerateObject())
-                {
-                    if (seen.Add(prop.Name))
-                    {
-                        columns.Add(prop.Name);
-                    }
-                }
-            }
-
-            var stringRows = jsonRows.Select(row =>
-            {
-                return (IReadOnlyList<string>)columns.Select(col =>
-                {
-                    if (row.TryGetProperty(col, out var el))
-                    {
-                        return el.ValueKind switch
-                        {
-                            System.Text.Json.JsonValueKind.Number =>
-                                el.TryGetDecimal(out var d)
-                                    ? d.ToString("0.00########", CultureInfo.InvariantCulture)
-                                    : el.GetRawText(),
-                            System.Text.Json.JsonValueKind.True => "true",
-                            System.Text.Json.JsonValueKind.False => "false",
-                            System.Text.Json.JsonValueKind.Null => string.Empty,
-                            _ => el.GetString() ?? string.Empty,
-                        };
-                    }
-
-                    return string.Empty;
-                }).ToList();
-            }).ToList();
-
-            return (columns, stringRows);
-        }
-    }
-
-    /// <summary>
-    /// Coerces a boxed <c>object?</c> value from an in-process preview row to an invariant-culture
-    /// string. Keeps <c>decimal</c> exact (never float), formats dates as ISO, booleans lowercase.
-    /// </summary>
-    private static string CoerceObjectToString(object? value) => value switch
-    {
-        null => string.Empty,
-        string s => s,
-        decimal d => d.ToString("0.00########", CultureInfo.InvariantCulture),
-        DateOnly dt => dt.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
-        DateTime dtm => dtm.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture),
-        bool b => b ? "true" : "false",
-        Guid g => g.ToString(),
-        _ => Convert.ToString(value, CultureInfo.InvariantCulture) ?? string.Empty,
-    };
 }
