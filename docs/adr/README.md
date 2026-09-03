@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living decision index
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-08-30
+- **Last reviewed:** 2026-09-02
 
 An **Architecture Decision Record** captures a single significant or non-obvious engineering
 decision — the context that forced it, the choice made, and the consequences accepted — so it can be
@@ -36,7 +36,7 @@ form, write it, and add a row to the index below. When a decision is replaced, m
 | [009](ADR-009-search-and-pagination.md)                              | Search via pg_trgm + GIN; consistent paged list contract                        | Accepted                               | 2026-06-13 |
 | [010](ADR-010-ledger-write-command-surface-and-actor-attribution.md) | Ledger write commands wrap the engine; the actor is attributed at the seam      | Accepted (amended by ADR-037, ADR-039) | 2026-06-13 |
 | [011](ADR-011-deposit-prepayment-over-application-policy.md)         | An application may not exceed the open receivable (warn + block)                | Accepted                               | 2026-06-13 |
-| [012](ADR-012-openapi-client-drift-gate.md)                          | Enforce the generated API client with a build-time OpenAPI drift gate           | Accepted (amended by ADR-030)          | 2026-06-15 |
+| [012](ADR-012-openapi-client-drift-gate.md)                          | Enforce the generated API client with a build-time OpenAPI drift gate           | Accepted (amended by ADR-030, ADR-042) | 2026-06-15 |
 | [013](ADR-013-composite-org-dimension-fks.md)                        | Promote the journal-dimension FKs to composite `(org_id, id)`                   | Accepted                               | 2026-06-20 |
 | [014](ADR-014-reconciliation-engine-and-lock.md)                     | Bank reconciliation — engine placement, clearance model, and the hybrid lock    | Accepted                               | 2026-06-20 |
 | [015](ADR-015-csv-statement-import-and-matching.md)                  | CSV bank-statement import, auto-match, and dedup                                | Accepted                               | 2026-06-21 |
@@ -66,6 +66,7 @@ form, write it, and add a row to the index below. When a decision is replaced, m
 | [039](ADR-039-durable-actor-attribution.md)                          | Actor attribution is durable                                                    | Accepted                               | 2026-08-18 |
 | [040](ADR-040-statement-delivery-history.md)                         | Statement delivery is an append-only history                                    | Accepted                               | 2026-08-18 |
 | [041](ADR-041-durable-keyring-and-proxy-trust.md)                    | The keyring is durable, and proxy trust is declared                             | Accepted                               | 2026-08-18 |
+| [042](ADR-042-explicit-host-process-lifecycle.md)                    | Make host process lifecycle explicit                                            | Accepted                               | 2026-09-02 |
 
 ## Status legend
 

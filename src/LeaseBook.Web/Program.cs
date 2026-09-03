@@ -1,8 +1,6 @@
 using System.Reflection;
 using System.Threading.RateLimiting;
 using Azure.Monitor.OpenTelemetry.Exporter;
-using Hangfire;
-using Hangfire.PostgreSql;
 using LeaseBook.Modules.Accounting;
 using LeaseBook.Modules.Banking;
 using LeaseBook.Modules.Capabilities;
@@ -15,18 +13,15 @@ using LeaseBook.SharedKernel.Observability;
 using LeaseBook.SharedKernel.Tenancy;
 using LeaseBook.Web.Adapters;
 using LeaseBook.Web.Auth;
-using LeaseBook.Web.Capabilities;
 using LeaseBook.Web.Cli;
 using LeaseBook.Web.Endpoints;
 using LeaseBook.Web.Health;
+using LeaseBook.Web.Hosting;
 using LeaseBook.Web.Jobs;
 using LeaseBook.Web.Persistence;
 using LeaseBook.Web.Reporting;
 using LeaseBook.Web.Security;
-using LeaseBook.Web.Seeding;
 using LeaseBook.Web.Tenancy;
-using Microsoft.AspNetCore.DataProtection;
-using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -39,43 +34,20 @@ using QuestPDF.Infrastructure;
 // threshold; LeaseBook qualifies at launch. Must be set before the first document is rendered.
 QuestPDF.Settings.License = LicenseType.Community;
 
-// Resolve foreground operator tools before composing the host. Parsing is pure, so a typo prints its
-// own usage error before configuration or the database can fail first. The same resolution is later
-// used for EF log suppression and dispatch: CliApplication's registry is the only verb list.
-var cli = CliApplication.Resolve(args);
-if (cli.Error is { } cliError)
+// Select exactly one process lifecycle before composing the host (ADR-042). Parsing is pure, so a
+// CLI usage error or an invalid CLI/OpenAPI hybrid fails before configuration or the database can.
+var process = HostProcessLifecycle.Resolve(
+    args,
+    Environment.GetEnvironmentVariable("LEASEBOOK_OPENAPI_BUILD") == "1");
+if (process.Error is { } processError)
 {
-    Console.Error.WriteLine(cliError);
+    Console.Error.WriteLine(processError);
     Environment.ExitCode = CliExitCodes.Failure;
     return;
 }
 
+var lifecycle = process.Lifecycle!;
 var builder = WebApplication.CreateBuilder(args);
-
-// Build-time OpenAPI generation (ADR-012): the GetDocument tool runs this program up to app.Run()
-// purely to capture the API surface, with no database and no real configuration — and, because it
-// sets no ASPNETCORE_ENVIRONMENT, it resolves as *Production*. Anything that touches a database or
-// requires deploy-supplied config must be skipped when this is set, or the drift gate fails on an
-// exception instead of reporting drift. The flag is set only by the CI schema-drift job; it is unset
-// in every real run (dev, prod, tests).
-var isOpenApiBuild = Environment.GetEnvironmentVariable("LEASEBOOK_OPENAPI_BUILD") == "1";
-
-// CLI verbs are foreground operator tools whose contract is the message they print. EF logs a failed
-// command and a failed SaveChanges at Error *before* rethrowing, so an operator running `capabilities`
-// against a bad row sees a full stack trace and then, underneath it, the friendly explanation that was
-// written for them — and reads the stack trace as the answer. That is worst during an incident, which
-// is when this verb is used.
-//
-// Fixed here, at the composition root, rather than in any verb's catch block: every verb that touches
-// EF has the same noisy-then-friendly shape, so a local suppression would paper over one call site and
-// leave the rest. Nothing is lost — the exception still carries the Postgres message, and whichever
-// path survives (a friendly print, or the runtime's own unhandled-exception output) still shows it.
-// The web host is untouched: it keeps full EF logging, which ADR-025's diagnostics depend on.
-if (cli.IsCli)
-{
-    builder.Logging.AddFilter("Microsoft.EntityFrameworkCore.Database.Command", LogLevel.None);
-    builder.Logging.AddFilter("Microsoft.EntityFrameworkCore.Update", LogLevel.None);
-}
 
 // Module assemblies the host composes. CQRS handlers/validators are discovered from these; endpoint
 // modules are discovered from these plus the host (which owns the auth/meta endpoints).
@@ -118,80 +90,12 @@ builder.Services.AddDbContext<AppDbContext>(options => options
 // Identity, cookie auth, antiforgery, deny-by-default authorization (P12).
 builder.Services.AddLeaseBookIdentity(builder.Environment);
 
-// F6/F8 (ADR-041): keyring for the Identity token-store encryption converter
-// (EncryptedStringConverter). It persists to Postgres in EVERY environment, because the default
-// filesystem keyring does not survive a container recreate — and losing it makes every enrolled
-// user's TOTP secret permanently undecryptable. KeyringDbContext is deliberately its own context;
-// see its class doc for the two reasons AppDbContext cannot be one.
+// F6/F8 (ADR-041): the Identity token-store keyring uses a separate context; the process lifecycle
+// decides whether this run may activate its durable Postgres/Key Vault configuration (ADR-042).
 builder.Services.AddDbContext<KeyringDbContext>(options => options
     .UseNpgsql(builder.Configuration.GetConnectionString("Default"),
         npgsql => npgsql.SetPostgresVersion(18, 0))
     .UseSnakeCaseNamingConvention());
-
-var dataProtection = builder.Services.AddDataProtection()
-    // Pinned rather than derived from the content root: the discriminator must stay identical across
-    // container revisions or a new revision silently starts a fresh keyring and cannot read the old
-    // rows — the same lockout this whole change exists to prevent.
-    .SetApplicationName("LeaseBook");
-
-// The isOpenApiBuild carve-out covers the WHOLE keyring, not just the Key Vault wrap. The ADR-012
-// schema-drift build runs Program to app.Run() with no ASPNETCORE_ENVIRONMENT — so
-// appsettings.Production.json applies with no connection string and no Azure identity — and startup
-// does read the key ring. Persisting to Postgres there fails with "an error occurred while reading
-// the key ring" rather than emitting a document. That build produces a schema and needs no durable
-// keys, so it keeps the in-memory default.
-if (!isOpenApiBuild)
-{
-    dataProtection.PersistKeysToDbContext<KeyringDbContext>();
-
-    // Wrapping the persisted keys with a Key Vault key is supplied by deployment config. Without it
-    // the key XML sits in the same database as the ciphertext it protects — acceptable for dev and
-    // test, and NOT for production, which is why an unset URI warns at boot (see below, ADR-041).
-    var keyVaultKeyUri = builder.Configuration["DataProtection:KeyVaultKeyUri"];
-    if (!string.IsNullOrWhiteSpace(keyVaultKeyUri))
-    {
-        dataProtection.ProtectKeysWithAzureKeyVault(
-            new Uri(keyVaultKeyUri), new Azure.Identity.DefaultAzureCredential());
-    }
-}
-
-// F9 (ADR-041): whom to believe for X-Forwarded-*. Off by default — a direct-connect environment
-// must not honour a header the client itself can set. Resolve() throws on an enabled-but-empty
-// configuration rather than degrading to loopback-only, which would leave the per-IP rate-limit
-// partition collapsed while looking configured.
-// isOpenApiBuild short-circuit for the same reason as the Key Vault wrap above: that build resolves
-// as Production, and Resolve() is deliberately throwing rather than forgiving.
-var forwardedHeaders = isOpenApiBuild
-    ? new ForwardedHeadersSettings()
-    : builder.Configuration
-        .GetSection(ForwardedHeadersSettings.SectionName)
-        .Get<ForwardedHeadersSettings>() ?? new ForwardedHeadersSettings();
-var (knownProxies, knownNetworks) = forwardedHeaders.Resolve();
-
-if (forwardedHeaders.Enabled)
-{
-    builder.Services.Configure<ForwardedHeadersOptions>(options =>
-    {
-        // Proto as well as For: the app must know the original scheme to emit secure cookies and
-        // correct redirects behind TLS termination.
-        options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-        options.ForwardLimit = forwardedHeaders.ForwardLimit;
-
-        // Replace the defaults rather than adding to them: the framework pre-trusts loopback, and
-        // leaving that in place would widen the trust set beyond what deployment config named.
-        options.KnownProxies.Clear();
-        options.KnownIPNetworks.Clear();
-        foreach (var proxy in knownProxies)
-        {
-            options.KnownProxies.Add(proxy);
-        }
-
-        foreach (var network in knownNetworks)
-        {
-            options.KnownIPNetworks.Add(network);
-        }
-    });
-}
 
 // WP-5 F3b: config-gated MFA enforcement for PMAdmin (default off; Production turns it on).
 builder.Services.Configure<LeaseBook.Web.Auth.AuthOptions>(builder.Configuration.GetSection("Auth"));
@@ -258,31 +162,9 @@ builder.Services.AddScoped<LeaseBook.Modules.Capabilities.Contracts.IPlatformSco
 // RLS-exempt, which makes this the only thing stopping a cohort rule naming another organization's user.
 builder.Services.AddScoped<LeaseBook.Modules.Capabilities.Contracts.IOrgMembership, OrgMembershipAdapter>();
 
-// The seam's two hosted services are host-owned. The LISTEN/NOTIFY listener holds a raw Npgsql
-// connection outside the EF pool — composition-root work over the host's persistence driver, so
-// host-only like the scheduler. The readiness probe proves the seam is reachable at startup, which
-// must not wait on inbound traffic (see CapabilityReadinessProbe for the deadlock it avoids). Both
-// are registered by concrete type as well, so diagnostics and the readiness endpoint can read their
-// counters — AddHostedService alone leaves them unresolvable. Carved out of the OpenAPI build for
-// the same reason as Hangfire below: that pass runs with no database and no real configuration.
-if (!isOpenApiBuild)
-{
-    builder.Services.AddSingleton<CapabilityNotificationListener>();
-    builder.Services.AddHostedService(sp => sp.GetRequiredService<CapabilityNotificationListener>());
-    builder.Services.AddSingleton<CapabilityReadinessProbe>();
-    builder.Services.AddHostedService(sp => sp.GetRequiredService<CapabilityReadinessProbe>());
-
-    // The role-seeding half of the same gate (ADR-028 §9). Registered on the same terms and for the
-    // same reason: it retries the one boot-time database write the host cannot serve traffic without,
-    // and against a reachable database it finds the work already done by the synchronous call below
-    // and exits immediately.
-    builder.Services.AddHostedService(sp => sp.GetRequiredService<RoleSeedingProbe>());
-}
-
-// Not inside the carve-out above: the synchronous role-seeding call below marks this even when no
-// hosted service runs, and the readiness check resolves it unconditionally.
+// Readiness state is part of the shared graph. The Web-only lifecycle supplies the background probe
+// that can advance it after a transient database outage (ADR-028 / ADR-042).
 builder.Services.AddSingleton<RoleSeedingState>();
-builder.Services.AddSingleton<RoleSeedingProbe>();
 
 // Readiness (Task 7): what the probes above establish, /api/health/ready reports. Registered
 // unconditionally — each check only reads a bool off a singleton, so they cost nothing in the OpenAPI
@@ -440,174 +322,46 @@ if (!string.IsNullOrWhiteSpace(appInsightsConnection))
 // and CI run. Singleton because it creates one scope per org itself (see the class comment).
 builder.Services.AddSingleton<ISweepRunner, InvariantSweepRunner>();
 
-// Scheduled jobs (ADR-001's first integration, WP-11). Registered ONLY when Jobs:Enabled — false in
-// the base settings so Development, the test host, and the e2e run never grow a background writer
-// competing with fixture state; Production turns it on. The CLI verbs return before app.Run(), so a
-// `seed`/`check-invariants` process never starts a job server either.
-//
-// No dashboard is mounted, deliberately: it is unauthenticated attack surface for a solo operator
-// who reads logs and alerts instead (this reverses ADR-001's stated dashboard rationale — see the
-// amendment there). Storage lives in the app-owned `hangfire` schema from infra/db/bootstrap.sql §5.
-//
-// The OpenAPI carve-out is load-bearing, not defensive: the GetDocument tool runs this program with
-// no ASPNETCORE_ENVIRONMENT, so it resolves as Production — where Jobs:Enabled is true — with no
-// connection string configured, and building the storage would throw before the document is emitted.
-if (!isOpenApiBuild && builder.Configuration.GetValue<bool>("Jobs:Enabled"))
-{
-    builder.Services.AddHangfire(config => config
-        .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
-        .UseSimpleAssemblyNameTypeSerializer()
-        .UseRecommendedSerializerSettings()
-        .UsePostgreSqlStorage(
-            postgres => postgres.UseNpgsqlConnection(builder.Configuration.GetConnectionString("Default")),
-            new PostgreSqlStorageOptions
-            {
-                // Must match the bootstrap schema. Hangfire installs and upgrades it as
-                // leasebook_app, which owns it — that ownership is why PrepareSchemaIfNecessary
-                // (the package default, kept explicit here) is safe rather than a grant failure.
-                SchemaName = "hangfire",
-                PrepareSchemaIfNecessary = true,
-
-                // Overrides the package default of true. Degraded mode would let the host come up
-                // reporting healthy while the storage sat uninitialized — for a nightly trust
-                // invariant sweep that means silently not running, which is the one failure this
-                // job exists to prevent. Storage is the application database, so if it is
-                // unreachable the host cannot serve traffic anyway; fail loudly and let the
-                // platform restart us.
-                AllowDegradedModeWithoutStorage = false,
-            }));
-
-    builder.Services.AddHangfireServer();
-    builder.Services.AddScoped<InvariantSweepJob>();
-}
+// The lifecycle is the only place process mode affects the service graph (ADR-042). All application
+// modules and callable cores above remain shared; only mode-sensitive host infrastructure varies.
+lifecycle.Configure(builder);
 
 var app = builder.Build();
 
-// F9: must run before anything that reads RemoteIpAddress — the rate limiter partitions on it.
-if (forwardedHeaders.Enabled)
-{
-    app.UseForwardedHeaders();
-}
-
-// Both F8's key wrap and F9's proxy trust are supplied by deployment config, not by a committed
-// file — the same posture as AllowedHosts. Neither can be validated before an environment exists,
-// so say so at boot instead of letting a half-configured production look healthy. An unconfigured
-// gap that nothing announces is the failure mode both findings were opened for.
-if (app.Environment.IsProduction() && !isOpenApiBuild)
-{
-    var startupLog = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Startup");
-
-    if (string.IsNullOrWhiteSpace(app.Configuration["DataProtection:KeyVaultKeyUri"]))
+var exitCode = await lifecycle.RunAsync(
+    app,
+    configuredApp =>
     {
-        startupLog.LogWarning(
-            "DataProtection:KeyVaultKeyUri is not set. The keyring is durable (it persists to " +
-            "Postgres) but its key material is unwrapped, so it sits in the same database as the " +
-            "data it protects. Set the Key Vault key URI before go-live.");
-    }
+        configuredApp.UseExceptionHandler();
+        configuredApp.UseMiddleware<LeaseBook.Web.Security.SecurityHeadersMiddleware>();
 
-    if (!forwardedHeaders.Enabled)
-    {
-        startupLog.LogWarning(
-            "{Section}:Enabled is false in Production. Per-client rate-limit partitioning falls back " +
-            "to the connection address, which behind an ingress proxy is the proxy — one shared " +
-            "partition for every client. Name the ingress before go-live.",
-            ForwardedHeadersSettings.SectionName);
-    }
-}
+        if (configuredApp.Environment.IsDevelopment())
+        {
+            configuredApp.MapOpenApi().AllowAnonymous(); // GET /openapi/v1.json
+        }
 
-app.UseExceptionHandler();
+        // Production serving model (P16): one container serves the API under /api and the built SPA
+        // as static files with SPA fallback. In dev these are no-ops (Vite owns the SPA).
+        configuredApp.UseDefaultFiles();
+        configuredApp.UseStaticFiles();
 
-app.UseMiddleware<LeaseBook.Web.Security.SecurityHeadersMiddleware>();
+        configuredApp.UseAuthentication();
+        // XSRF precedes authorization/org context so a rejected request opens no transaction.
+        configuredApp.UseMiddleware<ApiAntiforgeryMiddleware>();
+        configuredApp.UseAuthorization();
+        configuredApp.UseRateLimiter();
+        // Establish app.org_id inside a per-request transaction for authenticated requests (§C.4).
+        configuredApp.UseMiddleware<OrgContextMiddleware>();
 
-if (app.Environment.IsDevelopment())
+        configuredApp.MapModuleEndpoints(endpointAssemblies);
+        configuredApp.MapFallbackToFile("index.html").AllowAnonymous();
+    },
+    CancellationToken.None);
+
+if (exitCode is { } processExitCode)
 {
-    app.MapOpenApi().AllowAnonymous(); // GET /openapi/v1.json
+    Environment.ExitCode = processExitCode;
 }
-
-// Production serving model (P16): one container serves the API under /api and the built SPA as
-// static files with SPA fallback. In dev these are no-ops (Vite serves the SPA; wwwroot is empty).
-app.UseDefaultFiles();
-app.UseStaticFiles();
-
-app.UseAuthentication();
-// XSRF on unsafe /api requests, before authorization/org-context so a rejected request opens no tx.
-app.UseMiddleware<ApiAntiforgeryMiddleware>();
-app.UseAuthorization();
-app.UseRateLimiter();
-// Establishes app.org_id inside a per-request transaction for authenticated requests (§C.4).
-app.UseMiddleware<OrgContextMiddleware>();
-
-app.MapModuleEndpoints(endpointAssemblies);
-
-// SPA fallback: client-side routes resolve to index.html (served from wwwroot in the container).
-app.MapFallbackToFile("index.html").AllowAnonymous();
-
-// Foreground tools run before the web host's best-effort role seeding and production boot guards.
-// Each seed invocation calls the throwing RoleSeeder.EnsureRolesAsync itself; the other verbs need no
-// roles. Consequently a CLI process performs only the work its verb owns, and its friendly failure
-// cannot be preceded by an unrelated role-seeding database attempt.
-if (cli.Invocation is { } invocation)
-{
-    Environment.ExitCode = await invocation.RunAsync(app.Services, CancellationToken.None);
-    return;
-}
-
-// The four fixed roles must exist before sign-in/seeding (idempotent). Skipped during build-time
-// OpenAPI generation (ADR-012) — see the isOpenApiBuild note above.
-//
-// Try, not Ensure: an UNREACHABLE database is reported rather than thrown, so the host still binds a
-// port. Without that, a replica coming up during a database outage died right here — before Kestrel
-// bound and before any probe could observe it — and ACA crash-looped the revision, which is the one
-// failure no probe tuning can recover from. Every other fault (a missing table, a revoked grant, a
-// role that could not be created) still throws, because those are deployment defects whose answer is
-// a fix, not a wait.
-//
-// Skipping the seeding is only safe because readiness gates on the result: RoleSeedingState stays
-// false, RoleSeedingReadinessCheck reports 503, and RoleSeedingProbe keeps retrying once app.Run()
-// starts the hosted services. Swallowing the failure WITHOUT that gate would be worse than the crash
-// loop it replaces — a role-less replica would pass the capability readiness check the moment the
-// seam became reachable and enter rotation unable to authenticate anyone.
-//
-// CLI processes have already returned above. The softening therefore applies only to the web host.
-if (!isOpenApiBuild && await RoleSeeder.TryEnsureRolesAsync(app.Services))
-{
-    app.Services.GetRequiredService<RoleSeedingState>().MarkSeeded();
-}
-
-// Task 10 (F3a, F8): fail-fast in any non-Development environment if AllowedHosts is left open or
-// the Data Protection keyring hasn't been attested durable — a no-op in Development, and skipped
-// for the OpenAPI build (no real config/environment is being started up there, same as RoleSeeder
-// above) and for the CLI paths (which have already returned above and never reach this line).
-if (!isOpenApiBuild)
-{
-    ProductionSecurityGuards.Validate(app.Configuration, app.Environment);
-
-    // Task 7 (ADR-028): every feature_flags row must name a capability the registry knows about.
-    // Placed here for the same reasons as the guard above — after the CLI verbs have returned (a
-    // `seed` process must not be blocked by drift in a table it never reads) and outside the OpenAPI
-    // build, which has no database at all.
-    //
-    // Unlike the guard above, this one does NOT fail the host in Production: an unregistered row is
-    // inert, and throwing would make a rollback to a revision that predates the capability unbootable.
-    // See CapabilityRegistryValidator for the full argument.
-    await CapabilityRegistryValidator.ValidateAsync(app.Services, app.Environment);
-}
-
-// The nightly trust-invariant sweep (WP-11). Deliberately registered here rather than beside
-// AddHangfire: every CLI verb has already returned above, so a `seed` or `check-invariants` process
-// never writes a schedule row. AddOrUpdate is idempotent and keyed on the job id, so a redeploy that
-// changes the cron updates the existing row instead of accumulating duplicates. Carved out of the
-// OpenAPI build for the same reason as the registration above — this one would reach storage.
-if (!isOpenApiBuild && app.Configuration.GetValue<bool>("Jobs:Enabled"))
-{
-    app.Services.GetRequiredService<IRecurringJobManager>().AddOrUpdate<InvariantSweepJob>(
-        InvariantSweepJob.JobId,
-        job => job.RunAsync(CancellationToken.None),
-        InvariantSweepJob.CronUtc,
-        new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
-}
-
-app.Run();
 
 // Exposed so the integration test project can drive the host with WebApplicationFactory.
 public partial class Program

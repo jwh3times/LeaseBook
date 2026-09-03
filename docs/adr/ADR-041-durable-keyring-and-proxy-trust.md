@@ -88,11 +88,13 @@ migrator image's bundle already did. This is more explicit than what it replaced
 ripple: a future context added without updating those call sites breaks the build rather than the
 runtime.
 
-The `isOpenApiBuild` carve-out covers the whole keyring, not just the Key Vault wrap. The schema-drift
-build runs the application to completion with no `ASPNETCORE_ENVIRONMENT`, so Production settings
-apply with no database and no Azure identity — and startup does read the key ring. Persisting there
-fails with a cryptographic exception instead of emitting a document. That build produces a schema and
-needs no durable keys, so it keeps the in-memory default.
+The explicit OpenAPI-build lifecycle in
+[ADR-042](ADR-042-explicit-host-process-lifecycle.md) excludes the whole durable keyring, not just the
+Key Vault wrap. The schema-drift build runs the application to completion with no
+`ASPNETCORE_ENVIRONMENT`, so Production settings apply with no database and no Azure identity — and
+startup does read the key ring. Persisting there fails with a cryptographic exception instead of
+emitting a document. That build produces a schema and needs no durable keys, so its lifecycle keeps
+the in-memory default.
 
 Forwarded-header trust ships **off**, so the rate-limit partition is unchanged until an operator names
 the ingress. What changed is that the configuration now exists, refuses to be half-set, and announces
