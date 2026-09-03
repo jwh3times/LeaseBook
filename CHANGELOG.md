@@ -25,6 +25,11 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Changed
 
+- **AppFolio CSV imports now use one complete kind definition.** Route tokens, workflow family,
+  profile provenance, header rules, and typed row binding stay together, while startup checks that
+  every definition has matching host handling. Audit metadata and fallback filenames come from the
+  resolved definition; case and underscore aliases remain supported, but accidental numeric aliases
+  are rejected.
 - **Host execution modes now have one lifecycle contract.** Web serving, foreground CLI tools, and
   build-time OpenAPI generation share application composition while activating only their allowed
   startup effects. CLI commands no longer build an unused HTTP pipeline or register background

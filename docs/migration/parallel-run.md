@@ -3,7 +3,7 @@
 - **Audience:** Migration operators
 - **Status:** Living operator checklist
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-07-09
+- **Last reviewed:** 2026-09-03
 
 During the overlap month — from your cutover date until you are fully live on LeaseBook — enter
 transactions in **both** AppFolio and LeaseBook so you have a reconciled month-end to compare.
