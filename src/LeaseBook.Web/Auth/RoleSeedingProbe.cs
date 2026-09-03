@@ -3,10 +3,10 @@ namespace LeaseBook.Web.Auth;
 /// <summary>
 /// Keeps retrying role seeding until it succeeds, for the boot where the database was unreachable.
 /// <para>
-/// <b>Why it exists.</b> <c>Program.cs</c> still seeds roles synchronously before <c>app.Run()</c>,
+/// <b>Why it exists.</b> The Web process lifecycle seeds roles synchronously before <c>app.Run()</c>,
 /// and against a reachable database that call succeeds and this service exits on its first line — the
-/// ordinary path is unchanged, including for the CLI verbs, the test host and Docker. It matters only
-/// on the boot where <see cref="RoleSeeder.TryEnsureRolesAsync"/> reported an unreachable server. That
+/// ordinary Web path is unchanged, including for the test host and Docker. It matters only on the
+/// boot where <see cref="RoleSeeder.TryEnsureRolesAsync"/> reported an unreachable server. That
 /// boot now binds a port instead of dying, which means something has to finish the job later: without
 /// a retry, a replica that came up during an outage would stay role-less and not-ready for its entire
 /// life, and the guard would have converted a crash loop into a permanently useless replica.
@@ -43,7 +43,7 @@ public sealed class RoleSeedingProbe(
 
         if (state.IsSeeded)
         {
-            // The synchronous attempt in Program.cs already succeeded, which is every ordinary boot.
+            // The synchronous lifecycle attempt already succeeded, which is every ordinary Web boot.
             return;
         }
 

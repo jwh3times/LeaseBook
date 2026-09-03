@@ -135,8 +135,8 @@ jobs:
           cache: npm
           cache-dependency-path: web/codegen/package-lock.json
       # Emit the OpenAPI v1 document at build time — no running host, no database (ADR-012). The
-      # LEASEBOOK_OPENAPI_BUILD flag skips the startup role-seeding DB call the GetDocument tool
-      # would otherwise run; generation is off in every other build, so only this job emits the doc.
+      # LEASEBOOK_OPENAPI_BUILD flag selects ADR-042's side-effect-free document lifecycle;
+      # generation is off in every other build, so only this job emits the document.
       - name: Generate the OpenAPI document from the backend
         run: dotnet build src/LeaseBook.Web/LeaseBook.Web.csproj -c Debug -p:OpenApiGenerateDocumentsOnBuild=true
         env:

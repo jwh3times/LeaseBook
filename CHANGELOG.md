@@ -25,7 +25,10 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Changed
 
-- _Nothing yet._
+- **Host execution modes now have one lifecycle contract.** Web serving, foreground CLI tools, and
+  build-time OpenAPI generation share application composition while activating only their allowed
+  startup effects. CLI commands no longer build an unused HTTP pipeline or register background
+  workers, and OpenAPI generation remains database-free.
 
 ### Fixed
 

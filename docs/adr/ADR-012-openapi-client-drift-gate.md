@@ -1,11 +1,13 @@
 # ADR-012: Enforce the generated API client with a build-time OpenAPI drift gate
 
-- **Status:** Accepted (amended by ADR-030)
+- **Status:** Accepted (amended by ADR-030, ADR-042)
 - **Date:** 2026-06-15
 - **Deciders:** Engineering
 
 [ADR-030](ADR-030-hey-api-and-typescript-7.md) replaces this record's generator, generated-file
 layout, and compiler pin. The build-time OpenAPI emission and drift-gate decision remain in force.
+[ADR-042](ADR-042-explicit-host-process-lifecycle.md) replaces the scattered startup guards with an
+explicit OpenAPI-build lifecycle; generation remains database-free.
 
 ## Context
 
@@ -43,12 +45,11 @@ differs from the committed copy.** Concretely:
   the inner loop, the backend build, and the container build stay fast and DB-free; only the drift
   job opts in with `-p:OpenApiGenerateDocumentsOnBuild=true`. The document lands under `obj/`
   (gitignored), never the project root.
-- **Startup guard.** Every pre-`Run()` database call is skipped when `LEASEBOOK_OPENAPI_BUILD=1` —
-  originally just role seeding (now `RoleSeeder.TryEnsureRolesAsync`), since joined by the capability
-  registry validation and the capability hosted services added in
-  [ADR-028](ADR-028-platform-capability-model.md). That flag is set **only** by the drift job; it is
-  unset in every real run (dev, prod, integration tests), so their behavior is unchanged. This keeps
-  generation fully DB-free.
+- **Startup lifecycle.** `LEASEBOOK_OPENAPI_BUILD=1` selects the mutually exclusive, database-free
+  OpenAPI lifecycle defined by [ADR-042](ADR-042-explicit-host-process-lifecycle.md). The lifecycle
+  composes the endpoint surface without activating the durable keyring, deployment configuration,
+  hosted workers, role seeding, registry validation or scheduling. The flag is set **only** by the
+  drift job and is unset in every real run (dev, prod, integration tests).
 - **Canonical ordering.** Both `api:generate` and the gate pass `--alphabetize` to
   `openapi-typescript`, which sorts paths/types deterministically. This removes endpoint-ordering as a
   source of false drift (build-time order ≠ live order) and makes the committed file source-order
@@ -80,10 +81,10 @@ generator rather than reading a declared peer range — see ADR-030's revisit tr
 
 ## Revisit trigger
 
-Reopen if **build-time generation stops being viable** — e.g., startup grows more pre-`Run()`
-side effects than a single guard can reasonably cover, or a future `Microsoft.AspNetCore.OpenApi`
-changes the build tool's behavior — in which case fall back to booting the host against a throwaway
-Postgres (the `migration-check` pattern) and reading `/openapi/v1.json`. Independently, when the
+Reopen if **build-time generation stops being viable** — e.g., a future `Microsoft.AspNetCore.OpenApi`
+changes the build tool's behavior or ADR-042's lifecycle can no longer keep generation independent of
+deployment state — in which case fall back to booting the host against a throwaway Postgres (the
+`migration-check` pattern) and reading `/openapi/v1.json`. Independently, when the
 `openapi-typescript` peer admits TypeScript 6, drop the Dependabot ignore and retire the watcher —
 that second trigger is superseded by ADR-030, which replaced the generator and now owns the
 compiler-unblock condition.

@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living architecture guide
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-08-20
+- **Last reviewed:** 2026-09-02
 
 This is the canonical public map of the system **as implemented**. It explains how the pieces fit
 together and links the decisions that shaped them without reproducing every invariant. Accepted
@@ -217,6 +217,12 @@ The production image serves the SPA and `/api` on the container's port `8080` an
 Container Apps (East US 2), with secrets in Key Vault accessed by managed identity. Infrastructure is
 declared as Bicep modules in [`infra/`](../infra) (see [`infra/README.md`](../infra/README.md)), and
 CI compiles every template on each pull request.
+
+The same executable also runs foreground operator CLI verbs and the build-time OpenAPI generator.
+One explicit host lifecycle selects those mutually exclusive modes and owns their allowed startup
+effects: CLI shares application composition but starts no HTTP or background host, while OpenAPI
+generation composes the endpoint surface without database or deployment-dependent startup work. See
+[ADR-042](adr/ADR-042-explicit-host-process-lifecycle.md).
 
 Container probes are split by intent. `/api/health` is **liveness** — the process is up, and it touches
 no dependency. `/api/health/ready` is **readiness**: it stays unavailable until two independent
