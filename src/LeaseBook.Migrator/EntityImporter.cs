@@ -52,7 +52,8 @@ public static class EntityImporter
             var externalId = ctx.Cells.GetValueOrDefault("external_id") ?? string.Empty;
             if (string.IsNullOrWhiteSpace(externalId))
                 return ctx.Reject<OwnerRow>("external_id", "required");
-            Dec(ctx.Cells, "reserve", out var reserve); // optional — default 0
+            if (!OptionalDec(ctx.Cells, "reserve", out var reserve))
+                return ctx.Reject<OwnerRow>("reserve", "not a number");
             return new OwnerRow(externalId, name, reserve);
         });
 
@@ -83,7 +84,8 @@ public static class EntityImporter
             var label = ctx.Cells.GetValueOrDefault("label") ?? string.Empty;
             if (string.IsNullOrWhiteSpace(label))
                 return ctx.Reject<UnitRow>("label", "required");
-            Dec(ctx.Cells, "rent", out var rent); // optional
+            if (!OptionalDec(ctx.Cells, "rent", out var rent))
+                return ctx.Reject<UnitRow>("rent", "not a number");
             var status = ctx.Cells.GetValueOrDefault("status") ?? "vacant"; // optional, default vacant
             return new UnitRow(externalId, externalPropertyId, label, rent, status);
         });
@@ -100,10 +102,14 @@ public static class EntityImporter
             var name = ctx.Cells.GetValueOrDefault("name") ?? string.Empty;
             if (string.IsNullOrWhiteSpace(name))
                 return ctx.Reject<TenantLeaseRow>("name", "required");
-            var start = Date(ctx.Cells, "start");
-            var end = Date(ctx.Cells, "end");
-            Dec(ctx.Cells, "rent", out var rent);
-            Dec(ctx.Cells, "deposit", out var deposit);
+            if (!OptionalDate(ctx.Cells, "start", out var start))
+                return ctx.Reject<TenantLeaseRow>("start", "not a date");
+            if (!OptionalDate(ctx.Cells, "end", out var end))
+                return ctx.Reject<TenantLeaseRow>("end", "not a date");
+            if (!OptionalDec(ctx.Cells, "rent", out var rent))
+                return ctx.Reject<TenantLeaseRow>("rent", "not a number");
+            if (!OptionalDec(ctx.Cells, "deposit", out var deposit))
+                return ctx.Reject<TenantLeaseRow>("deposit", "not a number");
             var status = ctx.Cells.GetValueOrDefault("status") ?? "active";
             return new TenantLeaseRow(externalId, externalUnitId, name, start, end, rent, deposit, status);
         });
@@ -111,10 +117,40 @@ public static class EntityImporter
     private static bool Dec(IReadOnlyDictionary<string, string> c, string key, out decimal value) =>
         decimal.TryParse(c.GetValueOrDefault(key), NumberStyles.Currency, CultureInfo.InvariantCulture, out value);
 
-    private static DateOnly? Date(IReadOnlyDictionary<string, string> c, string key)
+    private static bool OptionalDec(
+        IReadOnlyDictionary<string, string> cells,
+        string key,
+        out decimal value)
     {
-        var raw = c.GetValueOrDefault(key);
-        if (string.IsNullOrWhiteSpace(raw)) return null;
-        return DateOnly.TryParse(raw, CultureInfo.InvariantCulture, out var d) ? d : null;
+        var raw = cells.GetValueOrDefault(key);
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            value = 0m;
+            return true;
+        }
+
+        return decimal.TryParse(raw, NumberStyles.Currency, CultureInfo.InvariantCulture, out value);
+    }
+
+    private static bool OptionalDate(
+        IReadOnlyDictionary<string, string> cells,
+        string key,
+        out DateOnly? value)
+    {
+        var raw = cells.GetValueOrDefault(key);
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            value = null;
+            return true;
+        }
+
+        if (DateOnly.TryParse(raw, CultureInfo.InvariantCulture, out var parsed))
+        {
+            value = parsed;
+            return true;
+        }
+
+        value = null;
+        return false;
     }
 }

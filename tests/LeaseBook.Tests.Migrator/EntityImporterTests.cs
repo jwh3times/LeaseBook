@@ -96,6 +96,31 @@ public sealed class EntityImporterTests
     }
 
     [Fact]
+    public void ReadOwners_optional_reserve_defaults_to_zero_when_blank()
+    {
+        var profile = AppFolioProfiles.For(EntityKind.Owners);
+        var result = EntityImporter.ReadOwners(
+            Csv("Owner ID,Owner Name,Reserve\nO-2,Linden Properties LLC,\n"), profile);
+
+        result.Errors.ShouldBeEmpty();
+        result.Rows.ShouldHaveSingleItem().Reserve.ShouldBe(0m);
+    }
+
+    [Fact]
+    public void ReadOwners_supplied_non_numeric_reserve_is_a_row_error()
+    {
+        var profile = AppFolioProfiles.For(EntityKind.Owners);
+        var result = EntityImporter.ReadOwners(
+            Csv("Owner ID,Owner Name,Reserve\n" +
+                "O-2,Linden Properties LLC,not-money\n" +
+                "O-3,Hargrove Family Trust,250.00\n"),
+            profile);
+
+        result.Rows.ShouldHaveSingleItem().ExternalId.ShouldBe("O-3");
+        result.Errors.ShouldContain(e => e.RowNumber == 1 && e.Field == "reserve");
+    }
+
+    [Fact]
     public void ReadOwners_missing_name_is_a_row_error()
     {
         var profile = AppFolioProfiles.For(EntityKind.Owners);
@@ -173,6 +198,17 @@ public sealed class EntityImporterTests
     }
 
     [Fact]
+    public void ReadUnits_supplied_non_numeric_rent_is_a_row_error()
+    {
+        var profile = AppFolioProfiles.For(EntityKind.Units);
+        var result = EntityImporter.ReadUnits(
+            Csv("Unit ID,Property ID,Unit,Rent\nU-1,P-1,Unit A,not-money\n"), profile);
+
+        result.Rows.ShouldBeEmpty();
+        result.Errors.ShouldContain(e => e.RowNumber == 1 && e.Field == "rent");
+    }
+
+    [Fact]
     public void ReadTenantsLeases_happy_path_parses_dates_and_amounts()
     {
         var profile = AppFolioProfiles.For(EntityKind.TenantsLeases);
@@ -203,7 +239,52 @@ public sealed class EntityImporterTests
         var row = result.Rows.ShouldHaveSingleItem();
         row.StartDate.ShouldBeNull();
         row.EndDate.ShouldBeNull();
+        row.Rent.ShouldBe(0m);
+        row.DepositRequired.ShouldBe(0m);
         row.Status.ShouldBe("active"); // default
+    }
+
+    [Fact]
+    public void ReadTenantsLeases_blank_optional_values_use_defaults()
+    {
+        var profile = AppFolioProfiles.For(EntityKind.TenantsLeases);
+        var result = EntityImporter.ReadTenantsLeases(
+            Csv("Tenant ID,Unit ID,Tenant Name,Lease Start,Lease End,Rent,Deposit\n" +
+                "T-2,U-2,Bob Jones,,,,\n"),
+            profile);
+
+        result.Errors.ShouldBeEmpty();
+        var row = result.Rows.ShouldHaveSingleItem();
+        row.StartDate.ShouldBeNull();
+        row.EndDate.ShouldBeNull();
+        row.Rent.ShouldBe(0m);
+        row.DepositRequired.ShouldBe(0m);
+    }
+
+    [Theory]
+    [InlineData("start")]
+    [InlineData("end")]
+    [InlineData("rent")]
+    [InlineData("deposit")]
+    public void ReadTenantsLeases_supplied_malformed_optional_value_is_a_row_error(string field)
+    {
+        var values = new Dictionary<string, string>
+        {
+            ["start"] = "2025-01-01",
+            ["end"] = "2026-01-01",
+            ["rent"] = "1200.00",
+            ["deposit"] = "2400.00",
+        };
+        values[field] = "malformed";
+
+        var profile = AppFolioProfiles.For(EntityKind.TenantsLeases);
+        var result = EntityImporter.ReadTenantsLeases(
+            Csv("Tenant ID,Unit ID,Tenant Name,Lease Start,Lease End,Rent,Deposit\n" +
+                $"T-1,U-1,Jane Smith,{values["start"]},{values["end"]},{values["rent"]},{values["deposit"]}\n"),
+            profile);
+
+        result.Rows.ShouldBeEmpty();
+        result.Errors.ShouldContain(e => e.RowNumber == 1 && e.Field == field);
     }
 
     [Fact]
