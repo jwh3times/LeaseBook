@@ -32,6 +32,9 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Fixed
 
+- **Malformed optional migration values are rejected instead of becoming defaults.** A supplied but
+  invalid reserve, rent, deposit, or lease date now produces a row error, while blank optional
+  values retain their documented zero or null defaults and valid rows continue importing.
 - **Empty report results now keep their column headers.** Generic report previews and CSV exports use
   the same declared column definition, so a report with no matching rows still describes its shape
   and the two output paths cannot silently drift apart.
