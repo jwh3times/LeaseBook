@@ -1,6 +1,6 @@
 using System.Text;
 using System.Text.Json;
-using LeaseBook.Migrator.Model;
+using LeaseBook.Migrator;
 using LeaseBook.Modules.Accounting.Contracts;
 using LeaseBook.Modules.Accounting.Domain;
 using LeaseBook.Modules.Accounting.Features.Banking;
@@ -91,7 +91,6 @@ public static class ScenarioSeeder
     public static readonly Guid PmOperatingId = new("01923000-0000-7000-8000-00005ce4ba03");
 
     private const string ProvisionAuditEntityType = "org-provisioned";
-    private const string Profile = "appfolio-default";
 
     /// <summary>Cutover date — opening positions post here through the real M7 import path.</summary>
     public static readonly DateOnly Cutover = new(2026, 2, 28);
@@ -320,17 +319,20 @@ public static class ScenarioSeeder
     private static async Task ImportEntitiesAsync(IServiceProvider sp, CancellationToken ct)
     {
         var entities = sp.GetRequiredService<EntityImportService>();
-        await ImportEntityAsync(entities, EntityKind.Owners, "owners.csv", ct);
-        await ImportEntityAsync(entities, EntityKind.Properties, "properties.csv", ct);
-        await ImportEntityAsync(entities, EntityKind.Units, "units.csv", ct);
-        await ImportEntityAsync(entities, EntityKind.TenantsLeases, "tenants_leases.csv", ct);
+        await ImportEntityAsync(entities, AppFolioImportCatalog.Owners, "owners.csv", ct);
+        await ImportEntityAsync(entities, AppFolioImportCatalog.Properties, "properties.csv", ct);
+        await ImportEntityAsync(entities, AppFolioImportCatalog.Units, "units.csv", ct);
+        await ImportEntityAsync(entities, AppFolioImportCatalog.TenantsLeases, "tenants_leases.csv", ct);
     }
 
     private static async Task ImportEntityAsync(
-        EntityImportService entities, EntityKind kind, string fixtureFile, CancellationToken ct)
+        EntityImportService entities,
+        AppFolioImportDefinition definition,
+        string fixtureFile,
+        CancellationToken ct)
     {
         await using var stream = OpenFixture(fixtureFile);
-        var result = await entities.ImportAsync(kind, Profile, fixtureFile, stream, ct);
+        var result = await entities.ImportAsync(definition, fixtureFile, stream, ct);
         Assert(result.ErrorCount == 0,
             $"scenario entity import {fixtureFile}: {result.ErrorCount} row error(s) — " +
             string.Join("; ", result.Errors.Select(e => $"row {e.RowNumber} {e.Field}: {e.Reason}")));
@@ -341,11 +343,11 @@ public static class ScenarioSeeder
     {
         var balances = sp.GetRequiredService<BalanceImportService>();
 
-        await ImportBalanceAsync(balances, EntityKind.BankBalances, "bank_balances.csv", ct);
-        await ImportBalanceAsync(balances, EntityKind.OwnerBalances, "owner_balances.csv", ct);
-        await ImportBalanceAsync(balances, EntityKind.DepositLiabilities, "deposit_liabilities.csv", ct);
-        await ImportBalanceAsync(balances, EntityKind.TenantReceivables, "tenant_receivables.csv", ct);
-        await ImportBalanceAsync(balances, EntityKind.HeldPmFees, "held_pm_fees.csv", ct);
+        await ImportBalanceAsync(balances, AppFolioImportCatalog.BankBalances, "bank_balances.csv", ct);
+        await ImportBalanceAsync(balances, AppFolioImportCatalog.OwnerBalances, "owner_balances.csv", ct);
+        await ImportBalanceAsync(balances, AppFolioImportCatalog.DepositLiabilities, "deposit_liabilities.csv", ct);
+        await ImportBalanceAsync(balances, AppFolioImportCatalog.TenantReceivables, "tenant_receivables.csv", ct);
+        await ImportBalanceAsync(balances, AppFolioImportCatalog.HeldPmFees, "held_pm_fees.csv", ct);
 
         // WP-7 Half-A provenance: the initial owner_balances deliberately understates O-S1
         // (8,000.00); the corrected file supersedes it to 8,250.00 and leaves the other four
@@ -353,7 +355,7 @@ public static class ScenarioSeeder
         await using (var corrected = OpenFixture("owner_balances_corrected.csv"))
         {
             var supersede = await balances.SupersedeAsync(
-                EntityKind.OwnerBalances, Profile, "owner_balances_corrected.csv", Cutover, corrected, ct);
+                AppFolioImportCatalog.OwnerBalances, "owner_balances_corrected.csv", Cutover, corrected, ct);
             Assert(supersede.Counts.Superseded == 1 && supersede.Counts.Unchanged == 4,
                 $"scenario supersede: expected 1 superseded / 4 unchanged, got " +
                 $"{supersede.Counts.Superseded}/{supersede.Counts.Unchanged}");
@@ -389,10 +391,13 @@ public static class ScenarioSeeder
     }
 
     private static async Task ImportBalanceAsync(
-        BalanceImportService balances, EntityKind kind, string fixtureFile, CancellationToken ct)
+        BalanceImportService balances,
+        AppFolioImportDefinition definition,
+        string fixtureFile,
+        CancellationToken ct)
     {
         await using var stream = OpenFixture(fixtureFile);
-        var result = await balances.ImportAsync(kind, Profile, fixtureFile, Cutover, stream, ct);
+        var result = await balances.ImportAsync(definition, fixtureFile, Cutover, stream, ct);
         Assert(result.ErrorCount == 0,
             $"scenario balance import {fixtureFile}: {result.ErrorCount} row error(s) — " +
             string.Join("; ", result.Errors.Select(e => $"row {e.RowNumber} {e.Field}: {e.Reason}")));

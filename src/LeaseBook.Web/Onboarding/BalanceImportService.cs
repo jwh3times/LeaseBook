@@ -2,7 +2,6 @@ using System.Text.Json;
 using LeaseBook.Migrator;
 using LeaseBook.Migrator.Csv;
 using LeaseBook.Migrator.Model;
-using LeaseBook.Migrator.Profiles;
 using LeaseBook.Modules.Accounting.Contracts;
 using LeaseBook.Modules.Accounting.Domain;
 using LeaseBook.Modules.Accounting.Features.Migration;
@@ -42,10 +41,23 @@ public sealed class BalanceImportService(
     ILogger<BalanceImportService> logger)
 {
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
+    private static readonly IReadOnlyDictionary<AppFolioImportDefinition, BalanceApplication> Applications =
+        CreateApplications(
+        [
+            PlanWith(AppFolioImportCatalog.BankBalances,
+                static (service, parsed, cutover, ct) => service.PlanBankBalancesAsync(parsed, cutover, ct)),
+            PlanWith(AppFolioImportCatalog.OwnerBalances,
+                static (service, parsed, cutover, ct) => service.PlanOwnerBalancesAsync(parsed, cutover, ct)),
+            PlanWith(AppFolioImportCatalog.DepositLiabilities,
+                static (service, parsed, cutover, ct) => service.PlanDepositLiabilitiesAsync(parsed, cutover, ct)),
+            PlanWith(AppFolioImportCatalog.TenantReceivables,
+                static (service, parsed, cutover, ct) => service.PlanTenantReceivablesAsync(parsed, cutover, ct)),
+            PlanWith(AppFolioImportCatalog.HeldPmFees,
+                static (service, parsed, cutover, ct) => service.PlanHeldPmFeesAsync(parsed, cutover, ct)),
+        ]);
 
     public async Task<ImportBatchResult> ImportAsync(
-        EntityKind kind,
-        string mappingProfile,
+        AppFolioImportDefinition definition,
         string filename,
         DateOnly cutoverDate,
         Stream csvStream,
@@ -53,7 +65,7 @@ public sealed class BalanceImportService(
     {
         await migrationCutoverDate.EnsureMatchesAsync(cutoverDate, ct);
 
-        var plan = await PlanAsync(kind, cutoverDate, csvStream, ct);
+        var plan = await PlanAsync(definition, cutoverDate, csvStream, ct);
         var rowOutcomes = new List<BalanceRowOutcome>(plan.ResolutionErrors);
 
         foreach (var group in plan.Positions.GroupBy(p => p.RowNumber))
@@ -89,7 +101,7 @@ public sealed class BalanceImportService(
 
             var head = lines[0].Position;
 
-            if (kind == EntityKind.OwnerBalances)
+            if (ReferenceEquals(definition, AppFolioImportCatalog.OwnerBalances))
             {
                 // owner_balances plans two independent positions per row, in this order: the cash
                 // position (Basis=Both) then the accrual-delta position (Basis=Accrual) — see
@@ -132,8 +144,8 @@ public sealed class BalanceImportService(
 
         // Persist batch + rows in one SaveChanges (within the ambient RLS transaction).
         var batch = ImportBatch.Create(
-            kind.ToString(),
-            mappingProfile,
+            definition.PersistedName,
+            definition.ProfileId,
             filename,
             rowCount: rowOutcomes.Count,
             errorCount: totalErrors,
@@ -179,8 +191,7 @@ public sealed class BalanceImportService(
     /// </para>
     /// </summary>
     public async Task<ImportBatchResult> SupersedeAsync(
-        EntityKind kind,
-        string mappingProfile,
+        AppFolioImportDefinition definition,
         string filename,
         DateOnly cutoverDate,
         Stream csvStream,
@@ -197,7 +208,7 @@ public sealed class BalanceImportService(
         // Guard 2 (§2.9): a corrected re-import needs a prior import of this balance type to correct.
         var priorStatuses = new[] { "posted", "posted_with_errors" };
         var priorBatch = await db.Set<ImportBatch>()
-            .Where(b => b.EntityKind == kind.ToString() && priorStatuses.Contains(b.Status))
+            .Where(b => b.EntityKind == definition.PersistedName && priorStatuses.Contains(b.Status))
             .OrderByDescending(b => b.CreatedAt)
             .FirstOrDefaultAsync(ct);
         if (priorBatch is null)
@@ -221,7 +232,7 @@ public sealed class BalanceImportService(
             .GroupBy(e => BaseRef(e.SourceRef))
             .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
 
-        var plan = await PlanAsync(kind, cutoverDate, csvStream, ct);
+        var plan = await PlanAsync(definition, cutoverDate, csvStream, ct);
         var outcomes = new List<BalanceRowOutcome>(plan.ResolutionErrors);
 
         // Row buckets partition every resolvable row exactly once, by precedence
@@ -340,8 +351,8 @@ public sealed class BalanceImportService(
 
         var totalErrors = outcomes.Count(r => r.IsError);
         var batch = ImportBatch.Create(
-            kind.ToString(),
-            mappingProfile,
+            definition.PersistedName,
+            definition.ProfileId,
             filename,
             rowCount: outcomes.Count,
             errorCount: totalErrors,
@@ -365,7 +376,7 @@ public sealed class BalanceImportService(
             {
                 batchId = batch.Id,
                 supersedesBatchId = priorBatch.Id,
-                kind = kind.ToString(),
+                kind = definition.PersistedName,
                 superseded,
                 posted,
                 unchanged,
@@ -459,24 +470,16 @@ public sealed class BalanceImportService(
     /// both for the same row. Does no posting: <see cref="ImportAsync"/> posts the plan, and the
     /// upcoming supersede engine (WP-7 Task 5) will diff it against prior positions instead.
     /// </summary>
-    private Task<BalancePlan> PlanAsync(EntityKind kind, DateOnly cutover, Stream csv, CancellationToken ct)
+    private Task<BalancePlan> PlanAsync(
+        AppFolioImportDefinition definition,
+        DateOnly cutover,
+        Stream csv,
+        CancellationToken ct)
     {
-        var profile = AppFolioProfiles.For(kind);
+        if (!Applications.TryGetValue(definition, out var application))
+            throw new ArgumentOutOfRangeException(nameof(definition), definition, "Not a balance import definition.");
 
-        return kind switch
-        {
-            EntityKind.BankBalances =>
-                PlanBankBalancesAsync(EntityImporter.ReadBankBalances(csv, profile), cutover, ct),
-            EntityKind.OwnerBalances =>
-                PlanOwnerBalancesAsync(EntityImporter.ReadOwnerBalances(csv, profile), cutover, ct),
-            EntityKind.DepositLiabilities =>
-                PlanDepositLiabilitiesAsync(EntityImporter.ReadDepositLiabilities(csv, profile), cutover, ct),
-            EntityKind.TenantReceivables =>
-                PlanTenantReceivablesAsync(EntityImporter.ReadTenantReceivables(csv, profile), cutover, ct),
-            EntityKind.HeldPmFees =>
-                PlanHeldPmFeesAsync(EntityImporter.ReadHeldPmFees(csv, profile), cutover, ct),
-            _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Not a balance kind."),
-        };
+        return application.Plan(this, csv, cutover, ct);
     }
 
     /// <summary>
@@ -557,7 +560,7 @@ public sealed class BalanceImportService(
         var errors = new List<BalanceRowOutcome>();
         AddParseErrorOutcomes(parsed.Errors, errors);
 
-        var ownerMap = await resolver.BuildMapAsync(EntityKind.Owners, ct);
+        var ownerMap = await resolver.BuildMapAsync(AppFolioImportCatalog.Owners, ct);
         var operatingTrustId = await ResolveOperatingTrustAsync(ct);
 
         if (operatingTrustId is null)
@@ -620,7 +623,7 @@ public sealed class BalanceImportService(
         var errors = new List<BalanceRowOutcome>();
         AddParseErrorOutcomes(parsed.Errors, errors);
 
-        var ownerMap = await resolver.BuildMapAsync(EntityKind.Owners, ct);
+        var ownerMap = await resolver.BuildMapAsync(AppFolioImportCatalog.Owners, ct);
         var tenantMap = await BuildTenantMapAsync(ct);
         var depositTrustId = await ResolveDepositTrustAsync(ct);
         var tenantIds = tenantMap.Values.Distinct().ToList();
@@ -707,7 +710,7 @@ public sealed class BalanceImportService(
         var errors = new List<BalanceRowOutcome>();
         AddParseErrorOutcomes(parsed.Errors, errors);
 
-        var ownerMap = await resolver.BuildMapAsync(EntityKind.Owners, ct);
+        var ownerMap = await resolver.BuildMapAsync(AppFolioImportCatalog.Owners, ct);
         var tenantMap = await BuildTenantMapAsync(ct);
 
         foreach (var (row, rowNumber) in WithSourceRowNumbers(parsed.Rows, parsed.Errors))
@@ -850,7 +853,7 @@ public sealed class BalanceImportService(
     /// </summary>
     private async Task<Dictionary<string, Guid>> BuildTenantMapAsync(CancellationToken ct)
     {
-        var kindStr = EntityKind.TenantsLeases.ToString();
+        var kindStr = AppFolioImportCatalog.TenantsLeases.PersistedName;
 
         var mappedJsonRows = await db.Set<ImportBatch>()
             .Where(b => b.EntityKind == kindStr
@@ -915,6 +918,30 @@ public sealed class BalanceImportService(
 
     private static string SerializeRaw(object obj) =>
         JsonSerializer.Serialize(obj, JsonOpts);
+
+    private static BalanceApplication PlanWith<TRow>(
+        AppFolioImportDefinition<TRow> definition,
+        Func<BalanceImportService, ImportResult<TRow>, DateOnly, CancellationToken, Task<BalancePlan>> plan)
+        where TRow : class =>
+        new(
+            definition,
+            (service, csv, cutover, ct) => plan(service, definition.Read(csv), cutover, ct));
+
+    private static IReadOnlyDictionary<AppFolioImportDefinition, BalanceApplication> CreateApplications(
+        IReadOnlyList<BalanceApplication> entries)
+    {
+        var duplicate = entries.GroupBy(entry => entry.Definition).FirstOrDefault(group => group.Count() > 1);
+        if (duplicate is not null)
+            throw new InvalidOperationException(
+                $"Duplicate balance application for {duplicate.Key.PersistedName}.");
+
+        var expected = AppFolioImportCatalog.ForFamily(AppFolioImportFamily.Balance).ToHashSet();
+        var actual = entries.Select(entry => entry.Definition).ToHashSet();
+        if (!expected.SetEquals(actual))
+            throw new InvalidOperationException("Balance applications must cover the AppFolio balance catalog exactly.");
+
+        return entries.ToDictionary(entry => entry.Definition);
+    }
 
     /// <summary>
     /// The outcome of attempting to post one opening line: whether it actually posted (a
@@ -1001,6 +1028,10 @@ public sealed class BalanceImportService(
         public static BalanceRowOutcome Error(int rowNumber, string externalId, string rawJson, string field, string reason) =>
             new(rowNumber, externalId, rawJson, null, false, false, true, field, reason);
     }
+
+    private sealed record BalanceApplication(
+        AppFolioImportDefinition Definition,
+        Func<BalanceImportService, Stream, DateOnly, CancellationToken, Task<BalancePlan>> Plan);
 
     // -------------------------------------------------------------------------
     // Planner shapes (WP-7 Task 4) — private nested like BalanceRowOutcome above, since Task 5's

@@ -44,7 +44,7 @@ public sealed class ImportBatch : IOrgScoped
     /// <inheritdoc />
     public Guid OrgId { get; set; }
 
-    /// <summary>The kind of entity being imported (e.g. "owner_balance").</summary>
+    /// <summary>The stable import definition name (e.g. "OwnerBalances").</summary>
     public string EntityKind { get; private set; }
 
     /// <summary>The mapping profile identifier used to parse the CSV (e.g. "appfolio-default").</summary>

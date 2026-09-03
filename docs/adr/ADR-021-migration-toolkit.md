@@ -35,14 +35,18 @@ nothing about the database, posting, or HTTP. Its public surface:
 - **`ColumnMappingProfile`** — a list of `(canonicalField, candidateHeaders[], required)` records.
   The profile resolves actual CSV headers against candidates; missing required columns produce
   top-level errors before any rows are processed.
-- **`AppFolioProfiles.For(EntityKind)`** — the `appfolio-default` profiles (one per entity kind).
-  Header candidates are best-guess strings (see §4 below). Plugging in the real
-  headers is a data edit to these profiles, not a code change.
+- **`AppFolioImportCatalog`** — the executable `appfolio-default` catalog. Each typed definition
+  owns one canonical route token, workflow family, stable persisted name, profile identifier and
+  header mappings, plus its CSV-to-row binder. The definition instance is the in-process kind
+  identity; the persisted names remain compatible with existing `import_batches` and audit data.
+  Lookup is case-insensitive and ignores underscores for route compatibility, but rejects the old
+  numeric aliases that leaked through enum parsing.
 - **Typed rows** (`OwnerRow`, `PropertyRow`, `UnitRow`, `TenantLeaseRow`, `OwnerBalanceRow`,
-  `DepositLiabilityRow`, `BankBalanceRow`, `TenantReceivableRow`) — canonical in-memory
+  `DepositLiabilityRow`, `BankBalanceRow`, `TenantReceivableRow`, `HeldPmFeeRow`) — canonical in-memory
   representations that the host's import services consume.
-- **`EntityImporter`** — static binders that call `CsvImporter.Read<TRow>` with the type-specific
-  bind logic, centralizing all CSV-to-domain mapping in one place.
+
+The former `EntityKind`, `AppFolioProfiles`, and `EntityImporter` parallel surfaces are removed.
+Kind-specific parsing now enters through `AppFolioImportDefinition<TRow>.Read(Stream)`.
 
 The isolation makes the parser **fully unit-testable in isolation**: no Testcontainers, no HTTP,
 no DI. The `LeaseBook.Tests.Migrator` project exercises tolerant ingestion, row-level error
@@ -59,10 +63,13 @@ feature and endpoint naming).
 - **`EntityImportService`** — parses entity CSVs, creates Directory rows via `ISender` commands
   (existing Directory write paths), and records `import_rows` staging data. External-id→LeaseBook-id
   mappings are persisted in `import_rows.mapped_json` for downstream consumption by the balance
-  importer.
+  importer. Its statically typed application table must cover the catalog's entity family exactly.
 - **`BalanceImportService`** — parses balance CSVs, resolves external ids to LeaseBook ids via
   `ExternalIdResolver` (reads prior `import_rows`) and bank name-matching, then calls
   `IBalanceForward.PostOpeningPositionAsync` per valid row — all in one ambient RLS transaction.
+  Its statically typed planning table must cover the catalog's balance family exactly. Both tables
+  close over the definition's row type before exposing a non-generic invocation delegate; they use
+  no reflection, row casts, or DI registry.
 - **`VerificationService`** — dispatches `GetMigrationVerificationData` via `ISender` (no
   cross-module SQL), builds the line-by-line variance report, persists a `migration_verifications`
   row, and enforces the hard sign-off gate (see §5 below).
@@ -105,14 +112,15 @@ pre-populated, leaving the original unsigned row intact for auditability. The ta
 The concrete AppFolio column header strings are **not validated** — real export files are not yet
 in hand. M7 ships:
 
-- A documented `appfolio-default` profile per entity kind in `AppFolioProfiles.For(EntityKind)`.
-- A tolerant parser seam: unrecognized headers surface as `RowError`s; the wizard lets the
-  operator remap columns inline.
+- A documented `appfolio-default` definition per import kind in `AppFolioImportCatalog`.
+- A tolerant parser seam: missing required headers surface as `RowError`s. Inline column remapping
+  is not implemented; operators must use a supported candidate header or the catalog must be
+  updated after a real export is verified.
 - A private research spike documenting what needs validation and how to update the profiles once
   real exports arrive; unvalidated mappings are not presented as public product documentation.
 
 The validation gate is maintained with the private migration research. Plugging in real headers is
-a string-array update in `AppFolioProfiles.cs` — no architectural change.
+a string-array update in `AppFolioImportCatalog.cs` — no architectural change.
 
 **Consequence of this deferral:** the M7 exit criteria use a synthetic cutover fixture (CSV files
 with known-good figures) rather than real AppFolio exports. The real cutover run on a
@@ -120,8 +128,10 @@ staging org is the M8/operator step that the research spike unblocks.
 
 ### 5. Import contract — JSON body, not multipart
 
-The import endpoints accept `{ entityKind, mappingProfile, filename, cutoverDate, csvContent }`
-as a JSON body, where `csvContent` is the CSV text as a JSON string.
+The import kind is a route token. The endpoints accept `{ mappingProfile, filename, cutoverDate,
+csvContent }` as a JSON body, where `csvContent` is the CSV text as a JSON string. Only
+`appfolio-default` is supported; null or whitespace selects it, and any other supplied identifier is
+rejected. The resolved definition owns the profile identifier persisted with the batch.
 
 `cutoverDate` is required but is not independent per upload. The first balance position that posts
 establishes one journal-derived organization cutover date (ADR-020 §6); later balance imports,
@@ -159,8 +169,11 @@ redirected into onboarding.
 
 ## Consequences
 
-- **The parser is the only place that knows CSV shapes.** Changing a column profile or adding a
-  new entity kind touches `LeaseBook.Migrator` only — the host import services are profile-agnostic.
+- **The catalog is the only place that knows AppFolio CSV shapes.** Changing a column profile is
+  local to `LeaseBook.Migrator`. Adding a kind requires one typed catalog definition and one real
+  host application/planning registration; endpoint family allowlists and onboarding status derive
+  from the catalog. The explicit SPA list remains separately owned because no discovery endpoint is
+  introduced.
 - **The `Onboarding` namespace vs the spec's `Migration` namespace.** The implementation settled on
   `Onboarding` for the host namespace, endpoint tags (`WithTags("Onboarding")`), and SPA feature.
   The spec used `Migration` as a working name. This is a cosmetic deviation; the ADR-007 boundary
@@ -176,7 +189,6 @@ redirected into onboarding.
 
 ## Revisit trigger
 
-If a second property-management source (Buildium, Rentec Direct) is ever onboarded, evaluate
-whether `AppFolioProfiles` should become a plugin registry and whether the research-spike process
-should be formalized into a documented operator runbook. The parser seam is already configuration-
-driven; the registry shape would be the only new piece.
+If a second property-management source (Buildium, Rentec Direct) is ever onboarded, evaluate a
+provider seam instead of generalizing the AppFolio catalog speculatively, and decide whether the
+research-spike process should become a documented operator runbook.

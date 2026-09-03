@@ -2,7 +2,6 @@ using System.Text.Json;
 using LeaseBook.Migrator;
 using LeaseBook.Migrator.Csv;
 using LeaseBook.Migrator.Model;
-using LeaseBook.Migrator.Profiles;
 using LeaseBook.Modules.Directory.Features.Leases;
 using LeaseBook.Modules.Directory.Features.Owners;
 using LeaseBook.Modules.Directory.Features.Properties;
@@ -41,7 +40,7 @@ public sealed record ImportBatchError(int RowNumber, string Field, string Reason
 
 /// <summary>
 /// Orchestrates entity import for one CSV upload (WP-3 Task 3.1). Parses the CSV via
-/// <see cref="EntityImporter"/> for the given kind, creates Directory rows via existing Directory
+/// the selected <see cref="AppFolioImportDefinition"/>, creates Directory rows via existing Directory
 /// commands dispatched through <see cref="ISender"/>, stages one <see cref="ImportBatch"/> +
 /// its <see cref="ImportRow"/>s, and records each row's external-id → LeaseBook id mapping in
 /// <c>ImportRow.MappedJson</c>. Runs entirely within the ambient RLS transaction; one bad row
@@ -55,34 +54,30 @@ public sealed class EntityImportService(
     ILogger<EntityImportService> logger)
 {
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
+    private static readonly IReadOnlyDictionary<AppFolioImportDefinition, EntityApplication> Applications =
+        CreateApplications(
+        [
+            Apply(AppFolioImportCatalog.Owners,
+                static (service, parsed, outcomes, ct) => service.ImportOwnersAsync(parsed, outcomes, ct)),
+            Apply(AppFolioImportCatalog.Properties,
+                static (service, parsed, outcomes, ct) => service.ImportPropertiesAsync(parsed, outcomes, ct)),
+            Apply(AppFolioImportCatalog.Units,
+                static (service, parsed, outcomes, ct) => service.ImportUnitsAsync(parsed, outcomes, ct)),
+            Apply(AppFolioImportCatalog.TenantsLeases,
+                static (service, parsed, outcomes, ct) => service.ImportTenantsLeasesAsync(parsed, outcomes, ct)),
+        ]);
 
     public async Task<ImportBatchResult> ImportAsync(
-        EntityKind kind,
-        string mappingProfile,
+        AppFolioImportDefinition definition,
         string filename,
         Stream csvStream,
         CancellationToken ct)
     {
-        var profile = AppFolioProfiles.For(kind);
-        var rowOutcomes = new List<RowOutcome>();
+        if (!Applications.TryGetValue(definition, out var application))
+            throw new ArgumentOutOfRangeException(nameof(definition), definition, "Not an entity import definition.");
 
-        switch (kind)
-        {
-            case EntityKind.Owners:
-                await ImportOwnersAsync(EntityImporter.ReadOwners(csvStream, profile), rowOutcomes, ct);
-                break;
-            case EntityKind.Properties:
-                await ImportPropertiesAsync(EntityImporter.ReadProperties(csvStream, profile), rowOutcomes, ct);
-                break;
-            case EntityKind.Units:
-                await ImportUnitsAsync(EntityImporter.ReadUnits(csvStream, profile), rowOutcomes, ct);
-                break;
-            case EntityKind.TenantsLeases:
-                await ImportTenantsLeasesAsync(EntityImporter.ReadTenantsLeases(csvStream, profile), rowOutcomes, ct);
-                break;
-            default:
-                throw new ArgumentOutOfRangeException(nameof(kind), kind, "Not an entity kind.");
-        }
+        var rowOutcomes = new List<RowOutcome>();
+        await application.Run(this, csvStream, rowOutcomes, ct);
 
         var totalErrors = rowOutcomes.Count(r => r.IsError);
         var batchErrors = rowOutcomes
@@ -92,8 +87,8 @@ public sealed class EntityImportService(
 
         // Persist batch + rows in one SaveChanges (within the ambient RLS transaction).
         var batch = ImportBatch.Create(
-            kind.ToString(),
-            mappingProfile,
+            definition.PersistedName,
+            definition.ProfileId,
             filename,
             rowCount: rowOutcomes.Count,
             errorCount: totalErrors,
@@ -187,7 +182,7 @@ public sealed class EntityImportService(
     {
         AddParseErrorOutcomes(parsed.Errors, outcomes);
 
-        var ownerMap = await resolver.BuildMapAsync(EntityKind.Owners, ct);
+        var ownerMap = await resolver.BuildMapAsync(AppFolioImportCatalog.Owners, ct);
 
         foreach (var (row, rowNumber) in WithSourceRowNumbers(parsed.Rows, parsed.Errors))
         {
@@ -235,7 +230,7 @@ public sealed class EntityImportService(
     {
         AddParseErrorOutcomes(parsed.Errors, outcomes);
 
-        var propertyMap = await resolver.BuildMapAsync(EntityKind.Properties, ct);
+        var propertyMap = await resolver.BuildMapAsync(AppFolioImportCatalog.Properties, ct);
 
         foreach (var (row, rowNumber) in WithSourceRowNumbers(parsed.Rows, parsed.Errors))
         {
@@ -284,7 +279,7 @@ public sealed class EntityImportService(
     {
         AddParseErrorOutcomes(parsed.Errors, outcomes);
 
-        var unitMap = await resolver.BuildMapAsync(EntityKind.Units, ct);
+        var unitMap = await resolver.BuildMapAsync(AppFolioImportCatalog.Units, ct);
 
         foreach (var (row, rowNumber) in WithSourceRowNumbers(parsed.Rows, parsed.Errors))
         {
@@ -420,6 +415,30 @@ public sealed class EntityImportService(
         _ => "active",
     };
 
+    private static EntityApplication Apply<TRow>(
+        AppFolioImportDefinition<TRow> definition,
+        Func<EntityImportService, ImportResult<TRow>, List<RowOutcome>, CancellationToken, Task> apply)
+        where TRow : class =>
+        new(
+            definition,
+            (service, csv, outcomes, ct) => apply(service, definition.Read(csv), outcomes, ct));
+
+    private static IReadOnlyDictionary<AppFolioImportDefinition, EntityApplication> CreateApplications(
+        IReadOnlyList<EntityApplication> entries)
+    {
+        var duplicate = entries.GroupBy(entry => entry.Definition).FirstOrDefault(group => group.Count() > 1);
+        if (duplicate is not null)
+            throw new InvalidOperationException(
+                $"Duplicate entity application for {duplicate.Key.PersistedName}.");
+
+        var expected = AppFolioImportCatalog.ForFamily(AppFolioImportFamily.Entity).ToHashSet();
+        var actual = entries.Select(entry => entry.Definition).ToHashSet();
+        if (!expected.SetEquals(actual))
+            throw new InvalidOperationException("Entity applications must cover the AppFolio entity catalog exactly.");
+
+        return entries.ToDictionary(entry => entry.Definition);
+    }
+
     // -------------------------------------------------------------------------
     // Private outcome record for staging results before the batch id is known
     // -------------------------------------------------------------------------
@@ -440,4 +459,8 @@ public sealed class EntityImportService(
         public static RowOutcome Error(int rowNumber, string externalId, string rawJson, string field, string reason) =>
             new(rowNumber, externalId, null, rawJson, null, true, field, reason);
     }
+
+    private sealed record EntityApplication(
+        AppFolioImportDefinition Definition,
+        Func<EntityImportService, Stream, List<RowOutcome>, CancellationToken, Task> Run);
 }
