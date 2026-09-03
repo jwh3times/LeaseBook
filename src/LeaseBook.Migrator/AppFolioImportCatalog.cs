@@ -66,6 +66,7 @@ public sealed class AppFolioImportDefinition<TRow> : AppFolioImportDefinition
 public static class AppFolioImportCatalog
 {
     private const string DefaultProfileId = "appfolio-default";
+    private static readonly List<AppFolioImportDefinition> Definitions = [];
 
     public static AppFolioImportDefinition<OwnerRow> Owners { get; } = Define(
         "owners",
@@ -254,11 +255,7 @@ public static class AppFolioImportCatalog
 
     static AppFolioImportCatalog()
     {
-        All = Array.AsReadOnly<AppFolioImportDefinition>(
-        [
-            Owners, Properties, Units, TenantsLeases,
-            OwnerBalances, DepositLiabilities, BankBalances, TenantReceivables, HeldPmFees,
-        ]);
+        All = Array.AsReadOnly(Definitions.ToArray());
 
         EnsureUnique(All, definition => definition.PersistedName, "persisted name", StringComparer.Ordinal);
         EnsureUnique(All, definition => definition.CanonicalToken, "canonical token", StringComparer.Ordinal);
@@ -292,8 +289,18 @@ public static class AppFolioImportCatalog
         AppFolioImportFamily family,
         IReadOnlyList<FieldMapping> fields,
         Func<RowContext, TRow?> bind)
-        where TRow : class =>
-        new(canonicalToken, persistedName, family, DefaultProfileId, new ColumnMappingProfile(fields), bind);
+        where TRow : class
+    {
+        var definition = new AppFolioImportDefinition<TRow>(
+            canonicalToken,
+            persistedName,
+            family,
+            DefaultProfileId,
+            new ColumnMappingProfile(fields),
+            bind);
+        Definitions.Add(definition);
+        return definition;
+    }
 
     private static string NormaliseToken(string token) => token.Replace("_", string.Empty);
 

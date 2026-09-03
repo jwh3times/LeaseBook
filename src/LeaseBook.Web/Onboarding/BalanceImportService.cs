@@ -21,7 +21,7 @@ namespace LeaseBook.Web.Onboarding;
 
 /// <summary>
 /// Orchestrates balance import for one CSV upload (WP-3 Task 3.2). Parses the CSV via
-/// the WP-1 binders for the given kind, resolves external ids → LeaseBook ids via prior entity-import
+/// the selected AppFolio definition, resolves external ids → LeaseBook ids via prior entity-import
 /// rows and bank account name matching, then posts one
 /// <see cref="IBalanceForward.PostOpeningPositionAsync"/> per valid row — all in one ambient
 /// RLS transaction. Each row posts into the real account + a <c>migration_clearing</c> contra so the
@@ -464,7 +464,7 @@ public sealed class BalanceImportService(
     // -------------------------------------------------------------------------
 
     /// <summary>
-    /// Parses <paramref name="csv"/> for <paramref name="kind"/> and resolves every row to either a
+    /// Parses <paramref name="csv"/> through <paramref name="definition"/> and resolves every row to either a
     /// <see cref="BalanceRowOutcome.Error"/> (unresolvable owner/tenant/bank, a missing operating or
     /// deposit trust bank, or a CSV parse error) or one-or-more <see cref="PlannedPosition"/>s — never
     /// both for the same row. Does no posting: <see cref="ImportAsync"/> posts the plan, and the
