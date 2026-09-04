@@ -30,6 +30,12 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   every definition has matching host handling. Audit metadata and fallback filenames come from the
   resolved definition; case and underscore aliases remain supported, but accidental numeric aliases
   are rejected.
+- **Project work is tracked in GitHub Issues rather than Markdown plan files.** Open work - the
+  operator-gated deployment sequence, compliance and beta gates, deferred items with the trigger
+  that promotes each one, and the remaining engineering backlog - now lives as issues on a shared
+  project board instead of checkboxes in a build plan. The contributor contract, the specialist
+  agents, and the session skills point there, and `docs/agents/issue-tracker.md` records how to tell
+  which of the two trackers an item belongs in.
 - **Host execution modes now have one lifecycle contract.** Web serving, foreground CLI tools, and
   build-time OpenAPI generation share application composition while activating only their allowed
   startup effects. CLI commands no longer build an unused HTTP pipeline or register background

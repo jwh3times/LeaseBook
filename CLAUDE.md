@@ -17,8 +17,9 @@ Everything above is the cross-agent contract. This section is the only Claude-sp
   `trust-accounting`, `code-reviewer`, `azure-infrastructure`, `docs-updater`. Dispatch the one that
   owns the domain rather than only reading its file.
 - The `/ship` skill runs the pre-push documentation-drift check: it invokes `docs-updater` for the
-  docs it owns and flags private-roadmap WP drift. Treat its report as a prompt to inspect the owning
-  document, not as permission to update every mentioned file.
+  docs it owns, and warns when a branch closes no issue or closes one that is not on the project
+  board. Treat its report as a prompt to inspect the owning document, not as permission to update
+  every mentioned file.
 - Invoke `docs-updater` before a push or PR when source behavior, commands, ports, architecture,
   business events, or user workflows changed.
 - Do not rely on these session-scoped checks as guarantees: they do not run in Codex, CI, Dependabot,

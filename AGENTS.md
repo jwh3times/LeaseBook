@@ -7,13 +7,14 @@ and documentation ownership.
 ## Repository State
 
 LeaseBook is a property-management SaaS for small residential property managers, differentiated on
-correct trust accounting and low click-depth UX. All milestone work is governed by
-`private/TODO.md`, the master build plan. Milestones M0-M8 implement PRD Phase 1 and are sequenced
-top-to-bottom; each milestone ends in a demonstrable state. Per-milestone plans and retrospectives
-live in `private/planning/` as `m{N}_plan.md` and `m{N}_retro.md`.
+correct trust accounting and low click-depth UX. Milestones M0-M8 implement PRD Phase 1; each ends
+in a demonstrable state. Per-milestone plans and retrospectives live in `private/planning/` as
+`m{N}_plan.md` and `m{N}_retro.md`.
 
-`private/TODO.md` checkboxes and `private/planning/*_retro.md` are the live source of truth. Consult
-them directly; do not trust summaries, including this one, for current progress.
+**Open work lives in GitHub Issues on the LeaseBook project board (project 3), across the public and
+private trackers — that is the live source of truth for what remains.** `private/planning/*_retro.md`
+remains the source of truth for how completed work actually went. Do not trust summaries, including
+this one, for current progress.
 
 - M0-M7 are complete and merged to `main`: foundations; the trust-accounting engine; Directory; the
   tenant ledger action hub; Banking and Reconciliation; Owner Statements and Reporting; Bulk
@@ -49,8 +50,9 @@ them directly; do not trust summaries, including this one, for current progress.
     configuration, refused at startup when enabled without a named proxy, and ships off until an
     operator names the ingress. Neither the wrap nor the ingress naming is deployment-validated.
 
-  Remaining M8 work is summarized publicly in `docs/ROADMAP.md`; detailed sequencing lives in
-  `private/roadmap.md` and `private/TODO.md`, with `private/TODO.md` canonical where they disagree.
+  Remaining M8 work is summarized publicly in `docs/ROADMAP.md`; detailed sequencing lives in the
+  open issues and the shared project board's `Track` and `Gate` fields
+  (`docs/agents/issue-tracker.md`).
 
 - Operator-gated remainder is deferred and is not ordinary engineering work: Azure OIDC federation,
   ACR, enabling the authored `deploy-dev`/`deploy-prod` workflows, live Key Vault and managed
@@ -65,9 +67,15 @@ The `private/` directory is gitignored by the public repository and is a separat
 confidential checkout for authorized maintainers. Its repository locator and bootstrap details live
 outside the public repository, and it may be absent in a public clone. It holds:
 
-- `private/TODO.md`: master build plan for unpublished sequencing and product decisions; its original
-  architecture baseline and Definition of Done have public counterparts in `docs/blueprint.md` and
-  `CONTRIBUTING.md`
+- `private/planning/m{N}_retro.md`: per-milestone retrospectives — the durable record of how
+  completed work actually went
+- `private/security-review-findings.md`, `private/architecture-review-findings.md`: historical
+  records of the review passes; new findings are issues, not appends
+- `private/appfolio.md`: AppFolio export catalog (reference data)
+- `private/TODO.md`, `private/roadmap.md`: **removed 2026-09-04** — every item moved to GitHub
+  Issues and the project board; read them in the private repository's git history if you need the
+  pre-migration state. Their architecture baseline and Definition of Done have public counterparts
+  in `docs/blueprint.md` and `CONTRIBUTING.md`
 - `private/LeaseBook_PRD_v1.0.md`: product requirements and scope authority
 - `private/claude_design_files/`: interactive UI prototype, design-system source of truth, and
   design/product analysis
@@ -75,7 +83,7 @@ outside the public repository, and it may be absent in a public clone. It holds:
 Anything confidential, including pricing, strategy, customer identity, and internal analysis, belongs
 in `private/` and must never be added to the public repository. Commit and push public and private
 changes independently. If `private/` is absent and the task depends on it, ask the user for the
-relevant build-plan or PRD context before starting milestone work.
+relevant PRD or design context before starting milestone work.
 
 ## Ground Rules
 
@@ -88,7 +96,7 @@ Verify, do not assume.
   numbers, EF/RLS/posting runtime behavior, and anything that can affect fiduciary correctness.
 - Ground truth is usually obtainable locally:
   - Scope and intent: `private/LeaseBook_PRD_v1.0.md` and `private/claude_design_files/`
-  - Built or decided work: `private/TODO.md` and `private/planning/*_retro.md`
+  - Built or decided work: closed issues and `private/planning/*_retro.md`
   - Real figures and behavior: run `check-invariants`, golden/invariant/property suites, query the
     seeded demo org, or read the migration, RLS-helper, and posting-template code
 - Designing a structure to discover an unknown at runtime is still building on an assumption. Verify
@@ -208,7 +216,23 @@ the relevant docs in the same change.
 
 ### Issue tracker
 
-Issues live in GitHub Issues for this repo (`gh` CLI). See [`docs/agents/issue-tracker.md`](docs/agents/issue-tracker.md).
+Two trackers, split on one question: **would this text be safe in a public git history?**
+
+- **Public** — `jwh3times/LeaseBook`. Anything a public PR closes: engineering work, bugs,
+  architecture questions, deployment steps. This is the default.
+- **Private** — the private companion repository, whose locator is the `private/` checkout's own
+  git remote and stays out of this tree. Anything confidential: security positions that
+  describe an unpatched weakness, compliance and legal engagements, customer identity, pricing and
+  strategy. These close on events in the world, not on merged PRs.
+
+Never reference a private issue from a public PR, commit, or issue — the reference itself leaks its
+existence. Both trackers share one board (project 3).
+
+**One rule prevents the drift this replaced:** an issue states its own question and never restates
+another issue's status. Use task lists and `Part of #N` for relationships — GitHub renders child
+state live, so a parent stays current with nobody maintaining it.
+
+See [`docs/agents/issue-tracker.md`](docs/agents/issue-tracker.md) and `gh` CLI usage there.
 
 ### Triage labels
 
@@ -336,9 +360,11 @@ These flows are instrumented in telemetry; regressions fail the release checklis
 
 ## Working Conventions
 
-- Follow `private/TODO.md` order. Check off boxes as tasks complete and keep it current. Scope
-  changes are edits to the plan, not side conversations. Items marked `GATE` block the work below
-  them until resolved.
+- **Work is tracked in GitHub Issues, not in Markdown checkboxes.** The LeaseBook project board
+  (`gh project view 3 --owner jwh3times`) is the single view across both trackers; its `Track` and
+  `Gate` fields carry the sequencing that `private/roadmap.md` §2 used to describe in prose. Close
+  issues as work completes. Scope changes are new or edited issues, not side conversations. An issue
+  labelled with a gate blocks the work that depends on it until it is closed.
 - The Definition of Done in `CONTRIBUTING.md` applies to every task: tests at the right altitude,
   audit/telemetry events on
   money-touching paths, empty/loading/error states, keyboard path, and demoability on the seed org.
