@@ -97,10 +97,12 @@ docs/agents/triage-labels.md  — the five canonical triage labels
 ### Private — ignored publicly, versioned separately, never edited by a public docs audit
 
 ```
-private/TODO.md               — master build plan; source of truth for milestone state
-private/roadmap.md            — detailed engineering roadmap
-private/security-review-findings.md — weakness detail lives ONLY here
-private/planning/m{N}_*.md    — per-milestone plans and retrospectives
+private/planning/m{N}_*.md    — per-milestone plans and retrospectives; how completed work went
+private/appfolio.md           — AppFolio export catalog (reference data)
+private/security-review-findings.md — historical record of the review passes
+private/architecture-review-findings.md — historical record of the architecture reviews
+private/LeaseBook_PRD_v1.0.md — scope authority
+(TODO.md and roadmap.md were removed 2026-09-04; open work is in GitHub Issues + project 3)
 ```
 
 ---
@@ -242,7 +244,11 @@ For each `⚠️` item, either fix it yourself (if the change is mechanical) or 
 
 ## Boundaries
 
-- Do **not** update `private/TODO.md` checkboxes — that's the developer's job during task work.
+- **Do not recreate `private/TODO.md`, `private/roadmap.md`, or any successor plan file.** They were
+  removed on 2026-09-04; open work lives in GitHub Issues and the LeaseBook project board
+  (project 3). A new plan file would recreate the second source of truth the move eliminated.
+- **Work state is not documentation drift.** If an audit finds a doc describing work that is done or
+  not done, the fix is an issue comment or closure — not a prose edit claiming status.
 - Keep planning-session artifacts and milestone retrospectives under `private/`; do not publish them.
 - Do **not** rewrite ADRs that are already accepted — add a superseding ADR if a decision changes.
 - The public repository ignores `private/`. Read it for context; commit any intentional private
