@@ -188,3 +188,54 @@ test("a review date cannot be back-dated, because recording it is itself an edit
   assert.equal(reviewIsStale("2026-08-10", "2026-08-19"), true);
   assert.equal(reviewIsStale("2026-08-19", "2026-08-19"), false);
 });
+
+test("obsolete authority claims are caught outside docs/", (context) => {
+  const root = mkdtempSync(path.join(tmpdir(), "leasebook-docs-"));
+  context.after(() => rmSync(root, { recursive: true, force: true }));
+  const file = "AGENTS.md";
+  writeFileSync(
+    path.join(root, file),
+    [
+      "# AGENTS",
+      "",
+      "Detailed sequencing lives in `private/roadmap.md` and `private/TODO.md`, with `private/TODO.md` canonical where they disagree.",
+    ].join("\n"),
+  );
+
+  // The real miss this pins: AGENTS.md is not under `docs/`, so scanning only living documents
+  // left this exact sentence in the contract with the gate green.
+  const errors = validateRepository(root, [file]);
+  assert.equal(
+    errors.some(
+      (error) =>
+        error.file === file &&
+        error.message.includes("obsolete canonical-authority claim"),
+    ),
+    true,
+  );
+});
+
+test("generated skill mirrors do not double-report an authored claim", (context) => {
+  const root = mkdtempSync(path.join(tmpdir(), "leasebook-docs-"));
+  context.after(() => rmSync(root, { recursive: true, force: true }));
+  const authored = ".agents/skills/demo/SKILL.md";
+  const mirror = ".claude/skills/demo/SKILL.md";
+  const body = [
+    "# Demo",
+    "",
+    "`private/TODO.md` is canonical for milestone state.",
+  ].join("\n");
+  mkdirSync(path.join(root, ".agents", "skills", "demo"), { recursive: true });
+  mkdirSync(path.join(root, ".claude", "skills", "demo"), { recursive: true });
+  writeFileSync(path.join(root, authored), body);
+  writeFileSync(path.join(root, mirror), body);
+
+  const claims = validateRepository(root, [authored, mirror]).filter((error) =>
+    error.message.includes("obsolete canonical-authority claim"),
+  );
+  // One defect, reported once, against the file a human can actually fix.
+  assert.deepEqual(
+    claims.map((error) => error.file),
+    [authored],
+  );
+});
