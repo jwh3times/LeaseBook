@@ -1,7 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text;
-using LeaseBook.Migrator.Model;
+using LeaseBook.Migrator;
 using LeaseBook.Modules.Accounting.Domain;
 using LeaseBook.Modules.Directory.Domain;
 using LeaseBook.Modules.Directory.Features.BankAccounts;
@@ -55,7 +55,7 @@ public sealed class BalanceSupersedeTests(PostgresFixture fixture)
         var (setup, ownerId) = await ArrangeTiedSetAsync("Changed", ct);
 
         // Supersede owner O-1: cash 500 → 450, accrual 500 → 450 (accrual delta stays 0).
-        var result = await SupersedeInScopeAsync(setup.OrgId, EntityKind.OwnerBalances,
+        var result = await SupersedeInScopeAsync(setup.OrgId, AppFolioImportCatalog.OwnerBalances,
             "Owner ID,Owner Name,Cash Balance,Accrual Balance\nO-1,Chain Owner LLC,450.00,450.00\n", Cutover, ct);
 
         result.Counts.Superseded.ShouldBe(1);
@@ -95,7 +95,7 @@ public sealed class BalanceSupersedeTests(PostgresFixture fixture)
 
         // Correct the bank side too: trust bank 500 → 450 (total bank 450 + 500 deposit = 950 = equity
         // 450 + deposit-liability 500) → clearing re-zeroes in BOTH bases.
-        await SupersedeInScopeAsync(setup.OrgId, EntityKind.BankBalances,
+        await SupersedeInScopeAsync(setup.OrgId, AppFolioImportCatalog.BankBalances,
             $"Account ID,Account Name,Book Balance\nB-TRUST,{setup.TrustBankName},450.00\nB-DEP,{setup.DepositBankName},500.00\n",
             Cutover, ct);
 
@@ -121,7 +121,7 @@ public sealed class BalanceSupersedeTests(PostgresFixture fixture)
         var (journalBefore, _) = await CountsAsync(setup.OrgId, ct);
 
         // Supersede with the identical original figures.
-        var result = await SupersedeInScopeAsync(setup.OrgId, EntityKind.OwnerBalances,
+        var result = await SupersedeInScopeAsync(setup.OrgId, AppFolioImportCatalog.OwnerBalances,
             "Owner ID,Owner Name,Cash Balance,Accrual Balance\nO-1,Chain Owner LLC,500.00,500.00\n", Cutover, ct);
 
         result.Counts.Unchanged.ShouldBe(result.RowCount, "an identical file leaves every row unchanged");
@@ -148,7 +148,7 @@ public sealed class BalanceSupersedeTests(PostgresFixture fixture)
         var ownerId = await ResolveOwnerIdAsync(setup.OrgId, "Chain Owner LLC", ct);
 
         // Supersede: cash 500 → 600, accrual held at 700 → new delta 100 (700 − 600).
-        var result = await SupersedeInScopeAsync(setup.OrgId, EntityKind.OwnerBalances,
+        var result = await SupersedeInScopeAsync(setup.OrgId, AppFolioImportCatalog.OwnerBalances,
             "Owner ID,Owner Name,Cash Balance,Accrual Balance\nO-1,Chain Owner LLC,600.00,700.00\n", Cutover, ct);
         result.Counts.Superseded.ShouldBe(1);
 
@@ -194,7 +194,7 @@ public sealed class BalanceSupersedeTests(PostgresFixture fixture)
             new { csvContent = "Tenant ID,Owner ID,Deposit Held\nT-1,O-1,500.00\n", cutoverDate = CutoverStr, filename = "deposits.csv" }, ct);
 
         // Supersede: held 500 → 0.00.
-        var result = await SupersedeInScopeAsync(setup.OrgId, EntityKind.DepositLiabilities,
+        var result = await SupersedeInScopeAsync(setup.OrgId, AppFolioImportCatalog.DepositLiabilities,
             "Tenant ID,Owner ID,Deposit Held\nT-1,O-1,0.00\n", Cutover, ct);
         result.Counts.Superseded.ShouldBe(1);
 
@@ -251,7 +251,7 @@ public sealed class BalanceSupersedeTests(PostgresFixture fixture)
         var (journalBefore, batchesBefore) = await CountsAsync(setup.OrgId, ct);
 
         var ex = await Should.ThrowAsync<SupersedeConflictException>(async () =>
-            await SupersedeInScopeAsync(setup.OrgId, EntityKind.OwnerBalances,
+            await SupersedeInScopeAsync(setup.OrgId, AppFolioImportCatalog.OwnerBalances,
                 "Owner ID,Owner Name,Cash Balance,Accrual Balance\nO-1,Chain Owner LLC,450.00,450.00\n", Cutover, ct));
         ex.Code.ShouldBe("already_signed_off");
 
@@ -273,7 +273,7 @@ public sealed class BalanceSupersedeTests(PostgresFixture fixture)
         var (journalBefore, batchesBefore) = await CountsAsync(setup.OrgId, ct);
 
         var ex = await Should.ThrowAsync<OnboardingConflictException>(async () =>
-            await SupersedeInScopeAsync(setup.OrgId, EntityKind.OwnerBalances,
+            await SupersedeInScopeAsync(setup.OrgId, AppFolioImportCatalog.OwnerBalances,
                 "Owner ID,Owner Name,Cash Balance,Accrual Balance\nO-1,Chain Owner LLC,450.00,450.00\n",
                 new DateOnly(2026, 7, 31), ct));
         ex.Code.ShouldBe("cutover_date_mismatch");
@@ -294,7 +294,7 @@ public sealed class BalanceSupersedeTests(PostgresFixture fixture)
         var setup = await SetupAsync("Nothing", ct);
 
         var ex = await Should.ThrowAsync<SupersedeConflictException>(async () =>
-            await SupersedeInScopeAsync(setup.OrgId, EntityKind.OwnerBalances,
+            await SupersedeInScopeAsync(setup.OrgId, AppFolioImportCatalog.OwnerBalances,
                 "Owner ID,Owner Name,Cash Balance,Accrual Balance\nO-1,Ghost Owner,450.00,450.00\n", Cutover, ct));
         ex.Code.ShouldBe("nothing_to_supersede");
 
@@ -319,9 +319,9 @@ public sealed class BalanceSupersedeTests(PostgresFixture fixture)
         var ownerId = await ResolveOwnerIdAsync(setup.OrgId, "Chain Owner LLC", ct);
 
         // 500 → 450 → 480.
-        await SupersedeInScopeAsync(setup.OrgId, EntityKind.OwnerBalances,
+        await SupersedeInScopeAsync(setup.OrgId, AppFolioImportCatalog.OwnerBalances,
             "Owner ID,Owner Name,Cash Balance,Accrual Balance\nO-1,Chain Owner LLC,450.00,450.00\n", Cutover, ct);
-        await SupersedeInScopeAsync(setup.OrgId, EntityKind.OwnerBalances,
+        await SupersedeInScopeAsync(setup.OrgId, AppFolioImportCatalog.OwnerBalances,
             "Owner ID,Owner Name,Cash Balance,Accrual Balance\nO-1,Chain Owner LLC,480.00,480.00\n", Cutover, ct);
 
         var baseRef = $"opening:{CutoverStr}:owner-equity={ownerId}";
@@ -365,7 +365,7 @@ public sealed class BalanceSupersedeTests(PostgresFixture fixture)
                 .FirstAsync(ct);
         }, ct);
 
-        var result = await SupersedeInScopeAsync(setup.OrgId, EntityKind.OwnerBalances,
+        var result = await SupersedeInScopeAsync(setup.OrgId, AppFolioImportCatalog.OwnerBalances,
             "Owner ID,Owner Name,Cash Balance,Accrual Balance\nO-1,Chain Owner LLC,450.00,450.00\n", Cutover, ct);
         result.Counts.Superseded.ShouldBe(1);
 
@@ -508,11 +508,11 @@ public sealed class BalanceSupersedeTests(PostgresFixture fixture)
 
         // Supersede: held fees 100 → 80, and the bank book down to 580 to keep the set tied (the
         // tied variant — clearing re-zeroes rather than showing the 20.00 shift).
-        var result = await SupersedeInScopeAsync(setup.OrgId, EntityKind.HeldPmFees,
+        var result = await SupersedeInScopeAsync(setup.OrgId, AppFolioImportCatalog.HeldPmFees,
             $"Account ID,Account Name,Held Fees\nB-TRUST,{setup.TrustBankName},80.00\n", Cutover, ct);
         result.Counts.Superseded.ShouldBe(1);
 
-        await SupersedeInScopeAsync(setup.OrgId, EntityKind.BankBalances,
+        await SupersedeInScopeAsync(setup.OrgId, AppFolioImportCatalog.BankBalances,
             $"Account ID,Account Name,Book Balance\nB-TRUST,{setup.TrustBankName},580.00\n", Cutover, ct);
 
         var baseRef = $"opening:{CutoverStr}:held-fees={trustBankId}";
@@ -578,7 +578,7 @@ public sealed class BalanceSupersedeTests(PostgresFixture fixture)
 
         // The corrected file carries O-1 only. O-2 is absent — which must mean "leave it alone",
         // never "remove it" (the $0.00 resubmission in test 4 is the removal gesture).
-        var result = await SupersedeInScopeAsync(setup.OrgId, EntityKind.OwnerBalances,
+        var result = await SupersedeInScopeAsync(setup.OrgId, AppFolioImportCatalog.OwnerBalances,
             "Owner ID,Owner Name,Cash Balance,Accrual Balance\nO-1,Chain Owner LLC,450.00,450.00\n", Cutover, ct);
 
         result.RowCount.ShouldBe(1, "the batch spans the corrected file's rows only, not the live position set");
@@ -629,7 +629,7 @@ public sealed class BalanceSupersedeTests(PostgresFixture fixture)
         // Fully qualified: an unaliased `using` for Accounting.Contracts would make BankPurpose
         // ambiguous against Directory.Domain's, which ResolveBankIdsAsync depends on.
         var ex = await Should.ThrowAsync<LeaseBook.Modules.Accounting.Contracts.InvalidOpeningPositionException>(async () =>
-            await SupersedeInScopeAsync(setup.OrgId, EntityKind.HeldPmFees,
+            await SupersedeInScopeAsync(setup.OrgId, AppFolioImportCatalog.HeldPmFees,
                 $"Account ID,Account Name,Held Fees\nB-TRUST,{setup.TrustBankName},80.00\n", Cutover, ct));
         ex.Code.ShouldBe("held_fees_bank_not_trust");
 
@@ -761,7 +761,11 @@ public sealed class BalanceSupersedeTests(PostgresFixture fixture)
     /// request unit-of-work, so guard throws leave zero side effect.
     /// </summary>
     private async Task<ImportBatchResult> SupersedeInScopeAsync(
-        Guid orgId, EntityKind kind, string csv, DateOnly cutover, CancellationToken ct)
+        Guid orgId,
+        AppFolioImportDefinition definition,
+        string csv,
+        DateOnly cutover,
+        CancellationToken ct)
     {
         await using var scope = fixture.Api.Services.CreateAsyncScope();
         var executor = scope.ServiceProvider.GetRequiredService<OrgScopedExecutor>();
@@ -771,7 +775,12 @@ public sealed class BalanceSupersedeTests(PostgresFixture fixture)
         await executor.RunAsSystemAsync(orgId, "test-harness", async () =>
         {
             await using var stream = new MemoryStream(Encoding.UTF8.GetBytes(csv));
-            result = await service.SupersedeAsync(kind, "appfolio-default", $"{kind}.csv", cutover, stream, ct);
+            result = await service.SupersedeAsync(
+                definition,
+                $"{definition.CanonicalToken}.csv",
+                cutover,
+                stream,
+                ct);
         }, ct);
         return result;
     }

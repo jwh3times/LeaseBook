@@ -12,7 +12,7 @@ internal static class ArchitectureAssemblies
 
     public static Assembly Web { get; } = typeof(Program).Assembly;
 
-    public static Assembly Migrator { get; } = typeof(LeaseBook.Migrator.Model.EntityKind).Assembly;
+    public static Assembly Migrator { get; } = typeof(LeaseBook.Migrator.AppFolioImportCatalog).Assembly;
 
     public static IReadOnlyList<NamedArchitectureAssembly> Modules { get; } =
     [

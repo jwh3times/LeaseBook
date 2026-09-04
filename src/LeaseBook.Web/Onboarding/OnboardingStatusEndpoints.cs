@@ -1,3 +1,4 @@
+using LeaseBook.Migrator;
 using LeaseBook.Modules.Accounting.Features.Ledgers;
 using LeaseBook.Modules.Directory.Features.BankAccounts;
 using LeaseBook.SharedKernel.Cqrs;
@@ -38,11 +39,9 @@ public sealed class OnboardingStatusEndpoints : IEndpointModule
                     var banksConfigured = banks.Count > 0;
 
                     // entitiesImported: ≥1 ImportBatch in an entity-kind family with a successful status.
-                    // EntityKind.ToString() produces PascalCase names (Owners, Properties, Units, TenantsLeases).
-                    var entityKinds = new[]
-                    {
-                        "Owners", "Properties", "Units", "TenantsLeases",
-                    };
+                    var entityKinds = AppFolioImportCatalog.ForFamily(AppFolioImportFamily.Entity)
+                        .Select(definition => definition.PersistedName)
+                        .ToArray();
                     var entityStatuses = new[] { "posted", "posted_with_errors" };
 
                     var entitiesImported = await db.Set<ImportBatch>()
@@ -50,12 +49,9 @@ public sealed class OnboardingStatusEndpoints : IEndpointModule
                                        && entityStatuses.Contains(b.Status), ct);
 
                     // balancesImported: ≥1 ImportBatch in a balance-kind family with a successful status.
-                    // EntityKind.ToString() produces PascalCase names (OwnerBalances, DepositLiabilities,
-                    // BankBalances, TenantReceivables, HeldPmFees).
-                    var balanceKinds = new[]
-                    {
-                        "OwnerBalances", "DepositLiabilities", "BankBalances", "TenantReceivables", "HeldPmFees",
-                    };
+                    var balanceKinds = AppFolioImportCatalog.ForFamily(AppFolioImportFamily.Balance)
+                        .Select(definition => definition.PersistedName)
+                        .ToArray();
 
                     var balancesImported = await db.Set<ImportBatch>()
                         .AnyAsync(b => balanceKinds.Contains(b.EntityKind)
@@ -98,7 +94,7 @@ public sealed record OnboardingStatusResponse(
     bool BanksConfigured,
     /// <summary>True when ≥1 entity import batch (owners/properties/units/tenants_leases) has been posted (with or without errors).</summary>
     bool EntitiesImported,
-    /// <summary>True when ≥1 balance import batch (owner_balances/deposit_liabilities/bank_balances/tenant_receivables) has been posted (with or without errors).</summary>
+    /// <summary>True when ≥1 balance import batch (including held_pm_fees) has been posted (with or without errors).</summary>
     bool BalancesImported,
     /// <summary>True when ≥1 migration verification has been run.</summary>
     bool Verified,

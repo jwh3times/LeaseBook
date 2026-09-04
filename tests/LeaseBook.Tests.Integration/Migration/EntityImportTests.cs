@@ -41,8 +41,8 @@ public sealed class EntityImportTests(PostgresFixture fixture)
             "O-1,Hargrove Family Trust,250.00\n" +
             "O-2,Linden Properties LLC,0\n";
 
-        var result = await PostImportAsync<ImportBatchResult>(client, "owners",
-            new { csvContent = csv, filename = "owners.csv" }, ct);
+        var result = await PostImportAsync<ImportBatchResult>(client, "_Ow_NeRs_",
+            new { csvContent = csv, mappingProfile = (string?)null }, ct);
 
         // HTTP 200 with well-formed result.
         result.RowCount.ShouldBe(2);
@@ -77,6 +77,9 @@ public sealed class EntityImportTests(PostgresFixture fixture)
                 .SingleOrDefaultAsync(b => b.Id == result.BatchId, ct);
             batch.ShouldNotBeNull();
             batch!.Status.ShouldBe("posted");
+            batch.EntityKind.ShouldBe("Owners");
+            batch.MappingProfile.ShouldBe("appfolio-default");
+            batch.SourceFilename.ShouldBe("owners.csv");
             batch.ErrorCount.ShouldBe(0);
             batch.RowCount.ShouldBe(2);
 
@@ -86,6 +89,21 @@ public sealed class EntityImportTests(PostgresFixture fixture)
             rows.Count.ShouldBe(2);
             rows.ShouldAllBe(r => r.RowStatus == "posted");
         }, ct);
+    }
+
+    [Fact]
+    public async Task Numeric_kind_alias_is_rejected()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (_, client) = await SetupAsync("NumericKind", ct);
+
+        var response = await client.PostAsJsonAsync(
+            "/api/onboarding/import/2",
+            new { csvContent = "Owner ID,Owner Name\nO-1,Numeric Alias\n" },
+            ct);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await response.Content.ReadAsStringAsync(ct)).ShouldContain("invalid_entity_kind");
     }
 
     // -------------------------------------------------------------------------

@@ -1,4 +1,4 @@
-using LeaseBook.Migrator.Model;
+using LeaseBook.Migrator;
 using LeaseBook.Modules.Accounting.Contracts;
 using LeaseBook.SharedKernel.Endpoints;
 using Microsoft.AspNetCore.Builder;
@@ -54,8 +54,7 @@ public sealed class ImportBalancesEndpoints : IEndpointModule
                     {
                         var result = await service.ImportAsync(
                             balanceKind,
-                            "appfolio-default",
-                            body.Filename ?? $"{kind}.csv",
+                            body.Filename ?? $"{balanceKind.CanonicalToken}.csv",
                             cutoverDate,
                             csvStream,
                             ct);
@@ -92,7 +91,7 @@ public sealed class ImportBalancesEndpoints : IEndpointModule
                     try
                     {
                         var result = await service.SupersedeAsync(
-                            balanceKind, "appfolio-default", body.Filename ?? $"{kind}.csv",
+                            balanceKind, body.Filename ?? $"{balanceKind.CanonicalToken}.csv",
                             cutoverDate, csvStream, ct);
                         return TypedResults.Ok(result);
                     }
@@ -116,17 +115,6 @@ public sealed class ImportBalancesEndpoints : IEndpointModule
             .Produces(StatusCodes.Status409Conflict);
     }
 
-    // The route uses snake_case kind tokens (e.g. "owner_balances"); normalise to PascalCase
-    // (strip underscores) before the idiomatic Enum.TryParse + IsDefined check.
-    private static bool TryParseBalanceKind(string raw, out EntityKind kind)
-    {
-        var normalised = raw.Replace("_", string.Empty);
-        return Enum.TryParse(normalised, ignoreCase: true, out kind)
-               && Enum.IsDefined(kind)
-               && kind is EntityKind.OwnerBalances or EntityKind.DepositLiabilities
-                   or EntityKind.BankBalances or EntityKind.TenantReceivables or EntityKind.HeldPmFees;
-    }
-
     /// <summary>
     /// The request-shape validation ladder shared verbatim by the import and supersede routes (kind →
     /// mapping profile → cutover date → csv presence), so the two routes cannot silently drift apart.
@@ -137,13 +125,16 @@ public sealed class ImportBalancesEndpoints : IEndpointModule
         string kind,
         BalanceImportRequest body,
         HttpContext httpContext,
-        out EntityKind balanceKind,
+        out AppFolioImportDefinition balanceKind,
         out DateOnly cutoverDate)
     {
-        balanceKind = default;
+        balanceKind = null!;
         cutoverDate = default;
 
-        if (!TryParseBalanceKind(kind, out balanceKind))
+        if (!AppFolioImportCatalog.TryResolve(
+                kind,
+                AppFolioImportFamily.Balance,
+                out balanceKind))
             return ProblemResults.Problem(
                 httpContext,
                 code: "invalid_balance_kind",
@@ -152,7 +143,7 @@ public sealed class ImportBalancesEndpoints : IEndpointModule
 
         // Only the documented appfolio-default profile exists today.
         var requested = body.MappingProfile;
-        if (!string.IsNullOrWhiteSpace(requested) && requested != "appfolio-default")
+        if (!string.IsNullOrWhiteSpace(requested) && requested != balanceKind.ProfileId)
             return ProblemResults.Problem(
                 httpContext,
                 code: "unknown_mapping_profile",
@@ -185,5 +176,5 @@ public sealed record BalanceImportRequest(
     string? CutoverDate,
     /// <summary>Original filename (for display / audit).</summary>
     string? Filename,
-    /// <summary>Optional mapping profile override; defaults to <c>appfolio-default</c>.</summary>
+    /// <summary>Optional mapping profile identifier; defaults to <c>appfolio-default</c>.</summary>
     string? MappingProfile);

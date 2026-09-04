@@ -1,5 +1,5 @@
 using System.Text.Json;
-using LeaseBook.Migrator.Model;
+using LeaseBook.Migrator;
 using LeaseBook.Web.Onboarding.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -7,7 +7,7 @@ namespace LeaseBook.Web.Onboarding;
 
 /// <summary>
 /// Builds a reverse lookup (external id → LeaseBook id) from the org's prior <c>posted</c>
-/// <see cref="ImportRow"/>s for a given <see cref="EntityKind"/>. Used during entity import so
+/// <see cref="ImportRow"/>s for a given <see cref="AppFolioImportDefinition"/>. Used during entity import so
 /// child rows can resolve parent FKs (e.g. a property row's <c>external_owner_id</c> →
 /// the owner's LeaseBook <see cref="Guid"/>). 3.2 balance import reuses the same helper.
 ///
@@ -20,16 +20,16 @@ public sealed class ExternalIdResolver(DbContext db)
     /// Returns a dictionary mapping external id → LeaseBook id for all <c>posted</c> rows of
     /// the given kind. Reads within the ambient RLS transaction (no new connection).
     /// </summary>
-    public async Task<Dictionary<string, Guid>> BuildMapAsync(EntityKind kind, CancellationToken ct)
+    public async Task<Dictionary<string, Guid>> BuildMapAsync(
+        AppFolioImportDefinition definition,
+        CancellationToken ct)
     {
-        var kindStr = kind.ToString();
-
         // RLS scopes this to the current org automatically. A batch with ≥1 bad row becomes
         // "posted_with_errors", but its successfully-created rows still carry RowStatus == "posted"
         // and a real leaseBookId — so include both batch statuses and filter to good rows at the
         // row level. Filtering only at the batch level would drop every good row of a mixed batch.
         var mappedJsonRows = await db.Set<ImportBatch>()
-            .Where(b => b.EntityKind == kindStr
+            .Where(b => b.EntityKind == definition.PersistedName
                         && (b.Status == "posted" || b.Status == "posted_with_errors"))
             .Join(db.Set<ImportRow>(),
                 b => b.Id,

@@ -1,4 +1,4 @@
-using LeaseBook.Migrator.Model;
+using LeaseBook.Migrator;
 using LeaseBook.SharedKernel.Endpoints;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -11,7 +11,7 @@ namespace LeaseBook.Web.Onboarding;
 ///
 /// <c>POST /api/onboarding/import/{kind}</c> — uploads a CSV (as JSON body with
 /// <c>csvContent</c> string field, mirroring the Banking statement import pattern), parses it
-/// against the AppFolio default profile (or an explicit <c>mappingProfile</c> override), creates
+/// against the AppFolio default profile, creates
 /// the corresponding Directory rows, and returns an <see cref="ImportBatchResult"/> with per-row
 /// error detail. One bad row never 500s the batch; import order owners → properties → units →
 /// tenants_leases is enforced by the parent FK resolution.
@@ -32,7 +32,10 @@ public sealed class ImportEntitiesEndpoints : IEndpointModule
                     HttpContext httpContext,
                     CancellationToken ct) =>
                 {
-                    if (!TryParseEntityKind(kind, out var entityKind))
+                    if (!AppFolioImportCatalog.TryResolve(
+                            kind,
+                            AppFolioImportFamily.Entity,
+                            out var definition))
                         return ProblemResults.Problem(
                             httpContext,
                             code: "invalid_entity_kind",
@@ -42,7 +45,7 @@ public sealed class ImportEntitiesEndpoints : IEndpointModule
                     // Only the documented appfolio-default profile exists today (null/empty = default).
                     // Reject any other value rather than silently parsing against the default.
                     var requested = body.MappingProfile;
-                    if (!string.IsNullOrWhiteSpace(requested) && requested != "appfolio-default")
+                    if (!string.IsNullOrWhiteSpace(requested) && requested != definition.ProfileId)
                         return ProblemResults.Problem(
                             httpContext,
                             code: "unknown_mapping_profile",
@@ -53,9 +56,8 @@ public sealed class ImportEntitiesEndpoints : IEndpointModule
                     await using var csvStream = new MemoryStream(csvBytes);
 
                     var result = await service.ImportAsync(
-                        entityKind,
-                        "appfolio-default",
-                        body.Filename ?? $"{kind}.csv",
+                        definition,
+                        body.Filename ?? $"{definition.CanonicalToken}.csv",
                         csvStream,
                         ct);
 
@@ -65,16 +67,6 @@ public sealed class ImportEntitiesEndpoints : IEndpointModule
             .Produces(StatusCodes.Status400BadRequest);
     }
 
-    // The route uses snake_case kind tokens (e.g. "tenants_leases"); normalise to PascalCase
-    // (strip underscores) before the idiomatic Enum.TryParse + Enum.IsDefined check — no sentinel cast.
-    private static bool TryParseEntityKind(string raw, out EntityKind kind)
-    {
-        var normalised = raw.Replace("_", string.Empty);
-        return Enum.TryParse(normalised, ignoreCase: true, out kind)
-               && Enum.IsDefined(kind)
-               && kind is EntityKind.Owners or EntityKind.Properties
-                   or EntityKind.Units or EntityKind.TenantsLeases;
-    }
 }
 
 /// <summary>Request body for <c>POST /api/onboarding/import/{kind}</c>.</summary>
@@ -83,5 +75,5 @@ public sealed record EntityImportRequest(
     string? CsvContent,
     /// <summary>Original filename (for display / audit).</summary>
     string? Filename,
-    /// <summary>Optional mapping profile override; defaults to <c>appfolio-default</c>.</summary>
+    /// <summary>Optional mapping profile identifier; defaults to <c>appfolio-default</c>.</summary>
     string? MappingProfile);
