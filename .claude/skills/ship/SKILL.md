@@ -1,7 +1,7 @@
 ---
 # GENERATED — do not edit. Source: .agents/skills/ship/SKILL.md — regenerate with 'node scripts/sync-agent-mirrors.mjs'.
 name: ship
-description: Use when a branch is ready for review or the user says "ship it", "open a PR", or "push this" — classifies the release impact as major, minor, or build; refreshes docs and the changelog; flags private-roadmap WP drift; runs the fast checks; pushes; and opens or updates the PR. LeaseBook-specific.
+description: Use when a branch is ready for review or the user says "ship it", "open a PR", or "push this" — classifies the release impact as major, minor, or build; refreshes docs and the changelog; flags unlinked issues and missing board entries; runs the fast checks; pushes; and opens or updates the PR. LeaseBook-specific.
 ---
 
 # Ship
@@ -99,38 +99,30 @@ the docs it owns (README.md, AGENTS.md, `docs/`, ADRs, runbooks, etc.). It runs
 **Tell it to leave `CHANGELOG.md` and `VERSION` alone** — you own the release files in step 4, so
 you don't fight over them. `CHANGELOG.md` is not in the docs-updater topology anyway.
 
-### 3b. Flag private-roadmap WP drift (warn only — never edit or commit `private/`)
+### 3b. Check issue linkage (warn only)
 
-The detailed plan lives in `private/roadmap.md` — **gitignored, so CI can never see it.** This local
-ship ritual is therefore the _only_ place its drift can be caught. That file's §10 ("Keeping this
-document honest") requires each WP's PR to tick that WP's own checkboxes and update the §1/§2 status
-lines in the same change; the `docs-updater` in step 3 cannot do this (it has no `private/` topology).
+Work is tracked in GitHub Issues on the LeaseBook project board, not in Markdown checkboxes. This
+step replaced a `private/roadmap.md` work-package drift check that went obsolete when the Track A WP
+sequence closed and tracking moved to issues (2026-09-04).
 
-**Skip entirely if `private/roadmap.md` is absent** — public clones and CI have no `private/` tree;
-do not warn about the missing file.
-
-Otherwise, find the WP this branch ships. The branch slug is the WP's roadmap tag, so grep for it:
+Find the issue this branch closes:
 
 ```
-branch=$(git branch --show-current)     # e.g. m8/compliance-pack
-grep -n "$branch" private/roadmap.md    # locates the WP block; its header names the slug
+branch=$(git branch --show-current)
+gh issue list --state open --limit 100 --json number,title --jq '.[] | "\(.number) \(.title)"'
 ```
 
-If the slug matches no WP block (a dependabot bump, a stray fix), there is no WP to tick — skip the
-rest. If it matches, read that WP block and **warn** — quoting the exact lines to fix — when any of
-these still read as "not done":
+**Warn** — never block — when:
 
-- the WP block **header** carries no `✅` / **merged, PR #NN** marker, or its step checkboxes are
-  still `- [ ]`;
-- §1's **"verified-open positions"** list still names a gap this WP closed (e.g. "no compliance-pack
-  code");
-- §2's **"Remaining (do in this order)"** table still lists this WP, or the **"N of 12"** counts (§1
-  "Closed since this baseline"; §2 "Complete (merged)") were not incremented;
-- §3's **execution-order** line does not prefix this WP with `✅`.
+- the PR body carries no closing keyword (`Fixes #NN`, `Closes #NN`) **and** the change is not a
+  dependency bump, a docs-only edit, or otherwise `skip-changelog`-shaped. Work that closes no issue
+  is work nobody filed;
+- the issue it closes is **not on the project board**, or is on it with `Track` / `Gate` unset —
+  `gh project item-list 3 --owner jwh3times --format json`;
+- the branch closes an issue on the **private** tracker. That reference must not appear in a public
+  PR body at all; the private issue is closed by hand instead.
 
-Surface the findings and let the maintainer edit `private/roadmap.md` themselves. **Never edit,
-stage, or commit it** — it is under `private/` (step 6 and the "Do not" list forbid it). Like the
-schema-drift nudge, this only warns; it never blocks the push.
+Surface the findings and let the maintainer decide. This only warns; it never blocks the push.
 
 ### 4. Update the changelog
 
@@ -237,7 +229,7 @@ Give the user:
   major/minor cut, the new `VERSION`; for a build, that the exact tag is assigned on merge;
 - what `docs-updater` changed;
 - the changelog entries you added and whether they remain in `[Unreleased]` or were cut;
-- any private-roadmap WP-drift warning from step 3b (and confirm you did **not** touch `private/`);
+- any issue-linkage warning from step 3b (and confirm you did **not** touch `private/`);
 - fast-check results, and any schema-drift or accounting-suite notes.
 
 State plainly that the full test suites run in CI, not locally — do not imply the branch is
@@ -256,5 +248,5 @@ enforces when marked a **required status check** on the `main` branch protection
 - Change `VERSION`, write a dated `## [x.y.z]` section, or edit compare links without a confirmed
   major/minor classification. Build ships only touch `[Unreleased]`.
 - Commit anything under `private/`.
-- Edit or stage `private/roadmap.md` — the step 3b drift check only **warns**; the maintainer
-  updates that file themselves.
+- Reference a **private-tracker** issue in a public PR body, commit message, or public issue — the
+  reference itself leaks its existence. Close it by hand.

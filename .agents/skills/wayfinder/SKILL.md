@@ -43,6 +43,15 @@ The whole map at low resolution, loaded once per session. Open tickets are **not
 
 - [<closed ticket title>](link) — <one-line gist of the answer>
 
+<!--
+Two rules, both learned the hard way:
+1. CLOSED tickets only. An open ticket's state lives on the ticket, never here.
+2. The line is the ANSWER, not the delivery status. No PR numbers, merge SHAs, or
+   SHIPPED / IN REVIEW markers — those go stale the moment something merges, and a
+   map that narrates its children's status is a second source of truth for them.
+   The answer does not go stale, which is why it is the thing worth writing down.
+-->
+
 ## Not yet specified
 
 <!-- see "Fog of war": in-scope fog you can't ticket yet; graduates as the frontier advances -->
@@ -122,7 +131,7 @@ User invokes with a map (URL or number). A ticket is **optional** — without on
 1. Load the **map** — the low-res view, not every ticket body.
 2. Choose the ticket. If the user named one, use it. Otherwise take the first frontier ticket in order. **Claim it**: assign it to yourself before any work.
 3. Resolve it — **zoom as needed**: fetch the full body of any related or closed ticket on demand; invoke the skills the `## Notes` block names. If in doubt, use `/grilling` and `/domain-modeling`.
-4. Record the resolution: post the answer as a **resolution comment**, **close** the issue, and **append a context pointer** to the map's Decisions-so-far.
+4. Record the resolution: post the answer as a **resolution comment**, **close** the issue, and **append a context pointer** to the map's Decisions-so-far — one line, the _answer_, not the delivery status. If the ticket is not closed, nothing goes in the map; comment on the ticket instead.
 5. Add newly-surfaced tickets (create-then-wire); graduate any fog the answer has made specifiable, clearing each graduated patch from **Not yet specified** so it lives only as its new ticket. If the answer reveals a ticket — this one or another — sits beyond the destination, **rule it out of scope** rather than resolving it on the route. If the decision invalidates other parts of the map, update or delete those tickets.
 
 The user may run unblocked tickets in parallel, so expect other sessions to be editing the tracker concurrently.

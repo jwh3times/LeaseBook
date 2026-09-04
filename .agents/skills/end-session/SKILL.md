@@ -26,8 +26,8 @@ discoveries land in different ones:
   **This repo is public.** Anything written here is published.
 - **`private/`** — confidential, ignored by the public repository, and **a separate versioned
   checkout with its own remote**. Not local-only: it is committed and pushed independently, per
-  `private/README.md` § Two-repository workflow. `private/TODO.md` and `private/planning/*_retro.md`
-  are the live source of truth for progress. The **public** CI can never see it; the private
+  `private/README.md` § Two-repository workflow. It holds **confidential reference and historical
+  record**, not open work state — open work lives in GitHub issues on the LeaseBook project board. The **public** CI can never see it; the private
   repository runs its own documentation gate (`private/scripts/check-docs.mjs`,
   `.github/workflows/docs.yml`), which checks structure, not whether the content is current — that
   is still this ritual's job.
@@ -90,15 +90,15 @@ files — most session findings belong in one that already exists:
 
 Rules that bite here:
 
-- **Position, not history.** If `git log`, `private/roadmap.md`, or `AGENTS.md` already says it,
-  do not restate it in memory. Record what none of them say.
+- **Position, not history.** If `git log`, an issue, the project board, or `AGENTS.md` already says
+  it, do not restate it in memory. Record what none of them say.
 - **Absolute dates**, never "yesterday" or "last week".
 - Convert a superseded fact by **editing** the memory, not by appending a contradiction. Delete a
   memory that turned out to be wrong.
 - Link related memories with `[[slug]]`.
 - New file ⇒ add its one-line pointer to `MEMORY.md` in the same pass.
 - **Security findings stay out of memory bodies in exploitable detail** — memory can point at
-  `private/security-review-findings.md`; it should not restate an unpatched weakness.
+  the private tracker's `security` issue; it should not restate an unpatched weakness.
 
 ### 3. GitHub issues
 
@@ -110,8 +110,14 @@ Start from what is open and what this session touched:
 
 ```
 gh issue list --state open --json number,title,labels --jq '[.[] | {number, title, labels: [.labels[].name]}]'
+(cd private && gh issue list --state open --json number,title,labels)  # infers its own remote
 gh pr list --state open --json number,title,headRefName
+gh project item-list 3 --owner jwh3times --format json     # both trackers, with Track/Gate
 ```
+
+**Two trackers.** Public is the default; the private one holds only confidential work — security
+positions describing an unpatched weakness, compliance and legal engagements, customer identity,
+pricing and strategy. Never reference a private issue from a public PR, commit, or issue.
 
 Then reconcile:
 
@@ -126,14 +132,19 @@ Then reconcile:
   scheduled work.
 - **Labels** → move anything now fully specified to `ready-for-agent`; move anything blocked on the
   user to `ready-for-human` or `needs-info`.
-- **Wayfinder map #196** — if the session grilled, resolved, or spun off one of its children, follow
-  the wayfinding operations in the issue-tracker doc: comment the answer, close the child, and append
-  a pointer to the map's Decisions-so-far. Sub-issue and blocked-by edges are `gh api` calls, not
+- **Wayfinder map #196** — if the session grilled, resolved, or spun off one of its children:
+  comment the answer on the child and close it. **Do not write the child's status into the map
+  body** — the map carries a task list, which renders child state on its own, and status prose in a
+  parent is exactly how it went stale before. Sub-issue and blocked-by edges are `gh api` calls, not
   body text, where they are enabled.
+- **The board** — a new issue is not tracked until it is on project 3 with `Track` and `Gate` set
+  (`gh project item-add 3 --owner jwh3times --url <url>`).
 
-**Never publish to an issue:** anything from `private/` — pricing, strategy, customer identity,
-internal analysis, private figures — or exploitable detail about an **unpatched** security finding.
-The repo is public. Those go to `private/security-review-findings.md` instead.
+**Never publish to a _public_ issue:** anything confidential — pricing, strategy, customer
+identity, internal analysis, private figures — or exploitable detail about an **unpatched** security
+finding. The public repo publishes what you write. Those go to a **private-tracker issue** instead
+(run `gh issue create` from inside the `private/` checkout, so its remote is inferred rather than
+written into this tree), labelled `security` or `product-decision`.
 
 ### 4. `private/` docs
 
@@ -142,28 +153,34 @@ A separate versioned checkout, ignored by the public repository. **Skip this who
 indexes every document there and is the authority on which one owns what; the list below is the
 subset a session close-out usually touches.
 
-Match the update to the kind of thing learned:
+> **Work state lives in GitHub Issues and the project board (project 3).** `TODO.md` and
+> `roadmap.md` were **removed on 2026-09-04** once every item they held had an issue — do not
+> recreate them or any successor plan file. If this session completed something, close its
+> **issue**. If it discovered something, **file** one.
 
-- **`private/TODO.md`** — the master build plan, canonical for **what is done**. Tick the boxes this
-  session completed. A scope change is an _edit to the plan_, not a note elsewhere. `GATE` items
-  block everything below them; if the session cleared one, say so here.
-- **`private/roadmap.md`** — the single M8 engineering document and canonical for **what the work
-  is**: Track A/B/C in §3/§4/§5, exit criteria §10, open operator decisions §11. Its §12 ("Keeping
-  this document honest") requires a completed item to tick its own checkbox **and** update the §1
-  evidence and §2 status lines in the same change. Check §1's verified-open-positions list, §2's
-  remaining table and its counts, and §3's execution-order markers. `/ship` only _warns_ about this
-  drift; here you fix it. (The former `planning/m8_plan.md` overlay was folded into this file and
-  deleted on 2026-08-28 — do not recreate a second M8 document.)
+What remains in `private/` is confidential reference and historical record. Match the update to the
+kind of thing learned:
+
 - **`private/planning/m{N}_plan.md` / `m{N}_retro.md`** — milestone overlays for M0–M7. There is no
   `m8_retro.md` yet. Deviations from the plan, known limitations, and what the next milestone must
-  absorb belong in the retro, written at milestone close, not invented mid-milestone.
-- **`private/security-review-findings.md`** — the only home for weakness and exploit detail, patched
-  or not.
-- **`private/architecture-review-findings.md`** — architecture-debt findings and their disposition,
-  including "shipped a different fix than the finding asked for", which is the common case.
+  absorb belong in the retro, written at milestone close, not invented mid-milestone. **This is the
+  durable home for _how completed work actually went_** — the one thing an issue tracker does not
+  capture well.
+- **`private/appfolio.md`** — the AppFolio export catalog and its validation gate. Reference data,
+  not a work item; the gate itself is a private issue.
+- **`private/security-review-findings.md`** — the **historical record** of the review passes and
+  their F-numbered findings. A _new_ weakness becomes a private issue labelled `security`; add to
+  this file only when writing up a review, not to track an open position.
+- **`private/architecture-review-findings.md`** — same shape: the durable evidence and disposition of
+  the review passes, including "shipped a different fix than the finding asked for", which is the
+  common case. New findings are issues.
+- **`private/LeaseBook_PRD_v1.0.md`** — scope authority. Read; change only on a deliberate scope
+  decision.
 - **`private/planning/design-history/`** — historical design specs and implementation plans
   (renamed from `superpowers/` on 2026-08-28). Archive: read it, never update it. Its links rot by
   design.
+- **`private/TODO.md`, `private/roadmap.md`** — **removed 2026-09-04.** In the private repository's
+  git history if you ever need the pre-migration state. Do not recreate them.
 
 Then commit the private repository, and verify the boundary held:
 
@@ -178,8 +195,8 @@ Three hard rules:
   nothing; a `git add -f` there would publish confidential material. This is the rule that matters,
   and the private gate asserts it too.
 - **Do commit and push inside the private checkout**, as its own repository — that is the documented
-  workflow in `private/README.md`. Public first, then record the public PR number or SHA in the
-  private plan, then commit the private update. The two histories stay independent.
+  workflow in `private/README.md`. Public first, then record the public PR number or SHA on the
+  relevant issue, then commit any private update. The two histories stay independent.
 - **Never copy `private/` content into a committed public file, a public doc, a PR body, or a GitHub
   issue.**
 
@@ -283,9 +300,9 @@ If a branch is still unshipped, say so and point at `/ship`; do not ship it as a
 - Open, update, or merge a PR — that is `/ship`.
 - Stage a `private/` path into the **public** repository, or quote `private/` content anywhere
   public. (Committing **inside** the private checkout is expected — see step 4.)
-- Publish private figures, strategy, or unpatched-security detail to a GitHub issue or any committed
-  file.
+- Publish private figures, strategy, or unpatched-security detail to a **public** issue or any
+  committed public file.
 - Delete uncommitted changes, stashes, or branches without explicit confirmation.
 - Run `./scripts/dev.ps1 reset-db`, drop volumes, or otherwise destroy local data.
 - Invent memory entries, issue comments, or retro content for a session that did not produce them.
-- Restate in memory what `git log`, `AGENTS.md`, or `private/roadmap.md` already records.
+- Restate in memory what `git log`, `AGENTS.md`, an issue, or the board already records.
