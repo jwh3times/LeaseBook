@@ -215,6 +215,32 @@ function isLivingDoc(file) {
   );
 }
 
+/**
+ * Documents whose authority claims are load-bearing. Wider than `isLivingDoc` on purpose: the
+ * root contract files and the agent/skill instructions are read as binding, so a stale
+ * "X is canonical" line does the same damage there as it does under `docs/` — arguably more, since
+ * an agent acts on it without a human reading the sentence.
+ *
+ * This scope is not hypothetical. `AGENTS.md` carried a live
+ * "private/TODO.md ... canonical where they disagree" claim that the obsolete-claim patterns below
+ * were written to catch, and the gate stayed green because AGENTS.md is not under `docs/`.
+ *
+ * Generated mirrors (`.claude/skills/`, `.codex/`) are excluded: they are byte-identical to the
+ * authored sources already scanned, so including them would double-report one defect.
+ */
+function isAuthorityDoc(file) {
+  return (
+    isLivingDoc(file) ||
+    file === "AGENTS.md" ||
+    file === "CLAUDE.md" ||
+    file === "README.md" ||
+    file === "CONTRIBUTING.md" ||
+    file === "CONTEXT.md" ||
+    file.startsWith(".claude/agents/") ||
+    file.startsWith(".agents/skills/")
+  );
+}
+
 function commandCopyAllowed(file) {
   return (
     file === "AGENTS.md" ||
@@ -325,8 +351,8 @@ export function validateRepository(root = defaultRoot, suppliedFiles) {
     }
   }
 
-  const livingText = [...contents]
-    .filter(([file]) => isLivingDoc(file))
+  const authorityText = [...contents]
+    .filter(([file]) => isAuthorityDoc(file))
     .map(([file, content]) => ({ file, content: stripFencedCode(content) }));
   const obsoleteClaims = [
     /CLAUDE\.md.{0,80}(authoritative|binding|canonical)/gi,
@@ -334,14 +360,14 @@ export function validateRepository(root = defaultRoot, suppliedFiles) {
     /private\/(TODO|roadmap)\.md.{0,80}(authoritative|binding|canonical)/gi,
   ];
 
-  for (const { file, content } of livingText) {
+  for (const { file, content } of authorityText) {
     for (const pattern of obsoleteClaims) {
       for (const match of content.matchAll(pattern)) {
         errors.push({
           file,
           line: lineOf(content, match.index),
           message:
-            "Living document contains an obsolete canonical-authority claim.",
+            "Authoritative document contains an obsolete canonical-authority claim.",
         });
       }
     }
