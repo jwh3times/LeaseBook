@@ -111,7 +111,7 @@ Start from what is open and what this session touched:
 
 ```
 gh issue list --state open --json number,title,labels --jq '[.[] | {number, title, labels: [.labels[].name]}]'
-gh issue list --repo jwh3times/LeaseBook-private --state open --json number,title,labels
+(cd private && gh issue list --state open --json number,title,labels)  # infers its own remote
 gh pr list --state open --json number,title,headRefName
 gh project item-list 3 --owner jwh3times --format json     # both trackers, with Track/Gate
 ```
@@ -144,7 +144,8 @@ Then reconcile:
 **Never publish to a _public_ issue:** anything confidential — pricing, strategy, customer
 identity, internal analysis, private figures — or exploitable detail about an **unpatched** security
 finding. The public repo publishes what you write. Those go to a **private-tracker issue** instead
-(`gh issue create --repo jwh3times/LeaseBook-private`), labelled `security` or `product-decision`.
+(run `gh issue create` from inside the `private/` checkout, so its remote is inferred rather than
+written into this tree), labelled `security` or `product-decision`.
 
 ### 4. `private/` docs
 

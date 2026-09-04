@@ -50,8 +50,9 @@ this one, for current progress.
     configuration, refused at startup when enabled without a named proxy, and ships off until an
     operator names the ingress. Neither the wrap nor the ingress naming is deployment-validated.
 
-  Remaining M8 work is summarized publicly in `docs/ROADMAP.md`; detailed sequencing lives in
-  `private/roadmap.md` and `private/TODO.md`, with `private/TODO.md` canonical where they disagree.
+  Remaining M8 work is summarized publicly in `docs/ROADMAP.md`; detailed sequencing lives in the
+  open issues and the shared project board's `Track` and `Gate` fields
+  (`docs/agents/issue-tracker.md`).
 
 - Operator-gated remainder is deferred and is not ordinary engineering work: Azure OIDC federation,
   ACR, enabling the authored `deploy-dev`/`deploy-prod` workflows, live Key Vault and managed
@@ -82,7 +83,7 @@ outside the public repository, and it may be absent in a public clone. It holds:
 Anything confidential, including pricing, strategy, customer identity, and internal analysis, belongs
 in `private/` and must never be added to the public repository. Commit and push public and private
 changes independently. If `private/` is absent and the task depends on it, ask the user for the
-relevant build-plan or PRD context before starting milestone work.
+relevant PRD or design context before starting milestone work.
 
 ## Ground Rules
 
@@ -95,7 +96,7 @@ Verify, do not assume.
   numbers, EF/RLS/posting runtime behavior, and anything that can affect fiduciary correctness.
 - Ground truth is usually obtainable locally:
   - Scope and intent: `private/LeaseBook_PRD_v1.0.md` and `private/claude_design_files/`
-  - Built or decided work: `private/TODO.md` and `private/planning/*_retro.md`
+  - Built or decided work: closed issues and `private/planning/*_retro.md`
   - Real figures and behavior: run `check-invariants`, golden/invariant/property suites, query the
     seeded demo org, or read the migration, RLS-helper, and posting-template code
 - Designing a structure to discover an unknown at runtime is still building on an assumption. Verify
@@ -219,7 +220,8 @@ Two trackers, split on one question: **would this text be safe in a public git h
 
 - **Public** — `jwh3times/LeaseBook`. Anything a public PR closes: engineering work, bugs,
   architecture questions, deployment steps. This is the default.
-- **Private** — `jwh3times/LeaseBook-private`. Anything confidential: security positions that
+- **Private** — the private companion repository, whose locator is the `private/` checkout's own
+  git remote and stays out of this tree. Anything confidential: security positions that
   describe an unpatched weakness, compliance and legal engagements, customer identity, pricing and
   strategy. These close on events in the world, not on merged PRs.
 

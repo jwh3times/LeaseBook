@@ -24,17 +24,19 @@ Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all o
 
 Two trackers, split on one question: **would this text be safe in a public git history?**
 
-|                      | Repo                          | Holds                                                                                                                                             |
-| -------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Public** (default) | `jwh3times/LeaseBook`         | Anything a public PR closes: engineering work, bugs, architecture questions, deployment steps                                                     |
-| **Private**          | `jwh3times/LeaseBook-private` | Confidential only: security positions describing an unpatched weakness, compliance and legal engagements, customer identity, pricing and strategy |
+|                      | Repo                             | Holds                                                                                                                                             |
+| -------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Public** (default) | `jwh3times/LeaseBook`            | Anything a public PR closes: engineering work, bugs, architecture questions, deployment steps                                                     |
+| **Private**          | the private companion repository | Confidential only: security positions describing an unpatched weakness, compliance and legal engagements, customer identity, pricing and strategy |
 
 The confidential items mostly close on events in the world rather than on merged PRs, so the split
 rarely forces a cross-repo link. **Never reference a private issue from a public PR, commit, or
 issue** — the reference itself leaks its existence.
 
-`gh` infers the public repo from `git remote -v` inside the clone. For the private tracker pass
-`--repo jwh3times/LeaseBook-private` explicitly.
+`gh` infers the public repo from `git remote -v` inside the clone. For the private tracker, run `gh`
+from inside the `private/` checkout so it infers that repository the same way. **Do not write the
+private locator into this tree** - `AGENTS.md` deliberately keeps it, and the bootstrap details,
+outside the public repository.
 
 Both trackers share one board: `gh project view 3 --owner jwh3times`. Its `Track` field
 (A-closed / B-operator / C-external / Discretionary / Deferred trigger) and `Gate` field

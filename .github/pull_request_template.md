@@ -2,7 +2,7 @@
 
 ## What & why
 
-<!-- A sentence or two. Link the work package / issue. -->
+<!-- A sentence or two. Link the issue this closes (`Closes #N`). -->
 
 ## Definition of Done (CONTRIBUTING.md)
 
@@ -15,7 +15,7 @@
 - [ ] No new MediatR / AutoMapper / FluentAssertions (licensed); no float/double for money
 - [ ] Demoable on the seed org
 - [ ] User-visible `src/` / `web/src/` changes recorded in `CHANGELOG.md` `[Unreleased]` (or `skip-changelog` label if none) — the `CHANGELOG [Unreleased] updated` gate enforces this
-- [ ] Scope changes flagged for the maintainer's build plan (`private/TODO.md`); ADR added for any `docs/blueprint.md` default deviation
+- [ ] Scope changes captured as an issue rather than only in this PR; ADR added for any `docs/blueprint.md` default deviation
 
 ## Verification
 
