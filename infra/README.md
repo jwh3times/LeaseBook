@@ -71,6 +71,7 @@ Two more settings follow that same supplied-at-deploy-time pattern (ADR-041):
 `DataProtection__KeyVaultKeyUri` is wired from the vault module's output, so a full `main.bicep` apply
 sets it. It wraps the Data Protection keyring, which persists to Postgres either way — so the app
 starts without it, and logs a Production startup warning naming what is missing.
+Keyring persistence is configured by the host; no `DataProtection__Durable` attestation is needed.
 
 `ForwardedHeaders__Enabled` ships **false** and must stay false until the ingress network is named in
 `ForwardedHeaders__KnownNetworks__0` (CIDR). Enabling it without naming anything is refused at

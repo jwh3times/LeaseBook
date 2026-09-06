@@ -43,6 +43,9 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Fixed
 
+- **Production startup uses the configured database keyring without an extra attestation flag.**
+  Data Protection persistence is automatic; deployments no longer need `DataProtection__Durable`.
+
 - **MFA enrollment rejects accounts that already have an authenticator configured**, preserving
   their existing authenticator for login.
 

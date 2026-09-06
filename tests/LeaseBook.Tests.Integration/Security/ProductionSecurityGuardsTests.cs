@@ -42,31 +42,13 @@ public sealed class ProductionSecurityGuardsTests
         ex.Message.ShouldContain("AllowedHosts");
     }
 
-    [Fact]
-    public void Non_development_with_real_host_but_no_durable_keyring_throws()
+    [Theory]
+    [InlineData(null)]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Non_development_with_real_host_needs_no_keyring_attestation(bool? durable)
     {
-        var config = BuildConfig("leasebook.example.com", durable: null);
-
-        var ex = Should.Throw<InvalidOperationException>(
-            () => ProductionSecurityGuards.Validate(config, new StubEnvironment("Production")));
-        ex.Message.ShouldContain("DataProtection:Durable");
-        ex.Message.ShouldContain("Key Vault");
-    }
-
-    [Fact]
-    public void Non_development_with_durable_keyring_explicitly_false_throws()
-    {
-        var config = BuildConfig("leasebook.example.com", durable: false);
-
-        var ex = Should.Throw<InvalidOperationException>(
-            () => ProductionSecurityGuards.Validate(config, new StubEnvironment("Production")));
-        ex.Message.ShouldContain("DataProtection:Durable");
-    }
-
-    [Fact]
-    public void Non_development_with_real_host_and_durable_keyring_does_not_throw()
-    {
-        var config = BuildConfig("leasebook.example.com", durable: true);
+        var config = BuildConfig("leasebook.example.com", durable);
 
         Should.NotThrow(() => ProductionSecurityGuards.Validate(config, new StubEnvironment("Production")));
     }
