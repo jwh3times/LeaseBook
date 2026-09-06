@@ -43,6 +43,9 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Fixed
 
+- **MFA enrollment rejects accounts that already have an authenticator configured**, preserving
+  their existing authenticator for login.
+
 - **Malformed optional migration values are rejected instead of becoming defaults.** A supplied but
   invalid reserve, rent, deposit, or lease date now produces a row error, while blank optional
   values retain their documented zero or null defaults and valid rows continue importing.

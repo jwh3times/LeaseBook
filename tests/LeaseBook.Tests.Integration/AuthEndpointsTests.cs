@@ -116,6 +116,12 @@ public sealed class AuthEndpointsTests(PostgresFixture fixture)
         // Antiforgery tokens bind to the authenticated user, so refresh after the auth state changes.
         await PrimeCsrfAsync(client, ct);
 
+        // A second session retains its pre-enrollment claims after the first session confirms.
+        using var staleClient = fixture.Api.CreateClient();
+        await PrimeCsrfAsync(staleClient, ct);
+        (await Login(staleClient, email, ct)).Status.ShouldBe(LoginStatus.Ok);
+        await PrimeCsrfAsync(staleClient, ct);
+
         // Enroll: get a secret, compute the current code via Identity, confirm it.
         var enroll = await client.PostAsync("/api/auth/mfa/enroll", content: null, ct);
         enroll.StatusCode.ShouldBe(HttpStatusCode.OK);
@@ -125,6 +131,21 @@ public sealed class AuthEndpointsTests(PostgresFixture fixture)
         var confirm = await client.PostAsJsonAsync(
             "/api/auth/mfa/enroll/confirm", new ConfirmMfaRequest(ComputeTotp(secret.Secret)), ct);
         confirm.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        // Enrollment is for first-time setup. Repeating it must neither disclose nor replace
+        // the active authenticator; the login below proves the original one still works.
+        var repeatedEnrollment = await client.PostAsync("/api/auth/mfa/enroll", content: null, ct);
+        repeatedEnrollment.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+        var enrollmentProblem = await repeatedEnrollment.Content.ReadAsStringAsync(ct);
+        enrollmentProblem.ShouldContain("mfa_already_enrolled");
+        enrollmentProblem.ShouldNotContain(secret.Secret);
+        enrollmentProblem.ShouldNotContain("otpauth://");
+
+        var staleEnrollment = await staleClient.PostAsync("/api/auth/mfa/enroll", content: null, ct);
+        staleEnrollment.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+        var staleProblem = await staleEnrollment.Content.ReadAsStringAsync(ct);
+        staleProblem.ShouldContain("mfa_already_enrolled");
+        staleProblem.ShouldNotContain(secret.Secret);
 
         await client.PostAsync("/api/auth/logout", content: null, ct);
         await PrimeCsrfAsync(client, ct); // back to anonymous → refresh again

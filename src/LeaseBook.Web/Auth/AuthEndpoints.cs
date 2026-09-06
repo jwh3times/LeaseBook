@@ -134,6 +134,17 @@ public sealed class AuthEndpoints : IEndpointModule
                     status: StatusCodes.Status401Unauthorized);
             }
 
+            // Enrollment is first-time setup, not a recovery or authenticator replacement path.
+            // Read persisted state rather than the cookie's potentially stale mfa_enrolled claim.
+            if (await userManager.GetTwoFactorEnabledAsync(user))
+            {
+                return ProblemResults.Problem(
+                    http,
+                    code: "mfa_already_enrolled",
+                    detail: "Multi-factor authentication is already enrolled.",
+                    status: StatusCodes.Status409Conflict);
+            }
+
             var key = await userManager.GetAuthenticatorKeyAsync(user);
             if (string.IsNullOrEmpty(key))
             {
