@@ -2,8 +2,10 @@ using LeaseBook.Tests.Common;
 using LeaseBook.Tests.Integration.Fixtures;
 using LeaseBook.Web.Security;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Shouldly;
 
 namespace LeaseBook.Tests.Integration;
@@ -78,10 +80,18 @@ public sealed class DataProtectionKeyringTests(PostgresFixture fixture)
     /// <c>PersistKeysToDbContext</c>, or changes <c>SetApplicationName</c>, the host falls back to a
     /// keyring this provider cannot see and this fails.
     /// </summary>
-    [Fact]
-    public async Task The_running_host_protects_with_the_database_backed_keyring()
+    [Theory]
+    [InlineData("Development")]
+    [InlineData("Production")]
+    public async Task The_running_host_protects_with_the_database_backed_keyring(string environment)
     {
-        var protectedByHost = fixture.Api.Services
+        using var host = fixture.Api.WithWebHostBuilder(builder => builder
+            .UseEnvironment(environment)
+            .UseSetting("AllowedHosts", "localhost")
+            .UseSetting("Jobs:Enabled", "false"));
+        host.Services.GetRequiredService<IHostEnvironment>().EnvironmentName.ShouldBe(environment);
+
+        var protectedByHost = host.Services
             .GetRequiredService<IDataProtectionProvider>()
             .CreateProtector(Purpose)
             .Protect("written-by-the-real-host");

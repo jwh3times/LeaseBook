@@ -26,17 +26,5 @@ public static class ProductionSecurityGuards
                 "(semicolon-separated, e.g. 'app.leasebook.com;www.leasebook.com') before starting " +
                 "this environment.");
         }
-
-        // Outside Development the app encrypts sensitive data at rest with ASP.NET Data Protection,
-        // which requires a durable, shared keyring (e.g. persisted to Key Vault); the default keyring
-        // is per-instance and unsuitable outside Development. This flag is the operator's attestation
-        // that a durable keyring is configured.
-        if (!config.GetValue<bool>("DataProtection:Durable"))
-        {
-            throw new InvalidOperationException(
-                $"A durable Data Protection keyring is required in the '{environment.EnvironmentName}' " +
-                "environment. Configure a durable, shared keyring (e.g. persisted to Key Vault) and set " +
-                "the 'DataProtection:Durable' configuration key to true before starting this environment.");
-        }
     }
 }
