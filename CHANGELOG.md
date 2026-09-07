@@ -14,6 +14,10 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ## [Unreleased]
 
+- _Nothing yet._
+
+## [0.12.0] - 2026-09-07
+
 ### Added
 
 - **Account security is available in the app.** Administrators can enroll an authenticator, save
@@ -706,7 +710,8 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.12.0
 [0.11.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.11.0
 [0.10.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.10.0
 [0.9.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.9.0

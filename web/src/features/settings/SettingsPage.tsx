@@ -45,7 +45,9 @@ export function SettingsPage() {
       <div className="pf-pagehd">
         <div>
           <h2>Settings</h2>
-          <Link to="/account/security">Account security</Link>
+          <Link to="/account/security" style={{ color: 'var(--text)' }}>
+            Account security
+          </Link>
         </div>
       </div>
       {settings.isPending ? (

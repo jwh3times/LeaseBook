@@ -18,6 +18,7 @@ const DEMO_INDEX_ROUTES = [
   '/reports',
   '/operations',
   '/settings',
+  '/account/security',
 ];
 
 for (const theme of THEMES) {

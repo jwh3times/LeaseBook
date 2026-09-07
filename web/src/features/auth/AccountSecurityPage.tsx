@@ -175,7 +175,9 @@ export function AccountSecurityPage() {
         </form>
       </Card>
       {!session?.mfaEnrollmentRequired && !recovery && (
-        <Link to="/dashboard">Continue to LeaseBook</Link>
+        <Link to="/dashboard" style={{ color: 'var(--text)' }}>
+          Continue to LeaseBook
+        </Link>
       )}
       <Button onClick={() => void signOut()} disabled={busy}>
         Sign out
