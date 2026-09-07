@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living runbook; canonical development command reference
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-09-02
+- **Last reviewed:** 2026-09-06
 
 ## Prerequisites
 
@@ -203,7 +203,8 @@ ledgers reconcile to the cent against the dataset, now rendered with names (gold
 Re-running is idempotent (both steps skip if already seeded).
 
 **Seeded dev admin — DEV ONLY:** `renee.calloway@tarheelpg.test` / `Tarheel-Trust-2026!`. MFA is
-not enrolled (enroll on first login). Real environments provision operators by invite; passwords
+not enrolled. Use **Settings → Account security** to enroll; when admin MFA is enforced, sign-in
+redirects to enrollment automatically. Real organizations use the operator command below; passwords
 never live in the repo.
 
 ### Seeded fixture organizations
@@ -364,3 +365,48 @@ on a local (Windows) `npm run e2e` — baselines are Linux (`*-chromium-linux.pn
   the failing `e2e` run rendered — the same Linux output the workflow would produce.
 - **Review a failure:** download the `playwright-report` artifact from the failed `e2e` run and
   inspect the diff image; if the change was intended, re-baseline via the workflow.
+
+## Account provisioning and recovery
+
+[ADR-043](../adr/ADR-043-account-security-lifecycle.md) owns the account-security lifecycle.
+The `accounts` verb runs in the foreground, opens no HTTP listener, and uses the runtime database
+connection and durable keyring. Apply migrations before running it. It creates a new, empty
+organization and a PMAdmin account; the administrator then enrolls MFA and uses import-first
+onboarding. It never imports the fixture credentials or financial data.
+
+Run from the repository root (initial password on standard input from a secure password source):
+
+```bash
+<secure-password-source> | dotnet run --project src/LeaseBook.Web -- accounts create-admin \
+  --org-name "Organization name" --email "admin@example.com" --name "Administrator"
+```
+
+Replace `<secure-password-source>` with the approved password manager's stdout command. The password
+must meet the Identity policy: at least 12 characters, upper and lower case letters, a digit, and a
+symbol. Do not put a password in command arguments, shell history, a committed file, or terminal logs.
+The command prints the new organization id, not the password. It marks the email confirmed without
+sending verification or invitation email. Verify the administrator's address independently and deliver
+credentials securely. In production, execute from the approved VNet-connected operator environment
+with its configured runtime database connection and Key Vault identity; provisioning that access
+remains an operator step.
+
+Users manage passwords and MFA at `/account/security`, reachable even before required enrollment.
+Save the ten recovery codes in a password manager or another secure location when they are shown.
+Each code works once, after the password step at login. Recovery codes are not displayed again.
+
+For a lost authenticator, use a saved recovery code to sign in. To replace the authenticator, an
+operator must independently verify the account holder's identity and organization and record that
+verification in the confidential operations record. Then run:
+
+```bash
+dotnet run --project src/LeaseBook.Web -- accounts reset-mfa \
+  --org "<organization-uuid>" --email "admin@example.com" --identity-verified yes
+```
+
+The confirmation flag records the operator's explicit choice; it does not perform identity
+verification. Reset invalidates existing sessions, the old authenticator key, and all recovery codes.
+The administrator signs in with their password and enrolls a replacement authenticator. Reset does
+not recover a forgotten password; no forgotten-password or operator password-reset command is supplied.
+Escalate that case to the maintainer for an approved recovery procedure. Account
+creation, enrollment, password change, and reset write attributed `account-security` audit events
+without storing passwords, keys, or recovery codes in the audit payload.

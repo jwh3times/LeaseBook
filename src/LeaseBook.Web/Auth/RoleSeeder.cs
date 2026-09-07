@@ -113,7 +113,7 @@ public static class RoleSeeder
                 "failing here, so a web host still binds a port. A web host reports NOT READY at " +
                 "/api/health/ready and takes no traffic until RoleSeedingProbe's retries succeed. A CLI " +
                 "verb has no readiness gate and simply carries on: `seed` reseeds roles itself and will " +
-                "fail on this same outage, and no other verb needs them.",
+                "fail on this same outage, and `accounts` also ensures its required roles before making account changes.",
                 Roles.All.Length);
 
             return false;

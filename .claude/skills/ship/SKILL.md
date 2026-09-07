@@ -124,6 +124,20 @@ gh issue list --state open --limit 100 --json number,title --jq '.[] | "\(.numbe
 
 Surface the findings and let the maintainer decide. This only warns; it never blocks the push.
 
+### 3c. Complete required human-action handoffs
+
+Before reporting the branch complete, execute
+[`Required human-action handoff`](../../../docs/agents/issue-tracker.md#required-human-action-handoff)
+for every required human action arising from the change. Coordinate publication with `docs-updater`:
+one agent creates or updates each private follow-up issue, adds it to project 3 with labels and
+Track/Gate, and publishes the linked step-by-step private wiki procedure indexed by `human-todo`.
+Verify both artifacts; reuse existing ones on repeat ships. This completion requirement is separate
+from step 3b's advisory linkage warnings. If private access prevents publication, report the handoff
+as incomplete with its precise blocker; a local draft is not a published procedure.
+
+Public release text contains no private links. Private issue/wiki publication is part of this
+handoff; private reference/history files remain outside the branch docs audit.
+
 ### 4. Update the changelog
 
 Read the branch diff (`git diff "$base"..HEAD`) and derive the user-visible changelog entries.
@@ -229,7 +243,9 @@ Give the user:
   major/minor cut, the new `VERSION`; for a build, that the exact tag is assigned on merge;
 - what `docs-updater` changed;
 - the changelog entries you added and whether they remain in `[Unreleased]` or were cut;
-- any issue-linkage warning from step 3b (and confirm you did **not** touch `private/`);
+- any issue-linkage warning from step 3b;
+- required human follow-ups from step 3c: private issue/wiki URLs and board verification, or that
+  none arose; identify any incomplete publication explicitly;
 - fast-check results, and any schema-drift or accounting-suite notes.
 
 State plainly that the full test suites run in CI, not locally — do not imply the branch is
@@ -247,6 +263,7 @@ enforces when marked a **required status check** on the `main` branch protection
 - Run the full test suites — that is CI's job and it makes this skill slow.
 - Change `VERSION`, write a dated `## [x.y.z]` section, or edit compare links without a confirmed
   major/minor classification. Build ships only touch `[Unreleased]`.
-- Commit anything under `private/`.
+- Stage or commit a `private/` path into the public repository. Commit private wiki changes only
+  in the wiki's own checkout.
 - Reference a **private-tracker** issue in a public PR body, commit message, or public issue — the
   reference itself leaks its existence. Close it by hand.

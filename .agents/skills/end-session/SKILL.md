@@ -35,7 +35,7 @@ discoveries land in different ones:
   repositories to sweep**, not one.
 
 Public CI enforces none of this. `/ship` covers the public docs and changelog for a _branch_;
-this skill covers the _session_, including everything `/ship` is forbidden to touch (`private/`) and
+this skill covers the _session_, including private reference/history outside `/ship`'s audit and
 everything that never reaches a commit (memory, issues, workspace).
 
 Run this **after** `/ship`, not instead of it. If a branch is ready for review, ship it first; this
@@ -115,9 +115,10 @@ gh pr list --state open --json number,title,headRefName
 gh project item-list 3 --owner jwh3times --format json     # both trackers, with Track/Gate
 ```
 
-**Two trackers.** Public is the default; the private one holds only confidential work — security
+**Two trackers.** Public is the engineering default; the private one holds confidential work — security
 positions describing an unpatched weakness, compliance and legal engagements, customer identity,
-pricing and strategy. Never reference a private issue from a public PR, commit, or issue.
+pricing and strategy — plus all required human follow-ups from agent-completed work. Never reference
+a private issue from a public PR, commit, or issue.
 
 Then reconcile:
 
@@ -130,8 +131,14 @@ Then reconcile:
   its narrowed scope written down, not left in the transcript.
 - **Work discovered but not done** → file it. A discovery that only exists in memory is not
   scheduled work.
-- **Labels** → move anything now fully specified to `ready-for-agent`; move anything blocked on the
-  user to `ready-for-human` or `needs-info`.
+- **Required human actions from completed work** → execute
+  [`Required human-action handoff`](../../../docs/agents/issue-tracker.md#required-human-action-handoff).
+  Reconcile every action against a private follow-up issue on project 3 and a published step-by-step
+  private wiki procedure indexed by `human-todo`. Reuse artifacts already created during development
+  or `/ship`; verify issue/wiki links, board fields, and labels before reporting completion.
+- **Labels** → apply `ready-for-agent` only when fully specified and unblocked. Use
+  `ready-for-human` for human-owned actions and `blocked-by-human` for work awaiting human action or
+  evidence; remove conflicting agent readiness and reassess when the blocker clears.
 - **Wayfinder map #196** — if the session grilled, resolved, or spun off one of its children:
   comment the answer on the child and close it. **Do not write the child's status into the map
   body** — the map carries a task list, which renders child state on its own, and status prose in a
@@ -148,8 +155,10 @@ written into this tree), labelled `security` or `product-decision`.
 
 ### 4. `private/` docs
 
-A separate versioned checkout, ignored by the public repository. **Skip this whole step if
-`private/` is absent** (public clone) — do not warn about the missing tree. `private/README.md`
+A separate versioned checkout, ignored by the public repository. Skip reference/history updates if
+`private/` is absent in a public clone. Required human follow-ups from step 3 still need private
+issue/board/wiki publication; if access is unavailable, report that handoff as incomplete with the
+specific blocker and retain a confidential draft per the handoff procedure. `private/README.md`
 indexes every document there and is the authority on which one owns what; the list below is the
 subset a session close-out usually touches.
 
@@ -286,6 +295,8 @@ Close with a short, honest account:
 
 - Memories written, updated, or deleted — by slug.
 - Issues commented, closed, labelled, or filed — by number, with URLs.
+- Required human actions: private follow-up issue and published wiki URLs, verified board placement,
+  or an explicit statement that none arose. Report missing publication as an incomplete handoff.
 - `private/` files updated, whether the private repository was committed and pushed, and the
   confirmation that `git ls-files private` from the public root still returns nothing.
 - Workspace: what was deleted, what was left alone and why, container and branch state, and any

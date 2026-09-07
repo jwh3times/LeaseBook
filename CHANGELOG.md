@@ -14,7 +14,16 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ## [Unreleased]
 
+- _Nothing yet._
+
+## [0.12.0] - 2026-09-07
+
 ### Added
+
+- **Account security is available in the app.** Administrators can enroll an authenticator, save
+  single-use recovery codes, use a recovery code at login, and change their password. Security
+  changes invalidate older sessions. Operator commands create the first administrator for an empty
+  organization and reset MFA after independent identity verification.
 
 - **Root-level workspace commands.** `npm run sync:main` fetches and prunes both the public and
   private checkouts, switches each clean working tree to `main`, and fast-forwards it to
@@ -24,6 +33,10 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   `npm run bootstrap:private`.
 
 ### Changed
+
+- **Human follow-ups have a required handoff.** Agents record required human actions as private
+  issues on the shared board and publish linked step-by-step wiki instructions before reporting
+  completion. Shipping, session close-out, documentation review, and operator guidance enforce it.
 
 - **AppFolio CSV imports now use one complete kind definition.** Route tokens, workflow family,
   profile provenance, header rules, and typed row binding stay together, while startup checks that
@@ -697,7 +710,8 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.12.0
 [0.11.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.11.0
 [0.10.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.10.0
 [0.9.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.9.0
