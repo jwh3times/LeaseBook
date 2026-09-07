@@ -1,8 +1,9 @@
-import { Navigate, Outlet } from 'react-router';
+import { Navigate, Outlet, useLocation } from 'react-router';
 import { useSession } from '@/features/auth/useSession';
 
 /** Redirects unauthenticated users to /login; renders the protected tree otherwise. */
 export function RouteGuard() {
+  const location = useLocation();
   const { data: session, isLoading } = useSession();
 
   if (isLoading) {
@@ -10,6 +11,9 @@ export function RouteGuard() {
   }
   if (!session) {
     return <Navigate to="/login" replace />;
+  }
+  if (session.mfaEnrollmentRequired && location.pathname !== '/account/security') {
+    return <Navigate to="/account/security" replace />;
   }
   return <Outlet />;
 }

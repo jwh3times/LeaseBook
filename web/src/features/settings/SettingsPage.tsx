@@ -1,3 +1,4 @@
+import { Link } from 'react-router';
 import { useEffect, useState } from 'react';
 import { Badge, Button, Card, CardHeader, Input, Select, Table, type TableColumn } from '@/design';
 import { Modal } from '@/components/Modal';
@@ -44,6 +45,9 @@ export function SettingsPage() {
       <div className="pf-pagehd">
         <div>
           <h2>Settings</h2>
+          <Link to="/account/security" style={{ color: 'var(--text)' }}>
+            Account security
+          </Link>
         </div>
       </div>
       {settings.isPending ? (

@@ -98,7 +98,7 @@ public sealed class AuthEndpoints : IEndpointModule
             return TypedResults.NoContent();
         }).RequireAuthorization(AuthPolicies.AuthenticatedMfaExempt);
 
-        group.MapGet("/me", async (HttpContext http, UserManager<AppUser> userManager, AppDbContext db) =>
+        group.MapGet("/me", async (HttpContext http, UserManager<AppUser> userManager, AppDbContext db, Microsoft.Extensions.Options.IOptions<AuthOptions> options) =>
         {
             var user = await userManager.GetUserAsync(http.User);
             if (user is null)
@@ -117,12 +117,13 @@ public sealed class AuthEndpoints : IEndpointModule
                 .FirstOrDefaultAsync(http.RequestAborted);
 
             return Results.Ok(new MeResponse(
-                user.Id, user.DisplayName, user.Email, roles.FirstOrDefault(), user.OrgId, orgName));
+                user.Id, user.DisplayName, user.Email, roles.FirstOrDefault(), user.OrgId, orgName, user.TwoFactorEnabled,
+                options.Value.EnforceAdminMfa && roles.Contains(Roles.PMAdmin) && !user.TwoFactorEnabled));
         })
         .Produces<MeResponse>()
         .RequireAuthorization(AuthPolicies.AuthenticatedMfaExempt);
 
-        group.MapPost("/mfa/enroll", async (HttpContext http, UserManager<AppUser> userManager) =>
+        group.MapPost("/mfa/enroll", async (HttpContext http, UserManager<AppUser> userManager, SignInManager<AppUser> signInManager) =>
         {
             var user = await userManager.GetUserAsync(http.User);
             if (user is null)
@@ -148,10 +149,12 @@ public sealed class AuthEndpoints : IEndpointModule
             var key = await userManager.GetAuthenticatorKeyAsync(user);
             if (string.IsNullOrEmpty(key))
             {
-                await userManager.ResetAuthenticatorKeyAsync(user);
+                AccountSecurityAudit.RequireSuccess(await userManager.ResetAuthenticatorKeyAsync(user));
+                await signInManager.RefreshSignInAsync(user);
                 key = await userManager.GetAuthenticatorKeyAsync(user);
             }
 
+            http.Response.Headers.CacheControl = "no-store";
             var account = user.Email ?? user.UserName ?? user.Id.ToString();
             return Results.Ok(new EnrollResponse(BuildOtpauthUri("LeaseBook", account, key!), key!));
         })
@@ -159,7 +162,7 @@ public sealed class AuthEndpoints : IEndpointModule
         .RequireAuthorization(AuthPolicies.AuthenticatedMfaExempt);
 
         group.MapPost("/mfa/enroll/confirm", async (
-            ConfirmMfaRequest request, HttpContext http, UserManager<AppUser> userManager, SignInManager<AppUser> signInManager) =>
+            ConfirmMfaRequest request, HttpContext http, UserManager<AppUser> userManager, SignInManager<AppUser> signInManager, AccountSecurityAudit audit) =>
         {
             var user = await userManager.GetUserAsync(http.User);
             if (user is null)
@@ -169,6 +172,12 @@ public sealed class AuthEndpoints : IEndpointModule
                     code: "not_authenticated",
                     detail: "Not authenticated.",
                     status: StatusCodes.Status401Unauthorized);
+            }
+
+            if (user.TwoFactorEnabled)
+            {
+                return ProblemResults.Problem(http, "mfa_already_enrolled",
+                    "Multi-factor authentication is already enrolled.", StatusCodes.Status409Conflict);
             }
 
             var valid = await userManager.VerifyTwoFactorTokenAsync(
@@ -182,11 +191,18 @@ public sealed class AuthEndpoints : IEndpointModule
                     status: StatusCodes.Status400BadRequest);
             }
 
-            await userManager.SetTwoFactorEnabledAsync(user, true);
-            await signInManager.RefreshSignInAsync(user); // re-issue the cookie so mfa_enrolled flips to true
-            return Results.NoContent();
+            AccountSecurityAudit.RequireSuccess(await userManager.SetTwoFactorEnabledAsync(user, true));
+            var codes = (await userManager.GenerateNewTwoFactorRecoveryCodesAsync(user, 10))?.ToArray()
+                ?? throw new InvalidOperationException("Recovery code generation failed.");
+            AccountSecurityAudit.RequireSuccess(await userManager.UpdateSecurityStampAsync(user));
+            await audit.RecordAsync(user, "mfa-enrolled", http.RequestAborted);
+            await signInManager.RefreshSignInAsync(user);
+            http.Response.Headers.CacheControl = "no-store";
+            return Results.Ok(new RecoveryCodesResponse(codes));
         })
         .AddEndpointFilter<ValidationEndpointFilter<ConfirmMfaRequest>>()
+        .Produces<RecoveryCodesResponse>()
+        .RequireRateLimiting("auth")
         .RequireAuthorization(AuthPolicies.AuthenticatedMfaExempt);
     }
 

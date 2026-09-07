@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living architecture guide
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-09-02
+- **Last reviewed:** 2026-09-07
 
 This is the canonical public map of the system **as implemented**. It explains how the pieces fit
 together and links the decisions that shaped them without reproducing every invariant. Accepted
@@ -137,6 +137,14 @@ and encryption of sensitive authentication data at rest. These controls are envi
 config-gated — permissive in Development and tests — and a non-Development environment fails fast at
 startup if required security configuration is missing. The security model and reporting process are in
 [SECURITY.md](../SECURITY.md).
+
+The account-security page remains reachable before required MFA enrollment and supports authenticator
+setup, one-time recovery-code display, and password changes. Recovery-code sign-in follows password
+verification. Identity security stamps are checked on every authenticated request so enrollment,
+password changes, and operator resets revoke older sessions promptly. First-admin provisioning and
+emergency MFA reset use the operator-only `accounts` CLI and the existing organization-scoped
+transaction and audit mechanisms. [ADR-043](adr/ADR-043-account-security-lifecycle.md) owns that
+boundary; the [local runbook](runbooks/local-dev.md#account-provisioning-and-recovery) owns the commands.
 
 ## Frontend and the generated API client
 

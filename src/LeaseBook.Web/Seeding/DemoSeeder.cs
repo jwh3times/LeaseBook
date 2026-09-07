@@ -24,7 +24,7 @@ public static class DemoSeeder
 
     public const string AdminEmail = "renee.calloway@tarheelpg.test";
 
-    /// <summary>DEV ONLY documented seed password — real environments provision via Key Vault / invite.</summary>
+    /// <summary>DEV ONLY documented seed password — real environments provision via the accounts create-admin CLI.</summary>
     public const string AdminPassword = "Tarheel-Trust-2026!";
 
     private const string ProvisionAuditEntityType = "org-provisioned";
