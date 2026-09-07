@@ -13,6 +13,7 @@ internal static class CliApplication
     private static readonly IReadOnlyList<ICliVerb> Verbs =
     [
         new SeedVerb(),
+        new AccountsVerb(),
         new InvariantSweepVerb(),
         new CapabilitiesCliVerb(),
         new PerfProbeVerb(),

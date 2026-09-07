@@ -216,14 +216,16 @@ the relevant docs in the same change.
 
 ### Issue tracker
 
-Two trackers, split on one question: **would this text be safe in a public git history?**
+Route engineering work by **whether the text is safe in public git history**; required human
+follow-ups always use the private tracker.
 
 - **Public** — `jwh3times/LeaseBook`. Anything a public PR closes: engineering work, bugs,
   architecture questions, deployment steps. This is the default.
 - **Private** — the private companion repository, whose locator is the `private/` checkout's own
   git remote and stays out of this tree. Anything confidential: security positions that
   describe an unpatched weakness, compliance and legal engagements, customer identity, pricing and
-  strategy. These close on events in the world, not on merged PRs.
+  strategy. Also all required human follow-ups arising from agent-completed work, even when the
+  engineering change is public. These close on events in the world, not on merged PRs.
 
 Never reference a private issue from a public PR, commit, or issue — the reference itself leaks its
 existence. Both trackers share one board (project 3).
@@ -233,6 +235,12 @@ another issue's status. Use task lists and `Part of #N` for relationships — Gi
 state live, so a parent stays current with nobody maintaining it.
 
 See [`docs/agents/issue-tracker.md`](docs/agents/issue-tracker.md) and `gh` CLI usage there.
+
+Before reporting agent work complete, execute the
+[required human-action handoff](docs/agents/issue-tracker.md#required-human-action-handoff): create
+or update private follow-up issues, add them to project 3 with labels and Track/Gate, and publish
+linked step-by-step private wiki procedures indexed by `human-todo`. Verify publication and report
+both links. If access prevents publication, report the handoff as incomplete with its blocker.
 
 ### Triage labels
 

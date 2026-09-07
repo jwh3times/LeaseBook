@@ -25,6 +25,8 @@ public sealed class AuthorizationMatrixTests(PostgresFixture fixture)
         "/api/auth/csrf",
         "/api/auth/login",
         "/api/auth/mfa",
+        // The second-factor recovery step requires the temporary cookie from password login.
+        "/api/auth/mfa/recovery",
         // dev-only; MapOpenApi()'s registered route template, not the resolved "/openapi/v1.json" path.
         "/openapi/{documentName}.json",
     };

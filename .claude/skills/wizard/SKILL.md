@@ -43,3 +43,9 @@ Hold the bar the template sets: open the URL before asking for its value, use `a
 - `chmod +x <script>`.
 - Don't run it end-to-end yourself — it opens browsers and blocks on human input. Trace it statically instead: every value from step 1 is captured and lands where step 1 said, and every `set_secret` name exactly matches a `secrets.*` reference in CI.
 - Tell the user how to run it. If it's a repeatable setup path, commit it and link it from the README so the next person runs the script instead of asking an AI.
+- For required human actions arising from agent-completed work, execute
+  [`Required human-action handoff`](../../../docs/agents/issue-tracker.md#required-human-action-handoff):
+  create or update the private follow-up issue on project 3 and publish the linked step-by-step
+  private wiki procedure indexed by `human-todo`. Include how to obtain/run the wizard and the
+  expected verification evidence. The script and terminal handoff do not replace these artifacts;
+  keep confidential instructions and private links off the public README.

@@ -92,7 +92,10 @@ docs/agents/issue-tracker.md  — GitHub Issues conventions
 docs/agents/triage-labels.md  — the five canonical triage labels
 ```
 
-### Private — ignored publicly, versioned separately, never edited by a public docs audit
+### Private — ignored publicly, versioned separately
+
+Private reference/history stays outside a public docs audit. Required human follow-up issues and
+wiki procedures are part of the completion audit below and are published only to private surfaces.
 
 ```
 private/planning/m{N}_*.md    — per-milestone plans and retrospectives; how completed work went
@@ -106,6 +109,19 @@ private/LeaseBook_PRD_v1.0.md — scope authority
 ---
 
 ## Audit checklist — run in this order
+
+### 0. Required human-action handoff
+
+For every required human action arising from the completed change, execute
+`docs/agents/issue-tracker.md` § Required human-action handoff. Create or update the private follow-up
+issue, add it to project 3 with Track/Gate and human/blocking labels, and publish the linked
+step-by-step private wiki procedure indexed by `human-todo`. Coordinate with the parent agent so
+one agent owns publication and repeated audits reuse the artifacts.
+
+This step passes only when every required action has a verified issue, board entry, and published
+procedure, or there are no required human actions. Report private issue/wiki URLs only to the user
+or parent agent, never in public documentation or PR text. Missing access is an incomplete handoff
+with an explicit blocker, not a reason to omit the action or claim the audit passed.
 
 ### 1. ADR coverage
 
@@ -230,6 +246,7 @@ At the end of your audit, produce a concise checklist:
 ## Documentation audit
 
 ✅ ADR coverage: no new technology/boundary decisions detected
+✅ Human follow-ups: private issue/board/wiki links verified, or no required human actions
 ⚠️  README port map: vite.config.ts proxies :5080 but README says :5081 — update README
 ✅ AGENTS.md and public roadmap: shipped-state summaries are accurate
 ✅ Runbooks: no command changes detected
@@ -247,6 +264,8 @@ For each `⚠️` item, either fix it yourself (if the change is mechanical) or 
   (project 3). A new plan file would recreate the second source of truth the move eliminated.
 - **Work state is not documentation drift.** If an audit finds a doc describing work that is done or
   not done, the fix is an issue comment or closure — not a prose edit claiming status.
+- The private wiki `human-todo` indexes human-action procedures and owning issues; keep completion
+  status in those issues. This handoff does not recreate a Markdown planning tracker.
 - Keep planning-session artifacts and milestone retrospectives under `private/`; do not publish them.
 - Do **not** rewrite ADRs that are already accepted — add a superseding ADR if a decision changes.
 - The public repository ignores `private/`. Read it for context; commit any intentional private
