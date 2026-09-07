@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living decision index
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-09-02
+- **Last reviewed:** 2026-09-07
 
 An **Architecture Decision Record** captures a single significant or non-obvious engineering
 decision — the context that forced it, the choice made, and the consequences accepted — so it can be

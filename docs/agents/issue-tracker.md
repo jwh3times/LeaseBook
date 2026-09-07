@@ -3,7 +3,7 @@
 - **Audience:** Coding agents and maintainers configuring engineering skills
 - **Status:** Living configuration
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-09-04
+- **Last reviewed:** 2026-09-07
 
 Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all operations.
 

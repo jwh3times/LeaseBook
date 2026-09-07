@@ -3,7 +3,7 @@
 - **Audience:** Coding agents and maintainers configuring engineering skills
 - **Status:** Living configuration
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-08-28
+- **Last reviewed:** 2026-09-07
 
 The skills speak in terms of five canonical triage roles. This repository uses the role names
 verbatim as its GitHub label strings, so a skill's role name is the label to apply.
