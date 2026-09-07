@@ -46,6 +46,11 @@ public static class AuthServiceCollectionExtensions
         services.AddScoped<IUserClaimsPrincipalFactory<AppUser>, AppUserClaimsPrincipalFactory>();
 
         // Auth request validators (P23) — executed by the ValidationEndpointFilter.
+        services.AddScoped<AccountSecurityAudit>();
+        services.AddScoped<AccountAdministration>();
+        services.Configure<SecurityStampValidatorOptions>(options => options.ValidationInterval = TimeSpan.Zero);
+        services.AddScoped<IValidator<RecoveryLoginRequest>, RecoveryLoginRequestValidator>();
+        services.AddScoped<IValidator<ChangePasswordRequest>, ChangePasswordRequestValidator>();
         services.AddScoped<IValidator<LoginRequest>, LoginRequestValidator>();
         services.AddScoped<IValidator<MfaRequest>, MfaRequestValidator>();
         services.AddScoped<IValidator<ConfirmMfaRequest>, ConfirmMfaRequestValidator>();

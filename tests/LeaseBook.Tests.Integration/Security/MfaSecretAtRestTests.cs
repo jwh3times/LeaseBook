@@ -36,10 +36,10 @@ public sealed class MfaSecretAtRestTests(PostgresFixture fixture)
         stored.ShouldNotBe(secret); // encrypted at rest
         stored!.Length.ShouldBeGreaterThan(secret.Length);
 
-        // And the app can still validate a fresh code (decrypt round-trip through the host).
+        // A confirmed enrollment cannot be replayed to replace recovery codes.
         await client.PrimeCsrfAsync(ct);
         var confirmAgain = await client.PostAsJsonAsync(
             "/api/auth/mfa/enroll/confirm", new ConfirmMfaRequest(AuthTestSupport.ComputeTotp(secret)), ct);
-        confirmAgain.EnsureSuccessStatusCode();
+        confirmAgain.StatusCode.ShouldBe(System.Net.HttpStatusCode.Conflict);
     }
 }

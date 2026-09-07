@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react';
 import { createBrowserRouter, Navigate } from 'react-router';
 import { KitchenSink } from '@/dev/KitchenSink';
+import { AccountSecurityPage } from '@/features/auth/AccountSecurityPage';
 import { LoginPage } from '@/features/auth/LoginPage';
 import { BankingPage } from '@/features/banking/BankingPage';
 import { DashboardPage } from '@/features/dashboard/DashboardPage';
@@ -53,6 +54,7 @@ export const router = createBrowserRouter([
   {
     element: <RouteGuard />,
     children: [
+      { path: '/account/security', element: <AccountSecurityPage /> },
       {
         element: <AppShell />,
         children: [

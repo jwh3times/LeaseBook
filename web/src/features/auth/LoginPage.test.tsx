@@ -46,6 +46,23 @@ describe('LoginPage', () => {
     expect(await screen.findByLabelText('Authentication code')).toBeInTheDocument();
   });
 
+  it('accepts a recovery code after the password step', async () => {
+    server.use(
+      http.post('/api/auth/login', () =>
+        HttpResponse.json({ status: 'mfa-required', mfaToken: 'tok-123' }),
+      ),
+      http.post('/api/auth/mfa/recovery', () =>
+        HttpResponse.json({ status: 'ok', mfaToken: null }),
+      ),
+    );
+    await fillCredentials();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Use a recovery code' }));
+    await user.type(screen.getByLabelText('Recovery code'), 'recovery-example');
+    await user.click(screen.getByRole('button', { name: 'Verify' }));
+    expect(await screen.findByText('dashboard ready')).toBeInTheDocument();
+  });
+
   it('surfaces an error on invalid credentials', async () => {
     server.use(http.post('/api/auth/login', () => new HttpResponse(null, { status: 401 })));
     await fillCredentials();

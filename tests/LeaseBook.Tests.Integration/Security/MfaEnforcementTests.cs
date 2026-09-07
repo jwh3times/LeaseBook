@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Json;
 using LeaseBook.SharedKernel;
 using LeaseBook.Tests.Common;
 using LeaseBook.Tests.Integration.Fixtures;
@@ -28,6 +29,9 @@ public sealed class MfaEnforcementTests(PostgresFixture fixture)
         var client = EnforcingClient();
         await client.PrimeCsrfAsync(ct);
         (await AuthTestSupport.LoginAsync(client, email, ct)).Status.ShouldBe(LoginStatus.Ok);
+        var session = await client.GetFromJsonAsync<MeResponse>("/api/auth/me", ct);
+        session!.MfaEnrollmentRequired.ShouldBeTrue();
+        session.MfaEnabled.ShouldBeFalse();
 
         // Blocked from business endpoints...
         var blocked = await client.GetAsync(ProtectedPath, ct);

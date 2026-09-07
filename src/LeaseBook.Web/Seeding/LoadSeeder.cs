@@ -79,7 +79,7 @@ public static class LoadSeeder
 
     public const string AdminEmail = "admin@load.test";
 
-    /// <summary>DEV ONLY documented seed password — real environments provision via Key Vault / invite.</summary>
+    /// <summary>DEV ONLY documented seed password — real environments provision via the accounts create-admin CLI.</summary>
     public const string AdminPassword = "Load-Trust-2026!";
 
     /// <summary>Stable bank-account ids so the chart-of-accounts provisioning is idempotent.</summary>
