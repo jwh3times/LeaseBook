@@ -67,6 +67,7 @@ form, write it, and add a row to the index below. When a decision is replaced, m
 | [040](ADR-040-statement-delivery-history.md)                         | Statement delivery is an append-only history                                    | Accepted                               | 2026-08-18 |
 | [041](ADR-041-durable-keyring-and-proxy-trust.md)                    | The keyring is durable, and proxy trust is declared                             | Accepted                               | 2026-08-18 |
 | [042](ADR-042-explicit-host-process-lifecycle.md)                    | Make host process lifecycle explicit                                            | Accepted                               | 2026-09-02 |
+| [043](ADR-043-account-security-lifecycle.md)                         | Account security has an application and operator lifecycle                      | Accepted                               | 2026-09-06 |
 
 ## Status legend
 

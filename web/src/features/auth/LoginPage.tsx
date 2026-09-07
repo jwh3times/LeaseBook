@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
-import { postApiAuthLogin, postApiAuthMfa, primeCsrf } from '@/api';
+import { postApiAuthLogin, postApiAuthMfa, postApiAuthMfaRecovery, primeCsrf, unwrap } from '@/api';
 import { Button, Card, Input } from '@/design';
 import { sessionQueryKey } from './useSession';
 
@@ -11,6 +11,7 @@ export function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [mfaToken, setMfaToken] = useState<string | null>(null);
+  const [useRecoveryCode, setUseRecoveryCode] = useState(false);
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -34,20 +35,22 @@ export function LoginPage() {
     event.preventDefault();
     setError(null);
     setBusy(true);
-    const { data, error: requestError } = await postApiAuthLogin({
-      body: { email, password },
-    });
-    setBusy(false);
-
-    if (requestError || !data) {
+    try {
+      const data = await unwrap(
+        postApiAuthLogin({ body: { email, password } }),
+        'Invalid email or password.',
+      );
+      setPassword('');
+      if (data.status === 'mfa-required') {
+        setMfaToken(data.mfaToken);
+        return;
+      }
+      await finishSignIn();
+    } catch {
       setError('Invalid email or password.');
-      return;
+    } finally {
+      setBusy(false);
     }
-    if (data.status === 'mfa-required') {
-      setMfaToken(data.mfaToken);
-      return;
-    }
-    await finishSignIn();
   }
 
   async function submitMfa(event: FormEvent) {
@@ -55,16 +58,18 @@ export function LoginPage() {
     if (!mfaToken) return;
     setError(null);
     setBusy(true);
-    const { data, error: requestError } = await postApiAuthMfa({
-      body: { mfaToken, code },
-    });
-    setBusy(false);
-
-    if (requestError || !data) {
-      setError('Invalid authentication code.');
-      return;
+    try {
+      await unwrap(
+        (useRecoveryCode ? postApiAuthMfaRecovery : postApiAuthMfa)({ body: { mfaToken, code } }),
+        'Invalid authentication code.',
+      );
+      setCode('');
+      await finishSignIn();
+    } catch {
+      setError(useRecoveryCode ? 'Invalid recovery code.' : 'Invalid authentication code.');
+    } finally {
+      setBusy(false);
     }
-    await finishSignIn();
   }
 
   const onMfaStep = mfaToken !== null;
@@ -89,23 +94,34 @@ export function LoginPage() {
           {onMfaStep ? (
             <form className="col gap12" onSubmit={submitMfa}>
               <label className="col gap6 fs13 t2">
-                Authentication code
+                {useRecoveryCode ? 'Recovery code' : 'Authentication code'}
                 <Input
-                  inputMode="numeric"
+                  inputMode={useRecoveryCode ? 'text' : 'numeric'}
                   autoComplete="one-time-code"
                   value={code}
                   onChange={(e) => setCode(e.target.value)}
-                  placeholder="123456"
+                  placeholder={useRecoveryCode ? 'Recovery code' : '123456'}
                   autoFocus
                 />
               </label>
               {error && (
-                <span className="fs13" style={{ color: 'var(--neg)' }}>
+                <span role="alert" className="fs13" style={{ color: 'var(--neg)' }}>
                   {error}
                 </span>
               )}
               <Button type="submit" variant="primary" disabled={busy}>
                 {busy ? 'Verifying…' : 'Verify'}
+              </Button>
+              <Button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  setUseRecoveryCode(!useRecoveryCode);
+                  setCode('');
+                  setError(null);
+                }}
+              >
+                {useRecoveryCode ? 'Use authenticator code' : 'Use a recovery code'}
               </Button>
             </form>
           ) : (
@@ -132,7 +148,7 @@ export function LoginPage() {
                 />
               </label>
               {error && (
-                <span className="fs13" style={{ color: 'var(--neg)' }}>
+                <span role="alert" className="fs13" style={{ color: 'var(--neg)' }}>
                   {error}
                 </span>
               )}

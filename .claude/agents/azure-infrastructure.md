@@ -22,7 +22,12 @@ This agent authors and validates Bicep. It **never** executes live Azure operati
 | Postgres role bootstrap (`psql … CREATE ROLE …`)       | **Operator-gated** — post-provision step   |
 | PITR restore (`az postgres flexible-server restore …`) | **Operator-gated** — requires Azure access |
 
-Never run `az deployment`, `what-if`, role bootstrap, or PITR commands — surface the operator runbook reference instead.
+Never run `az deployment`, `what-if`, role bootstrap, or PITR commands under this authoring role.
+For every required operator action arising from completed authoring, execute
+`docs/agents/issue-tracker.md` § Required human-action handoff: create or update the private
+follow-up issue on project 3, publish linked step-by-step private wiki instructions indexed by
+`human-todo`, and verify both. A public runbook reference alone does not complete the handoff.
+Report missing publication access explicitly and keep live verification pending until evidence exists.
 
 ---
 

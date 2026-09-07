@@ -23,9 +23,21 @@ export interface ApiResult<T> {
  * Three modules had already converged on this signature independently (banking, onboarding and
  * operations each held a byte-identical private `unwrap`); those three are now this one.
  */
-export async function unwrap<T>(call: Promise<ApiResult<T>>, fallbackMessage: string): Promise<T> {
+export function unwrap(
+  call: Promise<ApiResult<unknown>>,
+  fallbackMessage: string,
+  options: { allowNoContent: true },
+): Promise<void>;
+export function unwrap<T>(call: Promise<ApiResult<T>>, fallbackMessage: string): Promise<T>;
+export async function unwrap<T>(
+  call: Promise<ApiResult<T>>,
+  fallbackMessage: string,
+  options?: { allowNoContent: true },
+): Promise<T | void> {
   const { data, error, response } = await call;
-  if (data !== undefined && data !== null) return data;
+  if (options?.allowNoContent) {
+    if (!error && response?.status === 204) return;
+  } else if (data !== undefined && data !== null) return data;
   throw toApiError(error, response?.status ?? 0, fallbackMessage);
 }
 

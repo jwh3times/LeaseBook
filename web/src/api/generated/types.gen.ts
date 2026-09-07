@@ -124,6 +124,11 @@ export type BulkRunSpa = {
     createdAt: string;
 };
 
+export type ChangePasswordRequest = {
+    currentPassword: string;
+    newPassword: string;
+};
+
 export type ClearancesResult = {
     affected: number | string;
 };
@@ -399,6 +404,8 @@ export type MeResponse = {
     role: null | string;
     orgId: string;
     orgName: null | string;
+    mfaEnabled?: boolean;
+    mfaEnrollmentRequired?: boolean;
 };
 
 export type MfaRequest = {
@@ -669,6 +676,15 @@ export type RecordPayment = {
     bankAccountId: string;
     memo: null | string;
     sourceRef: string;
+};
+
+export type RecoveryCodesResponse = {
+    codes: Array<string>;
+};
+
+export type RecoveryLoginRequest = {
+    mfaToken: string;
+    code: string;
 };
 
 export type RegisterResponse = {
@@ -2555,6 +2571,36 @@ export type PostApiOnboardingVerificationByIdSignoffResponses = {
 
 export type PostApiOnboardingVerificationByIdSignoffResponse = PostApiOnboardingVerificationByIdSignoffResponses[keyof PostApiOnboardingVerificationByIdSignoffResponses];
 
+export type PostApiAuthMfaRecoveryData = {
+    body: RecoveryLoginRequest;
+    path?: never;
+    query?: never;
+    url: '/api/auth/mfa/recovery';
+};
+
+export type PostApiAuthMfaRecoveryResponses = {
+    /**
+     * OK
+     */
+    200: LoginResponse;
+};
+
+export type PostApiAuthMfaRecoveryResponse = PostApiAuthMfaRecoveryResponses[keyof PostApiAuthMfaRecoveryResponses];
+
+export type PostApiAuthChangePasswordData = {
+    body: ChangePasswordRequest;
+    path?: never;
+    query?: never;
+    url: '/api/auth/change-password';
+};
+
+export type PostApiAuthChangePasswordResponses = {
+    /**
+     * OK
+     */
+    200: unknown;
+};
+
 export type GetApiAuthCsrfData = {
     body?: never;
     path?: never;
@@ -2662,5 +2708,7 @@ export type PostApiAuthMfaEnrollConfirmResponses = {
     /**
      * OK
      */
-    200: unknown;
+    200: RecoveryCodesResponse;
 };
+
+export type PostApiAuthMfaEnrollConfirmResponse = PostApiAuthMfaEnrollConfirmResponses[keyof PostApiAuthMfaEnrollConfirmResponses];

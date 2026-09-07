@@ -130,7 +130,7 @@ public sealed class AuthEndpointsTests(PostgresFixture fixture)
 
         var confirm = await client.PostAsJsonAsync(
             "/api/auth/mfa/enroll/confirm", new ConfirmMfaRequest(ComputeTotp(secret.Secret)), ct);
-        confirm.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        confirm.StatusCode.ShouldBe(HttpStatusCode.OK);
 
         // Enrollment is for first-time setup. Repeating it must neither disclose nor replace
         // the active authenticator; the login below proves the original one still works.
@@ -141,10 +141,11 @@ public sealed class AuthEndpointsTests(PostgresFixture fixture)
         enrollmentProblem.ShouldNotContain(secret.Secret);
         enrollmentProblem.ShouldNotContain("otpauth://");
 
+        (await staleClient.GetAsync("/api/auth/me", ct)).StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+        await PrimeCsrfAsync(staleClient, ct);
         var staleEnrollment = await staleClient.PostAsync("/api/auth/mfa/enroll", content: null, ct);
-        staleEnrollment.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+        staleEnrollment.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
         var staleProblem = await staleEnrollment.Content.ReadAsStringAsync(ct);
-        staleProblem.ShouldContain("mfa_already_enrolled");
         staleProblem.ShouldNotContain(secret.Secret);
 
         await client.PostAsync("/api/auth/logout", content: null, ct);
