@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { seedTheme, visualSnapshot } from './helpers';
+import { captureDownload, seedTheme, visualSnapshot } from './helpers';
 
 // M5 reporting e2e specs (§D step 5), serial, against the seeded demo org.
 // The seeded admin (Renée Calloway) has no MFA; login is email + password.
@@ -117,53 +117,38 @@ test.describe.serial('M5 reports', () => {
     await expect(page.getByText('$22,640.30')).toBeVisible();
   });
 
-  test('owner statement PDF export returns a non-empty PDF response', async ({ page }) => {
+  test('owner statement PDF export downloads a non-empty PDF', async ({ page }) => {
     await login(page);
     await gotoO5Statement(page);
     await selectMay2026Cash(page);
 
-    // Intercept the PDF download at the API level (the SPA uses client → blob → anchor click).
-    // We intercept via a route that captures the response before the anchor fires.
-    const pdfPromise = page.waitForResponse(
-      (response) =>
-        response.url().includes(`/api/statements/${O5_ID}/pdf`) && response.status() === 200,
-      { timeout: 20_000 },
-    );
+    // The SPA exports via client → blob → anchor click, so the bytes to assert on are the
+    // downloaded file's, not the intercepted response's — see `captureDownload`.
+    const pdf = await captureDownload(page, page.getByRole('button', { name: 'PDF' }), {
+      urlPart: `/api/statements/${O5_ID}/pdf`,
+      contentType: 'application/pdf',
+    });
 
-    // Click the PDF button
-    await page.getByRole('button', { name: 'PDF' }).click();
-
-    const pdfResponse = await pdfPromise;
-    const contentType = pdfResponse.headers()['content-type'] ?? '';
-    expect(contentType).toContain('application/pdf');
-
-    // Verify body is non-empty (a real PDF has bytes)
-    const body = await pdfResponse.body();
-    expect(body.byteLength).toBeGreaterThan(1000);
+    // A real PDF has bytes and starts with the %PDF- magic number.
+    expect(pdf.byteLength).toBeGreaterThan(1000);
+    expect(pdf.subarray(0, 5).toString('ascii')).toBe('%PDF-');
 
     await page.screenshot({ path: 'e2e-results/m5-pdf-exported.png', fullPage: true });
   });
 
-  test('owner statement CSV export returns a non-empty CSV response', async ({ page }) => {
+  test('owner statement CSV export downloads a non-empty CSV', async ({ page }) => {
     await login(page);
     await gotoO5Statement(page);
     await selectMay2026Cash(page);
 
-    const csvPromise = page.waitForResponse(
-      (response) =>
-        response.url().includes(`/api/statements/${O5_ID}/csv`) && response.status() === 200,
-      { timeout: 20_000 },
+    const csv = await captureDownload(
+      page,
+      page.getByRole('button', { name: 'Export CSV' }).first(),
+      { urlPart: `/api/statements/${O5_ID}/csv`, contentType: 'text/csv' },
     );
 
-    // Click the CSV export button
-    await page.getByRole('button', { name: 'Export CSV' }).first().click();
-
-    const csvResponse = await csvPromise;
-    const contentType = csvResponse.headers()['content-type'] ?? '';
-    expect(contentType.toLowerCase()).toContain('text/csv');
-
-    const text = await csvResponse.text();
     // The CSV must contain the owner name and the ending balance figure.
+    const text = csv.toString('utf8');
     expect(text).toContain(O5_NAME);
     expect(text).toContain('22640.30');
   });
@@ -333,21 +318,12 @@ test.describe.serial('M5 reports', () => {
       timeout: 15_000,
     });
 
-    // Intercept the CSV export response
-    const csvPromise = page.waitForResponse(
-      (response) =>
-        response.url().includes('/api/reports/rent-roll/csv') && response.status() === 200,
-      { timeout: 20_000 },
-    );
+    const csv = await captureDownload(page, page.getByRole('button', { name: 'Export CSV' }), {
+      urlPart: '/api/reports/rent-roll/csv',
+      contentType: 'text/csv',
+    });
 
-    await page.getByRole('button', { name: 'Export CSV' }).click();
-
-    const csvResponse = await csvPromise;
-    const contentType = csvResponse.headers()['content-type'] ?? '';
-    expect(contentType.toLowerCase()).toContain('text/csv');
-
-    const text = await csvResponse.text();
     // The rent roll CSV must have at least one property address
-    expect(text.length).toBeGreaterThan(10);
+    expect(csv.toString('utf8').length).toBeGreaterThan(10);
   });
 });

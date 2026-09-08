@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { expect, type Locator, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 
@@ -105,4 +106,45 @@ export async function visualSnapshot(
     ...(opts.mask ? { mask: opts.mask } : {}),
     ...(opts.fullPage ? { fullPage: true } : {}),
   });
+}
+
+/**
+ * Clicks `trigger`, asserts the export request came back 200 with `contentType`, and returns the
+ * bytes the browser actually wrote to disk.
+ *
+ * Read the downloaded file, never `response.body()`. Every export on this app goes through
+ * `download()` in `web/src/api/request.ts`: the client reads the response with `parseAs: 'blob'`,
+ * then hands the Blob to an anchor. Chromium does not keep a body the page consumed as a Blob
+ * available to CDP's `Network.getResponseBody`, so `response.body()` has no bytes to give.
+ *
+ * That did not surface before Playwright 1.63: when a body came back empty against a non-empty
+ * `Content-Length`, Playwright silently re-fetched the URL via `Network.loadNetworkResource` and
+ * returned *that* response's bytes. Two things were wrong with leaning on it — the assertion never
+ * saw what the click produced, and each run re-rendered the export server-side (the API served the
+ * statement PDF twice per test). 1.63 narrowed that fallback to GETs of static subresource types
+ * (font/image/media/script/stylesheet/…) and prefetches precisely because re-fetching "may produce
+ * side effects on the server"; an `application/pdf` XHR no longer qualifies and comes back empty.
+ *
+ * The download event has none of that: one request, and the assertion is on the file the user gets.
+ */
+export async function captureDownload(
+  page: Page,
+  trigger: Locator,
+  options: { urlPart: string; contentType: string },
+): Promise<Buffer> {
+  // Both waiters must be registered before the click, or the events race the listeners.
+  const responsePromise = page.waitForResponse(
+    (response) => response.url().includes(options.urlPart) && response.status() === 200,
+    { timeout: 20_000 },
+  );
+  const downloadPromise = page.waitForEvent('download', { timeout: 20_000 });
+
+  await trigger.click();
+
+  const contentType = (await responsePromise).headers()['content-type'] ?? '';
+  expect(contentType.toLowerCase()).toContain(options.contentType.toLowerCase());
+
+  const download = await downloadPromise;
+  const path = await download.path();
+  return readFile(path);
 }
