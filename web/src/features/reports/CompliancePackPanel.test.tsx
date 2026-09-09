@@ -140,7 +140,7 @@ describe('CompliancePackPanel when the trust-account options cannot load', () =>
     expect(within(dialog).getByRole('button', { name: /retry/i })).toBeInTheDocument();
   });
 
-  it('does not show a failure for a non-admin, whose query never runs', async () => {
+  it('does not show a failure for a non-admin, whose query never runs', () => {
     server.use(
       http.get('/api/accounting/banks/balances', () => new HttpResponse(null, { status: 503 })),
     );
