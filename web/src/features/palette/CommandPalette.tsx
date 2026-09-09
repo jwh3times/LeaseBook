@@ -1,6 +1,7 @@
 import { Fragment, type KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Icon } from '@/design';
+import { ApiErrorNotice } from '@/components/ApiErrorNotice';
 import { useSearch, type SearchResult } from '@/lib/search';
 import { trackInteraction } from '@/lib/telemetry';
 import { groupLabel, iconForType, primaryRoute } from './actionRegistry';
@@ -92,6 +93,11 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
           <kbd className="pf-kbd">esc</kbd>
         </div>
 
+        {!showRecent && search.isError && (
+          <div className="pf-palette-empty">
+            <ApiErrorNotice error={search.error} />
+          </div>
+        )}
         <div className="pf-palette-list" id="palette-list" role="listbox">
           {showRecent && recent.length > 0 && <div className="pf-palette-group">Recent</div>}
           {showRecent && recent.length === 0 && (
@@ -100,7 +106,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
           {!showRecent && search.isFetching && items.length === 0 && (
             <div className="pf-palette-empty">Searching…</div>
           )}
-          {!showRecent && !search.isFetching && items.length === 0 && (
+          {!showRecent && search.isSuccess && !search.isFetching && items.length === 0 && (
             <div className="pf-palette-empty">No matches for “{debounced}”.</div>
           )}
 

@@ -16,6 +16,10 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Fixed
 
+- **Search and saved bank mappings distinguish failed reads from empty results.** The command
+  palette reports search errors, and statement imports explain when saved mappings are unavailable
+  while keeping manual column mapping usable.
+
 - **Settings distinguishes bank-account load failures from an empty organization.** A failed read
   now shows an explicit error instead of incorrectly saying that no bank accounts exist.
 

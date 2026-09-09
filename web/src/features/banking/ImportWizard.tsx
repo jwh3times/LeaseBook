@@ -181,7 +181,18 @@ export function ImportWizard({ bankAccountId, onClose, onConfirmed }: ImportWiza
 
         {step === 'map' && (
           <>
-            {(savedMappings.data?.length ?? 0) > 0 && (
+            {savedMappings.isPending ? (
+              <p className="t3 fs12" role="status">
+                Loading saved mappings…
+              </p>
+            ) : savedMappings.isError ? (
+              <div className="col gap6">
+                <ApiErrorNotice error={savedMappings.error} />
+                <p className="t3 fs12">You can still map the columns manually below.</p>
+              </div>
+            ) : (savedMappings.data?.length ?? 0) === 0 ? (
+              <p className="t3 fs12">No saved mappings yet. Map the columns below.</p>
+            ) : (
               <label className="col gap6">
                 <span className="pf-eyebrow">Saved mapping</span>
                 <Select

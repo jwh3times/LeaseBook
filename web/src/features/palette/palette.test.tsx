@@ -30,6 +30,23 @@ function renderPalette(onClose = vi.fn()) {
 }
 
 describe('CommandPalette', () => {
+  it('reports a failed search instead of claiming there are no matches', async () => {
+    server.use(
+      http.get('/api/search', () =>
+        HttpResponse.json({ detail: 'Search temporarily unavailable.' }, { status: 503 }),
+      ),
+    );
+    renderPalette();
+    await userEvent.type(screen.getByLabelText('Search'), 'carter');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Search temporarily unavailable.');
+    expect(screen.queryByText(/no matches/i)).not.toBeInTheDocument();
+    server.use(searchHandler([]));
+    await userEvent.clear(screen.getByLabelText('Search'));
+    await userEvent.type(screen.getByLabelText('Search'), 'another');
+    expect(await screen.findByText(/no matches for “another”/i)).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
   it('queries on type, groups results, and jumps on Enter', async () => {
     server.use(
       searchHandler([

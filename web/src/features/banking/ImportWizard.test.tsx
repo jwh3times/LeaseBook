@@ -44,6 +44,38 @@ beforeEach(() => {
 });
 
 describe('ImportWizard', () => {
+  it('shows a confirmed empty saved-mapping result', async () => {
+    server.use(
+      http.get('/api/banking/banks/:id/mappings', () => HttpResponse.json({ mappings: [] })),
+    );
+    renderWizard();
+    await userEvent.upload(
+      screen.getByLabelText('Statement CSV'),
+      new File([CSV], 'statement.csv', { type: 'text/csv' }),
+    );
+    expect(await screen.findByText(/no saved mappings yet/i)).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('reports unavailable saved mappings while allowing manual column mapping', async () => {
+    server.use(
+      http.get('/api/banking/banks/:id/mappings', () =>
+        HttpResponse.json({ detail: 'Saved mappings unavailable.' }, { status: 503 }),
+      ),
+    );
+    renderWizard();
+    await userEvent.upload(
+      screen.getByLabelText('Statement CSV'),
+      new File([CSV], 'statement.csv', { type: 'text/csv' }),
+    );
+    expect(await screen.findByRole('alert')).toHaveTextContent('Saved mappings unavailable.');
+    expect(screen.queryByText(/no saved mappings/i)).not.toBeInTheDocument();
+    await userEvent.selectOptions(screen.getByLabelText('Date column'), 'Date');
+    await userEvent.selectOptions(screen.getByLabelText('Description column'), 'Description');
+    await userEvent.selectOptions(screen.getByLabelText('Amount column'), 'Amount');
+    expect(screen.getByRole('button', { name: 'Preview matches' })).toBeEnabled();
+  });
+
   it('uploads, maps columns, previews matches, and confirms — clearing the matched line', async () => {
     let importBody: { columnMap?: Record<string, unknown> } | undefined;
     let confirmBody: { decisions?: unknown[] } | undefined;
