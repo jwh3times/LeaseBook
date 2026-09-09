@@ -157,7 +157,9 @@ bar before it merges (the pull-request template's checklist expands on it):
 2. Tests at the right altitude (unit for logic, invariant suite touched if accounting-adjacent,
    e2e if a budgeted flow changed) — green in CI.
 3. Telemetry/audit events emitted where the feature touches money or budgeted interactions.
-4. Empty/loading/error states handled; keyboard path works; AA contrast respected.
+4. Empty/loading/error states handled _and told apart_ — a pending or failed read is never rendered
+   as a confirmed value, and a money-posting control stays disabled while a read it depends on is
+   unavailable (`.claude/agents/react-frontend.md`); keyboard path works; AA contrast respected.
 5. Demoable on the seeded demo org without manual data fixes.
 
 ---

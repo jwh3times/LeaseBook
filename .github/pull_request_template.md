@@ -9,7 +9,8 @@
 - [ ] Tests at the right altitude (unit / integration / golden / e2e as appropriate)
 - [ ] Money-touching paths emit audit + telemetry events
 - [ ] Accounting-adjacent changes pass the invariant / property / golden-file suites
-- [ ] UI: empty, loading, and error states covered; keyboard path works
+- [ ] UI: empty, loading, and error states covered _and distinguished_ — no pending or failed read
+      renders as a confirmed value; keyboard path works
 - [ ] UI uses the design tokens/primitives; money uses `<Money>` (tabular numerals); status never color-alone
 - [ ] New org-scoped tables go through the RLS helper (schema guard stays green)
 - [ ] No new MediatR / AutoMapper / FluentAssertions (licensed); no float/double for money
