@@ -1,6 +1,6 @@
 import { useMutation } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
-import { Badge, type BadgeTone, Button, Icon, Money, Select } from '@/design';
+import { Badge, type BadgeTone, Button, EmptyState, Icon, Money, Select } from '@/design';
 import { ApiErrorNotice } from '@/components/ApiErrorNotice';
 import { Modal } from '@/components/Modal';
 import {
@@ -181,7 +181,22 @@ export function ImportWizard({ bankAccountId, onClose, onConfirmed }: ImportWiza
 
         {step === 'map' && (
           <>
-            {(savedMappings.data?.length ?? 0) > 0 && (
+            {savedMappings.isPending ? (
+              <div role="status" aria-label="Loading saved mappings">
+                <div className="pf-skeleton" style={{ height: 20 }} />
+              </div>
+            ) : savedMappings.isError ? (
+              <div className="col gap6">
+                <ApiErrorNotice error={savedMappings.error} />
+                <p className="t3 fs12">You can still map the columns manually below.</p>
+              </div>
+            ) : (savedMappings.data?.length ?? 0) === 0 ? (
+              <EmptyState
+                icon="doc"
+                title="No saved mappings yet"
+                description="Map the columns below."
+              />
+            ) : (
               <label className="col gap6">
                 <span className="pf-eyebrow">Saved mapping</span>
                 <Select
