@@ -82,6 +82,20 @@ describe('SettingsPage', () => {
     expect(screen.getByRole('button', { name: 'Deactivate' })).toBeInTheDocument();
   });
 
+  it('shows a bank-account load error instead of the empty state', async () => {
+    server.use(
+      http.get('/api/settings/org', () => HttpResponse.json(ORG)),
+      http.get('/api/settings/banks', () =>
+        HttpResponse.json({ detail: 'service unavailable' }, { status: 503 }),
+      ),
+    );
+
+    renderSettings();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't load bank accounts");
+    expect(screen.queryByText('No bank accounts yet.')).not.toBeInTheDocument();
+  });
+
   it('distinguishes the PM operating account from the operating trust account', async () => {
     server.use(
       http.get('/api/settings/org', () => HttpResponse.json(ORG)),

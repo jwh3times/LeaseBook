@@ -1,7 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router';
-import { postApiAuthLogout } from '@/api';
 import {
   AppLayout,
   Avatar,
@@ -12,6 +11,7 @@ import {
   Sidebar,
   Topbar,
 } from '@/design';
+import { signOutCurrentSession } from '@/features/auth/signOut';
 import { sessionQueryKey, useSession } from '@/features/auth/useSession';
 import { CommandPalette } from '@/features/palette/CommandPalette';
 import { HelpOverlay } from '@/features/palette/HelpOverlay';
@@ -50,7 +50,7 @@ export function AppShell() {
   const displayName = session?.name ?? session?.email ?? 'User';
 
   async function signOut() {
-    await postApiAuthLogout();
+    await signOutCurrentSession();
     await queryClient.invalidateQueries({ queryKey: sessionQueryKey });
     void navigate('/login', { replace: true });
   }

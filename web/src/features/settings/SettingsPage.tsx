@@ -1,6 +1,16 @@
 import { Link } from 'react-router';
 import { useEffect, useState } from 'react';
-import { Badge, Button, Card, CardHeader, Input, Select, Table, type TableColumn } from '@/design';
+import {
+  Badge,
+  Button,
+  Card,
+  CardHeader,
+  EmptyState,
+  Input,
+  Select,
+  Table,
+  type TableColumn,
+} from '@/design';
 import { Modal } from '@/components/Modal';
 import {
   useBankAccounts,
@@ -417,6 +427,14 @@ function BankAccountsSection() {
       {banks.isPending ? (
         <div className="pf-pad">
           <div className="pf-skeleton" />
+        </div>
+      ) : banks.isError ? (
+        <div className="pf-pad" role="alert">
+          <EmptyState
+            icon="alert"
+            title="Couldn't load bank accounts"
+            description={banks.error.message}
+          />
         </div>
       ) : (banks.data?.length ?? 0) === 0 ? (
         <div className="pf-pad t3 fs13">No bank accounts yet.</div>

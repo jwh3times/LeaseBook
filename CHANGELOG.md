@@ -14,7 +14,16 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ## [Unreleased]
 
-- _Nothing yet._
+### Fixed
+
+- **Settings distinguishes bank-account load failures from an empty organization.** A failed read
+  now shows an explicit error instead of incorrectly saying that no bank accounts exist.
+
+### Security
+
+- **Signing out clears recent command-palette selections from browser storage.** Tenant and property
+  identifiers no longer remain in local storage after a successful sign-out from either account
+  surface.
 
 ## [0.12.0] - 2026-09-07
 
