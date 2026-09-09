@@ -233,3 +233,53 @@ describe('LedgerComposer', () => {
     expect(screen.queryByText('Inactive Trust')).not.toBeInTheDocument();
   });
 });
+
+describe('LedgerComposer when the bank list cannot be read', () => {
+  it('reports the read failure instead of asking for a selection that cannot be made', async () => {
+    let posted = false;
+    server.use(
+      http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 })),
+      http.get('/api/settings/banks', () => new HttpResponse(null, { status: 503 })),
+      http.post('/api/accounting/tenants/:tenantId/payments', () => {
+        posted = true;
+        return HttpResponse.json({ entryId: 'e1' });
+      }),
+    );
+    renderComposer({ initialMode: 'payment' });
+
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+
+    // "Select a bank account." is advice the operator cannot act on: the selector has nothing in
+    // it because the read failed, not because they skipped a field.
+    expect(screen.queryByText(/select a bank account/i)).toBeNull();
+
+    await userEvent.type(screen.getByLabelText('Amount'), '100');
+    await userEvent.keyboard('{Enter}');
+    expect(posted).toBe(false);
+  });
+
+  it('recovers and posts once the bank list loads', async () => {
+    let attempt = 0;
+    let posted = false;
+    server.use(
+      http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 })),
+      http.get('/api/settings/banks', () => {
+        attempt += 1;
+        return attempt === 1 ? new HttpResponse(null, { status: 503 }) : HttpResponse.json(BANKS);
+      }),
+      http.post('/api/accounting/tenants/:tenantId/payments', () => {
+        posted = true;
+        return HttpResponse.json({ entryId: 'e1' });
+      }),
+    );
+    renderComposer({ initialMode: 'payment' });
+
+    await userEvent.click(await screen.findByRole('button', { name: /retry/i }));
+    await screen.findByLabelText('Bank account');
+
+    await userEvent.type(screen.getByLabelText('Amount'), '100');
+    await userEvent.keyboard('{Enter}');
+
+    await vi.waitFor(() => expect(posted).toBe(true));
+  });
+});
