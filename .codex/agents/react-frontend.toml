@@ -207,18 +207,20 @@ Adding a new status domain: extend the `*_TONE` map in `StatusBadge.tsx`; never 
 
 ## Loading / error / empty states
 
-All data-driven components handle all three branches:
+Every read has **three** outcomes, and they are never collapsed into two: pending, failed, and
+succeeded-with-nothing. Only the third is a fact about the org.
 
 ```tsx
 {
   query.isPending ? (
     <div className="pf-skeleton" style={{ height: 20 }} />
   ) : query.isError ? (
-    <EmptyState
-      icon="alert"
-      title="Something went wrong"
-      description={query.error.message}
-    />
+    <>
+      <ApiErrorNotice error={query.error} fallback="Couldn’t load the items." />
+      <Button variant="ghost" size="sm" onClick={() => query.refetch()}>
+        Retry
+      </Button>
+    </>
   ) : query.data.items.length === 0 ? (
     <EmptyState icon="inbox" title="No items yet" />
   ) : (
@@ -228,9 +230,36 @@ All data-driven components handle all three branches:
 ```
 
 - Loading: `<div className="pf-skeleton">` — animates via `pfPulse` keyframe in tokens.css
-- Error: `<EmptyState icon="alert" …>` from `@/design`
+- Error: `<ApiErrorNotice error={query.error} fallback="…" />` from `@/components/ApiErrorNotice`, plus a retry
+  control. It renders the server's mapped message and the `Reference: <32-hex>` support id that
+  `unwrap` carried through (ADR-025, 2026-09-09 amendment). A hardcoded `EmptyState` description
+  throws that id away — some primary-content surfaces still do and are being converted
 - Empty: `<EmptyState icon="inbox" …>` from `@/design`
 - Never render a bare `null` or skip the loading guard
+
+### A failed read is never rendered as a confirmed value
+
+This applies hardest to **auxiliary** reads — the ones feeding a selector, a label, a count, a
+default, or an enable/disable decision rather than a content region. Those failures are invisible by
+default: the surface still renders, so the user sees a confident answer that is actually a read
+error. That is worse than a visible error, because they act on it.
+
+- Never `?? 0`, `?? []`, or `?? fallback` on query data that has not resolved. `data?.length ?? 0`
+  reports a confirmed "0 reconciliations" while pending or failed; `Number(org?.x ?? 1)` seeded a
+  late-fee override modal with invented day/grace/amount values that Save then wrote to the lease
+- An empty options list means "this org has none" — say that only when the query actually succeeded.
+  Otherwise the selector shows the error and a retry
+- A surface that posts money **blocks the write** while a prerequisite read is unavailable. Disable
+  Save/Post, don't just annotate. This includes a failed refetch that still holds stale rows — a
+  stale bank list may name a since-deactivated account
+- Gate the loading branch on `fetchStatus`, not `isPending` alone: a disabled query
+  (`enabled: false`) is pending forever, so `isPending` alone renders a permanent "Loading…"
+- `unwrap`'s `fallbackMessage` is user-visible copy, so write a sentence — "Failed to load the owner
+  list", never `'owners'`. It surfaces whenever the server body carries no `detail` or `title`
+
+There is no build gate for this: a missing branch has no syntax to scan for, so
+`SpaRequestExecutionTests` cannot see it. Cover each auxiliary read's error state with a test
+(`server.use(http.get(…, () => HttpResponse.error()))`) — that test is the only enforcement.
 
 ---
 
@@ -297,6 +326,11 @@ test("records a payment", async () => {
 | Color as sole status indicator              | `<Badge tone={…} dot>` (always `dot` or `icon`)              |
 | `fetch(…)` for API calls                    | Generated named SDK functions from `@/api`                   |
 | `if (error \|\| !data) throw new Error(…)`  | `unwrap(call, fallbackMessage)` from `@/api`                 |
+| `query.data?.length ?? 0` in rendered copy  | Branch on `isSuccess` / `isError` / pending separately       |
+| `?? fallback` on an unresolved query value  | Block the control until the read succeeds                    |
+| Terse `unwrap` fallbacks (`'owners'`)       | A sentence — the fallback is user-visible error copy         |
+| `isPending` alone on a disabled query       | Check `fetchStatus` too, or it loads forever                 |
+| `EmptyState` for a query error              | `<ApiErrorNotice error={…}>` + retry (keeps the support ref) |
 | `URL.createObjectURL` + anchor click        | `download(call, filename)` from `@/api`                      |
 | `document.cookie` reads outside `api/`      | The XSRF interceptor in `api/client.ts`                      |
 | Hand-written API types                      | Generated named model types from `@/api`                     |

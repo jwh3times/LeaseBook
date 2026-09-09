@@ -42,6 +42,32 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   identifiers no longer remain in local storage after a successful sign-out from either account
   surface.
 
+- **Per-lease late-fee overrides no longer save invented values when the organization defaults
+  cannot load.** The dialog previously filled override fields with fallbacks — day 1, no grace
+  period, no fee — whenever the organization settings read failed, and saving stored those numbers
+  on the lease as deliberate policy. It now reports the failure, offers a retry, and keeps saving
+  disabled until the inherited defaults are actually known. The lease's own existing overrides stay
+  visible throughout.
+
+- **Recording a tenant payment and applying held funds tell an unreachable trust account apart from
+  an organization that has none.** Both surfaces reported that no trust bank was configured when the
+  bank list had merely failed to load, sending the operator to Settings to fix nothing. Each now
+  shows the read failure with a retry and prevents posting until the accounts can be read.
+
+- **The dashboard says when it cannot read onboarding status.** An unavailable status rendered
+  identically to a fully set-up organization: no migration banner, no setup redirect, and no
+  explanation. It now shows an explicit notice with a retry while the rest of the dashboard stays
+  usable.
+
+- **Owner, property, and trust-account pickers separate a failed lookup from an empty list.**
+  Creating a property, choosing report filters, assembling a compliance pack, and filtering the bank
+  register each used to render a failed lookup as an empty selector, an options list holding only
+  "All", or filter entries labelled with a dash. Each now reports the failure with a retry, and
+  keeps add-your-first-record guidance for lists that really are empty.
+
+- **Reconciliation history no longer reports a confirmed count it has not read.** The header showed
+  "0 reconciliations" while its read was still in flight or had failed.
+
 ## [0.12.0] - 2026-09-07
 
 ### Added
