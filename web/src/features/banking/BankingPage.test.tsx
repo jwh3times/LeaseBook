@@ -203,3 +203,58 @@ describe('BankingPage reconcile mode', () => {
     expect(await screen.findByRole('button', { name: 'Finalize' })).toBeInTheDocument();
   });
 });
+
+describe('BankingPage when the property list cannot be read', () => {
+  const REGISTER_WITH_PROPERTIES = {
+    ...REGISTER,
+    rows: [
+      { ...REGISTER.rows[0], propertyId: 'prop1' },
+      { ...REGISTER.rows[1], propertyId: 'prop2' },
+    ],
+  };
+
+  it('says property names are unavailable instead of offering em-dash filter options', async () => {
+    server.use(
+      // First-match-first: these overrides must precede baseHandlers().
+      http.get('/api/directory/properties', () => new HttpResponse(null, { status: 503 })),
+      http.get('/api/accounting/banks/:id/register', () =>
+        HttpResponse.json(REGISTER_WITH_PROPERTIES),
+      ),
+      ...baseHandlers(),
+    );
+    renderPage();
+
+    // The register itself is readable — the property read is auxiliary to it.
+    expect(await screen.findByText('Rent deposit')).toBeInTheDocument();
+
+    // The filter's options came from register rows, not from the property query, so a failed
+    // lookup produced a real dropdown whose every entry was an unlabelled em dash.
+    expect(screen.queryByLabelText('Filter by property')).toBeNull();
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+  });
+
+  it('still offers the filter when the property names load', async () => {
+    server.use(
+      http.get('/api/directory/properties', () =>
+        HttpResponse.json({
+          items: [
+            { id: 'prop1', address: '412 Oakmont Ave' },
+            { id: 'prop2', address: '9 Cardinal Ct' },
+          ],
+          page: 1,
+          pageSize: 200,
+          total: 2,
+        }),
+      ),
+      http.get('/api/accounting/banks/:id/register', () =>
+        HttpResponse.json(REGISTER_WITH_PROPERTIES),
+      ),
+      ...baseHandlers(),
+    );
+    renderPage();
+
+    const filter = await screen.findByLabelText('Filter by property');
+    expect(within(filter).getByRole('option', { name: '412 Oakmont Ave' })).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+});

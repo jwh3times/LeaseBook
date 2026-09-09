@@ -351,6 +351,60 @@ the sign-in path, not correctness; the interceptors are the correctness. The sig
 no manual prime at all. Mutations get one round-trip faster in the common case, and the
 "remember to prime" precondition is gone rather than renamed — the outcome #237 required.
 
+### 2026-09-09 amendment — auxiliary reads render their own failure
+
+The 2026-08-20 amendment left one question open on purpose: "does every error empty-state grow a
+support reference, and what does it look like?" Issue #302 and its children answered it, so the
+answer is recorded here rather than left to be re-derived per surface.
+
+**The decision.** A failed read renders `ApiErrorNotice` plus a retry control, in place of the value
+the read would have produced — not a hardcoded `EmptyState` description, and not the value's
+fallback.
+
+**The defect class it closes.** The 08-20 amendment framed the gap as lost `code`/`correlationId`.
+The children of #302 found the larger cost: a read has **three** outcomes, not two — pending, failed,
+and succeeded-with-nothing — and only the third is a fact about the organization. Every site that
+collapsed the first two into the third rendered a failure as a confirmed answer:
+
+- `LeaseLateFeeModal` seeded each override control from `Number(org?.x ?? fallback)`. With
+  `/api/settings/org` failing, switching a field to "Override" wrote invented values — day 1, grace
+  0, `$0` — and Save persisted them onto the lease as deliberate policy.
+- `ReconciliationHistory` read `history.data?.length ?? 0` and reported a confirmed
+  "0 reconciliations" while pending or failed. On an audit trail that is the difference between
+  "nothing was finalized" and "we could not check".
+- `ApplyModal` and `LedgerComposer` resolved trust banks out of `banks.data` and told the operator
+  "No trust bank is configured for this org" when the bank list simply had not loaded.
+- `NewPropertyModal` reported an org with no owners; the reports `SelectChip` popover offered a bare
+  "All"; `BankingPage`'s register filter offered every property as an em dash; `DashboardPage` took
+  the operational-org branch of both onboarding takeover rules, so a failed status read silently
+  produced no redirect, no migration banner, and no explanation.
+
+An error rendered as a confirmed value is worse than a visible error, because it is actionable: the
+operator acts on it, and in the late-fee case the action was a durable money-affecting write.
+
+**Two rules follow.** A surface that posts money blocks the write while a prerequisite read is
+unavailable — including a failed refetch still holding stale rows, since a stale bank list may name
+a since-deactivated account. And an `unwrap` fallback is user-visible copy, so it is a sentence: the
+nine `directory.ts` fallbacks that read `'owners'`, `'tenant create'` and the like became real
+sentences once the contract routed them to `ApiErrorNotice`.
+
+**Residual, measured rather than estimated.** The 08-20 amendment counted ~28 branches across 18
+components. Eighteen components now render `ApiErrorNotice`; nine still hardcode an alert
+`EmptyState` — `OnboardingPage`, `RunHistoryView`, `ReportsPage`, `SettingsPage`, `AuditDrawer`,
+`LedgerPage`, `ReconciliationHistory`'s list body, and the shared `DetailPage`/`IndexView`
+scaffolds. #302 scoped itself to auxiliary reads: the ones feeding a selector, a label, a count, or
+an enable/disable decision, where the failure is invisible. The remainder are primary-content
+regions, where an error at least occupies the space the content would have. This decision binds them
+too; they are simply not yet converted, and the two scaffolds should be converted first since they
+cover many routes at once.
+
+**Not mechanically enforced, and it cannot be by the same means.**
+`SpaRequestExecutionTests` guards the transport rule because a hand-written success rule is a
+grep-able shape. "This component rendered a failed read as a confirmed value" is not: the defect is
+the absence of a branch, and a missing branch has no syntax. Coverage here is a per-surface test
+asserting the error state — 23 of them on this change — so a new auxiliary read is guarded only if
+its author writes one.
+
 ## Consequences
 
 - Every error response an operator can screenshot now carries a `Reference: <32-hex>` string they can

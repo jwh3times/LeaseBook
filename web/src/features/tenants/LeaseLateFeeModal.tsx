@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Badge, Button, Input, Select } from '@/design';
+import { Badge, Button, formatMoney, Input, Money, Select } from '@/design';
+import { ApiErrorNotice } from '@/components/ApiErrorNotice';
 import { Modal } from '@/components/Modal';
 import { type TenantDetail, useUpdateLease } from '@/lib/directory';
 import { useOrgSettings } from '@/lib/settings';
@@ -78,104 +79,121 @@ export function LeaseLateFeeModal({
           The NC §42-46 cap still applies to whatever is configured here.
         </p>
 
-        <OverrideRow
-          id="lf-o-due"
-          label="Rent due day"
-          inheritedLabel={org ? `Day ${org.rentDueDay}` : 'org default'}
-          value={dueDay}
-          onChange={setDueDay}
-          defaultWhenOverriding={Number(org?.rentDueDay ?? 1)}
-          render={(value, onValue) => (
-            <Input
+        {settings.isPending ? (
+          <div role="status" aria-label="Loading organization defaults" className="col gap6">
+            <div className="pf-skeleton" style={{ height: 20 }} />
+            <div className="pf-skeleton" style={{ height: 20 }} />
+            <div className="pf-skeleton" style={{ height: 20 }} />
+          </div>
+        ) : !org ? (
+          <DefaultsUnavailable
+            lease={lease}
+            error={settings.error}
+            onRetry={() => void settings.refetch()}
+            retrying={settings.isFetching}
+          />
+        ) : (
+          <>
+            <OverrideRow
               id="lf-o-due"
-              type="number"
-              min={1}
-              max={28}
-              className="pf-num"
-              value={value}
-              onChange={(e) => onValue(Number(e.target.value))}
+              label="Rent due day"
+              inheritedLabel={`Day ${org.rentDueDay}`}
+              value={dueDay}
+              onChange={setDueDay}
+              defaultWhenOverriding={Number(org.rentDueDay)}
+              render={(value, onValue) => (
+                <Input
+                  id="lf-o-due"
+                  type="number"
+                  min={1}
+                  max={28}
+                  className="pf-num"
+                  value={value}
+                  onChange={(e) => onValue(Number(e.target.value))}
+                />
+              )}
             />
-          )}
-        />
 
-        <OverrideRow
-          id="lf-o-grace"
-          label="Grace days"
-          inheritedLabel={org ? `${org.lateFeeGraceDays} days` : 'org default'}
-          value={grace}
-          onChange={setGrace}
-          defaultWhenOverriding={Number(org?.lateFeeGraceDays ?? 0)}
-          render={(value, onValue) => (
-            <Input
+            <OverrideRow
               id="lf-o-grace"
-              type="number"
-              min={0}
-              className="pf-num"
-              value={value}
-              onChange={(e) => onValue(Number(e.target.value))}
+              label="Grace days"
+              inheritedLabel={`${org.lateFeeGraceDays} days`}
+              value={grace}
+              onChange={setGrace}
+              defaultWhenOverriding={Number(org.lateFeeGraceDays)}
+              render={(value, onValue) => (
+                <Input
+                  id="lf-o-grace"
+                  type="number"
+                  min={0}
+                  className="pf-num"
+                  value={value}
+                  onChange={(e) => onValue(Number(e.target.value))}
+                />
+              )}
             />
-          )}
-        />
 
-        <div className="pf-formrow">
-          <label htmlFor="lf-o-kind">Fee type</label>
-          <Select
-            id="lf-o-kind"
-            value={kind ?? 'inherit'}
-            onChange={(e) => setKind(e.target.value === 'inherit' ? null : e.target.value)}
-          >
-            <option value="inherit">
-              Inherit{org ? ` (${org.lateFeeKind === 'percent' ? 'percent of rent' : 'flat'})` : ''}
-            </option>
-            <option value="flat">Flat amount</option>
-            <option value="percent">Percent of rent</option>
-          </Select>
-        </div>
+            <div className="pf-formrow">
+              <label htmlFor="lf-o-kind">Fee type</label>
+              <Select
+                id="lf-o-kind"
+                value={kind ?? 'inherit'}
+                onChange={(e) => setKind(e.target.value === 'inherit' ? null : e.target.value)}
+              >
+                <option value="inherit">
+                  Inherit ({org.lateFeeKind === 'percent' ? 'percent of rent' : 'flat'})
+                </option>
+                <option value="flat">Flat amount</option>
+                <option value="percent">Percent of rent</option>
+              </Select>
+            </div>
 
-        <OverrideRow
-          id="lf-o-amount"
-          label="Flat fee"
-          inheritedLabel={org ? `$${Number(org.lateFeeAmount).toFixed(2)}` : 'org default'}
-          value={amount}
-          onChange={setAmount}
-          defaultWhenOverriding={Number(org?.lateFeeAmount ?? 0)}
-          render={(value, onValue) => (
-            <Input
+            <OverrideRow
               id="lf-o-amount"
-              type="number"
-              min={0}
-              step={0.01}
-              className="pf-num"
-              value={value}
-              onChange={(e) => onValue(Number(e.target.value))}
+              label="Flat fee"
+              inheritedLabel={formatMoney(Number(org.lateFeeAmount))}
+              value={amount}
+              onChange={setAmount}
+              defaultWhenOverriding={Number(org.lateFeeAmount)}
+              render={(value, onValue) => (
+                <Input
+                  id="lf-o-amount"
+                  type="number"
+                  min={0}
+                  step={0.01}
+                  className="pf-num"
+                  value={value}
+                  onChange={(e) => onValue(Number(e.target.value))}
+                />
+              )}
             />
-          )}
-        />
 
-        <OverrideRow
-          id="lf-o-rate"
-          label="Rate (%)"
-          inheritedLabel={org ? `${Number(org.lateFeeRateBps) / 100}%` : 'org default'}
-          value={rateBps}
-          onChange={setRateBps}
-          defaultWhenOverriding={Number(org?.lateFeeRateBps ?? 0)}
-          render={(value, onValue) => (
-            <Input
+            <OverrideRow
               id="lf-o-rate"
-              type="number"
-              min={0}
-              max={100}
-              step={0.01}
-              className="pf-num"
-              // Stored in basis points, entered as a percentage.
-              value={Number(value) / 100}
-              onChange={(e) => onValue(Math.round(Number(e.target.value) * 100))}
+              label="Rate (%)"
+              inheritedLabel={`${Number(org.lateFeeRateBps) / 100}%`}
+              value={rateBps}
+              onChange={setRateBps}
+              defaultWhenOverriding={Number(org.lateFeeRateBps)}
+              render={(value, onValue) => (
+                <Input
+                  id="lf-o-rate"
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={0.01}
+                  className="pf-num"
+                  // Stored in basis points, entered as a percentage.
+                  value={Number(value) / 100}
+                  onChange={(e) => onValue(Math.round(Number(e.target.value) * 100))}
+                />
+              )}
             />
-          )}
-        />
+          </>
+        )}
 
         <div className="row gap12">
-          <Button variant="primary" size="sm" onClick={save} disabled={update.isPending}>
+          <Button variant="primary" size="sm" onClick={save} disabled={update.isPending || !org}>
             {update.isPending ? 'Saving…' : 'Save overrides'}
           </Button>
           <Button variant="ghost" size="sm" onClick={onClose}>
@@ -185,6 +203,68 @@ export function LeaseLateFeeModal({
         </div>
       </div>
     </Modal>
+  );
+}
+
+/**
+ * Shown when the org defaults could not be read.
+ *
+ * The override controls are withheld rather than rendered against fallbacks. Every `OverrideRow`
+ * seeds its value from `defaultWhenOverriding`, so with no org settings a toggle to "Override"
+ * would write day 1 / grace 0 / $0 — numbers invented by the `??` fallback, not chosen by anyone —
+ * and `save` would persist them onto the lease as deliberate policy. The lease's own stored
+ * overrides are still known, so they stay visible; it is the inherited baseline that is missing.
+ */
+function DefaultsUnavailable({
+  lease,
+  error,
+  onRetry,
+  retrying,
+}: {
+  lease: NonNullable<TenantDetail['lease']>;
+  error: Error | null;
+  onRetry: () => void;
+  retrying: boolean;
+}) {
+  const kind = lease.lateFeeKindOverride;
+  const amount = numOrNull(lease.lateFeeAmountOverride);
+  const dueDay = numOrNull(lease.lateFeeRentDueDayOverride);
+  const grace = numOrNull(lease.lateFeeGraceDaysOverride);
+  const rateBps = numOrNull(lease.lateFeeRateBpsOverride);
+
+  const current: [string, React.ReactNode][] = [];
+  if (dueDay !== null) current.push(['Rent due day', `Day ${dueDay}`]);
+  if (grace !== null) current.push(['Grace days', `${grace} days`]);
+  if (kind) current.push(['Fee type', kind === 'percent' ? 'Percent of rent' : 'Flat amount']);
+  if (amount !== null) current.push(['Flat fee', <Money value={amount} />]);
+  if (rateBps !== null) current.push(['Rate', `${rateBps / 100}%`]);
+
+  return (
+    <div className="col gap12">
+      <ApiErrorNotice error={error} fallback="Couldn’t load the organization defaults." />
+      <p className="t3 fs13">
+        Late-fee overrides can’t be edited until the organization defaults load. Editing without
+        them would save values this dialog invented rather than the policy this lease inherits.
+      </p>
+      <div className="row gap12">
+        <Button variant="ghost" size="sm" onClick={onRetry} disabled={retrying}>
+          {retrying ? 'Retrying…' : 'Retry'}
+        </Button>
+      </div>
+      {current.length > 0 ? (
+        <div className="col gap6">
+          <span className="pf-eyebrow">This lease currently overrides</span>
+          {current.map(([label, value]) => (
+            <div key={label} className="row gap12">
+              <span className="t3 fs12">{label}</span>
+              <span className="fs12">{value}</span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="t3 fs12">This lease has no overrides of its own; it inherits every field.</p>
+      )}
+    </div>
   );
 }
 

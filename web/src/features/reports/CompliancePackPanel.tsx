@@ -125,7 +125,10 @@ export function CompliancePackPanel({ report, isAdmin }: CompliancePackPanelProp
           label="Trust account"
           value={selectedBankLabel}
           options={bankOptions}
-          loading={banksQuery.isPending}
+          loading={banksQuery.isPending && banksQuery.fetchStatus !== 'idle'}
+          error={banksQuery.error}
+          onRetry={() => void banksQuery.refetch()}
+          retrying={banksQuery.isFetching}
           onSelect={(id) => {
             setBankAccountId(id);
             setDone(false);

@@ -165,3 +165,74 @@ describe('LeaseLateFeeModal', () => {
     });
   });
 });
+
+describe('LeaseLateFeeModal when org settings are unavailable', () => {
+  it('does not persist a fabricated override built from fallback defaults', async () => {
+    let saved: Record<string, unknown> | null = null;
+    server.use(
+      http.get('/api/settings/org', () => new HttpResponse(null, { status: 503 })),
+      http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 })),
+      http.put('/api/directory/leases/:id', async ({ request }) => {
+        saved = (await request.json()) as Record<string, unknown>;
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+
+    renderModal(detailWith({}));
+
+    // The failure must be announced, not swallowed behind controls that look operable.
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+
+    // Nothing may persist while the inherited baseline is unknown: an override toggled here would
+    // carry `day 1` / `grace 0` — values invented by the fallback, not chosen by the operator.
+    expect(screen.queryByRole('button', { name: /save overrides/i })).toBeDisabled();
+    expect(saved).toBeNull();
+  });
+
+  it('does not offer override controls that would invent an inherited baseline', async () => {
+    server.use(
+      http.get('/api/settings/org', () => new HttpResponse(null, { status: 503 })),
+      http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 })),
+    );
+
+    renderModal(detailWith({}));
+
+    await screen.findByRole('alert');
+
+    // The inherit/override selects must not claim an org default they could not read.
+    expect(screen.queryByRole('option', { name: /Inherit \(org default\)/i })).toBeNull();
+    expect(screen.queryByRole('combobox', { name: 'Grace days' })).toBeNull();
+  });
+
+  it('preserves existing lease overrides rather than discarding them', async () => {
+    server.use(
+      http.get('/api/settings/org', () => new HttpResponse(null, { status: 503 })),
+      http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 })),
+    );
+
+    // A lease that already deviates must still show what it is set to; the unreadable org default
+    // is what is unknown, not the lease's own stored override.
+    renderModal(detailWith({ lateFeeGraceDaysOverride: 3 }));
+
+    await screen.findByRole('alert');
+    expect(screen.getByText(/3 days/i)).toBeInTheDocument();
+  });
+
+  it('recovers once the settings read succeeds', async () => {
+    let attempt = 0;
+    server.use(
+      http.get('/api/settings/org', () => {
+        attempt += 1;
+        return attempt === 1 ? new HttpResponse(null, { status: 503 }) : HttpResponse.json(ORG);
+      }),
+      http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 })),
+    );
+
+    renderModal(detailWith({}));
+
+    await userEvent.click(await screen.findByRole('button', { name: /retry/i }));
+
+    expect(await screen.findByRole('option', { name: 'Inherit (5 days)' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /save overrides/i })).toBeEnabled();
+  });
+});

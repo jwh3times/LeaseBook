@@ -25,7 +25,18 @@ export function ReconciliationHistory({ bankAccountId }: { bankAccountId: string
       <div className="pf-card-hd">
         <div>
           <h3>Reconciliation history</h3>
-          <div className="sub">{history.data?.length ?? 0} reconciliations</div>
+          {/*
+            The body already separates pending, error, and empty; this count did not, so a failed
+            or in-flight read reported a confirmed "0 reconciliations" above it. On an audit trail
+            that is the difference between "nothing was finalized" and "we could not check".
+          */}
+          <div className="sub">
+            {history.isSuccess
+              ? `${history.data.length} reconciliations`
+              : history.isError
+                ? 'Count unavailable'
+                : 'Counting…'}
+          </div>
         </div>
       </div>
 

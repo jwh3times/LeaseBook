@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Badge, Button, Input, Select, type TableColumn } from '@/design';
+import { ApiErrorNotice } from '@/components/ApiErrorNotice';
 import { IndexView } from '@/components/IndexView';
 import { Modal } from '@/components/Modal';
 import {
@@ -82,7 +83,13 @@ function NewPropertyModal({
     event.preventDefault();
     setError(null);
     if (!ownerId) {
-      setError('Choose an owner for this property.');
+      // A failed owner read and an unmade choice both leave ownerId empty, but only one of them is
+      // something the operator can act on by picking from the list.
+      setError(
+        owners.isError
+          ? 'The owner list is unavailable, so this property can’t be created yet.'
+          : 'Choose an owner for this property.',
+      );
       return;
     }
     try {
@@ -123,19 +130,46 @@ function NewPropertyModal({
       <form className="pf-modal-body" onSubmit={submit}>
         <div className="pf-formrow">
           <label htmlFor="p-owner">Owner</label>
-          <Select
-            id="p-owner"
-            value={ownerId}
-            onChange={(e) => setOwnerId(e.target.value)}
-            required
-          >
-            <option value="">Select an owner…</option>
-            {(owners.data?.items ?? []).map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.name}
-              </option>
-            ))}
-          </Select>
+          {/*
+            An empty `owners.data?.items ?? []` reads identically whether the org has no owners or
+            the read failed, and the selector renders the same unusable "Select an owner…" either
+            way. Only one of those is a setup step the operator can complete.
+          */}
+          {owners.isPending ? (
+            <div role="status" aria-label="Loading owners">
+              <div className="pf-skeleton" style={{ height: 32 }} />
+            </div>
+          ) : owners.isError ? (
+            <div className="col gap6">
+              <ApiErrorNotice error={owners.error} fallback="Couldn’t load the owner list." />
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => void owners.refetch()}
+                disabled={owners.isFetching}
+              >
+                {owners.isFetching ? 'Retrying…' : 'Retry'}
+              </Button>
+            </div>
+          ) : (owners.data?.items ?? []).length === 0 ? (
+            <p className="t3 fs12">
+              No owners yet — add an owner first, then come back to create this property.
+            </p>
+          ) : (
+            <Select
+              id="p-owner"
+              value={ownerId}
+              onChange={(e) => setOwnerId(e.target.value)}
+              required
+            >
+              <option value="">Select an owner…</option>
+              {(owners.data?.items ?? []).map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.name}
+                </option>
+              ))}
+            </Select>
+          )}
         </div>
         <div className="pf-formrow">
           <label htmlFor="p-address">Address</label>

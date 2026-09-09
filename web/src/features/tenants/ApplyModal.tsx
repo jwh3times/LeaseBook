@@ -42,6 +42,13 @@ export function ApplyModal({ tenantId, initialKind, onClose, onApplied }: ApplyM
   const depositBank = banks.data?.find((bank) => bank.purpose === 'deposit') ?? banks.data?.[0];
   const operatingBank = banks.data?.find((bank) => bank.purpose === 'trust') ?? banks.data?.[0];
 
+  /**
+   * `isError` blocks even when cached rows are still in hand: a failed refetch means the list may
+   * name a bank that has since been deactivated, and this modal posts money against whichever id it
+   * resolves. A stale read is not a good enough basis for that.
+   */
+  const banksUnavailable = banks.isPending || banks.isError;
+
   const mutation = useMutation<PostResult, LedgerPostError>({
     mutationFn: () => {
       const value = Number.parseFloat(amount);
@@ -85,6 +92,16 @@ export function ApplyModal({ tenantId, initialKind, onClose, onApplied }: ApplyM
       setError({ message: 'Enter an amount greater than zero.' });
       return;
     }
+    if (banksUnavailable) {
+      // Both banks resolve out of `banks.data`, so an unread list looks exactly like an org with no
+      // trust bank. Naming the wrong one sends the operator to Settings to fix nothing.
+      setError({
+        message: banks.isPending
+          ? 'Still loading the trust accounts — try again in a moment.'
+          : 'The trust accounts couldn’t be loaded, so nothing can be applied yet.',
+      });
+      return;
+    }
     if (!depositBank || !operatingBank) {
       setError({ message: 'No trust bank is configured for this org.' });
       return;
@@ -109,13 +126,31 @@ export function ApplyModal({ tenantId, initialKind, onClose, onApplied }: ApplyM
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button variant="primary" icon="check" disabled={mutation.isPending} onClick={submit}>
+          <Button
+            variant="primary"
+            icon="check"
+            disabled={mutation.isPending || banksUnavailable}
+            onClick={submit}
+          >
             Apply
           </Button>
         </>
       }
     >
       <div className="pf-modal-body col gap12">
+        {banks.isError && (
+          <div className="col gap6">
+            <ApiErrorNotice error={banks.error} fallback="Couldn’t load the trust accounts." />
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => void banks.refetch()}
+              disabled={banks.isFetching}
+            >
+              {banks.isFetching ? 'Retrying…' : 'Retry'}
+            </Button>
+          </div>
+        )}
         <label className="col gap6">
           <span className="pf-eyebrow">Source</span>
           <Select

@@ -54,13 +54,16 @@ export function BankingPage() {
   const propertyLabel = (id: string | null) =>
     id ? (properties.data?.items.find((p) => p.id === id)?.address ?? '—') : '—';
 
+  const propertyIds = useMemo(
+    () => Array.from(new Set(rows.map((r) => r.propertyId).filter((id): id is string => !!id))),
+    [rows],
+  );
+  const rowsReferenceProperties = propertyIds.length > 0;
+
   const propertyOptions = useMemo(() => {
-    const ids = Array.from(
-      new Set(rows.map((r) => r.propertyId).filter((id): id is string => !!id)),
-    );
-    return ids.map((id) => ({ id, label: propertyLabel(id) }));
+    return propertyIds.map((id) => ({ id, label: propertyLabel(id) }));
     // oxlint-disable-next-line react/exhaustive-deps
-  }, [rows, properties.data]);
+  }, [propertyIds, properties.data]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -292,19 +295,40 @@ export function BankingPage() {
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
-          {propertyOptions.length > 0 && (
-            <Select
-              aria-label="Filter by property"
-              value={propFilter}
-              onChange={(e) => setPropFilter(e.target.value)}
-            >
-              <option value="all">All properties</option>
-              {propertyOptions.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.label}
-                </option>
-              ))}
-            </Select>
+          {/*
+            The options are keyed off ids found in the register rows, so this dropdown appeared
+            whether or not the names behind those ids ever loaded — every entry rendering as the
+            same em dash, and every selection therefore ambiguous. Offer it only once the names are
+            actually known.
+          */}
+          {properties.isError && rowsReferenceProperties ? (
+            <div className="col gap6">
+              <ApiErrorNotice error={properties.error} fallback="Couldn’t load property names." />
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => void properties.refetch()}
+                disabled={properties.isFetching}
+              >
+                {properties.isFetching ? 'Retrying…' : 'Retry'}
+              </Button>
+            </div>
+          ) : (
+            properties.isSuccess &&
+            propertyOptions.length > 0 && (
+              <Select
+                aria-label="Filter by property"
+                value={propFilter}
+                onChange={(e) => setPropFilter(e.target.value)}
+              >
+                <option value="all">All properties</option>
+                {propertyOptions.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.label}
+                  </option>
+                ))}
+              </Select>
+            )
           )}
           <Select
             aria-label="Filter by type"

@@ -57,7 +57,10 @@ export function useTenants(): UseQueryResult<PagedResponseOfTenantListRow> {
   return useQuery({
     queryKey: ['tenants'],
     queryFn: async () =>
-      unwrap(await getApiDirectoryTenants({ query: { pageSize: PAGE } }), 'tenants'),
+      unwrap(
+        await getApiDirectoryTenants({ query: { pageSize: PAGE } }),
+        'Failed to load the tenant list',
+      ),
   });
 }
 
@@ -68,7 +71,10 @@ export function useOwners(
     queryKey: ['owners'],
     enabled: opts.enabled ?? true,
     queryFn: async () =>
-      unwrap(await getApiDirectoryOwners({ query: { pageSize: PAGE } }), 'owners'),
+      unwrap(
+        await getApiDirectoryOwners({ query: { pageSize: PAGE } }),
+        'Failed to load the owner list',
+      ),
   });
 }
 
@@ -79,28 +85,34 @@ export function useProperties(
     queryKey: ['properties'],
     enabled: opts.enabled ?? true,
     queryFn: async () =>
-      unwrap(await getApiDirectoryProperties({ query: { pageSize: PAGE } }), 'properties'),
+      unwrap(
+        await getApiDirectoryProperties({ query: { pageSize: PAGE } }),
+        'Failed to load the property list',
+      ),
   });
 }
 
 export function useTenantDetail(id: string): UseQueryResult<TenantDetail> {
   return useQuery({
     queryKey: ['tenant', id],
-    queryFn: async () => unwrap(await getApiDirectoryTenantsById({ path: { id } }), 'tenant'),
+    queryFn: async () =>
+      unwrap(await getApiDirectoryTenantsById({ path: { id } }), 'Failed to load the tenant'),
   });
 }
 
 export function useOwnerDetail(id: string): UseQueryResult<OwnerDetail> {
   return useQuery({
     queryKey: ['owner', id],
-    queryFn: async () => unwrap(await getApiDirectoryOwnersById({ path: { id } }), 'owner'),
+    queryFn: async () =>
+      unwrap(await getApiDirectoryOwnersById({ path: { id } }), 'Failed to load the owner'),
   });
 }
 
 export function usePropertyDetail(id: string): UseQueryResult<PropertyDetail> {
   return useQuery({
     queryKey: ['property', id],
-    queryFn: async () => unwrap(await getApiDirectoryPropertiesById({ path: { id } }), 'property'),
+    queryFn: async () =>
+      unwrap(await getApiDirectoryPropertiesById({ path: { id } }), 'Failed to load the property'),
   });
 }
 
@@ -133,7 +145,7 @@ export function useCreateTenant() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (body: CreateTenantBody) => {
-      return unwrap(await postApiDirectoryTenants({ body }), 'tenant create');
+      return unwrap(await postApiDirectoryTenants({ body }), 'Failed to create the tenant');
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['tenants'] }),
   });
@@ -143,7 +155,7 @@ export function useCreateOwner() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (body: CreateOwnerBody) => {
-      return unwrap(await postApiDirectoryOwners({ body }), 'owner create');
+      return unwrap(await postApiDirectoryOwners({ body }), 'Failed to create the owner');
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['owners'] }),
   });
@@ -153,7 +165,7 @@ export function useCreateProperty() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (body: CreatePropertyBody) => {
-      return unwrap(await postApiDirectoryProperties({ body }), 'property create');
+      return unwrap(await postApiDirectoryProperties({ body }), 'Failed to create the property');
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['properties'] }),
   });
