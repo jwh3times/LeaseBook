@@ -12,6 +12,7 @@ import {
   type EnrollResponse,
 } from '@/api';
 import { Button, Card, Input } from '@/design';
+import { clearRecent } from '@/features/palette/recent';
 import { sessionQueryKey, useSession } from './useSession';
 
 /** Sensitive setup values stay in component memory, never persistent storage or query caches. */
@@ -78,6 +79,7 @@ export function AccountSecurityPage() {
   async function signOut() {
     await run(async () => {
       await unwrap(postApiAuthLogout(), 'Unable to sign out.', { allowNoContent: true });
+      clearRecent();
       queries.clear();
       window.location.assign('/login');
     });

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
@@ -112,5 +112,14 @@ describe('Account security', () => {
     expect(await screen.findByRole('status')).toHaveTextContent('Password changed.');
     expect(screen.getByLabelText('Current password')).toHaveValue('');
     expect(screen.getByLabelText('New password')).toHaveValue('');
+  });
+
+  it('clears command-palette recents after a successful sign out', async () => {
+    localStorage.setItem('leasebook.palette.recent', '[{"type":"property","id":"property-1"}]');
+    renderSecurity(false);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Sign out' }));
+
+    await waitFor(() => expect(localStorage.getItem('leasebook.palette.recent')).toBeNull());
   });
 });

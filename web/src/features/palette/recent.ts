@@ -24,3 +24,11 @@ export function pushRecent(result: SearchResult): void {
     /* storage may be unavailable — recents are a nicety, not load-bearing */
   }
 }
+
+export function clearRecent(): void {
+  try {
+    localStorage.removeItem(KEY);
+  } catch {
+    /* storage may be unavailable — logout must still complete */
+  }
+}
