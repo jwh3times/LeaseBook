@@ -36,11 +36,17 @@
     <PackageVersion Include="Azure.Identity" Version="1.21.0" />
     <!-- Built-in OpenAPI document (P11); the SPA generates its TS client from it (WP-08). -->
     <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.11" />
-    <!-- Transitive of Microsoft.AspNetCore.OpenApi. Pinned to 2.7.5 (the patched release) to clear
-         NU1903 / GHSA-v5pm-xwqc-g5wc — a stack-overflow DoS via circular schema refs affecting
-         2.0.0-preview11 … 2.7.4. Transitive pinning (above) forces the resolved version up. Drop the
-         pin once Microsoft.AspNetCore.OpenApi references a patched Microsoft.OpenApi transitively. -->
-    <PackageVersion Include="Microsoft.OpenApi" Version="2.7.5" />
+    <!-- Transitive of Microsoft.AspNetCore.OpenApi. Pinned above NU1903 / GHSA-v5pm-xwqc-g5wc — a
+         stack-overflow DoS via circular schema refs affecting 2.0.0-preview11 … 2.7.4. Transitive
+         pinning (above) forces the resolved version up.
+         The version is now also load-bearing for the schema-drift gate, not just the advisory:
+         Microsoft.Extensions.ApiDescription.Server ships dotnet-getdocument against a specific
+         Microsoft.OpenApi, and loads it by exact assembly version from its own tools folder. Holding
+         this below what the tool expects fails the build with a manifest mismatch rather than a
+         version-conflict warning — 2.7.5 against the 10.0.12 tool, which wants 2.12.0. Raise the two
+         together. Drop the pin only once Microsoft.AspNetCore.OpenApi references a patched
+         Microsoft.OpenApi transitively AND that version matches the tool's. -->
+    <PackageVersion Include="Microsoft.OpenApi" Version="2.12.0" />
     <!-- Build-time OpenAPI doc emission for the CI schema-drift gate (ADR-012). Build-only tool. -->
     <PackageVersion Include="Microsoft.Extensions.ApiDescription.Server" Version="10.0.12" />
   </ItemGroup>
