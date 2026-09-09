@@ -242,6 +242,12 @@ or update private follow-up issues, add them to project 3 with labels and Track/
 linked step-by-step private wiki procedures indexed by `human-todo`. Verify publication and report
 both links. If access prevents publication, report the handoff as incomplete with its blocker.
 
+**Deployment exception:** LeaseBook is not publicly deployed. Consolidate all deployment-related
+authoring and operator follow-ups in the single private public-distribution issue and its linked
+wiki page, as specified in the handoff guide. Add to those artifacts instead of creating separate
+deployment board items or wiki pages. Defer execution until public distribution is elected; close
+the consolidated item only on distribution and completed deployment acceptance.
+
 ### Triage labels
 
 Default label vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`,

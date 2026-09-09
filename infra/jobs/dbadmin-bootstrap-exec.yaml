@@ -1,0 +1,26 @@
+# Complete execution template: job start replaces, rather than merges, the container spec.
+# Fill image, PGHOST, confirmation, PGUSER and operator. Passwords remain secretRef only.
+containers:
+  - name: dbadmin
+    image: IMAGE_PLACEHOLDER
+    args: [bootstrap]
+    resources:
+      cpu: 0.5
+      memory: 1Gi
+    env:
+      - name: PGHOST
+        value: ""
+      - name: LEASEBOOK_CONFIRM_HOST
+        value: ""
+      - name: PGUSER
+        value: ""
+      - name: LEASEBOOK_OPERATOR
+        value: ""
+      - name: PGPASSWORD
+        secretRef: postgres-admin-password
+      - name: LEASEBOOK_MIGRATOR_PASSWORD
+        secretRef: postgres-migrator-password
+      - name: LEASEBOOK_APP_PASSWORD
+        secretRef: postgres-app-password
+      - name: LEASEBOOK_OPS_PASSWORD
+        secretRef: postgres-ops-password

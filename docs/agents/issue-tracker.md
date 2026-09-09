@@ -3,7 +3,7 @@
 - **Audience:** Coding agents and maintainers configuring engineering skills
 - **Status:** Living configuration
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-09-07
+- **Last reviewed:** 2026-09-09
 
 Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all operations.
 
@@ -55,6 +55,27 @@ replaced went stale, and it goes stale in an issue for exactly the same reason.
 Infer the repo from `git remote -v` — `gh` does this automatically when run inside a clone.
 
 ## Required human-action handoff
+
+### Deployment consolidation
+
+LeaseBook is not publicly deployed. All deployment-related work is consolidated in the private
+issue titled **Public distribution: deployment and operational readiness**, on project 3, and its
+linked **Public-Distribution-Deployment** wiki page. Find the issue from the private checkout;
+keep its locator and links out of public artifacts.
+
+Append deployment authoring, provisioning, credentials, first-deploy verification, restore drills,
+account rollout, telemetry and alerting follow-ups to that issue and page. Do not create separate
+deployment issues, board items or wiki procedures. This exception overrides the per-action split
+below. The item is deferred until the maintainer elects public distribution and closes only when
+distribution and its required deployment evidence are complete; code merges and local tests do not
+close it. Preserve unfinished acceptance criteria when retiring older items as superseded.
+
+The issue owns checklist state and evidence; the wiki owns the ordered procedure. Independent
+product changes, external legal/customer decisions and recurring post-launch reviews retain their
+own trackers. Do not infer that the distribution trigger has fired from a deployment-related code
+change.
+
+### Other human actions
 
 **Private follow-up exception to the public default:** all required human actions arising from
 agent-completed work belong in private follow-up issues, even when the engineering change is public.

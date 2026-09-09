@@ -29,6 +29,11 @@ follow-up issue on project 3, publish linked step-by-step private wiki instructi
 `human-todo`, and verify both. A public runbook reference alone does not complete the handoff.
 Report missing publication access explicitly and keep live verification pending until evidence exists.
 
+Deployment consolidation overrides separate per-action handoffs: use the single private
+public-distribution issue and wiki page named in `docs/agents/issue-tracker.md`. Append authoring and
+operator requirements there. LeaseBook is not publicly deployed; these steps are deferred until the
+maintainer elects public distribution and complete on its deployment acceptance.
+
 ---
 
 ## 2. Environment model
@@ -129,32 +134,23 @@ Never commit a real password. The `.bicepparam` files source the admin password 
 
 ## 7. Postgres role bootstrap
 
-Bicep cannot create Postgres roles. After provisioning, the operator connects as the admin and runs an idempotent Azure-adapted bootstrap (passwords from Key Vault, not inline):
+Bicep cannot create Postgres roles. Use `infra/db/azure-bootstrap.md` for bootstrap, replay,
+failure recovery and restore spot-checks. `infra/db/azure-bootstrap.sql` is the executable Azure
+adaptation of the local-only bootstrap; do not reproduce SQL/password snippets in guidance.
 
-```bash
-psql "host=lb-<env>-pg.postgres.database.azure.com port=5432 dbname=leasebook \
-      user=lbadmin sslmode=require" -v ON_ERROR_STOP=1 <<'SQL'
-CREATE ROLE leasebook_migrator LOGIN PASSWORD :'migrator_pw';
-CREATE ROLE leasebook_app      LOGIN PASSWORD :'app_pw';
-CREATE ROLE leasebook_ops      LOGIN PASSWORD :'ops_pw';
-GRANT ALL ON SCHEMA public TO leasebook_migrator;
-ALTER SCHEMA public OWNER TO leasebook_migrator;
-GRANT USAGE ON SCHEMA public TO leasebook_app, leasebook_ops;
-ALTER DEFAULT PRIVILEGES FOR ROLE leasebook_migrator IN SCHEMA public
-  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO leasebook_app;
-ALTER DEFAULT PRIVILEGES FOR ROLE leasebook_migrator IN SCHEMA public
-  GRANT SELECT ON TABLES TO leasebook_ops;
--- Hangfire job storage (ADR-001), owned by the APP role: Hangfire installs and upgrades its own
--- objects at runtime and Postgres allows that only to the owner. The app role has no CREATE on the
--- database, so this schema must be pre-created here or the app fails at startup.
-CREATE SCHEMA hangfire AUTHORIZATION leasebook_app;
-GRANT USAGE ON SCHEMA hangfire TO leasebook_ops;
-ALTER DEFAULT PRIVILEGES FOR ROLE leasebook_app IN SCHEMA hangfire
-  GRANT SELECT ON TABLES TO leasebook_ops;
-SQL
-```
+Production uses the manual `lb-prod-dbadmin` job in `modules/dbadmin.bicep`, connected to the existing
+Container Apps environment. It has its own identity and credential vault: the application vault's
+existing app read grant must not expose administrator credentials. First apply creates the empty
+vault; `dbAdminSecretsReady` arms the job after all secrets exist. `dbAdminImageTag` names the
+separately built image. Both execution templates require an explicit host confirmation and operator;
+bare starts refuse, and automatic retries are disabled.
 
-See `infra/db/azure-bootstrap.md` for the full procedure — including the one caveat this snippet cannot carry: the `hangfire` statements act on behalf of `leasebook_app`, which requires the admin to hold membership in that role (implicit from `CREATE ROLE`, but verify it on Flexible Server rather than assuming). The target end-state (Entra auth / managed-identity-backed roles) requires an ADR when it lands.
+The bootstrap is transactional, preserves existing append-only revocations and app-owned `hangfire`,
+and synchronizes role passwords through client-side psql password encryption. PostgreSQL 16+ role
+creation does not imply SET membership: the script grants it explicitly to the administrator.
+Restore spot-checks use only the ops credential with transaction-local organization context;
+financial acceptance still requires the invariant engine. Local Docker tests are allowed and do not
+constitute Flexible Server deployment evidence. Live execution remains operator-gated.
 
 ---
 
