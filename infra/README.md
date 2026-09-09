@@ -1,7 +1,8 @@
 # Infrastructure (Bicep)
 
-Authored Azure infrastructure for `dev` and `prod`. Deployment is gated on operator Azure access;
-authoring and `az bicep build` are not.
+Authored Azure infrastructure for `dev` and `prod`. LeaseBook is not publicly deployed. Deployment
+work is deferred to public distribution under the consolidated deployment handoff; local checks
+such as `az bicep build` do not constitute deployment acceptance.
 
 ## Layout
 

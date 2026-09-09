@@ -5,8 +5,9 @@
 - **Owner:** Maintainers
 - **Last reviewed:** 2026-09-09
 
-Skeleton procedure. Real timings and screenshots are filled in after the first restore drill (M8
-schedules the drill).
+Skeleton procedure for a future deployment. LeaseBook is not publicly deployed; the first restore
+drill is deferred to public distribution under the consolidated deployment handoff. Record real
+timings and screenshots after that drill.
 
 ## When to use
 
@@ -67,6 +68,6 @@ firewall-gated:
 - Backups are automatic; retention is configured in Bicep. Geo-redundant backup is enabled in prod.
 - The trust-accounting invariant suite should be run against the restored database before cutover —
   a restore that doesn't reconcile to the cent is not a successful restore.
-- **TODO (first drill):** record actual restore duration, data-loss window observed, the mechanism
+- **TODO (first drill):** record actual restore duration, data-loss window observed,
   observed behavior of the administration job inside the VNet, and any manual steps
   discovered.

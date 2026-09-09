@@ -7,8 +7,9 @@ schema privileges. It adapts the local-only `bootstrap.sql` for Azure. Productio
 
 ## Prerequisites and boundaries
 
-This procedure is authored and locally tested, **not deployment-validated**. Only an authorized
-operator executes it. Required access: deploy Bicep, push to ACR, populate the dedicated credential
+This procedure is authored and locally tested, **not deployment-validated**. LeaseBook is not
+publicly deployed; execution is deferred to public distribution under the consolidated deployment
+handoff. Only an authorized operator executes it. Required access: deploy Bicep, push to ACR, populate the dedicated credential
 vault, start/read Container Apps Jobs and inspect confidential deployment logs. Restrict job
 update/start and identity assignment to trusted database operators: execution overrides can select
 arbitrary images, so script guards prevent accidents and do not replace RBAC.

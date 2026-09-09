@@ -14,6 +14,19 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ## [Unreleased]
 
+### Added
+
+- **Database administration tooling for the future production deployment.** A manual job provides
+  transactional role bootstrap and organization-scoped restore spot-checks inside the private
+  network, using a dedicated identity and credential vault. Local tests cover replay, rollback,
+  permissions and password handling; live deployment verification remains pending.
+
+### Changed
+
+- **Deployment work is consolidated for public distribution.** One distribution checklist owns
+  deployment authoring and operator follow-ups. Agent guidance defers execution until public
+  distribution is elected and requires deployment evidence before completion.
+
 ### Fixed
 
 - **Search and saved bank mappings distinguish failed reads from empty results.** The command
