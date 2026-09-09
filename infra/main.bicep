@@ -41,6 +41,12 @@ param migrationsSecretUri string = ''
 @description('Key Vault secret URI for the leasebook_app connection string, consumed by the capabilities job (ADR-028). Empty until the operator has bootstrapped the Postgres roles and stored it — see infra/db/azure-bootstrap.md.')
 param defaultSecretUri string = ''
 
+@description('Immutable release tag of the separately built leasebook-dbadmin image. Administration is manual and independent of app deploys.')
+param dbAdminImageTag string = 'latest'
+
+@description('Arm the production administration job only after its four password secrets exist in the separate dbadmin vault.')
+param dbAdminSecretsReady bool = false
+
 // Naming convention: lb-<env>-<resource> (see infra/README.md).
 var prefix = 'lb-${env}'
 
@@ -126,6 +132,23 @@ module app 'modules/containerapp.bicep' = {
   }
 }
 
+module dbadmin 'modules/dbadmin.bicep' = if (env == 'prod' && enablePrivateNetworking) {
+  scope: rg
+  name: 'dbadmin'
+  params: {
+    prefix: prefix
+    location: location
+    environmentId: app.outputs.environmentId
+    acrName: registry.outputs.name
+    acrLoginServer: registry.outputs.loginServer
+    imageTag: dbAdminImageTag
+    adminLogin: postgresAdminLogin
+    secretsReady: dbAdminSecretsReady
+  }
+}
+
+output dbAdminJobName string = env == 'prod' && enablePrivateNetworking ? dbadmin!.outputs.jobName : ''
+output dbAdminVaultName string = env == 'prod' && enablePrivateNetworking ? dbadmin!.outputs.vaultName : ''
 output resourceGroup string = rg.name
 output acrLoginServer string = registry.outputs.loginServer
 output keyVaultName string = vault.outputs.name

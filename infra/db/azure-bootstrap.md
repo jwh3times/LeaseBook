@@ -1,81 +1,141 @@
 # Azure Postgres role bootstrap
 
-Bicep cannot create Postgres roles, and Flexible Server's admin login is **not** a true superuser —
-so the three application roles (`leasebook_migrator`, `leasebook_app`, `leasebook_ops`) must be
-created against the server after it is provisioned, the same way `infra/db/bootstrap.sql` does
-locally. This is an idempotent operator step, run once per environment.
+Bicep creates the database; `azure-bootstrap.sql` creates the three application roles and their
+schema privileges. It adapts the local-only `bootstrap.sql` for Azure. Production uses the manual
+`lb-prod-dbadmin` Container Apps Job inside the existing VNet
+([ADR-027](../../docs/adr/ADR-027-prod-private-networking-and-migration-job.md)).
 
-## Reaching the server: dev vs prod
+## Prerequisites and boundaries
 
-Step 2 below connects with `psql` over the server's public FQDN. **That works for dev only.** Dev's
-server is public and firewall-gated, so an operator can connect from a workstation once their IP is
-allowed. Prod's server is VNet-injected and has **no public endpoint at all**
-([ADR-027](../../docs/adr/ADR-027-prod-private-networking-and-migration-job.md)) — the same command
-against `lb-prod-pg.postgres.database.azure.com` has nothing to connect to.
+This procedure is authored and locally tested, **not deployment-validated**. Only an authorized
+operator executes it. Required access: deploy Bicep, push to ACR, populate the dedicated credential
+vault, start/read Container Apps Jobs and inspect confidential deployment logs. Restrict job
+update/start and identity assignment to trusted database operators: execution overrides can select
+arbitrary images, so script guards prevent accidents and do not replace RBAC.
 
-**The prod bootstrap therefore needs a client inside the VNet, and how that client is provided is
-not yet decided.** It is the same unresolved question as verifying a restored server in the
-[restore runbook](../../docs/runbooks/restore.md), and it blocks the first prod deployment — resolve
-it (and record it here) before provisioning prod, not during.
+The job has its own identity and `lb-prod-dbadmin-kv` vault. The application identity has no grant
+on this vault. Do not put the administrator password in the application vault, where the app has
+vault-wide secret read access. The administration identity has AcrPull on ACR and Key Vault Secrets
+User on its dedicated vault.
 
-The ordering constraint is real either way: Key Vault is created empty by the same template that
-creates the server, and the migrator job's secret wiring is omitted until `migrationsSecretUri` is
-supplied. So the sequence is provision → bootstrap roles → store secrets → redeploy → run
-migrations, and the first prod deployment succeeds with the job present but un-armed.
+Passwords must contain 16–80 bytes without newlines or carriage returns. Generate strong unique
+values in the approved secret store. Bootstrap synchronizes role passwords to those inputs on every
+invocation; do not change them between retries. Changing them requires coordinated credential rotation.
 
-## Steps
+## Provision and arm
 
-1. Provision infrastructure (`az deployment sub create …`, see `infra/README.md`). Note the server
-   FQDN (`lb-<env>-pg.postgres.database.azure.com`) and the admin login/password used at deploy.
-2. Connect as the admin and run the role bootstrap — in prod, from a client inside the VNet (see
-   above). The committed `infra/db/bootstrap.sql` is for
-   **local dev** (it `CREATE DATABASE leasebook` and uses dev passwords); for Azure, the database
-   already exists (created by Bicep) and the role passwords come from Key Vault. Run an
-   Azure-adapted script that only creates roles + grants + default privileges:
+1. Apply `infra/main.bicep` with the reviewed production parameters and `dbAdminSecretsReady=false`.
+   This creates the job, identity and empty vault without password references. Preserve current app
+   and migrator image tags, secret URIs and network parameters on every reapply.
+2. Build the reviewed image and push an immutable commit tag from the repository root:
 
    ```bash
-   psql "host=lb-<env>-pg.postgres.database.azure.com port=5432 dbname=leasebook \
-         user=lbadmin sslmode=require" -v ON_ERROR_STOP=1 <<'SQL'
-   -- passwords pulled from Key Vault, injected by the operator/runbook (never inline)
-   CREATE ROLE leasebook_migrator LOGIN PASSWORD :'migrator_pw';
-   CREATE ROLE leasebook_app      LOGIN PASSWORD :'app_pw';
-   CREATE ROLE leasebook_ops      LOGIN PASSWORD :'ops_pw';
-   GRANT ALL ON SCHEMA public TO leasebook_migrator;
-   ALTER SCHEMA public OWNER TO leasebook_migrator;
-   GRANT USAGE ON SCHEMA public TO leasebook_app, leasebook_ops;
-   ALTER DEFAULT PRIVILEGES FOR ROLE leasebook_migrator IN SCHEMA public
-     GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO leasebook_app;
-   ALTER DEFAULT PRIVILEGES FOR ROLE leasebook_migrator IN SCHEMA public
-     GRANT SELECT ON TABLES TO leasebook_ops;
-   -- Hangfire job storage (ADR-001). App-owned, not migrator-owned: Hangfire installs and upgrades
-   -- its own objects at runtime and its upgrade scripts ALTER/DROP them, which Postgres allows only
-   -- to the owner. The app role has no CREATE on the database, so the schema must be pre-created
-   -- here or the app fails at startup.
-   CREATE SCHEMA hangfire AUTHORIZATION leasebook_app;
-   GRANT USAGE ON SCHEMA hangfire TO leasebook_ops;
-   ALTER DEFAULT PRIVILEGES FOR ROLE leasebook_app IN SCHEMA hangfire
-     GRANT SELECT ON TABLES TO leasebook_ops;
-   SQL
+   TAG=$(git rev-parse HEAD)
+   az acr login --name lbprodacr
+   docker build -t "lbprodacr.azurecr.io/leasebook-dbadmin:$TAG" infra/db
+   docker push "lbprodacr.azurecr.io/leasebook-dbadmin:$TAG"
    ```
 
-   The two `hangfire` statements are the only place the admin acts on behalf of `leasebook_app`
-   rather than `leasebook_migrator`. Both require the admin to hold membership in `leasebook_app`,
-   which `CREATE ROLE` grants the creator implicitly — verify this holds on Flexible Server during
-   B1 rather than assuming it, since the admin login is not a true superuser.
+3. Open Azure Portal **Key vaults → lb-prod-dbadmin-kv → Objects → Secrets → Generate/Import**.
+   Populate these from the approved secret store. Never put resolved values in command arguments,
+   templates, files, issue bodies or logs:
 
-3. Store the three role passwords as Key Vault secrets and the assembled
-   `ConnectionStrings__Default` (app) / `ConnectionStrings__Migrations` (migrator) connection
-   strings (see the secrets contract in `infra/README.md`).
-4. **Prod only:** set `migrationsSecretUri` in `infra/env/prod.bicepparam` to the full secret URI of
-   the migrator connection string just stored, and redeploy. Until this is done the
-   `lb-prod-migrate` job exists but is un-armed and fails at run time on a missing connection
-   string.
-5. Run migrations as the migrator role — in prod the `lb-prod-migrate` Container Apps Job started
-   and polled by `deploy-prod.yml`; in dev the `dotnet ef database update` step in `deploy-dev.yml`.
+   | Secret                       | Value                                  |
+   | ---------------------------- | -------------------------------------- |
+   | `postgres-admin-password`    | Existing server administrator password |
+   | `postgres-migrator-password` | Intended `leasebook_migrator` password |
+   | `postgres-app-password`      | Intended `leasebook_app` password      |
+   | `postgres-ops-password`      | Intended `leasebook_ops` password      |
 
-## AAD / managed identity (preferred, future)
+4. Inspect what-if and reapply with `dbAdminImageTag` set to the pushed tag and
+   `dbAdminSecretsReady=true`. Preserve all other deployed parameters. Identity propagation may
+   still take time after the role assignments exist.
+5. Copy `infra/jobs/dbadmin-bootstrap-exec.yaml` to `/tmp/dbadmin-bootstrap.yaml`. Set `image` to the
+   tagged image, `PGUSER` to the administrator login, and both `PGHOST` and `LEASEBOOK_CONFIRM_HOST`
+   to the selected server FQDN. Set `LEASEBOOK_OPERATOR` to your accountable identifier (letters,
+   digits, `@._+-`; no spaces). Keep every `secretRef` intact.
 
-Flexible Server supports Microsoft Entra authentication. The target end-state is for `leasebook_app`
-to be a managed-identity-backed role (no stored password) and the Container App to authenticate with
-its user-assigned identity. Password roles above are the Phase-1 path; record the switch to Entra
-auth as an ADR when it lands.
+## Execute and verify
+
+The complete YAML replaces the execution's container specification. Missing fields or wrong
+`secretRef` casing lose configuration. A bare start deliberately refuses.
+
+```bash
+RG=lb-prod-rg
+JOB=lb-prod-dbadmin
+EXEC=$(az containerapp job start --name "$JOB" --resource-group "$RG" \
+  --yaml /tmp/dbadmin-bootstrap.yaml --query name -o tsv)
+test -n "$EXEC" || exit 1
+STATUS=Unknown
+for attempt in $(seq 1 90); do
+  STATUS=$(az containerapp job execution show --name "$JOB" --resource-group "$RG" \
+    --job-execution-name "$EXEC" --query properties.status -o tsv) || exit 1
+  case "$STATUS" in
+    Succeeded) break ;;
+    Failed|Stopped|Degraded) break ;;
+  esac
+  sleep 10
+done
+printf 'Execution %s status %s\n' "$EXEC" "$STATUS"
+test "$STATUS" = Succeeded || exit 1
+```
+
+Inspect system and console logs in **Container Apps Jobs → lb-prod-dbadmin → Execution history →
+the named execution**. Confirm selected host/operator, `bootstrap committed` and completion marker.
+Record release tag/digest, UTC time, execution name, terminal status and evidence confidentially.
+
+Bootstrap uses one transaction and an advisory lock. Replaying preserves roles and synchronizes
+passwords/default privileges. It never grants privileges on existing tables, preserving migration-owned
+append-only revocations. `hangfire` stays app-owned; unexpected ownership or elevated application
+roles fail and roll back. The administrator receives explicit SET membership on the three roles:
+PostgreSQL 16+ role creation does not guarantee the membership needed to create their schemas.
+
+After bootstrap, store app/migrator connection strings in the application vault using those same
+role passwords. Arm the existing jobs with `defaultSecretUri` and `migrationsSecretUri`, then use
+the normal migration/deploy procedure. Bootstrap does not migrate or seed data.
+
+## Restore verification
+
+Copy `infra/jobs/dbadmin-verify-exec.yaml`. Set the image, restored-server `PGHOST`, matching
+confirmation, operator and an existing affected `LEASEBOOK_ORG_ID`. Start and poll as above using
+the copied verification file. This execution receives **only** the ops password and establishes
+organization context in a read-only transaction. Missing/unknown organizations fail.
+
+Compare the returned database/role/server, journal count and latest entry date with the expected
+restore point. The ops secret must match the password at that point in time; if credentials rotated
+after it, recover the corresponding approved secret version. Do not bootstrap a restored server
+just to make a verification password work.
+
+This spot-check does not prove financial reconciliation. Run `check-invariants --all` separately
+before cutover, following the [restore runbook](../../docs/runbooks/restore.md).
+Arbitrary-database invariant execution belongs to the consolidated public-distribution handoff;
+[#285](https://github.com/jwh3times/LeaseBook/issues/285) preserves its original specification.
+This job does not duplicate that engine.
+
+## Failure, retry and cleanup
+
+- No automatic retry. Missing inputs fail before connection; SQL errors roll back. Connection loss
+  or timeout after commit can leave the outcome unknown. Inspect before replaying unchanged inputs.
+- If the container never ran, inspect image-pull, secret-resolution, DNS and identity-propagation
+  events. Otherwise inspect role/schema state through an approved database support channel before
+  retrying. Do not enable shell tracing or query echo to diagnose password operations.
+- Query echo and raw bootstrap errors are suppressed to avoid credential-derived material in logs. Phase
+  markers and platform status provide non-secret evidence. psql `\password` encrypts client-side,
+  keeping cleartext out of SQL and server statement logs
+  ([PostgreSQL reference](https://www.postgresql.org/docs/18/app-psql.html)).
+- A polling deadline does not prove execution stopped. Inspect execution history, stop a remaining
+  execution through the operator control, and establish commit outcome before retry. Do not run
+  concurrent bootstraps or drop roles/schemas to undo an ambiguous result. Escalate ownership or
+  privilege drift to the database maintainer.
+- Remove temporary execution YAML after retaining evidence. During a drill keep live application
+  secrets unchanged; decommission only the explicitly verified restored server after drill-owner
+  approval. The job leaves no running client between executions; its identity and vault remain.
+
+## Dev and future authentication
+
+Dev stays public and firewall-gated. Run this same image from an authorized client network, using
+approved secret injection and environment-variable **names** with `docker run -e`; never put values
+in arguments. The same explicit host confirmation is required.
+
+Microsoft Entra database authentication remains future work and requires its own ADR. This path
+retains the Phase-1 password roles.

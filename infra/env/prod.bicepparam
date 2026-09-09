@@ -62,3 +62,8 @@ param appImageTag = 'latest'
 // platform escape). Pointing both at one secret would hand an operator tool schema-owner rights.
 param migrationsSecretUri = ''
 param defaultSecretUri = ''
+
+// Pin the separately built administration image to a reviewed commit tag before execution.
+// Arm only after all four secrets exist in lb-prod-dbadmin-kv (infra/db/azure-bootstrap.md).
+param dbAdminImageTag = 'latest'
+param dbAdminSecretsReady = false

@@ -114,6 +114,9 @@ private/LeaseBook_PRD_v1.0.md — scope authority
 
 ### 0. Required human-action handoff
 
+Deployment work uses the single private public-distribution issue and wiki page named in the
+handoff guide. Append requirements there; do not split deployment follow-ups into new items or pages.
+
 For every required human action arising from the completed change, execute
 `docs/agents/issue-tracker.md` § Required human-action handoff. Create or update the private follow-up
 issue, add it to project 3 with Track/Gate and human/blocking labels, and publish the linked

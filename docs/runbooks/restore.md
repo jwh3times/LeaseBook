@@ -3,7 +3,7 @@
 - **Audience:** Deployment operators and maintainers
 - **Status:** Draft runbook; blocked on the first live restore drill
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-08-02
+- **Last reviewed:** 2026-09-09
 
 Skeleton procedure. Real timings and screenshots are filled in after the first restore drill (M8
 schedules the drill).
@@ -30,8 +30,10 @@ firewall-gated:
   addresses before restoring, and confirm the exact subnet / private-DNS-zone arguments against the
   current `az postgres flexible-server restore` reference, because a VNet-injected restore is not
   the same command shape as a public one.
-- **You cannot verify the restore from a laptop.** Step 3 needs a client with a route into the VNet.
-  How that client is provided is unresolved and is a required output of the first drill.
+- **Verify from the manual `lb-prod-dbadmin` job inside the existing VNet.** Use its
+  [read-only verification procedure](../../infra/db/azure-bootstrap.md#restore-verification)
+  with the restored server selected explicitly. Live DNS, identity, credentials and execution
+  remain first-drill verification steps.
 - **Do not place a resource lock on the private DNS zone** (`privatelink.postgres.database.azure.com`)
   at any point. Azure documents that locks there break Postgres HA failover.
 - **Cutover is a Key Vault edit, not a workflow variable edit.** Both `ConnectionStrings__Default`
@@ -54,7 +56,8 @@ firewall-gated:
 
 3. Verify the restored data (connect as `leasebook_ops`, spot-check the trust equation and recent
    journal entries on the affected org). In production this connection must originate inside the
-   VNet — see the section above.
+   VNet — use the administration job above for the org-scoped journal spot-check. It does not
+   calculate the trust equation: the separate invariant suite remains required before cutover.
 4. Cut over: update the `ConnectionStrings__Default` / `__Migrations` Key Vault secrets to point at
    the restored server, restart the Container App revision, confirm `/api/health`.
 5. Decommission the old server once the restored one is confirmed healthy and reconciled.
@@ -65,5 +68,5 @@ firewall-gated:
 - The trust-accounting invariant suite should be run against the restored database before cutover —
   a restore that doesn't reconcile to the cent is not a successful restore.
 - **TODO (first drill):** record actual restore duration, data-loss window observed, the mechanism
-  used to reach the restored production server from inside the VNet, and any manual steps
+  observed behavior of the administration job inside the VNet, and any manual steps
   discovered.

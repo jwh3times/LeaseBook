@@ -10,6 +10,12 @@ authoring and `az bicep build` are not.
   (PostgreSQL Flexible Server 18), `vault` (Key Vault, RBAC), `storage` (blobs), `network` (VNet,
   delegated subnets, private DNS zone — prod only), `containerapp` (managed identity + Container Apps
   environment + app + migrator job + capabilities job, with AcrPull / Key Vault Secrets User RBAC).
+- `modules/dbadmin.bicep` — production-only manual Postgres administration job, dedicated identity
+  and credential vault; uses the existing Container Apps environment and VNet.
+- `db/Dockerfile`, `db/admin.sh`, `db/azure-bootstrap.sql`, `db/verify.sql` — separately built
+  administration image and its bootstrap/read-only verification actions.
+- `jobs/dbadmin-bootstrap-exec.yaml`, `jobs/dbadmin-verify-exec.yaml` — complete execution templates
+  with explicit target and operator; the verification template supplies only ops access.
 - `env/dev.bicepparam`, `env/prod.bicepparam` — per-environment parameters.
 - `jobs/capabilities-exec.yaml` — the execution template an operator copies to run a capability
   command in production. Pinned against `modules/containerapp.bicep` by
@@ -40,16 +46,20 @@ LEASEBOOK_PG_ADMIN_PASSWORD=... az deployment sub create \
 The app reads configuration from environment variables supplied by Container Apps, each referencing
 a Key Vault secret (resolved via the app's managed identity):
 
-| Env var                                 | Source                               | Used by                                                                   |
-| --------------------------------------- | ------------------------------------ | ------------------------------------------------------------------------- |
-| `ConnectionStrings__Default`            | Key Vault secret (app role)          | the running app (RLS-subject); the capabilities Container Apps Job        |
-| `ConnectionStrings__Migrations`         | Key Vault secret (migrator role)     | the migrator Container Apps Job **only** (prod); the deploy runner in dev |
-| `APPLICATIONINSIGHTS_CONNECTION_STRING` | App Insights (module output)         | telemetry exporter                                                        |
-| `AllowedHosts`                          | app setting, supplied at deploy time | ASP.NET Core host filtering (`HostFilteringMiddleware`)                   |
-| `LEASEBOOK_OPERATOR`                    | supplied per job execution           | the capabilities job — names the accountable party on every audit row     |
-| `DataProtection__KeyVaultKeyUri`        | Key Vault key (module output)        | wraps the Data Protection keyring (ADR-041)                               |
-| `ForwardedHeaders__Enabled`             | app setting, supplied at deploy time | whether to honour `X-Forwarded-*` from the ingress (ADR-041)              |
-| `ForwardedHeaders__KnownNetworks__0`    | app setting, supplied at deploy time | the ingress network, CIDR — required when the above is `true`             |
+| Env var                                 | Source                                                     | Used by                                                                   |
+| --------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------- |
+| `ConnectionStrings__Default`            | Key Vault secret (app role)                                | the running app (RLS-subject); the capabilities Container Apps Job        |
+| `ConnectionStrings__Migrations`         | Key Vault secret (migrator role)                           | the migrator Container Apps Job **only** (prod); the deploy runner in dev |
+| `APPLICATIONINSIGHTS_CONNECTION_STRING` | App Insights (module output)                               | telemetry exporter                                                        |
+| `AllowedHosts`                          | app setting, supplied at deploy time                       | ASP.NET Core host filtering (`HostFilteringMiddleware`)                   |
+| `LEASEBOOK_OPERATOR`                    | supplied per job execution                                 | the capabilities job — names the accountable party on every audit row     |
+| `DataProtection__KeyVaultKeyUri`        | Key Vault key (module output)                              | wraps the Data Protection keyring (ADR-041)                               |
+| `PGPASSWORD`                            | Dedicated `lb-prod-dbadmin-kv` / `postgres-admin-password` | Administration bootstrap only                                             |
+| `LEASEBOOK_MIGRATOR_PASSWORD`           | Dedicated vault / `postgres-migrator-password`             | Bootstrap role password                                                   |
+| `LEASEBOOK_APP_PASSWORD`                | Dedicated vault / `postgres-app-password`                  | Bootstrap role password                                                   |
+| `LEASEBOOK_OPS_PASSWORD`                | Dedicated vault / `postgres-ops-password`                  | Bootstrap and read-only restore spot-check                                |
+| `ForwardedHeaders__Enabled`             | app setting, supplied at deploy time                       | whether to honour `X-Forwarded-*` from the ingress (ADR-041)              |
+| `ForwardedHeaders__KnownNetworks__0`    | app setting, supplied at deploy time                       | the ingress network, CIDR — required when the above is `true`             |
 
 The two connection strings are **different credentials and must stay so**: the migrator job holds
 schema-owner rights on `public`, the capabilities job holds only the app role's DML under RLS's
@@ -121,6 +131,16 @@ the migrator runs. Directory search creates `pg_trgm`; the effective-dated lease
 one exclusion constraint. Keep this allowlist synchronized with every `CREATE EXTENSION` migration.
 
 ## Production migrations
+
+For bootstrap and restore spot-checks, use the [administration job procedure](db/azure-bootstrap.md).
+`dbAdminSecretsReady` defaults to false until its dedicated vault is populated; `dbAdminImageTag`
+pins the separately pushed image. Main outputs `dbAdminJobName` and `dbAdminVaultName` (empty outside
+production private networking). The job is manual with a 600-second timeout and zero retries.
+The app has no administration-vault grant, and the administration identity has no app-vault grant.
+
+Local verification: `python scripts/test-dbadmin.py` builds and runs the image against disposable
+PostgreSQL 18 with TLS, including a non-superuser administrator, replay, rollback, RLS scoping and
+password-log checks. CI runs the same test. Live execution remains operator-gated.
 
 A GitHub-hosted runner cannot reach a server with no public endpoint, so prod migrations do **not**
 run from the workflow host. `deploy-prod.yml` builds and pushes the `migrator` image, then starts the

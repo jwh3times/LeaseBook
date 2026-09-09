@@ -370,6 +370,14 @@ jobs:
             echo "::endgroup::"
           done
 
+  dbadmin:
+    name: Database administration image and replay
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - run: python3 scripts/test-dbadmin.py
+
   # Builds the container images *and* proves they actually run. This replaces a build-only job that
   # verified the image compiled but never started it — the gap that let a startup-guard
   # misconfiguration put `app` into a silent restart loop while every check stayed green.

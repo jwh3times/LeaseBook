@@ -1,0 +1,19 @@
+# Read-only restore spot-check. This execution receives only the ops credential.
+containers:
+  - name: dbadmin
+    image: IMAGE_PLACEHOLDER
+    args: [verify]
+    resources:
+      cpu: 0.5
+      memory: 1Gi
+    env:
+      - name: PGHOST
+        value: ""
+      - name: LEASEBOOK_CONFIRM_HOST
+        value: ""
+      - name: LEASEBOOK_OPERATOR
+        value: ""
+      - name: LEASEBOOK_ORG_ID
+        value: ""
+      - name: LEASEBOOK_OPS_PASSWORD
+        secretRef: postgres-ops-password
