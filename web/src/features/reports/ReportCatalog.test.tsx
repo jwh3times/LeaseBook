@@ -483,3 +483,73 @@ describe('ReportCatalog', () => {
     });
   });
 });
+
+describe('ReportCatalog filter chips when their options cannot load', () => {
+  /** Selects the report whose builder shows the given chip. */
+  async function openReportChip(reportName: string, chipLabel: string) {
+    const list = await screen.findByRole('list', { name: 'Available reports' });
+    await userEvent.click(within(list).getByRole('button', { name: new RegExp(reportName) }));
+    await screen.findByRole('table', { name: 'Report preview' });
+
+    const filtersGroup = screen.getByRole('group', { name: 'Report filters' });
+    await userEvent.click(within(filtersGroup).getByText(chipLabel).closest('button')!);
+    return screen.getByRole('dialog', { name: `Select ${chipLabel}` });
+  }
+
+  it('shows an owner-options failure rather than a dropdown holding only All', async () => {
+    server.use(
+      // MSW resolves the first matching handler, so an override must precede baseHandlers().
+      http.get('/api/directory/owners', () => new HttpResponse(null, { status: 503 })),
+      ...baseHandlers(),
+    );
+    renderCatalog();
+
+    const popover = await openReportChip('Owner statement', 'Owner');
+
+    // Only "All" in the list reads as "this org has one owner: none of them".
+    expect(within(popover).getByRole('alert')).toBeInTheDocument();
+    expect(within(popover).getByRole('button', { name: /retry/i })).toBeInTheDocument();
+  });
+
+  it('shows a bank-options failure on the trust-account chip', async () => {
+    server.use(
+      http.get('/api/accounting/banks/balances', () => new HttpResponse(null, { status: 503 })),
+      ...baseHandlers(),
+    );
+    renderCatalog();
+
+    const popover = await openReportChip('Trust account ledger', 'Bank');
+
+    expect(within(popover).getByRole('alert')).toBeInTheDocument();
+  });
+
+  it('keeps a successful empty list distinct from a failure', async () => {
+    server.use(...baseHandlers());
+    renderCatalog();
+
+    // baseHandlers returns an empty property list successfully — that is "no properties", which is
+    // not an error and must not be dressed as one.
+    const popover = await openReportChip('Owner statement', 'Owner');
+    expect(within(popover).queryByRole('alert')).toBeNull();
+    expect(within(popover).getByRole('button', { name: 'All' })).toBeInTheDocument();
+  });
+
+  it('recovers and lists the options after a retry', async () => {
+    let attempt = 0;
+    server.use(
+      http.get('/api/directory/owners', () => {
+        attempt += 1;
+        return attempt === 1
+          ? new HttpResponse(null, { status: 503 })
+          : HttpResponse.json(OWNERS_RESPONSE);
+      }),
+      ...baseHandlers(),
+    );
+    renderCatalog();
+
+    const popover = await openReportChip('Owner statement', 'Owner');
+    await userEvent.click(within(popover).getByRole('button', { name: /retry/i }));
+
+    expect(await within(popover).findByRole('button', { name: 'Helen Ford' })).toBeInTheDocument();
+  });
+});
