@@ -55,6 +55,15 @@ const DASH = {
   ],
 };
 
+/** Operational org: has journal data and is signed off — no banner, no redirect. */
+const OB = {
+  hasJournalData: true,
+  signedOff: true,
+  entitiesImported: false,
+  balancesImported: false,
+  verified: false,
+};
+
 function renderDashboard() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const router = createMemoryRouter(
@@ -62,6 +71,7 @@ function renderDashboard() {
       { path: '/dashboard', element: <DashboardPage /> },
       { path: '/owners/:id', element: <div>owner page</div> },
       { path: '/banking', element: <div>banking page</div> },
+      { path: '/onboarding', element: <div>onboarding page</div> },
     ],
     { initialEntries: ['/dashboard'] },
   );
@@ -74,7 +84,10 @@ function renderDashboard() {
 
 describe('DashboardPage', () => {
   it('renders the KPIs, the named owner hero with the roll-up, and the bank summary', async () => {
-    server.use(http.get('/api/dashboard', () => HttpResponse.json(DASH)));
+    server.use(
+      http.get('/api/dashboard', () => HttpResponse.json(DASH)),
+      http.get('/api/onboarding/status', () => HttpResponse.json(OB)),
+    );
     renderDashboard();
 
     expect(await screen.findByText('Trust total')).toBeInTheDocument();
@@ -102,26 +115,98 @@ describe('DashboardPage', () => {
   });
 
   it('navigates to an owner from the hero', async () => {
-    server.use(http.get('/api/dashboard', () => HttpResponse.json(DASH)));
+    server.use(
+      http.get('/api/dashboard', () => HttpResponse.json(DASH)),
+      http.get('/api/onboarding/status', () => HttpResponse.json(OB)),
+    );
     renderDashboard();
     await userEvent.click(await screen.findByText('Hargrove Family Trust'));
     expect(await screen.findByText('owner page')).toBeInTheDocument();
   });
 
   it('deep-links an action item to its route', async () => {
-    server.use(http.get('/api/dashboard', () => HttpResponse.json(DASH)));
+    server.use(
+      http.get('/api/dashboard', () => HttpResponse.json(DASH)),
+      http.get('/api/onboarding/status', () => HttpResponse.json(OB)),
+    );
     renderDashboard();
     await userEvent.click(await screen.findByText('Deposits awaiting application'));
     expect(await screen.findByText('banking page')).toBeInTheDocument();
   });
 
   it('shows an error state when the dashboard fails', async () => {
-    server.use(http.get('/api/dashboard', () => new HttpResponse(null, { status: 500 })));
+    server.use(
+      http.get('/api/dashboard', () => new HttpResponse(null, { status: 500 })),
+      http.get('/api/onboarding/status', () => HttpResponse.json(OB)),
+    );
     renderDashboard();
     expect(await screen.findByText(/couldn't load the dashboard/i)).toBeInTheDocument();
   });
 
   beforeEach(() => {
     document.body.innerHTML = '';
+  });
+});
+
+describe('DashboardPage when the onboarding status is unavailable', () => {
+  it('says the status is unavailable instead of rendering as a completed org', async () => {
+    server.use(
+      http.get('/api/dashboard', () => HttpResponse.json(DASH)),
+      http.get('/api/onboarding/status', () => new HttpResponse(null, { status: 503 })),
+    );
+    renderDashboard();
+
+    // The dashboard itself still works — the onboarding read is auxiliary.
+    expect(await screen.findByText('Trust total')).toBeInTheDocument();
+
+    // But its absence must be stated, not read as "onboarding is done".
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    expect(screen.getByText(/onboarding status/i)).toBeInTheDocument();
+
+    // A failed read is not evidence of a migration in progress either.
+    expect(screen.queryByText(/migration in progress/i)).not.toBeInTheDocument();
+  });
+
+  it('recovers when the status read succeeds', async () => {
+    let attempt = 0;
+    server.use(
+      http.get('/api/dashboard', () => HttpResponse.json(DASH)),
+      http.get('/api/onboarding/status', () => {
+        attempt += 1;
+        return attempt === 1
+          ? new HttpResponse(null, { status: 503 })
+          : HttpResponse.json({ ...OB, signedOff: false, entitiesImported: true });
+      }),
+    );
+    renderDashboard();
+
+    await userEvent.click(await screen.findByRole('button', { name: /retry/i }));
+
+    expect(await screen.findByText(/migration in progress/i)).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('still redirects an empty org once the status is known', async () => {
+    server.use(
+      http.get('/api/dashboard', () => HttpResponse.json(DASH)),
+      http.get('/api/onboarding/status', () =>
+        HttpResponse.json({ ...OB, hasJournalData: false, signedOff: false }),
+      ),
+    );
+    renderDashboard();
+
+    expect(await screen.findByText('onboarding page')).toBeInTheDocument();
+  });
+
+  it('shows neither the notice nor the banner for an operational org', async () => {
+    server.use(
+      http.get('/api/dashboard', () => HttpResponse.json(DASH)),
+      http.get('/api/onboarding/status', () => HttpResponse.json(OB)),
+    );
+    renderDashboard();
+
+    expect(await screen.findByText('Trust total')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.queryByText(/migration in progress/i)).not.toBeInTheDocument();
   });
 });
