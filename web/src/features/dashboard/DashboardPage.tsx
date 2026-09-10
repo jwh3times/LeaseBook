@@ -87,6 +87,7 @@ export function DashboardPage() {
           <ApiErrorNotice
             error={onboardingQuery.error}
             fallback="Couldn’t load the onboarding status."
+            kind="read"
           />
           <span>Setup completion can’t be confirmed, so migration guidance is hidden.</span>
           <button

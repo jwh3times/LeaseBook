@@ -251,10 +251,16 @@ The snippet above is the **inline** shape, for an auxiliary read sitting beside 
 />
 ```
 
-Never reach for `<EmptyState icon="alert" …>` on a query error. `EmptyState` is for the third
-outcome only — a read that succeeded and found nothing. The one exception is a failure that is not
-a failed read: a 404 on a detail route means the record is gone, and retrying reproduces it, so
-those keep their own empty state and are told apart with `isNotFound(query.error)` from `@/api`.
+Never answer a query error with copy you wrote yourself — not `<EmptyState icon="alert" …>`, and not
+a bare string in a `Card` either, which is the shape that survived the first sweep because the audit
+was grepping for `EmptyState`. `EmptyState` is for the third outcome only: a read that succeeded and
+found nothing. The one exception is a failure that is not a failed read — a 404 on a detail route
+means the record is gone, and retrying reproduces it, so those keep their own empty state and are
+told apart with `isNotFound(query.error)` from `@/api`.
+
+Pass `kind="read"` on any `ApiErrorNotice` for a read, including a file download. Without it the
+`internal_error` copy — what a real 500 produces — tells the user "Nothing was saved" about an
+operation that was never saving. `QueryErrorState` does this for you.
 
 ### A failed read is never rendered as a confirmed value
 

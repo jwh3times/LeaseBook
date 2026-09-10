@@ -140,7 +140,11 @@ export function ApplyModal({ tenantId, initialKind, onClose, onApplied }: ApplyM
       <div className="pf-modal-body col gap12">
         {banks.isError && (
           <div className="col gap6">
-            <ApiErrorNotice error={banks.error} fallback="Couldn’t load the trust accounts." />
+            <ApiErrorNotice
+              error={banks.error}
+              fallback="Couldn’t load the trust accounts."
+              kind="read"
+            />
             <Button
               variant="ghost"
               size="sm"

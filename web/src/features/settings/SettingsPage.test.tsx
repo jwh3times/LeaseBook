@@ -70,6 +70,45 @@ describe('SettingsPage', () => {
     );
   });
 
+  it('shows the server reason and reference when the org settings read fails', async () => {
+    const reference = '0f0e0d0c0f0e0d0c0f0e0d0c0f0e0d0c';
+    server.use(
+      http.get('/api/settings/org', () =>
+        HttpResponse.json(
+          { detail: 'The settings service is unavailable.', correlationId: reference },
+          { status: 503 },
+        ),
+      ),
+      http.get('/api/settings/banks', () => HttpResponse.json([ACTIVE_BANK])),
+    );
+    renderSettings();
+
+    // This branch was a bare string in a Card, so neither the `icon="alert"` sweep nor an
+    // EmptyState-shaped audit could see it.
+    expect(await screen.findByText('Couldn’t load settings')).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('The settings service is unavailable.');
+    expect(screen.getByText(`Reference: ${reference}`)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeEnabled();
+  });
+
+  it('does not claim nothing was saved when a read hits an unhandled server error', async () => {
+    server.use(
+      http.get('/api/settings/org', () =>
+        HttpResponse.json(
+          { code: 'internal_error', title: 'internal_error', correlationId: 'abcdefabcdefabcd' },
+          { status: 500 },
+        ),
+      ),
+      http.get('/api/settings/banks', () => HttpResponse.json([ACTIVE_BANK])),
+    );
+    renderSettings();
+
+    expect(await screen.findByText('Couldn’t load settings')).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('Something went wrong on our end.');
+    expect(screen.queryByText(/nothing was saved/i)).toBeNull();
+    expect(screen.getByText('Reference: abcdefabcdefabcd')).toBeInTheDocument();
+  });
+
   it('lists trust bank accounts with status badge', async () => {
     server.use(
       http.get('/api/settings/org', () => HttpResponse.json(ORG)),

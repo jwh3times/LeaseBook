@@ -9,6 +9,12 @@ export interface QueryErrorStateProps {
   title: string;
   /** User-visible copy for the case where the server body carried no `detail`, `title` or code. */
   fallback: string;
+  /**
+   * Replaces the default `query.refetch()`. A surface holding state derived from the rows — a bulk
+   * run's tick selection, say — resets that here, because a refetch returns a different row set and
+   * the selection is no longer about the rows on screen.
+   */
+  onRetry?: () => void;
 }
 
 /**
@@ -24,19 +30,24 @@ export interface QueryErrorStateProps {
  * Auxiliary reads — a selector, a label, a count — stay inline; see the `col gap6` pattern in
  * `.claude/agents/react-frontend.md`. This is the block-level sibling of that, not a replacement.
  */
-export function QueryErrorState({ query, title, fallback }: QueryErrorStateProps) {
+export function QueryErrorState({ query, title, fallback, onRetry }: QueryErrorStateProps) {
   return (
     <EmptyState
       icon="alert"
       title={title}
       description={
-        <ApiErrorNotice error={query.error} fallback={fallback} className="pf-api-error-block" />
+        <ApiErrorNotice
+          error={query.error}
+          fallback={fallback}
+          kind="read"
+          className="pf-api-error-block"
+        />
       }
       action={
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => void query.refetch()}
+          onClick={() => (onRetry ? onRetry() : void query.refetch())}
           disabled={query.isFetching}
         >
           {query.isFetching ? 'Retrying…' : 'Retry'}

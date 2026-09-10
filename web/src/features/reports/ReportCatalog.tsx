@@ -337,7 +337,11 @@ function BuilderPanel({ report }: BuilderPanelProps) {
         {showBasis && <BasisChip value={basis} onSelect={setBasis} />}
       </div>
 
-      <ApiErrorNotice error={downloadError} style={{ padding: '8px var(--card-pad)' }} />
+      <ApiErrorNotice
+        error={downloadError}
+        kind="read"
+        style={{ padding: '8px var(--card-pad)' }}
+      />
 
       {/* Preview */}
       <div className="pf-builder-preview">

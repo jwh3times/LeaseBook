@@ -241,7 +241,11 @@ function DefaultsUnavailable({
 
   return (
     <div className="col gap12">
-      <ApiErrorNotice error={error} fallback="Couldn’t load the organization defaults." />
+      <ApiErrorNotice
+        error={error}
+        fallback="Couldn’t load the organization defaults."
+        kind="read"
+      />
       <p className="t3 fs13">
         Late-fee overrides can’t be edited until the organization defaults load. Editing without
         them would save values this dialog invented rather than the policy this lease inherits.

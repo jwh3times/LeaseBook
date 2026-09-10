@@ -396,15 +396,22 @@ too, and #349 converted them — see the addendum below for what that turned up.
 
 ### 2026-09-09 addendum — the primary-content conversion, and what it cost to find
 
-Issue #349 converted the primary-content regions. Three findings are worth keeping, because each one
-is a thing the next audit of this kind will otherwise repeat.
+Issue #349 converted the primary-content regions. The findings below are worth keeping, because each
+one is a thing the next audit of this kind will otherwise repeat.
 
-**The count was 17, not nine.** #349 named nine surfaces and supplied a recipe to re-derive them:
-`rg -l 'icon="alert"'` minus the files that already render `ApiErrorNotice`. That subtraction is
-wrong at the file level — a file converted on one surface still hides unconverted ones — and it
-masked eight more branches, all on money surfaces: `DashboardPage`, `BankingPage`'s bank-balances
-and register reads, both `ReportCatalog` reads, and the rent, late-fee and disbursement run
-previews. Audit by branch, not by file.
+**The count was 18, not nine, and it took two passes to establish that.** #349 named nine surfaces
+and supplied a recipe to re-derive them: `rg -l 'icon="alert"'` minus the files that already render
+`ApiErrorNotice`. That subtraction is wrong at the file level — a file converted on one surface
+still hides unconverted ones — and it masked eight more branches, all on money surfaces:
+`DashboardPage`, `BankingPage`'s bank-balances and register reads, both `ReportCatalog` reads, and
+the rent, late-fee and disbursement run previews.
+
+Auditing by branch rather than by file found those eight. It did **not** find the eighteenth, which
+pre-merge review did: `SettingsPage`'s org-settings read rendered a bare string in a `Card`, not an
+`EmptyState`. Both recipes keyed off `EmptyState`, so neither could see it. The lesson is narrower
+than "audit by branch": an audit that greps for the _shape_ of the wrong answer only ever finds the
+instances that happened to choose that shape. Enumerate the population instead — every `isError`
+branch — and check each against the contract.
 
 **A private `unwrap` in `lib/directory.ts` made the whole Directory conversion inert.** It shadowed
 the shared one from `@/api` and threw a plain `Error` reading `Failed to load <what>`, discarding
@@ -421,13 +428,31 @@ below it. This is the `isPending`-on-a-disabled-query trap in a second shape: an
 `or`-ed with a condition that a failure cannot clear swallows the error branch. The error branch now
 precedes the loading guard.
 
-**And it made three mutation sites correct as a side effect.** The New tenant, New owner and New
+**And it made five mutation sites correct as a side effect.** The New tenant, New owner and New
 property modals each caught the create failure and replaced it with "Check the fields and try
-again" — advice that is wrong for a 409 or a 503, and that discarded the reference. Before the
+again" — advice that is wrong for a 409 or a 503, and that discarded the reference. `SettingsPage`'s
+two save forms did the same with "Couldn't save. You may need admin rights.", guessing a cause the
+server had already stated. Before the
 `directory.ts` fix there was no reference to keep; after it there was, one line above where it was
 being thrown away. The three now render `ApiErrorNotice`, with the form's own validation copy kept
 as a plain string in the same slot, so a local "Choose an owner for this property" and a server
 rejection stay distinguishable.
+
+**The `internal_error` copy was false on every read, and no test could see it.** `ApiErrorNotice`
+replaced the message with "Something went wrong on our end. Nothing was saved." whenever
+`code === 'internal_error'` — and `UnhandledExceptionHandler` stamps exactly that code on every
+unhandled exception, so it is what a production 500 produces. Harmless on a mutation, which is what
+the copy was written for; false on a read, and this conversion is what would have scaled it to
+eighteen whole-page content regions. `ApiErrorNotice` now takes `kind`, defaulting to `'write'` so
+no existing mutation site changes, and a read says "Something went wrong on our end." without the
+claim about saving. A file download counts as a read.
+
+Why no test caught it is the more useful half. The e2e `routeFail` helper sent
+`{ title: 'Internal Server Error', detail, correlationId }` with no `code`, and `toApiError` derives
+`code` from `title` when the body omits it — so the fixture produced `code: 'Internal Server Error'`
+and never entered the branch. Every unit test used a 503-with-`detail` or a bodiless 500. The suite
+exercised the contract against a shape the server does not emit. A fault-injection fixture is itself
+a claim about the server, and it has to be checked against the server's own error factory.
 
 **What the conversion added.** `QueryErrorState` (`web/src/components/`) is the block-level form of
 the contract — `ApiErrorNotice` and a retry inside `EmptyState`'s layout — so a converted surface

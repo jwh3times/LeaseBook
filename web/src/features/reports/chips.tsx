@@ -80,7 +80,11 @@ export function SelectChip({
             </div>
           ) : error ? (
             <div className="col gap6" style={{ padding: 4 }}>
-              <ApiErrorNotice error={error} fallback={`Couldn’t load the ${label} options.`} />
+              <ApiErrorNotice
+                error={error}
+                fallback={`Couldn’t load the ${label} options.`}
+                kind="read"
+              />
               {onRetry && (
                 <Button variant="ghost" size="sm" onClick={onRetry} disabled={retrying}>
                   {retrying ? 'Retrying…' : 'Retry'}

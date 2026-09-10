@@ -1,6 +1,7 @@
 import { Link } from 'react-router';
 import { useEffect, useState } from 'react';
 import { Badge, Button, Card, CardHeader, Input, Select, Table, type TableColumn } from '@/design';
+import { ApiErrorNotice } from '@/components/ApiErrorNotice';
 import { Modal } from '@/components/Modal';
 import { QueryErrorState } from '@/components/QueryErrorState';
 import {
@@ -55,7 +56,15 @@ export function SettingsPage() {
         <Card pad>
           <div className="pf-skeleton" style={{ maxWidth: 280, height: 22 }} />
         </Card>
-      ) : settings.isError || !settings.data ? (
+      ) : settings.isError ? (
+        <Card pad>
+          <QueryErrorState
+            query={settings}
+            title="Couldn’t load settings"
+            fallback="Failed to load the organization settings."
+          />
+        </Card>
+      ) : !settings.data ? (
         <Card pad>Couldn’t load settings.</Card>
       ) : (
         <div className="col gap16">
@@ -190,7 +199,14 @@ function OrgProfileForm({ initial }: { initial: OrgSettings }) {
               Saved
             </Badge>
           )}
-          {update.isError && <span className="err">Couldn’t save. You may need admin rights.</span>}
+          {/*
+            "You may need admin rights" was a guess at the cause, and a wrong one for a validation
+            rejection or a 500. The server says which it was, and carries the reference (ADR-025).
+          */}
+          <ApiErrorNotice
+            error={update.error}
+            fallback="Couldn’t save. You may need admin rights."
+          />
         </div>
       </form>
     </Card>
@@ -341,7 +357,14 @@ function LateFeeForm({ initial }: { initial: OrgSettings }) {
               Saved
             </Badge>
           )}
-          {update.isError && <span className="err">Couldn’t save. You may need admin rights.</span>}
+          {/*
+            "You may need admin rights" was a guess at the cause, and a wrong one for a validation
+            rejection or a 500. The server says which it was, and carries the reference (ADR-025).
+          */}
+          <ApiErrorNotice
+            error={update.error}
+            fallback="Couldn’t save. You may need admin rights."
+          />
         </div>
       </form>
     </Card>

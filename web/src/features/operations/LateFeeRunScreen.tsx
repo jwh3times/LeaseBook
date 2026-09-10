@@ -111,6 +111,12 @@ export function LateFeeRunScreen() {
             query={preview}
             title="Couldn't load preview"
             fallback="Failed to load the run preview."
+            onRetry={() => {
+              // A refetch returns a fresh row set; a tick from the previous one is no longer a
+              // statement about what is on screen. `handlePeriodChange` clears for the same reason.
+              setSelected(new Set());
+              void preview.refetch();
+            }}
           />
         ) : (
           <>

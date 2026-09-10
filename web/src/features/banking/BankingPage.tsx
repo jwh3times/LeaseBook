@@ -308,7 +308,11 @@ export function BankingPage() {
           */}
           {properties.isError && rowsReferenceProperties ? (
             <div className="col gap6">
-              <ApiErrorNotice error={properties.error} fallback="Couldn’t load property names." />
+              <ApiErrorNotice
+                error={properties.error}
+                fallback="Couldn’t load property names."
+                kind="read"
+              />
               <Button
                 variant="ghost"
                 size="sm"

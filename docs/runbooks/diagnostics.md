@@ -61,6 +61,10 @@ carry the same `code` and `correlationId` as mutations — every SPA call runs t
 in `web/src/api` — and since the 2026-09-09 amendment every read-error branch in the SPA renders that
 reference: content regions through `QueryErrorState`, inline reads through `ApiErrorNotice` directly.
 
+A read that hits an unhandled server exception shows the generic "Something went wrong on our end."
+without the "Nothing was saved" clause a rejected write gets — the reference is still there, and on
+that path it is the only clue, since nothing about the cause is in the response.
+
 So a failed load with no reference now means something, rather than nothing. Read it as one of:
 
 - the server sent no `correlationId` (the failure never reached the request pipeline — a proxy or

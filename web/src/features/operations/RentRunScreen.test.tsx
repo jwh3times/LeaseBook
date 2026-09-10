@@ -172,8 +172,14 @@ describe('RentRunScreen when the preview cannot be read', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('The rent schedule is unavailable.');
     expect(screen.getByText(`Reference: ${reference}`)).toBeInTheDocument();
 
+    // A run posts money off a preview. With no preview read, there is nothing to post from, so the
+    // confirm control must not be reachable at all — not merely disabled.
+    expect(screen.queryByRole('button', { name: /^Confirm/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Nothing to post' })).toBeNull();
+
     await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
 
     expect(await screen.findByText('Devon Pryor')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Confirm/ })).toBeInTheDocument();
   });
 });

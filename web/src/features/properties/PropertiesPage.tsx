@@ -144,7 +144,11 @@ function NewPropertyModal({
             </div>
           ) : owners.isError ? (
             <div className="col gap6">
-              <ApiErrorNotice error={owners.error} fallback="Couldn’t load the owner list." />
+              <ApiErrorNotice
+                error={owners.error}
+                fallback="Couldn’t load the owner list."
+                kind="read"
+              />
               <Button
                 variant="ghost"
                 size="sm"

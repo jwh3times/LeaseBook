@@ -95,7 +95,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
 
         {!showRecent && search.isError && (
           <div className="pf-palette-empty">
-            <ApiErrorNotice error={search.error} />
+            <ApiErrorNotice error={search.error} kind="read" />
           </div>
         )}
         <div className="pf-palette-list" id="palette-list" role="listbox">

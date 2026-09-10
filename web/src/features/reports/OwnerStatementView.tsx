@@ -295,7 +295,7 @@ export function OwnerStatementView({
         </div>
       </div>
 
-      <ApiErrorNotice error={downloadError} style={{ marginBottom: 'var(--gap)' }} />
+      <ApiErrorNotice error={downloadError} kind="read" style={{ marginBottom: 'var(--gap)' }} />
 
       <div className="pf-stmt-layout">
         {/* Statement document */}

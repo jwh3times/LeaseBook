@@ -187,7 +187,7 @@ export function ImportWizard({ bankAccountId, onClose, onConfirmed }: ImportWiza
               </div>
             ) : savedMappings.isError ? (
               <div className="col gap6">
-                <ApiErrorNotice error={savedMappings.error} />
+                <ApiErrorNotice error={savedMappings.error} kind="read" />
                 <p className="t3 fs12">You can still map the columns manually below.</p>
               </div>
             ) : (savedMappings.data?.length ?? 0) === 0 ? (
