@@ -10,6 +10,19 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   icon?: IconName;
 }
 
+/**
+ * The button class scheme, exported so the rare element that must wear the button shape without
+ * being a `<button>` — a link that is genuinely a navigation — stays pinned to it. Without this the
+ * literal string is copied, and renaming a variant silently unstyles the copy.
+ */
+export function buttonClassName(
+  variant: ButtonVariant = 'default',
+  size: ButtonSize = 'md',
+  className?: string,
+): string {
+  return `pf-btn v-${variant} s-${size}${className ? ` ${className}` : ''}`;
+}
+
 export function Button({
   children,
   variant = 'default',
@@ -20,11 +33,7 @@ export function Button({
   ...rest
 }: ButtonProps) {
   return (
-    <button
-      type={type}
-      className={`pf-btn v-${variant} s-${size}${className ? ` ${className}` : ''}`}
-      {...rest}
-    >
+    <button type={type} className={buttonClassName(variant, size, className)} {...rest}>
       {icon && <Icon name={icon} size={size === 'sm' ? 15 : 16} />}
       {children}
     </button>

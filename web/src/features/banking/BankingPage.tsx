@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { Button, Card, EmptyState, formatMoneyK, Icon, Money, Select } from '@/design';
 import { ApiErrorNotice } from '@/components/ApiErrorNotice';
+import { ErrorAction } from '@/components/ErrorAction';
 import { QueryErrorState } from '@/components/QueryErrorState';
 import { num, useProperties } from '@/lib/directory';
 import { trackInteraction } from '@/lib/telemetry';
@@ -313,14 +314,11 @@ export function BankingPage() {
                 fallback="Couldn’t load property names."
                 kind="read"
               />
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => void properties.refetch()}
-                disabled={properties.isFetching}
-              >
-                {properties.isFetching ? 'Retrying…' : 'Retry'}
-              </Button>
+              <ErrorAction
+                error={properties.error}
+                onRetry={() => void properties.refetch()}
+                retrying={properties.isFetching}
+              />
             </div>
           ) : (
             properties.isSuccess &&

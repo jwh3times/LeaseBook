@@ -73,9 +73,12 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   session had ended. Those screens now say plainly that you have been signed out and offer a Sign in
   link in place of the Retry; a rejected save says the same and confirms that nothing was saved. A
   mistyped password or authentication code is unaffected and still reports what the server said.
-  You are not bounced to the sign-in screen automatically, so a bulk run you have already previewed
-  stays on screen until you choose to leave it. Signed-out responses from the server now also carry
-  the same support reference every other error does.
+  This covers the smaller notices too — a bank-account selector, the owner list on a property form, a
+  report filter — each of which offered its own retry into the same dead end. You are not bounced to
+  the sign-in screen automatically, so a bulk run you have already previewed stays on screen until
+  you choose to leave it. Signed-out responses from the server now also carry the same support
+  reference every other error does. Separately, a compliance pack that fails to download no longer
+  claims "Nothing was saved" about a file it was never saving.
 
 ### Security
 

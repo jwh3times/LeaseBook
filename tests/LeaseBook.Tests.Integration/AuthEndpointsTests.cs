@@ -53,22 +53,6 @@ public sealed class AuthEndpointsTests(PostgresFixture fixture)
         problem.GetProperty("correlationId").GetString().ShouldNotBeNullOrWhiteSpace();
     }
 
-    /// <summary>
-    /// The SPA reads "signed out" off the 401 status, not the body, and the login page's own
-    /// credential rejection is a *different* 401 that must keep its own code — so this pins that
-    /// /api/auth/me still answers 401 when anonymous rather than, say, 200 with a null body.
-    /// </summary>
-    [Fact]
-    public async Task Me_is_unauthorized_when_anonymous()
-    {
-        var ct = TestContext.Current.CancellationToken;
-        var client = fixture.Api.CreateClient();
-
-        var response = await client.GetAsync("/api/auth/me", ct);
-
-        response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
-    }
-
     [Fact]
     public async Task Health_is_anonymous_and_reports_ok()
     {

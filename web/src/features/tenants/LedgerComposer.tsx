@@ -2,6 +2,7 @@ import { useMutation } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { Button, Icon, Input, Select } from '@/design';
 import { ApiErrorNotice } from '@/components/ApiErrorNotice';
+import { ErrorAction } from '@/components/ErrorAction';
 import { useBankAccounts } from '@/lib/settings';
 import { trackInteraction } from '@/lib/telemetry';
 import {
@@ -235,14 +236,11 @@ export function LedgerComposer({ tenantId, onPosted, initialMode }: LedgerCompos
                     fallback="Couldn’t load the bank accounts."
                     kind="read"
                   />
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => void banks.refetch()}
-                    disabled={banks.isFetching}
-                  >
-                    {banks.isFetching ? 'Retrying…' : 'Retry'}
-                  </Button>
+                  <ErrorAction
+                    error={banks.error}
+                    onRetry={() => void banks.refetch()}
+                    retrying={banks.isFetching}
+                  />
                 </div>
               ) : (
                 <label className="pf-composer-field">

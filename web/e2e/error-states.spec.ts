@@ -27,6 +27,52 @@ test.describe('error states', () => {
     await signIn(page, DEMO_ADMIN);
   });
 
+  /**
+   * #357. A session that expires with the tab open used to leave the operator on a Retry that could
+   * never succeed: `RouteGuard` decides authentication from the cached `useSession` query, so a 401
+   * on a *different* read rendered an ordinary read error and nothing redirected.
+   *
+   * Interception rather than a real cookie drop, for the reason this whole file uses interception —
+   * determinism. Dropping the auth cookie for real does produce the 401, but the cookie is then
+   * re-established and the retry succeeds, so the assertion races. What only an e2e can prove is
+   * here: the affordance is a real anchor that really navigates. That the server writes this exact
+   * body is pinned separately by `AuthEndpointsTests.Unauthenticated_api_request_carries_the_error_contract`.
+   *
+   * `/api/auth/me` is deliberately left alone. It is what keeps `RouteGuard` believing the user is
+   * signed in — failing it too is the already-handled state, where the guard redirects correctly and
+   * none of this code runs.
+   */
+  test('an expired session offers sign-in, not a retry that can never succeed', async ({
+    page,
+  }) => {
+    // The body-shape the cookie handler writes for an unauthenticated /api request.
+    await page.route('**/api/directory/owners*', (route) =>
+      route.fulfill({
+        status: 401,
+        contentType: 'application/problem+json',
+        body: JSON.stringify({
+          title: 'not_authenticated',
+          status: 401,
+          detail: 'Not authenticated.',
+          code: 'not_authenticated',
+          correlationId: ROUTE_FAIL_REFERENCE,
+        }),
+      }),
+    );
+
+    await page.getByRole('button', { name: 'Owners' }).click();
+    await expect(page).toHaveURL(/\/owners$/);
+
+    await expect(page.getByText(/signed out/i).first()).toBeVisible();
+    // The dead end itself: a retry re-issues the same read and gets the same 401 forever.
+    await expect(page.getByRole('button', { name: /^Retry$/ })).toHaveCount(0);
+
+    const signIn = page.getByRole('link', { name: 'Sign in' }).first();
+    await expect(signIn).toBeVisible();
+    await signIn.click();
+    await expect(page).toHaveURL(/\/login$/);
+  });
+
   test('a failed list query renders the designed error state, not a blank page or a fabricated figure', async ({
     page,
   }) => {

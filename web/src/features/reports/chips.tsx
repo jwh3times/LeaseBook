@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Button, Icon } from '@/design';
 import { ApiErrorNotice } from '@/components/ApiErrorNotice';
+import { ErrorAction } from '@/components/ErrorAction';
 import type { ApiError } from '@/api';
 
 // Shared builder-strip chips for the reports feature. Extracted so both the generic ReportCatalog
@@ -85,11 +86,7 @@ export function SelectChip({
                 fallback={`Couldn’t load the ${label} options.`}
                 kind="read"
               />
-              {onRetry && (
-                <Button variant="ghost" size="sm" onClick={onRetry} disabled={retrying}>
-                  {retrying ? 'Retrying…' : 'Retry'}
-                </Button>
-              )}
+              <ErrorAction error={error} onRetry={onRetry} retrying={retrying} />
             </div>
           ) : (
             <div className="col gap4">

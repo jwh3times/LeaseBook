@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { Badge, Button, Card, CardHeader, EmptyState, Icon, Money, StatCard } from '@/design';
 import { ApiErrorNotice } from '@/components/ApiErrorNotice';
+import { ErrorAction } from '@/components/ErrorAction';
 import { QueryErrorState } from '@/components/QueryErrorState';
 import { num } from '@/lib/directory';
 import { useDashboard, type DashboardResponse } from '@/lib/dashboard';
@@ -90,14 +91,12 @@ export function DashboardPage() {
             kind="read"
           />
           <span>Setup completion can’t be confirmed, so migration guidance is hidden.</span>
-          <button
-            type="button"
+          <ErrorAction
+            error={onboardingQuery.error}
+            onRetry={() => void onboardingQuery.refetch()}
+            retrying={onboardingQuery.isFetching}
             className="ob-migration-banner-link"
-            onClick={() => void onboardingQuery.refetch()}
-            disabled={onboardingQuery.isFetching}
-          >
-            {onboardingQuery.isFetching ? 'Retrying…' : 'Retry'}
-          </button>
+          />
         </div>
       )}
 

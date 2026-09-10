@@ -117,6 +117,13 @@ public static class AuthServiceCollectionExtensions
     /// <c>correlationId</c> — <c>ErrorContractTests</c> could not see the gap, because it scans for
     /// direct <c>Results.Problem</c> calls and this path never made one. The SPA was left inferring
     /// "signed out" from a body-less 401 (#357).
+    ///
+    /// Writing a body means the response has started once the challenge returns, where the bare
+    /// status write was idempotent. That is safe as long as one response takes at most one
+    /// challenge: <c>AuthorizationMiddlewareResultHandler</c> issues one per scheme when a policy
+    /// declares <c>AuthenticationSchemes</c>, and none of the policies above declare any. A second
+    /// challenge on the same response would set a status on a started response and surface as a 500,
+    /// so if a policy ever names two schemes, revisit this rather than the symptom.
     /// </summary>
     private static Func<RedirectContext<CookieAuthenticationOptions>, Task> ApiAwareProblem(
         int statusCode, string code, string detail) =>

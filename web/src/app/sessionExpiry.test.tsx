@@ -82,10 +82,8 @@ describe('a session that expires while the tab is open', () => {
 
     // Pin the premise: the guard still believes the user is signed in, so nothing redirected. If
     // this ever starts failing, the defect's state has moved and the assertions below prove nothing.
-    expect(await screen.findAllByRole('alert')).not.toHaveLength(0);
-    expect(screen.queryByText('Login screen')).not.toBeInTheDocument();
-
     const alerts = await screen.findAllByRole('alert');
+    expect(screen.queryByText('Login screen')).not.toBeInTheDocument();
     expect(alerts.some((a) => /signed out/i.test(a.textContent ?? ''))).toBe(true);
 
     // The dead end itself: a Retry re-issues the same read and gets the same 401 forever.

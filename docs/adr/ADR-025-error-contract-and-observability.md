@@ -545,15 +545,28 @@ defaults to showing the server's own message, which is merely unhelpful, rather 
 because `LoginPage` discards the `ApiError` and substitutes its own literal — an accident of that
 page's divergence from this contract, not a defense.
 
-**The remedy is honest copy, not an automatic redirect.** Redirecting on a signed-out 401 is the
-obvious fix and was rejected: a bulk-run screen holds its previewed run and period in component
-state (`RentRunScreen.tsx`), and unmounting it would discard the operator's confirmed selection and
-leave them at `/login` with no account of why the screen vanished. Instead `ApiErrorNotice` renders
-the signed-out copy — split on `kind`, so a rejected **write** still gets the "nothing was saved"
-reassurance that a read must not claim — and `QueryErrorState` replaces Retry with a plain
-`<a href="/login">`. A real anchor, not a router navigation: the session is dead, so a full document
-load drops every cached query and stale row with it, the same reasoning as the hard
-`window.location.assign('/login')` after an explicit sign-out in `AccountSecurityPage`.
+**The remedy is honest copy, not an automatic redirect.** Redirecting on a signed-out 401 was
+rejected because it acts on the operator's behalf at the moment they have the least information: a
+bulk-run screen holds its previewed run and period in component state (`RentRunScreen.tsx`), and
+unmounting it discards their confirmed selection and leaves them at `/login` with no account of why
+the screen vanished. Be precise about what this buys, because it is easy to overstate: signing in
+still costs them that preview — the anchor is a full document load, and `/login` has no return path
+— so what the choice preserves is not the work but the _explanation_, and the timing. They read what
+happened and decide when to leave, instead of finding themselves somewhere else. Instead
+`ApiErrorNotice` renders the signed-out copy — split on `kind`, so a rejected **write** still gets
+the "nothing was saved" reassurance that a read must not claim.
+
+**Fixing this on the block-level surface alone would have made things worse.** `QueryErrorState` was
+the obvious place, and stopping there left eight auxiliary reads — the bank-account selector, the
+owner list on the property form, the report chips, the dashboard's migration banner — each
+hand-rolling the same ghost Retry beside their own `ApiErrorNotice`. Those would have read "You have
+been signed out" next to a button that could not act on it: copy contradicting affordance, which is
+worse than the uninformative copy it replaced, because the operator now believes the button is
+relevant. Pre-merge review caught this; the static reasoning that produced the fix did not, because
+the fix looked complete from the component it was written in. The affordance is now one component,
+`ErrorAction`, for the same reason `ProblemResults` and `unwrap` are one thing each: eight copies of
+a decision drift the moment the decision changes, and this decision just changed. It also pins the
+one anchor that wears the button shape to `buttonClassName` rather than a copied literal.
 
 **The regression test has to hold one read succeeding while another fails.** The defect lives in the
 state where `/api/auth/me` is still cached as signed-in _and_ a data read returns 401; failing both

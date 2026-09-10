@@ -2,6 +2,7 @@ import { useMutation } from '@tanstack/react-query';
 import { useRef, useState, type KeyboardEvent } from 'react';
 import { Button, Input, Select } from '@/design';
 import { ApiErrorNotice } from '@/components/ApiErrorNotice';
+import { ErrorAction } from '@/components/ErrorAction';
 import { Modal } from '@/components/Modal';
 import { useBankAccounts } from '@/lib/settings';
 import {
@@ -145,14 +146,11 @@ export function ApplyModal({ tenantId, initialKind, onClose, onApplied }: ApplyM
               fallback="Couldn’t load the trust accounts."
               kind="read"
             />
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => void banks.refetch()}
-              disabled={banks.isFetching}
-            >
-              {banks.isFetching ? 'Retrying…' : 'Retry'}
-            </Button>
+            <ErrorAction
+              error={banks.error}
+              onRetry={() => void banks.refetch()}
+              retrying={banks.isFetching}
+            />
           </div>
         )}
         <label className="col gap6">

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Badge, Button, formatMoney, Input, Money, Select } from '@/design';
 import { ApiErrorNotice } from '@/components/ApiErrorNotice';
+import { ErrorAction } from '@/components/ErrorAction';
 import { Modal } from '@/components/Modal';
 import { type TenantDetail, useUpdateLease } from '@/lib/directory';
 import { useOrgSettings } from '@/lib/settings';
@@ -257,9 +258,7 @@ function DefaultsUnavailable({
         them would save values this dialog invented rather than the policy this lease inherits.
       </p>
       <div className="row gap12">
-        <Button variant="ghost" size="sm" onClick={onRetry} disabled={retrying}>
-          {retrying ? 'Retrying…' : 'Retry'}
-        </Button>
+        <ErrorAction error={error} onRetry={onRetry} retrying={retrying} />
       </div>
       {current.length > 0 ? (
         <div className="col gap6">

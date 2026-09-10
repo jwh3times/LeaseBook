@@ -23,7 +23,7 @@ export type { BadgeProps, BadgeTone } from './Badge';
 export { Money, MoneyDisplayProvider } from './Money';
 export type { MoneyProps } from './Money';
 
-export { Button } from './Button';
+export { Button, buttonClassName } from './Button';
 export type { ButtonProps, ButtonVariant, ButtonSize } from './Button';
 
 export { IconButton } from './IconButton';
