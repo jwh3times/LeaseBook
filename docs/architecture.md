@@ -176,11 +176,14 @@ rule, `createObjectURL`, a `document.cookie` read, or a raw `fetch(` appears und
 [ADR-025](adr/ADR-025-error-contract-and-observability.md).
 
 The UI renders what that rule carries rather than substituting copy of its own: a failed read shows
-the server's mapped message, the support reference, and a retry — inline beside an auxiliary read,
-and through `QueryErrorState` for a content region — so an operator can quote a reference for any
-failure a user reports, and an empty state means only that the read succeeded and found nothing. A
-404 on a detail route is the deliberate exception: it is a correct answer to a wrong id, so it keeps
-a plain not-found state and offers no retry. See the 2026-09-09 amendment and addendum to ADR-025
+the server's mapped message, the support reference, and the affordance that matches the failure
+— inline beside an auxiliary read, and through `QueryErrorState` for a content region — so an
+operator can quote a reference for any failure a user reports, and an empty state means only that
+the read succeeded and found nothing. One component (`ErrorAction`) makes that choice everywhere,
+because it is not always a retry: an expired session gets a sign-in link, since re-issuing the
+request only reproduces the 401 (ADR-025, 2026-09-10 addendum 2). A 404 on a detail route is the
+deliberate exception: it is a correct answer to a wrong id, so it keeps a plain not-found state and
+offers no retry. See the 2026-09-09 amendment and addendum to ADR-025
 and the [diagnostics runbook](runbooks/diagnostics.md).
 
 ## Data and persistence

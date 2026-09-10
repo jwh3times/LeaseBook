@@ -217,12 +217,18 @@ succeeded-with-nothing. Only the third is a fact about the org.
   query.isPending ? (
     <div className="pf-skeleton" style={{ height: 20 }} />
   ) : query.isError ? (
-    <>
-      <ApiErrorNotice error={query.error} fallback="Couldn’t load the items." />
-      <Button variant="ghost" size="sm" onClick={() => query.refetch()}>
-        Retry
-      </Button>
-    </>
+    <div className="col gap6">
+      <ApiErrorNotice
+        error={query.error}
+        fallback="Couldn’t load the items."
+        kind="read"
+      />
+      <ErrorAction
+        error={query.error}
+        onRetry={() => void query.refetch()}
+        retrying={query.isFetching}
+      />
+    </div>
   ) : query.data.items.length === 0 ? (
     <EmptyState icon="inbox" title="No items yet" />
   ) : (
@@ -232,10 +238,11 @@ succeeded-with-nothing. Only the third is a fact about the org.
 ```
 
 - Loading: `<div className="pf-skeleton">` — animates via `pfPulse` keyframe in tokens.css
-- Error: `<ApiErrorNotice error={query.error} fallback="…" />` from `@/components/ApiErrorNotice`, plus a retry
-  control. It renders the server's mapped message and the `Reference: <32-hex>` support id that
-  `unwrap` carried through (ADR-025, 2026-09-09 amendment). A hardcoded `EmptyState` description
-  throws that id away
+- Error: `<ApiErrorNotice error={query.error} fallback="…" />` from `@/components/ApiErrorNotice`,
+  plus `<ErrorAction … />` from `@/components/ErrorAction` for the affordance — never a
+  hand-rolled Retry (see below). It renders the server's mapped message and the
+  `Reference: <32-hex>` support id that `unwrap` carried through (ADR-025, 2026-09-09 amendment). A
+  hardcoded `EmptyState` description throws that id away
 - Empty: `<EmptyState icon="inbox" …>` from `@/design`
 - Never render a bare `null` or skip the loading guard
 
@@ -269,10 +276,10 @@ same 401 and never resolves, so `ErrorAction` renders a sign-in link instead, wh
 says so in place of the server's message. `QueryErrorState` does this for you; the inline `col gap6`
 shape pairs `<ApiErrorNotice … />` with `<ErrorAction error={q.error} onRetry={…} retrying={…} />`.
 
-Eight surfaces each held their own copy of that button, so fixing it in `QueryErrorState` alone left
-them saying "You have been signed out" beside a button that could not act on it — copy contradicting
-affordance. A ninth copy re-creates that bug. Two rules travel with it: a 401 is not automatically
-"signed out" — login, MFA and account-security answer a _rejected credential_ with 401, so ask
+Eight surfaces held a copy of that button, so fixing it in `QueryErrorState` alone left the other
+seven saying "You have been signed out" beside a button that could not act on it — copy
+contradicting affordance. A ninth copy re-creates that bug. Two rules travel with it: a 401 is not
+automatically "signed out" — login, MFA and account-security answer a _rejected credential_ with 401, so ask
 `isSessionExpired` rather than checking `status === 401`; and never redirect on one, because a screen
 holding operator state (a previewed bulk run) must not be unmounted out from under them (ADR-025,
 2026-09-10 addendum 2).
@@ -368,25 +375,26 @@ test("records a payment", async () => {
 
 ## Banned patterns
 
-| Pattern                                     | Use instead                                                  |
-| ------------------------------------------- | ------------------------------------------------------------ |
-| `toFixed(2)` for display                    | `formatMoney(value)` or `<Money value={n} />`                |
-| `Intl.NumberFormat` inline                  | `formatMoney` / `<Money>`                                    |
-| Hardcoded color values                      | CSS tokens: `var(--text)`, `var(--surface)`, etc.            |
-| Color as sole status indicator              | `<Badge tone={…} dot>` (always `dot` or `icon`)              |
-| `fetch(…)` for API calls                    | Generated named SDK functions from `@/api`                   |
-| `if (error \|\| !data) throw new Error(…)`  | `unwrap(call, fallbackMessage)` from `@/api`                 |
-| `query.data?.length ?? 0` in rendered copy  | Branch on `isSuccess` / `isError` / pending separately       |
-| `?? fallback` on an unresolved query value  | Block the control until the read succeeds                    |
-| Terse `unwrap` fallbacks (`'owners'`)       | A sentence — the fallback is user-visible error copy         |
-| `isPending` alone on a disabled query       | Check `fetchStatus` too, or it loads forever                 |
-| `EmptyState` for a query error              | `<ApiErrorNotice error={…}>` + retry (keeps the support ref) |
-| `EmptyState` for a failed content region    | `<QueryErrorState query={…} title fallback />`               |
-| A private `unwrap` in a feature/lib module  | `unwrap` from `@/api` — a local one drops the support ref    |
-| `URL.createObjectURL` + anchor click        | `download(call, filename)` from `@/api`                      |
-| `document.cookie` reads outside `api/`      | The XSRF interceptor in `api/client.ts`                      |
-| Hand-written API types                      | Generated named model types from `@/api`                     |
-| Relative import paths `../../`              | `@/design`, `@/components`, `@/api`, `@/lib`, `@/features/…` |
-| Ad-hoc `font-variant-numeric`               | `<td className="num">` / `<Money>` / `className="pf-num"`    |
-| New CSS custom properties in feature CSS    | Add to `web/src/design/tokens.css` only                      |
-| Direct `fetch` for XSRF-protected endpoints | Generated write functions (XSRF is configured automatically) |
+| Pattern                                      | Use instead                                                  |
+| -------------------------------------------- | ------------------------------------------------------------ |
+| `toFixed(2)` for display                     | `formatMoney(value)` or `<Money value={n} />`                |
+| `Intl.NumberFormat` inline                   | `formatMoney` / `<Money>`                                    |
+| Hardcoded color values                       | CSS tokens: `var(--text)`, `var(--surface)`, etc.            |
+| Color as sole status indicator               | `<Badge tone={…} dot>` (always `dot` or `icon`)              |
+| `fetch(…)` for API calls                     | Generated named SDK functions from `@/api`                   |
+| `if (error \|\| !data) throw new Error(…)`   | `unwrap(call, fallbackMessage)` from `@/api`                 |
+| `query.data?.length ?? 0` in rendered copy   | Branch on `isSuccess` / `isError` / pending separately       |
+| `?? fallback` on an unresolved query value   | Block the control until the read succeeds                    |
+| Terse `unwrap` fallbacks (`'owners'`)        | A sentence — the fallback is user-visible error copy         |
+| `isPending` alone on a disabled query        | Check `fetchStatus` too, or it loads forever                 |
+| `EmptyState` for a query error               | `<ApiErrorNotice error={…}>` + retry (keeps the support ref) |
+| A hand-rolled `Retry` button beside an error | `<ErrorAction error={…} onRetry={…} retrying={…} />`         |
+| `EmptyState` for a failed content region     | `<QueryErrorState query={…} title fallback />`               |
+| A private `unwrap` in a feature/lib module   | `unwrap` from `@/api` — a local one drops the support ref    |
+| `URL.createObjectURL` + anchor click         | `download(call, filename)` from `@/api`                      |
+| `document.cookie` reads outside `api/`       | The XSRF interceptor in `api/client.ts`                      |
+| Hand-written API types                       | Generated named model types from `@/api`                     |
+| Relative import paths `../../`               | `@/design`, `@/components`, `@/api`, `@/lib`, `@/features/…` |
+| Ad-hoc `font-variant-numeric`                | `<td className="num">` / `<Money>` / `className="pf-num"`    |
+| New CSS custom properties in feature CSS     | Add to `web/src/design/tokens.css` only                      |
+| Direct `fetch` for XSRF-protected endpoints  | Generated write functions (XSRF is configured automatically) |

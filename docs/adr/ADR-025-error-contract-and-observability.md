@@ -557,7 +557,7 @@ happened and decide when to leave, instead of finding themselves somewhere else.
 the "nothing was saved" reassurance that a read must not claim.
 
 **Fixing this on the block-level surface alone would have made things worse.** `QueryErrorState` was
-the obvious place, and stopping there left eight auxiliary reads — the bank-account selector, the
+the obvious place, and stopping there left the seven auxiliary reads — the bank-account selector, the
 owner list on the property form, the report chips, the dashboard's migration banner — each
 hand-rolling the same ghost Retry beside their own `ApiErrorNotice`. Those would have read "You have
 been signed out" next to a button that could not act on it: copy contradicting affordance, which is
@@ -567,6 +567,15 @@ the fix looked complete from the component it was written in. The affordance is 
 `ErrorAction`, for the same reason `ProblemResults` and `unwrap` are one thing each: eight copies of
 a decision drift the moment the decision changes, and this decision just changed. It also pins the
 one anchor that wears the button shape to `buttonClassName` rather than a copied literal.
+
+**The same review found a second thing the #349 sweep had missed.** `CompliancePackPanel` rendered a
+failed compliance-pack _download_ with the default `kind`, so the operator was told "Nothing was
+saved" about a ZIP that was never saving — the exact category error the 2026-08-20 and 2026-09-10
+amendments fixed for `internal_error`, still live on a surface the sweep had walked past. It was the
+only read among the `ApiErrorNotice` call sites left without an explicit `kind`; every other one is a
+genuine mutation. This is the nineteenth branch's lesson in a second costume: the sweep enumerated
+the branches that _look like_ a failed read, and a download does not, until you ask what the
+operation was doing. Enumerate by what the operation **is**, not by what its call site resembles.
 
 **The regression test has to hold one read succeeding while another fails.** The defect lives in the
 state where `/api/auth/me` is still cached as signed-in _and_ a data read returns 401; failing both
