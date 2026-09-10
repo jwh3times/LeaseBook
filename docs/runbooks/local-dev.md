@@ -235,10 +235,27 @@ are hand-authored tripwires locked by `ScenarioGoldenTests` — treat them as sa
 
 ## Checking the accounting invariants
 
-The `check-invariants` verb sweeps the core correctness invariants (I1 entries balance per basis,
-I2 the trust equation per trust bank, I3 PM-income isolation, I4 deposit liabilities ≥ 0, I7 deposit
-attribution symmetry — a held deposit stays ≥ 0 per owner bucket, not just per tenant) and exits
-non-zero on any violation. The verb owns only the operator surface — argument parsing, the console
+The `check-invariants` verb sweeps the core correctness invariants and exits non-zero on any
+violation:
+
+| Id           | Assertion                                                                                     |
+| ------------ | --------------------------------------------------------------------------------------------- |
+| I1           | Every entry balances per basis                                                                |
+| I2           | The trust equation holds per trust bank                                                       |
+| I3           | PM-income isolation — no `pm_income` line carries an owner                                    |
+| I4           | Deposit and prepayment liabilities are ≥ 0                                                    |
+| I5 _(swept)_ | `migration_clearing` nets to $0 per basis                                                     |
+| I7           | Deposit attribution symmetry — a held deposit stays ≥ 0 per owner bucket, not just per tenant |
+| I8           | Every event type posting an owner-attributed `owner_equity` line has a statement section      |
+
+Two different invariants are numbered **I5**: the swept one above is migration-clearing residual,
+while the property suite's `..._I5` is basis convergence. If you are paging on a swept I5, it is the
+migration-clearing one. I6 (a void and its reversal net to zero) is proven in the harness, not swept.
+
+I8 is the odd one out: it asserts reachability rather than arithmetic. Money is never wrong when it
+fires — an unmapped event type makes `StatementSectionMap` throw, so the affected statements refuse
+to render rather than quietly omitting a line. It fires the day a new posting template credits owner
+equity without a matching section. The verb owns only the operator surface — argument parsing, the console
 report, the exit code — over a core it shares with the nightly sweep job (ADR-001), so what you
 check by hand and what runs in production can never drift apart. With no `--org`, it checks every
 org, which is the mode the nightly job runs in.

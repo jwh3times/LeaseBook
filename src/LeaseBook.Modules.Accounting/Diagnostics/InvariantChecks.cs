@@ -1,4 +1,5 @@
 using LeaseBook.Modules.Accounting.Contracts;
+using LeaseBook.Modules.Accounting.Features.Statements;
 using Microsoft.EntityFrameworkCore;
 
 namespace LeaseBook.Modules.Accounting.Diagnostics;
@@ -19,6 +20,7 @@ internal sealed class InvariantChecks(DbContext db) : IInvariantChecks
         violations.AddRange(await CheckDepositLiabilitiesNonNegativeAsync(ct));
         violations.AddRange(await CheckDepositAttributionSymmetricAsync(ct));
         violations.AddRange(await CheckMigrationClearingBalancedAsync(ct));
+        violations.AddRange(await CheckStatementSectionCoverageAsync(ct));
         return violations;
     }
 
@@ -159,6 +161,50 @@ internal sealed class InvariantChecks(DbContext db) : IInvariantChecks
             .ToList();
     }
 
+    // I8: every event_type carrying an owner-attributed owner_equity line has a statement section.
+    // Unlike I1-I7 this asserts over the *shape* of the journal rather than its balances, because the
+    // defect it catches is a reachability one: StatementSectionMap.Section throws
+    // UncategorizedEventException on an unmapped type, so a new owner-crediting event makes every
+    // statement for every affected owner fail to render — and today that surfaces only when a human
+    // asks for one of those statements.
+    //
+    // Deliberately a set difference over event types rather than a per-(owner, period, basis) run of
+    // the statement handler. Three reasons: the risk is a property of the event-type set, not of any
+    // period, so one query covers all owners and all history; the handler would *throw* on the very
+    // org that has the defect, and the sweep loop has no per-org exception isolation, so org N's
+    // breach would stop orgs N+1..M from being checked at all; and the exception carries only the
+    // event type, so it would report strictly less than this query does.
+    //
+    // The statement's own Variance is NOT swept. Given the three queries in GetOwnerStatementData it
+    // is unfalsifiable by any data state — begins ∪ rows is exactly the end-balance predicate — so a
+    // nightly variance check could never go red. It is falsifiable only by an inconsistent source
+    // edit, which is what StatementInvariantTests asserts in CI.
+    public async Task<IReadOnlyList<InvariantViolation>> CheckStatementSectionCoverageAsync(CancellationToken ct)
+    {
+        var covered = StatementSectionMap.CoveredEventTypes.ToArray();
+
+        var rows = await db.Database.SqlQuery<UncoveredEventType>(
+            $"""
+            SELECT COALESCE(orig.event_type, e.event_type) AS event_type,
+                   COUNT(*) AS line_count,
+                   MIN(e.id::text) AS sample_entry_id
+            FROM journal_lines jl
+            JOIN journal_entries e ON e.id = jl.entry_id
+            LEFT JOIN journal_entries orig ON orig.id = e.reverses_entry_id
+            WHERE jl.account_class = 'owner_equity' AND jl.owner_id IS NOT NULL
+              AND COALESCE(orig.event_type, e.event_type) <> ALL({covered})
+            GROUP BY COALESCE(orig.event_type, e.event_type)
+            ORDER BY COALESCE(orig.event_type, e.event_type)
+            """).ToListAsync(ct);
+
+        return rows
+            .Select(r => new InvariantViolation("I8",
+                $"event_type '{r.EventType}' posts owner-attributed owner_equity lines but has no "
+                + $"statement section — {r.LineCount} line(s), e.g. entry {r.SampleEntryId}; every "
+                + "owner statement covering one of them fails to render"))
+            .ToList();
+    }
+
     private sealed record UnbalancedEntry(Guid EntryId, string BasisName, decimal SumDebit, decimal SumCredit);
 
     private sealed record EquationVariance(Guid BankAccountId, decimal Variance);
@@ -168,4 +214,6 @@ internal sealed class InvariantChecks(DbContext db) : IInvariantChecks
     private sealed record AttributionBucket(Guid? TenantId, Guid? OwnerId, decimal Held);
 
     private sealed record ClearingVariance(string BasisName, decimal Net);
+
+    private sealed record UncoveredEventType(string EventType, int LineCount, string SampleEntryId);
 }
