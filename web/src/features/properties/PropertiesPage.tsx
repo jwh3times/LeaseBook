@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Badge, Button, Input, Select, type TableColumn } from '@/design';
+import { asApiError, type ApiError } from '@/api';
 import { ApiErrorNotice } from '@/components/ApiErrorNotice';
 import { IndexView } from '@/components/IndexView';
 import { Modal } from '@/components/Modal';
@@ -77,7 +78,9 @@ function NewPropertyModal({
   const [address, setAddress] = useState('');
   const [city, setCity] = useState('');
   const [state, setState] = useState('NC');
-  const [error, setError] = useState<string | null>(null);
+  // A string is this form's own validation copy; an ApiError is the server's, and only the second
+  // carries the support reference (ADR-025).
+  const [error, setError] = useState<string | ApiError | null>(null);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -102,8 +105,8 @@ function NewPropertyModal({
         mgmtFeeBps: null,
       });
       onCreated(result.id);
-    } catch {
-      setError('Could not create the property. Check the fields and try again.');
+    } catch (e) {
+      setError(asApiError(e, 'Could not create the property. Check the fields and try again.'));
     }
   }
 
@@ -195,11 +198,14 @@ function NewPropertyModal({
             />
           </div>
         </div>
-        {error && (
-          <div className="err" role="alert">
-            {error}
-          </div>
-        )}
+        {error &&
+          (typeof error === 'string' ? (
+            <div className="err" role="alert">
+              {error}
+            </div>
+          ) : (
+            <ApiErrorNotice error={error} fallback="Could not create the property." />
+          ))}
       </form>
     </Modal>
   );

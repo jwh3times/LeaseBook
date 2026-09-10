@@ -143,6 +143,32 @@ describe('DashboardPage', () => {
     expect(await screen.findByText(/couldn't load the dashboard/i)).toBeInTheDocument();
   });
 
+  it('carries the support reference and retries the dashboard in place', async () => {
+    const reference = '5a5b5c5d5a5b5c5d5a5b5c5d5a5b5c5d';
+    let attempt = 0;
+    server.use(
+      http.get('/api/dashboard', () => {
+        attempt += 1;
+        return attempt === 1
+          ? HttpResponse.json(
+              { detail: 'The dashboard projection is rebuilding.', correlationId: reference },
+              { status: 503 },
+            )
+          : HttpResponse.json(DASH);
+      }),
+      http.get('/api/onboarding/status', () => HttpResponse.json(OB)),
+    );
+    renderDashboard();
+
+    expect(await screen.findByText(/couldn't load the dashboard/i)).toBeInTheDocument();
+    expect(screen.getByText('The dashboard projection is rebuilding.')).toBeInTheDocument();
+    expect(screen.getByText(`Reference: ${reference}`)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+
+    expect(await screen.findByText('Trust total')).toBeInTheDocument();
+  });
+
   beforeEach(() => {
     document.body.innerHTML = '';
   });

@@ -58,11 +58,17 @@ what happened — nothing about the cause is in the response.
 
 **When a failed page load shows no reference.** Since ADR-025's 2026-08-20 amendment, failed _reads_
 carry the same `code` and `correlationId` as mutations — every SPA call runs through one success rule
-in `web/src/api` — so a read surface that renders the standard alert shows the reference too (the
-banking import wizard's match preview, for example). Many read-error branches still render a plain
-empty-state description and never display what they received, so the absence of a reference on a
-failed load means "this surface does not render one yet", not "the server did not send one". Fall
-back to searching by route and time window:
+in `web/src/api` — and since the 2026-09-09 amendment every read-error branch in the SPA renders that
+reference: content regions through `QueryErrorState`, inline reads through `ApiErrorNotice` directly.
+
+So a failed load with no reference now means something, rather than nothing. Read it as one of:
+
+- the server sent no `correlationId` (the failure never reached the request pipeline — a proxy or
+  ingress error page, or the browser could not connect at all), or
+- what the user is looking at is not a read error. A detail route that says the record was not found
+  is reporting a 404, which is a successful answer to a wrong id and carries no reference by design.
+
+Either way, fall back to searching by route and time window:
 
 ```kusto
 requests

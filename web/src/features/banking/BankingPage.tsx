@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { Button, Card, EmptyState, formatMoneyK, Icon, Money, Select } from '@/design';
 import { ApiErrorNotice } from '@/components/ApiErrorNotice';
+import { QueryErrorState } from '@/components/QueryErrorState';
 import { num, useProperties } from '@/lib/directory';
 import { trackInteraction } from '@/lib/telemetry';
 import { ImportWizard } from './ImportWizard';
@@ -155,15 +156,19 @@ export function BankingPage() {
     return (
       <div className="pf-fade">
         <Card pad>
-          <EmptyState
-            icon={balances.isError ? 'alert' : 'bank'}
-            title={balances.isError ? "Couldn't load bank accounts" : 'No bank accounts yet'}
-            description={
-              balances.isError
-                ? 'Please retry in a moment.'
-                : 'Add a trust account in Settings to start banking.'
-            }
-          />
+          {balances.isError ? (
+            <QueryErrorState
+              query={balances}
+              title="Couldn't load bank accounts"
+              fallback="Failed to load the bank accounts."
+            />
+          ) : (
+            <EmptyState
+              icon="bank"
+              title="No bank accounts yet"
+              description="Add a trust account in Settings to start banking."
+            />
+          )}
         </Card>
       </div>
     );
@@ -355,10 +360,10 @@ export function BankingPage() {
           </div>
         ) : register.isError ? (
           <div className="pf-pad">
-            <EmptyState
-              icon="alert"
+            <QueryErrorState
+              query={register}
               title="Couldn't load the register"
-              description="Please retry in a moment."
+              fallback="Failed to load the register."
             />
           </div>
         ) : rows.length === 0 ? (

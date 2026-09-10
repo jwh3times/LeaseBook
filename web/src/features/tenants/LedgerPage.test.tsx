@@ -243,6 +243,66 @@ describe('LedgerPage', () => {
     expect(await screen.findByText("Couldn't load the ledger")).toBeInTheDocument();
   });
 
+  it('carries the support reference and retries the ledger in place', async () => {
+    const reference = 'aa11bb22aa11bb22aa11bb22aa11bb22';
+    let attempt = 0;
+    server.use(
+      detailHandler(),
+      http.get('/api/accounting/tenants/:tenantId/ledger', () => {
+        attempt += 1;
+        return attempt === 1
+          ? HttpResponse.json(
+              { detail: 'The ledger projection is rebuilding.', correlationId: reference },
+              { status: 503 },
+            )
+          : HttpResponse.json({ tenantId: 't1', balance: 1500, rows: ROWS });
+      }),
+    );
+    renderLedger();
+
+    expect(await screen.findByText("Couldn't load the ledger")).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('The ledger projection is rebuilding.');
+    expect(screen.getByText(`Reference: ${reference}`)).toBeInTheDocument();
+
+    // A tenant ledger that failed to load is not a tenant with no activity — the difference decides
+    // whether the operator re-enters a payment.
+    expect(screen.queryByText('No ledger activity yet')).toBeNull();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+
+    expect(await screen.findByText('Feb rent')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('separates a failed tenant read from a tenant that is genuinely gone', async () => {
+    const reference = 'cc33dd44cc33dd44cc33dd44cc33dd44';
+    server.use(
+      http.get('/api/directory/tenants/t1', () =>
+        HttpResponse.json(
+          { detail: 'The directory is unavailable.', correlationId: reference },
+          { status: 503 },
+        ),
+      ),
+      ledgerHandler(),
+    );
+    renderLedger();
+
+    expect(await screen.findByText("Couldn't load this tenant")).toBeInTheDocument();
+    expect(screen.getByText(`Reference: ${reference}`)).toBeInTheDocument();
+    expect(screen.queryByText('Tenant not found')).toBeNull();
+  });
+
+  it('still says the tenant is not found on a 404, which retrying cannot fix', async () => {
+    server.use(
+      http.get('/api/directory/tenants/t1', () => new HttpResponse(null, { status: 404 })),
+      ledgerHandler(),
+    );
+    renderLedger();
+
+    expect(await screen.findByText('Tenant not found')).toBeInTheDocument();
+    expect(screen.queryByText("Couldn't load this tenant")).toBeNull();
+  });
+
   it('is keyboard navigable — arrow keys move the selected row', async () => {
     server.use(detailHandler(), ledgerHandler());
     const { container } = renderLedger();

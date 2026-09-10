@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { server } from '@/test/mocks/server';
@@ -51,5 +52,45 @@ describe('ReconciliationHistory header count', () => {
     renderHistory();
 
     expect(await screen.findByText(/^0 reconciliations$/)).toBeInTheDocument();
+  });
+});
+
+describe('ReconciliationHistory body when the read failed', () => {
+  it('carries the support reference and retries in place', async () => {
+    const reference = '11223344112233441122334411223344';
+    let attempt = 0;
+    server.use(
+      http.get('/api/accounting/reconciliations', () => {
+        attempt += 1;
+        return attempt === 1
+          ? HttpResponse.json(
+              { detail: 'The reconciliation log is unavailable.', correlationId: reference },
+              { status: 503 },
+            )
+          : HttpResponse.json({
+              rows: [
+                {
+                  id: 'rec1',
+                  statementDate: '2026-02-28',
+                  statementBalance: 12000,
+                  clearedBalance: 12000,
+                  finalizedAt: '2026-03-01T10:00:00Z',
+                  itemCount: 8,
+                },
+              ],
+            });
+      }),
+    );
+    renderHistory();
+
+    expect(await screen.findByText("Couldn't load history")).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('The reconciliation log is unavailable.');
+    expect(screen.getByText(`Reference: ${reference}`)).toBeInTheDocument();
+    expect(screen.queryByText('No reconciliations yet')).toBeNull();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+
+    expect(await screen.findByText(/^1 reconciliation/)).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 });

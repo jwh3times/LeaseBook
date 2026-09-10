@@ -6,6 +6,6 @@
 // than in `lib/` because the split is what let `lib/telemetry.ts` re-implement transport policy
 // without anything saying otherwise (ADR-025).
 export { primeCsrf } from './client';
-export { asApiError, toApiError, type ApiError } from './apiError';
+export { asApiError, isNotFound, toApiError, type ApiError } from './apiError';
 export { download, unwrap, type ApiResult } from './request';
 export * from './generated';

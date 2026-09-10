@@ -16,6 +16,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { server } from '@/test/mocks/server';
 import { BalanceImportStep, EntityImportStep } from './ImportStep';
 import { OnboardingChecklist } from './OnboardingChecklist';
+import { OnboardingPage } from './OnboardingPage';
 import { VerificationStep } from './VerificationStep';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -968,5 +969,58 @@ describe('VerificationStep held-fees attestation field', () => {
 
     await waitFor(() => expect(verifyBody).toBeDefined());
     expect(verifyBody).toHaveProperty('heldPmFeesTotal', 100);
+  });
+});
+
+// ─── OnboardingPage status read ───────────────────────────────────────────────
+
+describe('OnboardingPage when the onboarding status cannot load', () => {
+  const REFERENCE = '99887766998877669988776699887766';
+
+  // The loading guard is `isPending || activeStep === null`, and `activeStep` is only ever seeded
+  // from a *successful* status — so before the error branch was hoisted above it, a failed read
+  // rendered a permanently animating skeleton and the error copy below it was unreachable.
+  it('carries the support reference and offers a retry', async () => {
+    server.use(
+      http.get('/api/onboarding/status', () =>
+        HttpResponse.json(
+          { detail: 'The migration service is unavailable.', correlationId: REFERENCE },
+          { status: 503 },
+        ),
+      ),
+    );
+
+    render(withRouter(<OnboardingPage />));
+
+    expect(await screen.findByText("Couldn't load onboarding status")).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('The migration service is unavailable.');
+    expect(screen.getByText(`Reference: ${REFERENCE}`)).toBeInTheDocument();
+  });
+
+  it('recovers into the wizard when the retry succeeds', async () => {
+    let attempt = 0;
+    server.use(
+      http.get('/api/onboarding/status', () => {
+        attempt += 1;
+        return attempt === 1
+          ? new HttpResponse(null, { status: 500 })
+          : HttpResponse.json({
+              banksConfigured: false,
+              entitiesImported: false,
+              balancesImported: false,
+              verified: false,
+              signedOff: false,
+              hasJournalData: false,
+              cutoverDate: null,
+            });
+      }),
+    );
+
+    render(withRouter(<OnboardingPage />));
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Retry' }));
+
+    expect(await screen.findByText('Migration Setup')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 });

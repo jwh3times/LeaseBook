@@ -6,6 +6,7 @@
 import { useState } from 'react';
 import { Badge, Button, Card, CardHeader, EmptyState, Money } from '@/design';
 import { ApiErrorNotice } from '@/components/ApiErrorNotice';
+import { QueryErrorState } from '@/components/QueryErrorState';
 import { trackInteraction } from '@/lib/telemetry';
 import { PeriodPicker } from './PeriodPicker';
 import { currentPeriod } from './periodUtils';
@@ -123,10 +124,10 @@ export function DisbursementRunScreen() {
             ))}
           </div>
         ) : preview.isError ? (
-          <EmptyState
-            icon="alert"
+          <QueryErrorState
+            query={preview}
             title="Couldn't load preview"
-            description="Please retry in a moment."
+            fallback="Failed to load the run preview."
           />
         ) : rows.length === 0 ? (
           <EmptyState

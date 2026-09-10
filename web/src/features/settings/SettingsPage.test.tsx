@@ -86,14 +86,42 @@ describe('SettingsPage', () => {
     server.use(
       http.get('/api/settings/org', () => HttpResponse.json(ORG)),
       http.get('/api/settings/banks', () =>
-        HttpResponse.json({ detail: 'service unavailable' }, { status: 503 }),
+        HttpResponse.json(
+          { detail: 'service unavailable', correlationId: 'c0ffee00c0ffee00c0ffee00c0ffee00' },
+          { status: 503 },
+        ),
       ),
     );
 
     renderSettings();
 
-    expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't load bank accounts");
+    // The heading still says what failed, and the alert now carries the server's own message plus
+    // the support reference the operator has to quote (ADR-025) — not a handwritten description.
+    expect(await screen.findByText("Couldn't load bank accounts")).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('service unavailable');
+    expect(screen.getByText('Reference: c0ffee00c0ffee00c0ffee00c0ffee00')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeEnabled();
     expect(screen.queryByText('No bank accounts yet.')).not.toBeInTheDocument();
+  });
+
+  it('recovers the bank-account list when the retry succeeds', async () => {
+    let attempt = 0;
+    server.use(
+      http.get('/api/settings/org', () => HttpResponse.json(ORG)),
+      http.get('/api/settings/banks', () => {
+        attempt += 1;
+        return attempt === 1
+          ? HttpResponse.json({ detail: 'service unavailable' }, { status: 503 })
+          : HttpResponse.json([ACTIVE_BANK]);
+      }),
+    );
+
+    renderSettings();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Retry' }));
+
+    expect(await screen.findByText('Operating Trust')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 
   it('distinguishes the PM operating account from the operating trust account', async () => {

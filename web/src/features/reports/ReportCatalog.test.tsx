@@ -221,6 +221,51 @@ describe('ReportCatalog', () => {
     expect(await screen.findByText("Couldn't load reports")).toBeInTheDocument();
   });
 
+  it('carries the support reference and retries when the catalog call fails', async () => {
+    const reference = '3a3b3c3d3a3b3c3d3a3b3c3d3a3b3c3d';
+    let attempt = 0;
+    server.use(
+      http.get('/api/reports', () => {
+        attempt += 1;
+        return attempt === 1
+          ? HttpResponse.json(
+              { detail: 'The report catalog is unavailable.', correlationId: reference },
+              { status: 503 },
+            )
+          : HttpResponse.json(CATALOG);
+      }),
+      ...baseHandlers(),
+    );
+    renderCatalog();
+
+    expect(await screen.findByText("Couldn't load reports")).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('The report catalog is unavailable.');
+    expect(screen.getByText(`Reference: ${reference}`)).toBeInTheDocument();
+    expect(screen.queryByText('No reports available')).toBeNull();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+
+    expect((await screen.findAllByText('All owner ending balances')).length).toBeGreaterThan(0);
+  });
+
+  it('carries the support reference when a report preview fails', async () => {
+    const reference = '4a4b4c4d4a4b4c4d4a4b4c4d4a4b4c4d';
+    server.use(
+      http.get('/api/reports/:id/preview', () =>
+        HttpResponse.json(
+          { detail: 'That period is still closing.', correlationId: reference },
+          { status: 422 },
+        ),
+      ),
+      ...baseHandlers(),
+    );
+    renderCatalog();
+
+    expect(await screen.findByText('Preview failed')).toBeInTheDocument();
+    expect(screen.getByText('That period is still closing.')).toBeInTheDocument();
+    expect(screen.getByText(`Reference: ${reference}`)).toBeInTheDocument();
+  });
+
   it('filters by search text', async () => {
     server.use(...baseHandlers());
     renderCatalog();

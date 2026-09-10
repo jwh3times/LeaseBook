@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { Badge, Button, Card, CardHeader, EmptyState, Icon, Money, StatCard } from '@/design';
 import { ApiErrorNotice } from '@/components/ApiErrorNotice';
+import { QueryErrorState } from '@/components/QueryErrorState';
 import { num } from '@/lib/directory';
 import { useDashboard, type DashboardResponse } from '@/lib/dashboard';
 import { trackInteraction } from '@/lib/telemetry';
@@ -41,11 +42,19 @@ export function DashboardPage() {
     return (
       <div className="pf-fade">
         <Card pad>
-          <EmptyState
-            icon="alert"
-            title="Couldn't load the dashboard"
-            description="Try again in a moment."
-          />
+          {query.isError ? (
+            <QueryErrorState
+              query={query}
+              title="Couldn't load the dashboard"
+              fallback="Failed to load the dashboard."
+            />
+          ) : (
+            <EmptyState
+              icon="alert"
+              title="Couldn't load the dashboard"
+              description="Try again in a moment."
+            />
+          )}
         </Card>
       </div>
     );

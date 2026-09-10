@@ -183,6 +183,32 @@ describe('TenantsPage', () => {
     expect(await screen.findByRole('heading', { name: 'New Renter' })).toBeInTheDocument();
   });
 
+  it('shows the server reason and support reference when the create fails', async () => {
+    const reference = '2a2b2c2d2a2b2c2d2a2b2c2d2a2b2c2d';
+    server.use(
+      listHandler(),
+      http.post('/api/directory/tenants', () =>
+        HttpResponse.json(
+          { detail: 'That tenant already exists on this lease.', correlationId: reference },
+          { status: 409 },
+        ),
+      ),
+    );
+    renderTenants();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'New tenant' }));
+    await userEvent.type(screen.getByLabelText('Display name'), 'Jasmine Carter');
+    await userEvent.click(screen.getByRole('button', { name: 'Create tenant' }));
+
+    // "Check the fields and try again" is wrong advice for a conflict, and it discarded the one
+    // string a support request needs.
+    expect(
+      await screen.findByText('That tenant already exists on this lease.'),
+    ).toBeInTheDocument();
+    expect(screen.getByText(`Reference: ${reference}`)).toBeInTheDocument();
+    expect(screen.queryByText(/check the fields and try again/i)).toBeNull();
+  });
+
   it('shows an empty state with no tenants', async () => {
     server.use(listHandler([]));
     renderTenants();
@@ -193,6 +219,34 @@ describe('TenantsPage', () => {
     server.use(http.get('/api/directory/tenants', () => new HttpResponse(null, { status: 500 })));
     renderTenants();
     expect(await screen.findByText(/couldn’t load this list/i)).toBeInTheDocument();
+  });
+
+  // IndexView is the scaffold behind every index route, so this covers them all at once.
+  it('carries the support reference and retries in place when the list read fails', async () => {
+    const reference = 'f1f2f3f4f1f2f3f4f1f2f3f4f1f2f3f4';
+    let attempt = 0;
+    server.use(
+      http.get('/api/directory/tenants', () => {
+        attempt += 1;
+        return attempt === 1
+          ? HttpResponse.json(
+              { detail: 'The directory is unavailable.', correlationId: reference },
+              { status: 503 },
+            )
+          : HttpResponse.json({ items: TENANTS, total: TENANTS.length, page: 1, pageSize: 200 });
+      }),
+    );
+    renderTenants();
+
+    expect(await screen.findByText(/couldn’t load this list/i)).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('The directory is unavailable.');
+    expect(screen.getByText(`Reference: ${reference}`)).toBeInTheDocument();
+    expect(screen.queryByText('No tenants yet')).toBeNull();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+
+    expect(await screen.findByText('Jasmine Carter')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 
   beforeEach(() => {

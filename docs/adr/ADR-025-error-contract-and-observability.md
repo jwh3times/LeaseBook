@@ -389,21 +389,61 @@ nine `directory.ts` fallbacks that read `'owners'`, `'tenant create'` and the li
 sentences once the contract routed them to `ApiErrorNotice`.
 
 **Residual, measured rather than estimated.** The 08-20 amendment counted ~28 branches across 18
-components. Eighteen components now render `ApiErrorNotice`; nine still hardcode an alert
-`EmptyState` — `OnboardingPage`, `RunHistoryView`, `ReportsPage`, `SettingsPage`, `AuditDrawer`,
-`LedgerPage`, `ReconciliationHistory`'s list body, and the shared `DetailPage`/`IndexView`
-scaffolds. #302 scoped itself to auxiliary reads: the ones feeding a selector, a label, a count, or
+components. #302 scoped itself to auxiliary reads: the ones feeding a selector, a label, a count, or
 an enable/disable decision, where the failure is invisible. The remainder are primary-content
 regions, where an error at least occupies the space the content would have. This decision binds them
-too; they are simply not yet converted, and the two scaffolds should be converted first since they
-cover many routes at once.
+too, and #349 converted them — see the addendum below for what that turned up.
+
+### 2026-09-09 addendum — the primary-content conversion, and what it cost to find
+
+Issue #349 converted the primary-content regions. Three findings are worth keeping, because each one
+is a thing the next audit of this kind will otherwise repeat.
+
+**The count was 17, not nine.** #349 named nine surfaces and supplied a recipe to re-derive them:
+`rg -l 'icon="alert"'` minus the files that already render `ApiErrorNotice`. That subtraction is
+wrong at the file level — a file converted on one surface still hides unconverted ones — and it
+masked eight more branches, all on money surfaces: `DashboardPage`, `BankingPage`'s bank-balances
+and register reads, both `ReportCatalog` reads, and the rent, late-fee and disbursement run
+previews. Audit by branch, not by file.
+
+**A private `unwrap` in `lib/directory.ts` made the whole Directory conversion inert.** It shadowed
+the shared one from `@/api` and threw a plain `Error` reading `Failed to load <what>`, discarding
+`code`, `correlationId` and `status` before any component saw them — so every tenant, owner and property
+read produced a fabricated message with no reference, and the conversion would have rendered that
+fabrication more prominently. `request.ts` records that three modules had each grown a private
+`unwrap` and were consolidated; this was a fourth that the consolidation missed. Its call sites
+passed sentences already, so they became correct `fallbackMessage`s unchanged.
+
+**`OnboardingPage`'s error branch was unreachable.** Its loading guard read
+`isPending || activeStep === null`, and `activeStep` is only ever seeded from a _successful_ status
+read — so a failed read rendered a permanently animating skeleton and never reached the error copy
+below it. This is the `isPending`-on-a-disabled-query trap in a second shape: any loading guard
+`or`-ed with a condition that a failure cannot clear swallows the error branch. The error branch now
+precedes the loading guard.
+
+**And it made three mutation sites correct as a side effect.** The New tenant, New owner and New
+property modals each caught the create failure and replaced it with "Check the fields and try
+again" — advice that is wrong for a 409 or a 503, and that discarded the reference. Before the
+`directory.ts` fix there was no reference to keep; after it there was, one line above where it was
+being thrown away. The three now render `ApiErrorNotice`, with the form's own validation copy kept
+as a plain string in the same slot, so a local "Choose an owner for this property" and a server
+rejection stay distinguishable.
+
+**What the conversion added.** `QueryErrorState` (`web/src/components/`) is the block-level form of
+the contract — `ApiErrorNotice` and a retry inside `EmptyState`'s layout — so a converted surface
+keeps its existing shape and heading and changes only what the description says. `isNotFound` in
+`web/src/api/apiError.ts` tells a failed read apart from a 404 on a detail route, which is a
+successful answer to a wrong id: those keep "Record not found" and offer no retry, since retrying
+reproduces the 404. `EmptyState` is now reserved for the third outcome only.
 
 **Not mechanically enforced, and it cannot be by the same means.**
 `SpaRequestExecutionTests` guards the transport rule because a hand-written success rule is a
 grep-able shape. "This component rendered a failed read as a confirmed value" is not: the defect is
 the absence of a branch, and a missing branch has no syntax. Coverage here is a per-surface test
-asserting the error state — 23 of them on this change — so a new auxiliary read is guarded only if
-its author writes one.
+asserting the error state — 23 of them on this change, plus 23 more on #349 — so a new read is
+guarded only if its author writes one. #349 added the sharper rule: a test that asserts only the
+error _heading_ is not coverage, because the heading survives the regression. Assert the mapped
+message and `Reference: <id>`, and confirm the test goes red with the branch reverted.
 
 ## Consequences
 

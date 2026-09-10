@@ -1,17 +1,8 @@
 import { Link } from 'react-router';
 import { useEffect, useState } from 'react';
-import {
-  Badge,
-  Button,
-  Card,
-  CardHeader,
-  EmptyState,
-  Input,
-  Select,
-  Table,
-  type TableColumn,
-} from '@/design';
+import { Badge, Button, Card, CardHeader, Input, Select, Table, type TableColumn } from '@/design';
 import { Modal } from '@/components/Modal';
+import { QueryErrorState } from '@/components/QueryErrorState';
 import {
   useBankAccounts,
   useCreateBankAccount,
@@ -429,11 +420,11 @@ function BankAccountsSection() {
           <div className="pf-skeleton" />
         </div>
       ) : banks.isError ? (
-        <div className="pf-pad" role="alert">
-          <EmptyState
-            icon="alert"
+        <div className="pf-pad">
+          <QueryErrorState
+            query={banks}
             title="Couldn't load bank accounts"
-            description={banks.error.message}
+            fallback="Failed to load the bank accounts."
           />
         </div>
       ) : (banks.data?.length ?? 0) === 0 ? (

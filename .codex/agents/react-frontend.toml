@@ -233,9 +233,26 @@ succeeded-with-nothing. Only the third is a fact about the org.
 - Error: `<ApiErrorNotice error={query.error} fallback="…" />` from `@/components/ApiErrorNotice`, plus a retry
   control. It renders the server's mapped message and the `Reference: <32-hex>` support id that
   `unwrap` carried through (ADR-025, 2026-09-09 amendment). A hardcoded `EmptyState` description
-  throws that id away — some primary-content surfaces still do and are being converted
+  throws that id away
 - Empty: `<EmptyState icon="inbox" …>` from `@/design`
 - Never render a bare `null` or skip the loading guard
+
+The snippet above is the **inline** shape, for an auxiliary read sitting beside a field. A
+**primary-content** region — a card body, a list, a whole page — uses `QueryErrorState` from
+`@/components/QueryErrorState` instead, which is the same contract in `EmptyState`'s layout:
+
+```tsx
+<QueryErrorState
+  query={query}
+  title="Couldn’t load the register"
+  fallback="Failed to load the register."
+/>
+```
+
+Never reach for `<EmptyState icon="alert" …>` on a query error. `EmptyState` is for the third
+outcome only — a read that succeeded and found nothing. The one exception is a failure that is not
+a failed read: a 404 on a detail route means the record is gone, and retrying reproduces it, so
+those keep their own empty state and are told apart with `isNotFound(query.error)` from `@/api`.
 
 ### A failed read is never rendered as a confirmed value
 
@@ -260,6 +277,11 @@ error. That is worse than a visible error, because they act on it.
 There is no build gate for this: a missing branch has no syntax to scan for, so
 `SpaRequestExecutionTests` cannot see it. Cover each auxiliary read's error state with a test
 (`server.use(http.get(…, () => HttpResponse.error()))`) — that test is the only enforcement.
+
+A test that only asserts the error _heading_ is not that enforcement: the heading usually survives
+the exact regression you are guarding against. Fault-inject a body carrying a `detail` and a
+`correlationId`, and assert both the mapped message and `Reference: <id>` — then confirm the test
+actually goes red with the branch reverted.
 
 ---
 
@@ -331,6 +353,8 @@ test("records a payment", async () => {
 | Terse `unwrap` fallbacks (`'owners'`)       | A sentence — the fallback is user-visible error copy         |
 | `isPending` alone on a disabled query       | Check `fetchStatus` too, or it loads forever                 |
 | `EmptyState` for a query error              | `<ApiErrorNotice error={…}>` + retry (keeps the support ref) |
+| `EmptyState` for a failed content region    | `<QueryErrorState query={…} title fallback />`               |
+| A private `unwrap` in a feature/lib module  | `unwrap` from `@/api` — a local one drops the support ref    |
 | `URL.createObjectURL` + anchor click        | `download(call, filename)` from `@/api`                      |
 | `document.cookie` reads outside `api/`      | The XSRF interceptor in `api/client.ts`                      |
 | Hand-written API types                      | Generated named model types from `@/api`                     |

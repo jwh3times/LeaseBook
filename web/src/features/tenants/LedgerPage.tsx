@@ -1,8 +1,10 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router';
+import { isNotFound } from '@/api';
 import { Avatar, Button, Card, EmptyState, Icon, IconButton, Input, Money, Select } from '@/design';
 import { num, useTenantDetail } from '@/lib/directory';
+import { QueryErrorState } from '@/components/QueryErrorState';
 import { RecordQuickSwitch } from '@/components/RecordQuickSwitch';
 import { TenantFinancialStandingBadges, TenantLifecycleBadge } from '@/components/StatusBadge';
 import { ApplyModal } from './ApplyModal';
@@ -127,7 +129,15 @@ export function LedgerPage() {
         <Card pad>
           <div className="pf-skeleton" style={{ maxWidth: 280, height: 26 }} />
         </Card>
-      ) : detail.isError || !detail.data ? (
+      ) : detail.isError && !isNotFound(detail.error) ? (
+        <Card pad>
+          <QueryErrorState
+            query={detail}
+            title="Couldn't load this tenant"
+            fallback="Failed to load the tenant."
+          />
+        </Card>
+      ) : !detail.data ? (
         <Card pad>
           <EmptyState
             icon="alert"
@@ -254,10 +264,10 @@ export function LedgerPage() {
           </div>
         ) : ledger.isError ? (
           <div className="pf-pad">
-            <EmptyState
-              icon="alert"
+            <QueryErrorState
+              query={ledger}
               title="Couldn't load the ledger"
-              description="Please retry in a moment."
+              fallback="Failed to load the ledger."
             />
           </div>
         ) : allRows.length === 0 ? (
