@@ -33,6 +33,24 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   deployment authoring and operator follow-ups. Agent guidance defers execution until public
   distribution is elected and requires deployment evidence before completion.
 
+- **Every screen that fails to load now says why, shows a support reference, and offers a Retry.**
+  Nineteen places across the dashboard, banking, the tenant ledger, reports, settings, migration
+  setup and the bulk-run screens used to answer a failed load with a fixed phrase such as "Please
+  retry in a moment", discarding the server's own explanation and the reference code needed to
+  report the problem. They now show the real reason, the reference, and a button that retries in
+  place instead of requiring a page reload. Two related problems are fixed with them: tenant, owner
+  and property screens were substituting an invented message for whatever the server actually said,
+  and migration setup answered a failed load with a loading animation that never stopped. The New
+  tenant, New owner and New property forms now report the server's actual reason for a rejected
+  create, with its reference, instead of always advising "check the fields" — advice that was wrong
+  whenever the cause was something other than the fields; the two Settings save forms likewise stop
+  guessing "you may need admin rights" when the server has already said what went wrong, and the
+  New bank account form and the lease late-fee overrides do the same. A page
+  that fails to load because of an unexpected server fault no longer tells you "nothing was saved",
+  which was never true of loading something. A detail page for a record that genuinely does not
+  exist still says so, and offers no retry. Screens that loaded successfully and found
+  nothing are unchanged.
+
 - **Each correctness check now has an identifier of its own.** Two different checks were both
   reported as "I5" — the migration-clearing residual and a cash/accrual convergence assertion — so an
   operator investigating an alert could be sent to the wrong reference entry. The migration-clearing

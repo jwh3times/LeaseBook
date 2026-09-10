@@ -258,3 +258,54 @@ describe('BankingPage when the property list cannot be read', () => {
     expect(screen.queryByRole('alert')).toBeNull();
   });
 });
+
+describe('BankingPage read errors on the trust surfaces', () => {
+  it('carries the support reference when the bank balances cannot be read', async () => {
+    const reference = '7a7b7c7d7a7b7c7d7a7b7c7d7a7b7c7d';
+    server.use(
+      http.get('/api/accounting/banks/balances', () =>
+        HttpResponse.json(
+          { detail: 'The balances projection is rebuilding.', correlationId: reference },
+          { status: 503 },
+        ),
+      ),
+      registerHandler(REGISTER),
+      ...baseHandlers(),
+    );
+    renderPage();
+
+    expect(await screen.findByText("Couldn't load bank accounts")).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('The balances projection is rebuilding.');
+    expect(screen.getByText(`Reference: ${reference}`)).toBeInTheDocument();
+
+    // The bank book balance is one side of the trust equation. "You have no bank accounts" is a
+    // different claim from "we could not read them", and only one of them is ever true here.
+    expect(screen.queryByText('No bank accounts yet')).toBeNull();
+  });
+
+  it('carries the support reference when the register cannot be read, and retries in place', async () => {
+    const reference = '8a8b8c8d8a8b8c8d8a8b8c8d8a8b8c8d';
+    let attempt = 0;
+    server.use(
+      http.get('/api/accounting/banks/:id/register', () => {
+        attempt += 1;
+        return attempt === 1
+          ? HttpResponse.json(
+              { detail: 'The register is rebuilding.', correlationId: reference },
+              { status: 503 },
+            )
+          : HttpResponse.json(REGISTER);
+      }),
+      ...baseHandlers(),
+    );
+    renderPage();
+
+    expect(await screen.findByText("Couldn't load the register")).toBeInTheDocument();
+    expect(screen.getByText(`Reference: ${reference}`)).toBeInTheDocument();
+    expect(screen.queryByText('No transactions')).toBeNull();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+
+    expect(await screen.findByText('Rent deposit')).toBeInTheDocument();
+  });
+});

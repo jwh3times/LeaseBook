@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Badge, Button, Card, CardHeader, EmptyState, Icon } from '@/design';
 import { ApiErrorNotice } from '@/components/ApiErrorNotice';
+import { QueryErrorState } from '@/components/QueryErrorState';
 import { asApiError } from '@/api';
 import { useOwners, useProperties } from '@/lib/directory';
 import { useBankBalances } from '@/features/banking/banking';
@@ -336,7 +337,11 @@ function BuilderPanel({ report }: BuilderPanelProps) {
         {showBasis && <BasisChip value={basis} onSelect={setBasis} />}
       </div>
 
-      <ApiErrorNotice error={downloadError} style={{ padding: '8px var(--card-pad)' }} />
+      <ApiErrorNotice
+        error={downloadError}
+        kind="read"
+        style={{ padding: '8px var(--card-pad)' }}
+      />
 
       {/* Preview */}
       <div className="pf-builder-preview">
@@ -359,10 +364,10 @@ function BuilderPanel({ report }: BuilderPanelProps) {
           </div>
         ) : preview.isError ? (
           <div className="pf-pad">
-            <EmptyState
-              icon="alert"
+            <QueryErrorState
+              query={preview}
               title="Preview failed"
-              description="Could not load report data. Please retry."
+              fallback="Could not load the report data."
             />
           </div>
         ) : preview.data ? (
@@ -441,10 +446,10 @@ export function ReportCatalog() {
           </div>
         </div>
         <Card pad>
-          <EmptyState
-            icon="alert"
+          <QueryErrorState
+            query={catalog}
             title="Couldn't load reports"
-            description="Please retry in a moment."
+            fallback="Failed to load the report catalog."
           />
         </Card>
       </div>

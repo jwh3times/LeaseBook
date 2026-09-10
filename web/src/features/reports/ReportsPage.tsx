@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useParams } from 'react-router';
 import { Card, EmptyState } from '@/design';
+import { QueryErrorState } from '@/components/QueryErrorState';
 import { ReportCatalog } from './ReportCatalog';
 import { OwnerStatementView } from './OwnerStatementView';
 import { currentPeriodFilters, type StatementFilters, useStatement } from './reports';
@@ -55,11 +56,19 @@ function OwnerStatementPage({ ownerId }: OwnerStatementPageProps) {
           </div>
         </div>
         <Card pad>
-          <EmptyState
-            icon="alert"
-            title="Couldn't load the statement"
-            description="Please retry in a moment."
-          />
+          {statement.isError ? (
+            <QueryErrorState
+              query={statement}
+              title="Couldn't load the statement"
+              fallback="Failed to load the owner statement."
+            />
+          ) : (
+            <EmptyState
+              icon="alert"
+              title="Couldn't load the statement"
+              description="Please retry in a moment."
+            />
+          )}
         </Card>
       </div>
     );

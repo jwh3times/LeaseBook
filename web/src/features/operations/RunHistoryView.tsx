@@ -3,6 +3,7 @@
  * Each run shows: type badge, period, summary counts, and total posted.
  */
 import { Badge, Card, CardHeader, EmptyState, Money } from '@/design';
+import { QueryErrorState } from '@/components/QueryErrorState';
 import { useRunHistory } from './useRuns';
 import type { BadgeTone } from '@/design';
 
@@ -57,10 +58,10 @@ export function RunHistoryView() {
           ))}
         </div>
       ) : history.isError ? (
-        <EmptyState
-          icon="alert"
+        <QueryErrorState
+          query={history}
           title="Couldn't load run history"
-          description="Please retry in a moment."
+          fallback="Failed to load the run history."
         />
       ) : (history.data?.runs ?? []).length === 0 ? (
         <EmptyState

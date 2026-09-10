@@ -3,7 +3,7 @@
 - **Audience:** Operators and maintainers
 - **Status:** Living runbook; canonical error-diagnosis reference
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-09-09
+- **Last reviewed:** 2026-09-10
 
 How to turn the reference an operator sees on screen into the full server-side detail in
 Application Insights. See [ADR-025](../adr/ADR-025-error-contract-and-observability.md) for the
@@ -40,8 +40,8 @@ logged) the underlying exception.
 
 ## Step 1 — find the reference on screen
 
-Every error alert in the product — mutations, and the read surfaces that render the same alert —
-shows the mapped error message plus, when the server supplied one, a small monospace line:
+Every error alert in the product — a rejected mutation and a failed read alike — shows the mapped
+error message plus, when the server supplied one, a small monospace line:
 
 ```
 Reference: 4bf92f3577b34da6a3ce929d0e0e4736
@@ -51,18 +51,26 @@ It is selectable as a whole (click once, copy). Ask the reporting user for this 
 directly off your own screenshot/session. The reference is a 32-character hex string — the W3C
 trace id of the request that produced the error.
 
-One specific case is worth recognizing on sight: if the message reads **"Something went wrong on
-our end. Nothing was saved."**, the server's terminal exception handler caught something
-unplanned (an `internal_error`, not a typed rejection). The reference is the only way to find out
-what happened — nothing about the cause is in the response.
+One specific case is worth recognizing on sight: if the message reads **"Something went wrong on our
+end."** — with **"Nothing was saved."** appended when the failed operation was a write — the server's
+terminal exception handler caught something unplanned (an `internal_error`, not a typed rejection).
+A failed _read_ gets the shorter wording, because it was never saving anything; both carry the
+reference, and on this path it is the only way to find out what happened, since nothing about the
+cause is in the response.
 
 **When a failed page load shows no reference.** Since ADR-025's 2026-08-20 amendment, failed _reads_
 carry the same `code` and `correlationId` as mutations — every SPA call runs through one success rule
-in `web/src/api` — so a read surface that renders the standard alert shows the reference too (the
-banking import wizard's match preview, for example). Many read-error branches still render a plain
-empty-state description and never display what they received, so the absence of a reference on a
-failed load means "this surface does not render one yet", not "the server did not send one". Fall
-back to searching by route and time window:
+in `web/src/api` — and since the 2026-09-10 addendum every read-error branch in the SPA renders that
+reference: content regions through `QueryErrorState`, inline reads through `ApiErrorNotice` directly.
+
+So a failed load with no reference now means something, rather than nothing. Read it as one of:
+
+- the server sent no `correlationId` (the failure never reached the request pipeline — a proxy or
+  ingress error page, or the browser could not connect at all), or
+- what the user is looking at is not a read error. A detail route that says the record was not found
+  is reporting a 404, which is a successful answer to a wrong id and carries no reference by design.
+
+Either way, fall back to searching by route and time window:
 
 ```kusto
 requests

@@ -52,6 +52,12 @@ export async function openPalette(page: Page): Promise<Locator> {
 // this string, rather than asserting on a generic status message.
 export const ROUTE_FAIL_DETAIL = 'Simulated failure (e2e).';
 
+// The `correlationId` the same forced failure carries. ADR-025 routes reads through the mutation
+// error contract, so a failed read renders `Reference: <32-hex>` — the id an operator quotes in a
+// support request. Asserting on it end-to-end is what proves the id survives transport, and not
+// just the component that formats it.
+export const ROUTE_FAIL_REFERENCE = 'e2e5fa11e2e5fa11e2e5fa11e2e5fa11';
+
 /**
  * Forces every request matching `urlPattern` to fail with a 500 + JSON problem body, so a spec can
  * assert the SPA's designed error branch renders (not blank content or a raw network error). A JSON
@@ -68,7 +74,11 @@ export async function routeFail(page: Page, urlPattern: string | RegExp): Promis
     route.fulfill({
       status: 500,
       contentType: 'application/json',
-      body: JSON.stringify({ title: 'Internal Server Error', detail: ROUTE_FAIL_DETAIL }),
+      body: JSON.stringify({
+        title: 'Internal Server Error',
+        detail: ROUTE_FAIL_DETAIL,
+        correlationId: ROUTE_FAIL_REFERENCE,
+      }),
     }),
   );
 }

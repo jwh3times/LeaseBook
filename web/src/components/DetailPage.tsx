@@ -1,7 +1,9 @@
 import type { UseQueryResult } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router';
+import { isNotFound } from '@/api';
 import { Button, Card, EmptyState } from '@/design';
+import { QueryErrorState } from './QueryErrorState';
 import { RecordQuickSwitch } from './RecordQuickSwitch';
 import type { EntityKind } from './recordNav';
 
@@ -47,7 +49,15 @@ export function DetailPage<T>({
         <Card pad>
           <div className="pf-skeleton" style={{ maxWidth: 260, height: 22 }} />
         </Card>
-      ) : query.isError || !data ? (
+      ) : query.isError && !isNotFound(query.error) ? (
+        <Card pad>
+          <QueryErrorState
+            query={query}
+            title="Couldn’t load this record"
+            fallback="Failed to load the record."
+          />
+        </Card>
+      ) : !data ? (
         <Card pad>
           <EmptyState
             icon="alert"

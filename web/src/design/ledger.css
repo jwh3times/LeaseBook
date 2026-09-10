@@ -142,6 +142,17 @@
   user-select: all;
 }
 
+/*
+ * Block-level variant for a primary-content read error (QueryErrorState). The inline form sits on
+ * one line beside a field; centred inside `.pf-empty p` a long server message plus the support
+ * reference would otherwise overflow the 360px column instead of wrapping.
+ */
+.pf-api-error.pf-api-error-block {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
 /* WP-06 modals (apply/void) + audit drawer body. */
 .pf-modal-body {
   padding: 16px 20px;

@@ -4,8 +4,9 @@
  * Preview → confirm in 2 clicks (period + Confirm): within the budgeted click depth.
  */
 import { useState } from 'react';
-import { Button, Card, CardHeader, EmptyState } from '@/design';
+import { Button, Card, CardHeader } from '@/design';
 import { ApiErrorNotice } from '@/components/ApiErrorNotice';
+import { QueryErrorState } from '@/components/QueryErrorState';
 import { trackInteraction } from '@/lib/telemetry';
 import { PeriodPicker } from './PeriodPicker';
 import { currentPeriod } from './periodUtils';
@@ -91,10 +92,10 @@ export function RentRunScreen() {
             ))}
           </div>
         ) : preview.isError ? (
-          <EmptyState
-            icon="alert"
+          <QueryErrorState
+            query={preview}
             title="Couldn't load preview"
-            description="Please retry in a moment."
+            fallback="Failed to load the run preview."
           />
         ) : (
           <>

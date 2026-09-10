@@ -235,4 +235,26 @@ describe('LeaseLateFeeModal when org settings are unavailable', () => {
     expect(await screen.findByRole('option', { name: 'Inherit (5 days)' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /save overrides/i })).toBeEnabled();
   });
+
+  it('reports the server reason and reference when saving the overrides fails', async () => {
+    const reference = '5151515151515151515151515151abcd';
+    server.use(
+      http.get('/api/settings/org', () => HttpResponse.json(ORG)),
+      http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 })),
+      http.put('/api/directory/leases/:id', () =>
+        HttpResponse.json(
+          { detail: 'That lease is in a locked period.', correlationId: reference },
+          { status: 409 },
+        ),
+      ),
+    );
+
+    renderModal(detailWith({}));
+    await userEvent.click(await screen.findByRole('button', { name: /save overrides/i }));
+
+    // A locked period is not "couldn't save the lease overrides" — it names a cause the operator
+    // can act on, and it carries the reference (ADR-025).
+    expect(await screen.findByText('That lease is in a locked period.')).toBeInTheDocument();
+    expect(screen.getByText(`Reference: ${reference}`)).toBeInTheDocument();
+  });
 });

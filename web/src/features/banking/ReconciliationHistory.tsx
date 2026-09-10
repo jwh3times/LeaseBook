@@ -1,4 +1,5 @@
 import { Badge, type BadgeTone, Button, Card, EmptyState, Money } from '@/design';
+import { QueryErrorState } from '@/components/QueryErrorState';
 import { num } from '@/lib/directory';
 import { downloadReconciliationReport, useReconciliationHistory } from './banking';
 
@@ -48,10 +49,10 @@ export function ReconciliationHistory({ bankAccountId }: { bankAccountId: string
         </div>
       ) : history.isError ? (
         <div className="pf-pad">
-          <EmptyState
-            icon="alert"
+          <QueryErrorState
+            query={history}
             title="Couldn't load history"
-            description="Please retry in a moment."
+            fallback="Failed to load the reconciliation history."
           />
         </div>
       ) : (history.data?.length ?? 0) === 0 ? (

@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
+import { asApiError, type ApiError } from '@/api';
+import { ApiErrorNotice } from '@/components/ApiErrorNotice';
 import { Avatar, Button, Input, Money, type TableColumn } from '@/design';
 import { IndexView } from '@/components/IndexView';
 import { Modal } from '@/components/Modal';
@@ -81,7 +83,9 @@ function NewOwnerModal({
   const [initials, setInitials] = useState('');
   const [email, setEmail] = useState('');
   const [feePct, setFeePct] = useState('8');
-  const [error, setError] = useState<string | null>(null);
+  // A string is this form's own validation copy; an ApiError is the server's, and only the second
+  // carries the support reference (ADR-025).
+  const [error, setError] = useState<string | ApiError | null>(null);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -97,8 +101,8 @@ function NewOwnerModal({
         reserveAmount: 0,
       });
       onCreated(result.id);
-    } catch {
-      setError('Could not create the owner. Check the fields and try again.');
+    } catch (e) {
+      setError(asApiError(e, 'Could not create the owner. Check the fields and try again.'));
     }
   }
 
@@ -154,11 +158,14 @@ function NewOwnerModal({
             onChange={(e) => setEmail(e.target.value)}
           />
         </div>
-        {error && (
-          <div className="err" role="alert">
-            {error}
-          </div>
-        )}
+        {error &&
+          (typeof error === 'string' ? (
+            <div className="err" role="alert">
+              {error}
+            </div>
+          ) : (
+            <ApiErrorNotice error={error} fallback="Could not create the owner." />
+          ))}
       </form>
     </Modal>
   );

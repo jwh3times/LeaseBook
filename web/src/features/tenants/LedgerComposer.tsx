@@ -230,7 +230,11 @@ export function LedgerComposer({ tenantId, onPosted, initialMode }: LedgerCompos
             {needsBank &&
               (banks.isError ? (
                 <div className="pf-composer-field col gap6">
-                  <ApiErrorNotice error={banks.error} fallback="Couldn’t load the bank accounts." />
+                  <ApiErrorNotice
+                    error={banks.error}
+                    fallback="Couldn’t load the bank accounts."
+                    kind="read"
+                  />
                   <Button
                     variant="ghost"
                     size="sm"

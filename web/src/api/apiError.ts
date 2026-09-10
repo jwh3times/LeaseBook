@@ -60,3 +60,15 @@ export function asApiError(e: unknown, fallback = 'Request failed.'): ApiError {
   }
   return { message: fallback, code: undefined, correlationId: undefined, status: undefined };
 }
+
+/**
+ * Was this failure the server saying the record does not exist?
+ *
+ * A detail surface has two different failures to tell apart: the record is gone (a dead link, or it
+ * was removed) and the read itself failed. Only the second is worth a support reference and a
+ * retry — retrying a 404 just produces the same 404 — so the copy keys off status here rather than
+ * treating every `isError` alike.
+ */
+export function isNotFound(error: unknown): boolean {
+  return !!error && typeof error === 'object' && (error as { status?: unknown }).status === 404;
+}

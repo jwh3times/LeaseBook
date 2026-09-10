@@ -389,21 +389,124 @@ nine `directory.ts` fallbacks that read `'owners'`, `'tenant create'` and the li
 sentences once the contract routed them to `ApiErrorNotice`.
 
 **Residual, measured rather than estimated.** The 08-20 amendment counted ~28 branches across 18
-components. Eighteen components now render `ApiErrorNotice`; nine still hardcode an alert
-`EmptyState` — `OnboardingPage`, `RunHistoryView`, `ReportsPage`, `SettingsPage`, `AuditDrawer`,
-`LedgerPage`, `ReconciliationHistory`'s list body, and the shared `DetailPage`/`IndexView`
-scaffolds. #302 scoped itself to auxiliary reads: the ones feeding a selector, a label, a count, or
+components. #302 scoped itself to auxiliary reads: the ones feeding a selector, a label, a count, or
 an enable/disable decision, where the failure is invisible. The remainder are primary-content
 regions, where an error at least occupies the space the content would have. This decision binds them
-too; they are simply not yet converted, and the two scaffolds should be converted first since they
-cover many routes at once.
+too, and #349 converted them — see the addendum below for what that turned up.
+
+### 2026-09-10 addendum — the primary-content conversion, and what it cost to find
+
+Issue #349 converted the primary-content regions. The findings below are worth keeping, because each
+one is a thing the next audit of this kind will otherwise repeat.
+
+**The count was 19 branches, not nine surfaces, and it took two passes to establish that.** #349
+named nine surfaces and supplied a recipe to re-derive them: `rg -l 'icon="alert"'` minus the files
+that already render `ApiErrorNotice`. That subtraction is wrong at the file level — a file converted
+on one surface still hides unconverted ones — and it masked eight more branches, all on money
+surfaces: `DashboardPage`, `BankingPage`'s bank-balances and register reads, both `ReportCatalog`
+reads, and the rent, late-fee and disbursement run previews. Counting by branch also split one of
+the nine in two, since `LedgerPage` carried the tenant-header read and the ledger body separately —
+so the nine named surfaces were already ten branches before the eight were added.
+
+Auditing by branch rather than by file found those eight. It did **not** find the nineteenth, which
+pre-merge review did: `SettingsPage`'s org-settings read rendered a bare string in a `Card`, not an
+`EmptyState` — a second branch inside a file the original list already named. Both recipes keyed off
+`EmptyState`, so neither could see it. The lesson is narrower
+than "audit by branch": an audit that greps for the _shape_ of the wrong answer only ever finds the
+instances that happened to choose that shape. Enumerate the population instead — every `isError`
+branch — and check each against the contract.
+
+**A private `unwrap` in `lib/directory.ts` made the whole Directory conversion inert.** It shadowed
+the shared one from `@/api` and threw a plain `Error` reading `Failed to load <what>`, discarding
+`code`, `correlationId` and `status` before any component saw them — so every tenant, owner and property
+read produced a fabricated message with no reference, and the conversion would have rendered that
+fabrication more prominently. `request.ts` records that three modules had each grown a private
+`unwrap` and were consolidated; this was a fourth that the consolidation missed. Its call sites
+passed sentences already, so they became correct `fallbackMessage`s unchanged.
+
+**`OnboardingPage`'s error branch was unreachable.** Its loading guard read
+`isPending || activeStep === null`, and `activeStep` is only ever seeded from a _successful_ status
+read — so a failed read rendered a permanently animating skeleton and never reached the error copy
+below it. This is the `isPending`-on-a-disabled-query trap in a second shape: any loading guard
+`or`-ed with a condition that a failure cannot clear swallows the error branch. The error branch now
+precedes the loading guard.
+
+**And it made five mutation sites correct as a side effect.** The New tenant, New owner and New
+property modals each caught the create failure and replaced it with "Check the fields and try
+again" — advice that is wrong for a 409 or a 503, and that discarded the reference. `SettingsPage`'s
+two save forms did the same with "Couldn't save. You may need admin rights.", guessing a cause the
+server had already stated. Before the
+`directory.ts` fix there was no reference to keep; after it there was, one line above where it was
+being thrown away. The three now render `ApiErrorNotice`, with the form's own validation copy kept
+as a plain string in the same slot, so a local "Choose an owner for this property" and a server
+rejection stay distinguishable.
+
+**No mutation residual — and the last two exposed a third private success rule.** Documentation
+review found two write branches still answering a rejection with copy of their own: `SettingsPage`'s
+`NewBankModal` ("Could not create the account. Check the fields and try again.") and
+`LeaseLateFeeModal` ("Couldn't save the lease overrides."). Both are converted, which makes seven
+mutation sites in total.
+
+Converting the second one is what surfaced `useUpdateLease`: it did `if (error) throw error`,
+throwing the raw problem body rather than mapping it. The rejection therefore reached the UI with no
+`message` and no `status` at all, so the surface silently fell back to its own copy while the
+server's reason sat unread inside the thrown object — the test asserting the server's message failed
+even after the component was correct. That is the same defect as the private `unwrap` above —
+the second hand-rolled success rule found in `directory.ts` alone. It now goes through the shared `unwrap` with
+`allowNoContent`.
+
+`LoginPage`'s "Invalid email or password." is **not** in that set and must stay as it is: a
+deliberate uniform answer that refuses to distinguish an unknown account from a wrong password.
+`rg 'if \(error\) throw error'` and `rg 'isError && <span className="err"'` are both now empty
+outside the generated client.
+
+**And the first test to actually drive a rejection found four unhandled ones.** Four handlers
+awaited `mutateAsync` with no `catch`: `LeaseLateFeeModal`, both `SettingsPage` save forms, and
+`VerificationStep`'s verify. React discards the promise an async click or submit handler returns, so
+each rejection escaped as an unhandled rejection. It was invisible while the surfaces answered with
+their own copy, because the copy is driven by `isError` rather than by the promise — the UI looked
+handled while nothing handled the rejection. Vitest reports it as `Errors 1 error` alongside a fully
+green `Tests` line and exits non-zero, so a `grep` for the test counts alone reports success on a
+red run: check the exit code, not the summary.
+
+**The `internal_error` copy was false on every read, and no test could see it.** `ApiErrorNotice`
+replaced the message with "Something went wrong on our end. Nothing was saved." whenever
+`code === 'internal_error'` — and `UnhandledExceptionHandler` stamps exactly that code on every
+unhandled exception, so it is what a production 500 produces. Harmless on a mutation, which is what
+the copy was written for; false on a read, and this conversion is what would have scaled it to
+nineteen whole-page content regions. `ApiErrorNotice` now takes `kind`, defaulting to `'write'` so
+no existing mutation site changes, and a read says "Something went wrong on our end." without the
+claim about saving. A file download counts as a read.
+
+Why no test caught it is the more useful half. The e2e `routeFail` helper sent
+`{ title: 'Internal Server Error', detail }` with no `code`, and `toApiError` derives `code` from
+`title` when the body omits it — so the fixture produced `code: 'Internal Server Error'` and never
+entered the branch. Every unit test used a 503-with-`detail` or a bodiless 500. The suite exercised
+the contract against a shape the server does not emit. A fault-injection fixture is itself a claim
+about the server, and it has to be checked against the server's own error factory.
+
+`routeFail` still omits `code`, deliberately, and that is worth stating so it is not "fixed" later:
+adding `code: 'internal_error'` would make `ApiErrorNotice` replace the message with the generic
+copy, and every spec in `error-states.spec.ts` asserts on `ROUTE_FAIL_DETAIL` — the helper models a
+_typed_ 500 that explained itself, not an unhandled exception. #349 added the `correlationId` it had
+been missing, so the e2e now proves the reference survives transport; the `internal_error` copy is
+covered at the unit layer instead, where both `kind`s can be asserted directly.
+
+**What the conversion added.** `QueryErrorState` (`web/src/components/`) is the block-level form of
+the contract — `ApiErrorNotice` and a retry inside `EmptyState`'s layout — so a converted surface
+keeps its existing shape and heading and changes only what the description says. `isNotFound` in
+`web/src/api/apiError.ts` tells a failed read apart from a 404 on a detail route, which is a
+successful answer to a wrong id: those keep "Record not found" and offer no retry, since retrying
+reproduces the 404. `EmptyState` is now reserved for the third outcome only.
 
 **Not mechanically enforced, and it cannot be by the same means.**
 `SpaRequestExecutionTests` guards the transport rule because a hand-written success rule is a
 grep-able shape. "This component rendered a failed read as a confirmed value" is not: the defect is
 the absence of a branch, and a missing branch has no syntax. Coverage here is a per-surface test
-asserting the error state — 23 of them on this change — so a new auxiliary read is guarded only if
-its author writes one.
+asserting the error state — 23 of them on this change, plus 31 more on #349 — so a new read is
+guarded only if its author writes one. #349 added the sharper rule: a test that asserts only the
+error _heading_ is not coverage, because the heading survives the regression. Assert the mapped
+message and `Reference: <id>`, and confirm the test goes red with the branch reverted.
 
 ## Consequences
 

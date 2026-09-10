@@ -149,3 +149,37 @@ describe('RentRunScreen capability version token', () => {
     expect(previews).toBe(1);
   });
 });
+
+describe('RentRunScreen when the preview cannot be read', () => {
+  it('carries the support reference, offers a retry, and does not offer the run', async () => {
+    const reference = '6a6b6c6d6a6b6c6d6a6b6c6d6a6b6c6d';
+    let attempt = 0;
+    server.use(
+      http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 })),
+      http.get('/api/operations/runs/rent/preview', () => {
+        attempt += 1;
+        return attempt === 1
+          ? HttpResponse.json(
+              { detail: 'The rent schedule is unavailable.', correlationId: reference },
+              { status: 503 },
+            )
+          : HttpResponse.json(PREVIEW);
+      }),
+    );
+    renderScreen();
+
+    expect(await screen.findByText("Couldn't load preview")).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('The rent schedule is unavailable.');
+    expect(screen.getByText(`Reference: ${reference}`)).toBeInTheDocument();
+
+    // A run posts money off a preview. With no preview read, there is nothing to post from, so the
+    // confirm control must not be reachable at all — not merely disabled.
+    expect(screen.queryByRole('button', { name: /^Confirm/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Nothing to post' })).toBeNull();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+
+    expect(await screen.findByText('Devon Pryor')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Confirm/ })).toBeInTheDocument();
+  });
+});

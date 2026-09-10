@@ -1,5 +1,6 @@
 import { EmptyState, Icon } from '@/design';
 import { Modal } from '@/components/Modal';
+import { QueryErrorState } from '@/components/QueryErrorState';
 import { useEntryAudit } from './ledger';
 
 interface AuditDrawerProps {
@@ -35,10 +36,10 @@ export function AuditDrawer({ entryId, onClose }: AuditDrawerProps) {
             ))}
           </div>
         ) : audit.isError ? (
-          <EmptyState
-            icon="alert"
+          <QueryErrorState
+            query={audit}
             title="Couldn't load the history"
-            description="Please retry in a moment."
+            fallback="Failed to load the entry history."
           />
         ) : audit.data.rows.length === 0 ? (
           <EmptyState

@@ -1,17 +1,10 @@
 import { Link } from 'react-router';
 import { useEffect, useState } from 'react';
-import {
-  Badge,
-  Button,
-  Card,
-  CardHeader,
-  EmptyState,
-  Input,
-  Select,
-  Table,
-  type TableColumn,
-} from '@/design';
+import { Badge, Button, Card, CardHeader, Input, Select, Table, type TableColumn } from '@/design';
+import { asApiError, type ApiError } from '@/api';
+import { ApiErrorNotice } from '@/components/ApiErrorNotice';
 import { Modal } from '@/components/Modal';
+import { QueryErrorState } from '@/components/QueryErrorState';
 import {
   useBankAccounts,
   useCreateBankAccount,
@@ -64,7 +57,15 @@ export function SettingsPage() {
         <Card pad>
           <div className="pf-skeleton" style={{ maxWidth: 280, height: 22 }} />
         </Card>
-      ) : settings.isError || !settings.data ? (
+      ) : settings.isError ? (
+        <Card pad>
+          <QueryErrorState
+            query={settings}
+            title="Couldn’t load settings"
+            fallback="Failed to load the organization settings."
+          />
+        </Card>
+      ) : !settings.data ? (
         <Card pad>Couldn’t load settings.</Card>
       ) : (
         <div className="col gap16">
@@ -99,18 +100,24 @@ function OrgProfileForm({ initial }: { initial: OrgSettings }) {
 
   async function save(event: React.FormEvent) {
     event.preventDefault();
-    await update.mutateAsync({
-      accountingBasis: form.accountingBasis,
-      moneyNegativeDisplay: form.moneyNegativeDisplay,
-      legalName: form.legalName ?? null,
-      address: form.address ?? null,
-      city: form.city ?? null,
-      state: form.state ?? null,
-      zip: form.zip ?? null,
-      phone: form.phone ?? null,
-      logoBlobRef: form.logoBlobRef ?? null,
-    });
-    setSaved(true);
+    try {
+      await update.mutateAsync({
+        accountingBasis: form.accountingBasis,
+        moneyNegativeDisplay: form.moneyNegativeDisplay,
+        legalName: form.legalName ?? null,
+        address: form.address ?? null,
+        city: form.city ?? null,
+        state: form.state ?? null,
+        zip: form.zip ?? null,
+        phone: form.phone ?? null,
+        logoBlobRef: form.logoBlobRef ?? null,
+      });
+      setSaved(true);
+    } catch {
+      // The rejection is rendered from `update.error`; catching it here keeps the promise handled,
+      // because an async submit handler's returned promise is discarded by React and an uncaught
+      // rejection escapes the test run as an unhandled error.
+    }
   }
 
   return (
@@ -199,7 +206,14 @@ function OrgProfileForm({ initial }: { initial: OrgSettings }) {
               Saved
             </Badge>
           )}
-          {update.isError && <span className="err">Couldn’t save. You may need admin rights.</span>}
+          {/*
+            "You may need admin rights" was a guess at the cause, and a wrong one for a validation
+            rejection or a 500. The server says which it was, and carries the reference (ADR-025).
+          */}
+          <ApiErrorNotice
+            error={update.error}
+            fallback="Couldn’t save. You may need admin rights."
+          />
         </div>
       </form>
     </Card>
@@ -230,27 +244,33 @@ function LateFeeForm({ initial }: { initial: OrgSettings }) {
 
   async function save(event: React.FormEvent) {
     event.preventDefault();
-    await update.mutateAsync({
-      // The profile fields are replaced unconditionally by the handler (the late-fee fields are
-      // patch-style), so they must be carried through or saving a late fee would blank the org's
-      // legal name, address and phone.
-      legalName: initial.legalName ?? null,
-      address: initial.address ?? null,
-      city: initial.city ?? null,
-      state: initial.state ?? null,
-      zip: initial.zip ?? null,
-      phone: initial.phone ?? null,
-      logoBlobRef: initial.logoBlobRef ?? null,
-      accountingBasis: initial.accountingBasis,
-      moneyNegativeDisplay: initial.moneyNegativeDisplay,
+    try {
+      await update.mutateAsync({
+        // The profile fields are replaced unconditionally by the handler (the late-fee fields are
+        // patch-style), so they must be carried through or saving a late fee would blank the org's
+        // legal name, address and phone.
+        legalName: initial.legalName ?? null,
+        address: initial.address ?? null,
+        city: initial.city ?? null,
+        state: initial.state ?? null,
+        zip: initial.zip ?? null,
+        phone: initial.phone ?? null,
+        logoBlobRef: initial.logoBlobRef ?? null,
+        accountingBasis: initial.accountingBasis,
+        moneyNegativeDisplay: initial.moneyNegativeDisplay,
 
-      rentDueDay: Number(form.rentDueDay),
-      lateFeeGraceDays: Number(form.lateFeeGraceDays),
-      lateFeeKind: form.lateFeeKind,
-      lateFeeAmount: Number(form.lateFeeAmount),
-      lateFeeRateBps: Number(form.lateFeeRateBps),
-    });
-    setSaved(true);
+        rentDueDay: Number(form.rentDueDay),
+        lateFeeGraceDays: Number(form.lateFeeGraceDays),
+        lateFeeKind: form.lateFeeKind,
+        lateFeeAmount: Number(form.lateFeeAmount),
+        lateFeeRateBps: Number(form.lateFeeRateBps),
+      });
+      setSaved(true);
+    } catch {
+      // The rejection is rendered from `update.error`; catching it here keeps the promise handled,
+      // because an async submit handler's returned promise is discarded by React and an uncaught
+      // rejection escapes the test run as an unhandled error.
+    }
   }
 
   const isPercent = form.lateFeeKind === 'percent';
@@ -350,7 +370,14 @@ function LateFeeForm({ initial }: { initial: OrgSettings }) {
               Saved
             </Badge>
           )}
-          {update.isError && <span className="err">Couldn’t save. You may need admin rights.</span>}
+          {/*
+            "You may need admin rights" was a guess at the cause, and a wrong one for a validation
+            rejection or a 500. The server says which it was, and carries the reference (ADR-025).
+          */}
+          <ApiErrorNotice
+            error={update.error}
+            fallback="Couldn’t save. You may need admin rights."
+          />
         </div>
       </form>
     </Card>
@@ -429,11 +456,11 @@ function BankAccountsSection() {
           <div className="pf-skeleton" />
         </div>
       ) : banks.isError ? (
-        <div className="pf-pad" role="alert">
-          <EmptyState
-            icon="alert"
+        <div className="pf-pad">
+          <QueryErrorState
+            query={banks}
             title="Couldn't load bank accounts"
-            description={banks.error.message}
+            fallback="Failed to load the bank accounts."
           />
         </div>
       ) : (banks.data?.length ?? 0) === 0 ? (
@@ -457,7 +484,9 @@ function NewBankModal({ onClose }: { onClose: () => void }) {
   const [institution, setInstitution] = useState('');
   const [mask, setMask] = useState('');
   const [purpose, setPurpose] = useState<string>('trust');
-  const [error, setError] = useState<string | null>(null);
+  // A string is this form's own validation copy; an ApiError is the server's, and only the second
+  // carries the support reference (ADR-025).
+  const [error, setError] = useState<string | ApiError | null>(null);
   const selectedPurpose = describeBankPurpose(purpose)!;
 
   async function submit(event: React.FormEvent) {
@@ -471,8 +500,8 @@ function NewBankModal({ onClose }: { onClose: () => void }) {
         purpose,
       });
       onClose();
-    } catch {
-      setError('Could not create the account. Check the fields and try again.');
+    } catch (e) {
+      setError(asApiError(e, 'Could not create the account. Check the fields and try again.'));
     }
   }
 
@@ -530,11 +559,14 @@ function NewBankModal({ onClose }: { onClose: () => void }) {
             </span>
           </div>
         </div>
-        {error && (
-          <div className="err" role="alert">
-            {error}
-          </div>
-        )}
+        {error &&
+          (typeof error === 'string' ? (
+            <div className="err" role="alert">
+              {error}
+            </div>
+          ) : (
+            <ApiErrorNotice error={error} fallback="Could not create the account." />
+          ))}
       </form>
     </Modal>
   );

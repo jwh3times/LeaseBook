@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Card, CardHeader, EmptyState } from '@/design';
+import { QueryErrorState } from '@/components/QueryErrorState';
 import { BalanceImportStep, EntityImportStep } from './ImportStep';
 import { OnboardingChecklist } from './OnboardingChecklist';
 import { useOnboardingStatus } from './onboarding';
@@ -42,6 +43,20 @@ export function OnboardingPage() {
     }
   }, [status, activeStep]);
 
+  if (statusQuery.isError) {
+    return (
+      <div className="pf-fade">
+        <Card pad>
+          <QueryErrorState
+            query={statusQuery}
+            title="Couldn't load onboarding status"
+            fallback="Failed to load onboarding status."
+          />
+        </Card>
+      </div>
+    );
+  }
+
   if (statusQuery.isPending || activeStep === null) {
     return (
       <div className="pf-fade">
@@ -59,7 +74,7 @@ export function OnboardingPage() {
     );
   }
 
-  if (statusQuery.isError || !status) {
+  if (!status) {
     return (
       <div className="pf-fade">
         <Card pad>

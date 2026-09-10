@@ -9,6 +9,7 @@ import {
   Table,
   type TableColumn,
 } from '@/design';
+import { QueryErrorState } from './QueryErrorState';
 import { useSetRecordOrder, type EntityKind } from './recordNav';
 import { trackInteraction } from '@/lib/telemetry';
 
@@ -113,10 +114,10 @@ export function IndexView<T>({
           <ListSkeleton columns={columns.length} />
         ) : query.isError ? (
           <div className="pf-pad">
-            <EmptyState
-              icon="alert"
+            <QueryErrorState
+              query={query}
               title="Couldn’t load this list"
-              description="Try again in a moment."
+              fallback="Failed to load the list."
             />
           </div>
         ) : filtered.length === 0 ? (

@@ -1,5 +1,12 @@
 import { expect, test } from '@playwright/test';
-import { DEMO_ADMIN, openPalette, ROUTE_FAIL_DETAIL, routeFail, signIn } from './helpers';
+import {
+  DEMO_ADMIN,
+  openPalette,
+  ROUTE_FAIL_DETAIL,
+  ROUTE_FAIL_REFERENCE,
+  routeFail,
+  signIn,
+} from './helpers';
 
 // Error/empty-state e2e (WP-4 step 2, folded with step 3): asserts the SPA's designed error and empty
 // branches actually render — not a blank page, a raw network error, or a client-fabricated figure.
@@ -36,6 +43,12 @@ test.describe('error states', () => {
     // No client-side financial math fabricates a figure in place of the failed server response — the
     // SPA renders server figures only, so a failed list must show no money glyph at all here.
     await expect(errorState).not.toContainText('$');
+
+    // The server's own message and the support reference reach the operator, and there is a way out
+    // of the failure that is not "reload the page" (ADR-025).
+    await expect(errorState.getByRole('alert')).toContainText(ROUTE_FAIL_DETAIL);
+    await expect(errorState.getByText(`Reference: ${ROUTE_FAIL_REFERENCE}`)).toBeVisible();
+    await expect(errorState.getByRole('button', { name: 'Retry' })).toBeEnabled();
   });
 
   test('a failed ledger payment post surfaces the composer error alert, with no phantom row posted', async ({

@@ -70,6 +70,73 @@ describe('SettingsPage', () => {
     );
   });
 
+  it('shows the server reason and reference when the org settings read fails', async () => {
+    const reference = '0f0e0d0c0f0e0d0c0f0e0d0c0f0e0d0c';
+    server.use(
+      http.get('/api/settings/org', () =>
+        HttpResponse.json(
+          { detail: 'The settings service is unavailable.', correlationId: reference },
+          { status: 503 },
+        ),
+      ),
+      http.get('/api/settings/banks', () => HttpResponse.json([ACTIVE_BANK])),
+    );
+    renderSettings();
+
+    // This branch was a bare string in a Card, so neither the `icon="alert"` sweep nor an
+    // EmptyState-shaped audit could see it.
+    expect(await screen.findByText('Couldn’t load settings')).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('The settings service is unavailable.');
+    expect(screen.getByText(`Reference: ${reference}`)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeEnabled();
+  });
+
+  it('does not claim nothing was saved when a read hits an unhandled server error', async () => {
+    server.use(
+      http.get('/api/settings/org', () =>
+        HttpResponse.json(
+          { code: 'internal_error', title: 'internal_error', correlationId: 'abcdefabcdefabcd' },
+          { status: 500 },
+        ),
+      ),
+      http.get('/api/settings/banks', () => HttpResponse.json([ACTIVE_BANK])),
+    );
+    renderSettings();
+
+    expect(await screen.findByText('Couldn’t load settings')).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('Something went wrong on our end.');
+    expect(screen.queryByText(/nothing was saved/i)).toBeNull();
+    expect(screen.getByText('Reference: abcdefabcdefabcd')).toBeInTheDocument();
+  });
+
+  it('reports the server reason and reference when creating a bank account fails', async () => {
+    const reference = '6262626262626262626262626262beef';
+    server.use(
+      http.get('/api/settings/org', () => HttpResponse.json(ORG)),
+      http.get('/api/settings/banks', () => HttpResponse.json([ACTIVE_BANK])),
+      http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 })),
+      http.post('/api/settings/banks', () =>
+        HttpResponse.json(
+          { detail: 'An account with that mask already exists.', correlationId: reference },
+          { status: 409 },
+        ),
+      ),
+    );
+    renderSettings();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'New account' }));
+    await userEvent.type(screen.getByLabelText('Name'), 'Reserve Trust');
+    await userEvent.click(screen.getByRole('button', { name: 'Create account' }));
+
+    // A bank account defines a trust boundary, so "check the fields" is the wrong answer to a
+    // conflict — and it threw away the reference.
+    expect(
+      await screen.findByText('An account with that mask already exists.'),
+    ).toBeInTheDocument();
+    expect(screen.getByText(`Reference: ${reference}`)).toBeInTheDocument();
+    expect(screen.queryByText(/check the fields and try again/i)).toBeNull();
+  });
+
   it('lists trust bank accounts with status badge', async () => {
     server.use(
       http.get('/api/settings/org', () => HttpResponse.json(ORG)),
@@ -86,14 +153,42 @@ describe('SettingsPage', () => {
     server.use(
       http.get('/api/settings/org', () => HttpResponse.json(ORG)),
       http.get('/api/settings/banks', () =>
-        HttpResponse.json({ detail: 'service unavailable' }, { status: 503 }),
+        HttpResponse.json(
+          { detail: 'service unavailable', correlationId: 'c0ffee00c0ffee00c0ffee00c0ffee00' },
+          { status: 503 },
+        ),
       ),
     );
 
     renderSettings();
 
-    expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't load bank accounts");
+    // The heading still says what failed, and the alert now carries the server's own message plus
+    // the support reference the operator has to quote (ADR-025) — not a handwritten description.
+    expect(await screen.findByText("Couldn't load bank accounts")).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('service unavailable');
+    expect(screen.getByText('Reference: c0ffee00c0ffee00c0ffee00c0ffee00')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeEnabled();
     expect(screen.queryByText('No bank accounts yet.')).not.toBeInTheDocument();
+  });
+
+  it('recovers the bank-account list when the retry succeeds', async () => {
+    let attempt = 0;
+    server.use(
+      http.get('/api/settings/org', () => HttpResponse.json(ORG)),
+      http.get('/api/settings/banks', () => {
+        attempt += 1;
+        return attempt === 1
+          ? HttpResponse.json({ detail: 'service unavailable' }, { status: 503 })
+          : HttpResponse.json([ACTIVE_BANK]);
+      }),
+    );
+
+    renderSettings();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Retry' }));
+
+    expect(await screen.findByText('Operating Trust')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 
   it('distinguishes the PM operating account from the operating trust account', async () => {

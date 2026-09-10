@@ -6,6 +6,13 @@ export interface ApiErrorNoticeProps {
   error: ApiError | null;
   /** Shown when the mapper produced an empty message (parity with the old per-surface fallbacks). */
   fallback?: string;
+  /**
+   * What failed. Only the `internal_error` copy differs: "Nothing was saved" is a true and
+   * reassuring thing to say about a rejected write, and a false one about a read, which was never
+   * saving anything. Defaults to `'write'` because every call site predating the read conversion
+   * is a mutation.
+   */
+  kind?: 'read' | 'write';
   className?: string;
   style?: CSSProperties;
 }
@@ -15,10 +22,15 @@ export interface ApiErrorNoticeProps {
  * plus the selectable support reference when the server supplied one. Mutations only, until the
  * 2026-08-20 amendment put reads through the same success rule; a failed read now arrives here
  * carrying the same `code` and `correlationId`.
+ *
+ * A read passes `kind="read"` so the internal_error copy does not claim "Nothing was saved" about
+ * an operation that was never saving. `UnhandledExceptionHandler` stamps `internal_error` on every
+ * unhandled exception, so this is the copy a production 500 actually produces — not an edge case.
  */
 export function ApiErrorNotice({
   error,
   fallback = 'Request failed.',
+  kind = 'write',
   className,
   style,
 }: ApiErrorNoticeProps) {
@@ -26,7 +38,9 @@ export function ApiErrorNotice({
 
   const message =
     error.code === 'internal_error'
-      ? 'Something went wrong on our end. Nothing was saved.'
+      ? kind === 'read'
+        ? 'Something went wrong on our end.'
+        : 'Something went wrong on our end. Nothing was saved.'
       : error.message || fallback;
 
   return (
