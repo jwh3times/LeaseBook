@@ -100,18 +100,24 @@ function OrgProfileForm({ initial }: { initial: OrgSettings }) {
 
   async function save(event: React.FormEvent) {
     event.preventDefault();
-    await update.mutateAsync({
-      accountingBasis: form.accountingBasis,
-      moneyNegativeDisplay: form.moneyNegativeDisplay,
-      legalName: form.legalName ?? null,
-      address: form.address ?? null,
-      city: form.city ?? null,
-      state: form.state ?? null,
-      zip: form.zip ?? null,
-      phone: form.phone ?? null,
-      logoBlobRef: form.logoBlobRef ?? null,
-    });
-    setSaved(true);
+    try {
+      await update.mutateAsync({
+        accountingBasis: form.accountingBasis,
+        moneyNegativeDisplay: form.moneyNegativeDisplay,
+        legalName: form.legalName ?? null,
+        address: form.address ?? null,
+        city: form.city ?? null,
+        state: form.state ?? null,
+        zip: form.zip ?? null,
+        phone: form.phone ?? null,
+        logoBlobRef: form.logoBlobRef ?? null,
+      });
+      setSaved(true);
+    } catch {
+      // The rejection is rendered from `update.error`; catching it here keeps the promise handled,
+      // because an async submit handler's returned promise is discarded by React and an uncaught
+      // rejection escapes the test run as an unhandled error.
+    }
   }
 
   return (
@@ -238,27 +244,33 @@ function LateFeeForm({ initial }: { initial: OrgSettings }) {
 
   async function save(event: React.FormEvent) {
     event.preventDefault();
-    await update.mutateAsync({
-      // The profile fields are replaced unconditionally by the handler (the late-fee fields are
-      // patch-style), so they must be carried through or saving a late fee would blank the org's
-      // legal name, address and phone.
-      legalName: initial.legalName ?? null,
-      address: initial.address ?? null,
-      city: initial.city ?? null,
-      state: initial.state ?? null,
-      zip: initial.zip ?? null,
-      phone: initial.phone ?? null,
-      logoBlobRef: initial.logoBlobRef ?? null,
-      accountingBasis: initial.accountingBasis,
-      moneyNegativeDisplay: initial.moneyNegativeDisplay,
+    try {
+      await update.mutateAsync({
+        // The profile fields are replaced unconditionally by the handler (the late-fee fields are
+        // patch-style), so they must be carried through or saving a late fee would blank the org's
+        // legal name, address and phone.
+        legalName: initial.legalName ?? null,
+        address: initial.address ?? null,
+        city: initial.city ?? null,
+        state: initial.state ?? null,
+        zip: initial.zip ?? null,
+        phone: initial.phone ?? null,
+        logoBlobRef: initial.logoBlobRef ?? null,
+        accountingBasis: initial.accountingBasis,
+        moneyNegativeDisplay: initial.moneyNegativeDisplay,
 
-      rentDueDay: Number(form.rentDueDay),
-      lateFeeGraceDays: Number(form.lateFeeGraceDays),
-      lateFeeKind: form.lateFeeKind,
-      lateFeeAmount: Number(form.lateFeeAmount),
-      lateFeeRateBps: Number(form.lateFeeRateBps),
-    });
-    setSaved(true);
+        rentDueDay: Number(form.rentDueDay),
+        lateFeeGraceDays: Number(form.lateFeeGraceDays),
+        lateFeeKind: form.lateFeeKind,
+        lateFeeAmount: Number(form.lateFeeAmount),
+        lateFeeRateBps: Number(form.lateFeeRateBps),
+      });
+      setSaved(true);
+    } catch {
+      // The rejection is rendered from `update.error`; catching it here keeps the promise handled,
+      // because an async submit handler's returned promise is discarded by React and an uncaught
+      // rejection escapes the test run as an unhandled error.
+    }
   }
 
   const isPercent = form.lateFeeKind === 'percent';

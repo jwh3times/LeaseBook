@@ -51,24 +51,30 @@ export function LeaseLateFeeModal({
 
   async function save() {
     if (!lease) return;
-    await update.mutateAsync({
-      id: lease.id,
-      // UpdateLease replaces the whole lease, so the untouched fields ride along unchanged.
-      tenantId: detail.id,
-      unitId: lease.unitId,
-      startDate: lease.startDate ?? null,
-      endDate: lease.endDate ?? null,
-      rent: lease.rent,
-      depositRequired: lease.depositRequired,
-      status: lease.status,
+    try {
+      await update.mutateAsync({
+        id: lease.id,
+        // UpdateLease replaces the whole lease, so the untouched fields ride along unchanged.
+        tenantId: detail.id,
+        unitId: lease.unitId,
+        startDate: lease.startDate ?? null,
+        endDate: lease.endDate ?? null,
+        rent: lease.rent,
+        depositRequired: lease.depositRequired,
+        status: lease.status,
 
-      lateFeeRentDueDayOverride: dueDay,
-      lateFeeGraceDaysOverride: grace,
-      lateFeeKindOverride: kind,
-      lateFeeAmountOverride: amount,
-      lateFeeRateBpsOverride: rateBps,
-    });
-    onClose();
+        lateFeeRentDueDayOverride: dueDay,
+        lateFeeGraceDaysOverride: grace,
+        lateFeeKindOverride: kind,
+        lateFeeAmountOverride: amount,
+        lateFeeRateBpsOverride: rateBps,
+      });
+      onClose();
+    } catch {
+      // The rejection is rendered from the mutation's own `error`; catching it here keeps the
+      // promise handled, because an async click/submit handler's returned promise is discarded by
+      // React and an uncaught rejection escapes the test run as an unhandled error.
+    }
   }
 
   return (

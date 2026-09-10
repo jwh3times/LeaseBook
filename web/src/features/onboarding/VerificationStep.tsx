@@ -85,23 +85,29 @@ export function VerificationStep({
 
   async function handleVerify() {
     setSignoffError(null);
-    const result = await verify.mutateAsync({
-      cutoverDate,
-      ownerEquityTotal: parseFloat(ownerEquity) || 0,
-      depositLiabilityTotal: parseFloat(depositLiability) || 0,
-      // D5: a blank field means UNATTESTED (null), NOT zero. Never coerce blank → 0 here, or the
-      // sign-off gate would read a fabricated attestation. A filled field sends the parsed number.
-      heldPmFeesTotal: heldPmFees.trim() === '' ? null : parseFloat(heldPmFees) || 0,
-      bankBookBalances: bankRows
-        .filter((r) => r.bankAccountId || r.accountCode)
-        .map((r) => ({
-          bankAccountId: r.bankAccountId || '',
-          accountCode: r.accountCode || null,
-          expectedBook: parseFloat(r.expectedBook) || 0,
-        })),
-    });
-    setReport(result);
-    setReportId(result.verificationId);
+    try {
+      const result = await verify.mutateAsync({
+        cutoverDate,
+        ownerEquityTotal: parseFloat(ownerEquity) || 0,
+        depositLiabilityTotal: parseFloat(depositLiability) || 0,
+        // D5: a blank field means UNATTESTED (null), NOT zero. Never coerce blank → 0 here, or the
+        // sign-off gate would read a fabricated attestation. A filled field sends the parsed number.
+        heldPmFeesTotal: heldPmFees.trim() === '' ? null : parseFloat(heldPmFees) || 0,
+        bankBookBalances: bankRows
+          .filter((r) => r.bankAccountId || r.accountCode)
+          .map((r) => ({
+            bankAccountId: r.bankAccountId || '',
+            accountCode: r.accountCode || null,
+            expectedBook: parseFloat(r.expectedBook) || 0,
+          })),
+      });
+      setReport(result);
+      setReportId(result.verificationId);
+    } catch {
+      // The rejection is rendered from the mutation's own `error`; catching it here keeps the
+      // promise handled, because an async click/submit handler's returned promise is discarded by
+      // React and an uncaught rejection escapes the test run as an unhandled error.
+    }
   }
 
   async function handleSignoff() {

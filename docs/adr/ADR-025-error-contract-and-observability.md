@@ -460,6 +460,15 @@ deliberate uniform answer that refuses to distinguish an unknown account from a 
 `rg 'if \(error\) throw error'` and `rg 'isError && <span className="err"'` are both now empty
 outside the generated client.
 
+**And the first test to actually drive a rejection found four unhandled ones.** Four handlers
+awaited `mutateAsync` with no `catch`: `LeaseLateFeeModal`, both `SettingsPage` save forms, and
+`VerificationStep`'s verify. React discards the promise an async click or submit handler returns, so
+each rejection escaped as an unhandled rejection. It was invisible while the surfaces answered with
+their own copy, because the copy is driven by `isError` rather than by the promise — the UI looked
+handled while nothing handled the rejection. Vitest reports it as `Errors 1 error` alongside a fully
+green `Tests` line and exits non-zero, so a `grep` for the test counts alone reports success on a
+red run: check the exit code, not the summary.
+
 **The `internal_error` copy was false on every read, and no test could see it.** `ApiErrorNotice`
 replaced the message with "Something went wrong on our end. Nothing was saved." whenever
 `code === 'internal_error'` — and `UnhandledExceptionHandler` stamps exactly that code on every
