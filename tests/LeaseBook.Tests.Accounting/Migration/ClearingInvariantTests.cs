@@ -93,7 +93,7 @@ public sealed class ClearingInvariantTests(PostgresFixture fixture)
                     BankAccountId: scope.TrustBankId), ct);
             }
 
-            // I5: clearing nets to $0 in both bases after a balanced set.
+            // I9: clearing nets to $0 in both bases after a balanced set.
             var clearingViolations = await new InvariantChecks(scope.Db).CheckMigrationClearingBalancedAsync(ct);
             clearingViolations.ShouldBeEmpty(
                 string.Join("; ", clearingViolations.Select(v => $"{v.Invariant}:{v.Detail}")));
@@ -125,7 +125,7 @@ public sealed class ClearingInvariantTests(PostgresFixture fixture)
                 cutover, $"opening:{cutover:yyyy-MM-dd}:owner-equity-unbalanced={owner}",
                 OwnerId: owner, BankAccountId: scope.TrustBankId), ct);
 
-            // The clearing account now has a net debit (the gap). I5 should report a violation.
+            // The clearing account now has a net debit (the gap). I9 should report a violation.
             var clearingViolations = await new InvariantChecks(scope.Db).CheckMigrationClearingBalancedAsync(ct);
             clearingViolations.ShouldNotBeEmpty("an unbalanced set must leave a detectable clearing residual");
 
