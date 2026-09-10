@@ -109,6 +109,34 @@ describe('SettingsPage', () => {
     expect(screen.getByText('Reference: abcdefabcdefabcd')).toBeInTheDocument();
   });
 
+  it('reports the server reason and reference when creating a bank account fails', async () => {
+    const reference = '6262626262626262626262626262beef';
+    server.use(
+      http.get('/api/settings/org', () => HttpResponse.json(ORG)),
+      http.get('/api/settings/banks', () => HttpResponse.json([ACTIVE_BANK])),
+      http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 })),
+      http.post('/api/settings/banks', () =>
+        HttpResponse.json(
+          { detail: 'An account with that mask already exists.', correlationId: reference },
+          { status: 409 },
+        ),
+      ),
+    );
+    renderSettings();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'New account' }));
+    await userEvent.type(screen.getByLabelText('Name'), 'Reserve Trust');
+    await userEvent.click(screen.getByRole('button', { name: 'Create account' }));
+
+    // A bank account defines a trust boundary, so "check the fields" is the wrong answer to a
+    // conflict — and it threw away the reference.
+    expect(
+      await screen.findByText('An account with that mask already exists.'),
+    ).toBeInTheDocument();
+    expect(screen.getByText(`Reference: ${reference}`)).toBeInTheDocument();
+    expect(screen.queryByText(/check the fields and try again/i)).toBeNull();
+  });
+
   it('lists trust bank accounts with status badge', async () => {
     server.use(
       http.get('/api/settings/org', () => HttpResponse.json(ORG)),

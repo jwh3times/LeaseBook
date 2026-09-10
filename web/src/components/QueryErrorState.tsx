@@ -18,7 +18,7 @@ export interface QueryErrorStateProps {
 }
 
 /**
- * The read-error state for a **primary-content** region (ADR-025, 2026-09-09 amendment).
+ * The read-error state for a **primary-content** region (ADR-025, 2026-09-10 addendum).
  *
  * These regions used to render a failed read as an `EmptyState` with a handwritten description,
  * which threw away the `code` and `correlationId` that `unwrap` carries — leaving the operator with

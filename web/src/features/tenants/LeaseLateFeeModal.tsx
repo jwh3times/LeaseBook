@@ -199,7 +199,7 @@ export function LeaseLateFeeModal({
           <Button variant="ghost" size="sm" onClick={onClose}>
             Cancel
           </Button>
-          {update.isError && <span className="err">Couldn’t save the lease overrides.</span>}
+          <ApiErrorNotice error={update.error} fallback="Couldn’t save the lease overrides." />
         </div>
       </div>
     </Modal>

@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living architecture guide
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-09-07
+- **Last reviewed:** 2026-09-10
 
 This is the canonical public map of the system **as implemented**. It explains how the pieces fit
 together and links the decisions that shaped them without reproducing every invariant. Accepted
@@ -169,6 +169,14 @@ instead of a hardcoded string. A source-scanning architecture test fails the bui
 rule, `createObjectURL`, a `document.cookie` read, or a raw `fetch(` appears under `web/src` outside
 `web/src/api` — see the 2026-08-20 amendment to
 [ADR-025](adr/ADR-025-error-contract-and-observability.md).
+
+The UI renders what that rule carries rather than substituting copy of its own: a failed read shows
+the server's mapped message, the support reference, and a retry — inline beside an auxiliary read,
+and through `QueryErrorState` for a content region — so an operator can quote a reference for any
+failure a user reports, and an empty state means only that the read succeeded and found nothing. A
+404 on a detail route is the deliberate exception: it is a correct answer to a wrong id, so it keeps
+a plain not-found state and offers no retry. See the 2026-09-09 amendment and addendum to ADR-025
+and the [diagnostics runbook](runbooks/diagnostics.md).
 
 ## Data and persistence
 

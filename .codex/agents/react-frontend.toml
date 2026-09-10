@@ -277,6 +277,11 @@ error. That is worse than a visible error, because they act on it.
   stale bank list may name a since-deactivated account
 - Gate the loading branch on `fetchStatus`, not `isPending` alone: a disabled query
   (`enabled: false`) is pending forever, so `isPending` alone renders a permanent "Loading…"
+- Put the error branch **before** the loading guard, and never `or` the guard with a condition that
+  only a success can clear. `OnboardingPage` guarded on `isPending || activeStep === null` with
+  `activeStep` seeded from a successful status read, so a failed read animated a skeleton forever and
+  the error branch below it was dead code. Ordering is the fix; a test that renders the failure and
+  asserts the error copy is what catches it
 - `unwrap`'s `fallbackMessage` is user-visible copy, so write a sentence — "Failed to load the owner
   list", never `'owners'`. It surfaces whenever the server body carries no `detail` or `title`
 

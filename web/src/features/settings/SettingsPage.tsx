@@ -1,6 +1,7 @@
 import { Link } from 'react-router';
 import { useEffect, useState } from 'react';
 import { Badge, Button, Card, CardHeader, Input, Select, Table, type TableColumn } from '@/design';
+import { asApiError, type ApiError } from '@/api';
 import { ApiErrorNotice } from '@/components/ApiErrorNotice';
 import { Modal } from '@/components/Modal';
 import { QueryErrorState } from '@/components/QueryErrorState';
@@ -471,7 +472,9 @@ function NewBankModal({ onClose }: { onClose: () => void }) {
   const [institution, setInstitution] = useState('');
   const [mask, setMask] = useState('');
   const [purpose, setPurpose] = useState<string>('trust');
-  const [error, setError] = useState<string | null>(null);
+  // A string is this form's own validation copy; an ApiError is the server's, and only the second
+  // carries the support reference (ADR-025).
+  const [error, setError] = useState<string | ApiError | null>(null);
   const selectedPurpose = describeBankPurpose(purpose)!;
 
   async function submit(event: React.FormEvent) {
@@ -485,8 +488,8 @@ function NewBankModal({ onClose }: { onClose: () => void }) {
         purpose,
       });
       onClose();
-    } catch {
-      setError('Could not create the account. Check the fields and try again.');
+    } catch (e) {
+      setError(asApiError(e, 'Could not create the account. Check the fields and try again.'));
     }
   }
 
@@ -544,11 +547,14 @@ function NewBankModal({ onClose }: { onClose: () => void }) {
             </span>
           </div>
         </div>
-        {error && (
-          <div className="err" role="alert">
-            {error}
-          </div>
-        )}
+        {error &&
+          (typeof error === 'string' ? (
+            <div className="err" role="alert">
+              {error}
+            </div>
+          ) : (
+            <ApiErrorNotice error={error} fallback="Could not create the account." />
+          ))}
       </form>
     </Modal>
   );

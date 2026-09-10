@@ -121,13 +121,15 @@ type UpdateLeaseBody = UpdateLease;
 export function useUpdateLease(tenantId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, ...body }: UpdateLeaseBody & { id: string }) => {
-      const { error } = await putApiDirectoryLeasesById({
-        path: { id },
-        body: body as UpdateLeaseBody,
-      });
-      if (error) throw error;
-    },
+    mutationFn: async ({ id, ...body }: UpdateLeaseBody & { id: string }) =>
+      // Throwing the raw problem body skipped `toApiError`, so the rejection reached the UI with no
+      // `message` and no `status` — the surface fell back to its own copy while the server's reason
+      // sat unread in the object. The endpoint answers 204, hence `allowNoContent`.
+      unwrap(
+        putApiDirectoryLeasesById({ path: { id }, body: body as UpdateLeaseBody }),
+        'Failed to save the lease.',
+        { allowNoContent: true },
+      ),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['tenant', tenantId] }),
   });
 }
