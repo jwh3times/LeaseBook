@@ -50,6 +50,7 @@ export function LedgerComposer({ tenantId, onPosted, initialMode }: LedgerCompos
   const interactions = useRef(1);
 
   const banks = useBankAccounts(true);
+  const banksUnavailable = banks.isPending || banks.isError;
   const open = mode !== null;
   const activeCategory = mode === 'payment' ? 'Payment' : category;
   const needsBank = categoryNeedsBank(activeCategory);
@@ -113,6 +114,16 @@ export function LedgerComposer({ tenantId, onPosted, initialMode }: LedgerCompos
     const value = Number.parseFloat(amount);
     if (!(value > 0)) {
       setError({ message: 'Enter an amount greater than zero.' });
+      return;
+    }
+    if (needsBank && banksUnavailable) {
+      // An unread list empties the selector exactly the way an unmade choice does, but only one of
+      // them is the operator's to fix. See ApplyModal for why a failed refetch blocks too.
+      setError({
+        message: banks.isPending
+          ? 'Still loading the bank accounts — try again in a moment.'
+          : 'The bank accounts couldn’t be loaded, so this can’t be posted yet.',
+      });
       return;
     }
     if (needsBank && !effectiveBankId) {
@@ -216,22 +227,35 @@ export function LedgerComposer({ tenantId, onPosted, initialMode }: LedgerCompos
               />
             </label>
 
-            {needsBank && (
-              <label className="pf-composer-field">
-                <span>Bank</span>
-                <Select
-                  value={effectiveBankId}
-                  onChange={(e) => choose(setBankId)(e.target.value)}
-                  aria-label="Bank account"
-                >
-                  {(banks.data ?? []).map((bank) => (
-                    <option key={bank.id} value={bank.id}>
-                      {bank.name}
-                    </option>
-                  ))}
-                </Select>
-              </label>
-            )}
+            {needsBank &&
+              (banks.isError ? (
+                <div className="pf-composer-field col gap6">
+                  <ApiErrorNotice error={banks.error} fallback="Couldn’t load the bank accounts." />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => void banks.refetch()}
+                    disabled={banks.isFetching}
+                  >
+                    {banks.isFetching ? 'Retrying…' : 'Retry'}
+                  </Button>
+                </div>
+              ) : (
+                <label className="pf-composer-field">
+                  <span>Bank</span>
+                  <Select
+                    value={effectiveBankId}
+                    onChange={(e) => choose(setBankId)(e.target.value)}
+                    aria-label="Bank account"
+                  >
+                    {(banks.data ?? []).map((bank) => (
+                      <option key={bank.id} value={bank.id}>
+                        {bank.name}
+                      </option>
+                    ))}
+                  </Select>
+                </label>
+              ))}
 
             <label className="pf-composer-field grow">
               <span>{activeCategory === 'Credit' ? 'Reason' : 'Memo'}</span>

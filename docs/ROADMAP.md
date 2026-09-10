@@ -3,7 +3,7 @@
 - **Audience:** Evaluators, contributors, and maintainers
 - **Status:** Living public direction
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-08-19
+- **Last reviewed:** 2026-09-09
 
 LeaseBook is pre-release software. This page communicates shipped capabilities and broad product
 direction; it is not an implementation plan or a commitment to specific dates. Detailed sequencing,
@@ -65,8 +65,10 @@ Before beta, the project is focused on:
 - Completing security, accessibility, performance, and operational hardening.
 - Validating trust-accounting behavior and migration workflows against real operating scenarios.
 - Completing compliance review and documented data-handling procedures.
-- Exercising deployment, backup, restore, telemetry, and alerting procedures in a live environment.
 - Closing remaining workflow gaps found during beta-readiness testing.
+
+LeaseBook is not publicly deployed. Deployment, backup, restore, live telemetry, and alerting work
+is consolidated and deferred until the maintainer elects to prepare the app for public distribution.
 
 Work is considered ready only when the accounting invariants, organization-isolation guarantees, documented
 interaction budgets, and relevant automated gates remain green.

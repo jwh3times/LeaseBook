@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { Button, Icon } from '@/design';
+import { ApiErrorNotice } from '@/components/ApiErrorNotice';
+import type { ApiError } from '@/api';
 
 // Shared builder-strip chips for the reports feature. Extracted so both the generic ReportCatalog
 // builder and the WP-8 CompliancePackPanel can reuse them without a circular import.
@@ -40,10 +42,27 @@ interface SelectChipProps {
   value: string;
   options: SelectChipOption[];
   loading?: boolean;
+  /**
+   * The options read failed. Without this the popover falls back to a bare "All", which reads as a
+   * filter with nothing to filter by rather than a list that could not be fetched — and quietly
+   * suggests the report's scope is the whole org by choice.
+   */
+  error?: ApiError | null;
+  onRetry?: () => void;
+  retrying?: boolean;
   onSelect: (id: string | null) => void;
 }
 
-export function SelectChip({ label, value, options, loading, onSelect }: SelectChipProps) {
+export function SelectChip({
+  label,
+  value,
+  options,
+  loading,
+  error,
+  onRetry,
+  retrying,
+  onSelect,
+}: SelectChipProps) {
   const [open, setOpen] = useState(false);
   return (
     <div className="pf-filter-wrap">
@@ -58,6 +77,15 @@ export function SelectChip({ label, value, options, loading, onSelect }: SelectC
           {loading ? (
             <div className="t3 fs12" style={{ padding: 4 }}>
               Loading…
+            </div>
+          ) : error ? (
+            <div className="col gap6" style={{ padding: 4 }}>
+              <ApiErrorNotice error={error} fallback={`Couldn’t load the ${label} options.`} />
+              {onRetry && (
+                <Button variant="ghost" size="sm" onClick={onRetry} disabled={retrying}>
+                  {retrying ? 'Retrying…' : 'Retry'}
+                </Button>
+              )}
             </div>
           ) : (
             <div className="col gap4">

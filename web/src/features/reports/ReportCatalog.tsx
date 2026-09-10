@@ -296,7 +296,10 @@ function BuilderPanel({ report }: BuilderPanelProps) {
             label="Owner"
             value={selectedOwnerLabel}
             options={ownerOptions}
-            loading={ownersQuery.isPending}
+            loading={ownersQuery.isPending && ownersQuery.fetchStatus !== 'idle'}
+            error={ownersQuery.error}
+            onRetry={() => void ownersQuery.refetch()}
+            retrying={ownersQuery.isFetching}
             onSelect={setOwnerId}
           />
         )}
@@ -307,7 +310,10 @@ function BuilderPanel({ report }: BuilderPanelProps) {
             label="Property"
             value={selectedPropertyLabel}
             options={propertyOptions}
-            loading={propertiesQuery.isPending}
+            loading={propertiesQuery.isPending && propertiesQuery.fetchStatus !== 'idle'}
+            error={propertiesQuery.error}
+            onRetry={() => void propertiesQuery.refetch()}
+            retrying={propertiesQuery.isFetching}
             onSelect={setPropertyId}
           />
         )}
@@ -318,7 +324,10 @@ function BuilderPanel({ report }: BuilderPanelProps) {
             label="Bank"
             value={selectedBankLabel}
             options={bankOptions}
-            loading={banksQuery.isPending}
+            loading={banksQuery.isPending && banksQuery.fetchStatus !== 'idle'}
+            error={banksQuery.error}
+            onRetry={() => void banksQuery.refetch()}
+            retrying={banksQuery.isFetching}
             onSelect={setBankAccountId}
           />
         )}

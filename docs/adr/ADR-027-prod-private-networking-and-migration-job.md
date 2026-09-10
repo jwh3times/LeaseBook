@@ -110,6 +110,29 @@ start` returns when the start succeeds, not when the migration finishes, so with
   server creation, so a missing link is silent at deploy and surfaces only when something tries to
   connect. The first `what-if` is a real gate, not a formality.
 
+## Addendum — on-demand administration (2026-09-09)
+
+Decision #294 selects a manual `psql` Container Apps Job for bootstrap and restore spot-checks
+inside the existing production environment. `lb-prod-dbadmin` runs a separately built PostgreSQL
+18 client image; no schedule, automatic retry, public database endpoint or standing client is added.
+Executions select the server and operator explicitly. A bare start refuses.
+
+The job has a dedicated identity and `lb-prod-dbadmin-kv` vault. The existing application identity
+has vault-wide read access on the application vault; putting administrator credentials there would
+expose them to the app. Only the administration identity receives access to the new vault. Job
+start/update permissions remain privileged because execution overrides can select another image.
+
+The Azure bootstrap is transactional and safe to replay, retains the three-role model and app-owned
+`hangfire`, and never grants permissions on existing tables. Passwords enter via secret-backed
+environment variables and psql password prompts; client encryption keeps cleartext out of SQL and
+server statement logs. Restore spot-checks receive only the ops password and establish local org
+context in a read-only transaction. Financial acceptance still uses the existing invariant engine.
+
+The image and scripts are tested against disposable PostgreSQL with a non-superuser administrator.
+Azure networking, identity propagation and Flexible Server behavior still require operator evidence;
+compilation and local tests do not validate deployment. See the
+[operator procedure](../../infra/db/azure-bootstrap.md).
+
 ## Revisit trigger
 
 Reopen if any of the following happens:

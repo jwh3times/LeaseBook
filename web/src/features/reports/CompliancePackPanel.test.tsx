@@ -125,3 +125,30 @@ describe('CompliancePackPanel', () => {
     expect(alert).toHaveTextContent(/isn't closed yet/i);
   });
 });
+
+describe('CompliancePackPanel when the trust-account options cannot load', () => {
+  it('surfaces the failure in the chip instead of an options list holding only All', async () => {
+    server.use(
+      http.get('/api/accounting/banks/balances', () => new HttpResponse(null, { status: 503 })),
+    );
+    renderPanel(true);
+
+    await userEvent.click(screen.getByText('Trust account').closest('button')!);
+    const dialog = await screen.findByRole('dialog', { name: 'Select Trust account' });
+
+    expect(within(dialog).getByRole('alert')).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: /retry/i })).toBeInTheDocument();
+  });
+
+  it('does not show a failure for a non-admin, whose query never runs', () => {
+    server.use(
+      http.get('/api/accounting/banks/balances', () => new HttpResponse(null, { status: 503 })),
+    );
+    // The query is `enabled: isAdmin`, so for a non-admin it sits pending-and-idle forever. That
+    // must not render as either a loading spinner or an error.
+    renderPanel(false);
+
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.queryByText('Loading…')).toBeNull();
+  });
+});

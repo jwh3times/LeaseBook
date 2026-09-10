@@ -27,6 +27,7 @@
     "CsvHelper",
     "CsCheck",
     "cutover",
+    "dbadmin",
     "dedup",
     "deepenable",
     "Deepenable",

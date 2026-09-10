@@ -557,3 +557,4 @@ output fqdn string = containerApp.properties.configuration.ingress.fqdn
 output identityClientId string = identity.properties.clientId
 output migratorJobName string = migratorJob.name
 output capabilitiesJobName string = capabilitiesJob.name
+output environmentId string = environment.id

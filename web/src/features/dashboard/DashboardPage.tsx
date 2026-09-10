@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { Badge, Button, Card, CardHeader, EmptyState, Icon, Money, StatCard } from '@/design';
+import { ApiErrorNotice } from '@/components/ApiErrorNotice';
 import { num } from '@/lib/directory';
 import { useDashboard, type DashboardResponse } from '@/lib/dashboard';
 import { trackInteraction } from '@/lib/telemetry';
@@ -66,6 +67,29 @@ export function DashboardPage() {
           Run owner disbursements
         </Button>
       </div>
+
+      {/*
+        A failed status read is not a signed-off org. Both takeover rules key off `ob`, so an
+        unavailable status silently produces the operational-org outcome — no redirect, no banner —
+        which is the one state that looks like everything is fine. Say so instead.
+      */}
+      {onboardingQuery.isError && (
+        <div className="ob-migration-banner">
+          <ApiErrorNotice
+            error={onboardingQuery.error}
+            fallback="Couldn’t load the onboarding status."
+          />
+          <span>Setup completion can’t be confirmed, so migration guidance is hidden.</span>
+          <button
+            type="button"
+            className="ob-migration-banner-link"
+            onClick={() => void onboardingQuery.refetch()}
+            disabled={onboardingQuery.isFetching}
+          >
+            {onboardingQuery.isFetching ? 'Retrying…' : 'Retry'}
+          </button>
+        </div>
+      )}
 
       {showMigrationBanner && (
         <div className="ob-migration-banner" role="status">
