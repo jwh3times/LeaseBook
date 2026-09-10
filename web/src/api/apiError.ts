@@ -76,11 +76,15 @@ export function isNotFound(error: unknown): boolean {
 /**
  * Was this failure the server saying the caller is not signed in?
  *
- * An expired cookie produces a **body-less** 401: `OnRedirectToLogin` writes a bare status for
- * `/api` paths and there is no `UseStatusCodePages`, so there is no `detail` to render and no
- * `correlationId` to quote. `unwrap` then falls back to the surface's own copy — which is how a
- * signed-out operator came to be told "Failed to load the register" beside a Retry that re-issues
- * the same 401 forever (#357).
+ * An expired cookie used to produce a **body-less** 401 — `OnRedirectToLogin` wrote a bare status
+ * for `/api` paths and there is no `UseStatusCodePages` — so there was no `detail` to render and no
+ * `correlationId` to quote, and `unwrap` fell back to the surface's own copy. That is how a
+ * signed-out operator came to be told "Failed to load the register" beside a Retry that re-issued
+ * the same 401 forever (#357). That path now carries `not_authenticated` and the correlation id.
+ *
+ * The body-less shape is still accepted, and not merely for history: any 401 raised before or
+ * outside that handler — a proxy, or middleware short-circuiting ahead of authentication — still
+ * arrives bare, and reading it as "signed out" is right.
  *
  * Status alone is not the discriminator. `/api/auth/login`, `/api/auth/mfa` and the account-security
  * endpoints answer a *rejected credential* with 401 + ProblemDetails, so keying on 401 by itself
