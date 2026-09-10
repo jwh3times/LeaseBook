@@ -238,22 +238,23 @@ are hand-authored tripwires locked by `ScenarioGoldenTests` — treat them as sa
 The `check-invariants` verb sweeps the core correctness invariants and exits non-zero on any
 violation:
 
-| Id           | Assertion                                                                                     |
-| ------------ | --------------------------------------------------------------------------------------------- |
-| I1           | Every entry balances per basis                                                                |
-| I2           | The trust equation holds per trust bank                                                       |
-| I3           | PM-income isolation — no `pm_income` line carries an owner                                    |
-| I4           | Deposit and prepayment liabilities are ≥ 0                                                    |
-| I5 _(swept)_ | `migration_clearing` nets to $0 per basis                                                     |
-| I7           | Deposit attribution symmetry — a held deposit stays ≥ 0 per owner bucket, not just per tenant |
-| I8           | Every event type posting an owner-attributed `owner_equity` line has a statement section      |
+| Id  | Assertion                                                                                     |
+| --- | --------------------------------------------------------------------------------------------- |
+| I1  | Every entry balances per basis                                                                |
+| I2  | The trust equation holds per trust bank                                                       |
+| I3  | PM-income isolation — no `pm_income` line carries an owner                                    |
+| I4  | Deposit and prepayment liabilities are ≥ 0                                                    |
+| I7  | Deposit attribution symmetry — a held deposit stays ≥ 0 per owner bucket, not just per tenant |
+| I8  | Every event type posting an owner-attributed `owner_equity` line has a statement section      |
+| I9  | `migration_clearing` nets to $0 per basis                                                     |
 
-Two different invariants are numbered **I5**: the swept one above is migration-clearing residual,
-while the test harness's `..._I5` (`InvariantTests.Cash_and_accrual_owner_totals_converge_after_settlement_I5`)
-is basis convergence. If you are paging on a swept I5, it is the migration-clearing one. The
-collision is known and unresolved — the id is what alerting keys on, so it is not fixed by
-renumbering in place. I6 (a void and its reversal net to zero) is likewise proven in the harness,
-not swept.
+**I5** and **I6** are not in that table and never will be: they are relational or conditional
+assertions proven in the test harness rather than swept per-org — I5 is cash/accrual basis
+convergence, I6 is a void and its reversal netting to zero. The migration-clearing check carried the
+id I5 until 2026-09-09, which meant an operator paging on a swept "I5" could be sent to the
+basis-convergence entry instead; it is I9 now, and `InvariantIdCollisionTests` fails the build if a
+swept check takes a harness-reserved id again. The renumber was free because no alert rule keyed on
+the id yet.
 
 I8 is the odd one out: it asserts reachability rather than arithmetic. Money is never wrong when it
 fires — an unmapped event type makes `StatementSectionMap` throw, so the affected statements refuse

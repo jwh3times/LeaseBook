@@ -57,7 +57,7 @@ public sealed class HeldFeesOpeningTests(PostgresFixture fixture)
             var contra = lines.Single(l => l.AccountClass == "migration_clearing");
             contra.Debit.ShouldBe(750m); contra.Basis.ShouldBe("both");
 
-            // I2 non-vacuous + clean; I5 clean; I3 sweep zero rows.
+            // I2 non-vacuous + clean; I9 clean; I3 sweep zero rows.
             var eq = await new GetTrustEquationHandler(scope.Db).Handle(new GetTrustEquation(), ct);
             var row = eq.Rows.Single(r => r.BankAccountId == scope.TrustBankId);
             row.HeldPmFees.ShouldBe(750m);

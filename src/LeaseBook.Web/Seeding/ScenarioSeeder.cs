@@ -1010,7 +1010,7 @@ public static class ScenarioSeeder
     /// <summary>
     /// The end-state pins, verified on first seed and every re-run: lifetime pm_income, per-bank
     /// held fees (never negative — bank fees/transfers have no code guard, design §12 finding 9),
-    /// and the core invariant sweep (I1–I5) clean.
+    /// and the core invariant sweep clean.
     /// </summary>
     private static async Task VerifyPinsAsync(IServiceProvider sp, AppDbContext db, CancellationToken ct)
     {

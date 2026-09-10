@@ -45,10 +45,10 @@ carried.** Concretely:
 **A new core invariant, I7, backstops it at runtime:** the held security deposit stays **≥ 0 per
 `(tenant, owner)` bucket** on the cash-inclusive bases, checked by `CheckCoreAsync` and the
 `check-invariants` verb. It takes the id I7 because the canonical set ran I1–I6 when this was
-written; the set has grown since (I8 in
-[ADR-016](ADR-016-reporting-read-layer.md)), and the live list of swept ids is the table in the
-[local-development runbook](../runbooks/local-dev.md#checking-the-accounting-invariants) rather than
-any ADR.
+written. The set has grown since, and restating it here is what made this sentence stale twice — the
+live list of swept ids is the table in the
+[local-development runbook](../runbooks/local-dev.md#checking-the-accounting-invariants), which no
+ADR duplicates.
 
 I7 is deliberately shaped as a **per-bucket floor** rather than "every deposit line carries an owner."
 The demo fixture holds an intentional owner-null aggregate deposit position (the synthetic aggregate

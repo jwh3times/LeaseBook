@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 namespace LeaseBook.Modules.Accounting.Diagnostics;
 
 /// <summary>
-/// Executable I1–I5 checks (§C.7) over the ambient org's journal via raw SQL on the scoped connection
+/// Executable swept checks (§C.7) over the ambient org's journal via raw SQL on the scoped connection
 /// (RLS-scoped, M-E11). Shared by the CLI sweep and the test harness; this is the future nightly
 /// sweep body (P33).
 /// </summary>
@@ -111,7 +111,7 @@ internal sealed class InvariantChecks(DbContext db) : IInvariantChecks
             .ToList();
     }
 
-    // I5: migration_clearing nets to $0 per basis — non-zero residual is a quantified import discrepancy
+    // I9: migration_clearing nets to $0 per basis — non-zero residual is a quantified import discrepancy
     // (ADR-020 / M7). The invariant is vacuous (no rows) for orgs that haven't imported, so it is safe
     // to include in the core sweep for all orgs.
     public async Task<IReadOnlyList<InvariantViolation>> CheckMigrationClearingBalancedAsync(CancellationToken ct)
@@ -132,7 +132,7 @@ internal sealed class InvariantChecks(DbContext db) : IInvariantChecks
             """).ToListAsync(ct);
 
         return rows
-            .Select(r => new InvariantViolation("I5",
+            .Select(r => new InvariantViolation("I9",
                 $"migration_clearing does not net to $0 in {r.BasisName}: residual {r.Net:0.00}"))
             .ToList();
     }

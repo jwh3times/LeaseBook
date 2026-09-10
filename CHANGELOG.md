@@ -33,6 +33,12 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   deployment authoring and operator follow-ups. Agent guidance defers execution until public
   distribution is elected and requires deployment evidence before completion.
 
+- **Each correctness check now has an identifier of its own.** Two different checks were both
+  reported as "I5" — the migration-clearing residual and a cash/accrual convergence assertion — so an
+  operator investigating an alert could be sent to the wrong reference entry. The migration-clearing
+  check is now I9, and a build-time check prevents an identifier being reused for a second meaning.
+  Nothing about what is checked changes.
+
 ### Fixed
 
 - **Search and saved bank mappings distinguish failed reads from empty results.** The command
