@@ -55,6 +55,22 @@ public sealed record RunCapabilities(
     /// name that no longer exists. Throwing turns a silent fiduciary failure into a loud one, which
     /// on this path is strictly the better direction.
     /// </para>
+    /// <para>
+    /// <b>Its only caller today is <see cref="MoneyPathState"/>, three lines below — and it stays
+    /// public anyway (#303).</b> What it guards right now is narrower than the paragraph above
+    /// describes: the encoder cannot fabricate an <c>off</c> into the state a committed run records,
+    /// because a money-path name absent from <see cref="Values"/> throws instead of encoding one. The
+    /// broader guarantee is currently unexercised, because the registry's only money-path entry is a
+    /// fixture that gates nothing and that no production path may read.
+    /// </para>
+    /// <para>
+    /// <b>Why not make it private, which is the tidier-looking answer.</b> <see cref="Values"/> is an
+    /// <c>IReadOnlyDictionary</c>, so the first author of a real money-path gate, denied this, reaches
+    /// for <c>Values.TryGetValue</c> — which answers a silent <c>false</c> for an unknown name. That
+    /// is the exact failure this type exists to refuse. Hiding the safe accessor while the unsafe one
+    /// stays public would make the seam worse, not smaller, so this is the sanctioned way to ask and
+    /// <c>Values</c> is deliberately not.
+    /// </para>
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException">
     /// <paramref name="capabilityName"/> is not in the resolved set.

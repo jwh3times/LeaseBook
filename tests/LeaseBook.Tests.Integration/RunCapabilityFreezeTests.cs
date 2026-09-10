@@ -278,6 +278,22 @@ public sealed class RunCapabilityFreezeTests(PostgresFixture fixture)
                 resolved.Values.Keys.Order(StringComparer.Ordinal).ShouldBe(
                     CapabilityCatalog.All.Select(c => c.Name).Order(StringComparer.Ordinal),
                     "the adapter must carry the complete resolved map, not the enabled subset");
+
+                // The other half of that contract, and the one nothing asserted before (#303).
+                // MoneyPathState() reads every money-path name back out through IsEnabled, which
+                // throws rather than answering "off". Today the two collections are both derived
+                // from CapabilityCatalog.All, so containment holds by construction — but that is
+                // incidental, not enforced. An adapter that sourced money-path names from anywhere
+                // else would turn every run confirmation into a throw on the money path, at
+                // run-confirmation entry, in production. Assert it here where it is cheap.
+                resolved.MoneyPathNames.ShouldBeSubsetOf(
+                    resolved.Values.Keys,
+                    "money-path names must name entries of the resolved map, or MoneyPathState() "
+                    + "throws at run-confirmation entry instead of at build time");
+
+                Should.NotThrow(
+                    () => resolved.MoneyPathState(),
+                    "the encoder must be able to read every money-path name it is given");
             },
             ct);
     }
