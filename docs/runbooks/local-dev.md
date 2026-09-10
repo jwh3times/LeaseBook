@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living runbook; canonical development command reference
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-09-06
+- **Last reviewed:** 2026-09-09
 
 ## Prerequisites
 
@@ -249,8 +249,11 @@ violation:
 | I8           | Every event type posting an owner-attributed `owner_equity` line has a statement section      |
 
 Two different invariants are numbered **I5**: the swept one above is migration-clearing residual,
-while the property suite's `..._I5` is basis convergence. If you are paging on a swept I5, it is the
-migration-clearing one. I6 (a void and its reversal net to zero) is proven in the harness, not swept.
+while the test harness's `..._I5` (`InvariantTests.Cash_and_accrual_owner_totals_converge_after_settlement_I5`)
+is basis convergence. If you are paging on a swept I5, it is the migration-clearing one. The
+collision is known and unresolved — the id is what alerting keys on, so it is not fixed by
+renumbering in place. I6 (a void and its reversal net to zero) is likewise proven in the harness,
+not swept.
 
 I8 is the odd one out: it asserts reachability rather than arithmetic. Money is never wrong when it
 fires — an unmapped event type makes `StatementSectionMap` throw, so the affected statements refuse

@@ -3,7 +3,7 @@
 - **Audience:** Contributors, operators, and reviewers
 - **Status:** Living accounting guide
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-09-02
+- **Last reviewed:** 2026-09-09
 
 This is the canonical public explanation of the shipped trust-accounting model, written so a
 property manager, bookkeeper, or attorney can evaluate it without reading C#. The Accounting module
@@ -345,8 +345,9 @@ The map is _exhaustive by construction_: any event that posts to `owner_equity` 
 this map throws at runtime rather than silently dropping a line off the statement. Adding a new
 posting template that touches owner equity requires updating the map. Two things enforce that: the
 property-based suite catches the omission before deployment, and invariant **I8** sweeps the live
-journal nightly for owner-equity event types missing from the map, which also covers types that
-arrived by import rather than from a posting template.
+journal nightly for owner-equity event types missing from the map — which also catches rows that
+entered the journal without going through the posting service at all, such as a data-repair
+migration, which no source-level test can see.
 
 ### The structural tie-out ($0.00 variance or issuance is blocked)
 

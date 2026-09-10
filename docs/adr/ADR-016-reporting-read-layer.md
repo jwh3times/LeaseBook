@@ -112,7 +112,7 @@ within Approach C. What is worth recording durably (it is a C1 attorney-review p
 - **Generation is audited.** Producing a pack emits a `compliance-pack-generated` audit event
   (audit-worthy, but not money-touching, so it never appears inside the extract).
 
-## 2026-09-10 addendum — the exhaustive-map guard is swept (invariant I8)
+## 2026-09-09 addendum — the exhaustive-map guard is swept (invariant I8)
 
 The Decision above scoped `UncategorizedEventException` to "runtime and the property-based test
 suite". Issue #320 asked for statement tie-out coverage in the nightly sweep; working out what could
@@ -124,8 +124,9 @@ SQL set difference per org, in `CheckCoreAsync`, so the `check-invariants` verb 
 both get it.
 
 **What was deliberately not added: the statement's own tie-out variance.** `StatementTieOut.Variance`
-cannot usefully be swept, because it cannot go red. `GetOwnerStatementData` runs three reads whose predicates
-partition exactly: the beginning-balance read covers `entry_date < start` plus in-period
+cannot usefully be swept, because it cannot go red. `GetOwnerStatementData` runs three reads — the
+Decision above says two, written before the independent period-end recompute that makes the tie-out
+structural landed later in M5 — and their predicates partition exactly: the beginning-balance read covers `entry_date < start` plus in-period
 opening-typed entries, the movement read covers in-period non-opening-typed entries, and their union
 is precisely the independent end-balance read's `entry_date < end`. Every movement row lands in
 exactly one section, so the section subtotals sum to the movement total by construction. `event_type`
@@ -158,5 +159,11 @@ the consolidated one.
 sweep asserts against the demo and scenario fixtures. It fires the first time a template credits an
 owner without a section entry, and the deferred interest-entitlement policy (ADR-014) is the known
 candidate: the day `InterestEarned` credits an owner, every statement for every owner in that bank
-throws until the map is updated. It also covers event types that arrive by import rather than from a
-posting template, which a source-level test cannot see.
+throws until the map is updated.
+
+It is not, however, a guard against imported event types: `IPostingService` is module-internal and
+every posted `event_type` is a literal in `AccountingEventService`, so the M7 import posts
+`OpeningBalance`/`BalanceForward` like any other template and cannot introduce an unmapped type. What
+it catches that a source-level test cannot is a row that reached `journal_entries` **without** the
+posting service — a data-repair migration run as the migrator role, or a restored or merged database.
+That is the shape the non-vacuity test writes, deliberately, in raw SQL.
