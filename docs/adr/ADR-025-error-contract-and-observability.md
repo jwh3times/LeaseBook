@@ -508,6 +508,59 @@ guarded only if its author writes one. #349 added the sharper rule: a test that 
 error _heading_ is not coverage, because the heading survives the regression. Assert the mapped
 message and `Reference: <id>`, and confirm the test goes red with the branch reverted.
 
+### 2026-09-10 addendum (2) — the one 401 that carried no contract
+
+Issue #357. Converting the primary-content branches (#349) made a pre-existing dead end visible
+rather than creating one: a session that expires with the tab open now offered a **Retry**, and that
+Retry re-issues the same read, gets the same 401, and never resolves. `RouteGuard`
+(`web/src/app/RouteGuard.tsx`) decides authentication solely from the cached `useSession` query, and
+nothing invalidated it when a _different_ request came back 401, so the operator was told the
+register could not load when the truth was that they were signed out.
+
+**The 401 carried no contract at all, and this ADR's own guard could not see that.**
+`ConfigureApplicationCookie`'s `OnRedirectToLogin` wrote a bare status code for `/api` paths
+(`AuthServiceCollectionExtensions.cs`), and the pipeline has no `UseStatusCodePages` to dress it —
+so the single most common error a signed-in operator meets was the one error response in the product
+with neither a `code` nor a `correlationId`. `ErrorContractTests` scans IL for direct
+`Results.Problem` / `TypedResults.Problem` calls outside `ProblemResults`; this path never made one,
+so there was nothing for it to catch. **A single-factory guard proves that the responses built by the
+factory are well-formed. It says nothing about error responses written by hand, by middleware, or by
+a framework event** — and those are exactly where the contract goes missing. The cookie handler's
+401 now goes through `ProblemResults.TypedProblem` and carries `not_authenticated` plus the
+correlation id.
+
+`OnRedirectToAccessDenied`'s 403 is deliberately still bare. `AuthorizationMatrixTests` asserts that
+a role denial is _not_ `application/problem+json`, which is what pins the MFA result handler's
+problem response to MFA alone. Extending the fix to that branch would have silently voided that
+test's meaning; it is a decision to make on its own evidence, not a tidy-up.
+
+**Status alone does not mean "signed out", and a rule keyed on it would have shipped a lie.** Five
+places answer 401 with ProblemDetails, and three of the four codes — `invalid_credentials`,
+`invalid_mfa_code`, `invalid_recovery_code` — mean _the credential you just supplied was rejected_,
+not _your session ended_. `isSessionExpired` (`web/src/api/apiError.ts`) is therefore an **allowlist**
+of the two signed-out shapes (no `code`, or `not_authenticated`), not a denylist of the credential
+codes: a 401 code added later then defaults to showing the server's own message, which is merely
+unhelpful, rather than to a confident "you have been signed out", which would be wrong. This is
+currently invisible on the login page only because `LoginPage` discards the `ApiError` and
+substitutes its own literal — an accident of that page's divergence from this contract, not a
+defense.
+
+**The remedy is honest copy, not an automatic redirect.** Redirecting on a signed-out 401 is the
+obvious fix and was rejected: a bulk-run screen holds its previewed run and period in component
+state (`RentRunScreen.tsx`), and unmounting it would discard the operator's confirmed selection and
+leave them at `/login` with no account of why the screen vanished. Instead `ApiErrorNotice` renders
+the signed-out copy — split on `kind`, so a rejected **write** still gets the "nothing was saved"
+reassurance that a read must not claim — and `QueryErrorState` replaces Retry with a plain
+`<a href="/login">`. A real anchor, not a router navigation: the session is dead, so a full document
+load drops every cached query and stale row with it, the same reasoning as the hard
+`window.location.assign('/login')` after an explicit sign-out in `AccountSecurityPage`.
+
+**The regression test has to hold one read succeeding while another fails.** The defect lives in the
+state where `/api/auth/me` is still cached as signed-in _and_ a data read returns 401; failing both
+is a different, already-handled state in which `RouteGuard` redirects correctly. `sessionExpiry.test.tsx`
+therefore asserts its own premise — that nothing redirected — before asserting the copy, so the test
+cannot quietly start passing for the wrong reason if the guard's behavior moves.
+
 ## Consequences
 
 - Every error response an operator can screenshot now carries a `Reference: <32-hex>` string they can

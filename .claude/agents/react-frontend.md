@@ -262,6 +262,14 @@ Pass `kind="read"` on any `ApiErrorNotice` for a read, including a file download
 `internal_error` copy — what a real 500 produces — tells the user "Nothing was saved" about an
 operation that was never saving. `QueryErrorState` does this for you.
 
+`QueryErrorState` also handles the one read failure a retry can never clear: an expired session.
+`isSessionExpired(query.error)` from `@/api` swaps Retry for a sign-in link, and `ApiErrorNotice`
+says so in place of the server's message. You get both for free — but if you hand-roll an error
+branch, remember that a 401 is not automatically "signed out": login, MFA and account-security all
+answer a _rejected credential_ with 401, so use the helper rather than checking `status === 401`
+yourself. Never redirect on it: a screen holding operator state (a previewed bulk run) must not be
+unmounted out from under them (ADR-025, 2026-09-10 addendum 2).
+
 ### A failed read is never rendered as a confirmed value
 
 This applies hardest to **auxiliary** reads — the ones feeding a selector, a label, a count, a

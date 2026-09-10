@@ -1,4 +1,5 @@
 import type { UseQueryResult } from '@tanstack/react-query';
+import { isSessionExpired } from '@/api';
 import { Button, EmptyState } from '@/design';
 import { ApiErrorNotice } from './ApiErrorNotice';
 
@@ -44,14 +45,30 @@ export function QueryErrorState({ query, title, fallback, onRetry }: QueryErrorS
         />
       }
       action={
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => (onRetry ? onRetry() : void query.refetch())}
-          disabled={query.isFetching}
-        >
-          {query.isFetching ? 'Retrying…' : 'Retry'}
-        </Button>
+        // An expired session is the one read failure a retry can never clear: it re-issues the same
+        // request and gets the same 401 forever (#357). The affordance has to change with the copy,
+        // so the operator is offered the thing that does resolve it.
+        //
+        // A real anchor, not a router navigation: the session is dead, so every cached query, stale
+        // row and in-memory value should go with it — the same reasoning as the hard
+        // `window.location.assign('/login')` after an explicit sign-out in AccountSecurityPage.
+        // Deliberately *not* an automatic redirect: a bulk-run screen holds its previewed run in
+        // component state, and unmounting it would discard the operator's confirmed selection with
+        // no explanation of why the screen vanished.
+        isSessionExpired(query.error) ? (
+          <a className="pf-btn v-ghost s-sm" href="/login">
+            Sign in
+          </a>
+        ) : (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => (onRetry ? onRetry() : void query.refetch())}
+            disabled={query.isFetching}
+          >
+            {query.isFetching ? 'Retrying…' : 'Retry'}
+          </Button>
+        )
       }
     />
   );

@@ -66,6 +66,17 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 - **Settings distinguishes bank-account load failures from an empty organization.** A failed read
   now shows an explicit error instead of incorrectly saying that no bank accounts exist.
 
+- **A session that expires while you are working now says so, instead of offering a Retry that can
+  never succeed.** When a sign-in expired with the tab still open, the next screen to load reported
+  that it could not load the register, the ledger or the statement — and offered a Retry that
+  re-issued the same request and failed the same way, indefinitely. The real cause was that the
+  session had ended. Those screens now say plainly that you have been signed out and offer a Sign in
+  link in place of the Retry; a rejected save says the same and confirms that nothing was saved. A
+  mistyped password or authentication code is unaffected and still reports what the server said.
+  Screens are no longer thrown away when this happens, so a bulk run you have already previewed
+  stays on screen until you choose to leave it. Signed-out responses from the server now also carry
+  the same support reference every other error does.
+
 ### Security
 
 - **Signing out clears recent command-palette selections from browser storage.** Tenant and property

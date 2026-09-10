@@ -1,4 +1,5 @@
 using FluentValidation;
+using LeaseBook.SharedKernel.Endpoints;
 using LeaseBook.Web.Persistence;
 using LeaseBook.Web.Security;
 using Microsoft.AspNetCore.Authentication;
@@ -64,7 +65,11 @@ public static class AuthServiceCollectionExtensions
             options.SlidingExpiration = true;
             options.ExpireTimeSpan = TimeSpan.FromHours(8);
             // SPA over /api expects status codes, not redirects to a login page.
-            options.Events.OnRedirectToLogin = ApiAwareStatus(StatusCodes.Status401Unauthorized);
+            options.Events.OnRedirectToLogin = ApiAwareProblem(
+                StatusCodes.Status401Unauthorized, code: "not_authenticated", detail: "Not authenticated.");
+            // Deliberately still a bare status: AuthorizationMatrixTests asserts a role denial is
+            // *not* problem+json, which is what pins the MFA result handler's problem response to
+            // MFA alone. Do not "finish the job" here without moving that test's meaning first.
             options.Events.OnRedirectToAccessDenied = ApiAwareStatus(StatusCodes.Status403Forbidden);
         });
 
@@ -101,5 +106,30 @@ public static class AuthServiceCollectionExtensions
 
             context.Response.Redirect(context.RedirectUri);
             return Task.CompletedTask;
+        };
+
+    /// <summary>
+    /// The <see cref="ApiAwareStatus"/> shape, but writing the ADR-025 problem body rather than a
+    /// bare status.
+    ///
+    /// An expired cookie is by far the most common error any signed-in operator meets, and it was
+    /// the one error response in the product carrying neither a <c>code</c> nor a
+    /// <c>correlationId</c> — <c>ErrorContractTests</c> could not see the gap, because it scans for
+    /// direct <c>Results.Problem</c> calls and this path never made one. The SPA was left inferring
+    /// "signed out" from a body-less 401 (#357).
+    /// </summary>
+    private static Func<RedirectContext<CookieAuthenticationOptions>, Task> ApiAwareProblem(
+        int statusCode, string code, string detail) =>
+        async context =>
+        {
+            if (context.Request.Path.StartsWithSegments("/api"))
+            {
+                await ProblemResults
+                    .TypedProblem(context.HttpContext, code, detail, statusCode)
+                    .ExecuteAsync(context.HttpContext);
+                return;
+            }
+
+            context.Response.Redirect(context.RedirectUri);
         };
 }

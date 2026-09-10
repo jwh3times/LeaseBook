@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react';
 import { Icon } from '@/design';
-import type { ApiError } from '@/api';
+import { isSessionExpired, type ApiError } from '@/api';
 
 export interface ApiErrorNoticeProps {
   error: ApiError | null;
@@ -23,7 +23,7 @@ export interface ApiErrorNoticeProps {
  * 2026-08-20 amendment put reads through the same success rule; a failed read now arrives here
  * carrying the same `code` and `correlationId`.
  *
- * A read passes `kind="read"` so the internal_error copy does not claim "Nothing was saved" about
+ * A read passes `kind="read"` so the internal_error and session-expiry copy does not claim "Nothing was saved" about
  * an operation that was never saving. `UnhandledExceptionHandler` stamps `internal_error` on every
  * unhandled exception, so this is the copy a production 500 actually produces — not an edge case.
  */
@@ -36,8 +36,14 @@ export function ApiErrorNotice({
 }: ApiErrorNoticeProps) {
   if (!error) return null;
 
-  const message =
-    error.code === 'internal_error'
+  // Session expiry is checked before `internal_error` and before the server's own message: an
+  // expired cookie carries neither, so the only copy left to fall back on is the *caller's* — which
+  // says the read failed, when the truth is that the user is signed out (#357).
+  const message = isSessionExpired(error)
+    ? kind === 'read'
+      ? 'You have been signed out. Sign in again to continue.'
+      : 'You have been signed out. Nothing was saved — sign in again and retry.'
+    : error.code === 'internal_error'
       ? kind === 'read'
         ? 'Something went wrong on our end.'
         : 'Something went wrong on our end. Nothing was saved.'
