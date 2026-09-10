@@ -73,7 +73,7 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   session had ended. Those screens now say plainly that you have been signed out and offer a Sign in
   link in place of the Retry; a rejected save says the same and confirms that nothing was saved. A
   mistyped password or authentication code is unaffected and still reports what the server said.
-  Screens are no longer thrown away when this happens, so a bulk run you have already previewed
+  You are not bounced to the sign-in screen automatically, so a bulk run you have already previewed
   stays on screen until you choose to leave it. Signed-out responses from the server now also carry
   the same support reference every other error does.
 

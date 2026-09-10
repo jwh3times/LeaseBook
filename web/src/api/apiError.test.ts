@@ -62,9 +62,9 @@ describe('asApiError', () => {
 });
 
 describe('isSessionExpired', () => {
-  // The cookie handler writes a bare 401 for /api paths (AuthServiceCollectionExtensions.cs), and
-  // there is no UseStatusCodePages, so the body-less shape is what an expired session really looks
-  // like on the wire — not an edge case.
+  // The cookie handler now writes the error contract on this path, so a body-less 401 is no longer
+  // what an expired session looks like. It is still accepted, and not only for history: a 401 raised
+  // ahead of the app — an ingress or proxy — arrives bare, and reading it as "signed out" is right.
   it('treats a body-less 401 as signed out', () => {
     expect(isSessionExpired({ message: 'Failed to load the register.', status: 401 })).toBe(true);
   });

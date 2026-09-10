@@ -534,16 +534,16 @@ a role denial is _not_ `application/problem+json`, which is what pins the MFA re
 problem response to MFA alone. Extending the fix to that branch would have silently voided that
 test's meaning; it is a decision to make on its own evidence, not a tidy-up.
 
-**Status alone does not mean "signed out", and a rule keyed on it would have shipped a lie.** Five
-places answer 401 with ProblemDetails, and three of the four codes — `invalid_credentials`,
-`invalid_mfa_code`, `invalid_recovery_code` — mean _the credential you just supplied was rejected_,
-not _your session ended_. `isSessionExpired` (`web/src/api/apiError.ts`) is therefore an **allowlist**
-of the two signed-out shapes (no `code`, or `not_authenticated`), not a denylist of the credential
-codes: a 401 code added later then defaults to showing the server's own message, which is merely
-unhelpful, rather than to a confident "you have been signed out", which would be wrong. This is
-currently invisible on the login page only because `LoginPage` discards the `ApiError` and
-substitutes its own literal — an accident of that page's divergence from this contract, not a
-defense.
+**Status alone does not mean "signed out", and a rule keyed on it would have shipped a lie.** Nine
+call sites across seven auth endpoints answer 401 with ProblemDetails, and three of the four codes
+they use — `invalid_credentials`, `invalid_mfa_code`, `invalid_recovery_code` — mean _the credential
+you just supplied was rejected_, not _your session ended_. `isSessionExpired`
+(`web/src/api/apiError.ts`) is therefore an **allowlist** of the two signed-out shapes (no `code`, or
+`not_authenticated`), not a denylist of the credential codes: a 401 code added later then
+defaults to showing the server's own message, which is merely unhelpful, rather than to a confident
+"you have been signed out", which would be wrong. This is currently invisible on the login page only
+because `LoginPage` discards the `ApiError` and substitutes its own literal — an accident of that
+page's divergence from this contract, not a defense.
 
 **The remedy is honest copy, not an automatic redirect.** Redirecting on a signed-out 401 is the
 obvious fix and was rejected: a bulk-run screen holds its previewed run and period in component
