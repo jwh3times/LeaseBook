@@ -43,6 +43,16 @@ and fail at app startup on the first version bump that carries a schema migratio
 therefore holds `CREATE` inside the `hangfire` schema — its only DDL privilege anywhere, and
 deliberately scoped so it has none on the database or on `public`.
 
+## Note (2026-09-09): this ADR owns the scheduler, not the contents of the sweep
+
+The Context above lists a "statement tie-out sweep" among the jobs Phase 1 needs. That motivation has
+since been answered in two halves, and the reasoning belongs with the statement engine rather than
+here: statement **section coverage** is swept as invariant I8, while the statement's own tie-out
+**variance** is deliberately not swept, because it is unfalsifiable by any data state — see the
+addendum to [ADR-016](ADR-016-reporting-read-layer.md). Adding or removing a check inside the sweep
+does not amend this ADR; the live list of swept invariants is the table in the
+[local-development runbook](../runbooks/local-dev.md#checking-the-accounting-invariants).
+
 ## Consequences
 
 - One fewer moving part than a Redis-backed queue; storage is transactional with our data.

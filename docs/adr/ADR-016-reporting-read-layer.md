@@ -111,3 +111,59 @@ within Approach C. What is worth recording durably (it is a C1 attorney-review p
   month locked is impractical, so the in-range boundary is the pragmatic guarantee.)
 - **Generation is audited.** Producing a pack emits a `compliance-pack-generated` audit event
   (audit-worthy, but not money-touching, so it never appears inside the extract).
+
+## 2026-09-09 addendum — the exhaustive-map guard is swept (invariant I8)
+
+The Decision above scoped `UncategorizedEventException` to "runtime and the property-based test
+suite". Issue #320 asked for statement tie-out coverage in the nightly sweep; working out what could
+actually be swept changed the answer, so the reasoning is recorded here rather than re-derived.
+
+**What was added.** Invariant **I8**: for every org, the set of `event_type` values carrying an
+owner-attributed `owner_equity` line, minus the set `StatementSectionMap` covers, must be empty. One
+SQL set difference per org, in `CheckCoreAsync`, so the `check-invariants` verb and the nightly job
+both get it.
+
+**What was deliberately not added: the statement's own tie-out variance.** `StatementTieOut.Variance`
+cannot usefully be swept, because it cannot go red. `GetOwnerStatementData` runs three reads — the
+Decision above says two, written before the independent period-end recompute that makes the tie-out
+structural landed later in M5 — and their predicates partition exactly: the beginning-balance read covers `entry_date < start` plus in-period
+opening-typed entries, the movement read covers in-period non-opening-typed entries, and their union
+is precisely the independent end-balance read's `entry_date < end`. Every movement row lands in
+exactly one section, so the section subtotals sum to the movement total by construction. `event_type`
+is `NOT NULL`, closing the three-valued-logic path where a row could fall out of both typed queries
+while remaining in the untyped one; and a reversal cannot itself be reversed, so the
+`COALESCE(orig.event_type, e.event_type)` resolution is stable across the queries.
+
+The variance is therefore unfalsifiable by any data state — including one written directly by the
+migrator role, bypassing every domain guard. It is falsifiable only by an inconsistent **source**
+edit, the canonical one being removing `OpeningBalance` from the movement read's exclusion while
+leaving it in the beginning read's inclusion, which would double-count it. That is a CI concern, and
+it is already asserted over random event sequences in `StatementInvariantTests`. Sweeping it nightly
+would have added a check that no production incident could ever trip — the kind of monitoring that
+reports green because it asks nothing.
+
+**Why a set difference rather than running the statement handler per period.** Three reasons, in
+order of weight. The sweep loop has no per-org exception isolation, so a handler throwing
+`UncategorizedEventException` for one org would abort the sweep and leave every subsequent org
+unchecked for I1–I7 — the single org with a real defect would silence the sweep for everyone else.
+The risk is a property of the event-type set rather than of any (owner, period, basis) tuple, so one
+query covers all owners and all history with no iteration bound to justify. And
+`UncategorizedEventException` carries only the event type, so the handler route would report strictly
+less than the query does — which names the type, the affected line count, and a sample entry.
+
+Sweeping consolidated statements (`propertyId: null`) is sufficient and dominant: the property filter
+is identical in all three reads, so a per-property statement's event-type set is a strict subset of
+the consolidated one.
+
+**What it will catch.** Nothing today — every `owner_equity`-posting template is mapped, which the
+sweep asserts against the demo and scenario fixtures. It fires the first time a template credits an
+owner without a section entry, and the deferred interest-entitlement policy (ADR-014) is the known
+candidate: the day `InterestEarned` credits an owner, every statement for every owner in that bank
+throws until the map is updated.
+
+It is not, however, a guard against imported event types: `IPostingService` is module-internal and
+every posted `event_type` is a literal in `AccountingEventService`, so the M7 import posts
+`OpeningBalance`/`BalanceForward` like any other template and cannot introduce an unmapped type. What
+it catches that a source-level test cannot is a row that reached `journal_entries` **without** the
+posting service — a data-repair migration run as the migrator role, or a restored or merged database.
+That is the shape the non-vacuity test writes, deliberately, in raw SQL.

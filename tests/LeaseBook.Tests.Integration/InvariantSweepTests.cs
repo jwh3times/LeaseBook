@@ -77,6 +77,53 @@ public sealed class InvariantSweepTests(PostgresFixture fixture)
     }
 
     [Fact]
+    public async Task Owner_equity_event_with_no_statement_section_is_reported_as_I8()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (orgId, ownerId) = await CreateUncategorizedOwnerEventOrgAsync(ct);
+
+        var logger = new CapturingLogger<InvariantSweepRunner>();
+        var runner = new InvariantSweepRunner(fixture.Api.Services, logger);
+
+        var result = await runner.RunAsync([orgId], ct);
+
+        // The entry balances, and its counterpart is neither a trust bank nor a deposit liability, so
+        // I1/I2/I4/I7 stay quiet and this asserts I8 alone rather than "something went wrong".
+        result.IsClean.ShouldBeFalse();
+        var violation = result.Violations.ShouldHaveSingleItem();
+        violation.OrgId.ShouldBe(orgId);
+        violation.Invariant.ShouldBe("I8");
+        violation.Detail.ShouldContain("InterestEarned");
+
+        logger.Entries.ShouldHaveSingleItem();
+        logger.Entries[0].EventId.ShouldBe(LogEvents.InvariantViolation);
+        logger.Entries[0].Level.ShouldBe(LogLevel.Error);
+        logger.Entries[0].Message.ShouldContain("I8");
+
+        // The owner is not named in the violation on purpose — the check is a set difference over
+        // event types, so it reports the type once however many owners it touches.
+        violation.Detail.ShouldNotContain(ownerId.ToString());
+    }
+
+    [Fact]
+    public async Task Every_event_type_the_posting_catalog_can_credit_an_owner_with_has_a_section()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await DemoSeeder.SeedAsync(fixture.Api.Services, ct);
+
+        // The scenario org exists to exercise every template and workflow, so if any owner-crediting
+        // event were missing from the map this is the fixture that would show it.
+        await ScenarioSeeder.SeedAsync(fixture.Api.Services, ct);
+
+        var runner = fixture.Api.Services.GetRequiredService<ISweepRunner>();
+        var result = await runner.RunAsync([DemoSeeder.DemoOrgId, ScenarioSeeder.ScenarioOrgId], ct);
+
+        result.Violations.ShouldNotContain(v => v.Invariant == "I8",
+            "an owner-equity event type has no StatementSectionMap entry: "
+            + string.Join("; ", result.Violations.Where(v => v.Invariant == "I8").Select(v => v.Detail)));
+    }
+
+    [Fact]
     public async Task A_clean_org_logs_nothing()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -191,5 +238,99 @@ public sealed class InvariantSweepTests(PostgresFixture fixture)
 
         await tx.CommitAsync(ct);
         return orgId;
+    }
+
+    /// <summary>
+    /// Commits a <b>balanced</b> entry whose event_type has no statement section, under an
+    /// owner-attributed owner_equity line. Raw SQL through the migrator role because the domain
+    /// cannot produce it: <c>AccountingEventService</c> only emits the mapped types, so the only way
+    /// to prove I8 can go red is to write the row the catalog will not.
+    /// <para>
+    /// <c>InterestEarned</c> is the realistic instance rather than a nonsense string: it posts no
+    /// owner_equity line today, which is exactly why it is absent from the map, and the interest
+    /// entitlement policy that would give it one is deferred under ADR-014. This test is what fires
+    /// the day that lands without a map entry.
+    /// </para>
+    /// </summary>
+    private async Task<(Guid OrgId, Guid OwnerId)> CreateUncategorizedOwnerEventOrgAsync(CancellationToken ct)
+    {
+        var orgId = UuidV7.NewId();
+        var entryId = UuidV7.NewId();
+        var ownerId = UuidV7.NewId();
+
+        await using (var migratorDb = fixture.CreateContext(fixture.MigratorConnectionString))
+        {
+            migratorDb.Orgs.Add(new OrgEntity { Id = orgId, Name = $"Uncategorized {orgId:N}" });
+            await migratorDb.SaveChangesAsync(ct);
+        }
+
+        await using var conn = new NpgsqlConnection(fixture.MigratorConnectionString);
+        await conn.OpenAsync(ct);
+        await using var tx = await conn.BeginTransactionAsync(ct);
+        await RlsProbe.SetOrgAsync(conn, tx, orgId, ct);
+
+        // journal_lines.owner_id carries a real FK, so the dimension has to exist before the line can
+        // reference it — the corruption is the event_type, not a dangling owner.
+        await using (var owner = new NpgsqlCommand(
+            """
+            INSERT INTO owners (id, org_id, name, reserve_amount, is_system, created_at)
+            VALUES (@id, @org, 'Uncategorized Owner', 0, false, now())
+            """, conn, tx))
+        {
+            owner.Parameters.AddWithValue("id", ownerId);
+            owner.Parameters.AddWithValue("org", orgId);
+            await owner.ExecuteNonQueryAsync(ct);
+        }
+
+        var equityAccountId = UuidV7.NewId();
+        var receivableAccountId = UuidV7.NewId();
+        await using (var accounts = new NpgsqlCommand(
+            """
+            INSERT INTO accounts (id, org_id, code, class, name, created_at) VALUES
+                (@equity, @org, 'owner_equity', 'owner_equity', 'Owner Equity', now()),
+                (@receivable, @org, '1200', 'tenant_receivable', 'Tenant Receivable', now())
+            """, conn, tx))
+        {
+            accounts.Parameters.AddWithValue("equity", equityAccountId);
+            accounts.Parameters.AddWithValue("receivable", receivableAccountId);
+            accounts.Parameters.AddWithValue("org", orgId);
+            await accounts.ExecuteNonQueryAsync(ct);
+        }
+
+        await using (var entry = new NpgsqlCommand(
+            """
+            INSERT INTO journal_entries (id, org_id, entry_date, event_type, posted_at, created_at)
+            VALUES (@id, @org, CURRENT_DATE, 'InterestEarned', now(), now())
+            """, conn, tx))
+        {
+            entry.Parameters.AddWithValue("id", entryId);
+            entry.Parameters.AddWithValue("org", orgId);
+            await entry.ExecuteNonQueryAsync(ct);
+        }
+
+        // Credit owner equity, debit a receivable for the same amount and basis: the entry balances,
+        // so I1 has nothing to say and the only thing wrong with this journal is that no statement
+        // can categorize it.
+        await using (var lines = new NpgsqlCommand(
+            """
+            INSERT INTO journal_lines
+                (id, org_id, entry_id, account_id, account_class, debit, credit, basis, owner_id, created_at)
+            VALUES
+                (@equityLine, @org, @entry, @equityAccount, 'owner_equity', NULL, 100.00, 'both', @owner, now()),
+                (@receivableLine, @org, @entry, @receivableAccount, 'tenant_receivable', 100.00, NULL, 'both', NULL, now())
+            """, conn, tx))
+        {
+            lines.Parameters.AddWithValue("equityLine", UuidV7.NewId());
+            lines.Parameters.AddWithValue("receivableLine", UuidV7.NewId());
+            lines.Parameters.AddWithValue("org", orgId);
+            lines.Parameters.AddWithValue("entry", entryId);
+            lines.Parameters.AddWithValue("equityAccount", equityAccountId);
+            lines.Parameters.AddWithValue("receivableAccount", receivableAccountId);
+            lines.Parameters.AddWithValue("owner", ownerId);
+            await lines.ExecuteNonQueryAsync(ct);
+        }
+
+        await tx.CommitAsync(ct);
+        return (orgId, ownerId);
     }
 }

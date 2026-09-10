@@ -3,7 +3,7 @@
 - **Audience:** Operators and maintainers
 - **Status:** Living runbook; canonical error-diagnosis reference
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-08-20
+- **Last reviewed:** 2026-09-09
 
 How to turn the reference an operator sees on screen into the full server-side detail in
 Application Insights. See [ADR-025](../adr/ADR-025-error-contract-and-observability.md) for the
@@ -143,6 +143,15 @@ condition persists until someone posts a correction. Reproduce it on demand with
 checks (see the local-dev runbook). The sweep also emits a `jobs.invariant_sweep` span with each
 violation attached as a span event, so the run's own trace is the correlation handle a request id
 would otherwise be.
+
+**One violation does not fit that shape: I8.** Every other swept invariant reports a balance that is
+wrong and is cleared by posting a correction. I8 reports that an `event_type` carrying
+owner-attributed `owner_equity` lines has no `StatementSectionMap` entry — a code condition. No
+correction entry clears it, and until the map gains the entry, every owner statement covering one of
+those entries fails to render (`UncategorizedEventException`) instead of dropping the line, so the
+figures were never wrong but the document cannot be produced. Triage it as a release defect: the
+message names the event type, how many lines carry it, and a sample entry id; the fix is a map entry
+and a deploy.
 
 A run with violations is additionally recorded as **Failed** in Hangfire's job storage, which is
 readable without the log pipeline. The Hangfire dashboard is deliberately not mounted

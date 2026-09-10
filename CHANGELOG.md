@@ -21,6 +21,12 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   network, using a dedicated identity and credential vault. Local tests cover replay, rollback,
   permissions and password handling; live deployment verification remains pending.
 
+- **The nightly correctness sweep now checks that every kind of owner transaction can appear on a
+  statement.** If a new kind of transaction ever reaches an owner's money without being given a place
+  on the owner statement, the statement refuses to render rather than quietly leaving the line out.
+  That gap is now caught the same night by the sweep — and by `check-invariants` on demand — instead
+  of when an owner asks for a document that will not open. No money figure changes.
+
 ### Changed
 
 - **Deployment work is consolidated for public distribution.** One distribution checklist owns

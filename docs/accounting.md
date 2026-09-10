@@ -3,7 +3,7 @@
 - **Audience:** Contributors, operators, and reviewers
 - **Status:** Living accounting guide
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-09-02
+- **Last reviewed:** 2026-09-09
 
 This is the canonical public explanation of the shipped trust-accounting model, written so a
 property manager, bookkeeper, or attorney can evaluate it without reading C#. The Accounting module
@@ -161,7 +161,13 @@ The same sweep checks the companion rules: every entry balances in each basis, n
 income line carries an owner's name, no held deposit or prepayment can go negative — and, because a
 deposit is owner-tagged, no _owner's_ held-deposit position can go negative either. That last check is
 what catches a release booked against a different owner than the collection: the tenant's own total
-would still come to zero while the owner's column silently stayed high. The
+would still come to zero while the owner's column silently stayed high.
+
+The sweep also checks one thing that is not about balances at all: that every kind of event crediting
+an owner is one the statement knows how to present. If a new kind of transaction reaches an owner's
+money without being given a place on the statement, the statement refuses to render rather than
+leaving the line out — so this is caught the same night rather than when an owner asks for a document
+that will not open. The
 [local-development runbook](runbooks/local-dev.md#checking-the-accounting-invariants) lists the full
 sweep.
 
@@ -337,8 +343,11 @@ lines are grouped by `event_type` using a single exhaustive map (`StatementSecti
 
 The map is _exhaustive by construction_: any event that posts to `owner_equity` but has no entry in
 this map throws at runtime rather than silently dropping a line off the statement. Adding a new
-posting template that touches owner equity requires updating the map, and the property-based test
-suite will catch the omission before deployment.
+posting template that touches owner equity requires updating the map. Two things enforce that: the
+property-based suite catches the omission before deployment, and invariant **I8** sweeps the live
+journal nightly for owner-equity event types missing from the map — which also catches rows that
+entered the journal without going through the posting service at all, such as a data-repair
+migration, which no source-level test can see.
 
 ### The structural tie-out ($0.00 variance or issuance is blocked)
 
