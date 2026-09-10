@@ -879,3 +879,10 @@ th.num {
     transform: none;
   }
 }
+
+/* An anchor wearing the button shape — a link that is genuinely a navigation, not a click handler
+   (the sign-in affordance on an expired session). Buttons get these from the UA stylesheet. */
+a.pf-btn {
+  text-decoration: none;
+  cursor: pointer;
+}

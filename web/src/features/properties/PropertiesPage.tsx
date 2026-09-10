@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router';
 import { Badge, Button, Input, Select, type TableColumn } from '@/design';
 import { asApiError, type ApiError } from '@/api';
 import { ApiErrorNotice } from '@/components/ApiErrorNotice';
+import { ErrorAction } from '@/components/ErrorAction';
 import { IndexView } from '@/components/IndexView';
 import { Modal } from '@/components/Modal';
 import {
@@ -149,14 +150,11 @@ function NewPropertyModal({
                 fallback="Couldn’t load the owner list."
                 kind="read"
               />
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => void owners.refetch()}
-                disabled={owners.isFetching}
-              >
-                {owners.isFetching ? 'Retrying…' : 'Retry'}
-              </Button>
+              <ErrorAction
+                error={owners.error}
+                onRetry={() => void owners.refetch()}
+                retrying={owners.isFetching}
+              />
             </div>
           ) : (owners.data?.items ?? []).length === 0 ? (
             <p className="t3 fs12">

@@ -173,7 +173,9 @@ export function CompliancePackPanel({ report, isAdmin }: CompliancePackPanelProp
         </p>
       )}
 
-      <ApiErrorNotice error={error} style={{ padding: '8px var(--card-pad)' }} />
+      {/* A download is a read: without kind the internal_error and signed-out copy would both
+          claim "Nothing was saved" about a ZIP that was never saving. */}
+      <ApiErrorNotice error={error} kind="read" style={{ padding: '8px var(--card-pad)' }} />
 
       {done && (
         <p className="pf-pack-ok" role="status" style={{ padding: '8px var(--card-pad)' }}>

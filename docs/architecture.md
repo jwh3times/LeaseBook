@@ -106,7 +106,12 @@ Every error response — CQRS slices and the auth endpoints alike — is built b
 `ProblemResults` (`SharedKernel.Endpoints`), which stamps a machine-readable `code` and a
 `correlationId` (the W3C trace id, the same value Application Insights indexes as `operation_Id`) on
 every response; an architecture test fails the build on any direct `Results.Problem` /
-`TypedResults.Problem` call elsewhere. A terminal exception handler, registered last, claims anything
+`TypedResults.Problem` call elsewhere. That guard sees only direct calls, so an error response
+written by middleware or by a framework event bypasses both the factory and the test: the cookie
+handler's unauthenticated 401 was one such response until it was routed through `ProblemResults`
+(ADR-025, 2026-09-10 addendum 2), and the authorization middleware's role-denial 403 — deliberately
+bare, so that a problem body still means MFA enforcement — and the rate limiter's 429 remain plain
+statuses. A terminal exception handler, registered last, claims anything
 the typed handlers decline and returns a generic 500 carrying only that reference — never the
 exception message, type, or stack trace. `ILogger` output shares the tracing pipeline's OpenTelemetry
 exporter, so the correlation id an operator sees on screen is directly searchable in Application
@@ -171,11 +176,14 @@ rule, `createObjectURL`, a `document.cookie` read, or a raw `fetch(` appears und
 [ADR-025](adr/ADR-025-error-contract-and-observability.md).
 
 The UI renders what that rule carries rather than substituting copy of its own: a failed read shows
-the server's mapped message, the support reference, and a retry — inline beside an auxiliary read,
-and through `QueryErrorState` for a content region — so an operator can quote a reference for any
-failure a user reports, and an empty state means only that the read succeeded and found nothing. A
-404 on a detail route is the deliberate exception: it is a correct answer to a wrong id, so it keeps
-a plain not-found state and offers no retry. See the 2026-09-09 amendment and addendum to ADR-025
+the server's mapped message, the support reference, and the affordance that matches the failure
+— inline beside an auxiliary read, and through `QueryErrorState` for a content region — so an
+operator can quote a reference for any failure a user reports, and an empty state means only that
+the read succeeded and found nothing. One component (`ErrorAction`) makes that choice everywhere,
+because it is not always a retry: an expired session gets a sign-in link, since re-issuing the
+request only reproduces the 401 (ADR-025, 2026-09-10 addendum 2). A 404 on a detail route is the
+deliberate exception: it is a correct answer to a wrong id, so it keeps a plain not-found state and
+offers no retry. See the 2026-09-09 amendment and addendum to ADR-025
 and the [diagnostics runbook](runbooks/diagnostics.md).
 
 ## Data and persistence

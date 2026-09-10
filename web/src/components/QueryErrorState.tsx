@@ -1,6 +1,7 @@
 import type { UseQueryResult } from '@tanstack/react-query';
-import { Button, EmptyState } from '@/design';
+import { EmptyState } from '@/design';
 import { ApiErrorNotice } from './ApiErrorNotice';
+import { ErrorAction } from './ErrorAction';
 
 export interface QueryErrorStateProps {
   /** The failed query. Only `error`, `refetch` and `isFetching` are read. */
@@ -44,14 +45,11 @@ export function QueryErrorState({ query, title, fallback, onRetry }: QueryErrorS
         />
       }
       action={
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => (onRetry ? onRetry() : void query.refetch())}
-          disabled={query.isFetching}
-        >
-          {query.isFetching ? 'Retrying…' : 'Retry'}
-        </Button>
+        <ErrorAction
+          error={query.error}
+          onRetry={() => (onRetry ? onRetry() : void query.refetch())}
+          retrying={query.isFetching}
+        />
       }
     />
   );

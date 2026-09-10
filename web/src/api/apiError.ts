@@ -72,3 +72,34 @@ export function asApiError(e: unknown, fallback = 'Request failed.'): ApiError {
 export function isNotFound(error: unknown): boolean {
   return !!error && typeof error === 'object' && (error as { status?: unknown }).status === 404;
 }
+
+/**
+ * Was this failure the server saying the caller is not signed in?
+ *
+ * An expired cookie used to produce a **body-less** 401 — `OnRedirectToLogin` wrote a bare status
+ * for `/api` paths and there is no `UseStatusCodePages` — so there was no `detail` to render and no
+ * `correlationId` to quote, and `unwrap` fell back to the surface's own copy. That is how a
+ * signed-out operator came to be told "Failed to load the register" beside a Retry that re-issued
+ * the same 401 forever (#357). That path now carries `not_authenticated` and the correlation id.
+ *
+ * The body-less shape is still accepted, and not merely for history: any 401 raised before or
+ * outside that handler — a proxy, or middleware short-circuiting ahead of authentication — still
+ * arrives bare, and reading it as "signed out" is right.
+ *
+ * Status alone is not the discriminator. `/api/auth/login`, `/api/auth/mfa` and the account-security
+ * endpoints answer a *rejected credential* with 401 + ProblemDetails, so keying on 401 by itself
+ * would tell someone who mistyped their password that their session had expired.
+ *
+ * Deliberately an allowlist of the two shapes that mean "signed out", rather than a denylist of the
+ * credential-rejection codes: a 401 code added later then defaults to showing the server's own
+ * message, which is merely unhelpful, instead of to a confident "you have been signed out", which
+ * would be wrong and would hand the user a sign-in link they did not need. A 403 never qualifies —
+ * an authorization failure must not sign anyone out.
+ */
+export function isSessionExpired(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const { status, code } = error as { status?: unknown; code?: unknown };
+  // `undefined` is the bare cookie-handler 401; `not_authenticated` is what the endpoints that read
+  // the user themselves return when the cookie survived but the user behind it did not.
+  return status === 401 && (code === undefined || code === 'not_authenticated');
+}

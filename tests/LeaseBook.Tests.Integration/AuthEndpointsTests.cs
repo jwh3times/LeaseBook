@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.Net;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
+using System.Text.Json;
 using LeaseBook.Modules.Accounting.Contracts;
 using LeaseBook.Modules.Accounting.Features.Ledgers;
 using LeaseBook.SharedKernel;
@@ -28,6 +29,29 @@ namespace LeaseBook.Tests.Integration;
 public sealed class AuthEndpointsTests(PostgresFixture fixture)
 {
     private const string Password = "Tarheel-Trust-2026!";
+
+    /// <summary>
+    /// #357. An expired or absent cookie is the error a signed-in operator meets most often, and it
+    /// used to be the one error response carrying neither a code nor a correlationId: the cookie
+    /// handler wrote a bare status and there is no UseStatusCodePages to dress it. ErrorContractTests
+    /// cannot see this gap — it scans for direct Results.Problem calls, and this path never made one.
+    /// </summary>
+    [Fact]
+    public async Task Unauthenticated_api_request_carries_the_error_contract()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var client = fixture.Api.CreateClient();
+
+        var response = await client.GetAsync("/api/accounting/banks/balances", ct);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+        response.Content.Headers.ContentType?.MediaType.ShouldBe("application/problem+json");
+
+        var problem = await response.Content.ReadFromJsonAsync<JsonElement>(ct);
+        problem.GetProperty("code").GetString().ShouldBe("not_authenticated");
+        // The W3C trace id the operator quotes and App Insights indexes as operation_Id.
+        problem.GetProperty("correlationId").GetString().ShouldNotBeNullOrWhiteSpace();
+    }
 
     [Fact]
     public async Task Health_is_anonymous_and_reports_ok()

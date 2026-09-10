@@ -58,6 +58,14 @@ A failed _read_ gets the shorter wording, because it was never saving anything; 
 reference, and on this path it is the only way to find out what happened, since nothing about the
 cause is in the response.
 
+A second message reads on sight: **"You have been signed out."** — with "Nothing was saved" added
+when the failed operation was a write — means the request arrived with no valid session cookie.
+That response now carries a reference like any other (#357), but it was written by the cookie
+handler before the request reached a handler, so the Step 2 query returns the `requests` row (a 401
+on the route the operator was on) and no traces and no exception. That absence is the expected shape
+here, not lost telemetry. Note that this is the server's answer, not the SPA's guess: a 401 from a
+rejected password or authentication code is a different response and never renders this copy.
+
 **When a failed page load shows no reference.** Since ADR-025's 2026-08-20 amendment, failed _reads_
 carry the same `code` and `correlationId` as mutations — every SPA call runs through one success rule
 in `web/src/api` — and since the 2026-09-10 addendum every read-error branch in the SPA renders that
@@ -69,6 +77,10 @@ So a failed load with no reference now means something, rather than nothing. Rea
   ingress error page, or the browser could not connect at all), or
 - what the user is looking at is not a read error. A detail route that says the record was not found
   is reporting a 404, which is a successful answer to a wrong id and carries no reference by design.
+- the response came from middleware that still writes a bare status rather than the error contract:
+  a role denial (403), left deliberately plain so that a problem body on a denial still means MFA
+  enforcement, or a rate-limit rejection (429), which carries only `Retry-After`. Both are
+  request-pipeline failures, so the fallback query below will find them.
 
 Either way, fall back to searching by route and time window:
 
