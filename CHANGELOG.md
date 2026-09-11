@@ -59,6 +59,12 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Fixed
 
+- **An administrator blocked for not having two-factor authentication set up now gets a support
+  reference like every other failure.** The message explaining the block carried no reference code,
+  so it was the one failure outside sign-in that looked reportable but gave the operator nothing to
+  quote. The explanation is now plain English, too, instead of instructions naming an internal web
+  address.
+
 - **A sign-in that fails now tells you whether your credentials were wrong or the attempt never
   completed, and gives you a reference to quote either way.** Taking too long over your
   authenticator code used to report "Invalid credentials" — the same answer as a genuinely wrong
