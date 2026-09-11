@@ -66,6 +66,12 @@ on the route the operator was on) and no traces and no exception. That absence i
 here, not lost telemetry. Note that this is the server's answer, not the SPA's guess: a 401 from a
 rejected password or authentication code is a different response and never renders this copy.
 
+A third shape belongs beside them, on the sign-in page only: **"Your sign-in attempt timed out."** —
+the partial two-factor cookie from the password step expired before the code was submitted
+(`mfa_session_expired`, #360). It is not a wrong code and not an ended session, it carries a
+reference like any other, and the page returns the operator to the password form. An operator
+reporting "it said my code was invalid" from before 2026-09-11 may well have met this instead.
+
 **When a failed page load shows no reference.** Since ADR-025's 2026-08-20 amendment, failed _reads_
 carry the same `code` and `correlationId` as mutations — every SPA call runs through one success rule
 in `web/src/api` — and since the 2026-09-10 addendum every read-error branch in the SPA renders that
@@ -81,6 +87,13 @@ So a failed load with no reference now means something, rather than nothing. Rea
   a role denial (403), left deliberately plain so that a problem body on a denial still means MFA
   enforcement, or a rate-limit rejection (429), which carries only `Retry-After`. Both are
   request-pipeline failures, so the fallback query below will find them.
+- **the operator was signing in and the credential was rejected.** This is the one remaining
+  operator-visible failure in the product that withholds its reference _by design_: sign-in answers a
+  wrong password, a wrong code, a locked account and an unknown email with one uniform message and no
+  reference, because login must never reveal whether an email address has an account (ADR-025,
+  2026-09-11 amendment). There is nothing to ask the operator for — go straight to the route-and-window
+  query below, filtered to `/api/auth/*`. A sign-in failure that _does_ show a reference judged no
+  credential: a server fault, a rate limit, or the timed-out attempt above.
 
 Either way, fall back to searching by route and time window:
 

@@ -211,10 +211,14 @@ test.describe('keyboard-only operability', () => {
     await deactivate.focus();
     await page.keyboard.press('Enter');
 
-    // The guard alert surfaces; the account stays Active (no state change).
-    await expect(page.getByRole('alert')).toHaveText(
-      'Clear or reconcile outstanding items before deactivating this account.',
-    );
+    // The guard alert surfaces; the account stays Active (no state change). The page used to
+    // hardcode this sentence and show it for *any* failure of this mutation, so this assertion
+    // could pass without the server having said anything (#360). It now reads the server's own
+    // `bank_account_has_uncleared` detail, and the reference proves the response was the contract
+    // rather than the client's guess.
+    const alert = page.getByRole('alert');
+    await expect(alert).toContainText('Clear or reconcile outstanding items before deactivating.');
+    await expect(alert).toContainText(/Reference: [0-9a-f]{32}/);
     await expect(row.getByRole('button', { name: 'Deactivate' })).toBeVisible();
     await expect(row.getByText('Active')).toBeVisible();
   });

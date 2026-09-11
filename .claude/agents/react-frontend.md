@@ -265,6 +265,25 @@ found nothing. The one exception is a failure that is not a failed read — a 40
 means the record is gone, and retrying reproduces it, so those keep their own empty state and are
 told apart with `isNotFound(query.error)` from `@/api`.
 
+**Sign-in is the other exception, and it is the only one that is a security decision.** `LoginPage`
+deliberately renders one uniform literal for a rejected credential and shows neither the server's
+`detail` nor the reference — login must never reveal whether an email address has an account, and
+`AuthEndpoints` answers a wrong password, a lockout and an unknown email identically for that reason.
+Do not "fix" it to honour the contract like every other surface.
+
+Two things about it generalize, so copy the shape and not just the outcome:
+
+- **Key the generic branch on the status, not on a list of codes.** These endpoints judge a credential
+  only at 401, so `status === 401` (minus the one non-judgement code) is the discriminator. Everything
+  else — a validation 400, `antiforgery_rejected`, a 5xx, a rate limit, a dropped connection — renders
+  in full. The first attempt allowlisted four _conditions_ instead and sent every non-401 failure to
+  "Invalid email or password.", which told an operator with a stale antiforgery token to retype a
+  correct password, forever.
+- **Point the rule at the safe default.** A 401 code added later falls through to the generic copy:
+  unhelpful, never leaky. Listing the credential codes instead would default a _new_ credential code
+  to rendering the server's detail, which is the leak itself. Same direction as `isSessionExpired`
+  (ADR-025, 2026-09-11 amendment).
+
 Pass `kind="read"` on any `ApiErrorNotice` for a read, including a file download. Without it the
 `internal_error` copy — what a real 500 produces — tells the user "Nothing was saved" about an
 operation that was never saving. `QueryErrorState` does this for you.
@@ -279,10 +298,16 @@ shape pairs `<ApiErrorNotice … />` with `<ErrorAction error={q.error} onRetry=
 Eight surfaces held a copy of that button, so fixing it in `QueryErrorState` alone left the other
 seven saying "You have been signed out" beside a button that could not act on it — copy
 contradicting affordance. A ninth copy re-creates that bug. Two rules travel with it: a 401 is not
-automatically "signed out" — login, MFA and account-security answer a _rejected credential_ with 401, so ask
-`isSessionExpired` rather than checking `status === 401`; and never redirect on one, because a screen
-holding operator state (a previewed bulk run) must not be unmounted out from under them (ADR-025,
-2026-09-10 addendum 2).
+automatically "signed out" — there are **three** kinds on the auth endpoints, not two (signed out; a
+_rejected credential_ from login, MFA or account-security; and `mfa_session_expired`, an attempt that
+timed out before any credential was judged), so ask `isSessionExpired` rather than checking
+`status === 401`; and never redirect on one, because a screen holding operator state (a previewed
+bulk run) must not be unmounted out from under them (ADR-025, 2026-09-10 addendum 2).
+
+The affordance rule binds honest copy too, not just retries: telling an expired sign-in attempt to
+"start again from the sign-in page" while leaving it on the code form — whose only button re-issues
+the same 401 — is the same dead end wearing better words. Copy that names an action must land the
+user somewhere that offers it (#360).
 
 ### A failed read is never rendered as a confirmed value
 
