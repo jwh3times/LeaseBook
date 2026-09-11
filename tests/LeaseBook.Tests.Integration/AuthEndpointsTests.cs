@@ -212,7 +212,8 @@ public sealed class AuthEndpointsTests(PostgresFixture fixture)
     /// <summary>
     /// Status + code + detail of a login rejection — the whole response body a caller can read.
     /// Deliberately not "everything a caller could compare": it does not pin headers, and it does
-    /// not pin timing, which is a separate channel tracked privately.
+    /// not pin timing. Timing is the same property on a different channel and is owned by
+    /// LoginTimingTests, because no assertion about a body can see how long producing it took.
     /// </summary>
     private static async Task<string> Shape(
         HttpClient client, string email, string password, CancellationToken ct)

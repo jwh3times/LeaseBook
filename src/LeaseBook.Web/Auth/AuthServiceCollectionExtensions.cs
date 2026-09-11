@@ -46,6 +46,10 @@ public static class AuthServiceCollectionExtensions
         // Sign-in mints the org_id claim the tenancy middleware consumes.
         services.AddScoped<IUserClaimsPrincipalFactory<AppUser>, AppUserClaimsPrincipalFactory>();
 
+        // Singleton: it mints one decoy hash at construction, and that cost should be paid once at
+        // startup rather than on the request that needs the timing to match.
+        services.AddSingleton<PasswordTimingEqualizer>();
+
         // Auth request validators (P23) — executed by the ValidationEndpointFilter.
         services.AddScoped<AccountSecurityAudit>();
         services.AddScoped<AccountAdministration>();

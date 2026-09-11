@@ -34,11 +34,34 @@ public sealed class AuthEndpoints : IEndpointModule
 
         group.MapPost("/login", async (
             LoginRequest request, SignInManager<AppUser> signInManager, UserManager<AppUser> userManager,
-            HttpContext httpContext) =>
+            PasswordTimingEqualizer timing, HttpContext httpContext) =>
         {
+            // Every arm below that reaches the generic 401 must cost the same. Identity verifies a
+            // password hash only after it has found a user and cleared the pre-sign-in checks, so an
+            // unknown email, a locked-out account and a not-allowed account each skipped the most
+            // expensive step and answered far faster than a wrong password did. The uniform message
+            // made the three indistinguishable in the body; the clock told them apart anyway, which
+            // is an account-existence oracle by another route. `timing.SpendVerification` pays the
+            // missing cost on exactly those arms.
             var user = await userManager.FindByEmailAsync(request.Email);
-            if (user is not null)
+            if (user is null)
             {
+                timing.SpendVerification(request.Password);
+            }
+            else
+            {
+                // Predicted BEFORE the call, because the result cannot be read backwards for this.
+                // `LockedOut` is returned from two places: from the pre-sign-in check, ahead of the
+                // hasher, and again *after* the hasher when this very attempt trips the lockout
+                // counter. Treating every `LockedOut` as unpaid charges that second case twice, which
+                // made the lock-tripping attempt cost about double and marked the exact moment an
+                // account locks — a sharper signal than the one being removed. A missing stored hash
+                // also returns `Failed` without the hasher running, so it is predicted here too
+                // rather than inferred from the enum.
+                var hasherWillRun = user.PasswordHash is not null
+                    && await signInManager.CanSignInAsync(user)
+                    && !await userManager.IsLockedOutAsync(user);
+
                 var result = await signInManager.PasswordSignInAsync(
                     user, request.Password, isPersistent: false, lockoutOnFailure: true);
                 if (result.Succeeded)
@@ -49,6 +72,11 @@ public sealed class AuthEndpoints : IEndpointModule
                 if (result.RequiresTwoFactor)
                 {
                     return Results.Ok(new LoginResponse(LoginStatus.MfaRequired, user.Id.ToString()));
+                }
+
+                if (!hasherWillRun)
+                {
+                    timing.SpendVerification(request.Password);
                 }
             }
 
