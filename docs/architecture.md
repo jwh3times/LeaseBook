@@ -207,7 +207,10 @@ slow or contended machine. What is equalized is the expensive work, not every in
 residual remains where one arm does bookkeeping the others do not, which is why the bound is a ratio
 with margin rather than a claim of equality. If you add a sign-in path that can reject without
 hashing, it needs the same treatment — and decide whether the hasher will run **before** the sign-in
-call, because the result cannot be read backwards to tell you.
+call, because the result cannot be read backwards to tell you. The decoy itself is minted once at Web
+startup rather than on first use, so no single sign-in pays for it; that warm-up is one of the host
+lifecycle's Web-only steps ([ADR-042](adr/ADR-042-explicit-host-process-lifecycle.md)), because
+neither a CLI verb nor the build-time OpenAPI run ever reaches the point of serving one.
 
 ## Data and persistence
 

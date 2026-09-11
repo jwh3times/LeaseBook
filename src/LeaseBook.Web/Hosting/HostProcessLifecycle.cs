@@ -266,6 +266,16 @@ internal sealed class HostProcessLifecycle
 
     private async Task PrepareWebHostAsync(WebApplication app, CancellationToken ct)
     {
+        // Mint the decoy password hash before the server binds: it costs one PBKDF2 hash, and doing
+        // it lazily would make the first sign-in of a process the one request whose timing stands
+        // out — the exact anomaly the equalizer exists to remove. Web-only, on two different
+        // strengths of argument: a CLI verb returns above without ever constructing the pipeline,
+        // while the OpenAPI build does map the sign-in endpoint and is excluded only because its
+        // generator stops the host before it can serve anything (#367). First in this method
+        // because it depends on nothing below it — ordering it after work that can throw would tie
+        // the property to that work succeeding.
+        app.Services.GetRequiredService<PasswordTimingEqualizer>().Warm();
+
         // An unreachable database is tolerated so Kestrel can bind and readiness can report 503.
         // RoleSeeder rethrows structural faults, and the Web-only retry probe advances the state
         // after a transient outage (ADR-028).

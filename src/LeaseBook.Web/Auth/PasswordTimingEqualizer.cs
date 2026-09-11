@@ -55,6 +55,13 @@ public sealed class PasswordTimingEqualizer(IServiceScopeFactory scopeFactory)
     public void Warm() => _ = _decoyHash.Value;
 
     /// <summary>
+    /// Whether the decoy hash has been minted. Exists so a test can observe that the warm-up ran on
+    /// the process modes that serve sign-ins and did not run on the ones that cannot (#367); it is
+    /// not part of the equalizer's behaviour and nothing in the sign-in path reads it.
+    /// </summary>
+    internal bool IsWarm => _decoyHash.IsValueCreated;
+
+    /// <summary>
     /// Performs one password verification against the decoy and discards the result. Call this on any
     /// sign-in path that reaches the generic 401 without the hasher having run.
     /// </summary>
