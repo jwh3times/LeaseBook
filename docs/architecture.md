@@ -182,9 +182,13 @@ operator can quote a reference for any failure a user reports, and an empty stat
 the read succeeded and found nothing. One component (`ErrorAction`) makes that choice everywhere,
 because it is not always a retry: an expired session gets a sign-in link, since re-issuing the
 request only reproduces the 401 (ADR-025, 2026-09-10 addendum 2). A 404 on a detail route is the
-deliberate exception: it is a correct answer to a wrong id, so it keeps a plain not-found state and
-offers no retry. See the 2026-09-09 amendment and addendum to ADR-025
-and the [diagnostics runbook](runbooks/diagnostics.md).
+deliberate exception on a read: it is a correct answer to a wrong id, so it keeps a plain not-found
+state and offers no retry. **Sign-in is the other, and it is a security decision rather than an
+ergonomic one:** a rejected credential renders one uniform message and withholds both the server's
+detail and the reference, because login must never reveal whether an email address has an account. A
+sign-in failure that judged no credential — an expired two-factor attempt, a rate limit, a server
+fault — explains itself normally (ADR-025, 2026-09-11 amendment). See the 2026-09-09 amendment and
+addendum to ADR-025 and the [diagnostics runbook](runbooks/diagnostics.md).
 
 ## Data and persistence
 

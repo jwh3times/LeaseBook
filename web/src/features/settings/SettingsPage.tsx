@@ -388,7 +388,7 @@ function BankAccountsSection() {
   const banks = useBankAccounts();
   const setActive = useSetBankAccountActive();
   const [showNew, setShowNew] = useState(false);
-  const [rowError, setRowError] = useState<string | null>(null);
+  const [rowError, setRowError] = useState<ApiError | null>(null);
 
   const bankColumns: TableColumn<BankAccount>[] = [
     { key: 'name', header: 'Account', render: (b) => <span className="strong">{b.name}</span> },
@@ -429,8 +429,11 @@ function BankAccountsSection() {
             setRowError(null);
             try {
               await setActive.mutateAsync({ id: b.id, isActive: !b.isActive });
-            } catch {
-              setRowError('Clear or reconcile outstanding items before deactivating this account.');
+            } catch (e) {
+              // Was a hardcoded copy of the `bank_account_has_uncleared` 409's detail, which made
+              // every other failure of this mutation — a 500, a dropped connection — claim the
+              // account had uncleared items and dropped the support reference (#360).
+              setRowError(asApiError(e, 'Could not change this account.'));
             }
           }}
         >
@@ -469,8 +472,8 @@ function BankAccountsSection() {
         <Table columns={bankColumns} rows={banks.data ?? []} rowKey={(b) => b.id} />
       )}
       {rowError && (
-        <div className="pf-pad err" role="alert">
-          {rowError}
+        <div className="pf-pad">
+          <ApiErrorNotice error={rowError} fallback="Could not change this account." />
         </div>
       )}
       {showNew && <NewBankModal onClose={() => setShowNew(false)} />}

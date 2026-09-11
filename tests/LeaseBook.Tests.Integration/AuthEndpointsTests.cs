@@ -122,6 +122,107 @@ public sealed class AuthEndpointsTests(PostgresFixture fixture)
         locked.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
     }
 
+    /// <summary>
+    /// #360. `GetTwoFactorAuthenticationUserAsync()` returns null when the partial cookie from the
+    /// password step is gone, which is what a user who took too long over their authenticator app
+    /// produces. That answered `invalid_credentials` — telling someone whose sign-in timed out that
+    /// their credentials were wrong, and pointing them at the wrong next action.
+    ///
+    /// A client that never did the password step has no partial cookie, which is the same server
+    /// state an expired one leaves behind.
+    /// </summary>
+    [Fact]
+    public async Task An_expired_two_factor_session_is_a_timed_out_attempt_not_a_rejected_credential()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var client = fixture.Api.CreateClient();
+        await PrimeCsrfAsync(client, ct);
+
+        var response = await client.PostAsJsonAsync(
+            "/api/auth/mfa", new MfaRequest(UuidV7.NewId().ToString(), "123456"), ct);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+        response.Content.Headers.ContentType!.MediaType.ShouldBe("application/problem+json");
+
+        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
+        var code = body.RootElement.GetProperty("code").GetString();
+        code.ShouldBe("mfa_session_expired");
+        code.ShouldNotBe("invalid_credentials");
+        // Not a credential judgement, so there is nothing to withhold: the reason and the reference
+        // both travel, which is what lets the login page show a support reference here (ADR-025).
+        body.RootElement.GetProperty("correlationId").GetString().ShouldNotBeNullOrWhiteSpace();
+        body.RootElement.GetProperty("detail").GetString().ShouldNotBeNull().ShouldContain("timed out");
+    }
+
+    /// <summary>
+    /// #360. The same split on the recovery-code path, which collapses one more condition than
+    /// POST /api/auth/mfa does — a lockout — and must keep collapsing that one.
+    /// </summary>
+    [Fact]
+    public async Task An_expired_two_factor_session_is_a_timed_out_attempt_on_the_recovery_path_too()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var client = fixture.Api.CreateClient();
+        await PrimeCsrfAsync(client, ct);
+
+        var response = await client.PostAsJsonAsync(
+            "/api/auth/mfa/recovery", new RecoveryLoginRequest(UuidV7.NewId().ToString(), "abcd-efgh"), ct);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
+        body.RootElement.GetProperty("code").GetString().ShouldBe("mfa_session_expired");
+    }
+
+    /// <summary>
+    /// #360's load-bearing property, and the one most at risk from giving the timed-out attempt its
+    /// own code: on the password step, a wrong password, an unknown email and a locked-out account
+    /// must stay byte-identical. Login never reveals whether an email exists, so any difference here
+    /// — status, code, or detail — is an account-enumeration oracle.
+    /// </summary>
+    [Fact]
+    public async Task A_rejected_credential_never_reveals_which_credential_it_was()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var orgId = UuidV7.NewId();
+        await CreateOrgAsync(orgId, "Enumeration Org", ct);
+        var email = $"enum-{orgId:N}@example.com";
+        await CreateUserAsync(orgId, email, "Enum Test", ct);
+
+        var client = fixture.Api.CreateClient();
+        await PrimeCsrfAsync(client, ct);
+
+        var wrongPassword = await Shape(client, email, "wrong-password", ct);
+        var unknownEmail = await Shape(client, $"nobody-{UuidV7.NewId():N}@example.com", Password, ct);
+
+        // Trip the lockout (MaxFailedAccessAttempts = 5), then present the *correct* password: a
+        // locked account is a third distinct server state that must look like the other two.
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            await client.PostAsJsonAsync("/api/auth/login", new LoginRequest(email, "wrong-password"), ct);
+        }
+
+        var lockedOut = await Shape(client, email, Password, ct);
+
+        unknownEmail.ShouldBe(wrongPassword);
+        lockedOut.ShouldBe(wrongPassword);
+    }
+
+    /// <summary>
+    /// Status + code + detail of a login rejection — the whole response body a caller can read.
+    /// Deliberately not "everything a caller could compare": it does not pin headers, and it does
+    /// not pin timing, which is a separate channel tracked privately.
+    /// </summary>
+    private static async Task<string> Shape(
+        HttpClient client, string email, string password, CancellationToken ct)
+    {
+        var response = await client.PostAsJsonAsync("/api/auth/login", new LoginRequest(email, password), ct);
+        response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
+        var code = body.RootElement.GetProperty("code").GetString();
+        var detail = body.RootElement.GetProperty("detail").GetString();
+        return $"{(int)response.StatusCode}|{code}|{detail}";
+    }
+
     [Fact]
     public async Task Mfa_enroll_then_confirm_then_login_with_a_totp_code()
     {

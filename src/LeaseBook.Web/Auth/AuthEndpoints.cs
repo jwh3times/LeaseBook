@@ -68,7 +68,23 @@ public sealed class AuthEndpoints : IEndpointModule
             MfaRequest request, SignInManager<AppUser> signInManager, HttpContext httpContext) =>
         {
             var user = await signInManager.GetTwoFactorAuthenticationUserAsync();
-            if (user is null || !string.Equals(request.MfaToken, user.Id.ToString(), StringComparison.OrdinalIgnoreCase))
+            // A null user means the partial cookie from the password step is gone — the sign-in attempt
+            // timed out. That is not a rejected credential, and answering `invalid_credentials` told
+            // someone who simply took too long that their password was wrong (#360). It gets its own
+            // code because the correct next action differs: start again, not retype the code. There is
+            // nothing to enumerate here — no credential was judged — so this detail is safe to render.
+            if (user is null)
+            {
+                return ProblemResults.Problem(
+                    httpContext,
+                    code: "mfa_session_expired",
+                    detail: "Your sign-in attempt timed out. Start again from the sign-in page.",
+                    status: StatusCodes.Status401Unauthorized);
+            }
+
+            // A token that does not match the partial session is a client sending the wrong thing, not
+            // a timeout. It stays generic, with the password step's copy.
+            if (!string.Equals(request.MfaToken, user.Id.ToString(), StringComparison.OrdinalIgnoreCase))
             {
                 return ProblemResults.Problem(
                     httpContext,
