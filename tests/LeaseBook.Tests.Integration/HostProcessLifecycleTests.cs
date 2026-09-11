@@ -4,6 +4,7 @@ using LeaseBook.Web.Cli;
 using LeaseBook.Web.Hosting;
 using LeaseBook.Web.Jobs;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -95,6 +96,45 @@ public sealed class HostProcessLifecycleTests
         exitCode.ShouldBe(CliExitCodes.Unavailable);
     }
 
+    /// <summary>
+    /// Minting the sign-in decoy hash costs one PBKDF2 hash — tens of milliseconds — and nothing a
+    /// CLI verb does can serve a sign-in, so a verb that mints one has paid for a value it will never
+    /// read (#367). The warm-up is deliberately eager for the Web host; the fix is to scope it, not
+    /// to defer it, which <c>LoginTimingTests</c> pins from the other side.
+    /// <para>
+    /// What this <b>cannot</b> see is the regression #367 actually reported: it drives a lifecycle it
+    /// composed itself, so a warm-up in the composition root would leave it green. What it pins is
+    /// that the CLI branch returns before the Web startup step the warm-up now lives in. The call
+    /// site is <c>SignInTimingWarmupTests</c>' subject, and the two are only jointly sufficient.
+    /// </para>
+    /// <para>
+    /// A stub hasher stands in because the mode-neutral graph this builder composes has no Identity:
+    /// without it a regression would surface as a resolution failure rather than as this assertion.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_cli_run_mints_no_decoy_password_hash()
+    {
+        var hasher = new CountingPasswordHasher();
+        var lifecycle = new HostProcessLifecycle(
+            HostProcessMode.Cli,
+            new CliInvocation("test", (_, _) => Task.FromResult(CliExitCodes.Success)));
+        var builder = Builder(jobsEnabled: false);
+        builder.Services.AddSingleton<PasswordTimingEqualizer>();
+        builder.Services.AddSingleton<IPasswordHasher<AppUser>>(hasher);
+        lifecycle.Configure(builder);
+        await using var app = builder.Build();
+
+        var exitCode = await lifecycle.RunAsync(app, _ => { }, TestContext.Current.CancellationToken);
+
+        // Guards the guard: a lifecycle that silently stopped running the invocation would also
+        // never warm, and would satisfy the assertions below having exercised nothing.
+        exitCode.ShouldBe(CliExitCodes.Success);
+        hasher.Hashes.ShouldBe(
+            0, "a CLI verb cannot serve a sign-in, so minting the decoy hash is pure startup cost");
+        app.Services.GetRequiredService<PasswordTimingEqualizer>().IsWarm.ShouldBeFalse();
+    }
+
     [Fact]
     public async Task Openapi_build_composes_without_a_database_or_deployment_configuration()
     {
@@ -144,4 +184,19 @@ public sealed class HostProcessLifecycleTests
 
     private static bool Has<T>(IServiceCollection services) =>
         services.Any(service => service.ServiceType == typeof(T));
+
+    private sealed class CountingPasswordHasher : IPasswordHasher<AppUser>
+    {
+        public int Hashes { get; private set; }
+
+        public string HashPassword(AppUser user, string password)
+        {
+            Hashes++;
+            return "stub";
+        }
+
+        public PasswordVerificationResult VerifyHashedPassword(
+            AppUser user, string hashedPassword, string providedPassword) =>
+            PasswordVerificationResult.Failed;
+    }
 }

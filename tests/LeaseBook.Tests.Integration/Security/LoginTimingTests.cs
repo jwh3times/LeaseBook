@@ -5,6 +5,7 @@ using LeaseBook.SharedKernel;
 using LeaseBook.Tests.Common;
 using LeaseBook.Tests.Integration.Fixtures;
 using LeaseBook.Web.Auth;
+using Microsoft.Extensions.DependencyInjection;
 using Shouldly;
 
 namespace LeaseBook.Tests.Integration.Security;
@@ -176,6 +177,32 @@ public sealed class LoginTimingTests(PostgresFixture fixture)
 
         ShouldMatch(Median(trippingLock), baseline, "the attempt that trips the lockout");
         ShouldMatch(Median(afterLock), baseline, "an attempt against an already-locked account");
+    }
+
+    /// <summary>
+    /// The two tests above sample a host that has already signed in many times, so neither can see
+    /// whether the decoy hash was minted at startup or on their own first attempt. It has to be
+    /// startup: the equalizer's whole purpose is that no single sign-in stands out, and a lazily
+    /// minted hash would put one PBKDF2 cost on whichever request happened to be first.
+    /// <para>
+    /// A dedicated host for exactly that reason — the shared factory would satisfy this whatever
+    /// startup did, because every sign-in in this class warms it as a side effect. Scoping the
+    /// warm-up to Web mode (#367) is what this must survive; <c>HostProcessLifecycleTests</c> pins
+    /// the other arm, and <c>SignInTimingWarmupTests</c> pins the call site.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_web_host_mints_the_decoy_hash_before_it_serves_anything()
+    {
+        await using var host = new ApiFactory(fixture.AppConnectionString);
+
+        // Boots the host and stops there. Nothing here signs in, so a warm equalizer can only have
+        // been warmed by startup.
+        using var client = host.CreateClient();
+
+        host.Services.GetRequiredService<PasswordTimingEqualizer>().IsWarm.ShouldBeTrue(
+            "the Web host must mint the decoy hash before it binds — deferred to first use, the cost "
+            + "lands on one real sign-in and makes it the request whose timing stands out");
     }
 
     private static void ShouldMatch(double arm, double baseline, string what)

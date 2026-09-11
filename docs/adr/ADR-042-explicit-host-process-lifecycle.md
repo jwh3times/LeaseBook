@@ -38,6 +38,7 @@ The modes are mutually exclusive:
 | Hangfire and recurring scheduling                     | when `Jobs:Enabled` | no  | no            |
 | Foreground CLI invocation                             | no                  | yes | no            |
 | Role seeding, security guards and registry validation | yes                 | no  | no            |
+| Sign-in timing decoy warm-up                          | yes                 | no  | no            |
 
 `Jobs:Enabled` and the ASP.NET environment remain inputs to Web policy, not additional process modes.
 A recognized CLI verb combined with `LEASEBOOK_OPENAPI_BUILD=1` is rejected before host composition;

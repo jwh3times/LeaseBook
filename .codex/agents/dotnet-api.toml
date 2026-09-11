@@ -200,7 +200,7 @@ millisecond budget, so it survives a slow CI box. If you add a sign-in path that
 without hashing — a new pre-check, a new lockout-like short circuit — call `SpendVerification` on it
 and add an arm to that test.
 
-Two traps, both of which this got wrong before review caught them:
+Three traps, all of which this got wrong before review caught them:
 
 - **Decide whether the hasher will run _before_ the sign-in call, not from its result.**
   `SignInResult.LockedOut` comes back from two different places — the pre-sign-in check, ahead of the
@@ -210,6 +210,12 @@ Two traps, both of which this got wrong before review caught them:
   the hasher running at all.
 - **Bound the ratio on both sides.** Over-payment separates two arms exactly as well as
   under-payment, and a one-sided floor cannot see it — it is what let the double-charge through.
+- **Warm the equalizer from the Web lifecycle, not the composition root.** The decoy hash is minted
+  eagerly on purpose — deferred to first use, one real sign-in pays the PBKDF2 cost and becomes the
+  request whose timing stands out. But an unconditional call after `builder.Build()` runs in _every_
+  process mode, so every CLI verb minted a hash it could never use (#367). It belongs in
+  `HostProcessLifecycle.PrepareWebHostAsync`, which ADR-042 already gates to Web;
+  `SignInTimingWarmupTests` reads compiled IL to keep it there.
 
 ### Three responses are deliberately bare — do not "correct" them
 
