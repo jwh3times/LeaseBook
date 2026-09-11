@@ -171,17 +171,22 @@ unauthenticated 401 wrote a bare status from WP-06 until #357 — three months �
 reason (ADR-025 addendum 2).
 
 So when you write an `OnRejected`, an `IAuthorizationMiddlewareResultHandler`, a cookie-handler
-event, or any other error path that does not go through an endpoint delegate, **CI cannot check you.**
-Route it through `ProblemResults`, or make leaving it bare a deliberate decision with its own
-justification and its own test.
+event, or any other error path that does not go through an endpoint delegate, **the call-site guard
+cannot check you.** Route it through `ProblemResults`, or make leaving it bare a deliberate decision
+with its own justification and its own test.
 
-**The repo currently has one response that does neither, and it is the one to copy nothing from.**
-`MfaAuthorizationResultHandler` (`src/LeaseBook.Web/Security/`) hand-builds a `ProblemDetails` for
-its MFA-enrollment 403 with `WriteAsJsonAsync` — so it carries a body but no `code` and no
-`correlationId`. Because the SPA's mapper reads `code ?? title`, its machine code is the English
-sentence "Multi-factor authentication required.", and the operator gets a notice with no reference
-to quote: a response that looks diagnosable and is not. That is worse than the three bare ones
-below, which at least do not pretend. Tracked by #361, not sanctioned — do not model new code on it.
+**A second guard can check you, but only on what you emit — and only if you add your path to it.**
+`MiddlewareErrorContractTests` (`tests/LeaseBook.Tests.Integration/Observability/`) drives the
+middleware-written error paths it lists against the real host and asserts each response body: full
+contract, or deliberately bare and named as such. It exists because two responses went missing through the IL guard's blind spot — the cookie
+handler's bare 401 (#357), and the MFA-enrollment 403 which served `application/problem+json`
+carrying neither `code` nor `correlationId`, so the SPA's `code ?? title` fallback promoted its
+English `Title` into the machine-readable slot (#361). A problem body with no reference is worse than
+a bare status: it looks diagnosable and is not.
+
+**If you add a middleware-written error response, add it to that suite.** The two guards catch
+different things and neither subsumes the other: revert the #361 fix and `ErrorContractTests` still
+passes, because no `Problem` call appeared or disappeared — only the bytes on the wire changed.
 
 ### Three responses are deliberately bare — do not "correct" them
 

@@ -31,10 +31,12 @@ public sealed class AuthEndpointsTests(PostgresFixture fixture)
     private const string Password = "Tarheel-Trust-2026!";
 
     /// <summary>
-    /// #357. An expired or absent cookie is the error a signed-in operator meets most often, and it
-    /// used to be the one error response carrying neither a code nor a correlationId: the cookie
-    /// handler wrote a bare status and there is no UseStatusCodePages to dress it. ErrorContractTests
-    /// cannot see this gap — it scans for direct Results.Problem calls, and this path never made one.
+    /// #357. An expired or absent cookie is the error a signed-in operator meets most often, and the
+    /// cookie handler wrote a bare status for it with no UseStatusCodePages to dress it.
+    /// ErrorContractTests cannot see that gap — it scans for direct Results.Problem calls, and this
+    /// path never made one. It was not the only response in that state, as this once claimed: the
+    /// MFA-enrollment 403 was a second (#361). MiddlewareErrorContractTests is now the home for this
+    /// class of check — add a middleware-written path there, not here.
     /// </summary>
     [Fact]
     public async Task Unauthenticated_api_request_carries_the_error_contract()

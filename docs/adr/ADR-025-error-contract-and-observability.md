@@ -524,8 +524,10 @@ register could not load when the truth was that they were signed out.
 **The 401 carried no contract at all, and this ADR's own guard could not see that.**
 `ConfigureApplicationCookie`'s `OnRedirectToLogin` wrote a bare status code for `/api` paths
 (`AuthServiceCollectionExtensions.cs`), and the pipeline has no `UseStatusCodePages` to dress it —
-so the single most common error a signed-in operator meets was the one error response in the product
-with neither a `code` nor a `correlationId`. `ErrorContractTests` scans IL for direct
+so the single most common error a signed-in operator meets was, as this read at the time, the one
+error response in the product with neither a `code` nor a `correlationId`. That superlative was
+wrong: the MFA-enrollment 403 was a second one all along, found in the #359 audit — see the
+2026-09-11 amendment (2) below. `ErrorContractTests` scans IL for direct
 `Results.Problem` / `TypedResults.Problem` calls outside `ProblemResults`; this path never made one,
 so there was nothing for it to catch. **A single-factory guard proves that the responses built by the
 factory are well-formed. It says nothing about error responses written by hand, by middleware, or by
@@ -643,6 +645,41 @@ report is diagnosed by route and time window rather than by reference. `docs/run
 records that, because it is the only operator-visible failure left in the product with no reference by
 design.
 
+### 2026-09-11 amendment (2) — gating the middleware surface by what it emits
+
+Issue #361, and the resolution of the revisit trigger recorded below. `MfaAuthorizationResultHandler`
+hand-built the MFA-enrollment 403 with `WriteAsJsonAsync`, serving `application/problem+json` that
+carried neither `code` nor `correlationId` for as long as the feature had existed. It now goes
+through `ProblemResults` like everything else and carries `mfa_enrollment_required`.
+
+**A problem body with no reference is a worse failure than a bare status.** A body-less response is at
+least honest that it has nothing to quote. This one looked diagnosable and was not — and because the
+SPA's mapper reads `code ?? title`, the machine-readable discriminator for it was the English sentence
+"Multi-factor authentication required.", a value that would have changed the moment anyone improved
+the copy. That is why it is not listed alongside the deliberately-bare responses enumerated in
+`.claude/agents/dotnet-api.md` (the role-denial 403, the rate limiter's 429, a detail route's 404):
+those are honest, and this was not.
+
+**The `urn:leasebook:error:*` type went with it.** Nothing read it, and `code` is the machine contract
+everywhere else; two spellings of one identifier is the drift the single factory exists to prevent.
+
+**The real remedy is the gate, not the fix.** `MiddlewareErrorContractTests`
+(`tests/LeaseBook.Tests.Integration/Observability/`) drives the middleware-written error paths it
+lists against the real host and asserts each emitted body: full contract for the cookie handler's
+401, this 403 and the antiforgery 400; deliberately bare for the role-denial 403 and the rate
+limiter's 429 — the bare ones asserted too, so
+giving one a body becomes a deliberate edit rather than a silent change.
+
+**The two guards are complementary and neither subsumes the other**, which is the point worth
+carrying. Reverting this fix leaves `ErrorContractTests` green: no `Problem` call appeared or
+disappeared, only the bytes on the wire changed. Reverting a factory call site leaves the new suite
+green for paths it does not drive. A call-site scan answers "was the factory used?"; a behavioral gate
+answers "is the response right?" — and only the second question is the one the contract actually makes.
+
+**Its own blind spot, stated so nobody has to rediscover it:** the suite is only as complete as its
+list of paths. A middleware-written error response added without a case there is invisible to it
+exactly as the first two were to the IL scan. That is the narrowed revisit trigger recorded below.
+
 ## Consequences
 
 - Every error response an operator can screenshot now carries a `Reference: <32-hex>` string they can
@@ -680,16 +717,13 @@ Reopen this decision if any of the following happens:
 - WP-11's Hangfire sweep lands and needs its own log-event id or correlation strategy beyond what is
   recorded here — extend this ADR (or add a short addendum, per the ADR-016 precedent) rather than
   re-deriving the taxonomy independently.
-- **Fired 2026-09-11, tracked by #361.** A second error response written outside the factory by
-  middleware was the trigger to gate that surface behaviorally rather than extend a call-site scan
-  that structurally cannot reach it. Auditing for #359 found it already in the tree:
-  `MfaAuthorizationResultHandler` hand-builds the MFA-enrollment 403 with `WriteAsJsonAsync`, so it
-  serves `application/problem+json` carrying neither `code` nor `correlationId`. It is a worse shape
-  than the bare 401 was — a body-less response is at least honest that it has nothing to quote,
-  whereas this one looks diagnosable and is not, and the SPA's `code ?? title` fallback silently
-  promotes its English `Title` into the machine-readable slot. The remaining trigger is a **third**
-  instance before #361 closes: that would make the pattern a habit rather than a pair, and the gate
-  the urgent work rather than the fix.
+- **Fired and resolved 2026-09-11 (#361); see the 2026-09-11 amendment (2) above.** A second error response written
+  outside the factory by middleware was the trigger to gate that surface behaviorally rather than
+  extend a call-site scan that structurally cannot reach it. It is now a behavioral gate, so the
+  trigger that remains is narrower: a middleware-written error response that
+  `MiddlewareErrorContractTests` does not drive. The suite asserts what the host emits, so it is only
+  as complete as its list of paths — such a response added without a case there is invisible
+  to it exactly as the first two were to the IL scan.
 - The decorator double-logging becomes a measurable signal-to-noise problem in Application Insights
   once B1/B4 are live, rather than a documented, accepted cost — promote the Follow-up below.
 
