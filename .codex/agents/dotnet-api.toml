@@ -123,9 +123,74 @@ Rules:
 
 - `MapGroup` sets auth policy + tag; individual routes don't repeat `.RequireAuthorization`
 - Bind → dispatch → map result. No logic in the endpoint lambda
-- `TypedResults.Ok(…)` for success; `Results.NotFound()` (not `TypedResults`) for null 404s
-- `.Produces<T>()` on every route for OpenAPI schema generation
+- `TypedResults.Ok(…)` for success. For a null 404 the form follows the delegate's **declared
+  return type**: with a declared `Task<Results<Ok<T>, NotFound>>` union use `TypedResults.NotFound()`
+  (12 of the 14 sites in `src/`); with an inferred return type use `Results.Ok(…)`/`Results.NotFound()`
+  together, so both ternary branches unify to `IResult` (2 sites)
+- `.Produces<T>()` on every route for OpenAPI schema generation — except where a declared
+  `Results<…>` union already supplies that metadata
 - Auth policies: `"RequirePMStaff"` for staff operations, `"RequirePMAdmin"` for admin-only
+
+---
+
+## Error contract (ADR-025)
+
+Every error response is meant to carry a machine-readable `code` and a `correlationId` — the W3C
+trace id the operator reads on screen as a support reference and an engineer searches Application
+Insights on. One factory builds them (for the one live exception, see the blind spot below):
+
+```csharp
+// In a typed-union delegate (Results<Ok<T>, …, ProblemHttpResult>)
+return ProblemResults.TypedProblem(
+    httpContext,
+    code: "bank_account_has_uncleared",
+    detail: "Clear or reconcile outstanding items before deactivating.",
+    status: StatusCodes.Status409Conflict);
+
+// Behind IResult
+return ProblemResults.Problem(httpContext, code, detail, status);
+```
+
+- `ProblemResults` is in `SharedKernel.Endpoints` (not the host) because module endpoint files are
+  emitters too, and a module may reference `SharedKernel` only
+- Never call `Results.Problem` / `TypedResults.Problem` / `Results.ValidationProblem` directly.
+  `ErrorContractTests` reads IL across every `src/` assembly (ADR-031) and fails the build on one
+- `code` is the stable contract the SPA switches on; `detail` is prose for a human and must never
+  leak an id, an account code, a DB column or constraint name, or a .NET type name
+- A structured value the **client needs for behavior** travels as a named, allowlisted `extensions`
+  entry — not as prose, and not as a general escape hatch
+
+### The blind spot: the guard sees direct calls only
+
+`ErrorContractTests` proves that the responses **`ProblemResults` builds** are well-formed. It says
+nothing about an error response written by middleware, by a framework event, or by hand onto
+`HttpResponse` — that path never makes a `Problem` call for the guard to find. The cookie handler's
+unauthenticated 401 wrote a bare status from WP-06 until #357 — three months — for exactly this
+reason (ADR-025 addendum 2).
+
+So when you write an `OnRejected`, an `IAuthorizationMiddlewareResultHandler`, a cookie-handler
+event, or any other error path that does not go through an endpoint delegate, **CI cannot check you.**
+Route it through `ProblemResults`, or make leaving it bare a deliberate decision with its own
+justification and its own test.
+
+**The repo currently has one response that does neither, and it is the one to copy nothing from.**
+`MfaAuthorizationResultHandler` (`src/LeaseBook.Web/Security/`) hand-builds a `ProblemDetails` for
+its MFA-enrollment 403 with `WriteAsJsonAsync` — so it carries a body but no `code` and no
+`correlationId`. Because the SPA's mapper reads `code ?? title`, its machine code is the English
+sentence "Multi-factor authentication required.", and the operator gets a notice with no reference
+to quote: a response that looks diagnosable and is not. That is worse than the three bare ones
+below, which at least do not pretend. Tracked by #361, not sanctioned — do not model new code on it.
+
+### Three responses are deliberately bare — do not "correct" them
+
+| Response                                                   | Why it stays bare                                                                                                                                                                                                                                 |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Role-denial **403** (`OnRedirectToAccessDenied`)           | `AuthorizationMatrixTests` asserts a role denial is _not_ `problem+json` — that assertion is what makes a problem body on a denial mean **MFA enforcement**. Adding a body silently voids the test's meaning. Move the test first, or not at all. |
+| Rate-limiter **429** (`Program.cs`, `OnRejected`)          | Carries `Retry-After` and nothing else. The header is the actionable part.                                                                                                                                                                        |
+| Detail-route **404** (`Results`/`TypedResults.NotFound()`) | A REST-conventional null lookup. RLS makes a cross-org id indistinguishable from a nonexistent one, so there is no existence oracle either way, and the SPA already maps it to a generic message.                                                 |
+
+The 404 is the one you will meet routinely: a bare, body-less 404 for a null lookup is correct in
+either form and is **not** a contract violation.
 
 ---
 
@@ -234,13 +299,14 @@ public sealed class MyFeatureTests(PostgresFixture fixture)
 
 ## Banned patterns
 
-| Pattern                                            | Use instead                                              |
-| -------------------------------------------------- | -------------------------------------------------------- |
-| MediatR                                            | Hand-rolled `ISender` / `ICommandHandler`                |
-| AutoMapper                                         | Manual mapping in the slice or a static `Map()` method   |
-| MVC controllers                                    | `IEndpointModule` + `MapGroup` + `MapGet`/`MapPost`      |
-| Cross-module EF LINQ                               | Consumer-owned `Contracts` port + host adapter           |
-| `float`/`double` for money                         | `decimal` in C#, `NUMERIC(14,2)` in Postgres             |
-| UPDATE/DELETE on `journal_entries`/`journal_lines` | Linked reversal entry (`reverses_entry_id`)              |
-| Global query filter as the only tenancy guard      | RLS policy is the real boundary; EF filter is ergonomics |
-| `new Guid()` for IDs                               | `UuidV7.NewId()` from SharedKernel                       |'''
+| Pattern                                            | Use instead                                                                                             |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| MediatR                                            | Hand-rolled `ISender` / `ICommandHandler`                                                               |
+| AutoMapper                                         | Manual mapping in the slice or a static `Map()` method                                                  |
+| MVC controllers                                    | `IEndpointModule` + `MapGroup` + `MapGet`/`MapPost`                                                     |
+| `Results.Problem(…)` / bare error `StatusCode`     | `ProblemResults.Problem(httpContext, code, detail, status)` — except the three under **Error contract** |
+| Cross-module EF LINQ                               | Consumer-owned `Contracts` port + host adapter                                                          |
+| `float`/`double` for money                         | `decimal` in C#, `NUMERIC(14,2)` in Postgres                                                            |
+| UPDATE/DELETE on `journal_entries`/`journal_lines` | Linked reversal entry (`reverses_entry_id`)                                                             |
+| Global query filter as the only tenancy guard      | RLS policy is the real boundary; EF filter is ergonomics                                                |
+| `new Guid()` for IDs                               | `UuidV7.NewId()` from SharedKernel                                                                      |'''
