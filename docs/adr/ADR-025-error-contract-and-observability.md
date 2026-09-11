@@ -3,6 +3,9 @@
 - **Status:** Accepted
 - **Date:** 2026-07-19
 - **Deciders:** Engineering
+- **Amended by:** [ADR-031](ADR-031-compiled-il-architecture-guards.md) — the single-factory guard
+  moved from matching source text to reading compiled IL, which retired the two syntactic scan
+  limitations this ADR originally named (see the Decision).
 
 ## Context
 
@@ -88,20 +91,21 @@ would add a payload nobody reads. A bug report about one of these is "the id doe
 the two live validation-400 emitters (`ValidationExceptionHandler` for CQRS slices,
 `ValidationEndpointFilter` for the auth DTOs). This is enforced by
 `ErrorContractTests.Only_ProblemResults_builds_problem_details_responses`
-(`tests/LeaseBook.Tests.Architecture/ErrorContractTests.cs`), which scans every `.cs` file under
-`src/` for the regex `\b(?:TypedResults|Results)\.(?:Problem|ValidationProblem)\s*\(` — excluding
-`ProblemResults.cs` itself and `obj`/`bin` — and fails with the offending file:line on any match. A
-doc-comment convention was tried first and did not hold: the 28 pre-existing direct call sites (the
-same figure cited in Context) are the proof, echoing the lesson ADR-012 and ADR-024 already drew for
-the generated API client and the changelog — a convention without a gate rots.
-Two scan limitations are accepted deliberately, not overlooked: the check is a raw-text match, so
-(1) it can flag a **comment** that happens to contain the pattern (e.g. `// see Results.Problem(...)`)
-— a false positive costs a one-line edit, and a text scan cannot distinguish code from comment without
-becoming a much larger analyzer for one rule; and (2) it matches **per source line**, so a call whose
-`TypedResults.Problem(` opening and arguments were deliberately split across multiple lines would not
-match. Neither is a real threat in a solo-maintained repository — the practical failure mode the test
-exists to catch is a new call site written in the natural single-line style, which it catches
-reliably.
+(`tests/LeaseBook.Tests.Architecture/ErrorContractTests.cs`), which reads method references out of
+the **compiled IL** of every application assembly — `SharedKernel`, the host, the `Migrator` and all
+seven modules (`ArchitectureAssemblies.Application`) — and fails on any
+`Results`/`TypedResults` `Problem`/`ValidationProblem` reference whose calling type is not
+`ProblemResults` itself. A doc-comment convention was tried first and did not hold: the 28
+pre-existing direct call sites (the same figure cited in Context) are the proof, echoing the lesson
+ADR-012 and ADR-024 already drew for the generated API client and the changelog — a convention
+without a gate rots.
+The guard also asserts that a sanctioned call **inside** `ProblemResults` is still visible to it,
+so it cannot pass because the IL reader or the target pattern stopped seeing its own subject — a
+guard that can no longer go red is indistinguishable from one that is satisfied.
+The limitation that remains is structural rather than syntactic, and it is the one the 2026-09-10
+addendum (2) below was written about: **IL records only calls that were actually made,** so an error
+response written by middleware, by a framework event, or by hand onto `HttpResponse` makes no
+`Problem` call for the guard to find and is invisible to it at any scan fidelity.
 `ProblemResults` lives in `LeaseBook.SharedKernel.Endpoints`, not the `LeaseBook.Web` host, even
 though most call sites are host endpoint files. The reason is a module-boundary constraint, not a
 preference: module endpoint files are themselves emitters.
@@ -651,7 +655,8 @@ design.
   for host-project exceptions (see Follow-ups).
 - A new problem-response call site cannot silently bypass the contract: `ErrorContractTests` fails the
   build the moment a new direct `Results.Problem`/`TypedResults.Problem`/`Results.ValidationProblem`
-  call appears anywhere under `src/`, at the cost of the two named, accepted scan limitations.
+  call appears in any application assembly — at the cost of the one structural limitation named
+  above: an error response that never makes such a call is not a call site it can see.
 - Frontend error handling collapsed from five independently drifted, hand-rolled mappers to one
   (`web/src/api/apiError.ts` + `web/src/components/ApiErrorNotice.tsx`), fixing `reports.ts`'s
   silently-dropped validation branch as a side effect of consolidation rather than a separately scoped
@@ -675,9 +680,16 @@ Reopen this decision if any of the following happens:
 - WP-11's Hangfire sweep lands and needs its own log-event id or correlation strategy beyond what is
   recorded here — extend this ADR (or add a short addendum, per the ADR-016 precedent) rather than
   re-deriving the taxonomy independently.
-- The `ErrorContractTests` regex produces a false positive or false negative that costs real
-  debugging time (a legitimate comment tripping the gate, or a deliberately multi-line call slipping
-  through) — reconsider a Roslyn-based check at that point.
+- **Fired 2026-09-11, tracked by #361.** A second error response written outside the factory by
+  middleware was the trigger to gate that surface behaviorally rather than extend a call-site scan
+  that structurally cannot reach it. Auditing for #359 found it already in the tree:
+  `MfaAuthorizationResultHandler` hand-builds the MFA-enrollment 403 with `WriteAsJsonAsync`, so it
+  serves `application/problem+json` carrying neither `code` nor `correlationId`. It is a worse shape
+  than the bare 401 was — a body-less response is at least honest that it has nothing to quote,
+  whereas this one looks diagnosable and is not, and the SPA's `code ?? title` fallback silently
+  promotes its English `Title` into the machine-readable slot. The remaining trigger is a **third**
+  instance before #361 closes: that would make the pattern a habit rather than a pair, and the gate
+  the urgent work rather than the fix.
 - The decorator double-logging becomes a measurable signal-to-noise problem in Application Insights
   once B1/B4 are live, rather than a documented, accepted cost — promote the Follow-up below.
 
