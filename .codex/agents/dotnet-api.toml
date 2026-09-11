@@ -186,6 +186,31 @@ a bare status: it looks diagnosable and is not.
 different things and neither subsumes the other: revert the #361 fix and `ErrorContractTests` still
 passes, because no `Problem` call appeared or disappeared — only the bytes on the wire changed.
 
+### Sign-in uniformity is a timing property too
+
+`AuthEndpoints` answers a wrong password, a locked-out account and an unknown email with one code and
+one message, so nothing reveals whether an email address has an account. **That has to hold on the
+clock as well as in the body.** The expensive step is the password-hash verification, and any arm
+that rejects before reaching it returns in a fraction of the time — which separates the cases exactly
+as well as different copy would, and no assertion about the response body can see it.
+
+`PasswordTimingEqualizer` (`LeaseBook.Web.Auth`) does one equivalent verification against a decoy
+hash on the paths that skip the hasher; `LoginTimingTests` pins it as a **ratio** between arms, not a
+millisecond budget, so it survives a slow CI box. If you add a sign-in path that can reject a request
+without hashing — a new pre-check, a new lockout-like short circuit — call `SpendVerification` on it
+and add an arm to that test.
+
+Two traps, both of which this got wrong before review caught them:
+
+- **Decide whether the hasher will run _before_ the sign-in call, not from its result.**
+  `SignInResult.LockedOut` comes back from two different places — the pre-sign-in check, ahead of the
+  hasher, and the attempt that trips the lockout counter, which has already paid. Treating both as
+  unpaid charges the tripping attempt twice, so it answers in roughly double and marks the exact
+  moment an account locks. `Failed` is no safer: a user row with no stored hash returns it without
+  the hasher running at all.
+- **Bound the ratio on both sides.** Over-payment separates two arms exactly as well as
+  under-payment, and a one-sided floor cannot see it — it is what let the double-charge through.
+
 ### Three responses are deliberately bare — do not "correct" them
 
 | Response                                                   | Why it stays bare                                                                                                                                                                                                                                 |

@@ -59,6 +59,12 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Fixed
 
+- **Signing in takes the same time whether or not an email address has an account.** A failed sign-in
+  already gave the same answer for a wrong password, a locked account and an unknown address, so that
+  nothing reveals who has an account. How long the answer took did not match — it was far quicker to
+  say no to an address with no account — which gave the same information away by another route. Every
+  failed sign-in now does the same expensive work, so the answers take comparable time.
+
 - **An administrator blocked for not having two-factor authentication set up now gets a support
   reference like every other failure.** The message explaining the block carried no reference code,
   so it was the one failure outside sign-in that looked reportable but gave the operator nothing to

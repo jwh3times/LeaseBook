@@ -195,6 +195,20 @@ sign-in failure that judged no credential — an expired two-factor attempt, a r
 fault — explains itself normally (ADR-025, 2026-09-11 amendment). See the 2026-09-09 amendment and
 addendum to ADR-025 and the [diagnostics runbook](runbooks/diagnostics.md).
 
+That uniformity is a property of the **response time** as well as the body, and the two are enforced
+separately because one assertion cannot see the other. The expensive step of a sign-in is the
+password-hash verification, and the arms that never reach it — an unknown email, a locked-out
+account — would otherwise return in a small fraction of the time, which distinguishes them just as
+plainly as different copy would. `PasswordTimingEqualizer` (`LeaseBook.Web.Auth`) does one equivalent
+verification against a decoy hash on exactly those paths, and `LoginTimingTests` asserts the arms
+stay within a ratio of one another — **two-sided**, because doing an arm's work twice separates it as
+well as skipping it does — rather than within a fixed number of milliseconds, so the check holds on a
+slow or contended machine. What is equalized is the expensive work, not every instruction: a small
+residual remains where one arm does bookkeeping the others do not, which is why the bound is a ratio
+with margin rather than a claim of equality. If you add a sign-in path that can reject without
+hashing, it needs the same treatment — and decide whether the hasher will run **before** the sign-in
+call, because the result cannot be read backwards to tell you.
+
 ## Data and persistence
 
 A **single `AppDbContext`**, owned by the host, discovers each module's `IEntityTypeConfiguration`
