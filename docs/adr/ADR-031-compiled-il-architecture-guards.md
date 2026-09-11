@@ -25,6 +25,26 @@ and shared positive controls make a broken inspector fail visibly. Mono.Cecil be
 dependency, and IL diagnostics identify compiled callers rather than source lines. New assemblies and
 new forbidden-reference shapes must be added to the shared catalogs instead of individual tests.
 
+### 2026-09-11 note — the class of rule compiled IL cannot express at any fidelity
+
+Recorded here because an author asking "how do I guard this?" starts at this ADR and would otherwise
+read an unqualified endorsement. IL inspection is unchanged and remains the right mechanism for what
+it was chosen for; this names one class it cannot reach, which is a matter of **scope** rather than
+the fidelity limit in the trigger below.
+
+A guard that reads method references can only see calls that were made. A rule of the form "every
+error response carries a `code` and a `correlationId`" is not a rule about calls at all — a response
+written by middleware, by a framework event, or by hand onto `HttpResponse` satisfies or violates it
+without referencing any factory, so no scan fidelity makes it visible. Two responses were missing the
+contract for months on exactly that basis while `ErrorContractTests` stayed green (#357, #361).
+
+The remedy is not a better scan. Where the property is about **what the system emits**, gate it
+behaviorally against a running host: `MiddlewareErrorContractTests` does that for the error contract
+(ADR-025, 2026-09-11 amendment 2). The two are complementary, and the trade is explicit — a call-site
+scan is exhaustive over a compiled surface but answers only "was the factory used?", while a
+behavioral gate answers "is the response right?" and is exhaustive over nothing but its own list of
+cases. Prefer the behavioral gate whenever the invariant is stated in terms of an observable output.
+
 ## Revisit trigger
 
 Revisit when Mono.Cecil cannot read the assemblies produced by the supported .NET toolchain, or when a

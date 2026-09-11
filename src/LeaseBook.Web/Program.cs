@@ -328,6 +328,10 @@ lifecycle.Configure(builder);
 
 var app = builder.Build();
 
+// Mint the decoy password hash before serving: it costs one PBKDF2 hash, and doing it lazily
+// would make the first sign-in of a process the one request whose timing stands out.
+app.Services.GetRequiredService<LeaseBook.Web.Auth.PasswordTimingEqualizer>().Warm();
+
 var exitCode = await lifecycle.RunAsync(
     app,
     configuredApp =>

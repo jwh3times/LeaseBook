@@ -264,8 +264,18 @@ describe('SettingsPage', () => {
       http.get('/api/settings/org', () => HttpResponse.json(ORG)),
       http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 })),
       http.get('/api/settings/banks', () => HttpResponse.json([ACTIVE_BANK])),
+      // The real `bank_account_has_uncleared` shape (SettingsEndpoints.cs). The page used to
+      // hardcode a copy of this detail and render it for *any* failure of this mutation, so the
+      // body was never read and a 500 here claimed the account had uncleared items (#360).
       http.put('/api/settings/banks/:id/active', () =>
-        HttpResponse.json({ detail: 'uncleared items' }, { status: 409 }),
+        HttpResponse.json(
+          {
+            code: 'bank_account_has_uncleared',
+            detail: 'Clear or reconcile outstanding items before deactivating.',
+            correlationId: 'bank409ref',
+          },
+          { status: 409 },
+        ),
       ),
     );
 
@@ -273,11 +283,33 @@ describe('SettingsPage', () => {
     await screen.findByText('Operating Trust');
     await userEvent.click(screen.getByRole('button', { name: 'Deactivate' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      /clear or reconcile outstanding items/i,
-    );
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(/clear or reconcile outstanding items/i);
+    expect(alert).toHaveTextContent(/Reference: bank409ref/);
     // Badge stays Active
     expect(screen.getByText('Active')).toBeInTheDocument();
+  });
+
+  it('does not blame uncleared items for a failure that was not about them', async () => {
+    server.use(
+      http.get('/api/settings/org', () => HttpResponse.json(ORG)),
+      http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 })),
+      http.get('/api/settings/banks', () => HttpResponse.json([ACTIVE_BANK])),
+      http.put('/api/settings/banks/:id/active', () =>
+        HttpResponse.json(
+          { code: 'internal_error', detail: 'Boom.', correlationId: 'bank500ref' },
+          { status: 500 },
+        ),
+      ),
+    );
+
+    renderSettings();
+    await screen.findByText('Operating Trust');
+    await userEvent.click(screen.getByRole('button', { name: 'Deactivate' }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).not.toHaveTextContent(/uncleared|clear or reconcile/i);
+    expect(alert).toHaveTextContent(/Reference: bank500ref/);
   });
 
   it('shows the rate as a percentage, stores it in basis points, and keeps the org profile', async () => {

@@ -3,6 +3,9 @@
 - **Status:** Accepted
 - **Date:** 2026-07-19
 - **Deciders:** Engineering
+- **Amended by:** [ADR-031](ADR-031-compiled-il-architecture-guards.md) — the single-factory guard
+  moved from matching source text to reading compiled IL, which retired the two syntactic scan
+  limitations this ADR originally named (see the Decision).
 
 ## Context
 
@@ -88,20 +91,21 @@ would add a payload nobody reads. A bug report about one of these is "the id doe
 the two live validation-400 emitters (`ValidationExceptionHandler` for CQRS slices,
 `ValidationEndpointFilter` for the auth DTOs). This is enforced by
 `ErrorContractTests.Only_ProblemResults_builds_problem_details_responses`
-(`tests/LeaseBook.Tests.Architecture/ErrorContractTests.cs`), which scans every `.cs` file under
-`src/` for the regex `\b(?:TypedResults|Results)\.(?:Problem|ValidationProblem)\s*\(` — excluding
-`ProblemResults.cs` itself and `obj`/`bin` — and fails with the offending file:line on any match. A
-doc-comment convention was tried first and did not hold: the 28 pre-existing direct call sites (the
-same figure cited in Context) are the proof, echoing the lesson ADR-012 and ADR-024 already drew for
-the generated API client and the changelog — a convention without a gate rots.
-Two scan limitations are accepted deliberately, not overlooked: the check is a raw-text match, so
-(1) it can flag a **comment** that happens to contain the pattern (e.g. `// see Results.Problem(...)`)
-— a false positive costs a one-line edit, and a text scan cannot distinguish code from comment without
-becoming a much larger analyzer for one rule; and (2) it matches **per source line**, so a call whose
-`TypedResults.Problem(` opening and arguments were deliberately split across multiple lines would not
-match. Neither is a real threat in a solo-maintained repository — the practical failure mode the test
-exists to catch is a new call site written in the natural single-line style, which it catches
-reliably.
+(`tests/LeaseBook.Tests.Architecture/ErrorContractTests.cs`), which reads method references out of
+the **compiled IL** of every application assembly — `SharedKernel`, the host, the `Migrator` and all
+seven modules (`ArchitectureAssemblies.Application`) — and fails on any
+`Results`/`TypedResults` `Problem`/`ValidationProblem` reference whose calling type is not
+`ProblemResults` itself. A doc-comment convention was tried first and did not hold: the 28
+pre-existing direct call sites (the same figure cited in Context) are the proof, echoing the lesson
+ADR-012 and ADR-024 already drew for the generated API client and the changelog — a convention
+without a gate rots.
+The guard also asserts that a sanctioned call **inside** `ProblemResults` is still visible to it,
+so it cannot pass because the IL reader or the target pattern stopped seeing its own subject — a
+guard that can no longer go red is indistinguishable from one that is satisfied.
+The limitation that remains is structural rather than syntactic, and it is the one the 2026-09-10
+addendum (2) below was written about: **IL records only calls that were actually made,** so an error
+response written by middleware, by a framework event, or by hand onto `HttpResponse` makes no
+`Problem` call for the guard to find and is invisible to it at any scan fidelity.
 `ProblemResults` lives in `LeaseBook.SharedKernel.Endpoints`, not the `LeaseBook.Web` host, even
 though most call sites are host endpoint files. The reason is a module-boundary constraint, not a
 preference: module endpoint files are themselves emitters.
@@ -520,8 +524,10 @@ register could not load when the truth was that they were signed out.
 **The 401 carried no contract at all, and this ADR's own guard could not see that.**
 `ConfigureApplicationCookie`'s `OnRedirectToLogin` wrote a bare status code for `/api` paths
 (`AuthServiceCollectionExtensions.cs`), and the pipeline has no `UseStatusCodePages` to dress it —
-so the single most common error a signed-in operator meets was the one error response in the product
-with neither a `code` nor a `correlationId`. `ErrorContractTests` scans IL for direct
+so the single most common error a signed-in operator meets was, as this read at the time, the one
+error response in the product with neither a `code` nor a `correlationId`. That superlative was
+wrong: the MFA-enrollment 403 was a second one all along, found in the #359 audit — see the
+2026-09-11 amendment (2) below. `ErrorContractTests` scans IL for direct
 `Results.Problem` / `TypedResults.Problem` calls outside `ProblemResults`; this path never made one,
 so there was nothing for it to catch. **A single-factory guard proves that the responses built by the
 factory are well-formed. It says nothing about error responses written by hand, by middleware, or by
@@ -534,16 +540,23 @@ a role denial is _not_ `application/problem+json`, which is what pins the MFA re
 problem response to MFA alone. Extending the fix to that branch would have silently voided that
 test's meaning; it is a decision to make on its own evidence, not a tidy-up.
 
-**Status alone does not mean "signed out", and a rule keyed on it would have shipped a lie.** Nine
-call sites across seven auth endpoints answer 401 with ProblemDetails, and three of the four codes
+**Status alone does not mean "signed out", and a rule keyed on it would have shipped a lie.** Eleven
+call sites across seven auth endpoints answer 401 with ProblemDetails, and three of the five codes
 they use — `invalid_credentials`, `invalid_mfa_code`, `invalid_recovery_code` — mean _the credential
 you just supplied was rejected_, not _your session ended_. `isSessionExpired`
 (`web/src/api/apiError.ts`) is therefore an **allowlist** of the two signed-out shapes (no `code`, or
 `not_authenticated`), not a denylist of the credential codes: a 401 code added later then
 defaults to showing the server's own message, which is merely unhelpful, rather than to a confident
-"you have been signed out", which would be wrong. This is currently invisible on the login page only
-because `LoginPage` discards the `ApiError` and substitutes its own literal — an accident of that
-page's divergence from this contract, not a defense.
+"you have been signed out", which would be wrong. The allowlist's prediction came true within the
+month: `mfa_session_expired` (#360) is exactly that later 401 code, it falls outside
+`isSessionExpired`, and it correctly renders the server's own message instead of a confident claim
+about the session.
+
+This is invisible on the login page, which renders one generic literal for every rejected
+credential. That is **a defense, not an accident** — corrected 2026-09-11, and it contradicted this
+ADR's own addendum (1) above ("a deliberate uniform answer that refuses to distinguish an unknown
+account from a wrong password... must stay as it is") on the day it was written. See the 2026-09-11
+amendment below, which makes the divergence explicit rather than incidental.
 
 **The remedy is honest copy, not an automatic redirect.** Redirecting on a signed-out 401 was
 rejected because it acts on the operator's behalf at the moment they have the least information: a
@@ -583,6 +596,90 @@ is a different, already-handled state in which `RouteGuard` redirects correctly.
 therefore asserts its own premise — that nothing redirected — before asserting the copy, so the test
 cannot quietly start passing for the wrong reason if the guard's behavior moves.
 
+### 2026-09-11 amendment — sign-in is a standing exception, and the axis it turns on
+
+Issue #360. Two defects that only look separate. `POST /api/auth/mfa` answered `invalid_credentials`
+when `GetTwoFactorAuthenticationUserAsync()` returned null — which is what an expired partial cookie
+produces — so a user who took too long over their authenticator app was told their credentials were
+wrong and advised to retype a code that was never the problem. And `LoginPage` replaced every failure
+with its own literal, so that lie was invisible: a 500, a dropped connection, a rate limit and a
+mistyped password all rendered identically, and a failed sign-in was the one operator failure in the
+product producing no reference to quote.
+
+**The expired partial session now has its own code, `mfa_session_expired`**, on both two-factor paths
+(`/api/auth/mfa` and `/api/auth/mfa/recovery`). It is the fifth 401 code and the second that does not
+mean _credential rejected_.
+
+**Sign-in is a standing exception to "the UI renders what the contract carries," and the exception is
+principled rather than incidental.** Rendering the server's `detail` on the password step would be an
+account-enumeration regression: `AuthEndpoints` deliberately answers bad credentials, lockout and an
+unknown email with one code and one message, because login must never reveal whether an email exists.
+Addendum (2) above previously called this divergence "an accident... not a defense"; that was wrong
+when written and is corrected there.
+
+**The axis is not _which_ credential failed but _whether a credential was judged at all_.** These
+endpoints judge one at exactly one status — **401**. Everything else is the request failing before or
+around that judgement: a validation 400 describing the fields just submitted, `antiforgery_rejected`,
+a 5xx, a rate limit, a dropped connection. None of those bodies can carry account-specific
+information, so they render in full with their reference. That is what the first attempt got wrong:
+it allowlisted four _conditions_ rather than keying on the status, which left every non-401 failure
+falling through to "Invalid email or password." — telling an operator whose antiforgery token had gone
+stale that their password was wrong, and looping them there indefinitely.
+
+**The direction of the rule is the load-bearing part, and it is the same direction as
+`isSessionExpired`.** The generic branch is keyed on 401, so a 401 code added later defaults to the
+generic copy — merely unhelpful. The inverse, listing the credential codes and revealing everything
+else, would default a _new credential code_ to rendering the server's detail on the password step,
+which is the enumeration leak itself. Fail toward unhelpful, never toward wrong.
+
+**An honest error must also leave an exit.** Telling an expired attempt to "start again from the
+sign-in page" while stranding it on the code form — whose only control re-issues the same 401 — would
+have been #357's dead end with the copy now naming the missing exit. The page returns to the password
+step on that code, so the affordance matches the sentence. Pre-merge review caught this; the static
+reasoning that produced the fix did not, for the third time in two changes, because the fix looked
+complete from the component it was written in.
+
+**The one thing sign-in cannot have is a reference on a rejected credential.** That is the deliberate
+cost of the uniform answer: `detail` and `correlationId` are both withheld, so a "wrong password"
+report is diagnosed by route and time window rather than by reference. `docs/runbooks/diagnostics.md`
+records that, because it is the only operator-visible failure left in the product with no reference by
+design.
+
+### 2026-09-11 amendment (2) — gating the middleware surface by what it emits
+
+Issue #361, and the resolution of the revisit trigger recorded below. `MfaAuthorizationResultHandler`
+hand-built the MFA-enrollment 403 with `WriteAsJsonAsync`, serving `application/problem+json` that
+carried neither `code` nor `correlationId` for as long as the feature had existed. It now goes
+through `ProblemResults` like everything else and carries `mfa_enrollment_required`.
+
+**A problem body with no reference is a worse failure than a bare status.** A body-less response is at
+least honest that it has nothing to quote. This one looked diagnosable and was not — and because the
+SPA's mapper reads `code ?? title`, the machine-readable discriminator for it was the English sentence
+"Multi-factor authentication required.", a value that would have changed the moment anyone improved
+the copy. That is why it is not listed alongside the deliberately-bare responses enumerated in
+`.claude/agents/dotnet-api.md` (the role-denial 403, the rate limiter's 429, a detail route's 404):
+those are honest, and this was not.
+
+**The `urn:leasebook:error:*` type went with it.** Nothing read it, and `code` is the machine contract
+everywhere else; two spellings of one identifier is the drift the single factory exists to prevent.
+
+**The real remedy is the gate, not the fix.** `MiddlewareErrorContractTests`
+(`tests/LeaseBook.Tests.Integration/Observability/`) drives the middleware-written error paths it
+lists against the real host and asserts each emitted body: full contract for the cookie handler's
+401, this 403 and the antiforgery 400; deliberately bare for the role-denial 403 and the rate
+limiter's 429 — the bare ones asserted too, so
+giving one a body becomes a deliberate edit rather than a silent change.
+
+**The two guards are complementary and neither subsumes the other**, which is the point worth
+carrying. Reverting this fix leaves `ErrorContractTests` green: no `Problem` call appeared or
+disappeared, only the bytes on the wire changed. Reverting a factory call site leaves the new suite
+green for paths it does not drive. A call-site scan answers "was the factory used?"; a behavioral gate
+answers "is the response right?" — and only the second question is the one the contract actually makes.
+
+**Its own blind spot, stated so nobody has to rediscover it:** the suite is only as complete as its
+list of paths. A middleware-written error response added without a case there is invisible to it
+exactly as the first two were to the IL scan. That is the narrowed revisit trigger recorded below.
+
 ## Consequences
 
 - Every error response an operator can screenshot now carries a `Reference: <32-hex>` string they can
@@ -595,7 +692,8 @@ cannot quietly start passing for the wrong reason if the guard's behavior moves.
   for host-project exceptions (see Follow-ups).
 - A new problem-response call site cannot silently bypass the contract: `ErrorContractTests` fails the
   build the moment a new direct `Results.Problem`/`TypedResults.Problem`/`Results.ValidationProblem`
-  call appears anywhere under `src/`, at the cost of the two named, accepted scan limitations.
+  call appears in any application assembly — at the cost of the one structural limitation named
+  above: an error response that never makes such a call is not a call site it can see.
 - Frontend error handling collapsed from five independently drifted, hand-rolled mappers to one
   (`web/src/api/apiError.ts` + `web/src/components/ApiErrorNotice.tsx`), fixing `reports.ts`'s
   silently-dropped validation branch as a side effect of consolidation rather than a separately scoped
@@ -619,9 +717,13 @@ Reopen this decision if any of the following happens:
 - WP-11's Hangfire sweep lands and needs its own log-event id or correlation strategy beyond what is
   recorded here — extend this ADR (or add a short addendum, per the ADR-016 precedent) rather than
   re-deriving the taxonomy independently.
-- The `ErrorContractTests` regex produces a false positive or false negative that costs real
-  debugging time (a legitimate comment tripping the gate, or a deliberately multi-line call slipping
-  through) — reconsider a Roslyn-based check at that point.
+- **Fired and resolved 2026-09-11 (#361); see the 2026-09-11 amendment (2) above.** A second error response written
+  outside the factory by middleware was the trigger to gate that surface behaviorally rather than
+  extend a call-site scan that structurally cannot reach it. It is now a behavioral gate, so the
+  trigger that remains is narrower: a middleware-written error response that
+  `MiddlewareErrorContractTests` does not drive. The suite asserts what the host emits, so it is only
+  as complete as its list of paths — such a response added without a case there is invisible
+  to it exactly as the first two were to the IL scan.
 - The decorator double-logging becomes a measurable signal-to-noise problem in Application Insights
   once B1/B4 are live, rather than a documented, accepted cost — promote the Follow-up below.
 

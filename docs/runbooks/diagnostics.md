@@ -3,7 +3,7 @@
 - **Audience:** Operators and maintainers
 - **Status:** Living runbook; canonical error-diagnosis reference
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-09-10
+- **Last reviewed:** 2026-09-11
 
 How to turn the reference an operator sees on screen into the full server-side detail in
 Application Insights. See [ADR-025](../adr/ADR-025-error-contract-and-observability.md) for the
@@ -66,6 +66,17 @@ on the route the operator was on) and no traces and no exception. That absence i
 here, not lost telemetry. Note that this is the server's answer, not the SPA's guess: a 401 from a
 rejected password or authentication code is a different response and never renders this copy.
 
+A blocked administrator reads **"Two-factor authentication must be set up on your account before you
+can continue."** — a 403 from MFA enforcement, which is on in Production only. It carries a reference
+like any other; before 2026-09-11 it carried a body but no reference at all, so a report from an
+earlier build has nothing to quote and must be found by route and window (#361).
+
+A third shape belongs beside them, on the sign-in page only: **"Your sign-in attempt timed out."** —
+the partial two-factor cookie from the password step expired before the code was submitted
+(`mfa_session_expired`, #360). It is not a wrong code and not an ended session, it carries a
+reference like any other, and the page returns the operator to the password form. An operator
+reporting "it said my code was invalid" from before 2026-09-11 may well have met this instead.
+
 **When a failed page load shows no reference.** Since ADR-025's 2026-08-20 amendment, failed _reads_
 carry the same `code` and `correlationId` as mutations — every SPA call runs through one success rule
 in `web/src/api` — and since the 2026-09-10 addendum every read-error branch in the SPA renders that
@@ -77,10 +88,21 @@ So a failed load with no reference now means something, rather than nothing. Rea
   ingress error page, or the browser could not connect at all), or
 - what the user is looking at is not a read error. A detail route that says the record was not found
   is reporting a 404, which is a successful answer to a wrong id and carries no reference by design.
-- the response came from middleware that still writes a bare status rather than the error contract:
-  a role denial (403), left deliberately plain so that a problem body on a denial still means MFA
+- the response came from middleware that writes a bare status rather than the error contract: a role
+  denial (403), left deliberately plain so that a problem body on a denial still means MFA
   enforcement, or a rate-limit rejection (429), which carries only `Retry-After`. Both are
-  request-pipeline failures, so the fallback query below will find them.
+  request-pipeline failures, so the fallback query below will find them. These two are the list as of
+  2026-09-11, and `MiddlewareErrorContractTests` pins their bareness so that giving one a body is a
+  deliberate edit. It does not make the list self-maintaining: the suite checks the paths it names,
+  so a bare response added without a case there appears with every test green. The list is
+  maintained, not enforced.
+- **the operator was signing in and the credential was rejected.** This is the one remaining
+  operator-visible failure in the product that withholds its reference _by design_: sign-in answers a
+  wrong password, a wrong code, a locked account and an unknown email with one uniform message and no
+  reference, because login must never reveal whether an email address has an account (ADR-025,
+  2026-09-11 amendment). There is nothing to ask the operator for — go straight to the route-and-window
+  query below, filtered to `/api/auth/*`. A sign-in failure that _does_ show a reference judged no
+  credential: a server fault, a rate limit, or the timed-out attempt above.
 
 Either way, fall back to searching by route and time window:
 

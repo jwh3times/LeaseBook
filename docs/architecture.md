@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living architecture guide
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-09-10
+- **Last reviewed:** 2026-09-11
 
 This is the canonical public map of the system **as implemented**. It explains how the pieces fit
 together and links the decisions that shaped them without reproducing every invariant. Accepted
@@ -107,12 +107,17 @@ Every error response — CQRS slices and the auth endpoints alike — is built b
 `correlationId` (the W3C trace id, the same value Application Insights indexes as `operation_Id`) on
 every response; an architecture test fails the build on any direct `Results.Problem` /
 `TypedResults.Problem` call elsewhere. That guard sees only direct calls, so an error response
-written by middleware or by a framework event bypasses both the factory and the test: the cookie
-handler's unauthenticated 401 was one such response until it was routed through `ProblemResults`
-(ADR-025, 2026-09-10 addendum 2), and the authorization middleware's role-denial 403 — deliberately
-bare, so that a problem body still means MFA enforcement — and the rate limiter's 429 remain plain
-statuses. A terminal exception handler, registered last, claims anything
-the typed handlers decline and returns a generic 500 carrying only that reference — never the
+written by middleware or by a framework event bypasses both the factory and the test — and two did,
+for most of the project's life: the cookie handler's unauthenticated 401 (ADR-025, 2026-09-10
+addendum 2) and the MFA-enrollment 403, which served a problem body carrying neither field
+(2026-09-11 amendment 2). Both now go through `ProblemResults`, and a second, **behavioral** gate
+drives the middleware-written error paths it lists against the running host and asserts what each
+emits, because a response that never calls the factory is invisible to a call-site scan at any
+fidelity. The authorization middleware's role-denial 403 — deliberately bare, so that a problem body
+on a 403 still means MFA enforcement — and the rate limiter's 429 remain plain statuses, and that
+suite asserts their bareness too, so giving one a body is a deliberate edit rather than a silent
+change. A terminal exception handler, registered last, claims anything the typed handlers decline
+and returns a generic 500 carrying only that reference — never the
 exception message, type, or stack trace. `ILogger` output shares the tracing pipeline's OpenTelemetry
 exporter, so the correlation id an operator sees on screen is directly searchable in Application
 Insights once deployed. See [ADR-025](adr/ADR-025-error-contract-and-observability.md) and the
@@ -182,9 +187,27 @@ operator can quote a reference for any failure a user reports, and an empty stat
 the read succeeded and found nothing. One component (`ErrorAction`) makes that choice everywhere,
 because it is not always a retry: an expired session gets a sign-in link, since re-issuing the
 request only reproduces the 401 (ADR-025, 2026-09-10 addendum 2). A 404 on a detail route is the
-deliberate exception: it is a correct answer to a wrong id, so it keeps a plain not-found state and
-offers no retry. See the 2026-09-09 amendment and addendum to ADR-025
-and the [diagnostics runbook](runbooks/diagnostics.md).
+deliberate exception on a read: it is a correct answer to a wrong id, so it keeps a plain not-found
+state and offers no retry. **Sign-in is the other, and it is a security decision rather than an
+ergonomic one:** a rejected credential renders one uniform message and withholds both the server's
+detail and the reference, because login must never reveal whether an email address has an account. A
+sign-in failure that judged no credential — an expired two-factor attempt, a rate limit, a server
+fault — explains itself normally (ADR-025, 2026-09-11 amendment). See the 2026-09-09 amendment and
+addendum to ADR-025 and the [diagnostics runbook](runbooks/diagnostics.md).
+
+That uniformity is a property of the **response time** as well as the body, and the two are enforced
+separately because one assertion cannot see the other. The expensive step of a sign-in is the
+password-hash verification, and the arms that never reach it — an unknown email, a locked-out
+account — would otherwise return in a small fraction of the time, which distinguishes them just as
+plainly as different copy would. `PasswordTimingEqualizer` (`LeaseBook.Web.Auth`) does one equivalent
+verification against a decoy hash on exactly those paths, and `LoginTimingTests` asserts the arms
+stay within a ratio of one another — **two-sided**, because doing an arm's work twice separates it as
+well as skipping it does — rather than within a fixed number of milliseconds, so the check holds on a
+slow or contended machine. What is equalized is the expensive work, not every instruction: a small
+residual remains where one arm does bookkeeping the others do not, which is why the bound is a ratio
+with margin rather than a claim of equality. If you add a sign-in path that can reject without
+hashing, it needs the same treatment — and decide whether the hasher will run **before** the sign-in
+call, because the result cannot be read backwards to tell you.
 
 ## Data and persistence
 

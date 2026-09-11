@@ -59,6 +59,36 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Fixed
 
+- **Signing in takes the same time whether or not an email address has an account.** A failed sign-in
+  already gave the same answer for a wrong password, a locked account and an unknown address, so that
+  nothing reveals who has an account. How long the answer took did not match — it was far quicker to
+  say no to an address with no account — which gave the same information away by another route. Every
+  failed sign-in now does the same expensive work, so the answers take comparable time.
+
+- **An administrator blocked for not having two-factor authentication set up now gets a support
+  reference like every other failure.** The message explaining the block carried no reference code,
+  so it was the one failure outside sign-in that looked reportable but gave the operator nothing to
+  quote. The explanation is now plain English, too, instead of instructions naming an internal web
+  address.
+
+- **A sign-in that fails now tells you whether your credentials were wrong or the attempt never
+  completed, and gives you a reference to quote either way.** Taking too long over your
+  authenticator code used to report "Invalid credentials" — the same answer as a genuinely wrong
+  code — so the advice was to retype a code that was never the problem; the sign-in attempt had
+  timed out and needed starting again, and it now says exactly that. The sign-in screen also used to
+  replace every failure with its own fixed wording, so a server fault, a dropped connection and a
+  mistyped password all looked identical and none carried a support reference. A failure that is not
+  a rejected credential now names what actually happened, with the support reference whenever the
+  server sent one — a dropped connection never reaches a server, so it explains itself instead. A
+  wrong password, a wrong
+  authenticator code, a wrong recovery code, a locked account and an unknown email address remain
+  deliberately indistinguishable, so nothing reveals whether an email address has an account.
+
+- **Deactivating a bank account no longer blames uncleared items for an unrelated failure.** Any
+  failure to change an account's status reported that outstanding items had to be cleared first —
+  true only for that one rejection, and misleading for a server error or a dropped connection, which
+  also lost the support reference. Each failure now reports its own reason.
+
 - **Search and saved bank mappings distinguish failed reads from empty results.** The command
   palette reports search errors, and statement imports explain when saved mappings are unavailable
   while keeping manual column mapping usable.
@@ -72,7 +102,8 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   re-issued the same request and failed the same way, indefinitely. The real cause was that the
   session had ended. Those screens now say plainly that you have been signed out and offer a Sign in
   link in place of the Retry; a rejected save says the same and confirms that nothing was saved. A
-  mistyped password or authentication code is unaffected and still reports what the server said.
+  mistyped password or authentication code is unaffected and still reports that the email address
+  or password was not accepted, without saying which.
   This covers the smaller notices too — a bank-account selector, the owner list on a property form, a
   report filter — each of which offered its own retry into the same dead end. You are not bounced to
   the sign-in screen automatically, so a bulk run you have already previewed stays on screen until
