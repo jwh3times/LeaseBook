@@ -134,26 +134,24 @@ jobs:
           node-version: '26'
           cache: npm
           cache-dependency-path: web/codegen/package-lock.json
-      # Emit the OpenAPI v1 document at build time — no running host, no database (ADR-012). The
-      # LEASEBOOK_OPENAPI_BUILD flag selects ADR-042's side-effect-free document lifecycle;
-      # generation is off in every other build, so only this job emits the document.
-      - name: Generate the OpenAPI document from the backend
-        run: dotnet build src/LeaseBook.Web/LeaseBook.Web.csproj -c Debug -p:OpenApiGenerateDocumentsOnBuild=true
-        env:
-          LEASEBOOK_OPENAPI_BUILD: '1'
-      - name: Install API generator dependencies
-        working-directory: web/codegen
-        run: npm ci
-      # Regenerate the typed client from the freshly built contract and fail if it differs from the
-      # committed copy — i.e. the API surface changed without `npm run api:generate` being re-run.
+      # Runs the documented command itself — `npm run api:generate` — rather than a re-typed equivalent
+      # of its steps. It emits the OpenAPI document at build time and generates from it: no running
+      # host, no database (ADR-012), with `scripts/emit-openapi.mjs` owning the LEASEBOOK_OPENAPI_BUILD
+      # flag (ADR-042's side-effect-free lifecycle), the pinned environment, and re-emission.
+      #
+      # Running the command and not a copy of it is the point. What was actually broken in #369 was the
+      # *composition* in web/package.json — it pointed at a URL-input script — and a gate that
+      # reassembles the steps by hand is precisely the gate that cannot see that. Independence is not
+      # lost: this job's check is the `git diff` against the committed files below, which is untouched
+      # by where the command's steps live.
       - name: Verify committed API client is up to date
-        working-directory: web/codegen
+        working-directory: web
         run: |
-          npm run generate
-          if [ -n "$(git status --porcelain -- ../src/api/generated)" ]; then
-            git diff -- ../src/api/generated
-            git status --short -- ../src/api/generated
-            echo "::error file=web/src/api/generated::API client is stale. Run 'npm run api:generate' against the host and commit web/src/api/generated/."
+          npm run api:generate
+          if [ -n "$(git status --porcelain -- src/api/generated)" ]; then
+            git diff -- src/api/generated
+            git status --short -- src/api/generated
+            echo "::error file=web/src/api/generated::API client is stale. Run 'npm run api:generate' from web/ and commit web/src/api/generated/."
             exit 1
           fi
 

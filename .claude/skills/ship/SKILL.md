@@ -197,10 +197,11 @@ Fix and re-run if red:
 
 If any check is red, **stop and report — do not push.**
 
-**Soft nudge (warn, don't block):** if the branch changed backend endpoints/DTOs (the API
-surface) but `web/src/api/schema.d.ts` is unchanged, CI's `schema-drift` job will fail.
-Tell the user to run `npm run api:generate` against a host running on `:5080` and commit the
-result. This can't be verified locally without a running host, so warn — don't gate on it.
+**Check it, don't nudge:** if the branch changed backend endpoints/DTOs (the API surface) but
+`web/src/api/generated/` is unchanged, CI's `schema-drift` job will fail. Since #369 this is
+verifiable locally — `npm run api:generate` (from `web/`) emits the contract itself and needs no
+running host or database (it does need the .NET SDK), and runs the same two steps the gate does. Run
+it, and if it leaves `web/src/api/generated/` dirty, commit the result before pushing.
 
 **Accounting-adjacent changes** (Accounting module, posting templates, migrations) rely on the
 invariant, property-based, and golden-file suites, which run under `dotnet test` in CI. Per the

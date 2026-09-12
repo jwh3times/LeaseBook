@@ -282,7 +282,8 @@ builder.Services.AddScoped<LeaseBook.Web.Audit.AuditExtractReader>();
 // per-event payload diff. Wider than the extract on purpose; see AuditLogReader.
 builder.Services.AddScoped<LeaseBook.Web.Audit.AuditLogReader>();
 
-// OpenAPI document (P11) — the SPA's `npm run api:generate` reads /openapi/v1.json.
+// OpenAPI document (P11). The SPA's client is generated from the *build-time* document, not from
+// this endpoint — `npm run api:generate` emits it via scripts/emit-openapi.mjs (ADR-012, #369).
 builder.Services.AddOpenApi();
 
 // Telemetry baseline: emit the CQRS ActivitySource (+ request spans). The Azure Monitor exporter

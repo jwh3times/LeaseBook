@@ -14,7 +14,14 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ## [Unreleased]
 
-- _Nothing yet._
+### Changed
+
+- **Regenerating the typed API client no longer needs a running application.** `npm run api:generate`
+  used to require the backend running on port 5080, which in turn required a database — and, because
+  it read the contract from that running host, it produced a client that the continuous-integration
+  check then rejected, telling the developer to re-run the command that had caused the problem. The
+  command now produces the contract itself and needs neither the application nor a database, and the
+  CI check runs the identical step, so the two cannot disagree again.
 
 ## [0.13.0] - 2026-09-12
 

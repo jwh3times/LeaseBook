@@ -77,8 +77,9 @@ jobs:
           }
           SPEC
 
-          # Same plugin set as web/codegen/openapi-ts.config.ts, minus runtimeConfigPath (that points
-          # into the SPA tree). Exercises the generator paths we actually depend on.
+          # Same plugin set as web/codegen/openapi-ts.config.ts, minus runtimeConfigPath (which points
+          # into the SPA tree) and baseUrl (which only shapes output, and this probe discards its
+          # output). Exercises the generator paths we actually depend on.
           cat >"${work}/openapi-ts.config.mjs" <<'CONFIG'
           export default {
             input: 'spec.json',
@@ -142,7 +143,7 @@ jobs:
             "**To unblock:**" \
             "1. Remove the \`typescript\` \`version-update:semver-major\` ignore from the \`/web/codegen\` block in \`.github/dependabot.yml\`." \
             "2. Raise \`typescript\` in \`web/codegen/package.json\` to the SPA major, or collapse code generation back into the root package as ADR-030 contemplates." \
-            "3. With the API host running on :5080, verify \`npm run api:generate\` from \`web/\` and confirm the ADR-012 drift gate is clean, then \`npm run lint\`, \`npm run typecheck\`, \`npm run test\`, and \`npm run build\`." \
+            "3. Verify \`npm run api:generate\` from \`web/\` (it emits the contract itself; no running host needed) and confirm the ADR-012 drift gate is clean, then \`npm run lint\`, \`npm run typecheck\`, \`npm run test\`, and \`npm run build\`." \
             "4. Update ADR-030 to record the collapsed boundary, and retire this workflow." \
             "" \
             "_Filed automatically by .github/workflows/codegen-unblock-watch.yml._")
