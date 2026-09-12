@@ -9,6 +9,12 @@ layout, and compiler pin. The build-time OpenAPI emission and drift-gate decisio
 [ADR-042](ADR-042-explicit-host-process-lifecycle.md) replaces the scattered startup guards with an
 explicit OpenAPI-build lifecycle; generation remains database-free.
 
+**Corrected 2026-09-12.** Three claims below still described the retired `openapi-typescript`
+mechanism in the present tense — the gate's command, the hygiene exclusion's file, and the compiler
+pin — each of them after the paragraph under "Canonical ordering" that retires it. A reader met the
+contradiction before the explanation. They now say what runs, naming the original mechanism as
+history. The decision itself is unchanged: a build-time document, generated-client drift failing CI.
+
 ## Context
 
 P11/WP-08 generate the SPA's typed client (`web/src/api/schema.d.ts`) from the host's OpenAPI
@@ -84,12 +90,18 @@ differs from the committed copy.** Concretely:
   input a single order. The client plugin also sets `baseUrl: false`, since `web/src/api/runtime.ts`
   owns the base URL, and `GeneratedClientOriginTests` fails the build if an origin is baked in again.
 
-- **The gate** (`.github/workflows/ci.yml` → `schema-drift` job) builds the host to emit the doc, runs
-  `openapi-typescript … --alphabetize` over it, and `git diff --exit-code`s the result against the
-  committed `schema.d.ts`, failing with a "run `npm run api:generate`" message on any difference.
-- **Generated-file hygiene.** `schema.d.ts` is excluded from Prettier and the active linter (ESLint at
-  the time of this decision; `Oxlint` under [ADR-029](ADR-029-frontend-linting-with-oxlint.md)), so
-  `npm run format` cannot rewrite it and reintroduce drift.
+- **The gate** (`.github/workflows/ci.yml` → `schema-drift` job) runs `npm run api:generate` — the
+  documented command itself rather than a re-typed equivalent of its steps — and fails if that leaves
+  `web/src/api/generated` dirty, printing the diff and naming the command to run. Originally it
+  emitted the document and ran `openapi-typescript … --alphabetize` over it, diffing a committed
+  `schema.d.ts`; ADR-030 retired both the tool and that single file, and #369 made the gate invoke the
+  command instead of reassembling it, because what was broken in #369 was the command's composition —
+  exactly what a gate built from re-typed steps cannot see.
+- **Generated-file hygiene.** The generated client is excluded from Prettier and the active linter
+  (ESLint at the time of this decision; `Oxlint` under
+  [ADR-029](ADR-029-frontend-linting-with-oxlint.md)), so `npm run format` cannot rewrite it and
+  reintroduce drift. The exclusion names the `src/api/generated` directory (`web/.prettierignore`,
+  `web/.oxlintrc.json`); the single `schema.d.ts` it originally named went away with ADR-030.
 
 **The held TS 6 upgrade is muted, not forgotten.** `.github/dependabot.yml` ignores `typescript`
 `version-update:semver-major`, and `.github/workflows/ts6-unblock-watch.yml` checks weekly whether
@@ -107,8 +119,11 @@ generator rather than reading a declared peer range — see ADR-030's revisit tr
   path, so this property now holds for the developer command too.)
 - **Costs accepted.** Production startup carries a one-line, build-tooling-aware guard (documented at
   its call site); the drift job duplicates a backend build and `npm ci` (acceptable, runs in parallel);
-  and `openapi-typescript` is now CI-critical, so the toolchain is pinned to TypeScript 5.x until that
-  dependency supports 6 (see the watcher above).
+  and the generator is CI-critical, so its compiler is pinned until it admits the next major. As
+  written this said `openapi-typescript` is the CI-critical tool and "the toolchain is pinned to
+  TypeScript 5.x". Under ADR-030 the SPA declares TypeScript 7 (`web/package.json`) and the 5.x pin
+  survives only inside the isolated `web/codegen` workspace where Hey API runs — which is the point of
+  that workspace: the generator's compiler requirement no longer constrains the application's.
 
 ## Revisit trigger
 
