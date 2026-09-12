@@ -68,6 +68,33 @@ public sealed class SeederTests(PostgresFixture fixture)
         (await login.Content.ReadFromJsonAsync<LoginResponse>(ct))!.Status.ShouldBe(LoginStatus.Ok);
     }
 
+    /// <summary>
+    /// #372: the seeder's own <c>org-provisioned</c> row used to carry no attribution at all — no
+    /// <c>actor_kind</c>, no <c>actor_process</c> — so it claimed the shape ADR-039 reserved for rows
+    /// that <i>predate</i> it, and the audit-review surface's <c>System (automated)</c> filter, which
+    /// keys on <c>actor_kind = 'system'</c>, could not see the one row it most obviously describes.
+    /// <para>
+    /// The sweep for a null kind covers every row <i>this</i> seed writes, including a writer added
+    /// later, rather than the one entity_type the defect arrived through. It is scoped to the demo
+    /// org; the scenario seeder deliberately runs as a real user rather than a process, and
+    /// <c>ScenarioSeederTests</c> asserts that separately.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_seeded_org_leaves_no_audit_row_without_an_actor()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await DemoSeeder.SeedAsync(fixture.Api.Services, ct);
+
+        (await CountAsync("audit_events WHERE actor_kind IS NULL", ct))
+            .ShouldBe(0, "every row this seed wrote knows whether a process or a person acted");
+
+        (await CountAsync(
+            "audit_events WHERE entity_type = 'org-provisioned' " +
+            "AND actor_kind = 'system' AND actor_process = 'seed:demo' AND actor_user_id IS NULL", ct))
+            .ShouldBe(1, "the provisioning row names the process that provisioned it");
+    }
+
     private async Task<long> CountAsync(string fromClause, CancellationToken ct)
     {
         await using var conn = await fixture.OpenAppConnectionAsync(ct);

@@ -7,7 +7,6 @@ using LeaseBook.Modules.Reporting.Rendering;
 using LeaseBook.SharedKernel;
 using LeaseBook.SharedKernel.Cqrs;
 using LeaseBook.SharedKernel.Endpoints;
-using LeaseBook.SharedKernel.Tenancy;
 using LeaseBook.Web.Persistence;
 using LeaseBook.Web.Tenancy;
 using Microsoft.AspNetCore.Builder;
@@ -116,7 +115,7 @@ public sealed class ReportingEndpoints : IEndpointModule
         group.MapGet("/reports/compliance-pack",
                 async (Guid bankAccountId, DateOnly from, DateOnly to,
                     CompliancePackAssembler assembler, ISender sender, IPmBranding branding, AppDbContext db,
-                    IActorContext actor, HttpContext httpContext, CancellationToken ct) =>
+                    HttpContext httpContext, CancellationToken ct) =>
                 {
                     if (from > to)
                     {
@@ -173,7 +172,6 @@ public sealed class ReportingEndpoints : IEndpointModule
                     db.Set<AuditEvent>().Add(new AuditEvent
                     {
                         Id = UuidV7.NewId(),
-                        ActorUserId = actor.UserId,
                         EntityType = "compliance-pack-generated",
                         EntityId = bankAccountId,
                         Action = "insert",

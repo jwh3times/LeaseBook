@@ -13,6 +13,7 @@ using LeaseBook.Tests.Integration.Fixtures;
 using LeaseBook.Web.Auth;
 using LeaseBook.Web.Persistence;
 using LeaseBook.Web.Seeding;
+using LeaseBook.Web.Tenancy;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -210,6 +211,37 @@ public sealed class ScenarioSeederTests(PostgresFixture fixture)
         var pack = await admin.GetAsync(url, ct);
         pack.StatusCode.ShouldBe(HttpStatusCode.OK);
         pack.Content.Headers.ContentType!.MediaType.ShouldBe("application/zip");
+    }
+
+    /// <summary>
+    /// #372: every audit row this seed writes says whether a person or a process acted, and for this
+    /// seeder the answer is a person. The scenario org exists to look like a real one — it opens its
+    /// unit of work as <c>Actor.User(adminId)</c> rather than a named process, deliberately (design
+    /// §2 R4: imports, sign-off and audit rows should carry a real actor), so its <c>org-provisioned</c>
+    /// row is <c>user</c>-attributed and is correctly <i>not</i> reachable by the review surface's
+    /// <c>System (automated)</c> filter. That is the difference from <c>SeederTests</c>, where the demo
+    /// seeder runs as <c>seed:demo</c> and the same row is a system write.
+    /// </summary>
+    [Fact]
+    public async Task Every_seeded_audit_row_names_an_actor_and_provisioning_names_the_admin()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await ScenarioSeeder.SeedAsync(fixture.Api.Services, ct);
+
+        var unattributed = await QueryAsync(
+            db => db.AuditEvents.CountAsync(a => a.ActorKind == null, ct), ct);
+        unattributed.ShouldBe(0, "every row this seed wrote knows whether a process or a person acted");
+
+        var adminId = await QueryAsync(
+            db => db.Users.Where(u => u.Email == ScenarioSeeder.AdminEmail).Select(u => u.Id).SingleAsync(ct), ct);
+
+        var provisioning = await QueryAsync(
+            db => db.AuditEvents.Where(a => a.EntityType == "org-provisioned")
+                .Select(a => new { a.ActorKind, a.ActorUserId, a.ActorProcess }).SingleAsync(ct), ct);
+
+        provisioning.ActorKind.ShouldBe("user");
+        provisioning.ActorUserId.ShouldBe(adminId);
+        provisioning.ActorProcess.ShouldBeNull();
     }
 
     private async Task<T> QueryAsync<T>(Func<AppDbContext, Task<T>> query, CancellationToken ct)
