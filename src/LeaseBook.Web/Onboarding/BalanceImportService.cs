@@ -367,7 +367,6 @@ public sealed class BalanceImportService(
         db.Set<AuditEvent>().Add(new AuditEvent
         {
             Id = UuidV7.NewId(),
-            ActorUserId = actor.UserId,
             EntityType = "import-superseded",
             EntityId = batch.Id,
             Action = "insert",

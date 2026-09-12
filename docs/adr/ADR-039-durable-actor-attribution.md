@@ -44,7 +44,9 @@ inconsistent one.
    declared actor, and `PostingService` refuses to post one — checked beside the organization-context
    check, since both come from the same `OrgScopedExecutor` call and neither is recoverable
    afterwards. `IActorContext.Actor` returning null now means "no unit of work is open", never "the
-   system did it".
+   system did it". **Extended 2026-09-12: a partial declaration fails too.** A call site does not fill
+   the attribution columns on an `AuditEvent` it writes by hand — `SaveChanges` stamps all three from
+   the ambient actor, and a row declaring a different actor is refused rather than reconciled.
 
 4. A database check constraint pairs the columns on both tables: `user` names a user and no process,
    `system` names a process and no user.
@@ -110,6 +112,23 @@ period — through a handler built with no actor context, so the second null was
 no test asserted `FinalizedBy` at all. Neither was a production defect: DI supplied both
 collaborators everywhere. Both are now required, the acting user is asserted, and the pattern is
 guarded rather than left to the next reader to notice.
+
+**A third instance, in the rows themselves (2026-09-12).** Decision 3 made a _missing_ actor fail
+before the write; it said nothing about a _partial_ one. `AppDbContext` built its own audit rows from
+the `Actor` correctly, but the ten places that write an `audit_events` row by hand set the three
+columns by hand too, and seven of them set fewer than three — the four seeders set none, so the row
+recording that an organization was provisioned recorded nothing about what provisioned it. Those rows
+landed in the null-`actor_kind` arm that decision 6 reserved for rows predating this ADR, claiming an
+era they were not written in, and the administrator review surface's `System (automated)` filter —
+which keys on `actor_kind = 'system'` — could not see them. Nothing rendered wrong, which is why it
+survived: the three user-attributed sites still resolved a name from `actor_user_id`.
+
+The columns are no longer a call site's to fill. `SaveChanges` stamps all three from the ambient actor
+on any hand-added `AuditEvent`, in the same pass and for the same reason it stamps `org_id`, and
+refuses a row whose declared actor disagrees with the unit of work's. This is decision 7's argument
+one level down: an attribution seam that tolerates absence will be left absent, and three columns that
+must be written together are three chances to write two of them. The guard is the write path rather
+than a test enumerating the call sites, so a writer added later is correct without being enumerated.
 
 ## Revisit trigger
 

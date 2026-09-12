@@ -23,6 +23,18 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   command now produces the contract itself and needs neither the application nor a database, and the
   CI check runs the identical step, so the two cannot disagree again.
 
+### Fixed
+
+- **Automated changes made by the system now appear under the Audit log's "System (automated)"
+  filter.** A handful of the things the product records — provisioning a demonstration organization,
+  generating a compliance pack, superseding an imported opening balance, signing off a migration —
+  recorded _who_ acted but not _whether_ that was a person or an automated process. The Audit log
+  page separates those two, so rows recorded that way could not be found by the filter that exists to
+  find them, and an automated change could be read as having no recorded actor at all. Every such
+  record now states which it was. Existing records are left as they are: for a row written before the
+  product began recording this, the answer genuinely was never captured, and marking it as belonging
+  to the earlier era is more honest than inventing one.
+
 ## [0.13.0] - 2026-09-12
 
 ### Added

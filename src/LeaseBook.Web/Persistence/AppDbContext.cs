@@ -176,7 +176,25 @@ public sealed class AppDbContext(
             }
 
             // ...but never audit the audit log itself (no recursion; audit_events is append-only).
-            if (entry.Entity is not AuditEvent)
+            // A hand-written row gets its ADR-039 attribution stamped here instead, for the same
+            // reason org_id is stamped above: the ambient actor is the only correct answer, and the
+            // call site cannot improve on it by repeating it.
+            if (entry.Entity is AuditEvent handWritten)
+            {
+                if (entry.State == EntityState.Added)
+                {
+                    StampAttribution(handWritten, actor);
+                }
+                else
+                {
+                    // audit_events is append-only and the runtime role holds no UPDATE/DELETE grant,
+                    // so this would fail at commit as a bare Postgres 42501 naming no call site.
+                    throw new InvalidOperationException(
+                        $"An audit row was marked {entry.State} (id {handWritten.Id}). audit_events is " +
+                        "append-only: a correction is a new row, never an edit of a posted one.");
+                }
+            }
+            else
             {
                 audits.Add(BuildAuditEvent(entry, orgId, actor));
             }
@@ -184,6 +202,62 @@ public sealed class AppDbContext(
 
         AuditEvents.AddRange(audits);
     }
+
+    /// <summary>
+    /// ADR-039 attribution for an audit row a feature wrote by hand. The auditing pass above builds its
+    /// own rows from <see cref="Actor"/> already; this gives the hand-written ones the same three columns
+    /// from the same source, so <c>actor_kind</c> cannot be omitted one initializer at a time.
+    /// <para>
+    /// The null branch of the <c>actor_kind</c> check constraint is reserved for rows that <i>predate</i>
+    /// ADR-039 — the ones where a null genuinely cannot say whether a process acted or nobody was
+    /// recorded. A row written today with a null kind is asserting something untrue about itself, and it
+    /// is invisible to the audit-review surface's <c>System (automated)</c> filter, which keys on
+    /// <c>actor_kind = 'system'</c>.
+    /// </para>
+    /// <para>
+    /// A row that already carries the ambient actor is left as it is. One that carries a <i>different</i>
+    /// actor is a bug at the call site rather than a disagreement to reconcile here: attribution names who
+    /// did the work, and the unit of work has already declared that.
+    /// </para>
+    /// </summary>
+    private static void StampAttribution(AuditEvent audit, Actor actor)
+    {
+        if (audit.ActorKind is null && audit.ActorUserId is null && audit.ActorProcess is null)
+        {
+            audit.ActorKind = actor.Kind;
+            audit.ActorUserId = actor.UserId;
+            audit.ActorProcess = actor.Process;
+            return;
+        }
+
+        if (audit.ActorKind != actor.Kind
+            || audit.ActorUserId != actor.UserId
+            || audit.ActorProcess != actor.Process)
+        {
+            throw new InvalidOperationException(
+                $"A hand-written audit row declares [{Describe(audit)}] but the unit of work is " +
+                $"attributed to [{Describe(actor)}]. Leave actor_kind, actor_user_id and actor_process " +
+                "unset and SaveChanges stamps all three from the ambient actor (ADR-039); set them and " +
+                "they must be that same actor. A partial set is the case this exists to catch — it is " +
+                "what writes a row claiming the null-actor_kind shape reserved for pre-ADR-039 rows.");
+        }
+    }
+
+    /// <summary>
+    /// All three columns, always — not the one the kind selects. Rendering
+    /// <see cref="Actor.Reference"/> on each side would print the same string twice whenever the
+    /// disagreement is in a field that reference does not carry: a row with the ambient kind and user
+    /// but a stray <c>actor_process</c> is exactly such a case, and it is also one the check constraint
+    /// rejects, so this message is the only readable diagnosis it will get.
+    /// </summary>
+    private static string Describe(AuditEvent audit) =>
+        Describe(audit.ActorKind, audit.ActorUserId, audit.ActorProcess);
+
+    private static string Describe(Actor actor) => Describe(actor.Kind, actor.UserId, actor.Process);
+
+    private static string Describe(string? kind, Guid? userId, string? process) =>
+        $"actor_kind={kind ?? "<unset>"}, actor_user_id={userId?.ToString() ?? "<unset>"}, " +
+        $"actor_process={process ?? "<unset>"}";
 
     private static InvalidOperationException CrossOrg(EntityEntry entry, Guid entityOrg, Guid contextOrg) =>
         new($"Cross-org write blocked: {entry.Entity.GetType().Name} carries org {entityOrg} but the " +

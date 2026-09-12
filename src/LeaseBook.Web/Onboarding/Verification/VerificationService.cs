@@ -171,7 +171,6 @@ public sealed class VerificationService(
         var domainAudit = new AuditEvent
         {
             Id = UuidV7.NewId(),
-            ActorUserId = actor.UserId,
             EntityType = "migration-signed-off",
             EntityId = signedRow.Id,
             Action = "insert",

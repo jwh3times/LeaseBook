@@ -15,6 +15,7 @@ using LeaseBook.Tests.Integration.Fixtures;
 using LeaseBook.Web.Audit;
 using LeaseBook.Web.Auth;
 using LeaseBook.Web.Persistence;
+using LeaseBook.Web.Tenancy;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -259,6 +260,200 @@ public sealed class ActorAuditTests(PostgresFixture fixture)
             (sp, _, c) => sp.GetRequiredService<EntryAuditReader>().GetAsync(charge.EntryId, c), ct);
         trail.Rows.ShouldBeEmpty();
     }
+
+    /// <summary>
+    /// #372: a feature that writes an audit row by hand — a compliance pack, a superseded import, a
+    /// sign-off, a seeder's provisioning row — gets ADR-039's three columns from the unit of work
+    /// rather than from its own initializer. Seven of the ten hand-written writers omitted
+    /// <c>actor_kind</c>, which is not a column a call site can usefully repeat: the ambient actor is
+    /// the only correct answer, so <c>SaveChanges</c> stamps it where it already stamps <c>org_id</c>.
+    /// </summary>
+    [Fact]
+    public async Task A_hand_written_audit_row_is_stamped_with_the_units_system_actor()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var orgId = await NewOrgAsync(ct);
+        var id = UuidV7.NewId();
+
+        await AsActorAsync(orgId, null, async (sp, _, c) =>
+        {
+            var db = sp.GetRequiredService<AppDbContext>();
+            db.AuditEvents.Add(new AuditEvent
+            {
+                Id = id,
+                EntityType = "org-provisioned",
+                EntityId = orgId,
+                Action = "seed",
+                OccurredAt = DateTime.UtcNow,
+            });
+            await db.SaveChangesAsync(c);
+            return 0;
+        }, ct);
+
+        var row = await ReadAuditAsync(orgId, id, ct);
+        row.ActorKind.ShouldBe("system");
+        row.ActorProcess.ShouldBe("test-harness");
+        row.ActorUserId.ShouldBeNull();
+    }
+
+    /// <summary>
+    /// The user half. These rows used to set <c>actor_user_id</c> alone, which renders correctly —
+    /// <c>AuditActorLabel</c> resolves the name — while the column that says <i>whether a person acted
+    /// at all</i> stayed null. The row displayed right and recorded wrong.
+    /// </summary>
+    [Fact]
+    public async Task A_hand_written_audit_row_is_stamped_with_the_units_user_actor()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var orgId = await NewOrgAsync(ct);
+        var (userId, _) = await CreateUserAsync(orgId, "Renée Calloway", ct);
+        var id = UuidV7.NewId();
+
+        await AsActorAsync(orgId, userId, async (sp, _, c) =>
+        {
+            var db = sp.GetRequiredService<AppDbContext>();
+            db.AuditEvents.Add(new AuditEvent
+            {
+                Id = id,
+                EntityType = "compliance-pack-generated",
+                EntityId = UuidV7.NewId(),
+                Action = "insert",
+                OccurredAt = DateTime.UtcNow,
+            });
+            await db.SaveChangesAsync(c);
+            return 0;
+        }, ct);
+
+        var row = await ReadAuditAsync(orgId, id, ct);
+        row.ActorKind.ShouldBe("user");
+        row.ActorUserId.ShouldBe(userId);
+        row.ActorProcess.ShouldBeNull();
+    }
+
+    /// <summary>
+    /// The partial set is refused rather than completed. Stamping the two missing columns from the
+    /// ambient actor would produce a coherent-looking row asserting something the call site did not
+    /// say — and the disagreement is the interesting part, so it is raised where it can still be read
+    /// as a call-site bug.
+    /// </summary>
+    [Fact]
+    public async Task A_hand_written_audit_row_naming_a_different_actor_is_refused()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var orgId = await NewOrgAsync(ct);
+        var (userId, _) = await CreateUserAsync(orgId, "Renée Calloway", ct);
+
+        await using var scope = fixture.Api.Services.CreateAsyncScope();
+        var sp = scope.ServiceProvider;
+        var db = sp.GetRequiredService<AppDbContext>();
+        var executor = sp.GetRequiredService<OrgScopedExecutor>();
+
+        // A system unit of work, and a row claiming a person did it — the exact shape the pre-#372
+        // endpoint writers had, where actor_user_id was set from a context that might hold neither.
+        var ex = await Should.ThrowAsync<InvalidOperationException>(() =>
+            executor.RunAsSystemAsync(orgId, "test-harness", async () =>
+            {
+                db.AuditEvents.Add(new AuditEvent
+                {
+                    Id = UuidV7.NewId(),
+                    ActorUserId = userId,
+                    EntityType = "org-provisioned",
+                    EntityId = orgId,
+                    Action = "seed",
+                    OccurredAt = DateTime.UtcNow,
+                });
+                await db.SaveChangesAsync(ct);
+            }, ct));
+
+        // Both halves. Naming only the unit's actor would let the message render the same string on
+        // both sides of "declares X but is attributed to X" — which is what an earlier version did
+        // whenever the disagreeing column was not the one the kind selects.
+        ex.Message.ShouldContain($"actor_kind=<unset>, actor_user_id={userId}, actor_process=<unset>");
+        ex.Message.ShouldContain("actor_kind=system, actor_user_id=<unset>, actor_process=test-harness");
+    }
+
+    /// <summary>
+    /// The accept-unchanged branch, named directly. Two writers still set all three columns from the
+    /// ambient actor (<c>AccountSecurityAudit</c>, the audit-log export), so the equality check has to
+    /// pass them through rather than treat "already attributed" as a disagreement. That branch was
+    /// covered only incidentally by those two features' own tests, which would take it down with them.
+    /// </summary>
+    [Fact]
+    public async Task A_hand_written_audit_row_that_repeats_the_units_actor_is_accepted()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var orgId = await NewOrgAsync(ct);
+        var id = UuidV7.NewId();
+
+        await AsActorAsync(orgId, null, async (sp, _, c) =>
+        {
+            var db = sp.GetRequiredService<AppDbContext>();
+            db.AuditEvents.Add(new AuditEvent
+            {
+                Id = id,
+                ActorKind = "system",
+                ActorProcess = "test-harness",
+                EntityType = "org-provisioned",
+                EntityId = orgId,
+                Action = "seed",
+                OccurredAt = DateTime.UtcNow,
+            });
+            await db.SaveChangesAsync(c);
+            return 0;
+        }, ct);
+
+        var row = await ReadAuditAsync(orgId, id, ct);
+        row.ActorKind.ShouldBe("system");
+        row.ActorProcess.ShouldBe("test-harness");
+    }
+
+    /// <summary>
+    /// The append-only invariant, raised where it names a call site. The runtime role holds no UPDATE
+    /// grant on <c>audit_events</c>, so this would otherwise surface at commit as a bare Postgres
+    /// 42501 with nothing pointing at the code that tried it.
+    /// </summary>
+    [Fact]
+    public async Task Editing_a_posted_audit_row_is_refused_before_it_reaches_the_database()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var orgId = await NewOrgAsync(ct);
+        var id = UuidV7.NewId();
+
+        await AsActorAsync(orgId, null, async (sp, _, c) =>
+        {
+            var db = sp.GetRequiredService<AppDbContext>();
+            db.AuditEvents.Add(new AuditEvent
+            {
+                Id = id,
+                EntityType = "org-provisioned",
+                EntityId = orgId,
+                Action = "seed",
+                OccurredAt = DateTime.UtcNow,
+            });
+            await db.SaveChangesAsync(c);
+            return 0;
+        }, ct);
+
+        await using var scope = fixture.Api.Services.CreateAsyncScope();
+        var sp2 = scope.ServiceProvider;
+        var executor = sp2.GetRequiredService<OrgScopedExecutor>();
+        var db2 = sp2.GetRequiredService<AppDbContext>();
+
+        var ex = await Should.ThrowAsync<InvalidOperationException>(() =>
+            executor.RunAsSystemAsync(orgId, "test-harness", async () =>
+            {
+                var tracked = await db2.AuditEvents.SingleAsync(a => a.Id == id, ct);
+                tracked.Action = "tampered";
+                await db2.SaveChangesAsync(ct);
+            }, ct));
+
+        ex.Message.ShouldContain("append-only");
+    }
+
+    private async Task<AuditEvent> ReadAuditAsync(Guid orgId, Guid id, CancellationToken ct) =>
+        await AsActorAsync(orgId, null, async (sp, _, c) =>
+            await sp.GetRequiredService<AppDbContext>().AuditEvents
+                .AsNoTracking().SingleAsync(a => a.Id == id, c), ct);
 
     private static string Key() => UuidV7.NewId().ToString();
 
