@@ -115,7 +115,9 @@ carries the metadata rows alone, capped. Content the product does not author is 
 surface and rendered as a marker rather than shown: the verbatim rows of a customer's previous
 system's export (§2.1) and the two fields derived from them, together with any column whose name marks
 it as a secret. A build-time check fails if an audited entity gains an unclassified free-form JSON
-column, or if a credential table is ever made organization-scoped and so becomes audited. See
+column — recognized by the `*Json` column-naming convention every such column follows today, so one
+named otherwise still has to be classified by hand — or if a credential table is ever made
+organization-scoped and so becomes audited. See
 [ADR-044](../adr/ADR-044-audit-log-review-surface.md).
 
 ### 2.6 Telemetry
@@ -204,7 +206,9 @@ The windows above are the technical defaults in the authored infrastructure. Two
   a complete per-organization export. This whole-organization export is **designed but not yet
   implemented.** Available today are narrower exports: the trust compliance pack (per trust account
   and period), owner statements, per-report CSV/PDF downloads, and the administrator audit-log CSV
-  (filtered trail metadata only, capped — no stored snapshots; §2.5).
+  (filtered trail metadata only, capped — no stored snapshots; §2.5). That last export records its own
+  generation in the audit trail, naming the administrator who took it and the filters they applied, so
+  a copy of the trail leaving the system is itself part of the trail.
 - **Deletion and offboarding.** A documented hard-delete path with retention rules is **designed but
   not yet implemented.** The append-only grant model deliberately prevents routine deletion of
   ledger, audit, and statement-delivery data, so a compliant offboarding or erasure path requires a

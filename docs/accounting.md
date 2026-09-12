@@ -3,7 +3,7 @@
 - **Audience:** Contributors, operators, and reviewers
 - **Status:** Living accounting guide
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-09-09
+- **Last reviewed:** 2026-09-12
 
 This is the canonical public explanation of the shipped trust-accounting model, written so a
 property manager, bookkeeper, or attorney can evaluate it without reading C#. The Accounting module
@@ -282,8 +282,11 @@ belonging to the earlier era rather than backfilled with a guess.
 The per-entry audit trail (`GET /entries/{id}/audit`) returns the entry's and its reversal's rows
 newest-first, resolving each actor to a name/email — an org-scoped identity lookup, so one company can
 never see another's users. An automated write shows as `System (<process>)`; a row from before
-ADR-039, which recorded no process, still shows as plain `System`. The compliance pack's audit
-extract uses the same label.
+ADR-039, which recorded no process, still shows as plain `System`. A person the lookup cannot resolve
+— deleted, or belonging to another organization — shows as `Unknown user` rather than falling through
+to `System`, because the row records that a _user_ acted and reading it as automated would be a false
+attribution rather than a missing name. The compliance pack's audit extract and the administrator
+review surface use the same label.
 
 ## Banking: the register, clearing & reconciliation (M4)
 

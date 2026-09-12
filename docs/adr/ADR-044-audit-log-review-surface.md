@@ -34,7 +34,12 @@ ships the snapshots underneath it. Both are `RequirePMAdmin`, for the same reaso
 is: this reads what everyone in the organization did.
 
 The export is the same filtered rows as CSV, metadata only, capped — and a truncated export says so in
-its own first row rather than looking complete.
+its own first row rather than looking complete. **Exporting is itself an audited event.** Taking a copy
+of the organization's audit history is at least as audit-worthy as generating a compliance pack, which
+has recorded its own generation since WP-8, and "who pulled the audit log" is precisely the kind of
+question this surface exists to answer. The row names the exporting user, the filter narrowing and how
+many rows were taken — never the rows themselves, which would put a second copy of the trail inside the
+trail.
 
 **Payloads are withheld by the origin of their content, not by guessing at sensitivity.** The one
 audited column whose content LeaseBook does not author is `ImportRow.RawJson` — a row of the customer's
@@ -70,7 +75,9 @@ The vocabularies are now a thing to maintain: a hand-written audit row with a ne
 line in the catalog. The build says so, and the alternative was a filter that silently stops offering
 events that exist.
 
-Nothing here changes what is recorded. This ADR is entirely about reading.
+Nothing here changes what is recorded about a change: the auditing pass, its payloads and its
+attribution are untouched, and the surface writes nothing on any read path but the export, which
+records itself.
 
 ## Revisit trigger
 
