@@ -17,7 +17,7 @@ import { CommandPalette } from '@/features/palette/CommandPalette';
 import { HelpOverlay } from '@/features/palette/HelpOverlay';
 import { useOrgSettings } from '@/lib/settings';
 import { useGlobalShortcuts } from '@/lib/useGlobalShortcuts';
-import { NAV_ROUTES, SETTINGS_ROUTE } from './navigation';
+import { ADMIN_NAV_ROUTES, ALL_NAV_ROUTES, NAV_ROUTES, SETTINGS_ROUTE } from './navigation';
 
 function initialsOf(name: string): string {
   return name
@@ -45,8 +45,14 @@ export function AppShell() {
     onNavigate: (path) => void navigate(path),
   });
 
+  // Admin-only items appear once the session says so. A pending or failed session read shows the
+  // shared nav rather than guessing a role — the endpoint is the enforcement, not this list.
+  const navRoutes = session?.role === 'PMAdmin' ? [...NAV_ROUTES, ...ADMIN_NAV_ROUTES] : NAV_ROUTES;
+  // Titled from every route, admin ones included: a PMStaff who follows a shared /audit link still
+  // gets the page's own "admin access required", and a topbar reading "Dashboard" over it would be
+  // the shell disagreeing with the page.
   const active =
-    NAV_ROUTES.find((route) => location.pathname.startsWith(route.path)) ?? NAV_ROUTES[0]!;
+    ALL_NAV_ROUTES.find((route) => location.pathname.startsWith(route.path)) ?? NAV_ROUTES[0]!;
   const displayName = session?.name ?? session?.email ?? 'User';
 
   async function signOut() {
@@ -61,10 +67,10 @@ export function AppShell() {
         sidebar={
           <Sidebar
             brand={session?.orgName ?? 'LeaseBook'}
-            items={NAV_ROUTES.map((route) => route.item)}
+            items={navRoutes.map((route) => route.item)}
             activeId={active.item.id}
             onNavigate={(id) => {
-              const target = NAV_ROUTES.find((route) => route.item.id === id);
+              const target = navRoutes.find((route) => route.item.id === id);
               if (target) void navigate(target.path);
             }}
             onSettings={() => void navigate(SETTINGS_ROUTE.path)}

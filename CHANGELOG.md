@@ -14,7 +14,22 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ## [Unreleased]
 
+- _Nothing yet._
+
+## [0.13.0] - 2026-09-12
+
 ### Added
+
+- **Administrators can now review the audit log in the product.** Every recorded change — who made
+  it, when, to which record — is on a new Audit log page, filtered by period, person, record type and
+  kind of change, with one event's recorded values behind a click. It covers everything the system
+  records, not only the money-touching changes the trust compliance pack exports, so questions like
+  "who changed this tenant's contact details" or "what did last night's automated check touch" can be
+  answered without a database. Automated changes name the process that made them. The filtered rows
+  export as a spreadsheet, and taking that export is itself recorded, so a later reviewer can see who
+  took a copy of the log and what they narrowed it to. Values imported verbatim from a previous system
+  are marked as withheld rather than shown, and the page is available to property-manager
+  administrators only.
 
 - **Database administration tooling for the future production deployment.** A manual job provides
   transactional role bootstrap and organization-scoped restore spot-checks inside the private
@@ -837,7 +852,8 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.13.0...HEAD
+[0.13.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.13.0
 [0.12.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.12.0
 [0.11.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.11.0
 [0.10.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.10.0

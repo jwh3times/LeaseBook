@@ -278,6 +278,9 @@ builder.Services.AddScoped<LeaseBook.Web.Dashboard.DashboardService>();
 builder.Services.AddScoped<LeaseBook.Web.Audit.EntryAuditReader>();
 // WP-8: the period-scoped money-touching audit extract for the trust-compliance pack.
 builder.Services.AddScoped<LeaseBook.Web.Audit.AuditExtractReader>();
+// #321: the PMAdmin audit-review read — the whole audited universe, filtered and paged, with a
+// per-event payload diff. Wider than the extract on purpose; see AuditLogReader.
+builder.Services.AddScoped<LeaseBook.Web.Audit.AuditLogReader>();
 
 // OpenAPI document (P11) — the SPA's `npm run api:generate` reads /openapi/v1.json.
 builder.Services.AddOpenApi();

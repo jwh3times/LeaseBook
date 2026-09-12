@@ -21,6 +21,17 @@ export const NAV_ROUTES: NavRoute[] = [
   route('operations', 'Operations', 'refresh', '/operations', 'Operations'),
 ];
 
+/**
+ * Primary navigation that only a PMAdmin sees. Separate from {@link NAV_ROUTES} rather than carrying
+ * a flag on each item, so "which routes need a role" is one list to read — and so the default for a
+ * new route stays "everyone", which is the safe direction for a nav item and the wrong one for an
+ * endpoint. The endpoint is what actually enforces this; hiding the item only keeps staff from
+ * walking into a 403.
+ */
+export const ADMIN_NAV_ROUTES: NavRoute[] = [
+  route('audit', 'Audit log', 'clock', '/audit', 'Audit Log'),
+];
+
 export const SETTINGS_ROUTE: NavRoute = route(
   'settings',
   'Settings',
@@ -28,3 +39,6 @@ export const SETTINGS_ROUTE: NavRoute = route(
   '/settings',
   'Settings',
 );
+
+/** Every route the shell can title, whether or not this user can see its nav item. */
+export const ALL_NAV_ROUTES: NavRoute[] = [...NAV_ROUTES, ...ADMIN_NAV_ROUTES, SETTINGS_ROUTE];

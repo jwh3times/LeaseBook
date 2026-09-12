@@ -55,7 +55,7 @@ public sealed class AuditExtractReader(AppDbContext db, IOrgContext tenant)
             .Where(a => MoneyTouchingEntityTypes.Contains(a.EntityType)
                         && a.OccurredAt >= start && a.OccurredAt < endExclusive)
             .OrderByDescending(a => a.OccurredAt)
-            .Select(a => new { a.ActorUserId, a.ActorProcess, a.EntityType, a.EntityId, a.Action, a.OccurredAt })
+            .Select(a => new { a.ActorUserId, a.ActorKind, a.ActorProcess, a.EntityType, a.EntityId, a.Action, a.OccurredAt })
             .ToListAsync(ct);
 
         var actorIds = events.Where(e => e.ActorUserId is not null)
@@ -74,7 +74,8 @@ public sealed class AuditExtractReader(AppDbContext db, IOrgContext tenant)
                 var actor = e.ActorUserId is { } id && byId.TryGetValue(id, out var u) ? u : null;
                 return new AuditExtractRow(
                     e.OccurredAt, e.EntityType, e.EntityId, e.Action,
-                    AuditActorLabel.For(actor?.DisplayName, actor?.Email, e.ActorProcess), actor?.Email);
+                    AuditActorLabel.For(actor?.DisplayName, actor?.Email, e.ActorProcess, e.ActorKind),
+                    actor?.Email);
             })
             .ToList();
 

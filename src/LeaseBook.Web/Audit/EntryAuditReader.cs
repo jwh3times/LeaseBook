@@ -41,7 +41,7 @@ public sealed class EntryAuditReader(AppDbContext db, IOrgContext tenant)
         var events = await db.AuditEvents.AsNoTracking()
             .Where(a => a.EntityType == "journal_entries" && entryIds.Contains(a.EntityId))
             .OrderByDescending(a => a.OccurredAt)
-            .Select(a => new { a.ActorUserId, a.ActorProcess, a.Action, a.OccurredAt })
+            .Select(a => new { a.ActorUserId, a.ActorKind, a.ActorProcess, a.Action, a.OccurredAt })
             .ToListAsync(ct);
 
         var actorIds = events.Where(e => e.ActorUserId is not null)
@@ -60,7 +60,8 @@ public sealed class EntryAuditReader(AppDbContext db, IOrgContext tenant)
                 var actor = e.ActorUserId is { } id && byId.TryGetValue(id, out var u) ? u : null;
                 return new AuditRow(
                     e.OccurredAt, e.Action,
-                    AuditActorLabel.For(actor?.DisplayName, actor?.Email, e.ActorProcess), actor?.Email);
+                    AuditActorLabel.For(actor?.DisplayName, actor?.Email, e.ActorProcess, e.ActorKind),
+                    actor?.Email);
             })
             .ToList();
 

@@ -46,6 +46,47 @@ export type ApplyPrepayment = {
     sourceRef: string;
 };
 
+export type AuditActorOption = {
+    id: string;
+    name: string;
+    email: null | string;
+};
+
+export type AuditEventDetail = {
+    event: AuditLogRow;
+    changes: Array<AuditFieldChange>;
+};
+
+export type AuditFieldChange = {
+    field: string;
+    before: null | string;
+    after: null | string;
+    redacted: boolean;
+};
+
+export type AuditFilterOptions = {
+    entityTypes: Array<string>;
+    actions: Array<string>;
+    actors: Array<AuditActorOption>;
+};
+
+export type AuditLogResponse = {
+    rows: Array<AuditLogRow>;
+    total: number | string;
+    page: number | string;
+    pageSize: number | string;
+};
+
+export type AuditLogRow = {
+    id: string;
+    occurredAt: string;
+    entityType: string;
+    entityId: string;
+    action: string;
+    actorName: string;
+    actorEmail: null | string;
+};
+
 export type AuditRow = {
     occurredAt: string;
     action: string;
@@ -2570,6 +2611,104 @@ export type PostApiOnboardingVerificationByIdSignoffResponses = {
 };
 
 export type PostApiOnboardingVerificationByIdSignoffResponse = PostApiOnboardingVerificationByIdSignoffResponses[keyof PostApiOnboardingVerificationByIdSignoffResponses];
+
+export type GetApiAuditFiltersData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/audit/filters';
+};
+
+export type GetApiAuditFiltersResponses = {
+    /**
+     * OK
+     */
+    200: AuditFilterOptions;
+};
+
+export type GetApiAuditFiltersResponse = GetApiAuditFiltersResponses[keyof GetApiAuditFiltersResponses];
+
+export type GetApiAuditEventsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        from?: string;
+        to?: string;
+        actor?: string;
+        entityType?: string;
+        action?: string;
+        page?: number | string;
+        pageSize?: number | string;
+    };
+    url: '/api/audit/events';
+};
+
+export type GetApiAuditEventsErrors = {
+    /**
+     * Bad Request
+     */
+    400: ProblemDetails;
+};
+
+export type GetApiAuditEventsError = GetApiAuditEventsErrors[keyof GetApiAuditEventsErrors];
+
+export type GetApiAuditEventsResponses = {
+    /**
+     * OK
+     */
+    200: AuditLogResponse;
+};
+
+export type GetApiAuditEventsResponse = GetApiAuditEventsResponses[keyof GetApiAuditEventsResponses];
+
+export type GetApiAuditEventsByIdData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/audit/events/{id}';
+};
+
+export type GetApiAuditEventsByIdErrors = {
+    /**
+     * Not Found
+     */
+    404: ProblemDetails;
+};
+
+export type GetApiAuditEventsByIdError = GetApiAuditEventsByIdErrors[keyof GetApiAuditEventsByIdErrors];
+
+export type GetApiAuditEventsByIdResponses = {
+    /**
+     * OK
+     */
+    200: AuditEventDetail;
+};
+
+export type GetApiAuditEventsByIdResponse = GetApiAuditEventsByIdResponses[keyof GetApiAuditEventsByIdResponses];
+
+export type GetApiAuditEventsCsvData = {
+    body?: never;
+    path?: never;
+    query?: {
+        from?: string;
+        to?: string;
+        actor?: string;
+        entityType?: string;
+        action?: string;
+    };
+    url: '/api/audit/events.csv';
+};
+
+export type GetApiAuditEventsCsvErrors = {
+    /**
+     * Bad Request
+     */
+    400: ProblemDetails;
+};
+
+export type GetApiAuditEventsCsvError = GetApiAuditEventsCsvErrors[keyof GetApiAuditEventsCsvErrors];
 
 export type PostApiAuthMfaRecoveryData = {
     body: RecoveryLoginRequest;
