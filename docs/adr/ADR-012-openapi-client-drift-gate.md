@@ -14,9 +14,9 @@ explicit OpenAPI-build lifecycle; generation remains database-free.
 P11/WP-08 generate the SPA's typed client (`web/src/api/schema.d.ts`) from the host's OpenAPI
 document, and the README states the consequence plainly: _"the frontend and backend contracts
 cannot silently drift."_ But the only thing enforcing that was a human remembering to run
-`npm run api:generate` (which needs the host running on `:5080`) and a reviewer catching a stale
-file — a CONTRIBUTING checkbox, not a gate. A changed endpoint shipped with a stale `schema.d.ts`
-would compile and pass CI. The guarantee was convention, not enforcement.
+`npm run api:generate` (which, at the time, needed the host running on `:5080`) and a reviewer
+catching a stale file — a CONTRIBUTING checkbox, not a gate. A changed endpoint shipped with a stale
+`schema.d.ts` would compile and pass CI. The guarantee was convention, not enforcement.
 
 Two facts shaped the fix:
 
@@ -42,18 +42,48 @@ differs from the committed copy.** Concretely:
 
 - **Build-time emission.** `LeaseBook.Web` references `Microsoft.Extensions.ApiDescription.Server`
   (build-only assets). Generation is **off by default** (`OpenApiGenerateDocumentsOnBuild=false`) so
-  the inner loop, the backend build, and the container build stay fast and DB-free; only the drift
-  job opts in with `-p:OpenApiGenerateDocumentsOnBuild=true`. The document lands under `obj/`
-  (gitignored), never the project root.
+  the inner loop, the backend build, and the container build stay fast and DB-free; only the
+  document-emitting build opts in with `-p:OpenApiGenerateDocumentsOnBuild=true`. The document lands
+  under `obj/` (gitignored), never the project root. Since #369 that build is one script,
+  `scripts/emit-openapi.mjs`, run by both the gate and `npm run api:generate` — see the ordering
+  bullet below.
 - **Startup lifecycle.** `LEASEBOOK_OPENAPI_BUILD=1` selects the mutually exclusive, database-free
   OpenAPI lifecycle defined by [ADR-042](ADR-042-explicit-host-process-lifecycle.md). The lifecycle
   composes the endpoint surface without activating the durable keyring, deployment configuration,
-  hosted workers, role seeding, registry validation or scheduling. The flag is set **only** by the
-  drift job and is unset in every real run (dev, prod, integration tests).
+  hosted workers, role seeding, registry validation or scheduling. The flag is set **only** by that
+  document-emitting build and is unset in every real run (dev, prod, integration tests).
 - **Canonical ordering.** Both `api:generate` and the gate pass `--alphabetize` to
   `openapi-typescript`, which sorts paths/types deterministically. This removes endpoint-ordering as a
   source of false drift (build-time order ≠ live order) and makes the committed file source-order
   independent. The committed `schema.d.ts` is stored in this canonical order.
+
+  **This mechanism no longer exists, the property is now obtained differently, and the diagnosis above
+  was wrong (#369).**
+
+  `--alphabetize` existed because two inputs did: the gate read the build-time document while
+  `api:generate` read a running host, and sorting made the two interchangeable. ADR-030 replaced
+  `openapi-typescript` with Hey API, which has no equivalent flag, and settled the question the other
+  way — its decision text says generated files "are regenerated from the build-time OpenAPI document".
+  `api:generate` was never repointed, so the documented command kept reading the host with nothing
+  reconciling the orders, and additionally baked the served origin into the client as both a default
+  and a narrowed type. The result was a command that produced a client the gate rejected, in an error
+  message advising the reader to run that same command.
+
+  **The ordering variable was never "build-time vs live".** Measured while fixing #369: the build-time
+  document emitted with `ASPNETCORE_ENVIRONMENT=Development` has byte-identical path ordering to the
+  live `/openapi/v1.json`, and differs from the same build under Production. Emission is stable
+  run-to-run with the environment held fixed. `Program.cs` maps `/openapi/v1.json` only in Development,
+  which shifts the endpoint enumeration the document generator walks — so the live document is always
+  Development and the build document was always Production, and the two variables were never separable
+  in the original test. The real axis is **the environment**, and it applies to the build-time document
+  on its own: two developers can emit differently-ordered documents from the same commit.
+
+  So one input is necessary but not sufficient. `api:generate` emits the build-time document itself
+  (`scripts/emit-openapi.mjs`) and generates from it, and the gate runs that same command — and the
+  script **pins the environment** rather than inheriting the shell's, which is what makes the single
+  input a single order. The client plugin also sets `baseUrl: false`, since `web/src/api/runtime.ts`
+  owns the base URL, and `GeneratedClientOriginTests` fails the build if an origin is baked in again.
+
 - **The gate** (`.github/workflows/ci.yml` → `schema-drift` job) builds the host to emit the doc, runs
   `openapi-typescript … --alphabetize` over it, and `git diff --exit-code`s the result against the
   committed `schema.d.ts`, failing with a "run `npm run api:generate`" message on any difference.
@@ -73,7 +103,8 @@ generator rather than reading a declared peer range — see ADR-030's revisit tr
 - **The README's promise is now true.** A contract change that lands without a regenerated client
   fails CI on the exact file to fix.
 - **Generation stays cheap and DB-free.** No running host, no Postgres, no Kestrel — one `dotnet build`
-  emits the doc; the drift job is the only place the tool runs.
+  emits the doc. (Since #369 the local `npm run api:generate` is that same build rather than a second
+  path, so this property now holds for the developer command too.)
 - **Costs accepted.** Production startup carries a one-line, build-tooling-aware guard (documented at
   its call site); the drift job duplicates a backend build and `npm ci` (acceptable, runs in parallel);
   and `openapi-typescript` is now CI-critical, so the toolchain is pinned to TypeScript 5.x until that

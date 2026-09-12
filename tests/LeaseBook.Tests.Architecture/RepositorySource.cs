@@ -65,6 +65,28 @@ internal sealed class RepositorySource
         ];
     }
 
+    /// <summary>
+    /// TypeScript under a <b>generated</b> directory — the one place a guard deliberately looks at
+    /// generated output. Separate from <see cref="WebSourceFiles"/>, which excludes it, so that
+    /// exclusion stays the default and including it stays an explicit choice.
+    /// </summary>
+    public IReadOnlyList<RepositoryFile> WebGeneratedFiles(string relativeRoot)
+    {
+        var (fullRoot, normalizedRoot) = Resolve(relativeRoot);
+        if (!Directory.Exists(fullRoot))
+        {
+            throw new DirectoryNotFoundException($"Repository directory not found: {normalizedRoot}");
+        }
+
+        return
+        [
+            .. Directory.EnumerateFiles(fullRoot, "*", SearchOption.AllDirectories)
+                .Where(path => WebExtensions.Contains(Path.GetExtension(path)))
+                .Select(path => new RepositoryFile(path, Path.GetRelativePath(root, path)))
+                .OrderBy(file => file.RelativePath, StringComparer.Ordinal),
+        ];
+    }
+
     public IReadOnlyList<RepositoryFile> CodeFilesUnder(params string[] relativeRoots)
     {
         var files = new List<RepositoryFile>();

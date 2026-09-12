@@ -24,7 +24,7 @@
     "typecheck": "tsc -b",
     "test": "vitest run",
     "test:watch": "vitest",
-    "api:generate": "npm --prefix codegen ci && npm --prefix codegen run generate:dev",
+    "api:generate": "npm --prefix codegen ci && node ../scripts/emit-openapi.mjs && npm --prefix codegen run generate",
     "e2e": "playwright test"
   },
   "dependencies": {
