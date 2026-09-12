@@ -17,6 +17,9 @@ const DEMO_INDEX_ROUTES = [
   '/banking',
   '/reports',
   '/operations',
+  // PMAdmin-only (#321). DEMO_ADMIN is one, so the page renders its real table rather than the
+  // admin-access-required state — scanning that instead would prove nothing about the surface.
+  '/audit',
   '/settings',
   '/account/security',
 ];

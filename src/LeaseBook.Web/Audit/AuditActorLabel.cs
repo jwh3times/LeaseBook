@@ -1,8 +1,11 @@
+using LeaseBook.SharedKernel.Tenancy;
+
 namespace LeaseBook.Web.Audit;
 
 /// <summary>
-/// How an audit row names who acted. One implementation for both readers, because the per-entry
-/// trail and the compliance extract must not describe the same row two different ways.
+/// How an audit row names who acted. One implementation for all three readers, because the per-entry
+/// trail, the compliance extract and the admin review surface must not describe the same row three
+/// different ways.
 /// </summary>
 internal static class AuditActorLabel
 {
@@ -17,8 +20,17 @@ internal static class AuditActorLabel
     /// false attribution in the document an examiner reads.
     /// </para>
     /// </summary>
-    public static string For(string? displayName, string? email, string? process) =>
+    /// <param name="actorKind">
+    /// The persisted <c>actor_kind</c>, where the caller has it. Without it, a user whose identity row
+    /// no longer resolves — deleted, or belonging to another org — falls through to "System", which is
+    /// a <b>false</b> attribution rather than a missing one: the row says <c>user</c>, and the review
+    /// surface's System filter (which keys on <c>actor_kind</c>) will not return the row it just
+    /// labelled System. Passing the kind keeps "we cannot name them" separate from "nobody was there".
+    /// </param>
+    public static string For(string? displayName, string? email, string? process, string? actorKind = null) =>
         displayName
         ?? email
-        ?? (string.IsNullOrEmpty(process) ? "System" : $"System ({process})");
+        ?? (actorKind == Actor.UserKind
+            ? "Unknown user"
+            : string.IsNullOrEmpty(process) ? "System" : $"System ({process})");
 }

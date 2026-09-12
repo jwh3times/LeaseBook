@@ -1,0 +1,46 @@
+/* Audit-review surface (#321). Tokens only — no new custom properties (they live in tokens.css). */
+
+.pf-audit-filter-card {
+  margin-bottom: var(--gap);
+}
+
+.pf-audit-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gap);
+  align-items: flex-end;
+  padding: var(--gap);
+}
+
+.pf-audit-pager {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--gap);
+  padding: var(--gap);
+  border-top: 1px solid var(--border);
+}
+
+/* Definition list of the event's own facts, above its field diff. */
+.pf-audit-meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--gap);
+  margin: 0;
+}
+
+.pf-audit-meta dt {
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.pf-audit-meta dd {
+  margin: 0;
+  color: var(--text);
+}
+
+/* A payload value can be long and is not prose — wrap it rather than letting it stretch the table. */
+.pf-audit-value {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}

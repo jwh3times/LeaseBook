@@ -231,6 +231,23 @@ durable actor — a user id, or the name of the system process that acted — an
 neither is refused rather than stored unattributed; see
 [ADR-039](adr/ADR-039-durable-actor-attribution.md).
 
+That audit trail is read by three deliberately different surfaces: the per-entry trail beside a
+journal entry, the money-touching extract the trust compliance pack hands an examiner, and an
+admin-only **review** surface (`/api/audit`, the SPA's `/audit`) that spans the whole audited universe
+over any period, filtered server-side by actor, record type and action. The review list carries
+**metadata only** — one event's `before`/`after` snapshot is a second read behind it, so browsing a
+trail never ships the payloads underneath it, and the CSV export is the same filtered metadata,
+capped, with a truncated export saying so in its own first row. Payloads are withheld by the **origin
+of their content** rather than by a guess at sensitivity: the one audited column LeaseBook does not
+author — a row of the customer's previous system's export, verbatim — renders as a marker, as does a
+payload that is not a flat object or a column whose name is secret-shaped. Credentials never reach the
+table at all, because Identity is deliberately not organization-scoped. Filter vocabularies come from
+the EF model and from enumerated source catalogs rather than `SELECT DISTINCT`, so the filter names
+the events that _can_ occur rather than the rows that happen to exist; build-time guards fail on a
+hand-written `entity_type` or `action` outside its catalog, and on an audited entity that gains an
+unclassified `*Json` column, a secret-shaped one, or becomes an Identity type. See
+[ADR-044](adr/ADR-044-audit-log-review-surface.md).
+
 ## Test execution
 
 Every executable xUnit v3 project runs on Microsoft Testing Platform v2. The .NET 10 runner is selected

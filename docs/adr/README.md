@@ -68,6 +68,7 @@ form, write it, and add a row to the index below. When a decision is replaced, m
 | [041](ADR-041-durable-keyring-and-proxy-trust.md)                    | The keyring is durable, and proxy trust is declared                             | Accepted                               | 2026-08-18 |
 | [042](ADR-042-explicit-host-process-lifecycle.md)                    | Make host process lifecycle explicit                                            | Accepted                               | 2026-09-02 |
 | [043](ADR-043-account-security-lifecycle.md)                         | Account security has an application and operator lifecycle                      | Accepted                               | 2026-09-06 |
+| [044](ADR-044-audit-log-review-surface.md)                           | Audit-log review is a separate read, and payloads are withheld by origin        | Accepted                               | 2026-09-11 |
 
 ## Status legend
 

@@ -35,5 +35,8 @@ public sealed class AuditEventConfiguration : IEntityTypeConfiguration<AuditEven
         // Composite indexes lead with org_id so the RLS equality predicate rides every access path (§1).
         builder.HasIndex(e => new { e.OrgId, e.OccurredAt });
         builder.HasIndex(e => new { e.OrgId, e.EntityType, e.EntityId });
+        // "What did this person change, and when" — the audit-review surface's actor filter (#321),
+        // which is otherwise a scan of the largest table in the database.
+        builder.HasIndex(e => new { e.OrgId, e.ActorUserId, e.OccurredAt });
     }
 }

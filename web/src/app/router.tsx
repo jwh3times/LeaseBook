@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react';
 import { createBrowserRouter, Navigate } from 'react-router';
 import { KitchenSink } from '@/dev/KitchenSink';
+import { AuditPage } from '@/features/audit';
 import { AccountSecurityPage } from '@/features/auth/AccountSecurityPage';
 import { LoginPage } from '@/features/auth/LoginPage';
 import { BankingPage } from '@/features/banking/BankingPage';
@@ -17,7 +18,7 @@ import { SettingsPage } from '@/features/settings/SettingsPage';
 import { LedgerPage } from '@/features/tenants/LedgerPage';
 import { TenantsPage } from '@/features/tenants/TenantsPage';
 import { AppShell } from './AppShell';
-import { NAV_ROUTES, SETTINGS_ROUTE } from './navigation';
+import { ALL_NAV_ROUTES } from './navigation';
 import { NotFound } from './NotFound';
 import { PlaceholderPage } from './PlaceholderPage';
 import { RouteGuard } from './RouteGuard';
@@ -32,9 +33,13 @@ const FEATURE_PAGES: Record<string, ReactElement> = {
   '/reports': <ReportsPage />,
   '/operations': <OperationsPage />,
   '/settings': <SettingsPage />,
+  // PMAdmin-only (#321). The route is registered for everyone and the page turns a non-admin away
+  // itself, so a shared link says "admin only" instead of the SPA's 404 — which would be a claim
+  // about the route rather than about the reader. The endpoint is the enforcement either way.
+  '/audit': <AuditPage />,
 };
 
-const pageRoutes = [...NAV_ROUTES, SETTINGS_ROUTE].map((route) => ({
+const pageRoutes = ALL_NAV_ROUTES.map((route) => ({
   path: route.path,
   element: FEATURE_PAGES[route.path] ?? <PlaceholderPage title={route.title} />,
 }));

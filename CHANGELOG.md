@@ -16,6 +16,15 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Added
 
+- **Administrators can now review the audit log in the product.** Every recorded change — who made
+  it, when, to which record — is on a new Audit log page, filtered by period, person, record type and
+  kind of change, with one event's recorded values behind a click. It covers everything the system
+  records, not only the money-touching changes the trust compliance pack exports, so questions like
+  "who changed this tenant's contact details" or "what did last night's automated check touch" can be
+  answered without a database. Automated changes name the process that made them. The filtered rows
+  export as a spreadsheet. Values imported verbatim from a previous system are marked as withheld
+  rather than shown, and the page is available to property-manager administrators only.
+
 - **Database administration tooling for the future production deployment.** A manual job provides
   transactional role bootstrap and organization-scoped restore spot-checks inside the private
   network, using a dedicated identity and credential vault. Local tests cover replay, rollback,
