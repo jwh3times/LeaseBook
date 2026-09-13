@@ -723,6 +723,22 @@ public static class ScenarioSeeder
 
         await ConfirmRunAsync(ctx, RunType.Disbursement, 2026, 6, ct);
 
+        // ADR-045's carry-forward, demoable: a May maintenance recharge for T-S3 is keyed in late —
+        // after O-S1's May statement was issued — then voided as of June 1 as posted in error. The charge
+        // is accrual-only (no bank line), so May's reconciliation lock never sees it, which is exactly the
+        // gap the carry-forward closes: O-S1's June accrual statement opens from the issued May figure
+        // and itemizes the 95.00 as a prior-period adjustment, while the June-dated void lands in June's
+        // Income. What moves: an accrual or receivable read dated May 28–31 shows T-S3 owing 95.00 more.
+        // What does not: from June 1 the pair nets out — before T-S3's June 3 payment, so its FIFO
+        // allocation is unchanged — and no cash, bank or reconciliation figure is touched. Both are posted
+        // after the June disbursement run, so the run's equity read never saw them.
+        var lateRecharge = await ctx.Sender.Send(new AddCharge(
+            ctx.Tenant("Kenji Nakamura"), 95.00m, new(2026, 5, 28), "maintenance-recharge",
+            "Gutter cleaning recharge — May", "scenario:recharge:late:2026-05:t-s3"), ct);
+        await ctx.Sender.Send(new VoidEntry(
+            lateRecharge.EntryId, "Posted in error — the gutter work was the owner's expense",
+            new DateOnly(2026, 6, 1), "scenario:void:recharge:late:t-s3"), ct);
+
         await ctx.Sender.Send(new RecordBankAdjustment(
             "fee", 15.00m, new(2026, 6, 20), OperatingTrustId, null,
             "Monthly account analysis fee", "scenario:bankfee:2026-06"), ct);

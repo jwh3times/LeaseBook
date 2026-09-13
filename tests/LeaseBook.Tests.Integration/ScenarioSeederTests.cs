@@ -161,6 +161,9 @@ public sealed class ScenarioSeederTests(PostgresFixture fixture)
         artifacts.Count.ShouldBe(3, "O-S1 May, O-S2 April, O-S5 April");
         artifacts.ShouldAllBe(a => a.ArtifactKey.EndsWith(".pdf"));
         artifacts.ShouldAllBe(a => a.Basis == "accrual");
+        artifacts.ShouldAllBe(
+            a => a.PropertyId == null && a.EndingBalance != null && a.AsOf != null,
+            "every artifact issued since ADR-045 records the whole-owner figure it presented and when it was read");
 
         var attempts = artifacts.SelectMany(a => a.Attempts).ToList();
         attempts.Count.ShouldBe(4, "the bounced O-S2 send was retried");

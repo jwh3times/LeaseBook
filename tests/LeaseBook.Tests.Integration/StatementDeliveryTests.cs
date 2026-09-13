@@ -176,7 +176,8 @@ public sealed class StatementDeliveryTests(PostgresFixture fixture)
         await using var selectCmd = new NpgsqlCommand(
             """
             SELECT art.owner_id, art.period_year, art.period_month, art.basis, art.artifact_key,
-                   att.id, att.to_email, ev.sequence, ev.kind
+                   att.id, att.to_email, ev.sequence, ev.kind,
+                   art.property_id, art.ending_balance, art.as_of
             FROM statement_artifacts art
             JOIN statement_delivery_attempts att
               ON att.org_id = art.org_id AND att.artifact_id = art.id
@@ -200,6 +201,11 @@ public sealed class StatementDeliveryTests(PostgresFixture fixture)
         reader.GetString(6).ShouldBe("owner@example.com");
         reader.GetInt32(7).ShouldBe(1, "the Queued event is always sequence 1");
         reader.GetString(8).ShouldBe("queued");
+        // ADR-045: the artifact records what it presented, so next period's statement can chain from it.
+        (await reader.IsDBNullAsync(9, ct)).ShouldBeTrue("a whole-owner statement records no property scope");
+        reader.GetDecimal(10).ShouldBe(22_640.30m, "the ending balance the owner was given");
+        reader.GetFieldValue<DateTime>(11).ShouldBe(
+            new DateTime(2026, 6, 1, 12, 0, 0, DateTimeKind.Utc), "the instant the view's figures were read");
         (await reader.ReadAsync(ct)).ShouldBeFalse("a fresh attempt has exactly one event");
         await reader.DisposeAsync();
         await tx.RollbackAsync(ct); // read-only probe — roll back so nothing persists
@@ -214,6 +220,23 @@ public sealed class StatementDeliveryTests(PostgresFixture fixture)
         artifactBytes[1].ShouldBe((byte)'P');
         artifactBytes[2].ShouldBe((byte)'D');
         artifactBytes[3].ShouldBe((byte)'F');
+    }
+
+    /// <summary>
+    /// ADR-045: an issued artifact's <c>as_of</c> is what its successor carries forward from. A view that
+    /// never recorded when it was read would store a false instant, so issuance refuses it outright.
+    /// </summary>
+    [Fact]
+    public async Task Delivery_refuses_a_view_that_never_recorded_when_it_was_read()
+    {
+        var ct = TestContext.Current.CancellationToken;
+
+        var (_, thrown) = await RunInOrgAsync(async delivery =>
+            await Should.ThrowAsync<ArgumentException>(async () =>
+                await delivery.DeliverAsync(BuildBalancedView() with { AsOf = default }, "owner@example.com", ct)),
+            ct);
+
+        thrown.ParamName.ShouldBe("view");
     }
 
     // ─── ADR-040: the history model (#185's two scenarios) ──────────────────
@@ -608,15 +631,18 @@ public sealed class StatementDeliveryTests(PostgresFixture fixture)
         return new StatementView(
             OwnerId: ownerId,
             OwnerName: "Test Owner",
+            PropertyId: null,
             PropertyAddress: null,
             Basis: "cash",
             Year: 2026,
             Month: 5,
             Beginning: 100m,
+            CarryForward: null,
             Sections: [],
             Ending: 200m,  // deliberately inconsistent — variance != 0
             Fiduciary: fiduciary,
-            Branding: branding);
+            Branding: branding,
+            AsOf: new DateTime(2026, 6, 1, 12, 0, 0, DateTimeKind.Utc));
     }
 
     /// <summary>
@@ -653,15 +679,18 @@ public sealed class StatementDeliveryTests(PostgresFixture fixture)
         return new StatementView(
             OwnerId: DemoIds.O5,
             OwnerName: "Ridgeline Investments",
+            PropertyId: null,
             PropertyAddress: "204 Elm St, Chapel Hill, NC",
             Basis: "cash",
             Year: 2026,
             Month: 5,
             Beginning: 20_345.30m,
+            CarryForward: null,
             Sections: sections,
             Ending: 22_640.30m,
             Fiduciary: fiduciary,
-            Branding: branding);
+            Branding: branding,
+            AsOf: new DateTime(2026, 6, 1, 12, 0, 0, DateTimeKind.Utc));
     }
 
     /// <summary>

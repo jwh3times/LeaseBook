@@ -64,11 +64,12 @@ form, write it, and add a row to the index below. When a decision is replaced, m
 | [037](ADR-037-effective-dated-lease-attribution.md)                  | Effective-dated lease attribution and non-overlapping terms                     | Accepted                               | 2026-08-16 |
 | [038](ADR-038-derived-financial-standing-and-occupancy.md)           | Derive tenant financial standing and unit occupancy                             | Accepted                               | 2026-08-17 |
 | [039](ADR-039-durable-actor-attribution.md)                          | Actor attribution is durable                                                    | Accepted                               | 2026-08-18 |
-| [040](ADR-040-statement-delivery-history.md)                         | Statement delivery is an append-only history                                    | Accepted                               | 2026-08-18 |
+| [040](ADR-040-statement-delivery-history.md)                         | Statement delivery is an append-only history                                    | Accepted (amended by ADR-045)          | 2026-08-18 |
 | [041](ADR-041-durable-keyring-and-proxy-trust.md)                    | The keyring is durable, and proxy trust is declared                             | Accepted                               | 2026-08-18 |
 | [042](ADR-042-explicit-host-process-lifecycle.md)                    | Make host process lifecycle explicit                                            | Accepted                               | 2026-09-02 |
 | [043](ADR-043-account-security-lifecycle.md)                         | Account security has an application and operator lifecycle                      | Accepted                               | 2026-09-06 |
 | [044](ADR-044-audit-log-review-surface.md)                           | Audit-log review is a separate read, and payloads are withheld by origin        | Accepted                               | 2026-09-11 |
+| [045](ADR-045-statement-carry-forward.md)                            | A statement carries forward from the one issued before it                       | Accepted                               | 2026-09-13 |
 
 ## Status legend
 

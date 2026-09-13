@@ -43,6 +43,34 @@ public sealed class StatementArtifact : IOrgScoped
     /// </summary>
     public string? Basis { get; set; }
 
+    /// <summary>
+    /// The property the statement was scoped to, or null for a whole-owner statement. Part of the
+    /// artifact's identity for carry-forward (ADR-045): a property-scoped statement anchors only the
+    /// next statement with the same scope.
+    /// <para>
+    /// Null on artifacts issued before ADR-045 as well, which never recorded it — those also carry a
+    /// null <see cref="EndingBalance"/>, and that, not this column, is what marks them unanchorable.
+    /// </para>
+    /// </summary>
+    public Guid? PropertyId { get; set; }
+
+    /// <summary>
+    /// The ending balance this statement presented to the owner (ADR-045). The next period's statement
+    /// opens from it and itemizes what was posted since, so the owner's two documents chain.
+    /// <para>
+    /// Null on artifacts issued before ADR-045. Deliberately not backfilled: re-reading the journal now
+    /// would record today's figure as the one the owner was given.
+    /// </para>
+    /// </summary>
+    public decimal? EndingBalance { get; set; }
+
+    /// <summary>
+    /// The instant the statement's figures were read (UTC). Postings whose <c>posted_at</c> is later
+    /// are the ones this document could not have shown. Null exactly when
+    /// <see cref="EndingBalance"/> is.
+    /// </summary>
+    public DateTime? AsOf { get; set; }
+
     /// <summary>Opaque key into <c>IArtifactStore</c> for the immutable PDF bytes.</summary>
     public string ArtifactKey { get; set; } = string.Empty;
 

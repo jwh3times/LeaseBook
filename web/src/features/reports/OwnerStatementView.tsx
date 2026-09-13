@@ -8,6 +8,7 @@ import {
   downloadStatement,
   monthLabel,
   num,
+  type CarryForwardView,
   type FiduciaryPanel,
   type ReportsError,
   type StatementFilters,
@@ -38,6 +39,81 @@ function StatementSection({ section }: StatementSectionProps) {
         </div>
       ))}
     </div>
+  );
+}
+
+// ---- CarryForward -----------------------------------------------------------
+
+/**
+ * `YYYY-MM-DD…` → `Apr 28, 2026`, read from the string itself. A date-only value parsed through
+ * `Date` lands on UTC midnight and renders as the previous day west of Greenwich; the server's
+ * instants are UTC, and the PDF prints their UTC date, so both surfaces agree.
+ */
+function shortDate(iso: string): string {
+  const [year = 0, month = 0, day = 0] = iso.slice(0, 10).split('-').map(Number);
+  return `${MONTHS_SHORT[month - 1] ?? ''} ${day}, ${year}`;
+}
+
+interface CarryForwardProps {
+  carryForward: CarryForwardView;
+  beginning: number;
+}
+
+/**
+ * ADR-045: the statement opens from the ending balance the owner's previous statement presented,
+ * itemizes what was posted into that period after it was issued (each entry's booked date and its
+ * posted date), and lands on the beginning balance the sections build on. Meaning is carried by labels
+ * and signs, never by colour alone.
+ */
+function CarryForward({ carryForward: cf, beginning }: CarryForwardProps) {
+  const unitemized = num(cf.unitemized);
+
+  return (
+    <>
+      <div className="pf-stmt-begin">
+        <span>
+          Beginning balance, as issued for {monthLabel(num(cf.issuedYear), num(cf.issuedMonth))}{' '}
+          (issued {shortDate(cf.issuedAt)})
+        </span>
+        <Money value={num(cf.issuedEnding)} />
+      </div>
+      <div className="pf-stmt-section" role="region" aria-label="Prior-period adjustments">
+        <div className="pf-stmt-sectionhd">
+          <span>Prior-period adjustments</span>
+          <Money value={num(cf.total)} colorize />
+        </div>
+        {cf.lines.map((line, i) => (
+          // One row per (entry, property): an entry split across properties repeats its id.
+          <div key={`${line.entryId}:${i}`} className="pf-stmt-line">
+            <div className="col" style={{ gap: 2 }}>
+              <span>
+                {shortDate(line.date)} · {line.description}
+              </span>
+              <span className="t3 fs12">
+                Posted {shortDate(line.postedAt)}
+                {line.propertyAddress ? ` · ${line.propertyAddress}` : ''}
+              </span>
+            </div>
+            <Money value={num(line.amount)} colorize />
+          </div>
+        ))}
+        {unitemized !== 0 && (
+          <div className="pf-stmt-line">
+            <div className="col" style={{ gap: 2 }}>
+              <span>Unitemized adjustments</span>
+              <span className="t3 fs12">
+                Not attributable to a single entry posted after the prior statement
+              </span>
+            </div>
+            <Money value={unitemized} colorize />
+          </div>
+        )}
+      </div>
+      <div className="pf-stmt-begin">
+        <span>Adjusted beginning balance</span>
+        <Money value={beginning} />
+      </div>
+    </>
   );
 }
 
@@ -316,11 +392,15 @@ export function OwnerStatementView({
             </div>
           </div>
 
-          {/* Beginning */}
-          <div className="pf-stmt-begin">
-            <span>Beginning balance</span>
-            <Money value={beginning} />
-          </div>
+          {/* Beginning — carried forward from the issued prior statement when one exists */}
+          {statement.carryForward ? (
+            <CarryForward carryForward={statement.carryForward} beginning={beginning} />
+          ) : (
+            <div className="pf-stmt-begin">
+              <span>Beginning balance</span>
+              <Money value={beginning} />
+            </div>
+          )}
 
           {/* Sections */}
           {statement.sections.map((section) => (

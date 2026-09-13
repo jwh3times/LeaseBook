@@ -12,6 +12,8 @@ import {
   toApiError,
   unwrap,
   type ApiError,
+  type CarryForwardLineView,
+  type CarryForwardView,
   type FiduciaryPanel,
   type PmBrandingRow,
   type ReconciliationSnapshotRow,
@@ -23,6 +25,8 @@ import {
 import { num } from '@/lib/directory';
 
 export type {
+  CarryForwardLineView,
+  CarryForwardView,
   FiduciaryPanel,
   PmBrandingRow,
   ReconciliationSnapshotRow,

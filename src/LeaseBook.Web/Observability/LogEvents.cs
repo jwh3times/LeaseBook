@@ -46,4 +46,14 @@ public static class LogEvents
     /// reading — unlike 1300, where only a sustained rate is — because each one names a period that two
     /// capability states were about to touch.</summary>
     public static readonly EventId CapabilityCrossRunConflict = new(1301, nameof(CapabilityCrossRunConflict));
+
+    // 1400-1499 = owner statements. Their own block: a statement is assembled on the HTTP surface,
+    // in a seeder, and eventually in a delivery job, so it belongs to none of the blocks above.
+
+    /// <summary>A statement's prior-period adjustments could not all be attributed to entries posted after
+    /// the anchoring statement was read (ADR-045). The statement still renders exactly — the remainder is
+    /// its own labelled line. Expected only when a posting transaction was open while the anchoring
+    /// statement was issued (a bulk run commits all its entries at its end, so that window is the run's
+    /// length). Outside that, it means the issued figure and the journal disagree.</summary>
+    public static readonly EventId StatementCarryForwardUnitemized = new(1400, nameof(StatementCarryForwardUnitemized));
 }

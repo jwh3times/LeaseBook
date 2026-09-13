@@ -12,9 +12,11 @@ namespace LeaseBook.Web.Adapters;
 internal sealed class OwnerStatementDataAdapter(ISender sender) : IOwnerStatementData
 {
     public async Task<IReadOnlyDictionary<Guid, OwnerStatement>> GetAsync(
-        IReadOnlyList<Guid> ownerIds, Guid? propertyId, int year, int month, string basis, CancellationToken ct)
+        IReadOnlyList<Guid> ownerIds, Guid? propertyId, int year, int month, string basis,
+        IReadOnlyDictionary<Guid, StatementAnchor>? anchors, CancellationToken ct)
     {
-        var r = await sender.Query(new GetOwnerStatementData(ownerIds, propertyId, year, month, basis), ct);
+        var r = await sender.Query(
+            new GetOwnerStatementData(ownerIds, propertyId, year, month, basis, anchors), ct);
         return r.ByOwner;
     }
 }

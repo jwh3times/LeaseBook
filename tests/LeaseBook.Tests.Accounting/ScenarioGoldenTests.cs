@@ -1,9 +1,11 @@
 using LeaseBook.Modules.Accounting.Features.Ledgers;
 using LeaseBook.Modules.Accounting.Features.Statements;
 using LeaseBook.Modules.Directory.Domain;
+using LeaseBook.Modules.Reporting.Delivery;
 using LeaseBook.SharedKernel.Tenancy;
 using LeaseBook.Tests.Common;
 using LeaseBook.Web.Persistence;
+using LeaseBook.Web.Reporting;
 using LeaseBook.Web.Seeding;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -256,6 +258,61 @@ public sealed class ScenarioGoldenTests(PostgresFixture fixture)
         (perA.Ending + perB.Ending - consolidated.Ending).ShouldBe(13_472.42m);
     }
 
+    /// <summary>
+    /// ADR-045 on real seeded rows. O-S1's May accrual statement was issued, then a May-dated recharge
+    /// was keyed in during June and voided in June. May's live figure has therefore moved away from the
+    /// document the owner holds — the defect — and June's statement must open from the issued figure and
+    /// itemize the recharge, so the two documents chain. Scope and basis are part of the anchor, so the
+    /// per-property and cash views of June have nothing to carry forward from.
+    /// </summary>
+    [Fact]
+    public async Task June_statement_carries_forward_from_the_issued_May_statement()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await SeedAsync(ct);
+        var owners = await OwnerIdsAsync(ct);
+        var oS1 = owners["Harborview Holdings"];
+        var pS1 = await QueryAsync(
+            db => db.Set<Property>().Where(p => p.Address == "14 Harborview Ln").Select(p => p.Id).SingleAsync(ct), ct);
+
+        var (issuedMay, mayNow, june, juneCash, junePerProperty) = await AssembleAsync(async (assembler, db) =>
+        {
+            var issued = await db.Set<StatementArtifact>()
+                .SingleAsync(a => a.OwnerId == oS1 && a.PeriodYear == 2026 && a.PeriodMonth == 5, ct);
+            return (
+                issued,
+                (await assembler.BuildAsync([oS1], null, 2026, 5, "accrual", ct))[0],
+                (await assembler.BuildAsync([oS1], null, 2026, 6, "accrual", ct))[0],
+                (await assembler.BuildAsync([oS1], null, 2026, 6, "cash", ct))[0],
+                (await assembler.BuildAsync([oS1], pS1, 2026, 6, "accrual", ct))[0]);
+        }, ct);
+
+        var issuedEnding = issuedMay.EndingBalance.ShouldNotBeNull("the May artifact recorded what it presented");
+        // The issued May accrual figure equals the cash reserve: every May receivable on O-S1's
+        // properties was collected, and the disbursement run swept to exactly the 500.00 floor.
+        issuedEnding.ShouldBe(500.00m);
+        mayNow.Ending.ShouldBe(issuedEnding + 95.00m, "the live May figure has drifted from the issued document");
+
+        var cf = june.CarryForward.ShouldNotBeNull();
+        (cf.IssuedYear, cf.IssuedMonth).ShouldBe((2026, 5));
+        cf.IssuedEnding.ShouldBe(issuedEnding);
+        var line = cf.Lines.ShouldHaveSingleItem();
+        line.Date.ShouldBe(new DateOnly(2026, 5, 28));
+        line.Description.ShouldBe("Gutter cleaning recharge — May");
+        line.Amount.ShouldBe(95.00m);
+        cf.Unitemized.ShouldBe(0m);
+        cf.Total.ShouldBe(95.00m);
+        (cf.IssuedEnding + cf.Total).ShouldBe(june.Beginning, "June opens where May was issued, plus what changed");
+
+        june.Sections.SelectMany(s => s.Lines)
+            .ShouldContain(l => l.Date == new DateOnly(2026, 6, 1) && l.Amount == -95.00m,
+                "the void is ordinary June activity");
+        june.Fiduciary.Balanced.ShouldBeTrue();
+
+        juneCash.CarryForward.ShouldBeNull("May was issued on accrual; the cash statement has no anchor");
+        junePerProperty.CarryForward.ShouldBeNull("May was issued whole-owner; a property-scoped statement has no anchor");
+    }
+
     // ── Harness ──────────────────────────────────────────────────────────────
 
     private Task SeedAsync(CancellationToken ct) => ScenarioSeeder.SeedAsync(fixture.Api.Services, ct);
@@ -267,6 +324,18 @@ public sealed class ScenarioGoldenTests(PostgresFixture fixture)
     private Task<IReadOnlyDictionary<string, Guid>> TenantIdsAsync(CancellationToken ct) =>
         QueryAsync(async db => (IReadOnlyDictionary<string, Guid>)await db.Set<Tenant>()
             .Where(t => !t.IsSystem).ToDictionaryAsync(t => t.DisplayName, t => t.Id, ct), ct);
+
+    private async Task<T> AssembleAsync<T>(Func<StatementAssembler, AppDbContext, Task<T>> work, CancellationToken ct)
+    {
+        await using var scope = fixture.Api.Services.CreateAsyncScope();
+        var executor = scope.ServiceProvider.GetRequiredService<OrgScopedExecutor>();
+        var assembler = scope.ServiceProvider.GetRequiredService<StatementAssembler>();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        T result = default!;
+        await executor.RunAsSystemAsync(
+            ScenarioSeeder.ScenarioOrgId, "test-harness", async () => result = await work(assembler, db), ct);
+        return result;
+    }
 
     private async Task<T> QueryAsync<T>(Func<DbContext, Task<T>> query, CancellationToken ct)
     {
