@@ -25,6 +25,33 @@ public sealed class CsvInjectionTests
         csv.ShouldNotContain(",=cmd");  // never an unguarded formula at a field boundary
     }
 
+    /// <summary>
+    /// ADR-045's carry-forward rows are a second path through <c>StatementCsv</c>; an entry description
+    /// is free text (and, via M7, imported), so it must reach the guard too.
+    /// </summary>
+    [Fact]
+    public void StatementCsv_neutralizes_formula_injection_in_carry_forward_rows()
+    {
+        const string carryPayload = "=HYPERLINK(\"http://example.invalid\")";
+        var view = StatementWithPayload() with
+        {
+            CarryForward = new CarryForwardView(
+                2026, 4, new DateTime(2026, 5, 2, 9, 0, 0, DateTimeKind.Utc), -40.00m,
+                [
+                    new CarryForwardLineView(Guid.NewGuid(), new DateOnly(2026, 4, 20),
+                        new DateTime(2026, 5, 9, 9, 0, 0, DateTimeKind.Utc), "RentCharged",
+                        carryPayload, carryPayload, 40.00m),
+                ],
+                Unitemized: 0m,
+                Total: 40.00m),
+        };
+
+        var csv = Encoding.UTF8.GetString(StatementCsv.Write(view));
+
+        csv.ShouldContain("'=HYPERLINK");
+        csv.ShouldNotContain(",=HYPERLINK");
+    }
+
     [Fact]
     public void ReportCsv_neutralizes_formula_injection_in_data_cells()
     {
@@ -50,8 +77,9 @@ public sealed class CsvInjectionTests
             DepositsRecognizedOnApplication: true, LatestReconciledBank: null);
 
         return new StatementView(
-            OwnerId: Guid.NewGuid(), OwnerName: "Acme", PropertyAddress: "1 Main St",
-            Basis: "cash", Year: 2026, Month: 5, Beginning: 0m, Sections: sections,
-            Ending: 1_000.00m, Fiduciary: fiduciary, Branding: branding);
+            OwnerId: Guid.NewGuid(), OwnerName: "Acme", PropertyId: null, PropertyAddress: "1 Main St",
+            Basis: "cash", Year: 2026, Month: 5, Beginning: 0m, CarryForward: null, Sections: sections,
+            Ending: 1_000.00m, Fiduciary: fiduciary, Branding: branding,
+            AsOf: new DateTime(2026, 6, 1, 12, 0, 0, DateTimeKind.Utc));
     }
 }

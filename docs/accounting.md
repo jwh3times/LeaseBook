@@ -393,6 +393,28 @@ is read from an attempt's latest event, never stored. A resend is a new attempt 
 artifact, so it cannot present different figures than the send it follows and the tie-out does not
 run again. See [ADR-040](adr/ADR-040-statement-delivery-history.md).
 
+### Carrying forward from an issued statement
+
+A posting may be dated into a month whose statement was already issued — period locks gate bank
+lines, not statements, so an accrual charge or a correction dated into an unlocked month is legal. An
+issued statement is treated as true when it was issued: it is never amended, and the owner's **next**
+statement carries the change forward instead.
+
+Issuing a statement records the ending balance it presented and the instant its figures were read.
+The following month's statement, for the same owner, basis and property scope, then opens with:
+
+1. the beginning balance **as issued** for the previous month;
+2. a **prior-period adjustments** section listing every entry dated into that month or earlier that
+   was posted after it was issued — each with the date it is booked to and the date it was posted;
+3. an **adjusted beginning balance**, which is the same live beginning balance the tie-out uses.
+
+The issued figure is authoritative, so the adjustment total is always the exact difference. If the
+listed entries do not account for all of it — possible only when a posting, such as a bulk run, was
+still being committed while the earlier statement was issued — the remainder appears as a labelled _unitemized adjustments_ line
+and is logged, never folded into another figure. The section is omitted when nothing changed, when no
+statement was issued for the immediately preceding month, or when the earlier statement predates this
+behavior. See [ADR-045](adr/ADR-045-statement-carry-forward.md).
+
 ### The ADR-016 read-layer boundary
 
 The statement engine is the one place in LeaseBook where the read layer is intentionally allowed to

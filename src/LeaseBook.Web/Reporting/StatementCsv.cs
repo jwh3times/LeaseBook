@@ -19,6 +19,8 @@ public static class StatementCsv
     // Column headers match the screen-owner.jsx columns visible on the PDF.
     private static readonly string[] Headers = ["Section", "Date", "Description", "Property", "Amount"];
 
+    private const string PriorPeriodAdjustmentsTitle = "Prior-period adjustments";
+
     /// <summary>
     /// Serializes <paramref name="view"/> to UTF-8 CSV bytes.
     /// Rows: one per <see cref="StatementLineView"/>; subtotal rows follow each section;
@@ -43,7 +45,39 @@ public static class StatementCsv
             WriteRow(csv, "STATEMENT", "", $"Owner: {view.OwnerName}", "", "");
             WriteRow(csv, "STATEMENT", "", $"Period: {view.Year}-{view.Month:D2}", "", "");
             WriteRow(csv, "STATEMENT", "", $"Basis: {view.Basis}", "", "");
-            WriteRow(csv, "STATEMENT", "", "Beginning balance", "", FormatMoney(view.Beginning));
+            if (view.CarryForward is { } cf)
+            {
+                // ADR-045: open from what the owner was given, itemize what changed since, then land on
+                // the beginning balance every figure below builds on.
+                WriteRow(csv, "STATEMENT", "",
+                    $"Beginning balance, as issued for {cf.IssuedYear}-{cf.IssuedMonth:D2} " +
+                    $"(issued {cf.IssuedAt.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)})",
+                    "", FormatMoney(cf.IssuedEnding));
+                foreach (var line in cf.Lines)
+                {
+                    WriteRow(
+                        csv,
+                        PriorPeriodAdjustmentsTitle,
+                        line.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                        $"{line.Description} (posted {line.PostedAt.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)})",
+                        line.PropertyAddress ?? string.Empty,
+                        FormatMoney(line.Amount));
+                }
+
+                if (cf.Unitemized != 0m)
+                {
+                    WriteRow(csv, PriorPeriodAdjustmentsTitle, "", "Unitemized adjustments", "", FormatMoney(cf.Unitemized));
+                }
+
+                WriteRow(csv, PriorPeriodAdjustmentsTitle, "", $"Subtotal — {PriorPeriodAdjustmentsTitle}", "",
+                    FormatMoney(cf.Total));
+                WriteRow(csv, "STATEMENT", "", "Adjusted beginning balance", "", FormatMoney(view.Beginning));
+            }
+            else
+            {
+                WriteRow(csv, "STATEMENT", "", "Beginning balance", "", FormatMoney(view.Beginning));
+            }
+
             csv.NextRecord();
 
             // Sections

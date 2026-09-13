@@ -14,6 +14,21 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ## [Unreleased]
 
+- _Nothing yet._
+
+## [0.14.0] - 2026-09-13
+
+### Added
+
+- **An owner's statements now chain, even when an earlier month is changed after its statement went
+  out.** A charge or correction can legitimately be dated into a month whose statement the owner
+  already has, and until now the next statement simply opened at a different figure with no
+  explanation. Issuing a statement now records the ending balance it showed, and the following month's
+  statement opens from that figure, lists each entry posted into the earlier month afterwards — with
+  the date it applies to and the date it was actually posted — and then shows the adjusted beginning
+  balance. The in-app statement, the PDF, and the CSV all show the same section, and it appears only
+  when something changed.
+
 ### Changed
 
 - **Regenerating the typed API client no longer needs a running application.** `npm run api:generate`
@@ -871,7 +886,8 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.13.0...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.14.0...HEAD
+[0.14.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.14.0
 [0.13.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.13.0
 [0.12.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.12.0
 [0.11.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.11.0

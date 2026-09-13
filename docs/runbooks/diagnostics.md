@@ -3,7 +3,7 @@
 - **Audience:** Operators and maintainers
 - **Status:** Living runbook; canonical error-diagnosis reference
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-09-11
+- **Last reviewed:** 2026-09-13
 
 How to turn the reference an operator sees on screen into the full server-side detail in
 Application Insights. See [ADR-025](../adr/ADR-025-error-contract-and-observability.md) for the
@@ -141,22 +141,23 @@ This returns, in order, everything logged for that one request:
 structured log this contract produces. Track B's B4 alert rules key on these ids, so a query can
 filter on `customDimensions.EventId` (or the trace message) instead of matching text:
 
-| Id   | Name                        | Level       | Meaning                                                                                                                                                         |
-| ---- | --------------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1000 | `UnhandledException`        | Error       | The terminal handler caught an exception no typed handler claimed. Always has the exception.                                                                    |
-| 1001 | `DomainRejection`           | Warning     | A typed accounting domain rule declined the request (a 404/409/422) — expected, not a defect.                                                                   |
-| 1002 | `ValidationRejection`       | Warning     | A command/query or auth DTO failed FluentValidation — a 400.                                                                                                    |
-| 1003 | `ImportRowFailed`           | Error       | One row of a migration import failed after parsing; the batch continued. Has the exception.                                                                     |
-| 1100 | `SupersedeReversalRace`     | Information | The corrected re-import (supersede) path found the entry already reversed by a racing request; it converges on success anyway — expected, not a defect.         |
-| 1101 | `HeldFeesShapeRejected`     | Warning     | A balance-import row's pm_income opening violated the held-fees shape at post time — never a 500. What follows depends on the caller; see below.                |
-| 1200 | `InvariantViolation`        | Error       | The nightly sweep found a trust-accounting invariant violated for one org. Fiduciary incorrectness — never routine noise; see below.                            |
-| 1201 | `InvariantSweepCompleted`   | Information | The nightly sweep finished with no violations. Its **absence** is itself a signal: a silent night means the job did not run.                                    |
-| 1300 | `CapabilityVersionConflict` | Warning     | A run confirmation was rejected (409) because the capability set moved after its preview. Expected and recoverable; a sustained rate is the signal — see below. |
+| Id   | Name                              | Level       | Meaning                                                                                                                                                                         |
+| ---- | --------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1000 | `UnhandledException`              | Error       | The terminal handler caught an exception no typed handler claimed. Always has the exception.                                                                                    |
+| 1001 | `DomainRejection`                 | Warning     | A typed accounting domain rule declined the request (a 404/409/422) — expected, not a defect.                                                                                   |
+| 1002 | `ValidationRejection`             | Warning     | A command/query or auth DTO failed FluentValidation — a 400.                                                                                                                    |
+| 1003 | `ImportRowFailed`                 | Error       | One row of a migration import failed after parsing; the batch continued. Has the exception.                                                                                     |
+| 1100 | `SupersedeReversalRace`           | Information | The corrected re-import (supersede) path found the entry already reversed by a racing request; it converges on success anyway — expected, not a defect.                         |
+| 1101 | `HeldFeesShapeRejected`           | Warning     | A balance-import row's pm_income opening violated the held-fees shape at post time — never a 500. What follows depends on the caller; see below.                                |
+| 1200 | `InvariantViolation`              | Error       | The nightly sweep found a trust-accounting invariant violated for one org. Fiduciary incorrectness — never routine noise; see below.                                            |
+| 1201 | `InvariantSweepCompleted`         | Information | The nightly sweep finished with no violations. Its **absence** is itself a signal: a silent night means the job did not run.                                                    |
+| 1300 | `CapabilityVersionConflict`       | Warning     | A run confirmation was rejected (409) because the capability set moved after its preview. Expected and recoverable; a sustained rate is the signal — see below.                 |
+| 1400 | `StatementCarryForwardUnitemized` | Warning     | An owner statement's prior-period adjustments were not all attributable to entries posted after the preceding issued statement. The statement still renders exactly; see below. |
 
 1000-1099 is reserved for host/error plumbing; 1100-1199 is the import-supersede/held-fees domain
 (WP-7 — the first block claimed under ADR-025's 1100+ convention); 1200-1299 is scheduled jobs
-(WP-11); 1300-1399 is platform capabilities. Later domain areas take the next hundred-block (1400+,
-1500+, …) as they add their own structured events.
+(WP-11); 1300-1399 is platform capabilities; 1400-1499 is owner statements (ADR-045). Later domain
+areas take the next hundred-block (1500+, 1600+, …) as they add their own structured events.
 
 A `HeldFeesShapeRejected` (1101) means different things on the two import routes, which matters when
 you are reading it after an operator report. On a plain balance import the row is recorded as an
@@ -513,6 +514,36 @@ by the slower route. **Wait out the TTL before concluding a flip did not take.**
 a bulk run already in flight: the run engine freezes
 its capability set at preview and rejects a run confirmation whose set has moved, which is the 1300 above.
 Flipping a money-path capability mid-rollout is what produces that burst.
+
+## Diagnosing an unitemized statement carry-forward (1400)
+
+An owner statement whose preceding month was issued opens from the issued ending balance and itemizes
+every entry posted after that statement's figures were read
+([ADR-045](../adr/ADR-045-statement-carry-forward.md)). A 1400 means the itemized lines did not
+account for the whole difference. The statement is still exact: the remainder is its own labelled
+_unitemized adjustments_ line, never folded into another figure. The event fires wherever a statement
+is assembled, so it may come from a request (the in-app preview, a PDF or CSV download, issuing a
+statement) or from the seeder.
+
+```kusto
+traces
+| where customDimensions.EventId == 1400
+| order by timestamp desc
+```
+
+The message names the owner, basis, property scope (empty for a whole-owner statement), the prior
+period, and the unitemized amount against the adjustment total.
+
+**Expected cause:** a posting transaction was still open while the anchoring statement was issued.
+An entry's `posted_at` is stamped when it posts, but the row becomes visible only at commit, so it can
+miss both statements' itemization. A bulk run commits all its entries at the end, so its window lasts
+as long as the run. Check whether a run for that org committed around the anchoring artifact's
+`created_at`; if so, no action is needed.
+
+**Anything else is a defect:** the issued figure and the journal disagree for a reason the design
+does not cover. That is ADR-045's revisit trigger. Compare the anchoring artifact's recorded
+`ending_balance` and `as_of` on `statement_artifacts` with a statement for the same owner, period,
+basis and scope built from the journal, and treat the difference as a release defect.
 
 ## Production caution: Npgsql `Include Error Detail`
 

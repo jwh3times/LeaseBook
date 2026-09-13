@@ -133,6 +133,68 @@ describe('OwnerStatementView', () => {
     expect(screen.getAllByText('$1,750.00').length).toBeGreaterThan(0);
   });
 
+  it('opens from the issued prior statement and itemizes what changed since (ADR-045)', () => {
+    renderView({
+      beginning: 1595.0,
+      carryForward: {
+        issuedYear: 2026,
+        issuedMonth: 4,
+        issuedAt: '2026-05-02T14:00:00Z',
+        issuedEnding: 1500.0,
+        lines: [
+          {
+            entryId: 'cf-1',
+            date: '2026-04-28',
+            postedAt: '2026-05-09T16:30:00Z',
+            eventType: 'FeeCharged',
+            description: 'Gutter cleaning recharge',
+            propertyAddress: '101 Elm St',
+            amount: 95.0,
+          },
+        ],
+        unitemized: 0,
+        total: 95.0,
+      },
+    } as unknown as Partial<typeof STATEMENT>);
+
+    expect(
+      screen.getByText(/Beginning balance, as issued for .*2026 \(issued May 2, 2026\)/),
+    ).toBeInTheDocument();
+    const adjustments = screen.getByRole('region', { name: 'Prior-period adjustments' });
+    expect(
+      within(adjustments).getByText('Apr 28, 2026 · Gutter cleaning recharge'),
+    ).toBeInTheDocument();
+    expect(within(adjustments).getByText(/Posted May 9, 2026/)).toBeInTheDocument();
+    expect(within(adjustments).queryByText('Unitemized adjustments')).not.toBeInTheDocument();
+    expect(screen.getByText('Adjusted beginning balance')).toBeInTheDocument();
+    expect(screen.queryByText('Beginning balance')).not.toBeInTheDocument();
+  });
+
+  it('labels an unitemized remainder instead of hiding it', () => {
+    renderView({
+      carryForward: {
+        issuedYear: 2026,
+        issuedMonth: 4,
+        issuedAt: '2026-05-02T14:00:00Z',
+        issuedEnding: 1510.0,
+        lines: [],
+        unitemized: -10.0,
+        total: -10.0,
+      },
+    } as unknown as Partial<typeof STATEMENT>);
+
+    const adjustments = screen.getByRole('region', { name: 'Prior-period adjustments' });
+    expect(within(adjustments).getByText('Unitemized adjustments')).toBeInTheDocument();
+  });
+
+  it('keeps the plain beginning row when nothing carries forward', () => {
+    renderView();
+    expect(
+      screen.queryByRole('region', { name: 'Prior-period adjustments' }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText('Adjusted beginning balance')).not.toBeInTheDocument();
+  });
+
   it('renders statement sections with their lines', () => {
     renderView();
     expect(screen.getByText('Income — rent collected')).toBeInTheDocument();

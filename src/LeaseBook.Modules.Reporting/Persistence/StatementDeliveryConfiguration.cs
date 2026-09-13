@@ -18,9 +18,18 @@ public sealed class StatementArtifactConfiguration : IEntityTypeConfiguration<St
     public void Configure(EntityTypeBuilder<StatementArtifact> builder)
     {
         builder.ToTable("statement_artifacts", t =>
+        {
             t.HasCheckConstraint(
                 "ck_statement_artifacts_basis",
-                "basis IS NULL OR basis IN ('cash', 'accrual')"));
+                "basis IS NULL OR basis IN ('cash', 'accrual')");
+
+            // ADR-045: an artifact either recorded what it presented (both) or predates the decision
+            // (neither). Half a snapshot could anchor a successor on a figure with no instant, or the
+            // reverse, so the database refuses it rather than the anchor query having to.
+            t.HasCheckConstraint(
+                "ck_statement_artifacts_carry_forward_snapshot",
+                "(ending_balance IS NULL) = (as_of IS NULL)");
+        });
 
         builder.HasKey(e => e.Id);
 
@@ -29,6 +38,9 @@ public sealed class StatementArtifactConfiguration : IEntityTypeConfiguration<St
         builder.Property(e => e.PeriodYear).IsRequired();
         builder.Property(e => e.PeriodMonth).IsRequired();
         builder.Property(e => e.Basis);
+        builder.Property(e => e.PropertyId);
+        builder.Property(e => e.EndingBalance).HasColumnType("numeric(14,2)");
+        builder.Property(e => e.AsOf);
         builder.Property(e => e.ArtifactKey).IsRequired();
         builder.Property(e => e.CreatedAt).IsRequired();
 

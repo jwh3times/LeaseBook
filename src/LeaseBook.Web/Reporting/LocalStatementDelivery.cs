@@ -56,6 +56,14 @@ public sealed class LocalStatementDelivery(
 
         // ── Happy path: balanced statement ────────────────────────────────────────
 
+        // The successor statement carries forward from AsOf (ADR-045). A view that never recorded when
+        // its figures were read cannot anchor anything, so refuse it rather than store a false instant.
+        if (view.AsOf == default)
+        {
+            throw new ArgumentException(
+                "A statement view must record when its figures were read before it can be issued.", nameof(view));
+        }
+
         // 1. Render the PDF (stateless — StatementPdf.Render is thread-safe).
         var pdfBytes = StatementPdf.Render(view);
 
@@ -78,6 +86,11 @@ public sealed class LocalStatementDelivery(
             PeriodYear = view.Year,
             PeriodMonth = view.Month,
             Basis = view.Basis,
+            // What the owner is being given, so next period's statement can chain from it (ADR-045).
+            // The tie-out gate above guarantees Ending equals the independent journal re-read.
+            PropertyId = view.PropertyId,
+            EndingBalance = view.Ending,
+            AsOf = view.AsOf,
             ArtifactKey = artifactKey,
         };
         db.Set<StatementArtifact>().Add(artifact);

@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living runbook; canonical development command reference
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-09-09
+- **Last reviewed:** 2026-09-13
 
 ## Prerequisites
 
@@ -230,7 +230,9 @@ posts only through the engine. It seeds four users — two PMAdmin (`admin@scena
 (`staff@scenario.test`, `staff2@scenario.test`) — all with the documented dev passwords in
 `ScenarioSeeder.cs`, so the PMAdmin/PMStaff boundary (reconciliation unlock, settings writes, the
 compliance pack) can be exercised against a running host. March–May are reconciled and locked
-(April was unlocked-with-reason and re-finalized); June is open with uncleared items. Its figures
+(April was unlocked-with-reason and re-finalized); June is open with uncleared items. O-S1's May
+statement is issued, and a May-dated maintenance recharge posted after it (voided June 1) makes
+O-S1's June accrual statement show an itemized prior-period adjustment (ADR-045). Its figures
 are hand-authored tripwires locked by `ScenarioGoldenTests` — treat them as sacred as the demo's.
 
 ## Checking the accounting invariants

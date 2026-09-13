@@ -165,6 +165,26 @@ export type BulkRunSpa = {
     createdAt: string;
 };
 
+export type CarryForwardLineView = {
+    entryId: string;
+    date: string;
+    postedAt: string;
+    eventType: string;
+    description: string;
+    propertyAddress: null | string;
+    amount: number | string;
+};
+
+export type CarryForwardView = {
+    issuedYear: number | string;
+    issuedMonth: number | string;
+    issuedAt: string;
+    issuedEnding: number | string;
+    lines: Array<CarryForwardLineView>;
+    unitemized: number | string;
+    total: number | string;
+};
+
 export type ChangePasswordRequest = {
     currentPassword: string;
     newPassword: string;
@@ -846,15 +866,18 @@ export type StatementSectionView = {
 export type StatementView = {
     ownerId: string;
     ownerName: string;
+    propertyId: null | string;
     propertyAddress: null | string;
     basis: string;
     year: number | string;
     month: number | string;
     beginning: number | string;
+    carryForward: null | CarryForwardView;
     sections: Array<StatementSectionView>;
     ending: number | string;
     fiduciary: FiduciaryPanel;
     branding: PmBrandingRow;
+    asOf: string;
 };
 
 export type TenantContact = {

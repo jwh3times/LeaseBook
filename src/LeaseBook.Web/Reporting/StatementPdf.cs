@@ -130,8 +130,15 @@ public static class StatementPdf
     {
         container.PaddingTop(8).Column(col =>
         {
-            // Beginning balance
-            MoneyRow(col, "Beginning balance", v.Beginning, bold: false);
+            // Beginning balance — carried forward from the issued prior statement when one exists (ADR-045)
+            if (v.CarryForward is { } carryForward)
+            {
+                ComposeCarryForward(col, v, carryForward);
+            }
+            else
+            {
+                MoneyRow(col, "Beginning balance", v.Beginning, bold: false);
+            }
 
             col.Item().PaddingVertical(2).LineHorizontal(0.5f).LineColor(Colors.Grey.Lighten2);
 
@@ -173,6 +180,62 @@ public static class StatementPdf
             // Fiduciary panel
             ComposeFiduciary(col, v);
         });
+    }
+
+    /// <summary>
+    /// The prior-period adjustments block (ADR-045): the balance the owner's previous statement closed at,
+    /// each entry posted into that period or earlier after it was issued — with both its accounting date
+    /// and its posted date — and the adjusted beginning balance the rest of the statement builds on.
+    /// Meaning is carried by labels and signs, never by colour.
+    /// </summary>
+    private static void ComposeCarryForward(ColumnDescriptor col, StatementView v, CarryForwardView cf)
+    {
+        var parens = v.Branding.ParenthesizedNegatives;
+        var issuedPeriod = new DateTime(cf.IssuedYear, cf.IssuedMonth, 1)
+            .ToString("MMMM yyyy", CultureInfo.InvariantCulture);
+        var issuedOn = cf.IssuedAt.ToString("MMM d, yyyy", CultureInfo.InvariantCulture);
+
+        MoneyRow(col, $"Beginning balance, as issued for {issuedPeriod} (issued {issuedOn})", cf.IssuedEnding, bold: false);
+
+        col.Item().PaddingTop(4).Row(row =>
+        {
+            row.RelativeItem().Text("PRIOR-PERIOD ADJUSTMENTS").Style(SectionHeaderStyle);
+            row.ConstantItem(120).AlignRight().Text(FormatMoney(cf.Total, parens)).Style(SectionHeaderStyle);
+        });
+
+        foreach (var line in cf.Lines)
+        {
+            col.Item().PaddingVertical(1).Row(row =>
+            {
+                row.RelativeItem().Column(inner =>
+                {
+                    inner.Item().Text(
+                        $"{line.Date.ToString("MMM d, yyyy", CultureInfo.InvariantCulture)}  {line.Description}")
+                        .Style(LineStyle);
+                    var posted = $"Posted {line.PostedAt.ToString("MMM d, yyyy", CultureInfo.InvariantCulture)}";
+                    inner.Item().Text(line.PropertyAddress is null ? posted : $"{posted} · {line.PropertyAddress}")
+                        .Style(SubStyle);
+                });
+                row.ConstantItem(120).AlignRight().Text(FormatMoney(line.Amount, parens)).Style(LineStyle);
+            });
+        }
+
+        if (cf.Unitemized != 0m)
+        {
+            col.Item().PaddingVertical(1).Row(row =>
+            {
+                row.RelativeItem().Column(inner =>
+                {
+                    inner.Item().Text("Unitemized adjustments").Style(LineStyle);
+                    inner.Item().Text("Not attributable to a single entry posted after the prior statement")
+                        .Style(SubStyle);
+                });
+                row.ConstantItem(120).AlignRight().Text(FormatMoney(cf.Unitemized, parens)).Style(LineStyle);
+            });
+        }
+
+        col.Item().PaddingVertical(2).LineHorizontal(0.5f).LineColor(Colors.Grey.Lighten2);
+        MoneyRow(col, "Adjusted beginning balance", v.Beginning, bold: true);
     }
 
     private static void ComposeSection(ColumnDescriptor col, StatementSectionView section, bool parens)

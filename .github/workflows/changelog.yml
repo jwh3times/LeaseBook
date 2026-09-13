@@ -92,12 +92,16 @@ jobs:
             head_changelog="$(git show "$HEAD_SHA:CHANGELOG.md" 2>/dev/null || true)"
             base_changelog="$(git show "$BASE_SHA:CHANGELOG.md" 2>/dev/null || true)"
             escaped_version="${head_version//./\\.}"
-            release_body="$(printf '%s\n' "$head_changelog" | awk -v prefix="## [$head_version] - " '
+            # Here-strings, never `printf … | awk`: awk exits at the section after the new release, so a
+            # printf producer is left writing into a closed pipe. Under the step's `bash -e -o pipefail`
+            # that SIGPIPE kills the job with no ::error line once CHANGELOG.md outgrows the ~64 KiB
+            # pipe buffer — which is exactly how the 0.14.0 cut first failed.
+            release_body="$(awk -v prefix="## [$head_version] - " '
               index($0, prefix) == 1 { capture = 1; next }
               /^## \[/ && capture   { exit }
               capture               { print }
-            ')"
-            release_entry="$(printf '%s\n' "$release_body" | grep -E '^- ' | grep -Fvx -- '- _Nothing yet._' || true)"
+            ' <<<"$head_changelog")"
+            release_entry="$(grep -E '^- ' <<<"$release_body" | grep -Fvx -- '- _Nothing yet._' || true)"
 
             # Here-strings keep grep from closing a printf producer early under pipefail. A valid
             # match near the top of a long changelog must not turn into a broken-pipe failure.

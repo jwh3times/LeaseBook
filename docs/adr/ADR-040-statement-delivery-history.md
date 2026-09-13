@@ -1,6 +1,6 @@
 # ADR-040: Statement delivery is an append-only history
 
-- **Status:** Accepted
+- **Status:** Accepted (amended by ADR-045)
 - **Date:** 2026-08-18
 - **Deciders:** Jerry Holland
 

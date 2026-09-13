@@ -454,7 +454,109 @@ public sealed class StatementOutputTests(PostgresFixture fixture)
         response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
     }
 
+    // ─── Carry-forward render tests (ADR-045) ──────────────────────────────────
+
+    [Fact]
+    public void StatementPdf_renders_the_carry_forward_chain_with_both_dates()
+    {
+        var text = ExtractPdfText(StatementPdf.Render(BuildTestViewWithCarryForward(unitemized: 0m)));
+
+        text.ShouldContain("as issued for April 2026");
+        text.ShouldContain("20,465.30", Case.Sensitive, "the ending balance the owner was given");
+        text.ShouldContain("PRIOR-PERIOD ADJUSTMENTS");
+        text.ShouldContain("Apr 14, 2026");          // the date the entry is booked to
+        text.ShouldContain("Posted May 9, 2026");    // when it was actually posted
+        text.ShouldContain("-120.00");
+        text.ShouldContain("Adjusted beginning balance");
+        text.ShouldNotContain("Unitemized");
+    }
+
+    [Fact]
+    public void StatementPdf_labels_an_unitemized_remainder_rather_than_hiding_it()
+    {
+        var text = ExtractPdfText(StatementPdf.Render(BuildTestViewWithCarryForward(unitemized: -5.00m)));
+
+        text.ShouldContain("Unitemized adjustments");
+        text.ShouldContain("-5.00");
+    }
+
+    [Fact]
+    public void StatementPdf_without_carry_forward_keeps_the_plain_beginning_row()
+    {
+        var text = ExtractPdfText(StatementPdf.Render(BuildTestView()));
+
+        text.ShouldContain("Beginning balance");
+        text.ShouldNotContain("PRIOR-PERIOD");
+        text.ShouldNotContain("Adjusted beginning");
+    }
+
+    [Fact]
+    public void StatementCsv_writes_the_carry_forward_chain_as_rows_that_sum()
+    {
+        var rows = ParseCsvRows(StatementCsv.Write(BuildTestViewWithCarryForward(unitemized: 0m)));
+
+        var issued = rows.Single(r => r[2].StartsWith("Beginning balance, as issued for 2026-04", StringComparison.Ordinal));
+        issued[4].ShouldBe("20465.30");
+
+        var line = rows.Single(r => r[0] == "Prior-period adjustments" && r[1] == "2026-04-14");
+        line[2].ShouldBe("Repair invoice — Unit 3 (posted 2026-05-09)");
+        line[4].ShouldBe("-120.00");
+
+        rows.Single(r => r[2] == "Subtotal — Prior-period adjustments")[4].ShouldBe("-120.00");
+        rows.Single(r => r[2] == "Adjusted beginning balance")[4].ShouldBe("20345.30");
+        rows.ShouldNotContain(r => r[2] == "Beginning balance", "the plain label is replaced, not duplicated");
+    }
+
     // ─── helpers ──────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// <see cref="BuildTestView"/> opened from an April statement that presented 20,465.30, with one
+    /// April-dated entry (−120.00) posted after it was issued. 20,465.30 − 120.00 − <paramref name="unitemized"/>
+    /// is not what the view claims when <paramref name="unitemized"/> is non-zero; the renderer does no
+    /// arithmetic, so the fixture only has to be internally labelled, not balanced.
+    /// </summary>
+    private static StatementView BuildTestViewWithCarryForward(decimal unitemized) =>
+        BuildTestView() with
+        {
+            CarryForward = new CarryForwardView(
+                IssuedYear: 2026,
+                IssuedMonth: 4,
+                IssuedAt: new DateTime(2026, 5, 2, 14, 0, 0, DateTimeKind.Utc),
+                IssuedEnding: 20_465.30m,
+                Lines:
+                [
+                    new CarryForwardLineView(Guid.NewGuid(), new DateOnly(2026, 4, 14),
+                        new DateTime(2026, 5, 9, 16, 30, 0, DateTimeKind.Utc), "VendorPaid",
+                        "Repair invoice — Unit 3", "204 Elm St", -120.00m),
+                ],
+                Unitemized: unitemized,
+                Total: -120.00m + unitemized),
+        };
+
+    private static List<string[]> ParseCsvRows(byte[] bytes)
+    {
+        using var reader = new StringReader(Encoding.UTF8.GetString(bytes));
+        using var csvReader = new CsvReader(reader, CultureInfo.InvariantCulture);
+        csvReader.Read();
+        csvReader.ReadHeader();
+
+        var rows = new List<string[]>();
+        while (csvReader.Read())
+        {
+            var row = new string[csvReader.Parser.Count];
+            for (var i = 0; i < csvReader.Parser.Count; i++)
+            {
+                row[i] = csvReader.GetField(i) ?? string.Empty;
+            }
+
+            if (row.Length >= 5)
+            {
+                rows.Add(row);
+            }
+        }
+
+        return rows;
+    }
 
     /// <summary>
     /// Builds a representative <see cref="StatementView"/> for O5 May 2026 without going through
@@ -498,15 +600,18 @@ public sealed class StatementOutputTests(PostgresFixture fixture)
         return new StatementView(
             OwnerId: DemoIds.O5,
             OwnerName: "Ridgeline Investments",
+            PropertyId: null,
             PropertyAddress: "204 Elm St, Chapel Hill, NC",
             Basis: "cash",
             Year: 2026,
             Month: 5,
             Beginning: 20_345.30m,
+            CarryForward: null,
             Sections: sections,
             Ending: 22_640.30m,
             Fiduciary: fiduciary,
-            Branding: branding);
+            Branding: branding,
+            AsOf: new DateTime(2026, 6, 1, 12, 0, 0, DateTimeKind.Utc));
     }
 
     /// <summary>
@@ -550,15 +655,18 @@ public sealed class StatementOutputTests(PostgresFixture fixture)
         return new StatementView(
             OwnerId: DemoIds.O5,
             OwnerName: "Ridgeline Investments",
+            PropertyId: null,
             PropertyAddress: "204 Elm St, Chapel Hill, NC",
             Basis: "cash",
             Year: 2026,
             Month: 5,
             Beginning: 20_345.30m,
+            CarryForward: null,
             Sections: sections,
             Ending: 20_745.30m,
             Fiduciary: fiduciary,
-            Branding: branding);
+            Branding: branding,
+            AsOf: new DateTime(2026, 6, 1, 12, 0, 0, DateTimeKind.Utc));
     }
 
     /// <summary>

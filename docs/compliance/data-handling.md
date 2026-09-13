@@ -3,7 +3,7 @@
 - **Audience:** Contributors, maintainers, and the external compliance reviewer
 - **Status:** Draft — pending external GLBA/NCREC compliance review
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-09-12
+- **Last reviewed:** 2026-09-13
 
 > **Draft status.** This document is engineering-authored and **not yet accepted**. What blocks
 > acceptance is the external trust-accounting and privacy compliance review — the NCREC-facing review
@@ -85,7 +85,10 @@ Issued owner-statement PDFs are written to an immutable, write-once artifact sto
 (`IArtifactStore`) so the stored copy is exactly what was sent to the owner; these PDFs contain owner
 name, property address, and financial figures. A resend reuses the stored artifact rather than
 re-rendering it, so every send of a statement — including one that bounced and the retry that
-followed — refers to the same bytes (ADR-040). The store is a local filesystem today and moves to
+followed — refers to the same bytes (ADR-040). Alongside the PDF, the `statement_artifacts` row records
+the ending balance the statement presented and when its figures were read, so the owner's next
+statement can carry forward from exactly what they were given (ADR-045); like the rest of the delivery
+history, the row is append-only. The store is a local filesystem today and moves to
 Azure Blob Storage at go-live (two containers — `statements` and `documents`). Compliance packs,
 report CSVs, and on-demand statement downloads are streamed to the requester and **not** persisted.
 
