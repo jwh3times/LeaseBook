@@ -14,6 +14,10 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ## [Unreleased]
 
+- _Nothing yet._
+
+## [0.14.0] - 2026-09-13
+
 ### Added
 
 - **An owner's statements now chain, even when an earlier month is changed after its statement went
@@ -882,7 +886,8 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.13.0...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.14.0...HEAD
+[0.14.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.14.0
 [0.13.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.13.0
 [0.12.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.12.0
 [0.11.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.11.0
