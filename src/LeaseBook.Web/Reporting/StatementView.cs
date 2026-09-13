@@ -46,7 +46,7 @@ public sealed record StatementLineView(
     decimal Amount);
 
 /// <summary>
-/// Fiduciary panel flags surfaced on the statement footer (NC 58A .0116 transparency).
+/// Fiduciary panel flags surfaced on the statement footer (NC 21 NCAC 58A .0117 transparency).
 /// All must pass before a statement is considered presentable.
 /// </summary>
 /// <param name="Balanced">True when the Accounting tie-out variance is exactly zero.</param>

@@ -91,8 +91,8 @@ Verify, do not assume.
 
 - Do not build on unverified assumptions. When a task depends on a fact that cannot be confirmed from
   code, docs, or a quick local check, stop and verify before designing against it.
-- This is especially important for trust-accounting and domain facts: NCREC 58A .0116
-  recordkeeping rules, basis behavior, posting-template lines, prototype golden figures, demo-seed
+- This is especially important for trust-accounting and domain facts: NCREC trust-money rules
+  (21 NCAC 58A .0116-.0118; record retention is .0108), basis behavior, posting-template lines, prototype golden figures, demo-seed
   numbers, EF/RLS/posting runtime behavior, and anything that can affect fiduciary correctness.
 - Ground truth is usually obtainable locally:
   - Scope and intent: `private/LeaseBook_PRD_v1.0.md` and `private/claude_design_files/`
