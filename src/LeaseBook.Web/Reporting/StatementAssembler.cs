@@ -30,7 +30,9 @@ public sealed class StatementAssembler(
     AppDbContext db,
     ILogger<StatementAssembler> logger)
 {
-    private sealed record IssuedAnchor(Guid OwnerId, DateTime CreatedAt, decimal EndingBalance, DateTime AsOf);
+    private sealed record IssuedAnchor(
+        Guid OwnerId, int PeriodYear, int PeriodMonth, string Basis, Guid? PropertyId,
+        DateTime CreatedAt, decimal EndingBalance, DateTime AsOf);
 
     /// <summary>
     /// Builds a statement view for each owner in <paramref name="ownerIds"/>.
@@ -116,12 +118,17 @@ public sealed class StatementAssembler(
 
                 if (adj.Unitemized != 0m)
                 {
+                    // Identified by the stored anchor artifact, not the request: the anchor matched this
+                    // owner, period, basis and scope exactly, and its row is data the organization issued
+                    // rather than caller-supplied text (CWE-117 log forging).
+                    var anchor = anchors[ownerId];
                     logger.LogWarning(
                         LogEvents.StatementCarryForwardUnitemized,
                         "Statement carry-forward has {Unitemized:0.00} of {Total:0.00} not attributable to an " +
                         "entry posted after the issued {PriorYear}-{PriorMonth:D2} statement for owner {OwnerId} " +
                         "({Basis}, property {PropertyId}). Rendered as an unitemized adjustment.",
-                        adj.Unitemized, adj.Total, prior.Year, prior.Month, ownerId, basis, propertyId);
+                        adj.Unitemized, adj.Total, anchor.PeriodYear, anchor.PeriodMonth, anchor.OwnerId,
+                        anchor.Basis, anchor.PropertyId);
                 }
             }
 
@@ -149,7 +156,7 @@ public sealed class StatementAssembler(
                 && a.PropertyId == propertyId
                 && a.EndingBalance != null
                 && a.AsOf != null)
-            .Select(a => new { a.OwnerId, a.CreatedAt, a.EndingBalance, a.AsOf })
+            .Select(a => new { a.OwnerId, a.PeriodYear, a.PeriodMonth, a.Basis, a.PropertyId, a.CreatedAt, a.EndingBalance, a.AsOf })
             .ToListAsync(ct);
 
         return issued
@@ -158,6 +165,7 @@ public sealed class StatementAssembler(
             .ToDictionary(
                 a => a.OwnerId,
                 a => new IssuedAnchor(
-                    a.OwnerId, a.CreatedAt, a.EndingBalance!.Value, DateTime.SpecifyKind(a.AsOf!.Value, DateTimeKind.Utc)));
+                    a.OwnerId, a.PeriodYear, a.PeriodMonth, a.Basis!, a.PropertyId, a.CreatedAt,
+                    a.EndingBalance!.Value, DateTime.SpecifyKind(a.AsOf!.Value, DateTimeKind.Utc)));
     }
 }
