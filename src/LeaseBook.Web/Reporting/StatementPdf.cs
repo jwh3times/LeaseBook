@@ -204,7 +204,7 @@ public static class StatementPdf
         col.Item().PaddingVertical(2).LineHorizontal(0.5f).LineColor(Colors.Grey.Lighten2);
     }
 
-    // ─── Fiduciary panel (NC 58A .0116 transparency) ─────────────────────────
+    // ─── Fiduciary panel (NC 21 NCAC 58A .0117 transparency) ─────────────────
 
     private static void ComposeFiduciary(ColumnDescriptor col, StatementView v)
     {

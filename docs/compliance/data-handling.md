@@ -3,7 +3,7 @@
 - **Audience:** Contributors, maintainers, and the external compliance reviewer
 - **Status:** Draft — pending external GLBA/NCREC compliance review
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-07-18
+- **Last reviewed:** 2026-09-12
 
 > **Draft status.** This document is engineering-authored and **not yet accepted**. What blocks
 > acceptance is the external trust-accounting and privacy compliance review — the NCREC-facing review
@@ -26,8 +26,8 @@
 
 LeaseBook is a property-management trust-accounting system for North Carolina residential brokers. It
 holds nonpublic personal and financial information about property owners, tenants, and the managing
-brokerage, and it keeps the fiduciary trust records a brokerage must maintain under NCREC Rule
-58A .0116. This document is the data map and safeguards description that supports a GLBA Safeguards
+brokerage, and it keeps the fiduciary trust records a brokerage must maintain under the NCREC
+trust-money rules (21 NCAC 58A .0116-.0118, with record retention under .0108). This document is the data map and safeguards description that supports a GLBA Safeguards
 review: what data the system holds, where it lives, how it is protected in transit and at rest, who
 can reach it, how long it is kept, and how it leaves the system.
 
@@ -189,8 +189,9 @@ SECURITY` and an `org_id` isolation policy applied through one migration helper;
 The windows above are the technical defaults in the authored infrastructure. Two policy windows are
 **not yet established** and are inputs to the compliance review:
 
-- **Trust-record retention minimum — `[LEGAL REVIEW]`.** NCREC Rule 58A .0116 governs how long trust
-  records must be retained. The compliance review sets the required minimum; the journal and audit
+- **Trust-record retention minimum — `[LEGAL REVIEW]`.** NCREC Rule 21 NCAC 58A .0108 governs how
+  long broker records, including trust records, must be retained; .0117 lists the property-management
+  records it covers. The compliance review sets the required minimum as applied to LeaseBook; the journal and audit
   trail are append-only and are not purged today, but no enforced retention floor is yet encoded.
 - **Artifact and audit-log lifecycle.** Issued statement artifacts, the delivery history recording
   where each was sent, and `audit_events` have no lifecycle policy today (retained indefinitely);
