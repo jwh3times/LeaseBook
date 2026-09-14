@@ -69,6 +69,10 @@ public sealed class DisbursementRunStrategy(
             return new StrategyPreview([], []);
         }
 
+        // A preview with selectable owners must satisfy the same organization-level precondition
+        // as its plan. Otherwise the operator can review a run that confirmation cannot execute.
+        await bankInfo.GetOperatingTrustAsync(ct);
+
         var ownerIds = owners.Select(o => o.OwnerId).ToList();
         var equityMap = await equityBalances.GetAsync(ownerIds, Basis, ct);
 
@@ -82,36 +86,25 @@ public sealed class DisbursementRunStrategy(
         foreach (var owner in owners)
         {
             var equity = equityMap.GetValueOrDefault(owner.OwnerId, 0m);
-            var amounts = DisbursementAmounts.Compute(equity, owner.DefaultMgmtFeeBps, owner.ReserveAmount);
-            var fee = amounts.Fee;
-            var netBeforeReserve = amounts.NetBeforeReserve;
-            var disburse = amounts.AfterReserve;
+            var decision = Decide(equity, owner.DefaultMgmtFeeBps, owner.ReserveAmount);
             var disburseKey = DisburseSourceRef(period, owner.OwnerId);
             var alreadyDone = alreadyPosted.Contains(disburseKey);
 
             var detail = new Dictionary<string, string>
             {
                 ["equity"] = equity.ToString("F2"),
-                ["fee"] = fee.ToString("F2"),
-                ["netBeforeReserve"] = netBeforeReserve.ToString("F2"),
+                ["fee"] = decision.Amounts.Fee.ToString("F2"),
+                ["netBeforeReserve"] = decision.Amounts.NetBeforeReserve.ToString("F2"),
                 ["reserve"] = owner.ReserveAmount.ToString("F2"),
             };
 
-            string? excludedReason = null;
-            decimal rowAmount = 0m;
-
-            if (equity <= 0m)
+            var (rowAmount, excludedReason) = decision switch
             {
-                excludedReason = "non_positive_equity";
-            }
-            else if (disburse <= 0m)
-            {
-                excludedReason = "below_reserve_floor";
-            }
-            else
-            {
-                rowAmount = disburse;
-            }
+                DisburseOwner disbursement => (disbursement.Amounts.AfterReserve, (string?)null),
+                IneligibleForDisbursement ineligible => (0m, ineligible.Code),
+                _ => throw new InvalidOperationException(
+                    $"Unknown disbursement decision case '{decision.GetType().Name}'."),
+            };
 
             previewRows.Add(new PreviewRow(
                 TargetKind: RunTargetKind.Owner,
@@ -157,35 +150,28 @@ public sealed class DisbursementRunStrategy(
             }
 
             var equity = equityMap.GetValueOrDefault(ownerId, 0m);
-            var amounts = DisbursementAmounts.Compute(equity, owner.DefaultMgmtFeeBps, owner.ReserveAmount);
-            var fee = amounts.Fee;
-            var netBeforeReserve = amounts.NetBeforeReserve;
-            var disburse = amounts.AfterReserve;
-
-            if (equity <= 0m)
+            var decision = Decide(equity, owner.DefaultMgmtFeeBps, owner.ReserveAmount);
+            if (decision is IneligibleForDisbursement ineligible)
             {
-                plan.Add(Exclude(ownerId, new Dictionary<string, object?>(StringComparer.Ordinal)
+                var detail = new Dictionary<string, object?>(StringComparer.Ordinal)
                 {
-                    ["reason"] = "non_positive_equity",
+                    ["reason"] = ineligible.Code,
                     ["equity"] = equity,
-                }));
+                };
+
+                if (ineligible.Code == "below_reserve_floor")
+                {
+                    detail["fee"] = ineligible.Amounts.Fee;
+                    detail["netBeforeReserve"] = ineligible.Amounts.NetBeforeReserve;
+                    detail["reserve"] = owner.ReserveAmount;
+                    detail["disburse"] = ineligible.Amounts.AfterReserve;
+                }
+
+                plan.Add(Exclude(ownerId, detail));
                 continue;
             }
 
-            if (disburse <= 0m)
-            {
-                plan.Add(Exclude(ownerId, new Dictionary<string, object?>(StringComparer.Ordinal)
-                {
-                    ["reason"] = "below_reserve_floor",
-                    ["equity"] = equity,
-                    ["fee"] = fee,
-                    ["netBeforeReserve"] = netBeforeReserve,
-                    ["reserve"] = owner.ReserveAmount,
-                    ["disburse"] = disburse,
-                }));
-                continue;
-            }
-
+            var disbursement = (DisburseOwner)decision;
             var description = $"Disbursement {period.Key} — {owner.Name}";
             var feeRef = FeeSourceRef(period, ownerId);
             var disburseRef = DisburseSourceRef(period, ownerId);
@@ -196,21 +182,21 @@ public sealed class DisbursementRunStrategy(
                 Intent: new DisbursementIntent(
                     OwnerId: ownerId,
                     PropertyId: null,
-                    MgmtFee: fee,
-                    DisburseAmount: disburse,
+                    MgmtFee: disbursement.Amounts.Fee,
+                    DisburseAmount: disbursement.Amounts.AfterReserve,
                     Reserve: owner.ReserveAmount,
                     Date: chargeDate,
                     OperatingBankId: operatingBankId,
                     Description: description,
                     FeeSourceRef: feeRef,
                     DisburseSourceRef: disburseRef),
-                Amount: disburse,
+                Amount: disbursement.Amounts.AfterReserve,
                 PostedDetail: new Dictionary<string, object?>(StringComparer.Ordinal)
                 {
                     ["feeSourceRef"] = feeRef,
                     ["disburseSourceRef"] = disburseRef,
-                    ["fee"] = fee,
-                    ["disburse"] = disburse,
+                    ["fee"] = disbursement.Amounts.Fee,
+                    ["disburse"] = disbursement.Amounts.AfterReserve,
                     ["reserve"] = owner.ReserveAmount,
                     ["bankWithdrawalRef"] = $"check/ACH {period.Key} {owner.Name}",
                 },
@@ -226,6 +212,39 @@ public sealed class DisbursementRunStrategy(
         // equity or below the floor has nothing to post, as opposed to something already posted.
         static PlannedExclusion Exclude(Guid ownerId, Dictionary<string, object?> detail) =>
             new(RunTargetKind.Owner, ownerId, RunItemStatus.Excluded, detail);
+    }
+
+    // ── the decision ─────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// What this run should do about one owner's current balance. Both preview and plan project this
+    /// closed result while fetching their own data, so sharing the rules never caches stale inputs.
+    /// </summary>
+    private abstract record DisbursementDecision(DisbursementAmountResult Amounts);
+
+    private sealed record DisburseOwner(DisbursementAmountResult Amounts)
+        : DisbursementDecision(Amounts);
+
+    private sealed record IneligibleForDisbursement(
+        string Code,
+        DisbursementAmountResult Amounts)
+        : DisbursementDecision(Amounts);
+
+    private static DisbursementDecision Decide(decimal equity, int? managementFeeBps, decimal reserve)
+    {
+        var amounts = DisbursementAmounts.Compute(equity, managementFeeBps, reserve);
+
+        if (equity <= 0m)
+        {
+            return new IneligibleForDisbursement("non_positive_equity", amounts);
+        }
+
+        if (amounts.AfterReserve <= 0m)
+        {
+            return new IneligibleForDisbursement("below_reserve_floor", amounts);
+        }
+
+        return new DisburseOwner(amounts);
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────

@@ -3,7 +3,7 @@
 - **Audience:** Operators and maintainers
 - **Status:** Living runbook; canonical error-diagnosis reference
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-09-13
+- **Last reviewed:** 2026-09-14
 
 How to turn the reference an operator sees on screen into the full server-side detail in
 Application Insights. See [ADR-025](../adr/ADR-025-error-contract-and-observability.md) for the
@@ -141,18 +141,19 @@ This returns, in order, everything logged for that one request:
 structured log this contract produces. Track B's B4 alert rules key on these ids, so a query can
 filter on `customDimensions.EventId` (or the trace message) instead of matching text:
 
-| Id   | Name                              | Level       | Meaning                                                                                                                                                                         |
-| ---- | --------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1000 | `UnhandledException`              | Error       | The terminal handler caught an exception no typed handler claimed. Always has the exception.                                                                                    |
-| 1001 | `DomainRejection`                 | Warning     | A typed accounting domain rule declined the request (a 404/409/422) — expected, not a defect.                                                                                   |
-| 1002 | `ValidationRejection`             | Warning     | A command/query or auth DTO failed FluentValidation — a 400.                                                                                                                    |
-| 1003 | `ImportRowFailed`                 | Error       | One row of a migration import failed after parsing; the batch continued. Has the exception.                                                                                     |
-| 1100 | `SupersedeReversalRace`           | Information | The corrected re-import (supersede) path found the entry already reversed by a racing request; it converges on success anyway — expected, not a defect.                         |
-| 1101 | `HeldFeesShapeRejected`           | Warning     | A balance-import row's pm_income opening violated the held-fees shape at post time — never a 500. What follows depends on the caller; see below.                                |
-| 1200 | `InvariantViolation`              | Error       | The nightly sweep found a trust-accounting invariant violated for one org. Fiduciary incorrectness — never routine noise; see below.                                            |
-| 1201 | `InvariantSweepCompleted`         | Information | The nightly sweep finished with no violations. Its **absence** is itself a signal: a silent night means the job did not run.                                                    |
-| 1300 | `CapabilityVersionConflict`       | Warning     | A run confirmation was rejected (409) because the capability set moved after its preview. Expected and recoverable; a sustained rate is the signal — see below.                 |
-| 1400 | `StatementCarryForwardUnitemized` | Warning     | An owner statement's prior-period adjustments were not all attributable to entries posted after the preceding issued statement. The statement still renders exactly; see below. |
+| Id   | Name                              | Level       | Meaning                                                                                                                                                                             |
+| ---- | --------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1000 | `UnhandledException`              | Error       | The terminal handler caught an exception no typed handler claimed. Always has the exception.                                                                                        |
+| 1001 | `DomainRejection`                 | Warning     | A typed accounting domain rule declined the request (a 404/409/422) — expected, not a defect.                                                                                       |
+| 1002 | `ValidationRejection`             | Warning     | A command/query or auth DTO failed FluentValidation — a 400.                                                                                                                        |
+| 1003 | `ImportRowFailed`                 | Error       | One row of a migration import failed after parsing; the batch continued. Has the exception.                                                                                         |
+| 1100 | `SupersedeReversalRace`           | Information | The corrected re-import (supersede) path found the entry already reversed by a racing request; it converges on success anyway — expected, not a defect.                             |
+| 1101 | `HeldFeesShapeRejected`           | Warning     | A balance-import row's pm_income opening violated the held-fees shape at post time — never a 500. What follows depends on the caller; see below.                                    |
+| 1200 | `InvariantViolation`              | Error       | The nightly sweep found a trust-accounting invariant violated for one org. Fiduciary incorrectness — never routine noise; see below.                                                |
+| 1201 | `InvariantSweepCompleted`         | Information | The nightly sweep finished with no violations. Its **absence** is itself a signal: a silent night means the job did not run.                                                        |
+| 1300 | `CapabilityVersionConflict`       | Warning     | A run confirmation was rejected (409) because the capability set moved after its preview. Expected and recoverable; a sustained rate is the signal — see below.                     |
+| 1301 | `CapabilityCrossRunConflict`      | Warning     | A run confirmation was rejected (409) because a prior run for the period used different money-path capability state. Any occurrence is worth reading; a re-preview cannot clear it. |
+| 1400 | `StatementCarryForwardUnitemized` | Warning     | An owner statement's prior-period adjustments were not all attributable to entries posted after the preceding issued statement. The statement still renders exactly; see below.     |
 
 1000-1099 is reserved for host/error plumbing; 1100-1199 is the import-supersede/held-fees domain
 (WP-7 — the first block claimed under ADR-025's 1100+ convention); 1200-1299 is scheduled jobs
