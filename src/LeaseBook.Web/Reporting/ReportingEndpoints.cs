@@ -28,6 +28,7 @@ namespace LeaseBook.Web.Reporting;
 /// <item><c>GET /api/statements/{ownerId}/pdf</c> — statement as PDF download.</item>
 /// <item><c>GET /api/statements/{ownerId}/csv</c> — statement as CSV download.</item>
 /// <item><c>POST /api/statements/{ownerId}/deliver</c> — render PDF, store artifact, queue delivery.</item>
+/// <item><c>GET /api/statements/issued-coverage</c> — which issued statements given postings will carry forward into (#377).</item>
 /// </list>
 /// </summary>
 public sealed class ReportingEndpoints : IEndpointModule
