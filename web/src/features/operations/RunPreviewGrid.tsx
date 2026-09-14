@@ -8,6 +8,8 @@
  *   • Excluded      → x-circle icon + excluded reason
  *   • Eligible      → checkbox (check/empty) when selectable
  */
+import { useState } from 'react';
+import { IssuedStatementNotice } from '@/components/IssuedStatementNotice';
 import { Badge, Button, EmptyState, Money } from '@/design';
 import type { PreviewRowSpa } from './useRuns';
 
@@ -169,20 +171,27 @@ export function RunPreviewGrid({
   );
 }
 
-/** Small confirm-result panel shown after a successful run confirmation. */
+/**
+ * Small confirm-result panel shown after a successful run confirmation. It also reports, without
+ * blocking anything, which already-issued owner statements the run's postings will be carried forward
+ * into (#377) — looked up by the run id, after the run has posted.
+ */
 export function RunResultPanel({
+  runId,
   posted,
   skipped,
   excluded,
   total,
   onDone,
 }: {
+  runId: string;
   posted: number;
   skipped: number;
   excluded: number;
   total: number;
   onDone: () => void;
 }) {
+  const [noticeDismissed, setNoticeDismissed] = useState(false);
   return (
     <div className="pf-run-result col gap16 pf-fade">
       <div className="col gap8">
@@ -210,6 +219,9 @@ export function RunResultPanel({
           </span>
         </div>
       </div>
+      {posted > 0 && !noticeDismissed && (
+        <IssuedStatementNotice target={{ runId }} onDismiss={() => setNoticeDismissed(true)} />
+      )}
       <Button variant="default" onClick={onDone}>
         Back to Operations
       </Button>

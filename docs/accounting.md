@@ -415,6 +415,18 @@ and is logged, never folded into another figure. The section is omitted when not
 statement was issued for the immediately preceding month, or when the earlier statement predates this
 behavior. See [ADR-045](adr/ADR-045-statement-carry-forward.md).
 
+The person posting such an entry is told at the time. After a payment, charge, credit, application or
+void is recorded — and after a rent, late-fee or disbursement run is confirmed — the screen shows a
+notice naming each owner whose statement the posting falls under, the basis, and the latest month
+already issued, and saying the change will appear as a prior-period adjustment on the statement for
+the month after it. It follows the carry-forward's rules: the same owner, a statement issued for the
+entry's month or later, a basis the posting touches, a whole-owner statement or one for the same
+property, a statement read before the posting was made, and a posting that still moves that statement
+once its lines are netted the way the statement reads them. The notice is informational only: it is a
+separate read after posting, it never blocks or changes what was posted, and nothing about issued
+statements is an input to posting. If the check itself fails, the screen says so rather than showing
+nothing.
+
 ### The ADR-016 read-layer boundary
 
 The statement engine is the one place in LeaseBook where the read layer is intentionally allowed to
