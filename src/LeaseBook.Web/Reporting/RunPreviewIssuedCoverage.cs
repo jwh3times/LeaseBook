@@ -11,6 +11,7 @@ using LeaseBook.Web.Adapters;
 using LeaseBook.Web.Operations;
 using LeaseBook.Web.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace LeaseBook.Web.Reporting;
 
@@ -31,6 +32,20 @@ public sealed record RunPreviewIssuedCoverageResponse(IReadOnlyList<RunPreviewIs
 /// <summary>Reads prospective issued-statement coverage for one bulk-run preview period.</summary>
 public sealed record GetRunPreviewIssuedCoverage(string Type, int? Year, int? Month)
     : IQuery<RunPreviewIssuedCoverageResponse>;
+
+public static class RunPreviewIssuedCoverageServiceCollectionExtensions
+{
+    /// <summary>
+    /// Registers the host-owned cross-module slice before the shared CQRS registration decorates
+    /// every handler. The whole host assembly is intentionally not scanned because Auth owns and
+    /// registers its endpoint-filter validators separately.
+    /// </summary>
+    public static IServiceCollection AddRunPreviewIssuedCoverage(this IServiceCollection services) =>
+        services
+            .AddScoped<IQueryHandler<GetRunPreviewIssuedCoverage, RunPreviewIssuedCoverageResponse>,
+                GetRunPreviewIssuedCoverageHandler>()
+            .AddScoped<IValidator<GetRunPreviewIssuedCoverage>, GetRunPreviewIssuedCoverageValidator>();
+}
 
 public sealed class GetRunPreviewIssuedCoverageValidator : AbstractValidator<GetRunPreviewIssuedCoverage>
 {
