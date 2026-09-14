@@ -8,6 +8,7 @@ using LeaseBook.Modules.Reporting.Delivery;
 using LeaseBook.SharedKernel;
 using LeaseBook.SharedKernel.Cqrs;
 using LeaseBook.Web.Adapters;
+using LeaseBook.Web.Operations;
 using LeaseBook.Web.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -38,7 +39,7 @@ public sealed class GetRunPreviewIssuedCoverageValidator : AbstractValidator<Get
         RuleFor(q => q.Type)
             .Cascade(CascadeMode.Stop)
             .NotEmpty()
-            .Must(type => RunPreviewIssuedCoverageRunType.TryParse(type, out _))
+            .Must(type => RunTypeRoute.TryParse(type, out _))
             .WithMessage("That is not a run type this screen supports.");
         RuleFor(q => q.Year)
             .InclusiveBetween(2000, 2100)
@@ -64,9 +65,9 @@ internal sealed class GetRunPreviewIssuedCoverageHandler(
         GetRunPreviewIssuedCoverage query,
         CancellationToken ct)
     {
-        var now = clock.GetUtcNow();
-        var runType = RunPreviewIssuedCoverageRunType.Parse(query.Type);
-        var period = new RunPeriod(query.Year ?? now.Year, query.Month ?? now.Month);
+        var periodNow = clock.GetUtcNow();
+        var runType = RunTypeRoute.Parse(query.Type);
+        var period = new RunPeriod(query.Year ?? periodNow.Year, query.Month ?? periodNow.Month);
         var candidates = await engine.EligibleTargetsAsync(runType, period, ct);
         if (candidates.Count == 0)
         {
@@ -116,7 +117,7 @@ internal sealed class GetRunPreviewIssuedCoverageHandler(
                 "The Accounting run-event projection must return exactly one owner-equity line per event.");
         }
 
-        var postedAt = now.UtcDateTime;
+        var postedAt = clock.GetUtcNow().UtcDateTime;
         var linesByTarget = prospective
             .Select((line, index) => new
             {
@@ -167,23 +168,4 @@ internal sealed class GetRunPreviewIssuedCoverageHandler(
     private static int PeriodIndex(int year, int month) => (year * 12) + (month - 1);
 
     private sealed record EventSlot(Guid TargetId, AccountingEvent Event);
-}
-
-internal static class RunPreviewIssuedCoverageRunType
-{
-    public static RunType Parse(string raw) => TryParse(raw, out var runType)
-        ? runType
-        : throw new InvalidOperationException("Run preview coverage was dispatched without valid input.");
-
-    public static bool TryParse(string raw, out RunType runType)
-    {
-        runType = raw.ToLowerInvariant() switch
-        {
-            "rent" => RunType.Rent,
-            "latefee" => RunType.LateFee,
-            "disbursement" => RunType.Disbursement,
-            _ => (RunType)(-1),
-        };
-        return (int)runType >= 0;
-    }
 }

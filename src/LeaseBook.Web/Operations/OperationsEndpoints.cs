@@ -45,7 +45,7 @@ public sealed class OperationsEndpoints : IEndpointModule
                 async (string type, int? year, int? month, RunEngine engine, HttpContext httpContext,
                     CancellationToken ct) =>
                 {
-                    if (!TryParseRunType(type, out var runType))
+                    if (!RunTypeRoute.TryParse(type, out var runType))
                     {
                         return ProblemResults.Problem(
                             httpContext,
@@ -103,7 +103,7 @@ public sealed class OperationsEndpoints : IEndpointModule
                 async (string type, ConfirmRunRequest body, RunEngine engine, HttpContext httpContext,
                     CancellationToken ct) =>
                 {
-                    if (!TryParseRunType(type, out var runType))
+                    if (!RunTypeRoute.TryParse(type, out var runType))
                     {
                         return ProblemResults.Problem(
                             httpContext,
@@ -223,18 +223,6 @@ public sealed class OperationsEndpoints : IEndpointModule
                     return Results.Ok(new BulkRunDetailResponse(run, items));
                 })
             .Produces<BulkRunDetailResponse>();
-    }
-
-    private static bool TryParseRunType(string raw, out RunType runType)
-    {
-        runType = raw.ToLowerInvariant() switch
-        {
-            "rent" => RunType.Rent,
-            "latefee" => RunType.LateFee,
-            "disbursement" => RunType.Disbursement,
-            _ => (RunType)(-1),
-        };
-        return (int)runType >= 0;
     }
 
 }
