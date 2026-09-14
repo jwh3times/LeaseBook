@@ -52,6 +52,7 @@ export function RentRunScreen() {
   if (result) {
     return (
       <RunResultPanel
+        runId={result.runId}
         posted={Number(result.posted)}
         skipped={Number(result.skipped)}
         excluded={Number(result.excluded)}

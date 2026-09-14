@@ -241,6 +241,42 @@ public sealed class ReportingEndpoints : IEndpointModule
                     return Results.File(bytes, "text/csv", fileName);
                 });
 
+        // GET /api/statements/issued-coverage?entryIds=&entryIds=…  |  ?runId=
+        // Which already-issued owner statements the given postings will be carried forward into (#377,
+        // ADR-045). A read the SPA makes after a successful post — never part of posting — so the notice
+        // it drives cannot influence what was posted. Exactly one of entryIds or runId.
+        group.MapGet("/statements/issued-coverage",
+                async (Guid[]? entryIds, Guid? runId, ISender sender, AppDbContext db, IStatementNames names,
+                    HttpContext httpContext, CancellationToken ct) =>
+                {
+                    var hasEntries = entryIds is { Length: > 0 };
+                    if (hasEntries == runId.HasValue)
+                    {
+                        return ProblemResults.Problem(
+                            httpContext,
+                            code: "coverage_input_invalid",
+                            detail: "Provide either the posted entry ids or a run id, not both.",
+                            status: StatusCodes.Status400BadRequest);
+                    }
+
+                    if (hasEntries && entryIds!.Length > IssuedStatementCoverage.MaxEntryIds)
+                    {
+                        return ProblemResults.Problem(
+                            httpContext,
+                            code: "coverage_too_many_entries",
+                            detail: $"Ask about at most {IssuedStatementCoverage.MaxEntryIds} entries at once; use the run id for a run.",
+                            status: StatusCodes.Status400BadRequest);
+                    }
+
+                    var ids = hasEntries
+                        ? entryIds!.Distinct().ToList()
+                        : await IssuedStatementCoverage.RunEntryIdsAsync(db, runId!.Value, ct);
+
+                    return Results.Ok(await IssuedStatementCoverage.ReadAsync(ids, sender, db, names, ct));
+                })
+            .Produces<IssuedStatementCoverageResponse>()
+            .ProducesProblem(StatusCodes.Status400BadRequest);
+
         // POST /api/statements/{ownerId}/deliver?propertyId=&year=&month=&basis=&toEmail=
         // Issues the statement: renders the PDF, stores the immutable artifact, opens the first
         // delivery attempt, and records that attempt's Queued event (ADR-040). The provider send and

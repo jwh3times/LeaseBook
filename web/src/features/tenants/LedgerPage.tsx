@@ -4,6 +4,7 @@ import { useParams, useSearchParams } from 'react-router';
 import { isNotFound } from '@/api';
 import { Avatar, Button, Card, EmptyState, Icon, IconButton, Input, Money, Select } from '@/design';
 import { num, useTenantDetail } from '@/lib/directory';
+import { IssuedStatementNotice } from '@/components/IssuedStatementNotice';
 import { QueryErrorState } from '@/components/QueryErrorState';
 import { RecordQuickSwitch } from '@/components/RecordQuickSwitch';
 import { TenantFinancialStandingBadges, TenantLifecycleBadge } from '@/components/StatusBadge';
@@ -50,6 +51,9 @@ export function LedgerPage() {
 
   const [lateFeeOpen, setLateFeeOpen] = useState(false);
   const [flashId, setFlashId] = useState<string | null>(null);
+  // #377: the most recent post, whose issued-statement coverage the notice reports. The composer and
+  // dialogs close on success, so the notice lives here; it persists until dismissed or navigation.
+  const [noticeEntryId, setNoticeEntryId] = useState<string | null>(null);
   const [typeFilter, setTypeFilter] = useState('all');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
@@ -66,6 +70,7 @@ export function LedgerPage() {
       void queryClient.invalidateQueries({ queryKey: tenantLedgerKey(id) });
       void queryClient.invalidateQueries({ queryKey: ['tenant', id] });
       setFlashId(entryId);
+      setNoticeEntryId(entryId);
       window.setTimeout(
         () => setFlashId((current) => (current === entryId ? null : current)),
         1600,
@@ -209,6 +214,16 @@ export function LedgerPage() {
             </div>
           </div>
         </Card>
+      )}
+
+      {/* Non-blocking: which issued owner statements the last post will be carried forward into. */}
+      {noticeEntryId && (
+        <IssuedStatementNotice
+          key={noticeEntryId}
+          target={{ entryIds: [noticeEntryId] }}
+          onDismiss={() => setNoticeEntryId(null)}
+          style={{ marginTop: 'var(--gap)' }}
+        />
       )}
 
       {/* Composer slot (WP-05 fills it). */}

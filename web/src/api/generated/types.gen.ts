@@ -419,6 +419,20 @@ export type IssueCredit = {
     sourceRef: string;
 };
 
+export type IssuedStatementCoverageResponse = {
+    rows: Array<IssuedStatementCoverageRow>;
+};
+
+export type IssuedStatementCoverageRow = {
+    ownerId: string;
+    ownerName: string;
+    basis: string;
+    propertyId: null | string;
+    propertyAddress: null | string;
+    issuedYear: number | string;
+    issuedMonth: number | string;
+};
+
 export type LoginRequest = {
     email: string;
     password: string;
@@ -2387,6 +2401,34 @@ export type GetApiStatementsByOwnerIdCsvResponses = {
      */
     200: unknown;
 };
+
+export type GetApiStatementsIssuedCoverageData = {
+    body?: never;
+    path?: never;
+    query?: {
+        entryIds?: Array<string>;
+        runId?: string;
+    };
+    url: '/api/statements/issued-coverage';
+};
+
+export type GetApiStatementsIssuedCoverageErrors = {
+    /**
+     * Bad Request
+     */
+    400: ProblemDetails;
+};
+
+export type GetApiStatementsIssuedCoverageError = GetApiStatementsIssuedCoverageErrors[keyof GetApiStatementsIssuedCoverageErrors];
+
+export type GetApiStatementsIssuedCoverageResponses = {
+    /**
+     * OK
+     */
+    200: IssuedStatementCoverageResponse;
+};
+
+export type GetApiStatementsIssuedCoverageResponse = GetApiStatementsIssuedCoverageResponses[keyof GetApiStatementsIssuedCoverageResponses];
 
 export type PostApiStatementsByOwnerIdDeliverData = {
     body?: never;

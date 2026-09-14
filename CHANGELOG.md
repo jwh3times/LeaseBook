@@ -14,7 +14,16 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ## [Unreleased]
 
-- _Nothing yet._
+### Added
+
+- **Posting into a month whose owner statement already went out now tells you so.** Recording a
+  payment, charge, credit, deposit or prepayment application, or a void — or confirming a rent,
+  late-fee or disbursement run — shows a notice naming each owner whose already-issued statement the
+  posting falls under, which basis and month, and the statement for the following month on which the
+  change will appear as a prior-period adjustment. It appears only when that is actually true, never
+  blocks the
+  posting, and adds no steps: recording a payment still takes three interactions. A run with many
+  affected owners shows a count, with the individual statements one click away.
 
 ## [0.14.0] - 2026-09-13
 
