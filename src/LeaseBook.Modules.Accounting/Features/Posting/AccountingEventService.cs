@@ -103,22 +103,10 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
     // ----- Accrual-only charges -------------------------------------------------------------------
 
     private Task<Guid> PostRentChargedAsync(RentCharged e, CancellationToken ct) =>
-        posting.PostAsync(new PostEntryRequest(e.Date, "RentCharged", null, e.Description, e.SourceRef,
-            [
-                new(AccountCodes.TenantReceivable, e.Amount, null, EntryBasis.Accrual,
-                    PropertyId: e.PropertyId, UnitId: e.UnitId, OwnerId: e.OwnerId, TenantId: e.TenantId),
-                new(AccountCodes.OwnerEquity, null, e.Amount, EntryBasis.Accrual,
-                    PropertyId: e.PropertyId, OwnerId: e.OwnerId),
-            ], DueDate: e.DueDate ?? e.Date), ct);
+        posting.PostAsync(RunEventEntryBuilder.Build(e), ct);
 
     private Task<Guid> PostFeeChargedAsync(FeeCharged e, CancellationToken ct) =>
-        posting.PostAsync(new PostEntryRequest(e.Date, "FeeCharged", FeeSubtype(e.Kind), e.Description, e.SourceRef,
-            [
-                new(AccountCodes.TenantReceivable, e.Amount, null, EntryBasis.Accrual,
-                    PropertyId: e.PropertyId, UnitId: e.UnitId, OwnerId: e.OwnerId, TenantId: e.TenantId),
-                new(AccountCodes.OwnerEquity, null, e.Amount, EntryBasis.Accrual,
-                    PropertyId: e.PropertyId, OwnerId: e.OwnerId),
-            ], AssessesEntryId: e.AssessesEntryId, DueDate: e.Date), ct);
+        posting.PostAsync(RunEventEntryBuilder.Build(e), ct);
 
     private Task<Guid> PostCreditIssuedAsync(CreditIssued e, CancellationToken ct) =>
         posting.PostAsync(new PostEntryRequest(e.Date, "CreditIssued", null, e.Reason, e.SourceRef,
@@ -294,14 +282,7 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
     // ----- PM income ------------------------------------------------------------------------------
 
     private Task<Guid> PostManagementFeeAssessedAsync(ManagementFeeAssessed e, CancellationToken ct) =>
-        posting.PostAsync(new PostEntryRequest(e.Date, "ManagementFeeAssessed", null, e.Description, e.SourceRef,
-            [
-                new(AccountCodes.OwnerEquity, e.Amount, null, EntryBasis.Both,
-                    PropertyId: e.PropertyId, OwnerId: e.OwnerId, BankAccountId: e.OperatingBankId),
-                // pm_income carries NO owner dimension (P25) — the structural isolation.
-                new(AccountCodes.PmIncome, null, e.Amount, EntryBasis.Both,
-                    PropertyId: e.PropertyId, BankAccountId: e.OperatingBankId),
-            ]), ct);
+        posting.PostAsync(RunEventEntryBuilder.Build(e), ct);
 
     private async Task<Guid> PostPmFeesSweptAsync(PMFeesSwept e, CancellationToken ct)
     {
@@ -340,13 +321,7 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
         await postingLock.AcquireAsync(ct);
         await GuardReserveFloorAsync(e.OwnerId, e.Amount, e.Reserve, ct);
 
-        return await posting.PostAsync(new PostEntryRequest(e.Date, "OwnerDisbursed", null, e.Description, e.SourceRef,
-            [
-                new(AccountCodes.OwnerEquity, e.Amount, null, EntryBasis.Both,
-                    OwnerId: e.OwnerId, BankAccountId: e.BankAccountId),
-                new(AccountCodes.TrustBank(e.BankAccountId), null, e.Amount, EntryBasis.Both,
-                    BankAccountId: e.BankAccountId),
-            ]), ct);
+        return await posting.PostAsync(RunEventEntryBuilder.Build(e), ct);
     }
 
     private async Task<Guid> PostVendorPaidAsync(VendorPaid e, CancellationToken ct)
@@ -459,14 +434,6 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
             throw new ReserveFloorException(amount.Amount, equity, reserve.Amount, ownerId);
         }
     }
-
-    private static string FeeSubtype(FeeKind kind) => kind switch
-    {
-        FeeKind.Late => "late",
-        FeeKind.MaintenanceRecharge => "maintenance-recharge",
-        FeeKind.Other => "other",
-        _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null),
-    };
 
     private static string MethodSubtype(PaymentMethod method) => method switch
     {

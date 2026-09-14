@@ -128,6 +128,7 @@ export function LateFeeRunScreen() {
               selectable
               onToggle={handleToggle}
               onToggleAll={handleToggleAll}
+              issuedCoverage={{ type: 'latefee', year: period.year, month: period.month }}
             />
             <ApiErrorNotice error={confirmError} style={{ marginTop: 8 }} />
             <div className="row gap10" style={{ marginTop: 16 }}>

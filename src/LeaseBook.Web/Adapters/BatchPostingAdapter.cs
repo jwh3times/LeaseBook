@@ -33,22 +33,13 @@ internal sealed class BatchPostingAdapter(IAccountingEvents events) : IBatchPost
     public async Task<PostOutcome> PostAsync(RunIntent intent, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(intent);
+        var prospectiveEvents = ToEvents(intent);
 
         try
         {
-            return intent switch
-            {
-                RentChargeIntent rent => await PostRentAsync(rent, ct),
-                LateFeeIntent fee => await PostLateFeeAsync(fee, ct),
-                DisbursementIntent disbursement => await PostDisbursementAsync(disbursement, ct),
-
-                // Not exhaustiveness-checked by the compiler, so it fails loudly and immediately
-                // rather than mis-routing: a new intent shape reaching here is a wiring bug, and the
-                // first run that hits it says so by name.
-                _ => throw new NotSupportedException(
-                    $"No posting translation for intent type {intent.GetType().Name}. Add a branch " +
-                    "here when a run type introduces a new intent shape."),
-            };
+            return intent is DisbursementIntent
+                ? await PostDisbursementAsync(prospectiveEvents, ct)
+                : PostOutcome.Posted(await events.PostAsync(prospectiveEvents.Single(), ct));
         }
         catch (DuplicateSourceRefException)
         {
@@ -72,21 +63,6 @@ internal sealed class BatchPostingAdapter(IAccountingEvents events) : IBatchPost
         // ReserveFloorException is deliberately NOT caught here — see PostDisbursementAsync.
     }
 
-    private async Task<PostOutcome> PostRentAsync(RentChargeIntent i, CancellationToken ct) =>
-        PostOutcome.Posted(await events.PostAsync(
-            new RentCharged(
-                i.TenantId, i.PropertyId, i.OwnerId, i.UnitId,
-                new Money(i.Amount), i.Date, i.Description, i.SourceRef, i.DueDate),
-            ct));
-
-    private async Task<PostOutcome> PostLateFeeAsync(LateFeeIntent i, CancellationToken ct) =>
-        PostOutcome.Posted(await events.PostAsync(
-            new FeeCharged(
-                i.TenantId, i.PropertyId, i.OwnerId, i.UnitId,
-                new Money(i.Amount), i.Date, FeeKind.Late, i.Description, i.SourceRef,
-                i.RentObligationEntryId),
-            ct));
-
     /// <summary>
     /// The management-fee assessment posts FIRST when non-zero: it reduces owner equity before the
     /// disbursement's reserve-floor guard runs, so the guard sees the balance the owner will actually
@@ -100,35 +76,77 @@ internal sealed class BatchPostingAdapter(IAccountingEvents events) : IBatchPost
     /// Left uncaught it aborts the run inside its own transaction, by name.
     /// </para>
     /// </summary>
-    private async Task<PostOutcome> PostDisbursementAsync(DisbursementIntent i, CancellationToken ct)
+    private async Task<PostOutcome> PostDisbursementAsync(
+        IReadOnlyList<AccountingEvent> prospectiveEvents,
+        CancellationToken ct)
     {
         Guid? feeEntryId = null;
 
         try
         {
-            if (i.MgmtFee > 0m)
+            var disbursement = prospectiveEvents[^1];
+            if (prospectiveEvents.Count == 2)
             {
-                feeEntryId = await events.PostAsync(
-                    new ManagementFeeAssessed(
-                        i.OwnerId, i.PropertyId,
-                        new Money(i.MgmtFee), i.Date, i.OperatingBankId,
-                        i.Description, i.FeeSourceRef),
-                    ct);
+                feeEntryId = await events.PostAsync(prospectiveEvents[0], ct);
             }
 
-            var disbursementEntryId = await events.PostAsync(
-                new OwnerDisbursed(
-                    i.OwnerId,
-                    new Money(i.DisburseAmount), i.Date, i.OperatingBankId,
-                    i.Description, i.DisburseSourceRef,
-                    Reserve: new Money(i.Reserve)),
-                ct);
+            var disbursementEntryId = await events.PostAsync(disbursement, ct);
 
             return PostOutcome.Posted(disbursementEntryId, feeEntryId);
         }
         catch (ReserveFloorException)
         {
             return PostOutcome.Refused(PostStatus.ReserveFloor);
+        }
+    }
+
+    /// <summary>
+    /// Pure Operations-intent to Accounting-event translation shared by actual posting and the
+    /// prospective issued-statement read. Event order is posting order; a fee-bearing disbursement
+    /// yields its fee first and disbursement second.
+    /// </summary>
+    internal static IReadOnlyList<AccountingEvent> ToEvents(RunIntent intent)
+    {
+        ArgumentNullException.ThrowIfNull(intent);
+
+        return intent switch
+        {
+            RentChargeIntent i =>
+            [
+                new RentCharged(
+                    i.TenantId, i.PropertyId, i.OwnerId, i.UnitId,
+                    new Money(i.Amount), i.Date, i.Description, i.SourceRef, i.DueDate),
+            ],
+            LateFeeIntent i =>
+            [
+                new FeeCharged(
+                    i.TenantId, i.PropertyId, i.OwnerId, i.UnitId,
+                    new Money(i.Amount), i.Date, FeeKind.Late, i.Description, i.SourceRef,
+                    i.RentObligationEntryId),
+            ],
+            DisbursementIntent i => DisbursementEvents(i),
+            _ => throw new NotSupportedException(
+                $"No posting translation for intent type {intent.GetType().Name}. Add a branch " +
+                "here when a run type introduces a new intent shape."),
+        };
+
+        static IReadOnlyList<AccountingEvent> DisbursementEvents(DisbursementIntent i)
+        {
+            var result = new List<AccountingEvent>(2);
+            if (i.MgmtFee > 0m)
+            {
+                result.Add(new ManagementFeeAssessed(
+                    i.OwnerId, i.PropertyId,
+                    new Money(i.MgmtFee), i.Date, i.OperatingBankId,
+                    i.Description, i.FeeSourceRef));
+            }
+
+            result.Add(new OwnerDisbursed(
+                i.OwnerId,
+                new Money(i.DisburseAmount), i.Date, i.OperatingBankId,
+                i.Description, i.DisburseSourceRef,
+                Reserve: new Money(i.Reserve)));
+            return result;
         }
     }
 }

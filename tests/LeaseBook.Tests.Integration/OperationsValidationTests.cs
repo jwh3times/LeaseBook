@@ -51,6 +51,24 @@ public sealed class OperationsValidationTests(PostgresFixture fixture)
 
     [Theory]
     [InlineData("rent", 2026, 13)]
+    [InlineData("disbursement", 1999, 6)]
+    public async Task Issued_coverage_preview_returns_400_for_invalid_period(
+        string runType,
+        int year,
+        int month)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var setup = await SetupAsync(ct);
+        var client = await LoggedInClientAsync(setup, ct);
+
+        var response = await client.GetAsync(
+            $"/api/operations/runs/{runType}/preview/issued-coverage?year={year}&month={month}", ct);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+    }
+
+    [Theory]
+    [InlineData("rent", 2026, 13)]
     [InlineData("rent", 2026, 0)]
     [InlineData("latefee", 2026, 13)]
     [InlineData("disbursement", 1999, 6)]

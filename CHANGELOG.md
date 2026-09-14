@@ -16,6 +16,17 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 - _Nothing yet._
 
+## [0.16.0] - 2026-09-14
+
+### Added
+
+- **Bulk-run previews now warn when confirmation would change a period whose owner statement already
+  went out.** Rent, late-fee, and disbursement previews name the affected owner, accounting basis,
+  statement month, and property scope before anything posts. Selective runs update the warning as
+  targets are ticked without recalculating the preview, and a run affecting several owners shows a
+  count with the individual statements one click away. The warning is informational and dismissible;
+  the exact post-confirm check remains in place in case a statement is issued after the preview.
+
 ## [0.15.0] - 2026-09-13
 
 ### Added
@@ -899,7 +910,8 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.15.0...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.16.0...HEAD
+[0.16.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.16.0
 [0.15.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.15.0
 [0.14.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.14.0
 [0.13.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.13.0

@@ -120,7 +120,8 @@ public sealed class DisbursementRunStrategy(
                 Amount: rowAmount,
                 AlreadyDone: alreadyDone,
                 ExcludedReason: excludedReason,
-                Detail: detail));
+                Detail: detail,
+                OwnerId: owner.OwnerId));
         }
 
         return new StrategyPreview(previewRows, []);

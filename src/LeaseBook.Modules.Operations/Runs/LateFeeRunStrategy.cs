@@ -108,7 +108,8 @@ public sealed class LateFeeRunStrategy(
                 Amount: charge.Amount,
                 AlreadyDone: alreadyPosted.Contains(SourceRef(charge.RentObligationEntryId)),
                 ExcludedReason: null,
-                Detail: detail));
+                Detail: detail,
+                OwnerId: row.OwnerId));
         }
 
         return new StrategyPreview(previewRows, exceptions);

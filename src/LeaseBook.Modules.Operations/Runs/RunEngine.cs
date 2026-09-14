@@ -95,6 +95,55 @@ public sealed class RunEngine(
     }
 
     /// <summary>
+    /// Plans every target the strategy currently presents as eligible for confirmation. This is the
+    /// planning-only entry point used by secondary preview reads: it deliberately takes neither the
+    /// period advisory lock nor a capability snapshot, and it posts and persists nothing.
+    /// </summary>
+    public async Task<IReadOnlyList<PlannedPosting>> PlanEligibleAsync(
+        RunType runType, RunPeriod period, CancellationToken ct)
+    {
+        var eligibleTargets = await EligibleTargetsAsync(runType, period, ct);
+        return await PlanEligibleAsync(runType, period, eligibleTargets, ct);
+    }
+
+    /// <summary>
+    /// Plans a previously identified eligible-target snapshot. Passing the snapshot lets a caller do
+    /// a read-only precheck between discovery and planning without recomputing the preview rows.
+    /// </summary>
+    public async Task<IReadOnlyList<PlannedPosting>> PlanEligibleAsync(
+        RunType runType,
+        RunPeriod period,
+        IReadOnlyList<EligibleRunTarget> eligibleTargets,
+        CancellationToken ct)
+    {
+        if (eligibleTargets.Count == 0)
+        {
+            return [];
+        }
+
+        var strategy = ResolveStrategy(runType);
+        var eligibleTargetIds = eligibleTargets.Select(target => target.TargetId).ToArray();
+        var plan = await strategy.PlanAsync(period, eligibleTargetIds, ct);
+        return plan.OfType<PlannedPosting>().ToArray();
+    }
+
+    /// <summary>
+    /// Identifies the owner-attributed targets that would be offered for planning, without resolving
+    /// capabilities or taking the confirmation lock. A secondary preview can use this cheap phase to
+    /// avoid planning when none of those owners has anything relevant to inspect.
+    /// </summary>
+    public async Task<IReadOnlyList<EligibleRunTarget>> EligibleTargetsAsync(
+        RunType runType, RunPeriod period, CancellationToken ct)
+    {
+        var strategy = ResolveStrategy(runType);
+        var preview = await strategy.PreviewAsync(period, ct);
+        return preview.Rows
+            .Where(row => !row.AlreadyDone && row.ExcludedReason is null && row.OwnerId is not null)
+            .Select(row => new EligibleRunTarget(row.TargetId, row.OwnerId!.Value))
+            .ToArray();
+    }
+
+    /// <summary>
     /// Confirms the run for the given <paramref name="selectedTargetIds"/>: calls the strategy's
     /// <c>ConfirmAsync</c>, persists the <see cref="BulkRun"/> header + <see cref="BulkRunItem"/>
     /// rows, emits a telemetry span, and returns a <see cref="RunResult"/>.

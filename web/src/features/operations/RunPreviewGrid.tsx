@@ -11,7 +11,8 @@
 import { useState } from 'react';
 import { IssuedStatementNotice } from '@/components/IssuedStatementNotice';
 import { Badge, Button, EmptyState, Money } from '@/design';
-import type { PreviewRowSpa } from './useRuns';
+import { RunPreviewIssuedStatementNotice } from './RunPreviewIssuedStatementNotice';
+import type { PreviewRowSpa, RunType } from './useRuns';
 
 export interface RunPreviewGridProps {
   rows: PreviewRowSpa[];
@@ -22,6 +23,11 @@ export interface RunPreviewGridProps {
   selectable: boolean;
   onToggle?: (targetId: string) => void;
   onToggleAll?: () => void;
+  issuedCoverage: {
+    type: RunType;
+    year: number;
+    month: number;
+  };
 }
 
 export const EXCLUDED_LABELS: Record<string, string> = {
@@ -43,6 +49,7 @@ export function RunPreviewGrid({
   selectable,
   onToggle,
   onToggleAll,
+  issuedCoverage,
 }: RunPreviewGridProps) {
   if (rows.length === 0 && exceptions.length === 0) {
     return (
@@ -72,6 +79,14 @@ export function RunPreviewGrid({
           </ul>
         </div>
       )}
+
+      <RunPreviewIssuedStatementNotice
+        key={`${issuedCoverage.type}:${issuedCoverage.year}:${issuedCoverage.month}`}
+        type={issuedCoverage.type}
+        year={issuedCoverage.year}
+        month={issuedCoverage.month}
+        selectedTargetIds={selected}
+      />
 
       <table className="pf-table">
         <thead>

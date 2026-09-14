@@ -96,7 +96,8 @@ public sealed class RentRunStrategy(
                 Amount: charge.Amount,
                 AlreadyDone: alreadyDone,
                 ExcludedReason: null,
-                Detail: detail));
+                Detail: detail,
+                OwnerId: row.OwnerId));
         }
 
         return new StrategyPreview(previewRows, exceptions);

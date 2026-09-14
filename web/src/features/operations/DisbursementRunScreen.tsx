@@ -11,6 +11,7 @@ import { trackInteraction } from '@/lib/telemetry';
 import { PeriodPicker } from './PeriodPicker';
 import { currentPeriod } from './periodUtils';
 import { RunResultPanel, excludedLabel } from './RunPreviewGrid';
+import { RunPreviewIssuedStatementNotice } from './RunPreviewIssuedStatementNotice';
 import { useConfirmRun, useRunPreview } from './useRuns';
 import type { PreviewRowSpa, RunError, RunResultSpaResponse } from './useRuns';
 
@@ -144,6 +145,13 @@ export function DisbursementRunScreen() {
           />
         ) : (
           <>
+            <RunPreviewIssuedStatementNotice
+              key={`disbursement:${period.year}:${period.month}`}
+              type="disbursement"
+              year={period.year}
+              month={period.month}
+              selectedTargetIds={selected}
+            />
             <table className="pf-table">
               <thead>
                 <tr>

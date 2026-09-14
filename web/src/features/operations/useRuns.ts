@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tan
 import {
   getApiOperationsRuns,
   getApiOperationsRunsByTypePreview,
+  getApiOperationsRunsByTypePreviewIssuedCoverage,
   postApiOperationsRunsByTypeConfirm,
   unwrap,
   type ApiError,
@@ -14,6 +15,7 @@ import {
   type ConfirmRunRequest,
   type PreviewRowSpa,
   type RunHistoryResponse,
+  type RunPreviewIssuedCoverageResponse,
   type RunPreviewSpaResponse,
   type RunResultSpaResponse,
 } from '@/api';
@@ -39,6 +41,9 @@ export const runPreviewKey = (type: RunType, year: number, month: number) =>
 
 export const runHistoryKey = () => ['operations', 'history'] as const;
 
+export const runPreviewIssuedCoverageKey = (type: RunType, year: number, month: number) =>
+  ['operations', 'preview', type, year, month, 'issued-coverage'] as const;
+
 // ─── Queries ──────────────────────────────────────────────────────────────────
 
 /** Preview what a run of the given type would post for the given period. */
@@ -54,6 +59,26 @@ export function useRunPreview(
         getApiOperationsRunsByTypePreview({ path: { type }, query: { year, month } }),
         `Failed to load ${type} preview`,
       ),
+  });
+}
+
+/** Issued owner statements that the run plan would affect if it were confirmed now. */
+export function useRunPreviewIssuedCoverage(
+  type: RunType,
+  year: number,
+  month: number,
+): UseQueryResult<RunPreviewIssuedCoverageResponse, ApiError> {
+  return useQuery({
+    queryKey: runPreviewIssuedCoverageKey(type, year, month),
+    queryFn: () =>
+      unwrap(
+        getApiOperationsRunsByTypePreviewIssuedCoverage({
+          path: { type },
+          query: { year, month },
+        }),
+        'Failed to check for issued statements affected by this run.',
+      ),
+    retry: false,
   });
 }
 

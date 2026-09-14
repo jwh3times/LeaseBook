@@ -29,7 +29,11 @@ public sealed record PreviewRow(
     decimal Amount,
     bool AlreadyDone,
     string? ExcludedReason,
-    IReadOnlyDictionary<string, string> Detail);
+    IReadOnlyDictionary<string, string> Detail,
+    Guid? OwnerId = null);
+
+/// <summary>An eligible preview target and the owner whose equity its posting would move.</summary>
+public sealed record EligibleRunTarget(Guid TargetId, Guid OwnerId);
 
 /// <summary>
 /// What a strategy computes for a period: the rows, and any exceptions it hit while computing them.

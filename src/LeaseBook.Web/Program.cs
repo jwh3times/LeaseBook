@@ -50,7 +50,7 @@ var lifecycle = process.Lifecycle!;
 var builder = WebApplication.CreateBuilder(args);
 
 // Module assemblies the host composes. CQRS handlers/validators are discovered from these; endpoint
-// modules are discovered from these plus the host (which owns the auth/meta endpoints).
+// modules are discovered from these plus the host (which owns cross-module reporting and auth/meta).
 Assembly[] moduleAssemblies =
 [
     typeof(LeaseBook.Modules.Accounting.ModuleMarker).Assembly,
@@ -62,6 +62,9 @@ Assembly[] moduleAssemblies =
 ];
 Assembly[] endpointAssemblies = [.. moduleAssemblies, typeof(Program).Assembly];
 
+// Register the host-owned reporting slice before AddLeaseBookCqrs decorates all handlers. Scanning
+// the host assembly would also double-register Auth's separately owned endpoint-filter validators.
+builder.Services.AddRunPreviewIssuedCoverage();
 builder.Services.AddLeaseBookCqrs(moduleAssemblies);
 
 // RFC 7807 everywhere (P17): ProblemDetails defaults + the CQRS ValidationException → 400 mapping.
