@@ -133,7 +133,10 @@ public sealed class DisbursementTests
     public async Task Preview_empty_org_returns_empty_rows()
     {
         var ct = TestContext.Current.CancellationToken;
-        var strategy = BuildStrategy(owners: [], equity: []);
+        var strategy = BuildStrategy(
+            owners: [],
+            equity: [],
+            bankInfo: new MissingOperatingTrustBankInfo());
         var preview = await strategy.PreviewAsync(new RunPeriod(2026, 6), ct);
         preview.Rows.Count.ShouldBe(0);
         preview.Exceptions.Count.ShouldBe(0);
@@ -154,16 +157,64 @@ public sealed class DisbursementTests
         preview.Rows[0].ExcludedReason.ShouldBe("non_positive_equity");
     }
 
+    [Fact]
+    public async Task Preview_with_owners_surfaces_a_missing_operating_trust_account()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var ownerId = Guid.NewGuid();
+        var strategy = BuildStrategy(
+            owners: [new OwnerDisbursementRow(ownerId, "Grace", ReserveAmount: 0m, DefaultMgmtFeeBps: 800)],
+            equity: [(ownerId, 1_000m)],
+            bankInfo: new MissingOperatingTrustBankInfo());
+
+        await Should.ThrowAsync<InvalidOperationException>(() =>
+            strategy.PreviewAsync(new RunPeriod(2026, 6), ct));
+    }
+
+    [Theory]
+    [InlineData(2100, 200, 1732, null)]
+    [InlineData(150, 200, 0, "below_reserve_floor")]
+    [InlineData(0, 0, 0, "non_positive_equity")]
+    public async Task Preview_and_plan_reach_the_same_verdict_and_amount_for_the_same_owner(
+        decimal equity,
+        decimal reserve,
+        decimal expectedAmount,
+        string? expectedReason)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var ownerId = Guid.NewGuid();
+        var strategy = BuildStrategy(
+            owners: [new OwnerDisbursementRow(ownerId, "Katherine", reserve, DefaultMgmtFeeBps: 800)],
+            equity: [(ownerId, equity)]);
+        var period = new RunPeriod(2026, 6);
+
+        var preview = await strategy.PreviewAsync(period, ct);
+        var plan = await strategy.PlanAsync(period, [ownerId], ct);
+
+        var row = preview.Rows.ShouldHaveSingleItem();
+        var item = plan.ShouldHaveSingleItem();
+        var planAmount = item is PlannedPosting posting ? posting.Amount : 0m;
+        var planReason = item is PlannedExclusion exclusion
+            ? exclusion.Detail["reason"] as string
+            : null;
+
+        row.Amount.ShouldBe(expectedAmount);
+        planAmount.ShouldBe(expectedAmount);
+        row.ExcludedReason.ShouldBe(expectedReason);
+        planReason.ShouldBe(expectedReason);
+    }
+
     // ── helpers ──────────────────────────────────────────────────────────────
 
     private static DisbursementRunStrategy BuildStrategy(
         IReadOnlyList<OwnerDisbursementRow> owners,
-        IReadOnlyList<(Guid OwnerId, decimal Equity)> equity)
+        IReadOnlyList<(Guid OwnerId, decimal Equity)> equity,
+        IBankAccountInfo? bankInfo = null)
     {
         return new DisbursementRunStrategy(
             new StubOwnerData(owners),
             new StubEquityBalances(equity.ToDictionary(e => e.OwnerId, e => e.Equity)),
-            new StubBankInfo(),
+            bankInfo ?? new StubBankInfo(),
             new StubPostedRefs());
     }
 }
@@ -188,6 +239,12 @@ file sealed class StubBankInfo : IBankAccountInfo
 {
     public Task<(Guid OperatingBankId, string Display)> GetOperatingTrustAsync(CancellationToken ct) =>
         Task.FromResult((Guid.Parse("aaaaaaaa-aaaa-7aaa-8aaa-aaaaaaaaaaaa"), "Test Trust Bank"));
+}
+
+file sealed class MissingOperatingTrustBankInfo : IBankAccountInfo
+{
+    public Task<(Guid OperatingBankId, string Display)> GetOperatingTrustAsync(CancellationToken ct) =>
+        throw new InvalidOperationException("No active operating trust account exists.");
 }
 
 file sealed class StubPostedRefs : IPostedSourceRefs

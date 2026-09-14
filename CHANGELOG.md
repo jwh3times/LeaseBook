@@ -14,7 +14,12 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ## [Unreleased]
 
-- _Nothing yet._
+### Fixed
+
+- **Disbursement previews no longer appear runnable when no operating trust account exists.** A
+  preview with owner targets now reports the same missing-bank configuration error that confirmation
+  would, before an operator reviews or selects rows. Preview and confirmation also derive owner
+  eligibility and amounts from one decision, preventing their exclusion rules from drifting apart.
 
 ## [0.16.0] - 2026-09-14
 

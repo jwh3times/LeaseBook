@@ -11,6 +11,8 @@
 - **Amended 2026-08-09 (self):** strategies plan and the engine executes (§4b); §4a revised so no
   capability set reaches a strategy; §2 corrected — source-ref keys must not be derived from
   `RunType`
+- **Amended 2026-09-14 (self):** disbursement preview and plan now project one decision, and a
+  non-empty preview validates the same operating-trust precondition as confirmation (§4c)
 
 ## Context
 
@@ -188,10 +190,20 @@ green while the operator was shown a lease as chargeable four days before it leg
 held for rent's zero-rent test. Both are now single statements, and the pre-existing plan-side tests
 fail when either is broken.
 
-**Scope, and why disbursement was left alone.** Disbursement already had the property — one
-`DisbursementAmounts.Compute` shared by both paths, and the same reason strings on both sides — and
-its preview branches were already test-pinned. It is the in-repo precedent this amendment generalizes
-rather than a third site to change.
+**Disbursement follow-up (amendment, 2026-09-14).** Sharing `DisbursementAmounts.Compute` made the
+arithmetic canonical, but the two projections still restated the exclusion branches. They now share
+their own private, pure `Decide(...)`, including the exclusion code. A non-empty preview also resolves
+the operating trust account before showing selectable rows; planning already required it, so the old
+preview could present a run that confirmation could only reject. An organization with no owners still
+gets an empty preview without needing bank configuration because there is no executable target.
+
+**Freshness between preview and confirmation.** Sharing a decision does not make a preview a frozen
+quote. Confirmation re-reads its inputs and may legitimately reach a different result if data changed.
+Late-fee assessment follows the same rule for time: each operation captures the current UTC calendar
+date once, and confirmation evaluates and posts on its own current date. Freezing the preview date
+would contradict the domain definition of assessment as a present-tense act and could deliberately
+post a stale date after midnight. The capability token is different: it freezes reachability state so
+money paths cannot change underneath an operator; it is not a general snapshot token for domain data.
 
 **Two things deliberately kept out of the decision.** The _amount_ was already canonical everywhere
 (`Proration.Charge`, `LateFeeCalculator.Compute`, `DisbursementAmounts.Compute`). The _source ref_
