@@ -67,7 +67,7 @@ export function useRunPreviewIssuedCoverage(
   type: RunType,
   year: number,
   month: number,
-): UseQueryResult<RunPreviewIssuedCoverageResponse> {
+): UseQueryResult<RunPreviewIssuedCoverageResponse, ApiError> {
   return useQuery({
     queryKey: runPreviewIssuedCoverageKey(type, year, month),
     queryFn: () =>

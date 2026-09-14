@@ -33,22 +33,13 @@ internal sealed class BatchPostingAdapter(IAccountingEvents events) : IBatchPost
     public async Task<PostOutcome> PostAsync(RunIntent intent, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(intent);
+        var prospectiveEvents = ToEvents(intent);
 
         try
         {
-            return intent switch
-            {
-                RentChargeIntent rent => await PostRentAsync(rent, ct),
-                LateFeeIntent fee => await PostLateFeeAsync(fee, ct),
-                DisbursementIntent disbursement => await PostDisbursementAsync(disbursement, ct),
-
-                // Not exhaustiveness-checked by the compiler, so it fails loudly and immediately
-                // rather than mis-routing: a new intent shape reaching here is a wiring bug, and the
-                // first run that hits it says so by name.
-                _ => throw new NotSupportedException(
-                    $"No posting translation for intent type {intent.GetType().Name}. Add a branch " +
-                    "here when a run type introduces a new intent shape."),
-            };
+            return intent is DisbursementIntent
+                ? await PostDisbursementAsync(prospectiveEvents, ct)
+                : PostOutcome.Posted(await events.PostAsync(prospectiveEvents.Single(), ct));
         }
         catch (DuplicateSourceRefException)
         {
@@ -72,12 +63,6 @@ internal sealed class BatchPostingAdapter(IAccountingEvents events) : IBatchPost
         // ReserveFloorException is deliberately NOT caught here — see PostDisbursementAsync.
     }
 
-    private async Task<PostOutcome> PostRentAsync(RentChargeIntent i, CancellationToken ct) =>
-        PostOutcome.Posted(await events.PostAsync(ToEvents(i).Single(), ct));
-
-    private async Task<PostOutcome> PostLateFeeAsync(LateFeeIntent i, CancellationToken ct) =>
-        PostOutcome.Posted(await events.PostAsync(ToEvents(i).Single(), ct));
-
     /// <summary>
     /// The management-fee assessment posts FIRST when non-zero: it reduces owner equity before the
     /// disbursement's reserve-floor guard runs, so the guard sees the balance the owner will actually
@@ -91,13 +76,14 @@ internal sealed class BatchPostingAdapter(IAccountingEvents events) : IBatchPost
     /// Left uncaught it aborts the run inside its own transaction, by name.
     /// </para>
     /// </summary>
-    private async Task<PostOutcome> PostDisbursementAsync(DisbursementIntent i, CancellationToken ct)
+    private async Task<PostOutcome> PostDisbursementAsync(
+        IReadOnlyList<AccountingEvent> prospectiveEvents,
+        CancellationToken ct)
     {
         Guid? feeEntryId = null;
 
         try
         {
-            var prospectiveEvents = ToEvents(i);
             var disbursement = prospectiveEvents[^1];
             if (prospectiveEvents.Count == 2)
             {

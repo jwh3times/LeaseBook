@@ -1,38 +1,9 @@
 import { useState, type ReactNode } from 'react';
-import type { RunPreviewIssuedCoverageRow } from '@/api';
+import { ApiErrorNotice } from '@/components/ApiErrorNotice';
+import { ErrorAction } from '@/components/ErrorAction';
 import { InfoNotice } from '@/components/InfoNotice';
+import { IssuedStatementCoverageNotice } from '@/components/IssuedStatementCoverageNotice';
 import { useRunPreviewIssuedCoverage, type RunType } from './useRuns';
-
-const MONTHS = [
-  'January',
-  'February',
-  'March',
-  'April',
-  'May',
-  'June',
-  'July',
-  'August',
-  'September',
-  'October',
-  'November',
-  'December',
-];
-
-function monthName(year: number, month: number): string {
-  return `${MONTHS[month - 1] ?? ''} ${year}`;
-}
-
-function sentence(row: RunPreviewIssuedCoverageRow): string {
-  const year = Number(row.issuedYear);
-  const month = Number(row.issuedMonth);
-  const following = month === 12 ? monthName(year + 1, 1) : monthName(year, month + 1);
-  const scope = row.propertyAddress ? ` (${row.propertyAddress})` : '';
-  return (
-    `If confirmed: ${row.ownerName} — the ${row.basis} statement for ${monthName(year, month)}${scope} ` +
-    `was already issued; this run's postings will appear as prior-period adjustments on their ` +
-    `${following} ${row.basis} statement.`
-  );
-}
 
 export interface RunPreviewIssuedStatementNoticeProps {
   type: RunType;
@@ -66,43 +37,42 @@ export function RunPreviewIssuedStatementNotice({
   }
 
   function content() {
-    if (dismissed || selectedTargetIds.size === 0 || coverage.isPending) return null;
+    if (dismissed || selectedTargetIds.size === 0) return null;
+
+    if (coverage.isPending) {
+      return (
+        <div
+          className="pf-skeleton"
+          aria-label="Checking for issued statements affected by this run"
+          style={{ height: 20 }}
+        />
+      );
+    }
 
     if (coverage.isError) {
-      return notice(<span>Couldn&apos;t check for issued statements affected by this run.</span>);
+      return (
+        <div className="col gap6">
+          {notice(<span>Couldn&apos;t check for issued statements affected by this run.</span>)}
+          <ApiErrorNotice
+            error={coverage.error}
+            fallback="Failed to check for issued statements affected by this run."
+            kind="read"
+          />
+          <ErrorAction
+            error={coverage.error}
+            onRetry={() => void coverage.refetch()}
+            retrying={coverage.isFetching}
+          />
+        </div>
+      );
     }
 
-    const selected = coverage.data.rows.filter((row) => selectedTargetIds.has(row.targetId));
-    const unique = new Map<string, RunPreviewIssuedCoverageRow>();
-    for (const row of selected) {
-      unique.set(`${row.ownerId}:${row.basis}:${row.propertyId ?? 'owner'}`, row);
-    }
-    const rows = Array.from(unique.values());
-    if (rows.length === 0) return null;
-
-    if (rows.length === 1) {
-      return notice(<span>{sentence(rows[0]!)}</span>);
-    }
-
-    const owners = new Set(rows.map((row) => row.ownerId)).size;
-    return notice(
-      <>
-        <span>
-          If confirmed: statements already issued for {owners} {owners === 1 ? 'owner' : 'owners'};
-          this run&apos;s postings will appear as prior-period adjustments on the statement for the
-          month after each.
-        </span>
-        <details>
-          <summary>Show affected statements</summary>
-          <ul className="pf-info-notice-list">
-            {rows.map((row) => (
-              <li key={`${row.ownerId}:${row.basis}:${row.propertyId ?? 'owner'}`}>
-                {sentence(row)}
-              </li>
-            ))}
-          </ul>
-        </details>
-      </>,
+    return (
+      <IssuedStatementCoverageNotice
+        rows={coverage.data.rows.filter((row) => selectedTargetIds.has(row.targetId))}
+        mode="preview-run"
+        onDismiss={() => setDismissed(true)}
+      />
     );
   }
 }

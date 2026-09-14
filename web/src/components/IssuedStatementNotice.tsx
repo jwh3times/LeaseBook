@@ -1,51 +1,18 @@
 import type { CSSProperties, ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { getApiStatementsIssuedCoverage, unwrap, type IssuedStatementCoverageRow } from '@/api';
+import {
+  getApiStatementsIssuedCoverage,
+  unwrap,
+  type ApiError,
+  type IssuedStatementCoverageResponse,
+} from '@/api';
+import { ApiErrorNotice } from './ApiErrorNotice';
+import { ErrorAction } from './ErrorAction';
 import { InfoNotice } from './InfoNotice';
+import { IssuedStatementCoverageNotice } from './IssuedStatementCoverageNotice';
 
 /** What was just posted: specific ledger entries, or every posting of a confirmed run. */
 export type IssuedCoverageTarget = { entryIds: string[] } | { runId: string };
-
-const MONTHS = [
-  'January',
-  'February',
-  'March',
-  'April',
-  'May',
-  'June',
-  'July',
-  'August',
-  'September',
-  'October',
-  'November',
-  'December',
-];
-
-function monthName(year: number, month: number): string {
-  return `${MONTHS[month - 1] ?? ''} ${year}`;
-}
-
-/**
- * One (owner, basis, scope) line: the latest issued statement — the document now out of date — and the
- * statement that will itemize the change. ADR-045 carries forward only from the immediately preceding
- * month, so that is the statement for the month after the issued one, named exactly rather than
- * promised as "their next statement" (which a skipped month would make untrue).
- */
-export function issuedStatementSentence(
-  row: IssuedStatementCoverageRow,
-  subject: 'This entry' | 'These postings',
-): string {
-  const year = Number(row.issuedYear);
-  const month = Number(row.issuedMonth);
-  const following = month === 12 ? monthName(year + 1, 1) : monthName(year, month + 1);
-  const scope = row.propertyAddress ? ` (${row.propertyAddress})` : '';
-  const adjustment =
-    subject === 'This entry' ? 'a prior-period adjustment' : 'prior-period adjustments';
-  return (
-    `${row.ownerName} — the ${row.basis} statement for ${monthName(year, month)}${scope} was already issued. ` +
-    `${subject} will appear as ${adjustment} on their ${following} ${row.basis} statement.`
-  );
-}
 
 export const issuedCoverageKey = (target: IssuedCoverageTarget) =>
   ['statements', 'issued-coverage', target] as const;
@@ -66,7 +33,7 @@ export interface IssuedStatementNoticeProps {
  */
 export function IssuedStatementNotice({ target, onDismiss, style }: IssuedStatementNoticeProps) {
   const isRun = 'runId' in target;
-  const coverage = useQuery({
+  const coverage = useQuery<IssuedStatementCoverageResponse, ApiError>({
     queryKey: issuedCoverageKey(target),
     queryFn: () =>
       unwrap(
@@ -91,49 +58,46 @@ export function IssuedStatementNotice({ target, onDismiss, style }: IssuedStatem
   }
 
   function content() {
-    if (coverage.isPending) return null;
+    if (coverage.isPending) {
+      return (
+        <div
+          className="pf-skeleton"
+          aria-label={`Checking for issued statements affected by ${isRun ? 'these postings' : 'this entry'}`}
+          style={{ height: 20 }}
+        />
+      );
+    }
 
     if (coverage.isError) {
-      return notice(
-        <span>
-          Couldn&apos;t check for issued statements affected by{' '}
-          {isRun ? 'these postings' : 'this entry'}.
-        </span>,
+      return (
+        <div className="col gap6">
+          {notice(
+            <span>
+              Couldn&apos;t check for issued statements affected by{' '}
+              {isRun ? 'these postings' : 'this entry'}.
+            </span>,
+          )}
+          <ApiErrorNotice
+            error={coverage.error}
+            fallback="Failed to check for issued statements."
+            kind="read"
+          />
+          <ErrorAction
+            error={coverage.error}
+            onRetry={() => void coverage.refetch()}
+            retrying={coverage.isFetching}
+          />
+        </div>
       );
     }
 
-    const rows = coverage.data.rows;
-    if (rows.length === 0) return null;
-
-    const key = (row: IssuedStatementCoverageRow) =>
-      `${row.ownerId}:${row.basis}:${row.propertyId ?? 'owner'}`;
-
-    if (!isRun) {
-      return notice(
-        rows.map((row) => <span key={key(row)}>{issuedStatementSentence(row, 'This entry')}</span>),
-      );
-    }
-
-    if (rows.length === 1) {
-      return notice(<span>{issuedStatementSentence(rows[0]!, 'These postings')}</span>);
-    }
-
-    const owners = new Set(rows.map((row) => row.ownerId)).size;
-    return notice(
-      <>
-        <span>
-          Statements already issued for {owners} {owners === 1 ? 'owner' : 'owners'}; these postings
-          will appear as prior-period adjustments on the statement for the month after each.
-        </span>
-        <details>
-          <summary>Show affected statements</summary>
-          <ul className="pf-info-notice-list">
-            {rows.map((row) => (
-              <li key={key(row)}>{issuedStatementSentence(row, 'These postings')}</li>
-            ))}
-          </ul>
-        </details>
-      </>,
+    return (
+      <IssuedStatementCoverageNotice
+        rows={coverage.data.rows}
+        mode={isRun ? 'posted-run' : 'entry'}
+        onDismiss={onDismiss}
+        style={style}
+      />
     );
   }
 }

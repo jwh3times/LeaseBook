@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { http, HttpResponse } from 'msw';
+import { delay, http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
 import { server } from '@/test/mocks/server';
 import { IssuedStatementNotice, type IssuedCoverageTarget } from './IssuedStatementNotice';
@@ -47,6 +47,21 @@ function renderNotice(target: IssuedCoverageTarget, onDismiss?: () => void) {
 }
 
 describe('IssuedStatementNotice', () => {
+  it('shows that issued statements are being checked while the coverage read is pending', () => {
+    server.use(
+      http.get('/api/statements/issued-coverage', async () => {
+        await delay('infinite');
+        return HttpResponse.json({ rows: [] });
+      }),
+    );
+
+    renderNotice({ entryIds: ['entry-1'] });
+
+    expect(
+      screen.getByLabelText('Checking for issued statements affected by this entry'),
+    ).toBeVisible();
+  });
+
   it('names the issued statement and the one that will itemize the entry, asking by entry id', async () => {
     let asked: URL | undefined;
     respondWith([HARBORVIEW], (url) => (asked = url));
@@ -85,10 +100,22 @@ describe('IssuedStatementNotice', () => {
   });
 
   it('says the check failed instead of staying silent', async () => {
+    const reference = '8a8b8c8d8a8b8c8d8a8b8c8d8a8b8c8d';
+    let requests = 0;
     server.use(
-      http.get('/api/statements/issued-coverage', () =>
-        HttpResponse.json({ code: 'internal_error' }, { status: 500 }),
-      ),
+      http.get('/api/statements/issued-coverage', () => {
+        requests += 1;
+        return requests === 1
+          ? HttpResponse.json(
+              {
+                code: 'coverage_unavailable',
+                detail: 'The issued-statement index is unavailable.',
+                correlationId: reference,
+              },
+              { status: 503 },
+            )
+          : HttpResponse.json({ rows: [HARBORVIEW] });
+      }),
     );
     const status = renderNotice({ entryIds: ['entry-1'] });
 
@@ -97,6 +124,14 @@ describe('IssuedStatementNotice', () => {
         "Couldn't check for issued statements affected by this entry.",
       ),
     );
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'The issued-statement index is unavailable.',
+    );
+    expect(screen.getByText(`Reference: ${reference}`)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await vi.waitFor(() => expect(status).toHaveTextContent('Harborview Holdings'));
+    expect(requests).toBe(2);
   });
 
   it('summarizes a run by owner count with the per-statement lines one click away', async () => {

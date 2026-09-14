@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { http, HttpResponse } from 'msw';
+import { delay, http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
 import { server } from '@/test/mocks/server';
 import { RunPreviewIssuedStatementNotice } from './RunPreviewIssuedStatementNotice';
@@ -59,6 +59,24 @@ function renderNotice(selectedTargetIds: ReadonlySet<string>) {
 }
 
 describe('RunPreviewIssuedStatementNotice', () => {
+  it('shows that issued statements are being checked while the coverage read is pending', () => {
+    server.use(
+      http.get('/api/operations/runs/rent/preview/issued-coverage', async () => {
+        await delay('infinite');
+        return HttpResponse.json({ rows: [] });
+      }),
+    );
+
+    const view = renderNotice(new Set());
+
+    expect(screen.getByRole('status')).toBeEmptyDOMElement();
+    view.rerenderWith(new Set(['lease-1']));
+
+    expect(
+      screen.getByLabelText('Checking for issued statements affected by this run'),
+    ).toBeVisible();
+  });
+
   it('uses future-tense wording and filters the loaded answer as targets are selected', async () => {
     let requests = 0;
     server.use(
@@ -89,6 +107,10 @@ describe('RunPreviewIssuedStatementNotice', () => {
     view.rerenderWith(new Set());
     expect(status).toBeEmptyDOMElement();
     expect(requests).toBe(1);
+
+    view.rerenderWith(new Set(['lease-1']));
+    await userEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
+    expect(status).toBeEmptyDOMElement();
   });
 
   it('summarizes several selected owners with collapsible statement details', async () => {
@@ -109,10 +131,22 @@ describe('RunPreviewIssuedStatementNotice', () => {
   });
 
   it('shows the specified non-blocking note when coverage cannot be read', async () => {
+    const reference = '7a7b7c7d7a7b7c7d7a7b7c7d7a7b7c7d';
+    let requests = 0;
     server.use(
-      http.get('/api/operations/runs/rent/preview/issued-coverage', () =>
-        HttpResponse.json({ code: 'run_plan_failed' }, { status: 500 }),
-      ),
+      http.get('/api/operations/runs/rent/preview/issued-coverage', () => {
+        requests += 1;
+        return requests === 1
+          ? HttpResponse.json(
+              {
+                code: 'run_plan_failed',
+                detail: 'The run plan could not be projected.',
+                correlationId: reference,
+              },
+              { status: 503 },
+            )
+          : HttpResponse.json({ rows: [HARBORVIEW] });
+      }),
     );
 
     const view = renderNotice(new Set(['lease-1']));
@@ -120,6 +154,9 @@ describe('RunPreviewIssuedStatementNotice', () => {
     expect(
       await screen.findByText("Couldn't check for issued statements affected by this run."),
     ).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('The run plan could not be projected.');
+    expect(screen.getByText(`Reference: ${reference}`)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
 
     view.rerenderWith(new Set());
     expect(screen.getByRole('status')).toBeEmptyDOMElement();
@@ -128,7 +165,10 @@ describe('RunPreviewIssuedStatementNotice', () => {
     expect(
       await screen.findByText("Couldn't check for issued statements affected by this run."),
     ).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
-    expect(screen.getByRole('status')).toBeEmptyDOMElement();
+    expect(requests).toBe(1);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(await screen.findByText(/If confirmed: Harborview Holdings/)).toBeInTheDocument();
+    expect(requests).toBe(2);
   });
 });

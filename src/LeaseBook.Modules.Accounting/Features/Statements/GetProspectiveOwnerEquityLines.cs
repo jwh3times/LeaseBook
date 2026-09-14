@@ -21,7 +21,7 @@ public sealed class GetProspectiveOwnerEquityLinesValidator : AbstractValidator<
         RuleFor(q => q.Events)
             .Cascade(CascadeMode.Stop)
             .NotNull()
-            .Must(events => events.All(RunEventEntryBuilder.Supports))
+            .Must(events => events.All(e => RunEventEntryBuilder.TryBuild(e, out _)))
             .WithMessage("Only bulk-run accounting events can be projected.");
     }
 }
