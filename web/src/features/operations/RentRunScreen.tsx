@@ -105,6 +105,7 @@ export function RentRunScreen() {
               exceptions={preview.data?.exceptions ?? []}
               selected={allSelected}
               selectable={false}
+              issuedCoverage={{ type: 'rent', year: period.year, month: period.month }}
             />
             <ApiErrorNotice error={confirmError} style={{ marginTop: 8 }} />
             <div className="row gap10" style={{ marginTop: 16 }}>

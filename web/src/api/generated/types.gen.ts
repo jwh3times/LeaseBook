@@ -806,6 +806,21 @@ export type RunHistoryResponse = {
     runs: Array<BulkRunSpa>;
 };
 
+export type RunPreviewIssuedCoverageResponse = {
+    rows: Array<RunPreviewIssuedCoverageRow>;
+};
+
+export type RunPreviewIssuedCoverageRow = {
+    targetId: string;
+    ownerId: string;
+    ownerName: string;
+    basis: string;
+    propertyId: null | string;
+    propertyAddress: null | string;
+    issuedYear: number | string;
+    issuedMonth: number | string;
+};
+
 export type RunPreviewSpaResponse = {
     runType: string;
     year: number | string;
@@ -2472,6 +2487,27 @@ export type GetApiOperationsRunsByTypePreviewResponses = {
 };
 
 export type GetApiOperationsRunsByTypePreviewResponse = GetApiOperationsRunsByTypePreviewResponses[keyof GetApiOperationsRunsByTypePreviewResponses];
+
+export type GetApiOperationsRunsByTypePreviewIssuedCoverageData = {
+    body?: never;
+    path: {
+        type: string;
+    };
+    query?: {
+        year?: number | string;
+        month?: number | string;
+    };
+    url: '/api/operations/runs/{type}/preview/issued-coverage';
+};
+
+export type GetApiOperationsRunsByTypePreviewIssuedCoverageResponses = {
+    /**
+     * OK
+     */
+    200: RunPreviewIssuedCoverageResponse;
+};
+
+export type GetApiOperationsRunsByTypePreviewIssuedCoverageResponse = GetApiOperationsRunsByTypePreviewIssuedCoverageResponses[keyof GetApiOperationsRunsByTypePreviewIssuedCoverageResponses];
 
 export type PostApiOperationsRunsByTypeConfirmData = {
     body: ConfirmRunRequest;

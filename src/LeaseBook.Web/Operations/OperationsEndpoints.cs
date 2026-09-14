@@ -1,6 +1,7 @@
 using LeaseBook.Modules.Operations.Domain;
 using LeaseBook.Modules.Operations.Runs;
 using LeaseBook.SharedKernel.Endpoints;
+using LeaseBook.Web.Reporting;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -87,6 +88,38 @@ public sealed class OperationsEndpoints : IEndpointModule
                         preview.CapabilitiesVersion));
                 })
             .Produces<RunPreviewSpaResponse>();
+
+        // GET /api/operations/runs/{type}/preview/issued-coverage?year=&month=
+        // Separate from the capability-stamped preview: this is a non-blocking heads-up only.
+        group.MapGet("/runs/{type}/preview/issued-coverage",
+                async (string type, int? year, int? month, RunPreviewIssuedCoverageService coverage,
+                    HttpContext httpContext, CancellationToken ct) =>
+                {
+                    if (!TryParseRunType(type, out var runType))
+                    {
+                        return ProblemResults.Problem(
+                            httpContext,
+                            code: "unknown_run_type",
+                            detail: "That is not a run type this screen supports.",
+                            status: StatusCodes.Status400BadRequest);
+                    }
+
+                    var now = DateTime.UtcNow;
+                    var actualYear = year ?? now.Year;
+                    var actualMonth = month ?? now.Month;
+                    if (actualMonth < 1 || actualMonth > 12 || actualYear < 2000 || actualYear > 2100)
+                    {
+                        return ProblemResults.Problem(
+                            httpContext,
+                            code: "invalid_period",
+                            detail: $"Invalid period: year={actualYear} month={actualMonth}. Year must be 2000–2100; month must be 1–12.",
+                            status: StatusCodes.Status400BadRequest);
+                    }
+
+                    return Results.Ok(await coverage.ReadAsync(
+                        runType, new RunPeriod(actualYear, actualMonth), ct));
+                })
+            .Produces<RunPreviewIssuedCoverageResponse>();
 
         // POST /api/operations/runs/{type}/confirm
         // Body: { year, month, selectedTargetIds, capabilitiesVersion, acknowledgeCapabilityChange? }

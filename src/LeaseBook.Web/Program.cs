@@ -271,6 +271,7 @@ builder.Services.AddScoped<LeaseBook.Web.Onboarding.Verification.VerificationSer
 // Host-composed dashboard (§C.6 / P45): the cross-module composition root, dispatching module read
 // queries via ISender. TimeProvider drives the "current accounting month" (injectable for tests).
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddScoped<RunPreviewIssuedCoverageService>();
 builder.Services.AddScoped<LeaseBook.Web.Dashboard.DashboardService>();
 
 // Host-composed per-entry audit trail (P56): joins host audit/identity tables with the Accounting

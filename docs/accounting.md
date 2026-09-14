@@ -3,7 +3,7 @@
 - **Audience:** Contributors, operators, and reviewers
 - **Status:** Living accounting guide
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-09-12
+- **Last reviewed:** 2026-09-14
 
 This is the canonical public explanation of the shipped trust-accounting model, written so a
 property manager, bookkeeper, or attorney can evaluate it without reading C#. The Accounting module
@@ -419,13 +419,17 @@ The person posting such an entry is told at the time. After a payment, charge, c
 void is recorded — and after a rent, late-fee or disbursement run is confirmed — the screen shows a
 notice naming each owner whose statement the posting falls under, the basis, and the latest month
 already issued, and saying the change will appear as a prior-period adjustment on the statement for
-the month after it. It follows the carry-forward's rules: the same owner, a statement issued for the
-entry's month or later, a basis the posting touches, a whole-owner statement or one for the same
-property, a statement read before the posting was made, and a posting that still moves that statement
-once its lines are netted the way the statement reads them. The notice is informational only: it is a
-separate read after posting, it never blocks or changes what was posted, and nothing about issued
-statements is an input to posting. If the check itself fails, the screen says so rather than showing
-nothing.
+the month after it. A run preview shows the same warning before confirmation, projected from the run
+plan through the same posting-template builders that confirmation uses and filtered to the targets
+currently selected. The post-confirm notice remains the exact check against the entries actually
+written, including a statement issued after the preview was read.
+
+Both notices follow the carry-forward's rules: the same owner, a statement issued for the entry's
+month or later, a basis the posting touches, a whole-owner statement or one for the same property, a
+statement read before the posting was made, and a posting that still moves that statement once its
+lines are netted the way the statement reads them. They are informational only: neither blocks or
+changes a posting, and nothing about issued statements is an input to posting. If either check fails,
+the screen says so rather than showing nothing.
 
 ### The ADR-016 read-layer boundary
 
