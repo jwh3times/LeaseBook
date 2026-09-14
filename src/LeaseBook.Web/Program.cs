@@ -49,8 +49,8 @@ if (process.Error is { } processError)
 var lifecycle = process.Lifecycle!;
 var builder = WebApplication.CreateBuilder(args);
 
-// Module assemblies the host composes. CQRS handlers/validators are discovered from these; endpoint
-// modules are discovered from these plus the host (which owns the auth/meta endpoints).
+// Module assemblies the host composes. CQRS handlers/validators and endpoint modules are discovered
+// from these plus the host (which owns cross-module reporting slices and auth/meta endpoints).
 Assembly[] moduleAssemblies =
 [
     typeof(LeaseBook.Modules.Accounting.ModuleMarker).Assembly,
@@ -62,7 +62,7 @@ Assembly[] moduleAssemblies =
 ];
 Assembly[] endpointAssemblies = [.. moduleAssemblies, typeof(Program).Assembly];
 
-builder.Services.AddLeaseBookCqrs(moduleAssemblies);
+builder.Services.AddLeaseBookCqrs(endpointAssemblies);
 
 // RFC 7807 everywhere (P17): ProblemDetails defaults + the CQRS ValidationException → 400 mapping.
 builder.Services.AddProblemDetails();
@@ -271,7 +271,6 @@ builder.Services.AddScoped<LeaseBook.Web.Onboarding.Verification.VerificationSer
 // Host-composed dashboard (§C.6 / P45): the cross-module composition root, dispatching module read
 // queries via ISender. TimeProvider drives the "current accounting month" (injectable for tests).
 builder.Services.AddSingleton(TimeProvider.System);
-builder.Services.AddScoped<RunPreviewIssuedCoverageService>();
 builder.Services.AddScoped<LeaseBook.Web.Dashboard.DashboardService>();
 
 // Host-composed per-entry audit trail (P56): joins host audit/identity tables with the Accounting

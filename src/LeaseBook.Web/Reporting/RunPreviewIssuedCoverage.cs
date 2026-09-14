@@ -1,3 +1,4 @@
+using FluentValidation;
 using LeaseBook.Modules.Accounting.Contracts;
 using LeaseBook.Modules.Accounting.Features.Statements;
 using LeaseBook.Modules.Operations.Domain;
@@ -26,22 +27,46 @@ public sealed record RunPreviewIssuedCoverageRow(
 /// <summary>SPA shape for a run preview's issued-statement coverage read.</summary>
 public sealed record RunPreviewIssuedCoverageResponse(IReadOnlyList<RunPreviewIssuedCoverageRow> Rows);
 
+/// <summary>Reads prospective issued-statement coverage for one bulk-run preview period.</summary>
+public sealed record GetRunPreviewIssuedCoverage(string Type, int? Year, int? Month)
+    : IQuery<RunPreviewIssuedCoverageResponse>;
+
+public sealed class GetRunPreviewIssuedCoverageValidator : AbstractValidator<GetRunPreviewIssuedCoverage>
+{
+    public GetRunPreviewIssuedCoverageValidator()
+    {
+        RuleFor(q => q.Type)
+            .Cascade(CascadeMode.Stop)
+            .NotEmpty()
+            .Must(type => RunPreviewIssuedCoverageRunType.TryParse(type, out _))
+            .WithMessage("That is not a run type this screen supports.");
+        RuleFor(q => q.Year)
+            .InclusiveBetween(2000, 2100)
+            .When(q => q.Year.HasValue);
+        RuleFor(q => q.Month)
+            .InclusiveBetween(1, 12)
+            .When(q => q.Month.HasValue);
+    }
+}
+
 /// <summary>
 /// Composes Operations' side-effect-free run plan, Accounting's dry-run event projection and #377's
 /// issued-statement matcher. It is a separate read from the capability-stamped run preview by design.
 /// </summary>
-public sealed class RunPreviewIssuedCoverageService(
+internal sealed class GetRunPreviewIssuedCoverageHandler(
     RunEngine engine,
     ISender sender,
     AppDbContext db,
     IStatementNames names,
-    TimeProvider clock)
+    TimeProvider clock) : IQueryHandler<GetRunPreviewIssuedCoverage, RunPreviewIssuedCoverageResponse>
 {
-    public async Task<RunPreviewIssuedCoverageResponse> ReadAsync(
-        RunType runType,
-        RunPeriod period,
+    public async Task<RunPreviewIssuedCoverageResponse> Handle(
+        GetRunPreviewIssuedCoverage query,
         CancellationToken ct)
     {
+        var now = clock.GetUtcNow();
+        var runType = RunPreviewIssuedCoverageRunType.Parse(query.Type);
+        var period = new RunPeriod(query.Year ?? now.Year, query.Month ?? now.Month);
         var candidates = await engine.EligibleTargetsAsync(runType, period, ct);
         if (candidates.Count == 0)
         {
@@ -91,7 +116,7 @@ public sealed class RunPreviewIssuedCoverageService(
                 "The Accounting run-event projection must return exactly one owner-equity line per event.");
         }
 
-        var postedAt = clock.GetUtcNow().UtcDateTime;
+        var postedAt = now.UtcDateTime;
         var linesByTarget = prospective
             .Select((line, index) => new
             {
@@ -142,4 +167,23 @@ public sealed class RunPreviewIssuedCoverageService(
     private static int PeriodIndex(int year, int month) => (year * 12) + (month - 1);
 
     private sealed record EventSlot(Guid TargetId, AccountingEvent Event);
+}
+
+internal static class RunPreviewIssuedCoverageRunType
+{
+    public static RunType Parse(string raw) => TryParse(raw, out var runType)
+        ? runType
+        : throw new InvalidOperationException("Run preview coverage was dispatched without valid input.");
+
+    public static bool TryParse(string raw, out RunType runType)
+    {
+        runType = raw.ToLowerInvariant() switch
+        {
+            "rent" => RunType.Rent,
+            "latefee" => RunType.LateFee,
+            "disbursement" => RunType.Disbursement,
+            _ => (RunType)(-1),
+        };
+        return (int)runType >= 0;
+    }
 }

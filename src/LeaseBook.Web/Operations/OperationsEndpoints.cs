@@ -45,12 +45,30 @@ public sealed class OperationsEndpoints : IEndpointModule
                 async (string type, int? year, int? month, RunEngine engine, HttpContext httpContext,
                     CancellationToken ct) =>
                 {
-                    if (!TryBindRunPeriod(type, year, month, httpContext, out var binding, out var problem))
+                    if (!TryParseRunType(type, out var runType))
                     {
-                        return problem!;
+                        return ProblemResults.Problem(
+                            httpContext,
+                            code: "unknown_run_type",
+                            detail: "That is not a run type this screen supports.",
+                            status: StatusCodes.Status400BadRequest);
                     }
 
-                    var preview = await engine.PreviewAsync(binding.RunType, binding.Period, ct);
+                    var now = DateTime.UtcNow;
+                    var actualYear = year ?? now.Year;
+                    var actualMonth = month ?? now.Month;
+
+                    if (actualMonth < 1 || actualMonth > 12 || actualYear < 2000 || actualYear > 2100)
+                    {
+                        return ProblemResults.Problem(
+                            httpContext,
+                            code: "invalid_period",
+                            detail: $"Invalid period: year={actualYear} month={actualMonth}. Year must be 2000–2100; month must be 1–12.",
+                            status: StatusCodes.Status400BadRequest);
+                    }
+
+                    var period = new RunPeriod(actualYear, actualMonth);
+                    var preview = await engine.PreviewAsync(runType, period, ct);
 
                     var rows = preview.Rows.Select(r => new PreviewRowSpa(
                         r.TargetId,
@@ -62,9 +80,9 @@ public sealed class OperationsEndpoints : IEndpointModule
                         r.Detail)).ToList();
 
                     return Results.Ok(new RunPreviewSpaResponse(
-                        binding.RunType.ToString(),
-                        binding.Period.Year,
-                        binding.Period.Month,
+                        runType.ToString(),
+                        period.Year,
+                        period.Month,
                         rows,
                         preview.Exceptions,
                         preview.CapabilitiesVersion));
@@ -74,17 +92,9 @@ public sealed class OperationsEndpoints : IEndpointModule
         // GET /api/operations/runs/{type}/preview/issued-coverage?year=&month=
         // Separate from the capability-stamped preview: this is a non-blocking heads-up only.
         group.MapGet("/runs/{type}/preview/issued-coverage",
-                async (string type, int? year, int? month, RunPreviewIssuedCoverageService coverage,
-                    HttpContext httpContext, CancellationToken ct) =>
-                {
-                    if (!TryBindRunPeriod(type, year, month, httpContext, out var binding, out var problem))
-                    {
-                        return problem!;
-                    }
-
-                    return Results.Ok(await coverage.ReadAsync(
-                        binding.RunType, binding.Period, ct));
-                })
+                async (string type, int? year, int? month, LeaseBook.SharedKernel.Cqrs.ISender sender,
+                    CancellationToken ct) => TypedResults.Ok(await sender.Query(
+                        new GetRunPreviewIssuedCoverage(type, year, month), ct)))
             .Produces<RunPreviewIssuedCoverageResponse>();
 
         // POST /api/operations/runs/{type}/confirm
@@ -227,44 +237,6 @@ public sealed class OperationsEndpoints : IEndpointModule
         return (int)runType >= 0;
     }
 
-    private static bool TryBindRunPeriod(
-        string rawType,
-        int? year,
-        int? month,
-        HttpContext httpContext,
-        out RunPeriodBinding binding,
-        out IResult problem)
-    {
-        binding = default;
-        if (!TryParseRunType(rawType, out var runType))
-        {
-            problem = ProblemResults.Problem(
-                httpContext,
-                code: "unknown_run_type",
-                detail: "That is not a run type this screen supports.",
-                status: StatusCodes.Status400BadRequest);
-            return false;
-        }
-
-        var now = DateTime.UtcNow;
-        var actualYear = year ?? now.Year;
-        var actualMonth = month ?? now.Month;
-        if (actualMonth < 1 || actualMonth > 12 || actualYear < 2000 || actualYear > 2100)
-        {
-            problem = ProblemResults.Problem(
-                httpContext,
-                code: "invalid_period",
-                detail: $"Invalid period: year={actualYear} month={actualMonth}. Year must be 2000–2100; month must be 1–12.",
-                status: StatusCodes.Status400BadRequest);
-            return false;
-        }
-
-        binding = new RunPeriodBinding(runType, new RunPeriod(actualYear, actualMonth));
-        problem = null!;
-        return true;
-    }
-
-    private readonly record struct RunPeriodBinding(RunType RunType, RunPeriod Period);
 }
 
 // ─── SPA-shaped request / response records ────────────────────────────────────
