@@ -31,11 +31,11 @@
     "@fontsource/plus-jakarta-sans": "^5.3.0",
     "@tanstack/react-query": "^5.102.8",
     "@tanstack/react-query-devtools": "^5.102.8",
-    "@tanstack/react-virtual": "^3.14.11",
+    "@tanstack/react-virtual": "^3.14.12",
     "qrcode": "^1.5.4",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
-    "react-hook-form": "^7.87.0",
+    "react-hook-form": "^7.88.0",
     "react-router": "^8.3.1",
     "zod": "^4.6.2"
   },
