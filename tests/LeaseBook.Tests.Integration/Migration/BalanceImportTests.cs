@@ -600,6 +600,50 @@ public sealed class BalanceImportTests(PostgresFixture fixture)
         }, ct);
     }
 
+    [Fact]
+    public async Task Mixed_batch_persists_consistent_row_numbers()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var setup = await SetupAsync("MixedRowNumbers", ct);
+
+        var csv =
+            "Account ID,Account Name,Book Balance\n" +
+            $"B-1,{setup.TrustBankName},100.00\n" +
+            "B-2,,200.00\n" +
+            $"B-3,{setup.DepositBankName},300.00\n" +
+            $"B-4,{setup.TrustBankName},not-a-number\n";
+
+        var result = await PostBalanceImportAsync<ImportBatchResult>(
+            setup.Client,
+            "bank_balances",
+            new { csvContent = csv, cutoverDate = CutoverStr, filename = "banks-mixed.csv" },
+            ct);
+
+        result.RowCount.ShouldBe(4);
+        result.ErrorCount.ShouldBe(2);
+
+        var tenant = new OrgContext { OrgId = setup.OrgId };
+        var actor = new ActorContext();
+        await using var db = fixture.CreateContext(fixture.AppConnectionString, tenant, actor);
+        var executor = new OrgScopedExecutor(db, tenant, actor);
+
+        await executor.RunAsSystemAsync(setup.OrgId, "test-harness", async () =>
+        {
+            var rows = await db.Set<ImportRow>()
+                .Where(row => row.BatchId == result.BatchId)
+                .OrderBy(row => row.RowNumber)
+                .ToListAsync(ct);
+
+            rows.Select(row => row.RowNumber).ShouldBe(new[] { 1, 2, 3, 4 });
+            rows.Where(row => row.RowStatus == "posted")
+                .Select(row => row.RowNumber)
+                .ShouldBe(new[] { 1, 3 });
+            rows.Where(row => row.RowStatus == "error")
+                .Select(row => row.RowNumber)
+                .ShouldBe(new[] { 2, 4 });
+        }, ct);
+    }
+
     // -------------------------------------------------------------------------
     // Fix 3: empty CsvContent → HTTP 400 (empty_csv)
     // -------------------------------------------------------------------------

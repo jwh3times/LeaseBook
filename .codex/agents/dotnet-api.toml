@@ -22,7 +22,7 @@ src/
 tests/
   LeaseBook.Tests.Common/          — PostgresFixture, OrgScope, ApiFactory
   LeaseBook.Tests.Integration/     — integration tests (Testcontainers)
-  LeaseBook.Tests.Unit/            — pure unit tests (no DB)
+  LeaseBook.Tests.Web/             — pure tests for host-local code (no DB or HTTP)
 ```
 
 Modules reference `SharedKernel` only. Cross-module calls go through Contracts ports (see boundary rules). `ModuleBoundaryTests` enforces this at the assembly level.
