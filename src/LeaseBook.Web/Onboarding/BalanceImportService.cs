@@ -136,7 +136,7 @@ public sealed class BalanceImportService(
             }
         }
 
-        var totalErrors = rowOutcomes.Count(r => r.IsError);
+        var summary = ImportBatchMechanics.Summarize(rowOutcomes.Select(outcome => outcome.Kind).ToList());
         var batchErrors = rowOutcomes
             .Where(r => r.IsError)
             .Select(r => new ImportBatchError(r.RowNumber, r.ErrorField!, r.ErrorReason!))
@@ -147,9 +147,9 @@ public sealed class BalanceImportService(
             definition.PersistedName,
             definition.ProfileId,
             filename,
-            rowCount: rowOutcomes.Count,
-            errorCount: totalErrors,
-            status: totalErrors == 0 ? "posted" : "posted_with_errors",
+            rowCount: summary.RowCount,
+            errorCount: summary.ErrorCount,
+            status: summary.Status,
             actor: actor.UserId);
 
         db.Set<ImportBatch>().Add(batch);
@@ -157,15 +157,12 @@ public sealed class BalanceImportService(
 
         await db.SaveChangesAsync(ct);
 
-        var counts = new ImportOutcomeCounts(
-            Posted: rowOutcomes.Count(r => !r.IsError && !r.IsSkipped && !r.AlreadyPosted),
-            AlreadyPosted: rowOutcomes.Count(r => r.AlreadyPosted),
-            Unchanged: 0,
-            Superseded: 0,
-            Skipped: rowOutcomes.Count(r => r.IsSkipped),
-            Errors: totalErrors);
-
-        return new ImportBatchResult(batch.Id, rowOutcomes.Count, totalErrors, counts, batchErrors);
+        return new ImportBatchResult(
+            batch.Id,
+            summary.RowCount,
+            summary.ErrorCount,
+            summary.Counts,
+            batchErrors);
     }
 
     // -------------------------------------------------------------------------
@@ -237,10 +234,6 @@ public sealed class BalanceImportService(
 
         // Row buckets partition every resolvable row exactly once, by precedence
         // Superseded > Posted > Unchanged > Skipped (error rows are the pre-seeded ResolutionErrors).
-        var posted = 0;
-        var unchanged = 0;
-        var superseded = 0;
-        var skipped = 0;
         var reversedEntryIds = new List<Guid>();
 
         foreach (var rowGroup in plan.Positions.GroupBy(p => p.RowNumber))
@@ -337,26 +330,33 @@ public sealed class BalanceImportService(
 
             // Bucket the row exactly once by precedence, and record one outcome row for it. The resulting
             // journal-entry id prefers a new revision, then the void mirror, then the untouched entry.
-            bool alreadyPosted;
-            if (anyChanged) { superseded++; alreadyPosted = false; }
-            else if (anyNewPost) { posted++; alreadyPosted = false; }
-            else if (anyUnchanged) { unchanged++; alreadyPosted = true; }
-            else { skipped++; alreadyPosted = false; }
+            var outcomeKind = anyChanged
+                ? ImportOutcomeKind.Superseded
+                : anyNewPost
+                    ? ImportOutcomeKind.Posted
+                    : anyUnchanged
+                        ? ImportOutcomeKind.Unchanged
+                        : ImportOutcomeKind.Skipped;
 
             var resultingId = revisionEntryId ?? reversalEntryId ?? unchangedEntryId;
             outcomes.Add(resultingId is Guid id
-                ? BalanceRowOutcome.Success(head.RowNumber, head.ExternalId, head.RawJson, id, alreadyPosted)
+                ? BalanceRowOutcome.WithJournalEntry(
+                    head.RowNumber,
+                    head.ExternalId,
+                    head.RawJson,
+                    id,
+                    outcomeKind)
                 : BalanceRowOutcome.Skipped(head.RowNumber, head.ExternalId, head.RawJson));
         }
 
-        var totalErrors = outcomes.Count(r => r.IsError);
+        var summary = ImportBatchMechanics.Summarize(outcomes.Select(outcome => outcome.Kind).ToList());
         var batch = ImportBatch.Create(
             definition.PersistedName,
             definition.ProfileId,
             filename,
-            rowCount: outcomes.Count,
-            errorCount: totalErrors,
-            status: totalErrors == 0 ? "posted" : "posted_with_errors",
+            rowCount: summary.RowCount,
+            errorCount: summary.ErrorCount,
+            status: summary.Status,
             actor: actor.UserId,
             supersedesBatchId: priorBatch.Id);
 
@@ -376,18 +376,17 @@ public sealed class BalanceImportService(
                 batchId = batch.Id,
                 supersedesBatchId = priorBatch.Id,
                 kind = definition.PersistedName,
-                superseded,
-                posted,
-                unchanged,
-                skipped,
+                superseded = summary.Counts.Superseded,
+                posted = summary.Counts.Posted,
+                unchanged = summary.Counts.Unchanged,
+                skipped = summary.Counts.Skipped,
                 reversedEntryIds,
             }, JsonOpts),
         });
 
         await db.SaveChangesAsync(ct);
 
-        var counts = new ImportOutcomeCounts(posted, AlreadyPosted: 0, unchanged, superseded, skipped, totalErrors);
-        return new ImportBatchResult(batch.Id, outcomes.Count, totalErrors, counts,
+        return new ImportBatchResult(batch.Id, summary.RowCount, summary.ErrorCount, summary.Counts,
             outcomes.Where(r => r.IsError)
                 .Select(r => new ImportBatchError(r.RowNumber, r.ErrorField!, r.ErrorReason!))
                 .ToList());
@@ -502,7 +501,7 @@ public sealed class BalanceImportService(
             .Where(b => b.IsActive)
             .ToListAsync(ct);
 
-        foreach (var (row, rowNumber) in WithSourceRowNumbers(parsed.Rows, parsed.Errors))
+        foreach (var (row, rowNumber) in ImportBatchMechanics.AssignSourceRowNumbers(parsed.Rows, parsed.Errors))
         {
             var rawJson = SerializeRaw(new { row.ExternalBankId, row.Name, row.BookBalance });
 
@@ -564,7 +563,7 @@ public sealed class BalanceImportService(
 
         if (operatingTrustId is null)
         {
-            foreach (var (row, rowNumber) in WithSourceRowNumbers(parsed.Rows, parsed.Errors))
+            foreach (var (row, rowNumber) in ImportBatchMechanics.AssignSourceRowNumbers(parsed.Rows, parsed.Errors))
             {
                 var rawJson = SerializeRaw(new { row.ExternalOwnerId, row.Name, row.CashBalance, row.AccrualBalance });
                 errors.Add(BalanceRowOutcome.Error(rowNumber, row.ExternalOwnerId, rawJson,
@@ -573,7 +572,7 @@ public sealed class BalanceImportService(
             return new BalancePlan(positions, errors);
         }
 
-        foreach (var (row, rowNumber) in WithSourceRowNumbers(parsed.Rows, parsed.Errors))
+        foreach (var (row, rowNumber) in ImportBatchMechanics.AssignSourceRowNumbers(parsed.Rows, parsed.Errors))
         {
             var rawJson = SerializeRaw(new { row.ExternalOwnerId, row.Name, row.CashBalance, row.AccrualBalance });
 
@@ -637,7 +636,7 @@ public sealed class BalanceImportService(
 
         if (depositTrustId is null)
         {
-            foreach (var (row, rowNumber) in WithSourceRowNumbers(parsed.Rows, parsed.Errors))
+            foreach (var (row, rowNumber) in ImportBatchMechanics.AssignSourceRowNumbers(parsed.Rows, parsed.Errors))
             {
                 var rawJson = SerializeRaw(new { row.ExternalTenantId, row.ExternalOwnerId, row.HeldAmount });
                 errors.Add(BalanceRowOutcome.Error(rowNumber, row.ExternalTenantId, rawJson,
@@ -646,7 +645,7 @@ public sealed class BalanceImportService(
             return new BalancePlan(positions, errors);
         }
 
-        foreach (var (row, rowNumber) in WithSourceRowNumbers(parsed.Rows, parsed.Errors))
+        foreach (var (row, rowNumber) in ImportBatchMechanics.AssignSourceRowNumbers(parsed.Rows, parsed.Errors))
         {
             var rawJson = SerializeRaw(new { row.ExternalTenantId, row.ExternalOwnerId, row.HeldAmount });
 
@@ -712,7 +711,7 @@ public sealed class BalanceImportService(
         var ownerMap = await resolver.BuildMapAsync(AppFolioImportCatalog.Owners, ct);
         var tenantMap = await BuildTenantMapAsync(ct);
 
-        foreach (var (row, rowNumber) in WithSourceRowNumbers(parsed.Rows, parsed.Errors))
+        foreach (var (row, rowNumber) in ImportBatchMechanics.AssignSourceRowNumbers(parsed.Rows, parsed.Errors))
         {
             var rawJson = SerializeRaw(new { row.ExternalTenantId, row.ExternalOwnerId, row.Balance });
 
@@ -766,7 +765,7 @@ public sealed class BalanceImportService(
             .Where(b => b.IsActive)
             .ToListAsync(ct);
 
-        foreach (var (row, rowNumber) in WithSourceRowNumbers(parsed.Rows, parsed.Errors))
+        foreach (var (row, rowNumber) in ImportBatchMechanics.AssignSourceRowNumbers(parsed.Rows, parsed.Errors))
         {
             var rawJson = SerializeRaw(new { row.ExternalBankId, row.Name, row.HeldAmount });
 
@@ -898,23 +897,6 @@ public sealed class BalanceImportService(
             outcomes.Add(BalanceRowOutcome.Error(e.RowNumber, string.Empty, "{}", e.Field, e.Reason));
     }
 
-    /// <summary>
-    /// Pairs each valid row with its true 1-based source CSV row number, skipping slots taken
-    /// by parse errors (same interleaving logic as <see cref="EntityImportService"/>).
-    /// </summary>
-    private static IEnumerable<(TRow Row, int RowNumber)> WithSourceRowNumbers<TRow>(
-        IReadOnlyList<TRow> validRows,
-        IReadOnlyList<RowError> parseErrors)
-    {
-        var errorRowNumbers = parseErrors.Select(e => e.RowNumber).ToHashSet();
-        var sourceRow = 0;
-        foreach (var row in validRows)
-        {
-            do { sourceRow++; } while (errorRowNumbers.Contains(sourceRow));
-            yield return (row, sourceRow);
-        }
-    }
-
     private static string SerializeRaw(object obj) =>
         JsonSerializer.Serialize(obj, JsonOpts);
 
@@ -1011,21 +993,48 @@ public sealed class BalanceImportService(
         string ExternalId,
         string RawJson,
         Guid? JournalEntryId,
-        bool AlreadyPosted,
-        bool IsSkipped,
-        bool IsError,
+        ImportOutcomeKind Kind,
         string? ErrorField,
         string? ErrorReason)
     {
+        public bool AlreadyPosted => Kind is ImportOutcomeKind.AlreadyPosted or ImportOutcomeKind.Unchanged;
+        public bool IsSkipped => Kind == ImportOutcomeKind.Skipped;
+        public bool IsError => Kind == ImportOutcomeKind.Error;
+
         public static BalanceRowOutcome Success(int rowNumber, string externalId, string rawJson, Guid entryId, bool alreadyPosted) =>
-            new(rowNumber, externalId, rawJson, entryId, alreadyPosted, false, false, null, null);
+            new(
+                rowNumber,
+                externalId,
+                rawJson,
+                entryId,
+                alreadyPosted ? ImportOutcomeKind.AlreadyPosted : ImportOutcomeKind.Posted,
+                null,
+                null);
+
+        public static BalanceRowOutcome WithJournalEntry(
+            int rowNumber,
+            string externalId,
+            string rawJson,
+            Guid entryId,
+            ImportOutcomeKind kind)
+        {
+            if (kind is not (ImportOutcomeKind.Posted
+                or ImportOutcomeKind.AlreadyPosted
+                or ImportOutcomeKind.Unchanged
+                or ImportOutcomeKind.Superseded))
+            {
+                throw new ArgumentOutOfRangeException(nameof(kind), kind, "The outcome must carry a journal entry.");
+            }
+
+            return new BalanceRowOutcome(rowNumber, externalId, rawJson, entryId, kind, null, null);
+        }
 
         /// <summary>A no-op row: every line of the row was an exactly-zero figure, so nothing was posted.</summary>
         public static BalanceRowOutcome Skipped(int rowNumber, string externalId, string rawJson) =>
-            new(rowNumber, externalId, rawJson, null, false, true, false, null, null);
+            new(rowNumber, externalId, rawJson, null, ImportOutcomeKind.Skipped, null, null);
 
         public static BalanceRowOutcome Error(int rowNumber, string externalId, string rawJson, string field, string reason) =>
-            new(rowNumber, externalId, rawJson, null, false, false, true, field, reason);
+            new(rowNumber, externalId, rawJson, null, ImportOutcomeKind.Error, field, reason);
     }
 
     private sealed record BalanceApplication(
