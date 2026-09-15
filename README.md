@@ -124,7 +124,7 @@ Key design decisions (each recorded as an ADR in [`docs/adr/`](docs/adr)):
 .
 ├─ src/                     backend: host + module projects + shared kernel
 ├─ web/                     React + TypeScript SPA (Vite); e2e specs in web/e2e
-├─ tests/                   xUnit test projects (accounting, integration, architecture, shared kernel)
+├─ tests/                   xUnit test projects organized by module and test altitude
 ├─ infra/                   Bicep modules and environment parameters
 ├─ docs/                    architecture, accounting, ADRs, product scope, runbooks, and roadmap
 ├─ scripts/                 local dev helpers (dev.ps1)
