@@ -32,6 +32,8 @@
          Capabilities module. A readiness gate that can only ever answer 200 is not a gate, and the
          only way to observe the 503 branch on a live host is to put that state back to cold. -->
     <InternalsVisibleTo Include="LeaseBook.Tests.Integration" />
+    <!-- Pure tests for host-local implementations that carry no database or HTTP dependency. -->
+    <InternalsVisibleTo Include="LeaseBook.Tests.Web" />
   </ItemGroup>
 
   <PropertyGroup>

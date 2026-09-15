@@ -1,33 +1,12 @@
-using LeaseBook.Migrator.Csv;
 using LeaseBook.Web.Onboarding;
 using Shouldly;
 
-namespace LeaseBook.Tests.Integration.Migration;
+namespace LeaseBook.Tests.Web;
 
-public sealed class ImportBatchMechanicsTests
+public sealed class ImportBatchSummaryTests
 {
     [Fact]
-    public void AssignSourceRowNumbers_preserves_positions_around_parse_errors()
-    {
-        var validRows = new[] { "first", "third", "fifth" };
-        var parseErrors = new[]
-        {
-            new RowError(2, "name", "required"),
-            new RowError(4, "name", "required"),
-        };
-
-        var numberedRows = ImportBatchMechanics.AssignSourceRowNumbers(validRows, parseErrors);
-
-        numberedRows.ShouldBe(
-        [
-            ("first", 1),
-            ("third", 3),
-            ("fifth", 5),
-        ]);
-    }
-
-    [Fact]
-    public void Summarize_counts_outcomes_and_sets_the_error_status()
+    public void From_counts_outcomes_and_sets_the_error_status()
     {
         var outcomes = new[]
         {
@@ -40,7 +19,7 @@ public sealed class ImportBatchMechanicsTests
             ImportOutcomeKind.Error,
         };
 
-        var summary = ImportBatchMechanics.Summarize(outcomes);
+        var summary = ImportBatchSummary.From(outcomes);
 
         summary.ShouldBe(new ImportBatchSummary(
             RowCount: 7,
@@ -56,9 +35,9 @@ public sealed class ImportBatchMechanicsTests
     }
 
     [Fact]
-    public void Summarize_sets_the_posted_status_when_no_rows_failed()
+    public void From_sets_the_posted_status_when_no_rows_failed()
     {
-        var summary = ImportBatchMechanics.Summarize(
+        var summary = ImportBatchSummary.From(
         [
             ImportOutcomeKind.Posted,
             ImportOutcomeKind.AlreadyPosted,

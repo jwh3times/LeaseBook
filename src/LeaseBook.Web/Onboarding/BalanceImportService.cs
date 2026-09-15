@@ -136,7 +136,7 @@ public sealed class BalanceImportService(
             }
         }
 
-        var summary = ImportBatchMechanics.Summarize(rowOutcomes.Select(outcome => outcome.Kind).ToList());
+        var summary = ImportBatchSummary.From(rowOutcomes.Select(outcome => outcome.Kind).ToList());
         var batchErrors = rowOutcomes
             .Where(r => r.IsError)
             .Select(r => new ImportBatchError(r.RowNumber, r.ErrorField!, r.ErrorReason!))
@@ -349,7 +349,7 @@ public sealed class BalanceImportService(
                 : BalanceRowOutcome.Skipped(head.RowNumber, head.ExternalId, head.RawJson));
         }
 
-        var summary = ImportBatchMechanics.Summarize(outcomes.Select(outcome => outcome.Kind).ToList());
+        var summary = ImportBatchSummary.From(outcomes.Select(outcome => outcome.Kind).ToList());
         var batch = ImportBatch.Create(
             definition.PersistedName,
             definition.ProfileId,
@@ -501,7 +501,7 @@ public sealed class BalanceImportService(
             .Where(b => b.IsActive)
             .ToListAsync(ct);
 
-        foreach (var (row, rowNumber) in ImportBatchMechanics.AssignSourceRowNumbers(parsed.Rows, parsed.Errors))
+        foreach (var (row, rowNumber) in ImportSourceRows.AssignNumbers(parsed.Rows, parsed.Errors))
         {
             var rawJson = SerializeRaw(new { row.ExternalBankId, row.Name, row.BookBalance });
 
@@ -563,7 +563,7 @@ public sealed class BalanceImportService(
 
         if (operatingTrustId is null)
         {
-            foreach (var (row, rowNumber) in ImportBatchMechanics.AssignSourceRowNumbers(parsed.Rows, parsed.Errors))
+            foreach (var (row, rowNumber) in ImportSourceRows.AssignNumbers(parsed.Rows, parsed.Errors))
             {
                 var rawJson = SerializeRaw(new { row.ExternalOwnerId, row.Name, row.CashBalance, row.AccrualBalance });
                 errors.Add(BalanceRowOutcome.Error(rowNumber, row.ExternalOwnerId, rawJson,
@@ -572,7 +572,7 @@ public sealed class BalanceImportService(
             return new BalancePlan(positions, errors);
         }
 
-        foreach (var (row, rowNumber) in ImportBatchMechanics.AssignSourceRowNumbers(parsed.Rows, parsed.Errors))
+        foreach (var (row, rowNumber) in ImportSourceRows.AssignNumbers(parsed.Rows, parsed.Errors))
         {
             var rawJson = SerializeRaw(new { row.ExternalOwnerId, row.Name, row.CashBalance, row.AccrualBalance });
 
@@ -636,7 +636,7 @@ public sealed class BalanceImportService(
 
         if (depositTrustId is null)
         {
-            foreach (var (row, rowNumber) in ImportBatchMechanics.AssignSourceRowNumbers(parsed.Rows, parsed.Errors))
+            foreach (var (row, rowNumber) in ImportSourceRows.AssignNumbers(parsed.Rows, parsed.Errors))
             {
                 var rawJson = SerializeRaw(new { row.ExternalTenantId, row.ExternalOwnerId, row.HeldAmount });
                 errors.Add(BalanceRowOutcome.Error(rowNumber, row.ExternalTenantId, rawJson,
@@ -645,7 +645,7 @@ public sealed class BalanceImportService(
             return new BalancePlan(positions, errors);
         }
 
-        foreach (var (row, rowNumber) in ImportBatchMechanics.AssignSourceRowNumbers(parsed.Rows, parsed.Errors))
+        foreach (var (row, rowNumber) in ImportSourceRows.AssignNumbers(parsed.Rows, parsed.Errors))
         {
             var rawJson = SerializeRaw(new { row.ExternalTenantId, row.ExternalOwnerId, row.HeldAmount });
 
@@ -711,7 +711,7 @@ public sealed class BalanceImportService(
         var ownerMap = await resolver.BuildMapAsync(AppFolioImportCatalog.Owners, ct);
         var tenantMap = await BuildTenantMapAsync(ct);
 
-        foreach (var (row, rowNumber) in ImportBatchMechanics.AssignSourceRowNumbers(parsed.Rows, parsed.Errors))
+        foreach (var (row, rowNumber) in ImportSourceRows.AssignNumbers(parsed.Rows, parsed.Errors))
         {
             var rawJson = SerializeRaw(new { row.ExternalTenantId, row.ExternalOwnerId, row.Balance });
 
@@ -765,7 +765,7 @@ public sealed class BalanceImportService(
             .Where(b => b.IsActive)
             .ToListAsync(ct);
 
-        foreach (var (row, rowNumber) in ImportBatchMechanics.AssignSourceRowNumbers(parsed.Rows, parsed.Errors))
+        foreach (var (row, rowNumber) in ImportSourceRows.AssignNumbers(parsed.Rows, parsed.Errors))
         {
             var rawJson = SerializeRaw(new { row.ExternalBankId, row.Name, row.HeldAmount });
 

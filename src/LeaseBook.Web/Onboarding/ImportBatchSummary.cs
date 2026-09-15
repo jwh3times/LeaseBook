@@ -1,5 +1,3 @@
-using LeaseBook.Migrator.Csv;
-
 namespace LeaseBook.Web.Onboarding;
 
 /// <summary>The terminal classification of one staged import row.</summary>
@@ -17,39 +15,10 @@ internal sealed record ImportBatchSummary(
     int RowCount,
     int ErrorCount,
     string Status,
-    ImportOutcomeCounts Counts);
-
-internal static class ImportBatchMechanics
+    ImportOutcomeCounts Counts)
 {
-    /// <summary>
-    /// Assigns each successfully parsed row its original one-based CSV data-row number. Parser
-    /// errors already carry their source positions, so their positions are skipped rather than
-    /// reused by a valid row.
-    /// </summary>
-    internal static IReadOnlyList<(TRow Row, int RowNumber)> AssignSourceRowNumbers<TRow>(
-        IReadOnlyList<TRow> validRows,
-        IReadOnlyList<RowError> parseErrors)
-    {
-        var errorRowNumbers = parseErrors.Select(error => error.RowNumber).ToHashSet();
-        var numberedRows = new List<(TRow Row, int RowNumber)>(validRows.Count);
-        var sourceRow = 0;
-
-        foreach (var row in validRows)
-        {
-            do
-            {
-                sourceRow++;
-            }
-            while (errorRowNumbers.Contains(sourceRow));
-
-            numberedRows.Add((row, sourceRow));
-        }
-
-        return numberedRows;
-    }
-
     /// <summary>Derives the persisted batch status and response counts from immutable row outcomes.</summary>
-    internal static ImportBatchSummary Summarize(IReadOnlyList<ImportOutcomeKind> outcomes)
+    internal static ImportBatchSummary From(IReadOnlyList<ImportOutcomeKind> outcomes)
     {
         var posted = 0;
         var alreadyPosted = 0;

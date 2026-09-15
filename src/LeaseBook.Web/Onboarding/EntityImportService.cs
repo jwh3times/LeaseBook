@@ -79,7 +79,7 @@ public sealed class EntityImportService(
         var rowOutcomes = new List<RowOutcome>();
         await application.Run(this, csvStream, rowOutcomes, ct);
 
-        var summary = ImportBatchMechanics.Summarize(rowOutcomes
+        var summary = ImportBatchSummary.From(rowOutcomes
             .Select(outcome => outcome.IsError ? ImportOutcomeKind.Error : ImportOutcomeKind.Posted)
             .ToList());
         var batchErrors = rowOutcomes
@@ -141,7 +141,7 @@ public sealed class EntityImportService(
     {
         AddParseErrorOutcomes(parsed.Errors, outcomes);
 
-        foreach (var (row, rowNumber) in ImportBatchMechanics.AssignSourceRowNumbers(parsed.Rows, parsed.Errors))
+        foreach (var (row, rowNumber) in ImportSourceRows.AssignNumbers(parsed.Rows, parsed.Errors))
         {
             var rawJson = SerializeRaw(new { row.ExternalId, row.Name, row.Reserve });
             Guid leaseBookId;
@@ -180,7 +180,7 @@ public sealed class EntityImportService(
 
         var ownerMap = await resolver.BuildMapAsync(AppFolioImportCatalog.Owners, ct);
 
-        foreach (var (row, rowNumber) in ImportBatchMechanics.AssignSourceRowNumbers(parsed.Rows, parsed.Errors))
+        foreach (var (row, rowNumber) in ImportSourceRows.AssignNumbers(parsed.Rows, parsed.Errors))
         {
             var rawJson = SerializeRaw(new { row.ExternalId, row.ExternalOwnerId, row.Address });
 
@@ -228,7 +228,7 @@ public sealed class EntityImportService(
 
         var propertyMap = await resolver.BuildMapAsync(AppFolioImportCatalog.Properties, ct);
 
-        foreach (var (row, rowNumber) in ImportBatchMechanics.AssignSourceRowNumbers(parsed.Rows, parsed.Errors))
+        foreach (var (row, rowNumber) in ImportSourceRows.AssignNumbers(parsed.Rows, parsed.Errors))
         {
             var rawJson = SerializeRaw(new { row.ExternalId, row.ExternalPropertyId, row.Label, row.Rent, row.Status });
 
@@ -277,7 +277,7 @@ public sealed class EntityImportService(
 
         var unitMap = await resolver.BuildMapAsync(AppFolioImportCatalog.Units, ct);
 
-        foreach (var (row, rowNumber) in ImportBatchMechanics.AssignSourceRowNumbers(parsed.Rows, parsed.Errors))
+        foreach (var (row, rowNumber) in ImportSourceRows.AssignNumbers(parsed.Rows, parsed.Errors))
         {
             var rawJson = SerializeRaw(new
             {
