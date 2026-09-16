@@ -3,7 +3,7 @@
 - **Audience:** Operators and maintainers
 - **Status:** Living runbook; canonical error-diagnosis reference
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-09-14
+- **Last reviewed:** 2026-09-16
 
 How to turn the reference an operator sees on screen into the full server-side detail in
 Application Insights. See [ADR-025](../adr/ADR-025-error-contract-and-observability.md) for the
@@ -25,6 +25,14 @@ Query-string values are redacted by the current ASP.NET Core instrumentation, an
 boundary this runbook assumes. The distro uses that unsafe value by default, which is why ADR-025's
 2026-08 amendment defers adoption until metrics or Live Metrics are explicitly required and the
 privacy override can be validated in a live telemetry environment.
+
+One renderer setting sits on the same boundary. QuestPDF's `EnableDetailedLayoutErrors` — on by
+default since 2026.9.0 — puts fragments of the document being rendered into the layout exception's
+message, which for an owner statement means owner names, tenant names and money. `QuestPdfSetup` pins
+it off and `StatementOutputTests` holds it there; leave it off in any deployed configuration. A failed
+statement render arrives as a 500 with the exception attached, and the stack trace plus the statement
+identifiers already on the error path are the intended diagnosis. If a specific layout fault genuinely
+resists that, enable detail locally against a reproduction (ADR-025, 2026-09-16 amendment).
 
 The exporter retries transient ingestion failures and uses offline storage by default. That behavior
 does not require the distro. Microsoft Entra-authenticated ingestion is also available on the

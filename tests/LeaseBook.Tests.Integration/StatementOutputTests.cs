@@ -105,6 +105,78 @@ public sealed class StatementOutputTests(PostgresFixture fixture)
         allText.ShouldContain("Fiduciary");
     }
 
+    // ─── Fiduciary marks: drawn, not typed (issue #396) ────────────────────────
+
+    /// <summary>
+    /// The marks must reach the page as vector geometry whose <b>shape</b> tracks pass/fail — the
+    /// UX contract forbids conveying status by color alone, and the mark is the non-color channel.
+    /// <para>
+    /// Asserted as a delta rather than an absolute count, because the page draws other vectors
+    /// (rules, borders) that would keep a naive "some geometry exists" assertion green even with
+    /// every mark deleted. The tick is one subpath and the warning triangle is three, so each check
+    /// that flips to failing adds exactly two across the three-check panel. A render that drew no
+    /// mark, or that drew one shape and merely recolored it, moves these deltas to zero.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Fiduciary_marks_are_drawn_geometry_whose_shape_tracks_pass_and_fail()
+    {
+        var allPassing = BuildTestView();
+        var oneFailing = allPassing with
+        {
+            Fiduciary = allPassing.Fiduciary with { Balanced = false, Variance = 12.50m },
+        };
+        var allFailing = allPassing with
+        {
+            Fiduciary = allPassing.Fiduciary with
+            {
+                Balanced = false,
+                Variance = 12.50m,
+                PmIncomeExcluded = false,
+                DepositsRecognizedOnApplication = false,
+            },
+        };
+
+        var baseline = CountVectorSubpaths(StatementPdf.Render(allPassing));
+
+        CountVectorSubpaths(StatementPdf.Render(oneFailing)).ShouldBe(baseline + 2,
+            "one tick (1 subpath) became one warning triangle (3 subpaths)");
+        CountVectorSubpaths(StatementPdf.Render(allFailing)).ShouldBe(baseline + 6,
+            "all three ticks became warning triangles");
+    }
+
+    /// <summary>
+    /// Proves the glyph guard can actually be red. <see cref="QuestPdfSetup"/> leaves
+    /// <c>ThrowOnMissingTextGlyphs</c> on precisely so that text no deployed font can draw fails the
+    /// render instead of printing a hole; a guard nobody has seen fail is a guard nobody can trust.
+    /// </summary>
+    [Fact]
+    public void Text_no_deployed_font_can_draw_fails_the_render_rather_than_printing_a_hole()
+    {
+        // U+2713 — the very character this issue removed from the fiduciary panel. Lato has no
+        // coverage for it and system fonts are off, so no fallback can rescue it.
+        var view = BuildTestView() with { OwnerName = "Ridgeline ✓ Investments" };
+
+        Should.Throw<Exception>(() => StatementPdf.Render(view))
+            .Message.ShouldContain("✓");
+    }
+
+    [Fact]
+    public void QuestPdf_settings_are_pinned_rather_than_inherited_from_the_library()
+    {
+        QuestPdfSetup.Ensure();
+
+        // Fonts resolve identically in dev, CI and the chiseled runtime image.
+        QuestPDF.Settings.UseSystemFonts.ShouldBeFalse();
+
+        // A document with holes in it never ships.
+        QuestPDF.Settings.ThrowOnMissingTextGlyphs.ShouldBeTrue();
+        QuestPDF.Settings.ThrowOnMissingFontFamilies.ShouldBeTrue();
+
+        // Layout-failure messages must not carry owner names, tenant names or money into logs.
+        QuestPDF.Settings.EnableDetailedLayoutErrors.ShouldBeFalse();
+    }
+
     // ─── StatementCsv (unit-style, no HTTP) ────────────────────────────────────
 
     [Fact]
@@ -687,6 +759,18 @@ public sealed class StatementOutputTests(PostgresFixture fixture)
         }
 
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Counts vector subpaths across every page. Text is not counted — only drawn geometry — which
+    /// is what lets this tell "the mark was drawn" apart from "the mark was typed and dropped".
+    /// </summary>
+    private static int CountVectorSubpaths(byte[] pdfBytes)
+    {
+        using var document = PdfDocument.Open(pdfBytes);
+        return document.GetPages()
+            .SelectMany(page => page.Paths)
+            .Sum(path => path.Count);
     }
 
     /// <summary>Counts non-overlapping occurrences of <paramref name="needle"/> in <paramref name="haystack"/>.</summary>
