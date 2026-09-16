@@ -14,6 +14,14 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ## [Unreleased]
 
+### Added
+
+- **LeaseBook now has a browser and application icon.** Tabs, bookmarks, and pinned sites show the
+  mark instead of a blank page icon, and a web app manifest supplies the name, theme color, and
+  icons a browser uses when the app is added to a phone home screen or a desktop. Browser-chrome
+  sizes use a tighter crop than the home-screen icons, which stay padded so platforms can mask them
+  into their own tile shape.
+
 ### Fixed
 
 - **Disbursement previews no longer appear runnable when no operating trust account exists.** A
