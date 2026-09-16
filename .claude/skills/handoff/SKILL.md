@@ -17,6 +17,22 @@ The map is read and written only through `scripts/handoff-map.mjs` in this skill
 from the repo root so it can name the repo from the `origin` remote. It finds the Proton Drive
 `My files/Documents/Handoffs` folder itself; if it cannot, it says so and `HANDOFFS_DIR` overrides it.
 
+## How the Handoffs folder reaches this machine
+
+Two transports, decided by what is installed:
+
+- **Desktop client** (Windows) — the Proton Drive client keeps
+  `~/Proton Drive/<account>/My files/Documents/Handoffs` in sync on its own. Writing into that folder
+  is the whole sync; the CLI steps below are skipped.
+- **CLI mirror** (Fedora, where no client exists) — `proton-drive` (the Proton Drive CLI) is on
+  `PATH` and `HANDOFFS_DIR` names a local mirror folder. Nothing syncs by itself: each **Pull** and
+  **Push** block below is run explicitly, and the cloud folder is always
+  `/my-files/Documents/Handoffs`. A CLI reply of `You need to login first` means the user must run
+  `proton-drive auth login` first; that is an interactive step, not one for the agent.
+
+Decide once at the start: `command -v proton-drive` succeeds **and** the desktop client's folder is
+absent means CLI mirror; otherwise desktop client.
+
 ## Steps
 
 ### 1. Audit unmerged work and alert
@@ -76,6 +92,14 @@ case (`leasebook`) and `<focus>` is an optional short kebab slug. Write it to th
 
 ### 3. Publish and register
 
+**Pull** (CLI mirror only) — refresh the map before the script reads it, so the entry written on the
+other machine is the one this run supersedes:
+
+```bash
+mkdir -p "$HANDOFFS_DIR"
+proton-drive filesystem download -f remove /my-files/Documents/Handoffs/handoff_map.json "$HANDOFFS_DIR"
+```
+
 ```
 node <this skill's directory>/scripts/handoff-map.mjs publish <doc path>
 ```
@@ -88,6 +112,18 @@ its file stays in the folder.
 Done when `handoff-map.mjs get` reports this doc as `file` with `exists: true`. If the script fails,
 stop here, give the user the scratchpad path of the doc and the error, and skip step 4.
 
+**Push** (CLI mirror only) — the document and the map both leave this machine now:
+
+```bash
+proton-drive filesystem upload -f create-new-revision -t \
+  "$HANDOFFS_DIR/<file>" "$HANDOFFS_DIR/handoff_map.json" /my-files/Documents/Handoffs
+```
+
+`create-new-revision` keeps the cloud's earlier map as a revision instead of trashing it. The push is
+complete when the transfer summary lists both files as uploaded (an unchanged file reports as
+skipped, which is also complete). A summary with neither means the user's login lapsed — see the
+transport section above.
+
 ### 4. End the session
 
 Invoke the `end-session` skill and run it to completion. Anything it lands afterwards — closed issues,
@@ -97,5 +133,7 @@ current state.
 ### 5. Report
 
 - The published doc path and the map entry, plus any replaced previous handoff.
+- The reminder: run `/lets-go` in this repository on the other machine once the document is in the
+  cloud folder (the desktop client syncs it within a minute or so; a **Push** puts it there at once).
 - The step 1 alert again, updated for anything pushed since — or "All work is merged to `main`."
 - The `end-session` report.

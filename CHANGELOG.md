@@ -22,6 +22,13 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   sizes use a tighter crop than the home-screen icons, which stay padded so platforms can mask them
   into their own tile shape.
 
+### Changed
+
+- **`/handoff` and `/lets-go` now work on a machine without the Proton Drive desktop client.** Where
+  the `proton-drive` CLI is installed instead, `HANDOFFS_DIR` names a local mirror that the skills
+  pull the map (and the named handoff document) into and push back from, so a handoff written on one
+  machine reaches the other without a sync client.
+
 ### Fixed
 
 - **Disbursement previews no longer appear runnable when no operating trust account exists.** A
