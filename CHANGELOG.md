@@ -28,6 +28,12 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   preview with owner targets now reports the same missing-bank configuration error that confirmation
   would, before an operator reviews or selects rows. Preview and confirmation also derive owner
   eligibility and amounts from one decision, preventing their exclusion rules from drifting apart.
+- **Owner statement PDFs now show the fiduciary panel's pass and fail marks.** The tick and warning
+  marks beside each integrity check previously came out blank in generated statements, leaving the
+  panel to signal its result through color alone. They are now drawn directly rather than typed as
+  text, so they match the marks on screen and no longer depend on which fonts the machine
+  generating the statement happens to have. A statement that cannot render a character now fails
+  loudly instead of quietly printing a gap.
 
 ## [0.16.0] - 2026-09-14
 

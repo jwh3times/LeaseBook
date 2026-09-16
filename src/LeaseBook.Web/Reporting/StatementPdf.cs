@@ -29,20 +29,35 @@ public static class StatementPdf
     private static readonly TextStyle FidBoldStyle = TextStyle.Default.FontSize(9).Bold().FontColor(Colors.Black);
 
     /// <summary>
-    /// Ensures the QuestPDF Community license is set before the first render.
-    /// Idempotent — safe to call multiple times. <c>Program.cs</c> also sets it at host startup
-    /// (belt-and-suspenders); this method covers direct/test callers that bypass the host pipeline.
-    /// Static-field initializers run before any static constructor body, so calling this as the
-    /// first statement in <see cref="Render"/> guarantees the license is set before QuestPDF
-    /// accesses it, regardless of field-initializer ordering.
-    /// LeaseBook qualifies for the free Community tier (under $1M annual revenue).
+    /// Pass/fail marks for the fiduciary panel, drawn as vectors rather than typed as text.
+    /// <para>
+    /// These are the same paths the SPA's icon set uses for <c>check</c> and <c>alert</c>
+    /// (<c>web/src/design/Icon.tsx</c>), on the same 24×24 viewBox, so the printed statement and
+    /// the on-screen one carry the identical mark. Drawing them means the mark depends on no font:
+    /// the previous <c>"✓"</c> / <c>"✗"</c> were Dingbats (U+2713 / U+2717) that the bundled Lato
+    /// does not cover and the chiseled runtime image had no system font to supply, so they printed
+    /// as blanks (issue #396). Shape — a tick versus a warning triangle — is what keeps pass/fail
+    /// legible without relying on the green/red coloring.
+    /// </para>
     /// </summary>
-    private static void EnsureLicense()
+    private const string CheckPath = "M5 13l4 4L19 7";
+
+    private const string AlertPath =
+        "M12 9v4m0 4h.01M10.3 3.9L2 18a2 2 0 001.7 3h16.6a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z";
+
+    /// <summary>
+    /// Wraps one of the paths above in a standalone SVG document. <c>Icon.tsx</c> strokes with
+    /// <c>currentColor</c>, which has no meaning outside a DOM, so the color is resolved here from
+    /// the same palette entries the text marks used, rather than restated as a literal that could
+    /// drift away from them.
+    /// </summary>
+    private static string MarkSvg(bool passed)
     {
-        if (QuestPDF.Settings.License != LicenseType.Community)
-        {
-            QuestPDF.Settings.License = LicenseType.Community;
-        }
+        var color = passed ? Colors.Green.Darken2 : Colors.Red.Darken2;
+        var stroke = $"#{color.Red:X2}{color.Green:X2}{color.Blue:X2}";
+        var path = passed ? CheckPath : AlertPath;
+
+        return $"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="{stroke}" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="{path}"/></svg>""";
     }
 
     /// <summary>
@@ -51,7 +66,11 @@ public static class StatementPdf
     /// </summary>
     public static byte[] Render(StatementView view)
     {
-        EnsureLicense();
+        // Idempotent, and deliberately the first statement: static-field initializers run before any
+        // static constructor body, so this guarantees the settings are applied before QuestPDF reads
+        // them, regardless of field-initializer ordering. Covers CLI verbs, seeders and tests that
+        // reach the renderer without going through the host pipeline.
+        QuestPdfSetup.Ensure();
         ArgumentNullException.ThrowIfNull(view);
 
         return Document.Create(container =>
@@ -310,8 +329,7 @@ public static class StatementPdf
     {
         col.Item().PaddingTop(3).Row(row =>
         {
-            row.ConstantItem(14).Text(passed ? "✓" : "✗")
-                .Style(FidStyle.FontColor(passed ? Colors.Green.Darken2 : Colors.Red.Darken2).Bold());
+            row.ConstantItem(14).PaddingTop(1).Width(10).Height(10).Svg(MarkSvg(passed));
             row.RelativeItem().Column(inner =>
             {
                 inner.Item().Text(label).Style(FidBoldStyle);

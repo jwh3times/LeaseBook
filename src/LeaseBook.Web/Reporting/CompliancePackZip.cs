@@ -155,10 +155,7 @@ public static class CompliancePackZip
 
     private static byte[] CoverPdf(CompliancePack pack, string companyName, DateTime generatedAt)
     {
-        if (QuestPDF.Settings.License != LicenseType.Community)
-        {
-            QuestPDF.Settings.License = LicenseType.Community;
-        }
+        QuestPdfSetup.Ensure();
 
         var cover = pack.Cover;
         var eq = cover.ClosingEquation;
