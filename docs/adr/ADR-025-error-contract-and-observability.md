@@ -680,6 +680,37 @@ answers "is the response right?" — and only the second question is the one the
 list of paths. A middleware-written error response added without a case there is invisible to it
 exactly as the first two were to the IL scan. That is the narrowed revisit trigger recorded below.
 
+### 2026-09-16 amendment — the error-content rule reaches a third-party renderer's messages
+
+Issue #396. This ADR's content rule governs messages **LeaseBook writes**. QuestPDF 2026.9.0 made the
+gap visible: it renamed `EnableDebugging` to `EnableDetailedLayoutErrors` and turned it **on** by
+default. Enabled, a layout failure embeds fragments of the document being rendered into the exception
+message — and the document is an owner statement, so those fragments are owner names, tenant names and
+money. The terminal handler logs an unhandled exception object in full, so a library default would
+have decided what reaches the log pipeline.
+
+It is pinned **off** in `QuestPdfSetup` (`src/LeaseBook.Web/Reporting/`), deliberately against the new
+upstream default, together with every other QuestPDF process-wide setting — pinned rather than
+inherited so that a future default flip arrives as a diff on one file instead of as a silent change in
+what a statement PDF contains or an exception says. `StatementOutputTests` asserts each pinned value.
+
+**This is stricter than the server-side baseline above, on purpose.** The Decision deliberately moves
+diagnostic values (`AccountCode`, `Amount`, `TenantId`, `OwnerId`) onto typed exception properties
+_to be_ logged. The distinction is chosen versus incidental: a typed property is a named value someone
+decided to record, while a layout dump is unbounded prose whose contents nobody chose.
+
+**One narrower exception, stated so it is not mistaken for an oversight.**
+`ThrowOnMissingTextGlyphs`/`ThrowOnMissingFontFamilies` are pinned **on** — a statement that cannot
+draw a character must fail the render rather than print a hole, which is the defect #396 was filed
+against. That thrown message does name the offending run of text, which can be document content. It is
+accepted because it is bounded to the failing run, it is the only thing that makes the fault
+actionable, and it stays server-side: the terminal handler still returns the generic 500 and its
+reference, never the message.
+
+**Revisit trigger:** a statement layout fault that cannot be diagnosed from the stack trace plus the
+statement identifiers already on the error path. The response is to enable detail locally against a
+reproduction — not to change deployed configuration.
+
 ## Consequences
 
 - Every error response an operator can screenshot now carries a `Reference: <32-hex>` string they can

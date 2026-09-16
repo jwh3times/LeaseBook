@@ -28,11 +28,11 @@ using Microsoft.Extensions.Options;
 using OpenTelemetry.Logs;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
-using QuestPDF.Infrastructure;
 
-// QuestPDF Community license (M5 WP-04). Free for organizations under the $1M annual revenue
-// threshold; LeaseBook qualifies at launch. Must be set before the first document is rendered.
-QuestPDF.Settings.License = LicenseType.Community;
+// QuestPDF process-wide settings, including the Community license (M5 WP-04). Every value is pinned
+// in one place — see QuestPdfSetup for why each one is set rather than inherited. Must run before
+// the first document is rendered.
+QuestPdfSetup.Ensure();
 
 // Select exactly one process lifecycle before composing the host (ADR-042). Parsing is pure, so a
 // CLI usage error or an invalid CLI/OpenAPI hybrid fails before configuration or the database can.
