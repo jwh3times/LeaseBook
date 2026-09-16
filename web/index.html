@@ -4,6 +4,19 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>LeaseBook</title>
+    <!-- Icons live in web/public/ and are copied to the dist root by Vite, then into wwwroot by the
+         Dockerfile. They are served by UseStaticFiles(), which runs ahead of authentication, so the
+         login page gets them too. Three sets, and the distinction matters:
+           png-favicon/  tight crop (6% margin), for tab/bookmark sizes and every entry in the ICO
+           png-transparent/ and png-dark/  the padded app-icon ramp, correct for touch and PWA icons
+         The apple-touch-icon deliberately uses the opaque png-dark set: iOS composites a transparent
+         touch icon over pure black. -->
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/png-favicon/leasebook-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/png-favicon/leasebook-16x16.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/png-dark/leasebook-180x180.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <meta name="theme-color" content="#006c6c" />
   </head>
   <body>
     <div id="root"></div>

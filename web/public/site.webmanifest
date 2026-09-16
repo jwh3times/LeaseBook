@@ -1,0 +1,36 @@
+{
+  "id": "/",
+  "name": "LeaseBook",
+  "short_name": "LeaseBook",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "theme_color": "#006C6C",
+  "background_color": "#0C0F12",
+  "icons": [
+    {
+      "src": "/png-transparent/leasebook-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/png-transparent/leasebook-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/png-dark/leasebook-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/png-dark/leasebook-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
