@@ -23,6 +23,13 @@ web/src/
 
 Path alias `@/` → `web/src/`. Always use `@/design`, `@/components`, `@/api`, `@/lib` — never relative `../../`.
 
+`web/public/` holds the assets that must ship at the site root rather than through the bundler: the
+favicon/app-icon pack and `site.webmanifest`, linked from `web/index.html`. Vite copies the directory
+verbatim into `dist/`, and the Dockerfile copies `dist/` into the host's `wwwroot/`, so anything added
+there is published at `/<name>` and is served by `UseStaticFiles()` ahead of authentication. `web/ICONS.md`
+documents the pack, the two crops, and the ICO contents; it deliberately sits outside `public/` so the
+copy step does not publish it.
+
 ---
 
 ## Money formatting
