@@ -248,6 +248,16 @@ wiki page, as specified in the handoff guide. Add to those artifacts instead of 
 deployment board items or wiki pages. Defer execution until public distribution is elected; close
 the consolidated item only on distribution and completed deployment acceptance.
 
+### Machine handoff
+
+Switching machines uses `/handoff` (writes a handoff doc to the Proton Drive `Handoffs` folder,
+registers it in `handoff_map.json` through the skill's own `handoff-map.mjs`, then runs
+`/end-session`) and `/lets-go` on the other machine (resumes from that active handoff and clears its
+entry). The script finds the folder under `~/Proton Drive/<account>/My files/Documents/Handoffs`;
+set `HANDOFFS_DIR` where it is mounted elsewhere. On a machine with no Proton Drive desktop client
+(Fedora), `HANDOFFS_DIR` is a local mirror and both skills pull and push it through the
+`proton-drive` CLI against the cloud folder `/my-files/Documents/Handoffs`.
+
 ### Triage labels
 
 Default label vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`,
