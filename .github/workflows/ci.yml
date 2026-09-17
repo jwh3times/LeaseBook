@@ -457,8 +457,10 @@ jobs:
       # on (`QuestPdfSetup`), anything the image cannot supply fails the render as a 5xx, so "a real
       # PDF came back out of the container" is enough to catch the class without inspecting it.
       # Logs in exactly as the SPA does (antiforgery cookie echoed as X-XSRF-TOKEN), then renders
-      # the golden O5 statement for May 2026, cash basis, from the demo org the `seed` service loaded.
-      - name: Assert a statement PDF renders inside the image
+      # both QuestPDF documents from the demo org the `seed` service loaded: the golden O5 statement
+      # for May 2026, cash basis, and the compliance-pack cover for Operating Trust in April 2026 —
+      # the demo's one reconciliation-locked month, which the pack endpoint requires (else 422).
+      - name: Assert both PDF documents render inside the image
         run: |
           set -euo pipefail
           base="http://localhost:${LEASEBOOK_APP_PORT}"
@@ -497,6 +499,41 @@ jobs:
           # An error page cannot reach this floor; the real statement is well above it.
           if [ "$size" -lt 10000 ]; then
             echo "::error::The statement PDF is implausibly small ($size bytes)."
+            exit 1
+          fi
+
+          # The cover is the only PDF inside the pack ZIP; its CSV siblings cannot fail on a font.
+          zip="$(mktemp)"
+          read -r code type < <(curl -sS -b "$jar" -o "$zip" -w '%{http_code} %{content_type}\n' \
+            "$base/api/reports/compliance-pack?bankAccountId=01923000-0000-7000-8000-00000000ba01&from=2026-04-01&to=2026-04-30")
+          magic="$(head -c 2 "$zip")"
+          echo "Compliance pack: HTTP $code, Content-Type '$type', magic '$magic'"
+          if [ "$code" != 200 ]; then
+            echo "::error::The compliance pack did not render inside the image (HTTP $code)."
+            exit 1
+          fi
+          case "$type" in
+            application/zip*) ;;
+            *) echo "::error::Expected application/zip, got '$type'."; exit 1 ;;
+          esac
+          if [ "$magic" != 'PK' ]; then
+            echo "::error::The compliance pack body is not a ZIP (no PK header)."
+            exit 1
+          fi
+          cover="$(mktemp)"
+          if ! unzip -p "$zip" cover.pdf > "$cover"; then
+            echo "::error::The compliance pack has no readable cover.pdf entry."
+            exit 1
+          fi
+          size="$(stat -c %s "$cover")"
+          magic="$(head -c 5 "$cover")"
+          echo "Compliance-pack cover.pdf: $size bytes, magic '$magic'"
+          if [ "$magic" != '%PDF-' ]; then
+            echo "::error::cover.pdf is not a PDF (no %PDF- header)."
+            exit 1
+          fi
+          if [ "$size" -lt 10000 ]; then
+            echo "::error::cover.pdf is implausibly small ($size bytes)."
             exit 1
           fi
 
