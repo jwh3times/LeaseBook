@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
+import { MemoryRouter, useLocation, useNavigationType } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { trackInteraction } from '@/lib/telemetry';
 import { server } from '@/test/mocks/server';
@@ -63,13 +64,27 @@ function baseHandlers() {
 const registerHandler = (body: Record<string, unknown>) =>
   http.get('/api/accounting/banks/:id/register', () => HttpResponse.json(body));
 
-function renderPage() {
+function LocationProbe() {
+  const location = useLocation();
+  const navigationType = useNavigationType();
+  return (
+    <>
+      <output aria-label="location">{location.pathname + location.search}</output>
+      <output aria-label="navigation type">{navigationType}</output>
+    </>
+  );
+}
+
+function renderPage(url = '/banking') {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   render(
     <QueryClientProvider client={queryClient}>
-      <BankingPage />
+      <MemoryRouter initialEntries={[url]}>
+        <BankingPage />
+        <LocationProbe />
+      </MemoryRouter>
     </QueryClientProvider>,
   );
 }
@@ -120,6 +135,91 @@ describe('BankingPage register view', () => {
     );
     renderPage();
     expect(await screen.findByText('No transactions yet')).toBeInTheDocument();
+  });
+});
+
+describe('BankingPage account deep link', () => {
+  const TWO_ACCOUNTS = {
+    rows: [
+      ...BALANCES.rows,
+      { bankAccountId: 'acct2', name: 'Security Deposits', book: 900, cleared: 900, uncleared: 0 },
+    ],
+  };
+  const registerFor = (requested: string[]) =>
+    http.get('/api/accounting/banks/:id/register', ({ params }) => {
+      requested.push(String(params.id));
+      return HttpResponse.json(REGISTER);
+    });
+
+  it('opens the account named by ?account= instead of the first one', async () => {
+    const requested: string[] = [];
+    server.use(
+      http.get('/api/accounting/banks/balances', () => HttpResponse.json(TWO_ACCOUNTS)),
+      ...baseHandlers(),
+      registerFor(requested),
+    );
+    renderPage('/banking?account=acct2');
+
+    const deposits = await screen.findByRole('button', { name: /Security Deposits/ });
+    await screen.findByText('Rent deposit');
+    expect(deposits).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: /Operating Trust/ })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
+    expect(requested).toEqual(['acct2']);
+  });
+
+  it('falls back to the first account when ?account= names no account', async () => {
+    const requested: string[] = [];
+    server.use(
+      http.get('/api/accounting/banks/balances', () => HttpResponse.json(TWO_ACCOUNTS)),
+      ...baseHandlers(),
+      registerFor(requested),
+    );
+    renderPage('/banking?account=nope');
+
+    await screen.findByText('Rent deposit');
+    expect(screen.getByRole('button', { name: /Operating Trust/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(requested).toEqual(['acct1']);
+  });
+
+  it('keeps ?account= in step with the selected tab, replacing history', async () => {
+    server.use(
+      http.get('/api/accounting/banks/balances', () => HttpResponse.json(TWO_ACCOUNTS)),
+      ...baseHandlers(),
+      registerHandler(REGISTER),
+    );
+    renderPage('/banking');
+
+    await userEvent.click(await screen.findByRole('button', { name: /Security Deposits/ }));
+    expect(screen.getByRole('button', { name: /Security Deposits/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(screen.getByLabelText('location')).toHaveTextContent('/banking?account=acct2');
+    // REPLACE, not PUSH: switching tabs must not stack entries behind the Back button.
+    expect(screen.getByLabelText('navigation type')).toHaveTextContent('REPLACE');
+  });
+
+  it('leaves reconcile mode when the account changes', async () => {
+    server.use(
+      http.get('/api/accounting/banks/balances', () => HttpResponse.json(TWO_ACCOUNTS)),
+      ...baseHandlers(),
+      registerHandler(REGISTER),
+    );
+    renderPage('/banking');
+
+    await screen.findByText('Rent deposit');
+    await userEvent.click(screen.getByRole('button', { name: 'Reconcile account' }));
+    expect(await screen.findByRole('button', { name: 'Exit reconcile' })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /Security Deposits/ }));
+    expect(await screen.findByRole('button', { name: 'Reconcile account' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Exit reconcile' })).not.toBeInTheDocument();
   });
 });
 

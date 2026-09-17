@@ -4,7 +4,7 @@ import { Icon } from '@/design';
 import { ApiErrorNotice } from '@/components/ApiErrorNotice';
 import { useSearch, type SearchResult } from '@/lib/search';
 import { trackInteraction } from '@/lib/telemetry';
-import { groupLabel, iconForType, primaryRoute } from './actionRegistry';
+import { groupLabel, iconForType, primaryRoute } from './paletteActions';
 import { getRecent, pushRecent } from './recent';
 
 const TYPE_ORDER: SearchResult['type'][] = ['owner', 'property', 'unit', 'tenant', 'bank'];

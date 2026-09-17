@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router';
 import { Button, Card, EmptyState, formatMoneyK, Icon, Money, Select } from '@/design';
 import { ApiErrorNotice } from '@/components/ApiErrorNotice';
 import { ErrorAction } from '@/components/ErrorAction';
@@ -30,7 +31,6 @@ export function BankingPage() {
   const balances = useBankBalances();
   const properties = useProperties();
 
-  const [acctId, setAcctId] = useState('');
   const [reconciling, setReconciling] = useState(false);
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [statementBalance, setStatementBalance] = useState('');
@@ -41,13 +41,30 @@ export function BankingPage() {
   const [propFilter, setPropFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
 
-  // Default to the first account once balances load.
+  // The selected account lives in the URL (`?account=`), so the palette and a copied link can open a
+  // specific register (#207). An absent or unknown id falls back to the first account.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedAcct = searchParams.get('account');
+  const acctId =
+    balances.data?.find((bank) => bank.bankAccountId === requestedAcct)?.bankAccountId ??
+    balances.data?.[0]?.bankAccountId ??
+    '';
+  const selectAccount = (id: string) =>
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        next.set('account', id);
+        return next;
+      },
+      { replace: true },
+    );
+
+  // Reconcile state belongs to one account: any switch, from a tab or a deep link, leaves it.
   useEffect(() => {
-    const first = balances.data?.[0];
-    if (acctId === '' && first) {
-      setAcctId(first.bankAccountId);
-    }
-  }, [balances.data, acctId]);
+    setReconciling(false);
+    setSelected({});
+    setReconcileError(null);
+  }, [acctId]);
 
   const register = useBankRegister(acctId);
   const rows = useMemo(() => register.data?.rows ?? [], [register.data]);
@@ -206,10 +223,7 @@ export function BankingPage() {
             key={bank.bankAccountId}
             className={`pf-acct-tab${acctId === bank.bankAccountId ? ' active' : ''}`}
             aria-pressed={acctId === bank.bankAccountId}
-            onClick={() => {
-              setAcctId(bank.bankAccountId);
-              exitReconcile();
-            }}
+            onClick={() => selectAccount(bank.bankAccountId)}
           >
             <div className="pf-bankic">
               <Icon name="bank" size={16} />
