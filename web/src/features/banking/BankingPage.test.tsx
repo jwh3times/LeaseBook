@@ -2,9 +2,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
+import { MemoryRouter, useLocation, useNavigationType } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { trackInteraction } from '@/lib/telemetry';
 import { server } from '@/test/mocks/server';
+import { bankRegisterKey } from './banking';
 import { BankingPage } from './BankingPage';
 
 vi.mock('@/lib/telemetry', () => ({ trackInteraction: vi.fn() }));
@@ -63,15 +65,30 @@ function baseHandlers() {
 const registerHandler = (body: Record<string, unknown>) =>
   http.get('/api/accounting/banks/:id/register', () => HttpResponse.json(body));
 
-function renderPage() {
+function LocationProbe() {
+  const location = useLocation();
+  const navigationType = useNavigationType();
+  return (
+    <>
+      <output aria-label="location">{location.pathname + location.search}</output>
+      <output aria-label="navigation type">{navigationType}</output>
+    </>
+  );
+}
+
+function renderPage(url = '/banking') {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   render(
     <QueryClientProvider client={queryClient}>
-      <BankingPage />
+      <MemoryRouter initialEntries={[url]}>
+        <BankingPage />
+        <LocationProbe />
+      </MemoryRouter>
     </QueryClientProvider>,
   );
+  return queryClient;
 }
 
 beforeEach(() => {
@@ -120,6 +137,175 @@ describe('BankingPage register view', () => {
     );
     renderPage();
     expect(await screen.findByText('No transactions yet')).toBeInTheDocument();
+  });
+});
+
+describe('BankingPage account deep link', () => {
+  const TWO_ACCOUNTS = {
+    rows: [
+      ...BALANCES.rows,
+      { bankAccountId: 'acct2', name: 'Security Deposits', book: 900, cleared: 900, uncleared: 0 },
+    ],
+  };
+  const registerFor = (requested: string[]) =>
+    http.get('/api/accounting/banks/:id/register', ({ params }) => {
+      requested.push(String(params.id));
+      return HttpResponse.json(REGISTER);
+    });
+
+  it('opens the account named by ?account= instead of the first one', async () => {
+    const requested: string[] = [];
+    server.use(
+      http.get('/api/accounting/banks/balances', () => HttpResponse.json(TWO_ACCOUNTS)),
+      ...baseHandlers(),
+      registerFor(requested),
+    );
+    renderPage('/banking?account=acct2');
+
+    const deposits = await screen.findByRole('button', { name: /Security Deposits/ });
+    await screen.findByText('Rent deposit');
+    expect(deposits).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: /Operating Trust/ })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
+    expect(requested).toEqual(['acct2']);
+  });
+
+  it('falls back to the first account when ?account= names no account', async () => {
+    const requested: string[] = [];
+    server.use(
+      http.get('/api/accounting/banks/balances', () => HttpResponse.json(TWO_ACCOUNTS)),
+      ...baseHandlers(),
+      registerFor(requested),
+    );
+    renderPage('/banking?account=nope');
+
+    await screen.findByText('Rent deposit');
+    expect(screen.getByRole('button', { name: /Operating Trust/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(requested).toEqual(['acct1']);
+  });
+
+  it('keeps ?account= in step with the selected tab, replacing history', async () => {
+    server.use(
+      http.get('/api/accounting/banks/balances', () => HttpResponse.json(TWO_ACCOUNTS)),
+      ...baseHandlers(),
+      registerHandler(REGISTER),
+    );
+    renderPage('/banking');
+
+    await userEvent.click(await screen.findByRole('button', { name: /Security Deposits/ }));
+    expect(screen.getByRole('button', { name: /Security Deposits/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(screen.getByLabelText('location')).toHaveTextContent('/banking?account=acct2');
+    // REPLACE, not PUSH: switching tabs must not stack entries behind the Back button.
+    expect(screen.getByLabelText('navigation type')).toHaveTextContent('REPLACE');
+  });
+
+  it('keeps the account it opened on when a balances reload puts another account first', async () => {
+    server.use(...baseHandlers(), registerHandler(REGISTER));
+    const queryClient = renderPage('/banking');
+
+    await screen.findByText('Rent deposit');
+    await userEvent.click(screen.getByRole('button', { name: 'Reconcile account' }));
+    expect(await screen.findByRole('button', { name: 'Exit reconcile' })).toBeInTheDocument();
+
+    // A colleague adds an account whose name sorts first; the next balances read lists it first.
+    server.use(
+      http.get('/api/accounting/banks/balances', () =>
+        HttpResponse.json({
+          rows: [
+            { bankAccountId: 'acct0', name: 'Escrow Trust', book: 0, cleared: 0, uncleared: 0 },
+            ...BALANCES.rows,
+          ],
+        }),
+      ),
+    );
+    await queryClient.invalidateQueries({ queryKey: ['bank-balances'] });
+
+    expect(await screen.findByRole('button', { name: /Escrow Trust/ })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
+    expect(screen.getByRole('button', { name: /Operating Trust/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(screen.getByRole('button', { name: 'Exit reconcile' })).toBeInTheDocument();
+  });
+
+  it('refreshes the account it finalized even if the user switches accounts mid-finalize', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    let finalized = false;
+    const recon = {
+      id: 'rec1',
+      bankAccountId: 'acct1',
+      year: 2026,
+      month: 2,
+      statementEndingBalance: 1300,
+      clearedBalance: 1300,
+      difference: 0,
+      status: 'in_progress',
+      finalizedAt: null,
+    };
+    server.use(
+      http.get('/api/accounting/banks/balances', () => HttpResponse.json(TWO_ACCOUNTS)),
+      ...baseHandlers(),
+      registerHandler(REGISTER),
+      http.post('/api/accounting/banks/clearances', () => HttpResponse.json({ affected: 1 })),
+      http.post('/api/accounting/reconciliations', () => HttpResponse.json(recon)),
+      http.post('/api/accounting/reconciliations/:id/finalize', async () => {
+        await gate;
+        finalized = true;
+        return HttpResponse.json({
+          ...recon,
+          status: 'finalized',
+          finalizedAt: '2026-06-21T00:00:00Z',
+        });
+      }),
+    );
+    const queryClient = renderPage('/banking');
+
+    await screen.findByText('Rent deposit');
+    await userEvent.click(screen.getByRole('button', { name: 'Reconcile account' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Select all uncleared' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Finalize' }));
+
+    // Switch accounts while the finalize request is still in flight, then let it land.
+    await userEvent.click(screen.getByRole('button', { name: /Security Deposits/ }));
+    await vi.waitFor(() =>
+      expect(queryClient.getQueryState(bankRegisterKey('acct2'))?.status).toBe('success'),
+    );
+    release();
+    await vi.waitFor(() => expect(finalized).toBe(true));
+
+    await vi.waitFor(() =>
+      expect(queryClient.getQueryState(bankRegisterKey('acct1'))?.isInvalidated).toBe(true),
+    );
+    expect(queryClient.getQueryState(bankRegisterKey('acct2'))?.isInvalidated).toBe(false);
+  });
+
+  it('leaves reconcile mode when the account changes', async () => {
+    server.use(
+      http.get('/api/accounting/banks/balances', () => HttpResponse.json(TWO_ACCOUNTS)),
+      ...baseHandlers(),
+      registerHandler(REGISTER),
+    );
+    renderPage('/banking');
+
+    await screen.findByText('Rent deposit');
+    await userEvent.click(screen.getByRole('button', { name: 'Reconcile account' }));
+    expect(await screen.findByRole('button', { name: 'Exit reconcile' })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /Security Deposits/ }));
+    expect(await screen.findByRole('button', { name: 'Reconcile account' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Exit reconcile' })).not.toBeInTheDocument();
   });
 });
 
