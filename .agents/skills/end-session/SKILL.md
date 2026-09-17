@@ -20,8 +20,8 @@ destinations, in this order — memory, GitHub issues, `private/` docs, then the
 This repo's durable state is split across four places with different visibility, and a session's
 discoveries land in different ones:
 
-- **Memory** (`~/.claude/projects/C--Users-jerry-OneDrive-Documents-VSCodeProjects-LeaseBook/memory/`)
-  — cross-session orientation. Local to the machine, never committed.
+- **Memory** (the directory the harness names in its system prompt) — cross-session orientation.
+  Local to the machine, never committed.
 - **GitHub issues** — the issue tracker per [`docs/agents/issue-tracker.md`](../../../docs/agents/issue-tracker.md).
   **This repo is public.** Anything written here is published.
 - **`private/`** — confidential, ignored by the public repository, and **a separate versioned
@@ -72,9 +72,11 @@ only read code may legitimately produce no memory write and no issue edit.
 
 ### 2. Memory sweep
 
-Path:
-`C:\Users\jerry\.claude\projects\C--Users-jerry-OneDrive-Documents-VSCodeProjects-LeaseBook\memory\`.
-One fact per file, `MEMORY.md` is the index (one line per memory, never content).
+Path: the memory directory the harness supplies for this session — use it exactly as given. Do not
+hardcode or derive one from the checkout path: the directory name encodes a checkout location, so a
+moved or additional checkout maps to a different, possibly stale, directory whose writes succeed
+silently and are never read back. If the harness names no memory directory, skip this step and say
+so in the report. One fact per file, `MEMORY.md` is the index (one line per memory, never content).
 
 **Update before you create.** Read `MEMORY.md` first and match each discovery against the existing
 files — most session findings belong in one that already exists:
