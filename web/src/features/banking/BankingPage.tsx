@@ -45,10 +45,17 @@ export function BankingPage() {
   // specific register (#207). An absent or unknown id falls back to the first account.
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedAcct = searchParams.get('account');
+  // Without a (valid) param, the fallback is pinned to the account first seen, not re-derived: balances
+  // are name-ordered, so a reload that lists a newly added account first must not switch the register
+  // (and silently drop an in-progress reconcile) underneath the user.
+  const [fallbackAcct, setFallbackAcct] = useState('');
+  const firstAcct = balances.data?.[0]?.bankAccountId ?? '';
+  useEffect(() => {
+    if (fallbackAcct === '' && firstAcct !== '') setFallbackAcct(firstAcct);
+  }, [fallbackAcct, firstAcct]);
   const acctId =
     balances.data?.find((bank) => bank.bankAccountId === requestedAcct)?.bankAccountId ??
-    balances.data?.[0]?.bankAccountId ??
-    '';
+    (fallbackAcct || firstAcct);
   const selectAccount = (id: string) =>
     setSearchParams(
       (current) => {
@@ -138,28 +145,31 @@ export function BankingPage() {
     }
   };
 
-  const refreshAccount = () => {
-    void queryClient.invalidateQueries({ queryKey: bankRegisterKey(acctId) });
+  // Takes the account explicitly: a mutation's callbacks see the latest render, so reading `acctId` here
+  // after the user switched accounts mid-request would refresh the wrong register.
+  const refreshAccount = (accountId: string) => {
+    void queryClient.invalidateQueries({ queryKey: bankRegisterKey(accountId) });
     void queryClient.invalidateQueries({ queryKey: ['bank-balances'] });
-    void queryClient.invalidateQueries({ queryKey: reconciliationHistoryKey(acctId) });
+    void queryClient.invalidateQueries({ queryKey: reconciliationHistoryKey(accountId) });
   };
 
-  const finalize = useMutation<void, BankingError>({
-    mutationFn: async () => {
+  const finalize = useMutation<void, BankingError, string>({
+    mutationFn: async (accountId) => {
       const ids = uncleared.filter((r) => selected[r.journalLineId]).map((r) => r.journalLineId);
       if (ids.length > 0) await applyClearances(ids);
       const now = new Date();
       const recon = await startReconciliation({
-        bankAccountId: acctId,
+        bankAccountId: accountId,
         year: now.getFullYear(),
         month: now.getMonth() + 1,
         statementEndingBalance: Number.parseFloat(statementBalance),
       });
       await finalizeReconciliation(recon.id);
     },
-    onSuccess: () => {
-      refreshAccount();
-      exitReconcile();
+    onSuccess: (_result, accountId) => {
+      refreshAccount(accountId);
+      // A switch already left reconcile mode; don't end a session since started on another account.
+      if (accountId === acctId) exitReconcile();
     },
     onError: (err) => setReconcileError(err),
   });
@@ -296,7 +306,7 @@ export function BankingPage() {
             selectedSum={selectedSum}
             reconciled={reconciled}
             onSelectAll={toggleAll}
-            onFinalize={() => finalize.mutate()}
+            onFinalize={() => finalize.mutate(acctId)}
             finalizing={finalize.isPending}
           />
           <ApiErrorNotice error={reconcileError} style={{ marginBottom: 'var(--gap)' }} />
@@ -420,7 +430,7 @@ export function BankingPage() {
           onClose={() => setImporting(false)}
           onConfirmed={() => {
             setImporting(false);
-            refreshAccount();
+            refreshAccount(acctId);
           }}
         />
       )}

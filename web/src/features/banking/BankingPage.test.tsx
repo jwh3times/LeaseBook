@@ -6,6 +6,7 @@ import { MemoryRouter, useLocation, useNavigationType } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { trackInteraction } from '@/lib/telemetry';
 import { server } from '@/test/mocks/server';
+import { bankRegisterKey } from './banking';
 import { BankingPage } from './BankingPage';
 
 vi.mock('@/lib/telemetry', () => ({ trackInteraction: vi.fn() }));
@@ -87,6 +88,7 @@ function renderPage(url = '/banking') {
       </MemoryRouter>
     </QueryClientProvider>,
   );
+  return queryClient;
 }
 
 beforeEach(() => {
@@ -203,6 +205,90 @@ describe('BankingPage account deep link', () => {
     expect(screen.getByLabelText('location')).toHaveTextContent('/banking?account=acct2');
     // REPLACE, not PUSH: switching tabs must not stack entries behind the Back button.
     expect(screen.getByLabelText('navigation type')).toHaveTextContent('REPLACE');
+  });
+
+  it('keeps the account it opened on when a balances reload puts another account first', async () => {
+    server.use(...baseHandlers(), registerHandler(REGISTER));
+    const queryClient = renderPage('/banking');
+
+    await screen.findByText('Rent deposit');
+    await userEvent.click(screen.getByRole('button', { name: 'Reconcile account' }));
+    expect(await screen.findByRole('button', { name: 'Exit reconcile' })).toBeInTheDocument();
+
+    // A colleague adds an account whose name sorts first; the next balances read lists it first.
+    server.use(
+      http.get('/api/accounting/banks/balances', () =>
+        HttpResponse.json({
+          rows: [
+            { bankAccountId: 'acct0', name: 'Escrow Trust', book: 0, cleared: 0, uncleared: 0 },
+            ...BALANCES.rows,
+          ],
+        }),
+      ),
+    );
+    await queryClient.invalidateQueries({ queryKey: ['bank-balances'] });
+
+    expect(await screen.findByRole('button', { name: /Escrow Trust/ })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
+    expect(screen.getByRole('button', { name: /Operating Trust/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(screen.getByRole('button', { name: 'Exit reconcile' })).toBeInTheDocument();
+  });
+
+  it('refreshes the account it finalized even if the user switches accounts mid-finalize', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    let finalized = false;
+    const recon = {
+      id: 'rec1',
+      bankAccountId: 'acct1',
+      year: 2026,
+      month: 2,
+      statementEndingBalance: 1300,
+      clearedBalance: 1300,
+      difference: 0,
+      status: 'in_progress',
+      finalizedAt: null,
+    };
+    server.use(
+      http.get('/api/accounting/banks/balances', () => HttpResponse.json(TWO_ACCOUNTS)),
+      ...baseHandlers(),
+      registerHandler(REGISTER),
+      http.post('/api/accounting/banks/clearances', () => HttpResponse.json({ affected: 1 })),
+      http.post('/api/accounting/reconciliations', () => HttpResponse.json(recon)),
+      http.post('/api/accounting/reconciliations/:id/finalize', async () => {
+        await gate;
+        finalized = true;
+        return HttpResponse.json({
+          ...recon,
+          status: 'finalized',
+          finalizedAt: '2026-06-21T00:00:00Z',
+        });
+      }),
+    );
+    const queryClient = renderPage('/banking');
+
+    await screen.findByText('Rent deposit');
+    await userEvent.click(screen.getByRole('button', { name: 'Reconcile account' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Select all uncleared' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Finalize' }));
+
+    // Switch accounts while the finalize request is still in flight, then let it land.
+    await userEvent.click(screen.getByRole('button', { name: /Security Deposits/ }));
+    await vi.waitFor(() =>
+      expect(queryClient.getQueryState(bankRegisterKey('acct2'))?.status).toBe('success'),
+    );
+    release();
+    await vi.waitFor(() => expect(finalized).toBe(true));
+
+    await vi.waitFor(() =>
+      expect(queryClient.getQueryState(bankRegisterKey('acct1'))?.isInvalidated).toBe(true),
+    );
+    expect(queryClient.getQueryState(bankRegisterKey('acct2'))?.isInvalidated).toBe(false);
   });
 
   it('leaves reconcile mode when the account changes', async () => {
