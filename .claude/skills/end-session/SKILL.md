@@ -75,7 +75,7 @@ only read code may legitimately produce no memory write and no issue edit.
 
 Path: the memory directory the harness supplies for this session — use it exactly as given. Do not
 hardcode or derive one from the checkout path: the directory name encodes a checkout location, so a
-moved checkout or a new worktree maps to a different, possibly stale, directory whose writes succeed
+moved or additional checkout maps to a different, possibly stale, directory whose writes succeed
 silently and are never read back. If the harness names no memory directory, skip this step and say
 so in the report. One fact per file, `MEMORY.md` is the index (one line per memory, never content).
 
