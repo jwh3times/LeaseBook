@@ -41,6 +41,13 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   text, so they match the marks on screen and no longer depend on which fonts the machine
   generating the statement happens to have. A statement that cannot render a character now fails
   loudly instead of quietly printing a gap.
+- **Choosing a bank account in the ⌘K palette now opens that account's register.** It previously
+  landed on Settings, and Banking always opened the first account. The Banking page now keeps the
+  selected account in its address (`/banking?account=…`), so a palette jump, a refresh, or a copied
+  link opens the same register, and switching accounts leaves any in-progress reconcile selection
+  behind rather than carrying it to the other account. Switching accounts while a reconciliation is
+  still finalizing now refreshes the account that was finalized, instead of briefly showing its
+  cleared items as uncleared.
 
 ## [0.16.0] - 2026-09-14
 
