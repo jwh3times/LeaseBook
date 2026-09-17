@@ -452,6 +452,54 @@ jobs:
           code="$(curl -fsS -o /dev/null -w '%{http_code}' "http://localhost:${LEASEBOOK_APP_PORT}/")"
           echo "SPA root returned HTTP $code"
 
+      # Every other test renders PDFs on the runner host, never inside this image — the blind spot
+      # that let #396 ship blank statement marks. With QuestPDF's glyph and font-family guards pinned
+      # on (`QuestPdfSetup`), anything the image cannot supply fails the render as a 5xx, so "a real
+      # PDF came back out of the container" is enough to catch the class without inspecting it.
+      # Logs in exactly as the SPA does (antiforgery cookie echoed as X-XSRF-TOKEN), then renders
+      # the golden O5 statement for May 2026, cash basis, from the demo org the `seed` service loaded.
+      - name: Assert a statement PDF renders inside the image
+        run: |
+          set -euo pipefail
+          base="http://localhost:${LEASEBOOK_APP_PORT}"
+          jar="$(mktemp)"
+          curl -fsS -c "$jar" -b "$jar" -o /dev/null "$base/api/auth/csrf"
+          xsrf="$(awk '$6 == "XSRF-TOKEN" { print $7 }' "$jar")"
+          if [ -z "$xsrf" ]; then
+            echo "::error::/api/auth/csrf issued no XSRF-TOKEN cookie."
+            exit 1
+          fi
+          curl -fsS -c "$jar" -b "$jar" -o /dev/null \
+            -H 'Content-Type: application/json' -H "X-XSRF-TOKEN: $xsrf" \
+            --data '{"email":"renee.calloway@tarheelpg.test","password":"Tarheel-Trust-2026!"}' \
+            "$base/api/auth/login"
+          # A 200 login can still be MFA-pending; only /me proves the session is authenticated.
+          curl -fsS -b "$jar" -o /dev/null "$base/api/auth/me"
+
+          pdf="$(mktemp)"
+          read -r code type < <(curl -sS -b "$jar" -o "$pdf" -w '%{http_code} %{content_type}\n' \
+            "$base/api/statements/01923000-0000-7000-8000-000000000a05/pdf?year=2026&month=5&basis=cash")
+          size="$(stat -c %s "$pdf")"
+          magic="$(head -c 5 "$pdf")"
+          echo "Statement PDF: HTTP $code, Content-Type '$type', $size bytes, magic '$magic'"
+          if [ "$code" != 200 ]; then
+            echo "::error::The statement PDF did not render inside the image (HTTP $code)."
+            exit 1
+          fi
+          case "$type" in
+            application/pdf*) ;;
+            *) echo "::error::Expected application/pdf, got '$type'."; exit 1 ;;
+          esac
+          if [ "$magic" != '%PDF-' ]; then
+            echo "::error::The response body is not a PDF (no %PDF- header)."
+            exit 1
+          fi
+          # An error page cannot reach this floor; the real statement is well above it.
+          if [ "$size" -lt 10000 ]; then
+            echo "::error::The statement PDF is implausibly small ($size bytes)."
+            exit 1
+          fi
+
       - name: Dump Compose logs on failure
         if: failure()
         run: docker compose --profile full logs --no-color --tail 200
