@@ -2,12 +2,21 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { createMemoryRouter, RouterProvider } from 'react-router';
+import { StrictMode } from 'react';
+import { createMemoryRouter, type InitialEntry, RouterProvider, useNavigate } from 'react-router';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RecordNavProvider } from '@/components/recordNav';
+import { spentInteractions, trackInteraction } from '@/lib/telemetry';
 import { server } from '@/test/mocks/server';
 import type { TenantLedgerEntry } from './ledger';
 import { LedgerPage } from './LedgerPage';
+
+// Only the budget sample is stubbed; `spentInteractions`/`readSpentInteractions` stay real so the
+// #408 tests below exercise the actual navigation-state round trip rather than a stand-in for it.
+vi.mock('@/lib/telemetry', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/telemetry')>()),
+  trackInteraction: vi.fn(),
+}));
 
 const DETAIL = {
   id: 't1',
@@ -83,17 +92,49 @@ function ledgerHandler(rows: TenantLedgerEntry[] = ROWS) {
   );
 }
 
-function renderLedger() {
+// Stands in for the palette: a PUSH to the composed URL carrying the interactions it already spent.
+// The #408 tests navigate through this rather than starting at the composed URL, because the two
+// arrivals are not the same thing — a PUSH is the palette paying, an initial render is a reload.
+function ComposeLauncher() {
+  const navigate = useNavigate();
+  return (
+    <button onClick={() => void navigate('/tenants/t1?compose=payment', { state: LAUNCH_STATE })}>
+      launch payment
+    </button>
+  );
+}
+
+const LAUNCH_STATE = spentInteractions(2);
+
+function renderLedger(initialEntry: InitialEntry = '/tenants/t1') {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const router = createMemoryRouter([{ path: '/tenants/:id', element: <LedgerPage /> }], {
-    initialEntries: ['/tenants/t1'],
-  });
+  // The launcher sits alongside the page in the SAME route element, so navigating to the composed URL
+  // reconciles rather than remounts `LedgerPage` — exactly what React Router does in the app when the
+  // operator runs the palette action from a ledger they are already on.
+  const router = createMemoryRouter(
+    [
+      {
+        path: '/tenants/:id',
+        element: (
+          <>
+            <ComposeLauncher />
+            <LedgerPage />
+          </>
+        ),
+      },
+    ],
+    { initialEntries: [initialEntry] },
+  );
+  // StrictMode mirrors how the app actually mounts, so effect-ordering bugs that only appear under
+  // double-invocation (see LedgerComposer.test.tsx) surface here rather than in the browser.
   return render(
-    <QueryClientProvider client={queryClient}>
-      <RecordNavProvider>
-        <RouterProvider router={router} />
-      </RecordNavProvider>
-    </QueryClientProvider>,
+    <StrictMode>
+      <QueryClientProvider client={queryClient}>
+        <RecordNavProvider>
+          <RouterProvider router={router} />
+        </RecordNavProvider>
+      </QueryClientProvider>
+    </StrictMode>,
   );
 }
 
@@ -129,9 +170,82 @@ beforeAll(() => {
 
 beforeEach(() => {
   document.body.innerHTML = '';
+  vi.clearAllMocks();
 });
 
+function composerHandlers() {
+  return [
+    http.get('/api/settings/banks', () =>
+      HttpResponse.json([
+        {
+          id: 'trust1',
+          name: 'Operating Trust',
+          institution: null,
+          mask: null,
+          purpose: 'trust',
+          isActive: true,
+        },
+      ]),
+    ),
+    http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 })),
+    http.post('/api/accounting/tenants/:tenantId/payments', () =>
+      HttpResponse.json({ entryId: 'pay1' }),
+    ),
+  ];
+}
+
 describe('LedgerPage', () => {
+  // #408: the palette's "Record payment → X" spends ⌘K + the pick before this page exists and
+  // hands the count over in history state. The page is the seam that has to read it back out — and
+  // it must open the composer even though it is not remounting.
+  it('opens the composer and reports the true count on a palette-launched payment', async () => {
+    server.use(detailHandler(), ledgerHandler(), ...composerHandlers());
+    renderLedger();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'launch payment' }));
+
+    await screen.findByText('Operating Trust'); // banks loaded → the auto-opened composer is ready
+    await userEvent.type(screen.getByLabelText('Amount'), '1450');
+    await userEvent.keyboard('{Enter}');
+
+    await vi.waitFor(() =>
+      expect(trackInteraction).toHaveBeenCalledWith('record-payment', 3, true),
+    );
+  });
+
+  // A reload or a Back lands on the same history entry, state and all. Those cost the operator one
+  // interaction, not the palette's two, so the seed must not apply a second time.
+  it('does not re-charge the palette’s interactions on a replayed history entry', async () => {
+    server.use(detailHandler(), ledgerHandler(), ...composerHandlers());
+    renderLedger({
+      pathname: '/tenants/t1',
+      search: '?compose=payment',
+      state: spentInteractions(2),
+    });
+
+    await screen.findByText('Operating Trust');
+    await userEvent.type(screen.getByLabelText('Amount'), '1450');
+    await userEvent.keyboard('{Enter}');
+
+    await vi.waitFor(() =>
+      expect(trackInteraction).toHaveBeenCalledWith('record-payment', 2, true),
+    );
+  });
+
+  it('ignores a spent-interaction count on a history entry that asked for no composer', async () => {
+    server.use(detailHandler(), ledgerHandler(), ...composerHandlers());
+    renderLedger({ pathname: '/tenants/t1', state: spentInteractions(2) });
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Record payment' }));
+    await screen.findByText('Operating Trust');
+    await userEvent.type(screen.getByLabelText('Amount'), '1450');
+    await userEvent.keyboard('{Enter}');
+
+    await vi.waitFor(() =>
+      expect(trackInteraction).toHaveBeenCalledWith('record-payment', 2, true),
+    );
+  });
+
   it('renders the header and the ledger rows with running balances', async () => {
     server.use(detailHandler(), ledgerHandler());
     renderLedger();

@@ -2,21 +2,20 @@ import { Fragment, type KeyboardEvent, useEffect, useMemo, useRef, useState } fr
 import { useNavigate } from 'react-router';
 import { Icon } from '@/design';
 import { ApiErrorNotice } from '@/components/ApiErrorNotice';
-import { useSearch, type SearchResult } from '@/lib/search';
-import { trackInteraction } from '@/lib/telemetry';
-import { groupLabel, iconForType, primaryRoute } from './paletteActions';
+import { useSearch } from '@/lib/search';
+import { spentInteractions, trackInteraction } from '@/lib/telemetry';
+import { iconForType, primaryRoute } from './paletteActions';
+import { type PaletteRow, recentRows, searchRows } from './paletteRows';
 import { getRecent, pushRecent } from './recent';
 
-const TYPE_ORDER: SearchResult['type'][] = ['owner', 'property', 'unit', 'tenant', 'bank'];
-
-function groupByType(results: SearchResult[]): SearchResult[] {
-  return [...results].sort((a, b) => TYPE_ORDER.indexOf(a.type) - TYPE_ORDER.indexOf(b.type));
-}
+/** ⌘K to open plus the pick — what reaching any row costs, and the budget for an entity jump. */
+const PALETTE_INTERACTIONS = 2;
 
 /**
- * The ⌘K command palette (§C.5/§C.7): debounced cross-entity search grouped by type, recent items when
- * empty, full keyboard operation (↑/↓ move · Enter jumps · Esc closes), focus trap, and ARIA roles.
- * Selecting an entity runs its primary registered action (navigation) and records the jump.
+ * The ⌘K command palette (§C.5/§C.7): debounced cross-entity search, recent items when empty, full
+ * keyboard operation (↑/↓ move · Enter jumps · Esc closes), focus trap, and ARIA roles. The list opens
+ * with the best match and its contextual actions (#408) — "Record payment → X" is one ↓ away — then
+ * the remaining matches grouped by type. Selecting a row navigates and records the jump.
  */
 export function CommandPalette({ onClose }: { onClose: () => void }) {
   const navigate = useNavigate();
@@ -34,32 +33,45 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
   const search = useSearch(debounced);
   const recent = useMemo(() => getRecent(), []);
   const showRecent = debounced.trim().length === 0;
-  const items = useMemo(
-    () => (showRecent ? recent : groupByType(search.data ?? [])),
+  const rows = useMemo(
+    () => (showRecent ? recentRows(recent) : searchRows(search.data ?? [])),
     [showRecent, recent, search.data],
   );
 
-  useEffect(() => setSelected(0), [debounced, items.length]);
+  useEffect(() => setSelected(0), [debounced, rows.length]);
 
-  function activate(result: SearchResult) {
-    pushRecent(result);
-    trackInteraction('entity-jump', 2, true); // open palette + select ≤ 2 interactions to reach any entity
-    void navigate(primaryRoute(result));
+  function activate(row: PaletteRow) {
+    // Recents track where the operator went, so an action records its *entity* — "Record payment →
+    // Jasmine Carter" is not a place to come back to; Jasmine Carter is (#408).
+    pushRecent(row.result);
+    if (row.kind === 'action') {
+      // The palette has already spent ⌘K plus this pick. Handing the count to the destination keeps
+      // its own budget sample honest — a bare palette-launched payment is 3 interactions, not 2.
+      //
+      // No `entity-jump` sample here: these two interactions are the opening of the destination's
+      // task and get counted again inside its own budget. Recording them as a jump as well would put
+      // one gesture in two budgets, and fill the "reach any entity in ≤ 2" metric with rows from a
+      // flow that was never an entity jump.
+      void navigate(row.action.route, { state: spentInteractions(PALETTE_INTERACTIONS) });
+    } else {
+      trackInteraction('entity-jump', PALETTE_INTERACTIONS, true);
+      void navigate(primaryRoute(row.result));
+    }
     onClose();
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (event.key === 'ArrowDown') {
       event.preventDefault();
-      setSelected((index) => Math.min(index + 1, items.length - 1));
+      setSelected((index) => Math.max(0, Math.min(index + 1, rows.length - 1)));
     } else if (event.key === 'ArrowUp') {
       event.preventDefault();
       setSelected((index) => Math.max(index - 1, 0));
     } else if (event.key === 'Enter') {
-      const result = items[selected];
-      if (result) {
+      const row = rows[selected];
+      if (row) {
         event.preventDefault();
-        activate(result);
+        activate(row);
       }
     } else if (event.key === 'Escape') {
       event.preventDefault();
@@ -99,37 +111,39 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
           </div>
         )}
         <div className="pf-palette-list" id="palette-list" role="listbox">
-          {showRecent && recent.length > 0 && <div className="pf-palette-group">Recent</div>}
-          {showRecent && recent.length === 0 && (
+          {showRecent && rows.length === 0 && (
             <div className="pf-palette-empty">Type to search across the directory.</div>
           )}
-          {!showRecent && search.isFetching && items.length === 0 && (
+          {!showRecent && search.isFetching && rows.length === 0 && (
             <div className="pf-palette-empty">Searching…</div>
           )}
-          {!showRecent && search.isSuccess && !search.isFetching && items.length === 0 && (
+          {!showRecent && search.isSuccess && !search.isFetching && rows.length === 0 && (
             <div className="pf-palette-empty">No matches for “{debounced}”.</div>
           )}
 
-          {items.map((result, index) => {
-            const showHeader =
-              !showRecent && (index === 0 || items[index - 1]!.type !== result.type);
-            return (
-              <Fragment key={`${result.type}-${result.id}`}>
-                {showHeader && <div className="pf-palette-group">{groupLabel(result.type)}</div>}
-                <div
-                  className={`pf-palette-item${index === selected ? ' sel' : ''}`}
-                  role="option"
-                  aria-selected={index === selected}
-                  onMouseEnter={() => setSelected(index)}
-                  onClick={() => activate(result)}
-                >
-                  <Icon name={iconForType(result.type)} size={16} />
-                  <span className="label">{result.label}</span>
-                  {result.sublabel && <span className="sub">{result.sublabel}</span>}
-                </div>
-              </Fragment>
-            );
-          })}
+          {rows.map((row, index) => (
+            <Fragment key={row.key}>
+              {row.header && <div className="pf-palette-group">{row.header}</div>}
+              <div
+                className={`pf-palette-item${index === selected ? ' sel' : ''}`}
+                role="option"
+                aria-selected={index === selected}
+                onMouseEnter={() => setSelected(index)}
+                onClick={() => activate(row)}
+              >
+                <Icon
+                  name={row.kind === 'action' ? 'arrowUpRight' : iconForType(row.result.type)}
+                  size={16}
+                />
+                <span className="label">
+                  {row.kind === 'action' ? row.action.label : row.result.label}
+                </span>
+                {row.kind === 'result' && row.result.sublabel && (
+                  <span className="sub">{row.result.sublabel}</span>
+                )}
+              </div>
+            </Fragment>
+          ))}
         </div>
       </div>
     </div>

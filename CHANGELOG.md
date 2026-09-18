@@ -22,6 +22,14 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   sizes use a tighter crop than the home-screen icons, which stay padded so platforms can mask them
   into their own tile shape.
 
+- **The ⌘K palette now offers a result's other actions, not just opening it.** The list leads with
+  the best match, then that match's remaining actions — "Record payment → Jasmine Carter", "Owner
+  statement · Hargrove Family Trust" — then the rest of the matches grouped by type. Enter still
+  opens the record, so an action is one arrow key away, and choosing one remembers the record under
+  Recent rather than the action. A payment started this way now reports the interactions the whole
+  flow really took instead of only its last two steps, so its click budget describes what the
+  operator did.
+
 ### Changed
 
 - **`/handoff` and `/lets-go` now work on a machine without the Proton Drive desktop client.** Where

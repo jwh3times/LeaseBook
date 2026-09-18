@@ -23,6 +23,12 @@ export interface LedgerComposerProps {
   onPosted: (entryId: string) => void;
   /** Auto-open mode when the page is reached via the palette "Record payment" action. */
   initialMode?: 'payment' | 'charge';
+  /**
+   * Interactions already spent reaching that auto-open — the ⌘K palette's own two (#408). Applies to
+   * the `initialMode` open only; every later open on this page counts from scratch. Absent (a
+   * refresh, a bookmark, a hand-typed `?compose=`) means nobody told us, so the count starts here.
+   */
+  initialInteractions?: number;
 }
 
 type Mode = 'payment' | 'charge';
@@ -37,7 +43,12 @@ const todayIso = () => new Date().toISOString().slice(0, 10);
  * post keep a bare payment at ≤ 3 interactions, which `trackInteraction` records on submit. Each open
  * mints a `sourceRef` idempotency key (P54), so a double-submit dedups instead of double-posting.
  */
-export function LedgerComposer({ tenantId, onPosted, initialMode }: LedgerComposerProps) {
+export function LedgerComposer({
+  tenantId,
+  onPosted,
+  initialMode,
+  initialInteractions,
+}: LedgerComposerProps) {
   const [mode, setMode] = useState<Mode | null>(initialMode ?? null);
   const [amount, setAmount] = useState('');
   const [memo, setMemo] = useState('');
@@ -49,6 +60,10 @@ export function LedgerComposer({ tenantId, onPosted, initialMode }: LedgerCompos
 
   const sourceRef = useRef('');
   const interactions = useRef(1);
+  // Whether the operator has opened the composer themselves on this page. It is state set from the
+  // toggle handler, never a ref counted inside the effect below: StrictMode double-invokes effects in
+  // development, so a counter there reports the palette's auto-open as the operator's second one.
+  const [operatorOpened, setOperatorOpened] = useState(false);
 
   const banks = useBankAccounts(true);
   const banksUnavailable = banks.isPending || banks.isError;
@@ -63,16 +78,19 @@ export function LedgerComposer({ tenantId, onPosted, initialMode }: LedgerCompos
   const effectiveBankId = bankId || defaultBank?.id || '';
 
   // Opening (or switching mode) mints a fresh idempotency key and resets the interaction counter.
+  // The auto-open is the palette's when `initialMode` is set and the operator has not opened anything
+  // here yet: that flow began before this component existed, so its counter continues (#408).
   useEffect(() => {
     if (!open) return;
+    const palette = !operatorOpened && initialMode !== undefined;
     sourceRef.current = newSourceRef();
-    interactions.current = 1;
+    interactions.current = (palette ? initialInteractions : undefined) ?? 1;
     setAmount('');
     setMemo('');
     setBankId('');
     setError(null);
     setDate(todayIso());
-  }, [mode, open]);
+  }, [mode, open, operatorOpened, initialMode, initialInteractions]);
 
   const mutation = useMutation<PostResult, LedgerPostError>({
     mutationFn: () =>
@@ -152,7 +170,10 @@ export function LedgerComposer({ tenantId, onPosted, initialMode }: LedgerCompos
       setter(value);
     };
 
-  const toggle = (next: Mode) => setMode((current) => (current === next ? null : next));
+  const toggle = (next: Mode) => {
+    setOperatorOpened(true);
+    setMode((current) => (current === next ? null : next));
+  };
 
   return (
     <>

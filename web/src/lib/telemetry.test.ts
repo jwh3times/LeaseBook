@@ -1,7 +1,7 @@
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 import { server } from '@/test/mocks/server';
-import { trackInteraction } from './telemetry';
+import { readSpentInteractions, spentInteractions, trackInteraction } from './telemetry';
 
 describe('trackInteraction', () => {
   it('posts a tags-only budget sample and swallows failures', async () => {
@@ -53,5 +53,25 @@ describe('trackInteraction', () => {
   it('does not throw when the endpoint is unavailable', () => {
     server.use(http.post('/api/telemetry/budget', () => HttpResponse.error()));
     expect(() => trackInteraction('owner-balances-visible', 0, true)).not.toThrow();
+  });
+});
+
+describe('spent-interaction navigation state', () => {
+  it('round-trips a count a surface can continue counting from', () => {
+    expect(readSpentInteractions(spentInteractions(2))).toBe(2);
+  });
+
+  // History state is whatever the browser replays — a bookmark, a back/forward, a hand-crafted push.
+  // An unusable value means "nobody told us", which is the honest default, not a crash or a 0.
+  it('ignores state that carries no usable count', () => {
+    expect(readSpentInteractions(undefined)).toBeUndefined();
+    expect(readSpentInteractions(null)).toBeUndefined();
+    expect(readSpentInteractions({})).toBeUndefined();
+    expect(readSpentInteractions('2')).toBeUndefined();
+    expect(readSpentInteractions({ spentInteractions: '2' })).toBeUndefined();
+    expect(readSpentInteractions({ spentInteractions: 0 })).toBeUndefined();
+    expect(readSpentInteractions({ spentInteractions: -1 })).toBeUndefined();
+    expect(readSpentInteractions({ spentInteractions: 1.5 })).toBeUndefined();
+    expect(readSpentInteractions({ spentInteractions: Number.NaN })).toBeUndefined();
   });
 });

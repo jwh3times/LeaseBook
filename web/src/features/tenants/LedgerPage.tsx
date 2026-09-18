@@ -1,9 +1,16 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useMemo, useState } from 'react';
-import { useParams, useSearchParams } from 'react-router';
+import {
+  NavigationType,
+  useLocation,
+  useNavigationType,
+  useParams,
+  useSearchParams,
+} from 'react-router';
 import { isNotFound } from '@/api';
 import { Avatar, Button, Card, EmptyState, Icon, IconButton, Input, Money, Select } from '@/design';
 import { num, useTenantDetail } from '@/lib/directory';
+import { readSpentInteractions } from '@/lib/telemetry';
 import { IssuedStatementNotice } from '@/components/IssuedStatementNotice';
 import { QueryErrorState } from '@/components/QueryErrorState';
 import { RecordQuickSwitch } from '@/components/RecordQuickSwitch';
@@ -44,6 +51,16 @@ export function LedgerPage() {
   const composeParam = searchParams.get('compose');
   const initialMode =
     composeParam === 'payment' || composeParam === 'charge' ? composeParam : undefined;
+  // #408: a palette contextual action hands over the interactions it already spent, in history state
+  // rather than the URL. That state is durable — the browser replays it on reload and on back/forward
+  // — so the count applies only on the PUSH that carried it. On a replayed entry the operator spent a
+  // reload or a Back, not ⌘K plus a pick, and re-seeding would over-report a flow the palette had no
+  // part in (and could push a one-choice payment past its ≤ 3 budget).
+  const location = useLocation();
+  const arrivedByNavigation = useNavigationType() === NavigationType.Push;
+  const initialInteractions = arrivedByNavigation
+    ? readSpentInteractions(location.state)
+    : undefined;
 
   const queryClient = useQueryClient();
   const detail = useTenantDetail(id);
@@ -227,7 +244,21 @@ export function LedgerPage() {
       )}
 
       {/* Composer slot (WP-05 fills it). */}
-      <LedgerComposer tenantId={id} onPosted={handlePosted} initialMode={initialMode} />
+      {/*
+        Keyed on the history entry, because `initialMode` is mount-time state inside the composer and
+        React Router reuses this element across `/tenants/t1` → `/tenants/t1?compose=payment` and
+        across one tenant and the next. Without the key the palette's "Record payment" action does
+        nothing whenever the operator is already on a ledger page, and re-running it from the composed
+        URL — same URL, new entry — would not reopen it either (#408). A fresh arrival is also a fresh
+        composer: it re-mints the idempotency key rather than carrying one tenant's over to another.
+      */}
+      <LedgerComposer
+        key={location.key}
+        tenantId={id}
+        onPosted={handlePosted}
+        initialMode={initialMode}
+        initialInteractions={initialInteractions}
+      />
 
       {/* Ledger */}
       <Card className="pf-ledger-card">

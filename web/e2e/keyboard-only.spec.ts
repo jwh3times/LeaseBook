@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import type { BudgetTelemetryRequest } from '@/api';
-import { DEMO_ADMIN, openPalette, signIn } from './helpers';
+import { DEMO_ADMIN, openPalette, paletteOptions, signIn } from './helpers';
 
 // Keyboard-only operability e2e (WP-4 step 4): the flagship budgeted flow driven entirely by keyboard
 // (⌘K → tenant → composer → amount → Enter posts, budget ≤ 3), palette arrow navigation, focus-return
@@ -18,14 +18,39 @@ import { DEMO_ADMIN, openPalette, signIn } from './helpers';
 // so this is collision-free and repeatable. Finalize-by-keyboard is one Enter on the (asserted-
 // focusable) Finalize button; m4-banking owns that mutation.
 //
-// Mutation hygiene: the keyboard payment POSTs to the demo org with a UNIQUE amount (base 41.xx, away
-// from m3-ledger's 12.xx and every seeded figure) and never asserts against golden totals — adding an
-// entry does not move the seeded goldens (the trust equation stays balanced; check-invariants passes).
-// The Settings sub-test exercises the guard-REJECTION path (uncleared items), so the account's active
-// flag never changes.
+// Mutation hygiene: the two keyboard payments POST to the demo org with UNIQUE amounts (bases 41.xx
+// and 43.xx, away from m3-ledger's 12.xx and every seeded figure) and never assert against golden
+// totals — adding an entry does not move the seeded goldens (the trust equation stays balanced;
+// check-invariants passes). The Settings sub-test exercises the guard-REJECTION path (uncleared
+// items), so the account's active flag never changes.
 
-// Base 41.xx keeps this run's amount clear of m3-ledger's 12.xx range and of every seeded rent/fee.
+// Base 41.xx keeps this run's amount clear of m3-ledger's 12.xx range and of every seeded rent/fee;
+// 43.xx does the same for the palette-launched payment, so the two rows never collide.
 const UNIQUE_AMOUNT = (41 + Math.floor(Math.random() * 90) / 100).toFixed(2);
+const PALETTE_AMOUNT = (43 + Math.floor(Math.random() * 90) / 100).toFixed(2);
+const RELOAD_AMOUNT = (45 + Math.floor(Math.random() * 90) / 100).toFixed(2);
+
+// Drives the palette's "Record payment → Jasmine Carter" row from wherever the page currently is.
+async function pickRecordPaymentFromPalette(page: Page): Promise<void> {
+  const search = await openPalette(page);
+  await search.pressSequentially('carter');
+  const options = paletteOptions(page);
+  await expect(options.first().locator('.label')).toHaveText('Jasmine Carter');
+  await expect(options.nth(1).locator('.label')).toHaveText(/^Record payment/);
+  await page.keyboard.press('ArrowDown');
+  await expect(options.nth(1)).toHaveAttribute('aria-selected', 'true');
+  await page.keyboard.press('Enter');
+}
+
+// The budget sample the composer posts on a successful payment.
+function recordPaymentBudget(page: Page) {
+  return page.waitForRequest(
+    (request) =>
+      request.url().includes('/api/telemetry/budget') &&
+      request.method() === 'POST' &&
+      (request.postData() ?? '').includes('"task":"record-payment"'),
+  );
+}
 
 async function gotoCarterLedger(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'Tenants' }).click();
@@ -44,8 +69,8 @@ test.describe('keyboard-only operability', () => {
     // ⌘K → type the tenant → the top result is selected → Enter opens the ledger. All by keyboard.
     const search = await openPalette(page);
     await search.pressSequentially('carter');
-    const topOption = page.getByRole('option').first();
-    await expect(topOption).toContainText('Jasmine Carter');
+    const topOption = paletteOptions(page).first();
+    await expect(topOption.locator('.label')).toHaveText('Jasmine Carter');
     await expect(topOption).toHaveAttribute('aria-selected', 'true');
     await page.keyboard.press('Enter');
     await expect(page).toHaveURL(/\/tenants\/[0-9a-f-]+$/);
@@ -88,6 +113,108 @@ test.describe('keyboard-only operability', () => {
     // If a future spec ever asserts a July-inclusive or all-time balance, void this payment first.
   });
 
+  // #408: the palette's contextual actions, end to end. The budget assertion is the point — this
+  // flow really costs three interactions, and the composer only knows that because the palette hands
+  // its own spend over in navigation state. A regression there reports 2 and looks *better* than it
+  // is, which is why this asserts the exact count rather than the ≤ 3 bound.
+  test('records a payment from the palette action within the ≤ 3 budget, counted honestly', async ({
+    page,
+  }) => {
+    await signIn(page, DEMO_ADMIN);
+
+    // (1) ⌘K, then type. The top result is the tenant; its "Record payment" action is one ↓ away.
+    const search = await openPalette(page);
+    await search.pressSequentially('carter');
+    const options = paletteOptions(page);
+    await expect(options.first().locator('.label')).toHaveText('Jasmine Carter');
+    await expect(options.nth(1).locator('.label')).toHaveText(/^Record payment/);
+
+    // (2) pick the action.
+    await page.keyboard.press('ArrowDown');
+    await expect(options.nth(1)).toHaveAttribute('aria-selected', 'true');
+    await page.keyboard.press('Enter');
+
+    await expect(page).toHaveURL(/\/tenants\/[0-9a-f-]+\?compose=payment$/);
+    await expect(page.locator('.pf-composer-tag')).toHaveText('Record payment');
+    const amount = page.getByLabel('Amount');
+    await expect(amount).toBeFocused();
+    // Unlike the button-driven flow above, this composer opens while the bank list is still in
+    // flight, and it refuses to post money against a read it does not have yet. A person typing an
+    // amount covers that latency; `pressSequentially` does not. Waiting is not an interaction, and a
+    // refused submit never increments the counter, so the budget assertion below is unaffected.
+    await expect(page.getByLabel('Bank account')).toContainText('Operating Trust');
+
+    const budget = page.waitForRequest(
+      (request) =>
+        request.url().includes('/api/telemetry/budget') &&
+        request.method() === 'POST' &&
+        (request.postData() ?? '').includes('"task":"record-payment"'),
+    );
+    await amount.pressSequentially(PALETTE_AMOUNT);
+    await amount.press('Enter'); // (3) submit
+
+    const event = JSON.parse((await budget).postData() ?? '{}') as BudgetTelemetryRequest;
+    expect(event.task).toBe('record-payment');
+    expect(event.interactions).toBe(3);
+    expect(event.met).toBe(true);
+
+    // Posted inline, no navigation — same contract as the button-driven composer above.
+    await expect(
+      page
+        .getByRole('row')
+        .filter({ hasText: `$${PALETTE_AMOUNT}` })
+        .first(),
+    ).toBeVisible();
+  });
+
+  // The palette action has to work from a tenant ledger too, which is the one place React Router does
+  // NOT remount the page: `/tenants/t1` → `/tenants/t1?compose=payment` reconciles the same element,
+  // so anything the composer reads only at mount time silently does nothing (#408).
+  test('the palette action opens the composer when already on a tenant ledger', async ({
+    page,
+  }) => {
+    await signIn(page, DEMO_ADMIN);
+    await gotoCarterLedger(page);
+
+    await pickRecordPaymentFromPalette(page);
+
+    await expect(page).toHaveURL(/\/tenants\/[0-9a-f-]+\?compose=payment$/);
+    await expect(page.locator('.pf-composer-tag')).toHaveText('Record payment');
+    await expect(page.getByLabel('Amount')).toBeFocused();
+
+    // And again from the composed URL: the operator closes it and re-runs the same action. The URL
+    // does not change, so nothing keyed on the URL alone would reopen it.
+    await page.getByLabel('Amount').press('Escape');
+    await expect(page.locator('.pf-composer-tag')).toBeHidden();
+    await pickRecordPaymentFromPalette(page);
+    await expect(page.locator('.pf-composer-tag')).toHaveText('Record payment');
+  });
+
+  // The palette's spend belongs to the arrival it paid for. History state outlives that arrival — the
+  // browser replays it on reload and on back/forward — so a re-seeded counter would over-report a
+  // flow the palette had no part in, and could even fail the budget it is meant to measure (#408).
+  test('a reload of the composed URL does not re-charge the palette’s interactions', async ({
+    page,
+  }) => {
+    await signIn(page, DEMO_ADMIN);
+    await pickRecordPaymentFromPalette(page);
+    await expect(page).toHaveURL(/\/tenants\/[0-9a-f-]+\?compose=payment$/);
+
+    await page.reload();
+    await expect(page.locator('.pf-composer-tag')).toHaveText('Record payment');
+    const amount = page.getByLabel('Amount');
+    await expect(page.getByLabel('Bank account')).toContainText('Operating Trust');
+
+    const budget = recordPaymentBudget(page);
+    await amount.pressSequentially(RELOAD_AMOUNT);
+    await amount.press('Enter');
+
+    const event = JSON.parse((await budget).postData() ?? '{}') as BudgetTelemetryRequest;
+    // Reload (1) + submit (2). The ⌘K and the pick were spent on a page this one replaced.
+    expect(event.interactions).toBe(2);
+    expect(event.met).toBe(true);
+  });
+
   test('palette arrow keys move the selection and Enter activates the highlighted result', async ({
     page,
   }) => {
@@ -96,7 +223,7 @@ test.describe('keyboard-only operability', () => {
     // "trust" matches the Hargrove owner + both trust banks → at least two options to move between.
     const search = await openPalette(page);
     await search.pressSequentially('trust');
-    const options = page.getByRole('option');
+    const options = paletteOptions(page);
     await expect(options.nth(1)).toBeVisible(); // ≥ 2 results rendered
     await expect(options.nth(0)).toHaveAttribute('aria-selected', 'true');
 

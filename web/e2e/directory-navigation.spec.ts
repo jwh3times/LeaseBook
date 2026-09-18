@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { DEMO_ADMIN, openPalette, signIn } from './helpers';
+import { DEMO_ADMIN, openPalette, paletteOptions, signIn } from './helpers';
 
 // Directory navigation e2e (WP-4 step 1, ADR-022's deferred coverage): owners/properties/tenants
 // list → detail, units surfaced via property detail (there is no /units/:id route), a ⌘K jump to one
@@ -129,14 +129,18 @@ test.describe('directory navigation', () => {
     await expect(heading).toHaveText(firstName!);
   });
 
+  // Each leg asserts the FIRST option's label EXACTLY, and anchors the URL it lands on. Both halves
+  // matter since #408: filtering by the entity's name matches its contextual action row too ("Owner
+  // statement · Hargrove Family Trust"), and a substring check plus an unanchored URL would stay green
+  // with an action row leading the list and the statement page opening instead of the record.
   test('⌘K jumps to an owner, a property, and a tenant', async ({ page }) => {
     // Owner.
     let search = await openPalette(page);
     await search.fill('hargrove');
-    const ownerOption = page.getByRole('option').filter({ hasText: 'Hargrove Family Trust' });
-    await expect(ownerOption).toBeVisible();
+    const ownerOption = paletteOptions(page).first();
+    await expect(ownerOption.locator('.label')).toHaveText('Hargrove Family Trust');
     await page.keyboard.press('Enter');
-    await expect(page).toHaveURL(/\/owners\//);
+    await expect(page).toHaveURL(/\/owners\/[0-9a-f-]+$/);
     await expect(page.getByRole('heading', { name: 'Hargrove Family Trust' })).toBeVisible();
 
     // Property — discover a real address from the list rather than hardcoding unconfirmed seed data,
@@ -149,19 +153,19 @@ test.describe('directory navigation', () => {
 
     search = await openPalette(page);
     await search.fill(propertyTerm);
-    const propertyOption = page.getByRole('option').filter({ hasText: address });
-    await expect(propertyOption).toBeVisible();
+    const propertyOption = paletteOptions(page).first();
+    await expect(propertyOption.locator('.label')).toHaveText(address);
     await page.keyboard.press('Enter');
-    await expect(page).toHaveURL(/\/properties\//);
+    await expect(page).toHaveURL(/\/properties\/[0-9a-f-]+$/);
     await expect(page.getByRole('heading', { name: address })).toBeVisible();
 
     // Tenant. (A "unit" palette result routes to /properties, not a unit detail — not covered here.)
     search = await openPalette(page);
     await search.fill('carter');
-    const tenantOption = page.getByRole('option').filter({ hasText: 'Jasmine Carter' });
-    await expect(tenantOption).toBeVisible();
+    const tenantOption = paletteOptions(page).first();
+    await expect(tenantOption.locator('.label')).toHaveText('Jasmine Carter');
     await page.keyboard.press('Enter');
-    await expect(page).toHaveURL(/\/tenants\//);
+    await expect(page).toHaveURL(/\/tenants\/[0-9a-f-]+$/);
     await expect(page.getByRole('heading', { name: 'Jasmine Carter' })).toBeVisible();
   });
 });
