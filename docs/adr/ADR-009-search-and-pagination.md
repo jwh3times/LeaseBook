@@ -36,9 +36,12 @@ For search, the realistic options were:
   with `SET LOCAL` for the request transaction only (it dies with the tx — safe, M-E11). Whole-string
   similarity (`%`) was rejected: "carter" has low similarity to "Jasmine Carter" but high _word_
   similarity, which is the interaction we want.
-- Results are `{ type, id, label, sublabel, score }`, `WHERE NOT is_system` (aggregate rows never
+- Results are `{ type, id, label, sublabel, score, propertyId }`, `WHERE NOT is_system` (aggregate rows never
   surface, P40/M2-E2), default limit 20 (max 50), `q` 1–100 chars (empty → 400 via the validation
-  pipeline). Org scope rides the ambient RLS connection.
+  pipeline). Org scope rides the ambient RLS connection. `propertyId` is the property that owns a
+  `unit` result and is null for every other type (#409) — units have no detail route, so a caller
+  opens the owning property instead. Ordering is `score DESC, label, id`; the id tiebreak keeps
+  same-score, same-label rows (the demo org seeds three units labelled `#1`) in a stable order.
 
 **Lists use one consistent paged contract** (§C.3 / P42): `PagedResponse<T> { items, total, page,
 pageSize }` with query params `page` (1-based, default 1), `pageSize` (default 50, max 200), `q`

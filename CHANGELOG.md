@@ -37,6 +37,12 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   pull the map (and the named handoff document) into and push back from, so a handoff written on one
   machine reaches the other without a sync client.
 
+- **Choosing a unit in the ⌘K palette now opens the property it belongs to.** It previously landed
+  on the properties list, leaving the operator to find the building themselves — units have no page
+  of their own, so their property's detail page is where they are actually shown. Search results also
+  break ties on a stable key, so two units with the same label no longer swap places between
+  identical searches.
+
 ### Fixed
 
 - **Disbursement previews no longer appear runnable when no operating trust account exists.** A

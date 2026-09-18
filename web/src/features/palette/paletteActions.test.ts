@@ -2,12 +2,18 @@ import { describe, expect, it } from 'vitest';
 import type { SearchResult } from '@/lib/search';
 import { actionsFor, primaryRoute } from './paletteActions';
 
-const result = (type: string, id = 'x1', label = 'Label'): SearchResult => ({
+const result = (
+  type: string,
+  id = 'x1',
+  label = 'Label',
+  propertyId: string | null = null,
+): SearchResult => ({
   type,
   id,
   label,
   sublabel: null,
   score: 1,
+  propertyId,
 });
 
 describe('actionsFor', () => {
@@ -37,6 +43,19 @@ describe('actionsFor', () => {
     expect(actionsFor(result('bank', 'b1', 'Operating Trust'))).toEqual([
       { id: 'open-bank', label: 'Open Operating Trust', route: '/banking?account=b1' },
     ]);
+  });
+
+  it('opens a unit on its owning property, not the properties list', () => {
+    expect(actionsFor(result('unit', 'u1', '#2B', 'p9'))).toEqual([
+      { id: 'open-unit', label: 'Open #2B', route: '/properties/p9' },
+    ]);
+  });
+
+  // The server fills propertyId for every unit (#409), so this is the shape of a contract that has
+  // drifted, not an ordinary state. The list is the only honest destination left — better than a
+  // route with "null" in it, which 404s and tells the operator nothing.
+  it('falls back to the properties list for a unit with no owning property', () => {
+    expect(primaryRoute(result('unit', 'u1', '#2B'))).toBe('/properties');
   });
 
   it('opens a property on its detail page', () => {

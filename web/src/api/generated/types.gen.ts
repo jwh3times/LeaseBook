@@ -857,6 +857,7 @@ export type SearchResult = {
     label: string;
     sublabel: null | string;
     score: number | string;
+    propertyId: null | string;
 };
 
 export type SetBankActiveRequest = {

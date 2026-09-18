@@ -44,7 +44,18 @@ export function actionsFor(result: SearchResult): PaletteAction[] {
         },
       ];
     case 'unit':
-      return [{ id: 'open-unit', label: `Open ${result.label}`, route: '/properties' }];
+      // A unit has no page of its own — it lives on its property's detail page, which the search
+      // result names (#409). The list is the fallback for a unit that arrives without one. That is
+      // reachable: a unit stored in Recent before #409 has no `propertyId` and keeps the old
+      // behavior until the operator searches it again. A route with `null` in it would 404 and tell
+      // them nothing.
+      return [
+        {
+          id: 'open-unit',
+          label: `Open ${result.label}`,
+          route: result.propertyId ? `/properties/${result.propertyId}` : '/properties',
+        },
+      ];
     case 'bank':
       return [
         {
