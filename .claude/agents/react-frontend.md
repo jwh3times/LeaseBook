@@ -430,3 +430,5 @@ test("records a payment", async () => {
 | Ad-hoc `font-variant-numeric`                | `<td className="num">` / `<Money>` / `className="pf-num"`    |
 | New CSS custom properties in feature CSS     | Add to `web/src/design/tokens.css` only                      |
 | Direct `fetch` for XSRF-protected endpoints  | Generated write functions (XSRF is configured automatically) |
+| Bare header `div` inside a `role="listbox"`  | Wrap the run in `<div role="group" aria-label>`              |
+| Visual-only selection in a `combobox` list   | `aria-activedescendant` → the selected option's `id`         |

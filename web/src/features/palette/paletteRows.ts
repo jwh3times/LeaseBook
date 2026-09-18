@@ -67,3 +67,33 @@ export function recentRows(results: SearchResult[]): PaletteRow[] {
     result,
   }));
 }
+
+/** A run of consecutive rows sharing one header, rendered as an ARIA `group` inside the listbox. */
+export interface PaletteGroup {
+  header: string | null;
+  /**
+   * Rows paired with their index in the flat `rows` list. Grouping is a presentation concern only:
+   * selection, the arrow-key bounds and `aria-activedescendant` all stay one flat sequence, so a
+   * group boundary is something the operator hears rather than something they have to step over.
+   */
+  items: { row: PaletteRow; index: number }[];
+}
+
+/**
+ * Chunks rows into their groups (#413). A `listbox` may contain `option` and `group` children; a bare
+ * header `div` is neither, so the headers become each group's accessible name instead of a sibling
+ * the screen reader has no way to relate to the options under it.
+ */
+export function groupRows(rows: PaletteRow[]): PaletteGroup[] {
+  const groups: PaletteGroup[] = [];
+  for (const [index, row] of rows.entries()) {
+    const current = groups.at(-1);
+    // A null header continues the group above it; only a header starts a new one.
+    if (!current || row.header !== null) {
+      groups.push({ header: row.header, items: [{ row, index }] });
+    } else {
+      current.items.push({ row, index });
+    }
+  }
+  return groups;
+}

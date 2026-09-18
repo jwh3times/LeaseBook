@@ -29,3 +29,10 @@ if (typeof globalThis.localStorage === 'undefined') {
   Object.defineProperty(globalThis, 'localStorage', { value: storage, configurable: true });
   Object.defineProperty(window, 'localStorage', { value: storage, configurable: true });
 }
+
+// jsdom implements no layout, so it ships no `Element.scrollIntoView`. Calling it throws rather than
+// no-op'ing, which surfaces as the whole component failing to render. Real browsers always have it,
+// so this belongs here rather than as an optional call in app code that would weaken the contract.
+if (typeof Element.prototype.scrollIntoView !== 'function') {
+  Element.prototype.scrollIntoView = () => {};
+}

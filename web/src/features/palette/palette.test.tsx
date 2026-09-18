@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
@@ -188,6 +188,56 @@ describe('CommandPalette', () => {
     await userEvent.keyboard('{ArrowDown}{Enter}');
 
     expect(JSON.parse(localStorage.getItem('leasebook.palette.recent') ?? '[]')).toEqual([CARTER]);
+  });
+
+  // #413: focus never leaves the input, so a screen reader learns what is selected only from
+  // `aria-activedescendant`. axe cannot see this — the WCAG gate passed throughout the years it was
+  // missing — so these assertions are the only thing standing between it and silence.
+  it('tracks the selected option with aria-activedescendant', async () => {
+    server.use(searchHandler([CARTER, HARGROVE]));
+    renderPalette();
+    const input = screen.getByLabelText('Search');
+    await userEvent.type(input, 'car');
+    await screen.findByText('Jasmine Carter');
+
+    const options = screen.getAllByRole('option');
+    expect(options[0]!.id).toBeTruthy();
+    expect(input).toHaveAttribute('aria-activedescendant', options[0]!.id);
+
+    await userEvent.keyboard('{ArrowDown}');
+    expect(input).toHaveAttribute('aria-activedescendant', options[1]!.id);
+
+    await userEvent.keyboard('{ArrowUp}');
+    expect(input).toHaveAttribute('aria-activedescendant', options[0]!.id);
+  });
+
+  it('claims no active descendant when there is nothing to select', async () => {
+    server.use(searchHandler([]));
+    renderPalette();
+    const input = screen.getByLabelText('Search');
+    await userEvent.type(input, 'zzz');
+    await screen.findByText(/no matches/i);
+
+    // Pointing at an option that is not there is worse than pointing at nothing.
+    expect(input).not.toHaveAttribute('aria-activedescendant');
+  });
+
+  it('exposes each header as a labelled group, not a stray listbox child', async () => {
+    server.use(searchHandler([CARTER, HARGROVE]));
+    renderPalette();
+    await userEvent.type(screen.getByLabelText('Search'), 'car');
+    await screen.findByText('Jasmine Carter');
+
+    const listbox = screen.getByRole('listbox');
+    expect(
+      within(listbox)
+        .getAllByRole('group')
+        .map((g) => g.getAttribute('aria-label')),
+    ).toEqual(['Top result', 'Actions', 'Owners']);
+    // A listbox may contain options and groups; a bare header div is neither.
+    for (const option of within(listbox).getAllByRole('option')) {
+      expect(option.parentElement).toHaveAttribute('role', 'group');
+    }
   });
 
   it('shows recents without actions when the query is empty', async () => {
