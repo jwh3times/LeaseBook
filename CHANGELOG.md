@@ -62,6 +62,11 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   behind rather than carrying it to the other account. Switching accounts while a reconciliation is
   still finalizing now refreshes the account that was finalized, instead of briefly showing its
   cleared items as uncleared.
+- **A screen reader now announces which ⌘K palette row is selected.** Moving through results with the
+  arrow keys changed only a visual highlight, so anyone not looking at the screen had no way to know
+  what Enter would do — which matters more now that the list mixes records with actions like "Record
+  payment". The selected row is announced as it changes and is kept scrolled into view, and each
+  group of results is announced with its heading instead of the heading floating loose in the list.
 
 ## [0.16.0] - 2026-09-14
 
