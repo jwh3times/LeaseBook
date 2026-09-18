@@ -10,7 +10,13 @@ namespace LeaseBook.Modules.Directory.Features.Search;
 /// </summary>
 public sealed record Search(string Q, int? Limit) : IQuery<IReadOnlyList<SearchResult>>;
 
-public sealed record SearchResult(string Type, Guid Id, string Label, string? Sublabel, double Score);
+/// <summary>
+/// One matched directory entity. <paramref name="PropertyId"/> is the property that owns a
+/// <c>unit</c> result, so a caller can open that property rather than the properties list (#409); it
+/// is null for every other type. Named for what it is rather than a generic parent id, so a later
+/// type cannot reuse the slot to mean something else.
+/// </summary>
+public sealed record SearchResult(string Type, Guid Id, string Label, string? Sublabel, double Score, Guid? PropertyId);
 
 public sealed class SearchValidator : AbstractValidator<Search>
 {
@@ -40,24 +46,28 @@ internal sealed class SearchHandler(DbContext db, TimeProvider clock) : IQueryHa
         // is_system filter keeps aggregate rows out (P40/M2-E2). bank_accounts has no is_system column.
         var rows = await db.Database.SqlQuery<SearchResult>(
             $"""
-            SELECT type, id, label, sublabel, score FROM (
+            SELECT type, id, label, sublabel, score, property_id FROM (
                 SELECT 'owner' AS type, o.id, o.name AS label,
                        (SELECT count(*) FROM properties p WHERE p.owner_id = o.id)::text || ' properties' AS sublabel,
-                       word_similarity({q}, o.name)::float8 AS score
+                       word_similarity({q}, o.name)::float8 AS score,
+                       NULL::uuid AS property_id
                 FROM owners o
                 WHERE NOT o.is_system AND {q} <% o.name
 
                 UNION ALL
                 SELECT 'property', pr.id, pr.address,
                        COALESCE(ow.name, ''),
-                       word_similarity({q}, pr.address)::float8
+                       word_similarity({q}, pr.address)::float8,
+                       NULL::uuid
                 FROM properties pr LEFT JOIN owners ow ON ow.id = pr.owner_id
                 WHERE NOT pr.is_system AND {q} <% pr.address
 
+                -- The only arm that fills property_id (#409): a unit result opens its property.
                 UNION ALL
                 SELECT 'unit', u.id, u.label,
                        COALESCE(up.address, ''),
-                       word_similarity({q}, u.label)::float8
+                       word_similarity({q}, u.label)::float8,
+                       u.property_id
                 FROM units u LEFT JOIN properties up ON up.id = u.property_id
                 WHERE NOT u.is_system AND {q} <% u.label
 
@@ -69,18 +79,23 @@ internal sealed class SearchHandler(DbContext db, TimeProvider clock) : IQueryHa
                                    AND (l.start_date IS NULL OR l.start_date <= {today})
                                    AND (l.end_date IS NULL OR l.end_date >= {today})
                                  LIMIT 1), ''),
-                       word_similarity({q}, t.display_name)::float8
+                       word_similarity({q}, t.display_name)::float8,
+                       NULL::uuid
                 FROM tenants t
                 WHERE NOT t.is_system AND {q} <% t.display_name
 
                 UNION ALL
                 SELECT 'bank', b.id, b.name,
                        TRIM(COALESCE(b.institution, '') || COALESCE(' ••' || b.mask, '')),
-                       word_similarity({q}, b.name)::float8
+                       word_similarity({q}, b.name)::float8,
+                       NULL::uuid
                 FROM bank_accounts b
                 WHERE {q} <% b.name
             ) results
-            ORDER BY score DESC, label
+            -- `id` is the final tiebreak, not decoration: the demo org alone seeds three units
+            -- labelled `#1`, which score and sort identically, so without it the palette's top result
+            -- for such a query is whatever order Postgres happens to return.
+            ORDER BY score DESC, label, id
             LIMIT {limit}
             """).ToListAsync(ct);
 

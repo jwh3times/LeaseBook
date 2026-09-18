@@ -159,7 +159,7 @@ test.describe('directory navigation', () => {
     await expect(page).toHaveURL(/\/properties\/[0-9a-f-]+$/);
     await expect(page.getByRole('heading', { name: address })).toBeVisible();
 
-    // Tenant. (A "unit" palette result routes to /properties, not a unit detail — not covered here.)
+    // Tenant.
     search = await openPalette(page);
     await search.fill('carter');
     const tenantOption = paletteOptions(page).first();
@@ -167,5 +167,41 @@ test.describe('directory navigation', () => {
     await page.keyboard.press('Enter');
     await expect(page).toHaveURL(/\/tenants\/[0-9a-f-]+$/);
     await expect(page.getByRole('heading', { name: 'Jasmine Carter' })).toBeVisible();
+  });
+
+  // #409: units have no detail route of their own, so a unit result opens the property that owns it
+  // rather than dumping the operator on the properties list.
+  //
+  // `#2B` is pinned deliberately rather than discovered from the first Units row. Discovery picks
+  // `#1`, which the demo org seeds on three different properties with identical search scores and no
+  // id tiebreak — whichever Postgres returns first decides whether this passes. `#2B` is unique in
+  // the org AND differs from every property address, which matters because one seeded unit is
+  // labelled `88 Riverside Dr` — the address of the very property it sits on.
+  test('⌘K opens a unit on its owning property', async ({ page }) => {
+    await openList(page, 'Properties');
+    await page.locator('tbody tr').filter({ hasText: '412 Oakmont Ave' }).first().click();
+    await expect(page).toHaveURL(/\/properties\/[0-9a-f-]+$/);
+    const propertyUrl = page.url();
+
+    const unitsCard = page
+      .locator('.pf-card')
+      .filter({ has: page.getByRole('heading', { name: 'Units', level: 3 }) });
+    await expect(unitsCard.getByText('#2B', { exact: true })).toBeVisible();
+
+    // Go somewhere else first, so landing back on the property proves the jump and not inertia.
+    await openList(page, 'Owners');
+    const search = await openPalette(page);
+    await search.fill('#2B');
+
+    // Match the row LABEL exactly: Jasmine Carter's row carries `#2B` as its sublabel, and the
+    // property row's label is the address — clicking either would prove nothing. The count assertion
+    // is the guard that this stayed one unambiguous row.
+    const unitOption = paletteOptions(page).filter({
+      has: page.locator('.label', { hasText: /^#2B$/ }),
+    });
+    await expect(unitOption).toHaveCount(1);
+    await unitOption.click();
+
+    await expect(page).toHaveURL(propertyUrl);
   });
 });

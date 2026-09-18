@@ -8,6 +8,7 @@ const result = (type: string, id: string, label: string, score = 1): SearchResul
   label,
   sublabel: null,
   score,
+  propertyId: null,
 });
 
 const tenant = result('tenant', 't1', 'Jasmine Carter', 0.9);
