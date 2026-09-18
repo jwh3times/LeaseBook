@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living runbook; canonical development command reference
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-09-13
+- **Last reviewed:** 2026-09-18
 
 ## Prerequisites
 
