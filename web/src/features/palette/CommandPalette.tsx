@@ -1,15 +1,18 @@
-import { Fragment, type KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Icon } from '@/design';
 import { ApiErrorNotice } from '@/components/ApiErrorNotice';
 import { useSearch } from '@/lib/search';
 import { spentInteractions, trackInteraction } from '@/lib/telemetry';
 import { iconForType, primaryRoute } from './paletteActions';
-import { type PaletteRow, recentRows, searchRows } from './paletteRows';
+import { groupRows, type PaletteRow, recentRows, searchRows } from './paletteRows';
 import { getRecent, pushRecent } from './recent';
 
 /** ⌘K to open plus the pick — what reaching any row costs, and the budget for an entity jump. */
 const PALETTE_INTERACTIONS = 2;
+
+/** Positional, so it is always a valid id and always unique, whatever a result is labelled (#413). */
+const optionId = (index: number) => `palette-option-${index}`;
 
 /**
  * The ⌘K command palette (§C.5/§C.7): debounced cross-entity search, recent items when empty, full
@@ -37,8 +40,21 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
     () => (showRecent ? recentRows(recent) : searchRows(search.data ?? [])),
     [showRecent, recent, search.data],
   );
+  const groups = useMemo(() => groupRows(rows), [rows]);
 
   useEffect(() => setSelected(0), [debounced, rows.length]);
+
+  // Focus never leaves the input, so the selected row is announced through `aria-activedescendant`
+  // rather than by being focused (#413). With nothing to select the attribute is dropped entirely:
+  // pointing at an option that is not in the DOM is worse than pointing at nothing.
+  const activeId = rows[selected] ? optionId(selected) : undefined;
+
+  // The same pattern requires the active option to be visible — an announced row the operator cannot
+  // see is only half the fix, and a long result list scrolls.
+  useEffect(() => {
+    if (!activeId) return;
+    document.getElementById(activeId)?.scrollIntoView({ block: 'nearest' });
+  }, [activeId]);
 
   function activate(row: PaletteRow) {
     // Recents track where the operator went, so an action records its *entity* — "Record payment →
@@ -101,6 +117,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
             role="combobox"
             aria-expanded
             aria-controls="palette-list"
+            aria-activedescendant={activeId}
           />
           <kbd className="pf-kbd">esc</kbd>
         </div>
@@ -110,7 +127,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
             <ApiErrorNotice error={search.error} kind="read" />
           </div>
         )}
-        <div className="pf-palette-list" id="palette-list" role="listbox">
+        <div className="pf-palette-list" id="palette-list" role="listbox" aria-label="Results">
           {showRecent && rows.length === 0 && (
             <div className="pf-palette-empty">Type to search across the directory.</div>
           )}
@@ -121,28 +138,36 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
             <div className="pf-palette-empty">No matches for “{debounced}”.</div>
           )}
 
-          {rows.map((row, index) => (
-            <Fragment key={row.key}>
-              {row.header && <div className="pf-palette-group">{row.header}</div>}
-              <div
-                className={`pf-palette-item${index === selected ? ' sel' : ''}`}
-                role="option"
-                aria-selected={index === selected}
-                onMouseEnter={() => setSelected(index)}
-                onClick={() => activate(row)}
-              >
-                <Icon
-                  name={row.kind === 'action' ? 'arrowUpRight' : iconForType(row.result.type)}
-                  size={16}
-                />
-                <span className="label">
-                  {row.kind === 'action' ? row.action.label : row.result.label}
-                </span>
-                {row.kind === 'result' && row.result.sublabel && (
-                  <span className="sub">{row.result.sublabel}</span>
-                )}
-              </div>
-            </Fragment>
+          {groups.map((group) => (
+            <div
+              key={group.header ?? `group-${group.items[0]!.row.key}`}
+              role="group"
+              aria-label={group.header ?? undefined}
+            >
+              {group.header && <div className="pf-palette-group">{group.header}</div>}
+              {group.items.map(({ row, index }) => (
+                <div
+                  key={row.key}
+                  id={optionId(index)}
+                  className={`pf-palette-item${index === selected ? ' sel' : ''}`}
+                  role="option"
+                  aria-selected={index === selected}
+                  onMouseEnter={() => setSelected(index)}
+                  onClick={() => activate(row)}
+                >
+                  <Icon
+                    name={row.kind === 'action' ? 'arrowUpRight' : iconForType(row.result.type)}
+                    size={16}
+                  />
+                  <span className="label">
+                    {row.kind === 'action' ? row.action.label : row.result.label}
+                  </span>
+                  {row.kind === 'result' && row.result.sublabel && (
+                    <span className="sub">{row.result.sublabel}</span>
+                  )}
+                </div>
+              ))}
+            </div>
           ))}
         </div>
       </div>

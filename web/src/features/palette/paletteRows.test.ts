@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { SearchResult } from '@/lib/search';
-import { recentRows, searchRows } from './paletteRows';
+import { groupRows, recentRows, searchRows } from './paletteRows';
 
 const result = (type: string, id: string, label: string, score = 1): SearchResult => ({
   type,
@@ -80,5 +80,28 @@ describe('recentRows', () => {
 
   it('is empty for no recents', () => {
     expect(recentRows([])).toEqual([]);
+  });
+});
+
+describe('groupRows', () => {
+  it('chunks rows under their headers and keeps the flat selection indices', () => {
+    const groups = groupRows(searchRows([tenant, owner, property]));
+
+    expect(groups.map((g) => g.header)).toEqual(['Top result', 'Actions', 'Owners', 'Properties']);
+    // Indices stay global: selection and the arrow-key bounds remain one flat list across groups.
+    expect(groups.flatMap((g) => g.items.map((i) => i.index))).toEqual([0, 1, 2, 3]);
+    expect(groups[1]!.items[0]!.row.kind).toBe('action');
+  });
+
+  it('keeps consecutive headerless rows in the group above them', () => {
+    const groups = groupRows(recentRows([tenant, owner]));
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0]!.header).toBe('Recent');
+    expect(groups[0]!.items).toHaveLength(2);
+  });
+
+  it('is empty for no rows', () => {
+    expect(groupRows([])).toEqual([]);
   });
 });
