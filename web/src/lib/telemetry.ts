@@ -18,3 +18,30 @@ export function trackInteraction(task: string, interactions: number, met?: boole
     /* telemetry is best-effort; swallow */
   });
 }
+
+/**
+ * React Router navigation state carrying the interactions a *previous* surface already spent on its
+ * way to the destination (#408). The ⌘K palette spends two getting to "Record payment → X"; without
+ * this the ledger composer restarts at one and the budget sample under-reports the real flow.
+ *
+ * It rides in history state rather than the URL deliberately: it describes how the operator arrived,
+ * not what they are looking at, so a refresh or a bookmark carries none of it and the destination
+ * falls back to counting only its own interactions.
+ */
+export interface SpentInteractionsState {
+  spentInteractions: number;
+}
+
+export function spentInteractions(count: number): SpentInteractionsState {
+  return { spentInteractions: count };
+}
+
+/**
+ * Reads that count back out. History state is whatever the browser replays, so anything that is not
+ * a positive whole number reads as absent — "nobody told us" — rather than seeding a nonsense count.
+ */
+export function readSpentInteractions(state: unknown): number | undefined {
+  if (typeof state !== 'object' || state === null) return undefined;
+  const count = (state as Partial<SpentInteractionsState>).spentInteractions;
+  return typeof count === 'number' && Number.isInteger(count) && count > 0 ? count : undefined;
+}

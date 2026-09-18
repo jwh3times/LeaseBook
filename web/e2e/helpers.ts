@@ -47,6 +47,13 @@ export async function openPalette(page: Page): Promise<Locator> {
   return search;
 }
 
+// The palette's own result rows, scoped to its dialog. A bare `getByRole('option')` also matches the
+// `<option>` elements of any `<select>` on the page behind it — the ledger's type filter comes first in
+// DOM order — so `.first()` silently stops meaning "the palette's top result".
+export function paletteOptions(page: Page): Locator {
+  return page.getByRole('dialog', { name: 'Command palette' }).getByRole('option');
+}
+
 // The detail text a forced 500 fulfills (WP-4 step 2). Exported so specs can assert the SPA's real
 // error-mapping (e.g. `ledgerMutations.ts`'s `toError`, which prefers `body.detail`) actually surfaced
 // this string, rather than asserting on a generic status message.

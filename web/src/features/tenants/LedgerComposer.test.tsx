@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
+import { StrictMode } from 'react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -40,10 +41,15 @@ function renderComposer(props: Partial<Parameters<typeof LedgerComposer>[0]> = {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
+  // StrictMode on purpose: the app mounts under it, and it double-invokes effects. The palette's
+  // interaction seed (#408) lives next to that effect, and an implementation that counts opens inside
+  // it looks correct here and mis-reports in the browser — which is what this wrapper catches.
   render(
-    <QueryClientProvider client={queryClient}>
-      <LedgerComposer tenantId="t1" onPosted={onPosted} {...props} />
-    </QueryClientProvider>,
+    <StrictMode>
+      <QueryClientProvider client={queryClient}>
+        <LedgerComposer tenantId="t1" onPosted={onPosted} {...props} />
+      </QueryClientProvider>
+    </StrictMode>,
   );
   return { onPosted };
 }
@@ -79,6 +85,65 @@ describe('LedgerComposer', () => {
     });
     expect(body?.sourceRef).toEqual(expect.any(String));
     // open (1) + submit (1), no extra choices → met at ≤ 3.
+    expect(trackInteraction).toHaveBeenCalledWith('record-payment', 2, true);
+  });
+
+  // #408: the palette spends ⌘K + the "Record payment → X" pick before the composer exists, and
+  // hands that count over in navigation state. Seeding from it is what makes the budget sample
+  // describe the flow the operator actually performed rather than only its last two steps.
+  it('continues the palette’s interaction count when the palette auto-opened it', async () => {
+    server.use(
+      ...baseHandlers(),
+      http.post('/api/accounting/tenants/:tenantId/payments', () =>
+        HttpResponse.json({ entryId: 'pay1' }),
+      ),
+    );
+    const { onPosted } = renderComposer({ initialMode: 'payment', initialInteractions: 2 });
+
+    await screen.findByText('Operating Trust');
+    await userEvent.type(screen.getByLabelText('Amount'), '1450');
+    await userEvent.keyboard('{Enter}');
+
+    await vi.waitFor(() => expect(onPosted).toHaveBeenCalledWith('pay1'));
+    // ⌘K (1) + pick the action (2) + submit (3) — still inside the ≤ 3 budget.
+    expect(trackInteraction).toHaveBeenCalledWith('record-payment', 3, true);
+  });
+
+  it('counts only its own interactions for a bookmarked ?compose=payment open', async () => {
+    server.use(
+      ...baseHandlers(),
+      http.post('/api/accounting/tenants/:tenantId/payments', () =>
+        HttpResponse.json({ entryId: 'pay1' }),
+      ),
+    );
+    const { onPosted } = renderComposer({ initialMode: 'payment' });
+
+    await screen.findByText('Operating Trust');
+    await userEvent.type(screen.getByLabelText('Amount'), '1450');
+    await userEvent.keyboard('{Enter}');
+
+    await vi.waitFor(() => expect(onPosted).toHaveBeenCalledWith('pay1'));
+    // A refresh or a bookmark carries no navigation state, so the count starts here: open + submit.
+    expect(trackInteraction).toHaveBeenCalledWith('record-payment', 2, true);
+  });
+
+  it('starts from scratch when the operator reopens it by hand', async () => {
+    server.use(
+      ...baseHandlers(),
+      http.post('/api/accounting/tenants/:tenantId/payments', () =>
+        HttpResponse.json({ entryId: 'pay1' }),
+      ),
+    );
+    const { onPosted } = renderComposer({ initialMode: 'payment', initialInteractions: 2 });
+
+    await screen.findByText('Operating Trust');
+    await userEvent.type(screen.getByLabelText('Amount'), '{Escape}');
+    await userEvent.click(screen.getByRole('button', { name: 'Record payment' }));
+    await userEvent.type(await screen.findByLabelText('Amount'), '1450');
+    await userEvent.keyboard('{Enter}');
+
+    await vi.waitFor(() => expect(onPosted).toHaveBeenCalledWith('pay1'));
+    // The palette's spend belongs to the open it paid for, not to every later open on this page.
     expect(trackInteraction).toHaveBeenCalledWith('record-payment', 2, true);
   });
 

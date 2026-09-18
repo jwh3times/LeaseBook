@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { seedTheme, visualSnapshot } from './helpers';
+import { paletteOptions, seedTheme, visualSnapshot } from './helpers';
 
 // The budgeted M2 flows (§D step 6), run against the seeded demo org. The seeded admin has no MFA
 // enrolled (M0 seed), so login is email + password → dashboard.
@@ -55,9 +55,12 @@ test('⌘K jumps to any tenant in ≤ 2 interactions', async ({ page }) => {
     await expect(search).toBeVisible({ timeout: 1000 });
   }).toPass({ timeout: 15_000 });
   await search.fill('carter');
-  await expect(page.getByText('Jasmine Carter')).toBeVisible();
+  // The first option is the palette's "Top result" row — the one Enter activates. Assert its label
+  // EXACTLY: a `toContainText` here would also be satisfied by the "Record payment → Jasmine Carter"
+  // action row leading the list, and the anchored URL below is the other half of that guard (#408).
+  await expect(paletteOptions(page).first().locator('.label')).toHaveText('Jasmine Carter');
   await page.keyboard.press('Enter'); // (2) jump
-  await expect(page).toHaveURL(/\/tenants\//);
+  await expect(page).toHaveURL(/\/tenants\/[0-9a-f-]+$/);
   await expect(page.getByRole('heading', { name: 'Jasmine Carter' })).toBeVisible();
 });
 
