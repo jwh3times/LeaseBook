@@ -67,6 +67,10 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   what Enter would do — which matters more now that the list mixes records with actions like "Record
   payment". The selected row is announced as it changes and is kept scrolled into view, and each
   group of results is announced with its heading instead of the heading floating loose in the list.
+- **The ⌘K palette and every dialog now have a background.** Both were transparent, so their contents
+  sat directly on the dimmed page behind them — in the palette, the "Top result" and "Actions"
+  headings were very nearly invisible. Error text and the dashboard's alert marker also follow the
+  theme now instead of staying a fixed shade of red in dark mode.
 
 ## [0.16.0] - 2026-09-14
 

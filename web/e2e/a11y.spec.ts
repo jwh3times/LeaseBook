@@ -97,12 +97,7 @@ for (const theme of THEMES) {
       const search = await openPalette(page);
       await search.fill('carter');
       await expect(paletteOptions(page).first()).toBeVisible();
-      // color-contrast is disabled ONLY until #416 lands: `.pf-palette` sets its background from
-      // `--surface-1`, which no stylesheet defines, so the panel is transparent and axe reads the
-      // dimmed backdrop behind it (group headers come out at 1.09:1). That is a real failure and a
-      // real bug — filed, not waved away. Everything else here, including the listbox structure this
-      // test exists for, still gates. **Delete this disable when #416 closes.**
-      await runA11y(page, { disableRules: ['color-contrast'] });
+      await runA11y(page);
     });
   });
 
