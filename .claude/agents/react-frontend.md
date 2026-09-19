@@ -64,6 +64,8 @@ Tokens live in `web/src/design/tokens.css` as CSS custom properties on `html[dat
 
 **Never add new CSS custom properties outside `tokens.css`.** Never hardcode colors; always use a token.
 
+**A `var(--x)` naming a property nothing defines is not an error.** CSS drops the declaration, so the element silently falls back to `inherit`/`initial` — nothing type-checks a token name and nothing renders red. A declared fallback (`var(--x, #e5484d)`) is worse, not better: it hides the typo behind a literal that never tracks the theme. `web/src/design/tokens.test.ts` scans every `.css`/`.ts`/`.tsx` file under `web/src` and fails `npm run test` on any reference no definition backs, fallback or not. Fix the name or define the token in `tokens.css`.
+
 **`pf-*` prefix** — all design-system primitives:
 
 | Class                          | Component                                             |
