@@ -8,6 +8,8 @@
   --font-sora: 'Sora', system-ui, sans-serif;
   --font-manrope: 'Manrope', system-ui, sans-serif;
   --font: var(--font-jakarta);
+  /* Monospace for correlation ids and other copyable references; no theme variants. */
+  --font-mono: ui-monospace, 'SFMono-Regular', 'Menlo', monospace;
   --radius: 14px;
   --radius-sm: 9px;
   --radius-lg: 20px;

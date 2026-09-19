@@ -432,3 +432,4 @@ test("records a payment", async () => {
 | Direct `fetch` for XSRF-protected endpoints  | Generated write functions (XSRF is configured automatically) |
 | Bare header `div` inside a `role="listbox"`  | Wrap the run in `<div role="group" aria-label>`              |
 | Visual-only selection in a `combobox` list   | `aria-activedescendant` → the selected option's `id`         |
+| `var(--x)` naming no token in tokens.css     | Define it there; an unknown name drops the rule              |
