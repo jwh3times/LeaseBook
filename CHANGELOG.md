@@ -71,6 +71,22 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   sat directly on the dimmed page behind them — in the palette, the "Top result" and "Actions"
   headings were very nearly invisible. Error text and the dashboard's alert marker also follow the
   theme now instead of staying a fixed shade of red in dark mode.
+- **Sign-in would have failed outright the first time the app ran behind a TLS-terminating load
+  balancer.** The endpoint that issues the cross-site request forgery token refused to run whenever
+  the server could not itself see HTTPS, returning a server error and leaving the login page with no
+  token to submit. The token endpoint no longer makes that demand; the cookie's `Secure` flag is
+  applied on the way out instead.
+
+### Security
+
+- **Every cookie the application sets now carries `Secure` outside local development, whatever
+  scheme the server itself observes.** Where TLS ends at a load balancer, the application is reached
+  over plain HTTP even though the browser used HTTPS, so a cookie that decided the flag from the
+  request's own scheme could have been sent without it. The flag is now decided by the environment
+  and applied once for every cookie on its way out, which also covers the short-lived cookie that
+  links the password step to the code step during two-factor sign-in — one the application never
+  configured itself. Local development is unchanged, because `http://localhost` cannot deliver a
+  `Secure` cookie at all.
 
 ## [0.16.0] - 2026-09-14
 

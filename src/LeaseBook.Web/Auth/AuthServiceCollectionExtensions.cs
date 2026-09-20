@@ -20,9 +20,9 @@ public static class AuthServiceCollectionExtensions
         this IServiceCollection services, IWebHostEnvironment environment)
     {
         // http://localhost is plain HTTP in dev; every other environment terminates TLS at the edge.
-        var securePolicy = environment.IsDevelopment()
-            ? CookieSecurePolicy.SameAsRequest
-            : CookieSecurePolicy.Always;
+        // CookieSecurity owns that decision for every cookie this application sets, and
+        // CookieSecurity.UseLeaseBookCookiePolicy applies the same policy at the pipeline level.
+        var securePolicy = CookieSecurity.PolicyFor(environment);
 
         services
             .AddIdentity<AppUser, IdentityRole<Guid>>(options =>
@@ -84,7 +84,18 @@ public static class AuthServiceCollectionExtensions
             options.HeaderName = "X-XSRF-TOKEN";
             options.Cookie.Name = "LeaseBook.Antiforgery";
             options.Cookie.SameSite = SameSiteMode.Lax;
-            options.Cookie.SecurePolicy = securePolicy;
+            // Deliberately NOT set to CookieSecurePolicy.Always outside Development, and this is the
+            // one cookie where that is the right call. DefaultAntiforgery.CheckSSLConfig reads this
+            // property as an assertion about the *origin's* view of the request and throws
+            // InvalidOperationException on every GetAndStoreTokens call when Request.IsHttps is
+            // false. Behind an edge that terminates TLS, the origin sees plain HTTP on a request the
+            // browser made over HTTPS, so that assertion is not ours to make here — making it 500s
+            // the token endpoint and takes sign-in with it.
+            //
+            // The Secure flag this cookie needs comes from the pipeline instead:
+            // CookieSecurity.UseLeaseBookCookiePolicy stamps it on every cookie on the way out,
+            // without claiming anything about the scheme Kestrel observed. CookieSecurePolicyTests
+            // asserts the emitted Set-Cookie header rather than this property, for that reason.
         });
 
         var mfaEnrolled = new MfaEnrolledRequirement();
