@@ -108,3 +108,38 @@ application — a second service, or an out-of-band decryption tool — since th
 it with the data rests on there being exactly one reader. Revisit the proxy decision if a second hop
 is introduced in front of the ingress, which makes `ForwardLimit` a real choice rather than the
 one-hop default it is today.
+
+## Addendum — cookie `Secure` is stamped at the pipeline (2026-09-20)
+
+Forwarded-header trust shipping **off** has a consequence this ADR did not draw out: the origin sees
+plain HTTP on a request the browser made over HTTPS. So `Request.IsHttps` is not a usable signal for
+whether a cookie should carry `Secure`, and neither is any per-cookie setting that reasons from it.
+
+The decision is that the flag is derived from the **environment** and applied at the **pipeline**.
+`CookieSecurity.PolicyFor` is the single source of truth — `SameAsRequest` in Development, because
+`http://localhost` genuinely cannot deliver a `Secure` cookie, and `Always` everywhere else.
+`CookieSecurity.UseLeaseBookCookiePolicy` applies it to every cookie on the way out, which is the only
+altitude that reaches a cookie minted by a framework scheme nobody configured — `Identity`'s
+two-factor correlation cookie is registered by `AddIdentity` and its `CookieBuilder` is never touched
+here.
+
+**One deliberate exception, which looks like an inconsistency and must not be "fixed".** The
+antiforgery cookie's own `AntiforgeryOptions.Cookie.SecurePolicy` is **not** set to `Always`.
+`DefaultAntiforgery.CheckSSLConfig` reads that property as an assertion that the origin itself
+observes HTTPS and throws `InvalidOperationException` on every `GetAndStoreTokens` call when
+`Request.IsHttps` is false. Behind an edge that terminates TLS, that assertion is false by
+construction, so setting `Always` there returns 500 from the token endpoint and takes sign-in with it.
+The cookie still reaches the browser with `Secure`, because the pipeline stamps the wire without
+claiming anything about the scheme Kestrel observed.
+
+`CookieSecurePolicyTests` pins both halves: the option is asserted as _not_ `Always`, and four
+wire-level tests boot the host over plain HTTP in Production and assert the real `Set-Cookie` headers.
+The wire altitude is not optional — a DI-options assertion cannot see a cookie written by hand onto
+the response or minted by a scheme nothing here configures, which is precisely the class of cookie
+this is about.
+
+Enabling forwarded-header trust does not retire any of this. It restores `Request.IsHttps`, but the
+environment remains the correct input and the pipeline remains the only place that covers cookies
+this codebase does not configure. The positional constraint stands either way: the policy replaces the
+response cookie feature for the remainder of the request, so cookie-writing middleware registered
+above it is not covered.

@@ -342,6 +342,13 @@ var exitCode = await lifecycle.RunAsync(
         configuredApp.UseExceptionHandler();
         configuredApp.UseMiddleware<LeaseBook.Web.Security.SecurityHeadersMiddleware>();
 
+        // Every cookie that leaves this application carries the environment's secure policy, whoever
+        // writes it — see CookieSecurity. Position matters: it replaces the response cookie feature
+        // for the rest of the request, so it must precede authentication (which mints the session and
+        // the two-factor correlation cookies), antiforgery, and the endpoints. Keep any new
+        // cookie-writing middleware below this line.
+        configuredApp.UseLeaseBookCookiePolicy(configuredApp.Environment);
+
         if (configuredApp.Environment.IsDevelopment())
         {
             configuredApp.MapOpenApi().AllowAnonymous(); // GET /openapi/v1.json

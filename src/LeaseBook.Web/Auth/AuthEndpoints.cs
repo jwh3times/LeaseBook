@@ -1,7 +1,9 @@
 using LeaseBook.SharedKernel.Endpoints;
 using LeaseBook.Web.Endpoints;
 using LeaseBook.Web.Persistence;
+using LeaseBook.Web.Security;
 using Microsoft.AspNetCore.Antiforgery;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Routing;
@@ -20,14 +22,19 @@ public sealed class AuthEndpoints : IEndpointModule
     {
         var group = app.MapGroup("/api/auth").WithTags("Auth");
 
-        group.MapGet("/csrf", (HttpContext http, IAntiforgery antiforgery) =>
+        group.MapGet("/csrf", (HttpContext http, IAntiforgery antiforgery, IWebHostEnvironment environment) =>
         {
             var tokens = antiforgery.GetAndStoreTokens(http);
             http.Response.Cookies.Append("XSRF-TOKEN", tokens.RequestToken!, new CookieOptions
             {
                 HttpOnly = false, // the SPA must read it to echo as the X-XSRF-TOKEN header
                 SameSite = SameSiteMode.Lax,
-                Secure = http.Request.IsHttps,
+                // Environment-derived, not Request.IsHttps: behind a TLS-terminating edge the origin
+                // sees plain HTTP on a request the browser made over HTTPS, so the request's own
+                // scheme is not the question being asked. CookieSecurity owns the answer, and the
+                // pipeline policy applies it again on the way out — this call site is stated
+                // explicitly so the cookie is right whatever order the pipeline is in later.
+                Secure = CookieSecurity.IsSecureRequired(environment, http.Request),
             });
             return TypedResults.NoContent();
         }).AllowAnonymous();
