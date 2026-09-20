@@ -106,7 +106,15 @@ module database 'modules/database.bicep' = {
 module vault 'modules/vault.bicep' = {
   scope: rg
   name: 'vault'
-  params: { prefix: prefix, location: location }
+  params: {
+    prefix: prefix
+    location: location
+    // Prod only, and deliberately: purge protection cannot be switched back off, and it reserves the
+    // vault name for the full 90-day soft-delete window after a delete. Prod is long-lived and holds
+    // the key that unwraps the Data Protection keyring; dev is expected to be torn down and
+    // redeployed under the same name. Matches modules/dbadmin.bicep, which is prod-only by condition.
+    enablePurgeProtection: env == 'prod'
+  }
 }
 
 module app 'modules/containerapp.bicep' = {

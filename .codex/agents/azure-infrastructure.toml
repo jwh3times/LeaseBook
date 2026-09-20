@@ -75,15 +75,15 @@ Prod is **VNet-injected — it has no public endpoint at all**, which is not the
 
 `infra/main.bicep` is subscription-scoped (`targetScope = 'subscription'`). Entry params: `env` `@allowed(['dev','prod'])`, `location = 'eastus2'`, `postgresAdminLogin`, `postgresAdminPassword @secure`. Staging is deferred — `@allowed` enforces only `dev` and `prod`.
 
-| Module       | File                         | Produces                                                                                                               |
-| ------------ | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `monitoring` | `modules/monitoring.bicep`   | Log Analytics (`PerGB2018`, 30-day retention) + App Insights (`kind: 'web'`, workspace-based)                          |
-| `registry`   | `modules/registry.bicep`     | ACR (`Basic`, `adminUserEnabled: false`)                                                                               |
-| `storage`    | `modules/storage.bicep`      | StorageV2, `Standard_LRS`, TLS 1.2, no public blob; containers `statements` + `documents`                              |
-| `database`   | `modules/database.bicep`     | PostgreSQL Flexible Server v18, db name `leasebook`; see env table above                                               |
-| `vault`      | `modules/vault.bicep`        | Key Vault (`standard`/`A`; `enableRbacAuthorization: true`; `enableSoftDelete: true`; `softDeleteRetentionInDays: 90`) |
-| `network`    | `modules/network.bicep`      | VNet, delegated ACA + Postgres subnets, private DNS zone + VNet link — **prod only** (`enablePrivateNetworking`)       |
-| `app`        | `modules/containerapp.bicep` | Container Apps environment + user-assigned identity + app + migrator job + capabilities job + RBAC                     |
+| Module       | File                         | Produces                                                                                                          |
+| ------------ | ---------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `monitoring` | `modules/monitoring.bicep`   | Log Analytics (`PerGB2018`, 30-day retention) + App Insights (`kind: 'web'`, workspace-based)                     |
+| `registry`   | `modules/registry.bicep`     | ACR (`Basic`, `adminUserEnabled: false`)                                                                          |
+| `storage`    | `modules/storage.bicep`      | StorageV2, `Standard_LRS`, TLS 1.2, no public blob; containers `statements` + `documents`                         |
+| `database`   | `modules/database.bicep`     | PostgreSQL Flexible Server v18, db name `leasebook`; see env table above                                          |
+| `vault`      | `modules/vault.bicep`        | Key Vault (`standard`/`A`; RBAC auth; soft delete, 90-day retention; `enablePurgeProtection` prod only — one-way) |
+| `network`    | `modules/network.bicep`      | VNet, delegated ACA + Postgres subnets, private DNS zone + VNet link — **prod only** (`enablePrivateNetworking`)  |
+| `app`        | `modules/containerapp.bicep` | Container Apps environment + user-assigned identity + app + migrator job + capabilities job + RBAC                |
 
 Wiring order in `main.bicep`: RG → network (conditional) → monitoring → registry → storage → database → vault → app. Networking is declared first because both the database and the Container Apps environment are injected into its subnets and neither can be moved afterwards. Outputs: `resourceGroup`, `acrLoginServer`, `keyVaultName`, `appFqdn`, `migratorJobName`, `capabilitiesJobName`.
 
