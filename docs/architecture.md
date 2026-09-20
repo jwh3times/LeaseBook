@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living architecture guide
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-09-11
+- **Last reviewed:** 2026-09-20
 
 This is the canonical public map of the system **as implemented**. It explains how the pieces fit
 together and links the decisions that shaped them without reproducing every invariant. Accepted
@@ -145,8 +145,9 @@ that sets security response headers and a strict content-security policy on ever
 limiting on the authentication endpoints, config-gated multi-factor enforcement for admin accounts,
 and encryption of sensitive authentication data at rest. These controls are environment- and
 config-gated — permissive in Development and tests — and a non-Development environment fails fast at
-startup if required security configuration is missing. The security model and reporting process are in
-[SECURITY.md](../SECURITY.md).
+startup if required security configuration is missing. The security model is this section together
+with [data handling and retention](compliance/data-handling.md); the vulnerability reporting process
+is in [SECURITY.md](../SECURITY.md).
 
 The account-security page remains reachable before required MFA enrollment and supports authenticator
 setup, one-time recovery-code display, and password changes. Recovery-code sign-in follows password

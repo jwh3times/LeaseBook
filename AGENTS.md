@@ -206,9 +206,10 @@ Cross-cutting rules, module boundaries, organization-isolation model, and trust-
 apply to all work. If a domain guidance file conflicts with these invariants, the invariant wins.
 
 The `/ship` skill detects documentation drift: it invokes the `docs-updater` agent for the docs it owns
-and flags private-roadmap WP drift. It is authored at `.claude/skills/ship/` and mirrored to
-`.agents/skills/ship/` for harnesses that read that tree. It remains session-scoped either way — no
-harness is guaranteed to run it, and CI does not. When source changes affect docs, ports, ADR-worthy
+and warns when a branch closes no issue, or closes one that is missing from the project board or on it
+with `Track`/`Gate` unset. It is authored at `.agents/skills/ship/` and mirrored to
+`.claude/skills/ship/` for Claude Code, like every other skill. It remains session-scoped either way —
+no harness is guaranteed to run it, and CI does not. When source changes affect docs, ports, ADR-worthy
 decisions, user workflows, commands, or business events, check documentation drift manually and update
 the relevant docs in the same change.
 
