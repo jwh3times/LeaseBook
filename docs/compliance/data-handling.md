@@ -140,9 +140,10 @@ PostgreSQL data above for the retention window.
 
 - **At go-live —** TLS terminates at the Azure Container Apps ingress, which enforces TLS 1.2+ and
   HTTPS. Azure Blob Storage is provisioned HTTPS-only with a TLS 1.2 minimum.
-- **Live —** the authentication and antiforgery cookies are `HttpOnly` and `SameSite=Lax`, and are
-  marked `Secure` outside Development. Cross-site request forgery uses the double-submit pattern, so
-  the token the SPA echoes in a request header is readable by the SPA by design.
+- **Live —** the sign-in session cookie and the antiforgery validation cookie are `HttpOnly` and
+  `SameSite=Lax`, and are marked `Secure` outside Development. Cross-site request forgery uses the
+  double-submit pattern, so the companion token the SPA echoes back in a request header is readable
+  by the SPA by design.
 - **Live —** every response carries a strict content security policy and the supporting headers
   (`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`), and
   outside Development a one-year `Strict-Transport-Security` header with `includeSubDomains`.
@@ -185,8 +186,9 @@ SECURITY` and an `org_id` isolation policy applied through one migration helper;
   filter.
 - **Application authorization is deny-by-default.** Endpoints require an explicit authorization
   policy; ASP.NET Identity enforces a password-length floor and account lockout. Multi-factor
-  authentication is required of administrator accounts and is gated by environment configuration,
-  so it is mandatory in a deployed environment and permissive in Development and tests.
+  authentication applies to administrator accounts and is gated by a configuration setting that the
+  Production configuration turns on; it is off by default everywhere else, including Development and
+  tests.
 - **Secrets via managed identity (at go-live).** Connection strings and role passwords are held in
   Azure Key Vault and read by a user-assigned managed identity granted the Key Vault Secrets User role
   scoped to the vault; the same identity pulls container images.
