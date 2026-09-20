@@ -227,6 +227,15 @@ succeeds without it; store the secret, pass the URI, redeploy. This un-mutes its
 
 ### Deliberate omissions
 
+- **No private endpoint on Key Vault; both vaults stay on the public endpoint.** Access is gated by
+  Entra RBAC rather than by network reachability: the vaults are RBAC-mode only (no access policies),
+  the app identity holds Key Vault Secrets User and nothing wider, and the administration vault is a
+  separate resource the app identity has no grant on at all. Container Apps resolves secret references
+  over that endpoint, so moving either vault behind a private endpoint is not a one-property change —
+  it needs the `privatelink.vaultcore.azure.net` zone, an address out of the range reserved above, a
+  VNet link, and a decision about how an operator reaches the vault to store a secret afterwards.
+  Revisit when network-level isolation is wanted alongside the identity-level control, and do the
+  zone, the address and the operator path in one change rather than three.
 - **No NSG on either subnet.** Neither service requires one, and an over-restrictive NSG on an ACA
   subnet is a common way to break the platform's own traffic. Revisit if the security review wants
   one, but design it against the Container Apps required-traffic documentation, not from first

@@ -14,6 +14,10 @@ resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
     minimumTlsVersion: 'TLS1_2'
     allowBlobPublicAccess: false
     supportsHttpsTrafficOnly: true
+    // Entra only: the account keys and any SAS derived from them are refused. Set before anything
+    // reads or writes these containers, so the artifact store is built against managed identity from
+    // its first line — turning this off later would mean auditing every caller that grew up on a key.
+    allowSharedKeyAccess: false
   }
 }
 

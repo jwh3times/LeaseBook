@@ -3,7 +3,7 @@
 - **Audience:** Deployment operators and maintainers
 - **Status:** Draft runbook; blocked on the first live restore drill
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-09-09
+- **Last reviewed:** 2026-09-20
 
 Skeleton procedure for a future deployment. LeaseBook is not publicly deployed; the first restore
 drill is deferred to public distribution under the consolidated deployment handoff. Record real
@@ -63,11 +63,43 @@ firewall-gated:
    the restored server, restart the Container App revision, confirm `/api/health`.
 5. Decommission the old server once the restored one is confirmed healthy and reconciled.
 
+## Alongside the drill: back up the Data Protection wrapping key
+
+A PITR restores the database, and the Data Protection keyring is persisted in the database — but the
+keyring is wrapped by the `dataprotection` RSA key in `lb-<env>-kv` ([ADR-041](../adr/ADR-041-durable-keyring-and-proxy-trust.md)),
+whose private half never leaves the vault and is therefore not part of any database backup. The two
+have to be recoverable together: without the key, a restored database's `asp_net_user_tokens.value`
+(TOTP secrets and two-factor recovery codes) cannot be decrypted and existing auth/antiforgery
+cookies cannot be validated. Prod's vault carries purge protection (`infra/modules/vault.bicep`), so
+the first recovery path is the vault's own soft-delete window:
+
+```bash
+# The key still exists in the vault but was deleted — recover it in place.
+az keyvault key recover --vault-name lb-<env>-kv --name dataprotection
+```
+
+Keep an independent copy as well, refreshed whenever the key is rotated, and stored where the
+vault's own credentials are not:
+
+```bash
+az keyvault key backup \
+  --vault-name lb-<env>-kv \
+  --name dataprotection \
+  --file dataprotection-<env>-<YYYYMMDD>.keybackup
+```
+
+Restoring that blob is `az keyvault key restore --vault-name <target> --file <path>`. Three
+constraints shape where it is useful, so read them before relying on it: the blob can only be
+restored into a Key Vault in the **same subscription and the same Azure geography**; the restore
+fails if a key of that name already exists in the target vault, **including a soft-deleted one**
+(recover it instead, as above); and the file is the key — treat it as a credential even though it is
+encrypted and bound to the service.
+
 ## Notes
 
 - Backups are automatic; retention is configured in Bicep. Geo-redundant backup is enabled in prod.
 - The trust-accounting invariant suite should be run against the restored database before cutover —
   a restore that doesn't reconcile to the cent is not a successful restore.
 - **TODO (first drill):** record actual restore duration, data-loss window observed,
-  observed behavior of the administration job inside the VNet, and any manual steps
-  discovered.
+  observed behavior of the administration job inside the VNet, whether a `dataprotection` key backup
+  round-trips into a second vault, and any manual steps discovered.
