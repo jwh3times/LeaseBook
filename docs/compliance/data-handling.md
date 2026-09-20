@@ -3,7 +3,7 @@
 - **Audience:** Contributors, maintainers, and the external compliance reviewer
 - **Status:** Draft — pending external GLBA/NCREC compliance review
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-09-13
+- **Last reviewed:** 2026-09-20
 
 > **Draft status.** This document is engineering-authored and **not yet accepted**. What blocks
 > acceptance is the external trust-accounting and privacy compliance review — the NCREC-facing review
@@ -140,17 +140,26 @@ PostgreSQL data above for the retention window.
 
 - **At go-live —** TLS terminates at the Azure Container Apps ingress, which enforces TLS 1.2+ and
   HTTPS. Azure Blob Storage is provisioned HTTPS-only with a TLS 1.2 minimum.
-- **Live —** authentication and antiforgery cookies are `HttpOnly` and `SameSite=Lax`.
-
-Additional host-level transport hardening (strict host filtering, HSTS, a content security policy,
-and secure-cookie enforcement) is part of the go-live security work tracked in the engineering
-roadmap.
+- **Live —** the authentication and antiforgery cookies are `HttpOnly` and `SameSite=Lax`, and are
+  marked `Secure` outside Development. Cross-site request forgery uses the double-submit pattern, so
+  the token the SPA echoes in a request header is readable by the SPA by design.
+- **Live —** every response carries a strict content security policy and the supporting headers
+  (`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`), and
+  outside Development a one-year `Strict-Transport-Security` header with `includeSubDomains`.
+- **Live —** the host refuses to start outside Development unless `AllowedHosts` names real
+  hostnames, so host filtering cannot be left permissive in a deployed environment.
 
 ### At rest
 
 - **At go-live —** PostgreSQL, Blob Storage, and Key Vault encrypt data at rest with Azure
   platform-managed keys. Key Vault soft-delete retains deleted secrets for 90 days. Customer-managed
   keys are not used in the beta design.
+- **Live —** authenticator keys and two-factor recovery codes are encrypted in the identity token
+  store with ASP.NET Data Protection, above the database's own at-rest encryption.
+- **Live —** the Data Protection keyring itself persists to PostgreSQL rather than to a container
+  filesystem, and is wrapped by a Key Vault key wherever deployment configuration names one, so the
+  keys protecting the ciphertext are not stored only alongside it
+  ([ADR-041](../adr/ADR-041-durable-keyring-and-proxy-trust.md)).
 
 ## 4. Access controls and organization isolation
 
@@ -175,8 +184,9 @@ SECURITY` and an `org_id` isolation policy applied through one migration helper;
   in an owner statement or export by construction — a trust-accounting invariant, not a display
   filter.
 - **Application authorization is deny-by-default.** Endpoints require an explicit authorization
-  policy; ASP.NET Identity enforces a password-length floor, account lockout, and multi-factor
-  authentication.
+  policy; ASP.NET Identity enforces a password-length floor and account lockout. Multi-factor
+  authentication is required of administrator accounts and is gated by environment configuration,
+  so it is mandatory in a deployed environment and permissive in Development and tests.
 - **Secrets via managed identity (at go-live).** Connection strings and role passwords are held in
   Azure Key Vault and read by a user-assigned managed identity granted the Key Vault Secrets User role
   scoped to the vault; the same identity pulls container images.
