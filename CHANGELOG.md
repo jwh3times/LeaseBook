@@ -94,6 +94,11 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Security
 
+- **The local development stack is reachable only from the machine running it.** Docker Compose now
+  publishes the database, pgAdmin, and the app on the loopback address instead of every network
+  interface, so nobody else on a shared network can reach the local database or pgAdmin, which runs
+  without a login. To try the app from a phone, `LEASEBOOK_APP_BIND=0.0.0.0` opens the app alone.
+
 - **Click-budget telemetry now accepts only the flows the product actually measures.** The endpoint
   the app uses to report how many interactions a budgeted task took takes one of a fixed set of task
   names and a non-negative count, and rejects anything else. The app's own reports are checked
