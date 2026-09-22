@@ -1,4 +1,5 @@
 using LeaseBook.Migrator;
+using LeaseBook.SharedKernel.Csv;
 using LeaseBook.SharedKernel.Endpoints;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -52,6 +53,13 @@ public sealed class ImportEntitiesEndpoints : IEndpointModule
                             detail: "That column-mapping profile is not available.",
                             status: StatusCodes.Status400BadRequest);
 
+                    if (body.CsvContent?.Length > CsvImportLimits.MaxCharacters)
+                        return ProblemResults.Problem(
+                            httpContext,
+                            code: "csv_too_large",
+                            detail: CsvImportLimits.TooLargeMessage,
+                            status: StatusCodes.Status400BadRequest);
+
                     var csvBytes = System.Text.Encoding.UTF8.GetBytes(body.CsvContent ?? string.Empty);
                     await using var csvStream = new MemoryStream(csvBytes);
 
@@ -63,6 +71,7 @@ public sealed class ImportEntitiesEndpoints : IEndpointModule
 
                     return TypedResults.Ok(result);
                 })
+            .WithCsvImportLimit()
             .Produces<ImportBatchResult>()
             .Produces(StatusCodes.Status400BadRequest);
     }

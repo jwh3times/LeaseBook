@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living runbook; canonical development command reference
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-09-18
+- **Last reviewed:** 2026-09-22
 
 ## Prerequisites
 
@@ -147,6 +147,9 @@ Notes:
 
 - **Port already in use?** Override with `LEASEBOOK_APP_PORT` (app) or `LEASEBOOK_DB_PORT` (db), e.g.
   `$env:LEASEBOOK_APP_PORT='8090'; ./scripts/dev.ps1 app-up`.
+- **Opening the app from another device (a phone on the same network)?** Every port is published on
+  loopback only. `$env:LEASEBOOK_APP_BIND='0.0.0.0'; ./scripts/dev.ps1 app-up` opens the app — and
+  only the app: the database and pgAdmin stay on loopback, since pgAdmin runs without a login.
 - **Rebuild after code changes:** `app-up` always passes `--build`, so re-running it picks up changes.
 - **Auth across restarts:** the Data Protection keyring persists to Postgres in every environment
   ([ADR-041](../adr/ADR-041-durable-keyring-and-proxy-trust.md)), so auth/antiforgery cookies survive

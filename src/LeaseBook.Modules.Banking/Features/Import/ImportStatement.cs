@@ -3,6 +3,7 @@ using LeaseBook.Modules.Banking.Domain;
 using LeaseBook.Modules.Banking.Import;
 using LeaseBook.SharedKernel;
 using LeaseBook.SharedKernel.Cqrs;
+using LeaseBook.SharedKernel.Csv;
 using LeaseBook.SharedKernel.Tenancy;
 using Microsoft.EntityFrameworkCore;
 
@@ -26,7 +27,8 @@ public sealed class ImportStatementValidator : AbstractValidator<ImportStatement
     {
         RuleFor(x => x.BankAccountId).NotEmpty();
         RuleFor(x => x.Filename).NotEmpty();
-        RuleFor(x => x.CsvContent).NotEmpty();
+        RuleFor(x => x.CsvContent).NotEmpty()
+            .MaximumLength(CsvImportLimits.MaxCharacters).WithMessage(CsvImportLimits.TooLargeMessage);
         RuleFor(x => x.ColumnMap).NotNull();
         When(x => x.ColumnMap is not null, () =>
         {

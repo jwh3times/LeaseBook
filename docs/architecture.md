@@ -141,7 +141,11 @@ sub-org visibility (an owner sees only their properties) is enforced at the appl
 than by stacking more RLS policies — see [ADR-003](adr/ADR-003-portal-suborg-scoping-at-app-layer.md).
 
 Layered on top of that organization boundary, the host applies defense-in-depth hardening: a middleware
-that sets security response headers and a strict content-security policy on every response, rate
+that sets security response headers — including same-origin `Cross-Origin-Opener-Policy` and
+`Cross-Origin-Resource-Policy` — and a strict content-security policy on every response, with
+`Strict-Transport-Security` and the policy's `upgrade-insecure-requests` directive sent outside
+Development; Kestrel's `Server` header is suppressed, which the CI full-stack smoke job checks against
+the real container. The host also applies rate
 limiting on the authentication endpoints, config-gated multi-factor enforcement for admin accounts,
 and encryption of sensitive authentication data at rest. These controls are environment- and
 config-gated — permissive in Development and tests — and a non-Development environment fails fast at
@@ -307,7 +311,11 @@ so the host binds and readiness — not the exit code — keeps the replica out 
 server-side rejection such as a missing table or a revoked grant still fails the boot. See
 [ADR-028](adr/ADR-028-platform-capability-model.md). Readiness is tuned for patience and liveness for
 speed; a separate startup probe covers the pre-bind work (role seeding, registry validation, job
-wiring) that happens before the host binds a port.
+wiring) that happens before the host binds a port. Both probe endpoints are anonymous and answer with
+status only: liveness returns `{"status":"ok"}`, and readiness returns its aggregate status as plain
+text, without naming its checks. Which check is failing is in the logs, where the health-check
+service reports each failing check by name on every probe — see the
+[diagnostics runbook](runbooks/diagnostics.md#diagnosing-a-replica-that-stays-unready).
 
 Migrations always run separately from the application, as the `leasebook_migrator` role and **never
 at app startup** — but the two environments reach the database differently. Production's PostgreSQL
