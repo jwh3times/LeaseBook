@@ -1,14 +1,18 @@
 using FluentValidation;
 using LeaseBook.SharedKernel.Endpoints;
+using LeaseBook.Web.Observability;
 
 namespace LeaseBook.Web.Endpoints;
 
 /// <summary>
 /// Runs the registered FluentValidation validator for a request DTO on non-CQRS endpoints (auth,
 /// telemetry), returning a 400 ProblemDetails with the <c>errors</c> dictionary on failure. CQRS slices validate
-/// in the dispatcher's ValidationDecorator instead (§C.8) — never both for the same message.
+/// in the dispatcher's ValidationDecorator instead (§C.8) — never both for the same message. Both
+/// paths log <see cref="LogEvents.ValidationRejection"/> with the field count only, so the event means
+/// "a validation 400" whichever produced it.
 /// </summary>
-public sealed class ValidationEndpointFilter<T>(IValidator<T> validator) : IEndpointFilter
+public sealed class ValidationEndpointFilter<T>(IValidator<T> validator, ILogger<ValidationEndpointFilter<T>> logger)
+    : IEndpointFilter
     where T : class
 {
     public async ValueTask<object?> InvokeAsync(EndpointFilterInvocationContext context, EndpointFilterDelegate next)
@@ -22,6 +26,10 @@ public sealed class ValidationEndpointFilter<T>(IValidator<T> validator) : IEndp
                 var errors = result.Errors
                     .GroupBy(e => e.PropertyName)
                     .ToDictionary(g => g.Key, g => g.Select(e => e.ErrorMessage).ToArray());
+                logger.LogWarning(
+                    LogEvents.ValidationRejection,
+                    "Validation rejection on {FieldCount} field(s)",
+                    errors.Count);
                 return ProblemResults.ValidationProblem(context.HttpContext, errors);
             }
         }

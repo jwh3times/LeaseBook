@@ -27,10 +27,10 @@ public sealed class CapturingLogger<T> : ILogger<T>
 /// </summary>
 public sealed class CapturingLoggerProvider : ILoggerProvider
 {
-    private readonly List<(LogLevel Level, string Category, string Message)> _entries = [];
+    private readonly List<(LogLevel Level, string Category, string Message, EventId EventId)> _entries = [];
 
     /// <summary>A snapshot — the host's background services keep logging on other threads.</summary>
-    public IReadOnlyList<(LogLevel Level, string Category, string Message)> Entries
+    public IReadOnlyList<(LogLevel Level, string Category, string Message, EventId EventId)> Entries
     {
         get
         {
@@ -47,11 +47,11 @@ public sealed class CapturingLoggerProvider : ILoggerProvider
     {
     }
 
-    private void Add(LogLevel level, string category, string message)
+    private void Add(LogLevel level, string category, string message, EventId eventId)
     {
         lock (_entries)
         {
-            _entries.Add((level, category, message));
+            _entries.Add((level, category, message, eventId));
         }
     }
 
@@ -64,6 +64,6 @@ public sealed class CapturingLoggerProvider : ILoggerProvider
         public void Log<TState>(
             LogLevel logLevel, EventId eventId, TState state, Exception? exception,
             Func<TState, Exception?, string> formatter)
-            => owner.Add(logLevel, category, formatter(state, exception));
+            => owner.Add(logLevel, category, formatter(state, exception), eventId);
     }
 }
