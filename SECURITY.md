@@ -58,6 +58,17 @@ LeaseBook treats the following as security-critical, and reports in these areas 
 - **Secret and data exposure.** Leaked credentials, secrets committed to source, or sensitive data
   disclosed in responses or logs.
 
+### Already automated
+
+These run on the repository continuously, so a report that only restates what they already flag —
+without a demonstrated impact on LeaseBook — is unlikely to be new to us:
+
+- **Secret scanning:** gitleaks on every pull request and push to `main`, plus GitHub secret scanning
+  with push protection.
+- **Static analysis:** CodeQL (C#, JavaScript/TypeScript, Python, and GitHub Actions workflows).
+- **Dependencies:** Dependabot version and security updates for NuGet, npm, Docker images, and
+  GitHub Actions; every action is pinned to a full commit SHA.
+
 ### Out of scope
 
 - Findings that require a compromised host, physical access, or an already-privileged
