@@ -3,7 +3,7 @@
 - **Audience:** Evaluators, contributors, and maintainers
 - **Status:** Living public direction
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-09-09
+- **Last reviewed:** 2026-09-22
 
 LeaseBook is pre-release software. This page communicates shipped capabilities and broad product
 direction; it is not an implementation plan or a commitment to specific dates. Detailed sequencing,
@@ -37,7 +37,9 @@ Hardening and beta readiness are in progress. Shipped so far:
   MFA, authentication rate limiting, encrypted MFA secrets at rest — with the keys protecting them
   stored durably rather than alongside the running process, and wrapped by a managed key where a
   deployment supplies one — and production startup configuration guards), production safeguards for
-  development seed data, and CSV formula-injection protection.
+  development seed data, and CSV formula-injection protection. Sessions are time-bounded and
+  centrally revocable: a sign-in lasts at most twelve hours however active it is, and signing out
+  ends that account's sessions on every device rather than only the browser in use.
 - **Diagnostics.** A uniform API error contract with machine-readable codes and support-reference
   correlation ids, safe user-facing error messages, and application logging wired to Application
   Insights — see the error diagnostics runbook and ADR-025.

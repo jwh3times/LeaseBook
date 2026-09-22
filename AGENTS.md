@@ -49,6 +49,14 @@ this one, for current progress.
     one, so it is not tied to a container's filesystem. `ForwardedHeaders` trust is declared in
     configuration, refused at startup when enabled without a named proxy, and ships off until an
     operator names the ingress. Neither the wrap nor the ingress naming is deployment-validated.
+  - Bounded session lifetime and revocation on sign-out (ADR-043 addendum). A sign-in carries an
+    absolute twelve-hour ceiling held in the ticket itself, so sliding renewal and `RefreshSignInAsync`
+    move the idle window but never the ceiling, and a ticket without one is refused rather than
+    admitted. Signing out rotates the security stamp, which ends that account's sessions on every
+    device. `SessionLifetime` owns `OnValidatePrincipal` and calls the security-stamp validator
+    explicitly — assigning that event replaces it, and a replacement that forgot would switch off
+    revocation while every request still authenticated. The release that first deploys this signs
+    every existing session out once, by design.
 
   Remaining M8 work is summarized publicly in `docs/ROADMAP.md`; detailed sequencing lives in the
   open issues and the shared project board's `Track` and `Gate` fields
