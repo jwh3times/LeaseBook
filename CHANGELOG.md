@@ -32,6 +32,13 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Changed
 
+- **"Deliver to owner" now works, and sends only to the owner's email address on file.** The button
+  on an owner statement was refused by the server and issued nothing. It now issues the statement to
+  the address on the owner's record — the request names no recipient, so a statement cannot be sent
+  anywhere else. An owner with no address on file gets a message saying to add one to the owner's
+  record first. Demo and scenario owners now have addresses on reserved example domains; a local
+  database seeded before this change needs a reset and reseed before delivery works there.
+
 - **Signing out now ends your session on every device, and a sign-in lasts at most 12 hours.**
   Choosing sign out previously ended it only in the browser you were using. It now signs the account
   out everywhere it is open, which takes effect on the other device's next request — so an operator
