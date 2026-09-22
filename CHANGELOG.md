@@ -94,6 +94,11 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Security
 
+- **CSV imports now have an explicit size limit.** Bank statements, and the entity and opening
+  balance files used during onboarding, are refused above 5 MB with a message that says so — far
+  more than a full portfolio's export or years of statement lines. Much larger uploads are refused
+  before the server reads them.
+
 - **The local development stack is reachable only from the machine running it.** Docker Compose now
   publishes the database, pgAdmin, and the app on the loopback address instead of every network
   interface, so nobody else on a shared network can reach the local database or pgAdmin, which runs
