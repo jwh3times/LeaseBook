@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Json;
+using LeaseBook.Modules.Directory.Endpoints;
+using LeaseBook.Modules.Directory.Features.Owners;
 using LeaseBook.Tests.Common;
 using LeaseBook.Tests.Integration.Fixtures;
 using LeaseBook.Web.Auth;
@@ -10,32 +12,17 @@ using Shouldly;
 namespace LeaseBook.Tests.Integration.Security;
 
 /// <summary>
-/// WP-5 / finding F7: the statement-deliver endpoint (<c>POST /api/statements/{ownerId}/deliver</c>)
-/// takes the recipient email as a query-string parameter (<c>?toEmail=</c>), and <c>Program.cs</c>
-/// registers <c>AddAspNetCoreInstrumentation()</c> with no explicit query-string scrubbing
-/// configured. This test empirically verifies whether the recipient email reaches the telemetry
-/// that would be exported to App Insights.
+/// The statement-deliver endpoint (<c>POST /api/statements/{ownerId}/deliver</c>) sends to the
+/// owner's address on file, so the recipient never travels in the request: it is read from the
+/// owner record server-side. This guards the other half — that the resolved address is not copied
+/// into any telemetry the request produces. The listener takes every <see cref="ActivitySource"/>
+/// (hosting, the CQRS source, Npgsql), because the address now flows through a Directory query
+/// rather than the URL.
 /// <para>
-/// <b>Empirical result (verified via a diagnostic dump of every tag on every Activity produced
-/// during this request, across all sources — CQRS, Npgsql, and
-/// <c>Microsoft.AspNetCore.Hosting.HttpRequestIn</c>):</b> the ASP.NET Core hosting Activity does
-/// carry a <c>url.query</c> tag containing the raw query string shape, but
-/// <c>OpenTelemetry.Instrumentation.AspNetCore</c> redacts every query-string parameter value by
-/// default — the observed tag value is literally
-/// <c>?year=Redacted&amp;month=Redacted&amp;basis=Redacted&amp;toEmail=Redacted</c>, never the real
-/// email. Disabling that redaction requires the opt-out environment variable
-/// <c>OTEL_DOTNET_EXPERIMENTAL_ASPNETCORE_DISABLE_URL_QUERY_REDACTION=true</c>, which this repo does
-/// not set anywhere. No <c>url.full</c>/<c>http.target</c>/<c>http.url</c> tag is emitted under this
-/// app's default (new) semantic-convention mode, so there is no alternate tag carrying the
-/// unredacted value either.
-/// </para>
-/// <para>
-/// <b>Verdict: F7 is not exploitable through the OpenTelemetry export path as currently
-/// configured.</b> This test is kept as a regression guard — it fails if a future change (e.g. an
-/// explicit opt-out of redaction, an enrichment hook copying the raw query, or a switch to the
-/// legacy <c>http.target</c>/<c>http.url</c> tags) reintroduces the leak. It checks both wire
-/// encodings of the recipient email (raw and percent-encoded), since a reintroduced leak could
-/// surface either form.
+/// Earlier the address rode in the query string, and this test established that
+/// <c>OpenTelemetry.Instrumentation.AspNetCore</c> redacts query values by default. That no longer
+/// matters to this endpoint, and a supplied <c>toEmail</c> is still sent here to prove it is
+/// ignored rather than echoed. Both wire encodings are checked, since a leak could surface either.
 /// </para>
 /// </summary>
 [Collection(nameof(DatabaseCollection))]
@@ -55,7 +42,7 @@ public sealed class DeliverTelemetryTests(PostgresFixture fixture)
         // OTel SDK's own listener requests for export.
         using var listener = new ActivityListener
         {
-            ShouldListenTo = source => source.Name.StartsWith("Microsoft.AspNetCore", StringComparison.Ordinal),
+            ShouldListenTo = _ => true,
             Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
             ActivityStopped = activity =>
             {
@@ -76,18 +63,16 @@ public sealed class DeliverTelemetryTests(PostgresFixture fixture)
         };
         ActivitySource.AddActivityListener(listener);
 
-        // Provision: seeded demo org + PMAdmin login (satisfies the deliver endpoint's
-        // RequirePMStaff policy) + O5's May 2026 balanced statement — mirrors
-        // StatementDeliveryTests.DemoClientAsync/Deliver_endpoint_balanced_statement_returns_200_with_queued_state.
-        await DemoSeeder.SeedAsync(fixture.Api.Services, ct);
-        var client = fixture.Api.CreateClient();
-        await client.PrimeCsrfAsync(ct);
-        var login = await client.PostAsJsonAsync(
-            "/api/auth/login", new LoginRequest(DemoSeeder.AdminEmail, DemoSeeder.AdminPassword), ct);
-        login.StatusCode.ShouldBe(HttpStatusCode.OK, "login must succeed to reach the deliver endpoint");
-        await client.PrimeCsrfAsync(ct); // XSRF token rotates on sign-in
+        // A fresh org, so the owner this creates cannot move the demo org's golden counts.
+        var (_, client) = await AuthTestSupport.SignedInToNewOrgAsync(fixture, Roles.PMAdmin, ct);
 
-        var url = $"/api/statements/{DemoIds.O5}/deliver" +
+        var created = await client.PostAsJsonAsync("/api/directory/owners",
+            new CreateOwner($"Telemetry owner {Guid.NewGuid():N}", null, secretEmail, null, null, 0m), ct);
+        created.StatusCode.ShouldBe(HttpStatusCode.OK, await created.Content.ReadAsStringAsync(ct));
+        var ownerId = (await created.Content.ReadFromJsonAsync<CreatedId>(ct))!.Id;
+        captured.Clear(); // only the delivery is under test, not the create that put the address on file
+
+        var url = $"/api/statements/{ownerId}/deliver" +
                   $"?year=2026&month=5&basis=cash&toEmail={secretEmailEncoded}";
         var response = await client.PostAsync(url, null, ct);
         response.StatusCode.ShouldBe(HttpStatusCode.OK,

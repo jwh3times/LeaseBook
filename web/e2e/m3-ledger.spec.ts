@@ -116,7 +116,7 @@ test('a payment into a month with an issued owner statement shows a notice and s
   await page.request.get('/api/auth/csrf');
   const xsrf = (await page.context().cookies()).find((c) => c.name === 'XSRF-TOKEN')?.value ?? '';
   const issued = await page.request.post(
-    `/api/statements/${DEMO_OWNER_O1}/deliver?year=${year}&month=${month}&basis=cash&toEmail=owner%40e2e.test`,
+    `/api/statements/${DEMO_OWNER_O1}/deliver?year=${year}&month=${month}&basis=cash`,
     { headers: { 'X-XSRF-TOKEN': decodeURIComponent(xsrf) } },
   );
   expect(issued.ok(), await issued.text()).toBe(true);

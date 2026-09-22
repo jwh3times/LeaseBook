@@ -258,10 +258,10 @@ describe('OwnerStatementView', () => {
   });
 
   it('deliver button calls the deliver endpoint and shows queued status', async () => {
-    let delivered = false;
+    let deliveredUrl: string | undefined;
     server.use(
-      http.post('/api/statements/:ownerId/deliver', () => {
-        delivered = true;
+      http.post('/api/statements/:ownerId/deliver', ({ request }) => {
+        deliveredUrl = request.url;
         return new HttpResponse(null, { status: 200 });
       }),
     );
@@ -270,8 +270,29 @@ describe('OwnerStatementView', () => {
     const deliverBtn = screen.getByRole('button', { name: /Deliver to owner/i });
     await userEvent.click(deliverBtn);
 
-    await vi.waitFor(() => expect(delivered).toBe(true));
+    await vi.waitFor(() => expect(deliveredUrl).toBeDefined());
+    // The host sends to the owner's address on file; the request never names a recipient.
+    expect(new URL(deliveredUrl!).searchParams.has('toEmail')).toBe(false);
     expect(await screen.findByText(/Queued for delivery/)).toBeInTheDocument();
+  });
+
+  it('explains when the owner has no email address on file', async () => {
+    server.use(
+      http.post('/api/statements/:ownerId/deliver', () =>
+        HttpResponse.json(
+          {
+            code: 'owner_email_missing',
+            detail:
+              "This owner has no email address on file. Add one to the owner's record, then deliver the statement.",
+          },
+          { status: 409 },
+        ),
+      ),
+    );
+
+    renderView();
+    await userEvent.click(screen.getByRole('button', { name: /Deliver to owner/i }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/no email address on file/);
   });
 
   it('shows error status when deliver returns 409', async () => {

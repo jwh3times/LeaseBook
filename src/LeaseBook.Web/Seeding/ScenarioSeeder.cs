@@ -428,20 +428,22 @@ public static class ScenarioSeeder
         var tenants = await db.Set<Tenant>().Where(t => !t.IsSystem)
             .ToDictionaryAsync(t => t.DisplayName, t => t.Id, ct);
 
-        // (name, bps, reserve) — reserve re-stated because UpdateOwner is a full update.
-        (string Name, int? Bps, decimal Reserve)[] feePlan =
+        // (name, bps, reserve, address on file) — reserve re-stated because UpdateOwner is a full
+        // update. Statements are delivered only to the address on file, so every owner has one;
+        // Beacon Ridge's is the corrected address its April retry went to after the first bounced.
+        (string Name, int? Bps, decimal Reserve, string Email)[] feePlan =
         [
-            ("Harborview Holdings", 700, 500.00m),
-            ("Beacon Ridge LLC", 0, 0.00m),
-            ("Stillwater Properties", 500, 1_000.00m),
-            ("Meridian Estates", 600, 0.00m),
-            ("Cypress Grove Partners", 800, 250.00m),
+            ("Harborview Holdings", 700, 500.00m, "harborview@scenario.test"),
+            ("Beacon Ridge LLC", 0, 0.00m, "accounts@beaconridge.scenario.test"),
+            ("Stillwater Properties", 500, 1_000.00m, "stillwater@scenario.test"),
+            ("Meridian Estates", 600, 0.00m, "meridian@scenario.test"),
+            ("Cypress Grove Partners", 800, 250.00m, "cypressgrove@scenario.test"),
         ];
-        foreach (var (name, bps, reserve) in feePlan)
+        foreach (var (name, bps, reserve, email) in feePlan)
         {
             var updated = await sender.Send(
                 new Modules.Directory.Features.Owners.UpdateOwner(
-                    owners[name], name, null, null, null, bps, reserve), ct);
+                    owners[name], name, null, email, null, bps, reserve), ct);
             Assert(updated, $"scenario UpdateOwner({name}) returned false");
         }
 

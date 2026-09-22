@@ -48,23 +48,27 @@ internal static class DemoDirectorySeed
 
     private static void SeedOwners(DbContext db)
     {
-        Owner Real(Guid id, string name, string initials) => new()
+        // Every real owner has an address on file, because statements are delivered only there. The
+        // addresses sit under the reserved example.com domain (RFC 2606), so no email provider wired
+        // up later can ever deliver a demo statement to a real inbox.
+        Owner Real(Guid id, string name, string initials, string mailbox) => new()
         {
             Id = id,
             Name = name,
             Initials = initials,
+            ContactEmail = $"{mailbox}@example.com",
             DefaultMgmtFeeBps = DefaultMgmtFeeBps,
         };
 
         db.Set<Owner>().AddRange(
-            Real(DemoIds.O1, "Hargrove Family Trust", "HF"),
-            Real(DemoIds.O2, "Coastal Holdings LLC", "CH"),
-            Real(DemoIds.O3, "Marcus & Dana Bell", "MB"),
-            Real(DemoIds.O4, "Patricia Nunez", "PN"),
-            Real(DemoIds.O5, "Ridgeline Investments", "RI"),
-            Real(DemoIds.O6, "The Okafor Group", "OK"),
-            Real(DemoIds.O7, "Sandra Whitfield", "SW"),
-            Real(DemoIds.O8, "Beacon Street Partners", "BS"),
+            Real(DemoIds.O1, "Hargrove Family Trust", "HF", "hargrove"),
+            Real(DemoIds.O2, "Coastal Holdings LLC", "CH", "coastal"),
+            Real(DemoIds.O3, "Marcus & Dana Bell", "MB", "bell"),
+            Real(DemoIds.O4, "Patricia Nunez", "PN", "pnunez"),
+            Real(DemoIds.O5, "Ridgeline Investments", "RI", "ridgeline"),
+            Real(DemoIds.O6, "The Okafor Group", "OK", "okafor"),
+            Real(DemoIds.O7, "Sandra Whitfield", "SW", "swhitfield"),
+            Real(DemoIds.O8, "Beacon Street Partners", "BS", "beaconstreet"),
             // The 15 unlisted owners' rolled-up equity (P40) — a system row, relabeled by the dashboard
             // hero ("All other owners (15)") and hidden everywhere else.
             new Owner { Id = DemoIds.AggregateOwners, Name = "All other owners", IsSystem = true });
