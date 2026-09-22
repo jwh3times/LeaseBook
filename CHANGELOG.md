@@ -87,6 +87,11 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Security
 
+- **Click-budget telemetry now accepts only the flows the product actually measures.** The endpoint
+  the app uses to report how many interactions a budgeted task took takes one of a fixed set of task
+  names and a non-negative count, and rejects anything else. The app's own reports are checked
+  against the same list when it is built, so a newly measured flow cannot be silently dropped.
+
 - **Database connections must now prove the database is the real one, not just encrypt the
   traffic.** The PostgreSQL driver's default negotiates encryption and then accepts whatever
   certificate it is offered, which protects the data from being read in transit but does nothing to

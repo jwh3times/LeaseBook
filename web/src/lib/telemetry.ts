@@ -1,4 +1,16 @@
-import { postApiTelemetryBudget } from '@/api';
+import { postApiTelemetryBudget, type BudgetTelemetryRequest } from '@/api';
+
+/**
+ * The budgeted tasks, as the host publishes them. The sink rejects any other name, and because this
+ * call swallows its errors a rejection would be invisible — so the list is typed from the generated
+ * contract rather than kept here, and a task added on one side only fails the typecheck instead.
+ */
+export type BudgetTask = BudgetTelemetryRequest['task'];
+
+// Compile-time guard: if the contract ever widens `task` back to `string`, every call site would
+// still typecheck while the host went on rejecting unknown names. This line stops compiling instead.
+const budgetTaskIsClosed: string extends BudgetTask ? never : true = true;
+void budgetTaskIsClosed;
 
 /**
  * Click-budget telemetry (§C.8 / P47): records how many interactions a budgeted task took. Posts to
@@ -11,7 +23,7 @@ import { postApiTelemetryBudget } from '@/api';
  * `sdk.gen.ts` and always was. A second copy of *security* policy is the hazard here, not the
  * duplication: it works today and would fail silently forever if the XSRF contract ever moved.
  */
-export function trackInteraction(task: string, interactions: number, met?: boolean): void {
+export function trackInteraction(task: BudgetTask, interactions: number, met?: boolean): void {
   void postApiTelemetryBudget({
     body: { task, interactions, met: met ?? null },
   }).catch(() => {

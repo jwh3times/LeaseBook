@@ -287,7 +287,9 @@ builder.Services.AddScoped<LeaseBook.Web.Audit.AuditLogReader>();
 
 // OpenAPI document (P11). The SPA's client is generated from the *build-time* document, not from
 // this endpoint — `npm run api:generate` emits it via scripts/emit-openapi.mjs (ADR-012, #369).
-builder.Services.AddOpenApi();
+builder.Services.AddOpenApi(options =>
+    options.AddSchemaTransformer(BudgetTasks.PublishAsTaskEnum));
+builder.Services.AddScoped<FluentValidation.IValidator<BudgetTelemetryRequest>, BudgetTelemetryRequestValidator>();
 
 // Telemetry baseline: emit the CQRS ActivitySource (+ request spans). The Azure Monitor exporter
 // is added only when a connection string is present, so locally this collects nothing (no-op).
