@@ -11,6 +11,12 @@ public sealed class BulkRunConfiguration : IEntityTypeConfiguration<BulkRun>
         builder.ToTable("bulk_runs");
 
         builder.HasKey(r => r.Id);
+
+        // (org_id, id) alternate key: the target of every composite FK that points here, so a
+        // referencing row cannot name a row belonging to another organization. FK checks bypass
+        // RLS, so this is what makes the two org_ids provably equal.
+        builder.HasAlternateKey(r => new { r.OrgId, r.Id }).HasName("ak_bulk_runs_org_id_id");
+
         builder.Property(r => r.OrgId).IsRequired();
         builder.Property(r => r.RunType)
             .IsRequired()
@@ -26,10 +32,12 @@ public sealed class BulkRunConfiguration : IEntityTypeConfiguration<BulkRun>
         builder.HasIndex(r => new { r.OrgId, r.RunType, r.PeriodYear, r.PeriodMonth });
 
         // One run → many items. EF navigation is not declared on BulkRun (write-once aggregate);
-        // the FK is owned by BulkRunItem.
+        // the FK is owned by BulkRunItem. Composite on (org_id, run_id) so an item cannot attach to
+        // another organization's run — FK checks bypass RLS.
         builder.HasMany<BulkRunItem>()
             .WithOne()
-            .HasForeignKey(i => i.RunId)
+            .HasForeignKey(i => new { i.OrgId, i.RunId })
+            .HasPrincipalKey(r => new { r.OrgId, r.Id })
             .OnDelete(DeleteBehavior.Cascade);
     }
 }

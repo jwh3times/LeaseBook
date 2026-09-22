@@ -36,6 +36,16 @@ public sealed class SchemaGuardTests(PostgresFixture fixture)
                                  // organization data — and is read/written only by KeyringDbContext.
     };
 
+    /// <summary>
+    /// Foreign keys between two org-scoped tables that are deliberately NOT organization-constrained,
+    /// keyed by <c>"table.constraint"</c> with the reason they may stay that way. Empty on purpose:
+    /// every such key should pair <c>org_id</c> on both sides, and an entry here is a documented
+    /// exception, never a way to quiet the guard. Adding one means arguing why a row in this table may
+    /// legitimately point at another organization's row.
+    /// </summary>
+    private static readonly Dictionary<string, string> OrgUnconstrainedForeignKeyAllowlist =
+        new(StringComparer.Ordinal);
+
     // The three predicates the capability migration emits, as Postgres normalizes and stores them:
     // it re-prints the parse tree, so 'app.platform' becomes 'app.platform'::text and so on. These
     // are compared literally, which is the point — see ExpectedPlatformPolicies.
@@ -394,6 +404,112 @@ public sealed class SchemaGuardTests(PostgresFixture fixture)
         }
 
         failures.ShouldBeEmpty(failures.Count == 0 ? "" : Environment.NewLine + string.Join(Environment.NewLine, failures));
+    }
+
+    /// <summary>
+    /// Every foreign key whose referencing AND referenced table are both org-scoped must carry
+    /// <c>org_id</c> on both sides of the constraint — <c>FOREIGN KEY (org_id, x_id) REFERENCES
+    /// t (org_id, id)</c>, never <c>FOREIGN KEY (x_id) REFERENCES t (id)</c>.
+    /// <para>
+    /// Referential integrity is evaluated by the system, <i>bypassing</i> row-level security: a
+    /// single-column key proves only that the referenced row exists in SOME organization, not in the
+    /// referencing row's own. RLS cannot close that gap, because a policy sees one table at a time.
+    /// So a cross-organization pointer written through any path that sets the wrong id — an import, a
+    /// bulk run, a mis-parameterized command — is accepted by Postgres and only shows up later as a
+    /// row that reads as missing under its own organization's context.
+    /// </para>
+    /// <para>
+    /// The check walks the live catalog rather than a pinned list, so a table nobody thought of is
+    /// covered the moment its migration lands. It also verifies the PAIRING, not merely that
+    /// <c>org_id</c> appears in the key: the referenced column at <c>org_id</c>'s position must be the
+    /// referenced table's own <c>org_id</c>, which is the property that actually forces the two
+    /// organizations to be equal.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task Every_foreign_key_between_org_scoped_tables_is_org_constrained()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var conn = new NpgsqlConnection(fixture.MigratorConnectionString);
+        await conn.OpenAsync(ct);
+
+        var offenders = await ReadOrgUnconstrainedForeignKeysAsync(conn, ct);
+
+        var failures = offenders
+            .Where(o => !OrgUnconstrainedForeignKeyAllowlist.ContainsKey($"{o.Table}.{o.Name}"))
+            .Select(o => $"{o.Table}.{o.Name} -> {o.ReferencedTable}: {o.Definition}")
+            .ToList();
+
+        failures.ShouldBeEmpty(failures.Count == 0
+            ? ""
+            : $"{failures.Count} foreign key(s) between org-scoped tables do not constrain org_id, so " +
+              "Postgres will accept a row pointing at another organization's row (FK checks bypass " +
+              "RLS). Use .HasForeignKey(x => new { x.OrgId, x.SomeId })" +
+              ".HasPrincipalKey(p => new { p.OrgId, p.Id }) and give the principal an " +
+              "(org_id, id) alternate key." + Environment.NewLine +
+              string.Join(Environment.NewLine, failures));
+
+        // Sanity: an empty result is the pass condition above, so prove the catalog was actually
+        // populated and not, say, filtered to nothing by a schema-name typo. Deliberately asserted on
+        // table names rather than constraint names, which EF rewrites whenever a key's columns change.
+        var orgScoped = await ReadNamesAsync(conn,
+            "SELECT table_name FROM information_schema.columns " +
+            "WHERE table_schema = 'public' AND column_name = 'org_id'", ct);
+        orgScoped.ShouldContain("units");
+        (await ReadForeignKeysAsync(conn, ct)).ShouldNotBeEmpty();
+    }
+
+    /// <summary>
+    /// Foreign keys where both ends are org-scoped tables but the constraint does not pair the two
+    /// <c>org_id</c> columns. See
+    /// <see cref="Every_foreign_key_between_org_scoped_tables_is_org_constrained"/>.
+    /// <para>
+    /// <c>hangfire</c> is excluded by name for the same reason the rest of this file only walks
+    /// <c>public</c>: its objects are the scheduler's own, owned by the runtime role, never
+    /// org-scoped and never EF-migration territory (ADR-001). Every other schema is in scope, so a
+    /// future org-scoped table outside <c>public</c> cannot slip past.
+    /// </para>
+    /// </summary>
+    private static async Task<List<(string Table, string Name, string ReferencedTable, string Definition)>>
+        ReadOrgUnconstrainedForeignKeysAsync(NpgsqlConnection conn, CancellationToken ct)
+    {
+        await using var cmd = new NpgsqlCommand(
+            """
+            WITH org_tables AS (
+                SELECT c.oid, c.relname
+                FROM pg_class c
+                JOIN pg_namespace n ON n.oid = c.relnamespace
+                JOIN pg_attribute a ON a.attrelid = c.oid AND a.attname = 'org_id'
+                                   AND a.attnum > 0 AND NOT a.attisdropped
+                WHERE c.relkind = 'r'
+                  AND n.nspname NOT IN ('pg_catalog', 'information_schema', 'hangfire')
+            )
+            SELECT src.relname, con.conname, tgt.relname, pg_get_constraintdef(con.oid)
+            FROM pg_constraint con
+            JOIN org_tables src ON src.oid = con.conrelid
+            JOIN org_tables tgt ON tgt.oid = con.confrelid
+            WHERE con.contype = 'f'
+              AND NOT EXISTS (
+                    SELECT 1
+                    FROM generate_subscripts(con.conkey, 1) AS i
+                    WHERE con.conkey[i] = (SELECT a.attnum FROM pg_attribute a
+                                           WHERE a.attrelid = con.conrelid
+                                             AND a.attname = 'org_id' AND NOT a.attisdropped)
+                      AND con.confkey[i] = (SELECT a.attnum FROM pg_attribute a
+                                            WHERE a.attrelid = con.confrelid
+                                              AND a.attname = 'org_id' AND NOT a.attisdropped))
+            ORDER BY src.relname, con.conname
+            """, conn);
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+
+        var result = new List<(string, string, string, string)>();
+        while (await reader.ReadAsync(ct))
+        {
+            result.Add((reader.GetString(0), reader.GetString(1), reader.GetString(2),
+                        Normalize(reader.GetString(3))!));
+        }
+
+        return result;
     }
 
     private static async Task<List<(string Table, string Name, string Definition)>> ReadForeignKeysAsync(

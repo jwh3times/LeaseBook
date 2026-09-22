@@ -33,8 +33,16 @@ public sealed class LeaseLiteConfiguration : IEntityTypeConfiguration<LeaseLite>
         builder.Property(e => e.LateFeeAmountOverride).HasColumnType("numeric(14,2)");
         builder.Property(e => e.LateFeeRateBpsOverride);
 
-        builder.HasOne<Tenant>().WithMany().HasForeignKey(e => e.TenantId).OnDelete(DeleteBehavior.Restrict);
-        builder.HasOne<Unit>().WithMany().HasForeignKey(e => e.UnitId).OnDelete(DeleteBehavior.Restrict);
+        // Composite on (org_id, …): FK checks bypass RLS, so a single-column key would let a lease bind
+        // a tenant or a unit belonging to another organization.
+        builder.HasOne<Tenant>().WithMany()
+            .HasForeignKey(e => new { e.OrgId, e.TenantId })
+            .HasPrincipalKey(t => new { t.OrgId, t.Id })
+            .OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<Unit>().WithMany()
+            .HasForeignKey(e => new { e.OrgId, e.UnitId })
+            .HasPrincipalKey(u => new { u.OrgId, u.Id })
+            .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasIndex(e => new { e.OrgId, e.TenantId });
         builder.HasIndex(e => new { e.OrgId, e.UnitId });

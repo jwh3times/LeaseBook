@@ -30,6 +30,12 @@ public sealed class JournalLineConfiguration : IEntityTypeConfiguration<JournalL
         });
 
         builder.HasKey(e => e.Id);
+
+        // (org_id, id) alternate key: the target of every composite FK that points here, so a
+        // referencing row cannot name a row belonging to another organization. FK checks bypass
+        // RLS, so this is what makes the two org_ids provably equal.
+        builder.HasAlternateKey(e => new { e.OrgId, e.Id }).HasName("ak_journal_lines_org_id_id");
+
         builder.Property(e => e.OrgId).IsRequired();
         builder.Property(e => e.EntryId).IsRequired();
         builder.Property(e => e.AccountId).IsRequired();
@@ -50,9 +56,12 @@ public sealed class JournalLineConfiguration : IEntityTypeConfiguration<JournalL
         builder.Property(e => e.CreatedAt).IsRequired();
 
         // FK to accounts (no inverse navigation). Dimensions stay FK-less in M1 (P26).
+        // Composite on (org_id, account_id): referential integrity bypasses RLS, so a single-column key
+        // would only prove the account exists in SOME organization, not in this line's own.
         builder.HasOne<Account>()
             .WithMany()
-            .HasForeignKey(e => e.AccountId)
+            .HasForeignKey(e => new { e.OrgId, e.AccountId })
+            .HasPrincipalKey(a => new { a.OrgId, a.Id })
             .OnDelete(DeleteBehavior.Restrict);
 
         // Org-leading indexes so the RLS equality predicate rides every access path (§1 of TODO).
