@@ -1,5 +1,6 @@
 using LeaseBook.Migrator;
 using LeaseBook.Modules.Accounting.Contracts;
+using LeaseBook.SharedKernel.Csv;
 using LeaseBook.SharedKernel.Endpoints;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -70,6 +71,7 @@ public sealed class ImportBalancesEndpoints : IEndpointModule
                             status: StatusCodes.Status409Conflict);
                     }
                 })
+            .WithCsvImportLimit()
             .Produces<ImportBatchResult>()
             .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status409Conflict);
@@ -110,6 +112,7 @@ public sealed class ImportBalancesEndpoints : IEndpointModule
                     // half-finished correction — the exact bug the propagation exists to prevent.
                     // AccountingExceptionHandler maps it to a 409 by code, after the rollback.
                 })
+            .WithCsvImportLimit()
             .Produces<ImportBatchResult>()
             .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status409Conflict);
@@ -162,6 +165,13 @@ public sealed class ImportBalancesEndpoints : IEndpointModule
                 httpContext,
                 code: "empty_csv",
                 detail: "The uploaded file is empty.",
+                status: StatusCodes.Status400BadRequest);
+
+        if (body.CsvContent.Length > CsvImportLimits.MaxCharacters)
+            return ProblemResults.Problem(
+                httpContext,
+                code: "csv_too_large",
+                detail: CsvImportLimits.TooLargeMessage,
                 status: StatusCodes.Status400BadRequest);
 
         return null;
