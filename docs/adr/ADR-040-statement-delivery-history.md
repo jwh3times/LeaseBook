@@ -112,3 +112,34 @@ Revisit when an attempt needs to record _which_ provider handled it — a second
 postal-mail channel — since destination would stop being an email address and `to_email` would become
 a typed destination on the attempt. Revisit sooner if a delivery history is ever needed across orgs
 in one read, which the per-org RLS policies deliberately do not allow.
+
+## Addendum — a statement goes only to the owner's address on file (2026-09-22)
+
+This ADR fixed what an attempt records, including the `to_email` it was sent to, but not where that
+address comes from. It now has one source.
+
+**A statement is delivered only to the address on the owner's record.** `POST
+/api/statements/{ownerId}/deliver` takes no recipient. The host endpoint resolves it through the
+Directory query `GetOwnerDeliveryAddresses` — a batch read returning a map from owner id to the
+owner's trimmed `ContactEmail`, covering non-system owners with a non-blank address — and passes that
+address to `IStatementDelivery.DeliverAsync`. A statement carries an owner's trust figures, so its
+destination is a fact about the owner held on the owner's record, not operator input chosen per send.
+Resolving it server-side also keeps the address out of the request URL entirely.
+
+**An owner with no address on file is refused with a 409 `owner_email_missing`,** before anything is
+rendered, stored, or recorded. The owner is absent from the query's map rather than mapped to null,
+and absence is the refusal. The fix is to add the address to the owner's record and deliver again.
+
+The seam is unchanged: `DeliverAsync` and `RetryAsync` still take an explicit address, so the
+append-only history, the artifact, and the attempt row are exactly as decided above. Resolution
+belongs at the surface a request enters through. The retry endpoint that Track B adds must resolve
+its destination through the same query, so a retry after an owner's address is corrected goes to the
+corrected address on file — the case the scenario org's O-S2 bounce-then-retry history already
+models.
+
+## Revisit trigger (addendum)
+
+Revisit when an owner needs more than one statement recipient, or a recipient other than the owner —
+an accountant, a co-owner — since either makes the destination a list or a separate record rather than
+one address on the owner. Revisit with the typed destination named in the trigger above if a
+non-email channel arrives.

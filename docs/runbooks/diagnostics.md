@@ -19,8 +19,9 @@ request traces, the custom `LeaseBookTelemetry` ActivitySource, and correlated s
 does not include the distro's automatic HTTP-client/SQL tracing, standard metrics, performance
 counters, or Live Metrics.
 
-Query-string values are redacted by the current ASP.NET Core instrumentation, and
-`DeliverTelemetryTests` guards the statement-delivery email specifically. Do not set
+Query-string values are redacted by the current ASP.NET Core instrumentation. The statement-delivery
+recipient is not in the request at all — it is read from the owner's record (ADR-040, 2026-09-22
+addendum) — and `DeliverTelemetryTests` guards that it reaches no telemetry tag. Do not set
 `OTEL_DOTNET_EXPERIMENTAL_ASPNETCORE_DISABLE_URL_QUERY_REDACTION=true`: that changes the security
 boundary this runbook assumes. The distro uses that unsafe value by default, which is why ADR-025's
 2026-08 amendment defers adoption until metrics or Live Metrics are explicitly required and the

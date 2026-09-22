@@ -344,7 +344,7 @@ recipient's side.
 _Avoid_: sent, received, read
 
 **Retry**:
-A new delivery attempt against an artifact that was already issued, optionally to a corrected
-destination. The artifact is not re-rendered, so a retry always carries the same figures as the attempt
-it follows.
+A new delivery attempt against an artifact that was already issued, sent to the owner's address on
+file at the time — which may since have been corrected. The artifact is not re-rendered, so a retry
+always carries the same figures as the attempt it follows.
 _Avoid_: resend (ambiguous between this and re-issuing), redelivery, reattempt of an event
