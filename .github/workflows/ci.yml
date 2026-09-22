@@ -33,7 +33,7 @@ jobs:
     # Typically ~3.5 min; the widest variance here is NuGet restore and Testcontainers image pulls.
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # Full history, for CapabilityAgeTests (ADR-028). It dates each money-path capability from
           # git history and fails the build on one past the policy window. The default fetch-depth: 1
@@ -46,7 +46,7 @@ jobs:
           # FAILS, rather than skipping, whenever it cannot read history under Actions. This comment
           # documents the invariant; the guard is in the test.
           fetch-depth: 0
-      - uses: actions/setup-dotnet@v6
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: '10.0.x'
       - run: dotnet restore
@@ -72,7 +72,7 @@ jobs:
         run: dotnet test -c Release --no-build --report-xunit-trx --results-directory TestResults
       - name: Upload backend test results
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: backend-test-results
           path: TestResults/*.trx
@@ -88,14 +88,14 @@ jobs:
       run:
         working-directory: web
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # docs:check compares each living document's `Last reviewed` date against the last commit
           # that touched it. A shallow clone has exactly one commit, so `git log -1 -- <file>` would
           # report TODAY for every document and fail nearly all of them — the rule needs real history
           # to be either correct or quiet.
           fetch-depth: 0
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '26'
           cache: npm
@@ -125,11 +125,11 @@ jobs:
     # Typically ~1 min.
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-dotnet@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: '10.0.x'
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '26'
           cache: npm
@@ -171,8 +171,8 @@ jobs:
           --health-cmd "pg_isready -U postgres -d postgres"
           --health-interval 5s --health-timeout 5s --health-retries 12
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-dotnet@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: '10.0.x'
       - name: Create database + roles (bootstrap.sql)
@@ -212,8 +212,8 @@ jobs:
       ASPNETCORE_ENVIRONMENT: Development
       ConnectionStrings__Default: Host=localhost;Port=5432;Database=leasebook;Username=leasebook_app;Password=dev_app_pw
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-dotnet@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: '10.0.x'
       - name: Create database + roles (bootstrap.sql)
@@ -255,11 +255,11 @@ jobs:
       # seed steps and forwarded into the Playwright-started host via playwright.config.ts.
       ConnectionStrings__Default: Host=localhost;Port=5432;Database=leasebook;Username=leasebook_app;Password=dev_app_pw
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-dotnet@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: '10.0.x'
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '26'
           cache: npm
@@ -311,7 +311,7 @@ jobs:
         run: npm run e2e
       - name: Upload Playwright report
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: playwright-report
           path: |
@@ -325,10 +325,10 @@ jobs:
     # Typically ~10 s.
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - uses: gitleaks/gitleaks-action@v3
+      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -348,7 +348,7 @@ jobs:
     # Typically ~1 min.
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Build main template
         run: az bicep build --file infra/main.bicep --stdout > /dev/null
       - name: Build each module independently
@@ -373,7 +373,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: python3 scripts/test-dbadmin.py
 
   # Builds the container images *and* proves they actually run. This replaces a build-only job that
@@ -396,7 +396,7 @@ jobs:
       # README port map's default so CI exercises the same mapping a developer gets.
       LEASEBOOK_APP_PORT: 8082
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Builds db/migrate/seed/app and runs the depends_on chain: db healthy → migrate completes →
       # seed completes → app starts. A non-zero exit here means the chain itself broke.
