@@ -450,8 +450,10 @@ jobs:
         run: |
           set -euo pipefail
           headers="$(curl -fsS -D - -o /dev/null "http://localhost:${LEASEBOOK_APP_PORT}/api/health")"
-          if printf '%s' "$headers" | grep -qi '^server:'; then
-            echo "::error::The app sends a Server header: $(printf '%s' "$headers" | grep -i '^server:')"
+          # A here-string, not a pipe: under pipefail, grep -q exiting early could SIGPIPE the writer
+          # and turn a match into a pass.
+          if grep -qi '^server:' <<<"$headers"; then
+            echo "::error::The app sends a Server header: $(grep -i '^server:' <<<"$headers")"
             exit 1
           fi
 

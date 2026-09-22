@@ -72,9 +72,7 @@ public sealed class RoleSeedingReadinessTests(PostgresFixture fixture)
         // WHICH precondition failed matters — two independent reasons behind one status code is an
         // operator's problem during a rolling deploy — but the endpoint is anonymous on the public
         // ingress, so the answer goes to the log and the body carries only the aggregate status.
-        var body = await readiness.Content.ReadAsStringAsync(ct);
-        body.ShouldNotContain(RoleSeedingReadinessCheck.Name);
-        body.ShouldNotContain(CapabilityReadinessCheck.Name);
+        (await readiness.Content.ReadAsStringAsync(ct)).ShouldBe("status: Unhealthy");
         // The health-check service's own per-check report, not an incidental mention elsewhere: it is
         // logged for every failing check on every probe, whatever made the check fail.
         logs.Entries.ShouldContain(
