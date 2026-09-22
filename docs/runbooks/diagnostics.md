@@ -564,6 +564,22 @@ does not cover. That is ADR-045's revisit trigger. Compare the anchoring artifac
 `ending_balance` and `as_of` on `statement_artifacts` with a statement for the same owner, period,
 basis and scope built from the journal, and treat the difference as a release defect.
 
+## Diagnosing a replica that stays unready
+
+`/api/health/ready` answers with its aggregate status only (`status: Unhealthy` with a 503) and
+does not say which precondition failed. Read that from the logs: on every probe, the health-check
+service (log category `Microsoft.Extensions.Diagnostics.HealthChecks.*`) writes one Warning-or-above
+line per failing check, naming the check and carrying its description. There are two:
+
+- `capability-seam` — the startup probe has not yet proven the capability seam readable.
+- `role-seeding` — the four fixed roles are not yet seeded on this replica.
+
+Both are retried in the background, so a replica that booted during a database outage converges once
+the database is reachable. A replica that stays unready past the readiness budget is held out of
+rotation and still retrying, not restarted. A boot that could not reach the database also logs
+that at Error when startup role seeding first fails, with the exception attached. See
+[ADR-028 §9](../adr/ADR-028-platform-capability-model.md#9-readiness-is-its-own-probe-with-two-independent-preconditions).
+
 ## Production caution: Npgsql `Include Error Detail`
 
 Keep `Include Error Detail=true` **out of** production and staging Npgsql connection strings.

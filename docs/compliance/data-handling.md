@@ -146,8 +146,11 @@ PostgreSQL data above for the retention window.
   double-submit pattern, so the companion token the SPA echoes back in a request header is readable
   by the SPA by design.
 - **Live —** every response carries a strict content security policy and the supporting headers
-  (`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`), and
-  outside Development a one-year `Strict-Transport-Security` header with `includeSubDomains`.
+  (`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`,
+  `Cross-Origin-Opener-Policy`, `Cross-Origin-Resource-Policy`), and outside Development a one-year
+  `Strict-Transport-Security` header with `includeSubDomains` plus the policy's
+  `upgrade-insecure-requests` directive. Responses carry no `Server` header, and the anonymous health
+  endpoints return status only.
 - **Live —** the host refuses to start outside Development unless `AllowedHosts` names real
   hostnames, so host filtering cannot be left permissive in a deployed environment.
 

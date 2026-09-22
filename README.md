@@ -172,7 +172,9 @@ README keeps only the fastest product startup path and the authoritative port ma
 Every port the project binds, and where each is configured. The inner-loop API and the containerized
 app deliberately use **different** ports (`5080` vs `8082`) so both can run side by side. Host ports
 (`5373`/`8082`/`5632`/`5250`) are offset from the defaults so the stack coexists with other local
-projects. Only host-side ports move; container ports (and the Azure image) never change.
+projects. Only host-side ports move; container ports (and the Azure image) never change. Every
+Compose port is published on loopback (`127.0.0.1`) only; the app alone can be opened to the network,
+with `LEASEBOOK_APP_BIND`.
 
 **Inner-loop development** — backend and frontend on the host, Postgres in Docker (`./scripts/dev.ps1 up`):
 
@@ -199,11 +201,12 @@ projects. Only host-side ports move; container ports (and the Azure image) never
 
 **Host-port overrides** (the container's internal port is unchanged; only the host mapping moves):
 
-| Variable                 | Default | Remaps                                                              |
-| ------------------------ | ------- | ------------------------------------------------------------------- |
-| `LEASEBOOK_APP_PORT`     | `8082`  | host port for the full-stack app container (container stays `8080`) |
-| `LEASEBOOK_DB_PORT`      | `5632`  | host port for the Postgres container (container stays `5432`)       |
-| `LEASEBOOK_PGADMIN_PORT` | `5250`  | host port for pgAdmin                                               |
+| Variable                 | Default     | Remaps                                                                            |
+| ------------------------ | ----------- | --------------------------------------------------------------------------------- |
+| `LEASEBOOK_APP_PORT`     | `8082`      | host port for the full-stack app container (container stays `8080`)               |
+| `LEASEBOOK_DB_PORT`      | `5632`      | host port for the Postgres container (container stays `5432`)                     |
+| `LEASEBOOK_PGADMIN_PORT` | `5250`      | host port for pgAdmin                                                             |
+| `LEASEBOOK_APP_BIND`     | `127.0.0.1` | host address the app container is published on; `0.0.0.0` opens it to the network |
 
 ---
 
