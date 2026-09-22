@@ -94,6 +94,11 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Security
 
+- **The local development stack is reachable only from the machine running it.** Docker Compose now
+  publishes the database, pgAdmin, and the app on the loopback address instead of every network
+  interface, so nobody else on a shared network can reach the local database or pgAdmin, which runs
+  without a login. To try the app from a phone, `LEASEBOOK_APP_BIND=0.0.0.0` opens the app alone.
+
 - **The application tells anonymous callers less about itself.** The public health check answers
   only whether the app is up, without a version number, and the readiness check answers only ready or
   not ready; which of its conditions is failing is written to the application log, where an operator
