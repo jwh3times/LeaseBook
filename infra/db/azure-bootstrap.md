@@ -91,6 +91,12 @@ append-only revocations. `hangfire` stays app-owned; unexpected ownership or ele
 roles fail and roll back. The administrator receives explicit SET membership on the three roles:
 PostgreSQL 16+ role creation does not guarantee the membership needed to create their schemas.
 
+Every connection string stored below must include `SSL Mode=VerifyFull`. Npgsql defaults to
+`SSL Mode=Prefer`, which encrypts without verifying the server's certificate; Flexible Server
+certificates chain to public CAs, so no `Root Certificate` parameter is needed. The application
+refuses to start outside Development if either string is weaker, so a string saved without it will
+fail the next deploy rather than run unverified.
+
 After bootstrap, store app/migrator connection strings in the application vault using those same
 role passwords. Arm the existing jobs with `defaultSecretUri` and `migrationsSecretUri`, then use
 the normal migration/deploy procedure. Bootstrap does not migrate or seed data.
