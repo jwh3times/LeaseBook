@@ -87,6 +87,14 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Security
 
+- **Database connections must now prove the database is the real one, not just encrypt the
+  traffic.** The PostgreSQL driver's default negotiates encryption and then accepts whatever
+  certificate it is offered, which protects the data from being read in transit but does nothing to
+  confirm what is on the other end. Connection strings must now verify the server's certificate, and
+  the application refuses to start outside local development if one does not. The deployment
+  pipeline checks the same thing before it applies a schema change, because that connection carries
+  the most privileged credential over the least controlled network path.
+
 - **The build pipeline now runs only the exact third-party code it was reviewed against.** Every
   GitHub Action the project uses is identified by an immutable commit, and every container base
   image by an immutable digest, so a moved tag upstream can no longer change what runs with access

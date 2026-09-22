@@ -49,8 +49,8 @@ a Key Vault secret (resolved via the app's managed identity):
 
 | Env var                                 | Source                                                     | Used by                                                                   |
 | --------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------- |
-| `ConnectionStrings__Default`            | Key Vault secret (app role)                                | the running app (RLS-subject); the capabilities Container Apps Job        |
-| `ConnectionStrings__Migrations`         | Key Vault secret (migrator role)                           | the migrator Container Apps Job **only** (prod); the deploy runner in dev |
+| `ConnectionStrings__Default`            | Key Vault secret (app role) — `SSL Mode=VerifyFull`        | the running app (RLS-subject); the capabilities Container Apps Job        |
+| `ConnectionStrings__Migrations`         | Key Vault secret (migrator role) — `SSL Mode=VerifyFull`   | the migrator Container Apps Job **only** (prod); the deploy runner in dev |
 | `APPLICATIONINSIGHTS_CONNECTION_STRING` | App Insights (module output)                               | telemetry exporter                                                        |
 | `AllowedHosts`                          | app setting, supplied at deploy time                       | ASP.NET Core host filtering (`HostFilteringMiddleware`)                   |
 | `LEASEBOOK_OPERATOR`                    | supplied per job execution                                 | the capabilities job — names the accountable party on every audit row     |
@@ -61,6 +61,19 @@ a Key Vault secret (resolved via the app's managed identity):
 | `LEASEBOOK_OPS_PASSWORD`                | Dedicated vault / `postgres-ops-password`                  | Bootstrap and read-only restore spot-check                                |
 | `ForwardedHeaders__Enabled`             | app setting, supplied at deploy time                       | whether to honour `X-Forwarded-*` from the ingress (ADR-041)              |
 | `ForwardedHeaders__KnownNetworks__0`    | app setting, supplied at deploy time                       | the ingress network, CIDR — required when the above is `true`             |
+
+**Both connection strings must carry `SSL Mode=VerifyFull`.** Npgsql's default is `SSL Mode=Prefer`,
+which negotiates TLS and then accepts whatever certificate it is handed — encrypted, but
+authenticating nobody, so anyone on the network path can present their own certificate and read the
+credential. Azure Database for PostgreSQL Flexible Server presents certificates that chain to public
+CAs, so no `Root Certificate` parameter is needed. The host **refuses to start** outside Development
+if either string is present with a weaker mode, so this is enforced rather than merely documented.
+
+The migrator string is the one that decides this. Production application traffic stays inside the
+VNet, but dev migrations run from a GitHub-hosted runner across the public internet carrying the
+schema-owner credential — the only credential that can rewrite the schema, over the only path nobody
+controls. Set it on the `MIGRATIONS_CONNECTION_STRING` repository secret too, not just on the vault
+secrets.
 
 The two connection strings are **different credentials and must stay so**: the migrator job holds
 schema-owner rights on `public`, the capabilities job holds only the app role's DML under RLS's
