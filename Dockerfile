@@ -10,7 +10,7 @@
 #                       image deliberately cannot migrate — this image does, via an EF bundle.
 
 # --- Stage 1: build the React SPA ---
-FROM node:26-bookworm-slim AS web
+FROM node:26-bookworm-slim@sha256:582460f614631b59b824ac6020533b9bf339c7fdf3a6d7db31abb6b4065f0212 AS web
 WORKDIR /web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci
@@ -18,7 +18,7 @@ COPY web/ ./
 RUN npm run build
 
 # --- Stage 2: publish the ASP.NET Core host ---
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0@sha256:35d40304542c8689331f8cab17c65926cdf48fe711e289321d71924b230a7d29 AS build
 WORKDIR /src
 # Copy build configuration first for layer caching, then source.
 COPY global.json Directory.Build.props Directory.Packages.props .editorconfig ./
@@ -48,19 +48,24 @@ RUN dotnet ef migrations bundle \
 # --- Stage 4: migrator image (one-shot) ---
 # aspnet (not chiseled): the bundle loads the Web assembly to reach the design-time factory, so it
 # needs the full ASP.NET shared framework. Size is irrelevant — this is local/CD migration tooling.
-FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS migrator
+FROM mcr.microsoft.com/dotnet/aspnet:10.0@sha256:2d584d8147faddb0d678c5748d47953e5b8e18621ed4fb7049a91381d9d7746f AS migrator
 # Npgsql probes for the Kerberos/GSSAPI library when opening a connection; the slim base omits it,
 # which prints a scary (but non-fatal, password auth still works) load error. Add it so apply is clean.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends libgssapi-krb5-2 \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
-COPY --from=migrations /bundle/ ./
+# Owned by the app user so the bundle stays executable after the USER switch below.
+COPY --from=migrations --chown=$APP_UID:$APP_UID /bundle/ ./
+# Non-root, like the runtime stage. This stage holds the schema-owner credential at run time, so it
+# is the last one that should apply migrations as root. apt-get above needs root; everything after
+# this line does not.
+USER $APP_UID
 # Applies all pending migrations to ConnectionStrings__Migrations, then exits 0.
 ENTRYPOINT ["./efbundle"]
 
 # --- Stage 5: runtime (chiseled, non-root) — the application image ---
-FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled@sha256:9651fa59abcdf177c30392cb44a820605ca5d618429ab37acbf6e7c644510b02 AS runtime
 WORKDIR /app
 COPY --from=build /app/publish ./
 ENV ASPNETCORE_HTTP_PORTS=8080

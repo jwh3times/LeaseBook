@@ -87,6 +87,15 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Security
 
+- **The build pipeline now runs only the exact third-party code it was reviewed against.** Every
+  GitHub Action the project uses is identified by an immutable commit, and every container base
+  image by an immutable digest, so a moved tag upstream can no longer change what runs with access
+  to this repository. The one job that deliberately installs the newest version of an external code
+  generator — the weekly probe that checks whether an upstream fix has landed — now runs with no
+  write access at all, and a second job that runs nothing but a GitHub command is the only one able
+  to file the resulting issue. The database migration image also runs as an unprivileged user rather
+  than as root.
+
 - **The database now enforces that a record cannot reference another organization's record.** Links
   between records — a unit to its property, a statement line to its import, a journal line to its
   account — were checked only for the referenced record existing, because the database's own

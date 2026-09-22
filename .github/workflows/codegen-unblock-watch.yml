@@ -8,6 +8,12 @@
 # weekly against the compiler major the SPA actually uses and, once it succeeds, opens a tracking
 # issue telling us to drop the pin.
 #
+# The probe deliberately installs `@latest` — the version we would actually adopt — which means it
+# executes freshly published third-party code on every run. That code therefore runs in a job that
+# holds no writable token and checks out without persisted credentials; a second job, which runs
+# nothing but `gh`, is the only one granted `issues: write`. Pinning the generator instead would
+# remove the one thing this workflow exists to measure.
+#
 # This replaces the retired ts6-unblock-watch.yml, which inspected openapi-typescript's declared
 # peer range. A declared range is not enough here: @hey-api/openapi-ts@0.99.0 already advertises
 # `typescript: ">=5.5.3 || >=6.0.0 || 6.0.1-rc"`, which nominally admits TS 7 while still crashing
@@ -22,25 +28,34 @@ on:
 
 permissions:
   contents: read # read web/package.json to learn the SPA's compiler major
-  issues: write # file the tracking issue
 
 jobs:
-  check:
+  probe:
     name: Run the Hey API generator under the SPA TypeScript major
     runs-on: ubuntu-latest
+    # No `issues: write` here on purpose — this job runs `@latest` third-party code.
+    permissions:
+      contents: read
+    outputs:
+      admits: ${{ steps.probe.outputs.admits }}
+      gen_version: ${{ steps.probe.outputs.gen_version }}
+      ts_version: ${{ steps.probe.outputs.ts_version }}
+      ts_range: ${{ steps.probe.outputs.ts_range }}
     # Typically ~20 s. It installs a floating dependency range on purpose, so its install step is
     # the part most likely to stall on a registry.
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Leave no credential in .git/config for the third-party install below to read.
+          persist-credentials: false
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "26"
 
-      - name: Open a tracking issue if the generator runs under the SPA compiler
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Probe the generator
+        id: probe
         run: |
           set -euo pipefail
 
@@ -101,6 +116,7 @@ jobs:
             "@hey-api/openapi-ts@latest" "typescript@${ts_range}" >install.log 2>&1; then
             echo "Install failed (peer conflict or transient npm); still blocked. Log:"
             tail -20 install.log
+            echo "admits=false" >>"${GITHUB_OUTPUT}"
             exit 0
           fi
 
@@ -118,10 +134,45 @@ jobs:
           if [ "${admits}" != "true" ]; then
             echo "Generator still fails under typescript@${ts_version} — nothing to do. Output:"
             tail -20 generate.log
+            echo "admits=false" >>"${GITHUB_OUTPUT}"
             exit 0
           fi
 
           echo "Generator succeeded under typescript@${ts_version}."
+          {
+            echo "admits=true"
+            echo "gen_version=${gen_version}"
+            echo "ts_version=${ts_version}"
+            echo "ts_range=${ts_range}"
+          } >>"${GITHUB_OUTPUT}"
+
+
+  file-issue:
+    name: File the tracking issue
+    needs: probe
+    if: needs.probe.outputs.admits == 'true'
+    runs-on: ubuntu-latest
+    # The only job with a writable token, and it runs nothing but `gh`. The probe's third-party
+    # code never shares a runner with this scope.
+    permissions:
+      contents: read
+      issues: write
+    timeout-minutes: 10
+    steps:
+      - name: Open a tracking issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # This job deliberately does not check out, so `gh` has no git remote to infer from.
+          GH_REPO: ${{ github.repository }}
+          GEN_VERSION: ${{ needs.probe.outputs.gen_version }}
+          TS_VERSION: ${{ needs.probe.outputs.ts_version }}
+          TS_RANGE: ${{ needs.probe.outputs.ts_range }}
+        run: |
+          set -euo pipefail
+
+          gen_version="${GEN_VERSION}"
+          ts_version="${TS_VERSION}"
+          ts_range="${TS_RANGE}"
 
           title="Hey API generator runs under the SPA TypeScript major — drop the codegen pin"
 

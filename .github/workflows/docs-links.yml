@@ -28,7 +28,7 @@ jobs:
     # outside the repository. See the concurrency note on the args below.
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Prepare current-release link exclusions
         id: release-links
         shell: bash
@@ -49,7 +49,7 @@ jobs:
             echo "compare=^https://github\\.com/jwh3times/LeaseBook/compare/v${version}\\.\\.\\.HEAD$" >> "$GITHUB_OUTPUT"
             echo "release=^https://github\\.com/jwh3times/LeaseBook/releases/tag/v${version}$" >> "$GITHUB_OUTPUT"
           fi
-      - uses: lycheeverse/lychee-action@v2
+      - uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
         env:
           # Authenticates github.com link checks (avoids rate-limit 403s).
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
