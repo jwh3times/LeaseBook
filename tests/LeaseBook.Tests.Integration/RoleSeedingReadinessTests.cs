@@ -61,14 +61,25 @@ public sealed class RoleSeedingReadinessTests(PostgresFixture fixture)
         // as a state at all. Liveness deliberately touches no dependency.
         (await client.GetAsync("/api/health", ct)).StatusCode.ShouldBe(HttpStatusCode.OK);
 
+        using var logs = new CapturingLoggerProvider();
+        host.Services.GetRequiredService<ILoggerFactory>().AddProvider(logs);
+
         var readiness = await client.GetAsync(MetaEndpoints.ReadinessPath, ct);
         readiness.StatusCode.ShouldBe(
             HttpStatusCode.ServiceUnavailable,
             "a replica with no roles must take no traffic");
 
-        // The body says WHICH precondition failed. Two independent reasons behind one status code is
-        // an operator's problem during a rolling deploy, not a design detail.
-        (await readiness.Content.ReadAsStringAsync(ct)).ShouldContain(RoleSeedingReadinessCheck.Name);
+        // WHICH precondition failed matters — two independent reasons behind one status code is an
+        // operator's problem during a rolling deploy — but the endpoint is anonymous on the public
+        // ingress, so the answer goes to the log and the body carries only the aggregate status.
+        (await readiness.Content.ReadAsStringAsync(ct)).ShouldBe("status: Unhealthy");
+        // The health-check service's own per-check report, not an incidental mention elsewhere: it is
+        // logged for every failing check on every probe, whatever made the check fail.
+        logs.Entries.ShouldContain(
+            entry => entry.Level >= LogLevel.Warning
+                && entry.Category.StartsWith("Microsoft.Extensions.Diagnostics.HealthChecks", StringComparison.Ordinal)
+                && entry.Message.Contains(RoleSeedingReadinessCheck.Name),
+            "the failing check must be named in a Warning-or-above log line, where an operator reads it");
 
         // Which precondition is missing, not just that one is. If role seeding were left out of the
         // readiness predicate this assertion is the one that fails, and it fails on the name.

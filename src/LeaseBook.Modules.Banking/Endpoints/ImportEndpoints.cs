@@ -1,5 +1,6 @@
 using LeaseBook.Modules.Banking.Features.Import;
 using LeaseBook.SharedKernel.Cqrs;
+using LeaseBook.SharedKernel.Csv;
 using LeaseBook.SharedKernel.Endpoints;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -24,6 +25,7 @@ public sealed class ImportEndpoints : IEndpointModule
         group.MapPost("/banks/{bankAccountId:guid}/imports",
                 async (Guid bankAccountId, ImportStatement body, ISender sender, CancellationToken ct) =>
                     TypedResults.Ok(await sender.Send(body with { BankAccountId = bankAccountId }, ct)))
+            .WithCsvImportLimit()
             .Produces<ImportResult>();
 
         group.MapGet("/banks/{bankAccountId:guid}/mappings",

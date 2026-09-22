@@ -1,9 +1,15 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using LeaseBook.SharedKernel;
 using LeaseBook.Tests.Common;
 using LeaseBook.Tests.Integration.Fixtures;
 using LeaseBook.Web.Auth;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.Server.Kestrel.Core;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Shouldly;
 
 namespace LeaseBook.Tests.Integration.Security;
@@ -25,7 +31,56 @@ public sealed class SecurityHeadersTests(PostgresFixture fixture)
         response.Headers.Contains("Content-Security-Policy").ShouldBeTrue();
         response.Headers.GetValues("Content-Security-Policy").Single().ShouldContain("frame-ancestors 'none'");
         response.Headers.Contains("Permissions-Policy").ShouldBeTrue();
+        response.Headers.GetValues("Cross-Origin-Opener-Policy").ShouldContain("same-origin");
+        response.Headers.GetValues("Cross-Origin-Resource-Policy").ShouldContain("same-origin");
     }
+
+    /// <summary>
+    /// Local development is plain <c>http://localhost</c>, and browsers apply
+    /// <c>upgrade-insecure-requests</c> to localhost too — the SPA's own assets would be rewritten to
+    /// an https origin nothing serves. So the directive rides with HSTS: present wherever the edge
+    /// terminates TLS, absent in Development.
+    /// </summary>
+    [Theory]
+    [InlineData("Development", false)]
+    [InlineData("Production", true)]
+    public async Task Https_upgrade_directives_are_sent_only_outside_Development(string environment, bool expected)
+    {
+        await using var host = HostIn(environment);
+        var response = await host.CreateClient().GetAsync("/", TestContext.Current.CancellationToken);
+
+        response.Headers.GetValues("Content-Security-Policy").Single()
+            .Contains("upgrade-insecure-requests").ShouldBe(expected);
+        response.Headers.Contains("Strict-Transport-Security").ShouldBe(expected);
+    }
+
+    /// <summary>
+    /// The test server is not Kestrel, so the <c>Server</c> header cannot be observed on the wire
+    /// here; this pins the configuration that suppresses it, and CI's full-stack smoke job checks the
+    /// real container's response.
+    /// </summary>
+    [Fact]
+    public void Kestrel_does_not_announce_itself()
+    {
+        fixture.Api.Services.GetRequiredService<IOptions<KestrelServerOptions>>().Value.AddServerHeader
+            .ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task The_anonymous_liveness_answer_carries_only_the_status()
+    {
+        var response = await fixture.Api.CreateClient().GetAsync("/api/health", TestContext.Current.CancellationToken);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        body.RootElement.EnumerateObject().Select(p => p.Name).ShouldBe(["status"]);
+    }
+
+    private WebApplicationFactory<Program> HostIn(string environment) =>
+        fixture.Api.WithWebHostBuilder(builder => builder
+            .UseEnvironment(environment)
+            .UseSetting("AllowedHosts", "localhost")
+            .UseSetting("Jobs:Enabled", "false"));
 
     /// <summary>
     /// Critical-finding regression: prior to the OnStarting fix, headers were assigned directly on

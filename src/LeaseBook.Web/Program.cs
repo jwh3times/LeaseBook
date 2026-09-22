@@ -49,6 +49,9 @@ if (process.Error is { } processError)
 var lifecycle = process.Lifecycle!;
 var builder = WebApplication.CreateBuilder(args);
 
+// No `Server: Kestrel` banner: it names the stack to every anonymous caller and nothing reads it.
+builder.WebHost.ConfigureKestrel(kestrel => kestrel.AddServerHeader = false);
+
 // Module assemblies the host composes. CQRS handlers/validators are discovered from these; endpoint
 // modules are discovered from these plus the host (which owns cross-module reporting and auth/meta).
 Assembly[] moduleAssemblies =
