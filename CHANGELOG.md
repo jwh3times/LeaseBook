@@ -94,6 +94,11 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Security
 
+- **CSV imports now have an explicit size limit.** Bank statements, and the entity and opening
+  balance files used during onboarding, are refused above 5 MB with a message that says so — far
+  more than a full portfolio's export or years of statement lines. Much larger uploads are refused
+  before the server reads them.
+
 - **Click-budget telemetry now accepts only the flows the product actually measures.** The endpoint
   the app uses to report how many interactions a budgeted task took takes one of a fixed set of task
   names and a non-negative count, and rejects anything else. The app's own reports are checked
