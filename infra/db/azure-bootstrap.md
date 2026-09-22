@@ -1,7 +1,10 @@
 # Azure Postgres role bootstrap
 
 Bicep creates the database; `azure-bootstrap.sql` creates the three application roles and their
-schema privileges. It adapts the local-only `bootstrap.sql` for Azure. Production uses the manual
+schema privileges. It adapts the local-only `bootstrap.sql` for Azure — the mechanics differ
+(no superuser, the database already exists, passwords arrive through `\password`, and it must be safe
+to re-run) but the privilege model does not, and `BootstrapPrivilegeParityTests` fails the build if
+a grant, revoke or default privilege in `bootstrap.sql` has no counterpart here. Production uses the manual
 `lb-prod-dbadmin` Container Apps Job inside the existing VNet
 ([ADR-027](../../docs/adr/ADR-027-prod-private-networking-and-migration-job.md)).
 
