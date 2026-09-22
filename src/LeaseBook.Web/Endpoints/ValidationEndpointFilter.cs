@@ -4,8 +4,8 @@ using LeaseBook.SharedKernel.Endpoints;
 namespace LeaseBook.Web.Endpoints;
 
 /// <summary>
-/// Runs the registered FluentValidation validator for a request DTO on non-CQRS endpoints (auth),
-/// returning a 400 ProblemDetails with the <c>errors</c> dictionary on failure. CQRS slices validate
+/// Runs the registered FluentValidation validator for a request DTO on non-CQRS endpoints (auth,
+/// telemetry), returning a 400 ProblemDetails with the <c>errors</c> dictionary on failure. CQRS slices validate
 /// in the dispatcher's ValidationDecorator instead (§C.8) — never both for the same message.
 /// </summary>
 public sealed class ValidationEndpointFilter<T>(IValidator<T> validator) : IEndpointFilter
