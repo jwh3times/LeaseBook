@@ -99,6 +99,13 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   interface, so nobody else on a shared network can reach the local database or pgAdmin, which runs
   without a login. To try the app from a phone, `LEASEBOOK_APP_BIND=0.0.0.0` opens the app alone.
 
+- **The application tells anonymous callers less about itself.** The public health check answers
+  only whether the app is up, without a version number, and the readiness check answers only ready or
+  not ready; which of its conditions is failing is written to the application log, where an operator
+  reads it. Responses no longer name the web server software, and every response now tells browsers
+  not to share the app's windows or resources with other sites. Outside local development the
+  content security policy also tells browsers to load everything over HTTPS.
+
 - **Click-budget telemetry now accepts only the flows the product actually measures.** The endpoint
   the app uses to report how many interactions a budgeted task took takes one of a fixed set of task
   names and a non-negative count, and rejects anything else. The app's own reports are checked

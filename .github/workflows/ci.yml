@@ -444,6 +444,19 @@ jobs:
             exit 1
           fi
 
+      # Only the real Kestrel host can show this: the integration suite runs on the test server,
+      # which never writes a Server header, so it can pin the option but not the wire.
+      - name: Assert the response does not name the server
+        run: |
+          set -euo pipefail
+          headers="$(curl -fsS -D - -o /dev/null "http://localhost:${LEASEBOOK_APP_PORT}/api/health")"
+          # A here-string, not a pipe: under pipefail, grep -q exiting early could SIGPIPE the writer
+          # and turn a match into a pass.
+          if grep -qi '^server:' <<<"$headers"; then
+            echo "::error::The app sends a Server header: $(grep -i '^server:' <<<"$headers")"
+            exit 1
+          fi
+
       # The image serves the built SPA and the API from one origin; a 200 here proves the published
       # port reaches the app and the web assets made it into the runtime layer.
       - name: Assert the SPA is served
