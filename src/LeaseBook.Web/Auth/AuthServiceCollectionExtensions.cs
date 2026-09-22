@@ -70,6 +70,11 @@ public static class AuthServiceCollectionExtensions
             options.Cookie.SecurePolicy = securePolicy;
             options.SlidingExpiration = true;
             options.ExpireTimeSpan = TimeSpan.FromHours(8);
+            // ExpireTimeSpan bounds idleness only — sliding renewal means an active session never
+            // reaches it. SessionLifetime adds the ceiling measured from sign-in, and owns
+            // OnValidatePrincipal for both that check and the security-stamp check it delegates to.
+            options.Events.OnSigningIn = SessionLifetime.StampDeadlineAsync;
+            options.Events.OnValidatePrincipal = SessionLifetime.ValidateAsync;
             // SPA over /api expects status codes, not redirects to a login page.
             options.Events.OnRedirectToLogin = ApiAwareProblem(
                 StatusCodes.Status401Unauthorized, code: "not_authenticated", detail: "Not authenticated.");
@@ -78,6 +83,13 @@ public static class AuthServiceCollectionExtensions
             // MFA alone. Do not "finish the job" here without moving that test's meaning first.
             options.Events.OnRedirectToAccessDenied = ApiAwareStatus(StatusCodes.Status403Forbidden);
         });
+
+        // The handler's own expiry arithmetic and SessionLifetime's ceiling must read one clock;
+        // otherwise a test that moves time sees only half the session age, and a host given a
+        // non-system TimeProvider would apply the two bounds against different notions of now.
+        // ConfigureApplicationCookie's callback has no access to DI, so the binding is made here.
+        services.AddOptions<CookieAuthenticationOptions>(IdentityConstants.ApplicationScheme)
+            .Configure<TimeProvider>((options, clock) => options.TimeProvider = clock);
 
         services.AddAntiforgery(options =>
         {

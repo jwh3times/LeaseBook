@@ -3,7 +3,7 @@
 - **Audience:** Operators and maintainers
 - **Status:** Living runbook; canonical error-diagnosis reference
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-09-16
+- **Last reviewed:** 2026-09-22
 
 How to turn the reference an operator sees on screen into the full server-side detail in
 Application Insights. See [ADR-025](../adr/ADR-025-error-contract-and-observability.md) for the
@@ -73,6 +73,15 @@ handler before the request reached a handler, so the Step 2 query returns the `r
 on the route the operator was on) and no traces and no exception. That absence is the expected shape
 here, not lost telemetry. Note that this is the server's answer, not the SPA's guess: a 401 from a
 rejected password or authentication code is a different response and never renders this copy.
+
+Two of the causes behind that message end a session **by design**, and both look like a fault from
+the operator's seat. A sign-in expires twelve hours after it was issued however active it has been,
+so an operator who signed in early enough meets this mid-task rather than while idle; and signing out
+rotates the account's security stamp, which ends that user's sessions on every device, so a second
+browser or a phone left signed in is rejected on its next request. Neither leaves an exception to
+find. Before chasing telemetry, establish when the operator signed in and whether they or anyone
+sharing the account signed out — [ADR-043](../adr/ADR-043-account-security-lifecycle.md) owns both
+rules. Signing in again is the whole remedy.
 
 A blocked administrator reads **"Two-factor authentication must be set up on your account before you
 can continue."** — a 403 from MFA enforcement, which is on in Production only. It carries a reference
