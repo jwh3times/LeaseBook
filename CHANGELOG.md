@@ -60,6 +60,11 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Fixed
 
+- **Every rejected request now appears in the application log.** Sign-in and a few other requests
+  that are checked outside the main request pipeline returned their "invalid input" answer without
+  logging it, so the diagnostics runbook's validation-rejection event under-counted them. They now
+  log the same event, with the number of fields at fault and never what was typed.
+
 - **Disbursement previews no longer appear runnable when no operating trust account exists.** A
   preview with owner targets now reports the same missing-bank configuration error that confirmation
   would, before an operator reviews or selects rows. Preview and confirmation also derive owner
