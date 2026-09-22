@@ -189,6 +189,13 @@ SECURITY` and an `org_id` isolation policy applied through one migration helper;
   authentication applies to administrator accounts and is gated by a configuration setting that the
   Production configuration turns on; it is off by default everywhere else, including Development and
   tests.
+- **Sessions are time-bounded and centrally revocable.** A sign-in cannot outlive an absolute
+  twelve-hour ceiling measured from the sign-in itself, separately from the idle window that renews
+  while a session is in use; a session ticket that does not carry that ceiling is refused rather than
+  admitted. Identity security stamps are validated on every authenticated request, so enrollment
+  confirmation, password changes, operator MFA resets, and signing out all revoke sessions. The stamp
+  is per-user, so signing out ends that account's sessions on every device, not only the browser in
+  use. See [ADR-043](../adr/ADR-043-account-security-lifecycle.md).
 - **Secrets via managed identity (at go-live).** Connection strings and role passwords are held in
   Azure Key Vault and read by a user-assigned managed identity granted the Key Vault Secrets User role
   scoped to the vault; the same identity pulls container images.

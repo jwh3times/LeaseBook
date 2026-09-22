@@ -143,8 +143,26 @@ public sealed class AuthEndpoints : IEndpointModule
         .AllowAnonymous()
         .RequireRateLimiting("auth");
 
-        group.MapPost("/logout", async (SignInManager<AppUser> signInManager) =>
+        group.MapPost("/logout", async (
+            SignInManager<AppUser> signInManager, UserManager<AppUser> userManager, HttpContext http) =>
         {
+            // SignOutAsync deletes the browser's copy of the ticket and nothing else. Cookie tickets
+            // are self-contained, so a copy taken beforehand stays valid until it expires — which is
+            // the one case where signing out is the thing being relied on. Rotating the security
+            // stamp is what actually invalidates it, and with SecurityStampValidatorOptions'
+            // ValidationInterval at zero the rejection lands on the copy's very next request.
+            //
+            // This is deliberately global: every session for this user ends, not just this browser's.
+            // The stamp is per-user, so there is no narrower rotation available, and for a product
+            // holding trust money "sign me out" meaning "everywhere" is the safer reading of the
+            // operator's intent. Revoking one device individually would need a server-side ticket
+            // store; if that is ever wanted, this is the call site to revisit.
+            var user = await userManager.GetUserAsync(http.User);
+            if (user is not null)
+            {
+                AccountSecurityAudit.RequireSuccess(await userManager.UpdateSecurityStampAsync(user));
+            }
+
             await signInManager.SignOutAsync();
             return TypedResults.NoContent();
         }).RequireAuthorization(AuthPolicies.AuthenticatedMfaExempt);

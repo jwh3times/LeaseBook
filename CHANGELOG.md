@@ -32,6 +32,14 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Changed
 
+- **Signing out now ends your session on every device, and a sign-in lasts at most 12 hours.**
+  Choosing sign out previously ended it only in the browser you were using. It now signs the account
+  out everywhere it is open, which takes effect on the other device's next request — so an operator
+  who signed in on a shared or unattended machine can end that session from the one in front of them.
+  Separately, a session now expires 12 hours after sign-in however busy it is; it previously renewed
+  indefinitely as long as the tab stayed active. Signing in again is all that is needed, and changing
+  a password or enrolling in MFA no longer extends the 12 hours.
+
 - **`/handoff` and `/lets-go` now work on a machine without the Proton Drive desktop client.** Where
   the `proton-drive` CLI is installed instead, `HANDOFFS_DIR` names a local mirror that the skills
   pull the map (and the named handoff document) into and push back from, so a handoff written on one

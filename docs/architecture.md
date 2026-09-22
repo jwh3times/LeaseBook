@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living architecture guide
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-09-20
+- **Last reviewed:** 2026-09-22
 
 This is the canonical public map of the system **as implemented**. It explains how the pieces fit
 together and links the decisions that shaped them without reproducing every invariant. Accepted
@@ -151,10 +151,13 @@ is in [SECURITY.md](../SECURITY.md).
 
 The account-security page remains reachable before required MFA enrollment and supports authenticator
 setup, one-time recovery-code display, and password changes. Recovery-code sign-in follows password
-verification. Identity security stamps are checked on every authenticated request so enrollment,
-password changes, and operator resets revoke older sessions promptly. First-admin provisioning and
-emergency MFA reset use the operator-only `accounts` CLI and the existing organization-scoped
-transaction and audit mechanisms. [ADR-043](adr/ADR-043-account-security-lifecycle.md) owns that
+verification. Identity security stamps are checked on every authenticated request, so enrollment,
+password changes, operator resets, and signing out revoke older sessions promptly; the stamp is
+per-user, so signing out ends that account's sessions on every device rather than only the browser in
+front of the operator. A sign-in also carries an absolute twelve-hour ceiling, measured from sign-in
+and held in the ticket itself, so sliding renewal and in-session re-authentication move the idle
+window but never the ceiling. First-admin provisioning and emergency MFA reset use the operator-only
+`accounts` CLI and the existing organization-scoped transaction and audit mechanisms. [ADR-043](adr/ADR-043-account-security-lifecycle.md) owns that
 boundary; the [local runbook](runbooks/local-dev.md#account-provisioning-and-recovery) owns the commands.
 
 ## Frontend and the generated API client
