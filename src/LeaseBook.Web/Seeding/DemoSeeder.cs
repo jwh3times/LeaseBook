@@ -45,8 +45,10 @@ public static class DemoSeeder
         // Step 1 (global-class): the org itself — it has no org_id, so no context is needed.
         await EnsureOrgAsync(sp.GetRequiredService<AppDbContext>(), data.Pm.Company, ct);
 
-        // Step 2 (identity-class): the admin, bound to the org. MFA is left unenrolled (operator
-        // self-enrolls at first login). Identity tables carry no RLS, so again no organization context.
+        // Step 2 (identity-class): the admin, bound to the org. MFA is left unenrolled: admin MFA is
+        // enforced only where Auth:EnforceAdminMfa is on (Production, where this seeder refuses to
+        // run), and enrolling is optional here, from Account security. Identity tables carry no RLS,
+        // so again no organization context.
         await EnsureAdminAsync(sp.GetRequiredService<UserManager<AppUser>>(), data.Pm.User.Name, ct);
 
         // Step 3 (org-scoped): runs inside the OrgScopedExecutor unit of work — app.org_id is set,
