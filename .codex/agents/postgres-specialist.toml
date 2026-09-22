@@ -64,15 +64,32 @@ The surrounding transaction lives in `SharedKernel/Tenancy/TransactionalUnitOfWo
 
 `USING` filters reads; `WITH CHECK` guards writes. Verify both in every policy. A policy with only `USING` allows an organization to insert rows with a foreign `org_id` if `WITH CHECK` is absent.
 
-### composite `(org_id, id)` FKs for journal dimensions
+### composite `(org_id, id)` FKs — every org-scoped reference, not just journal dimensions
 
-Journal lines reference directory entities (tenants, properties, owners, units) via composite FKs:
+If both ends of a foreign key are org-scoped tables, the key carries `org_id` on both sides:
 
 ```sql
 FOREIGN KEY (org_id, tenant_id) REFERENCES directory.tenants (org_id, id)
 ```
 
-This ensures a line's `org_id` matches its referenced entity's `org_id` at the constraint level — RLS can't enforce cross-table consistency on its own.
+Referential integrity is checked by the system with row-level security **bypassed**. A single-column key therefore proves only that the referenced row exists in _some_ organization — never in the referencing row's own. RLS cannot close that gap, because a policy only ever sees one table: the offending row's own `org_id` is correct, and it is the row it _points at_ that belongs to someone else, so `WITH CHECK` passes. The result is a pointer Postgres accepts and that only surfaces later, as a reference that reads as missing under its own organization's context.
+
+Give the principal an `(org_id, id)` alternate key and wire the dependent to it:
+
+```csharp
+builder.HasAlternateKey(e => new { e.OrgId, e.Id }).HasName("ak_<table>_org_id_id");   // principal
+
+builder.HasOne<Principal>().WithMany()                                                 // dependent
+    .HasForeignKey(e => new { e.OrgId, e.SomeId })
+    .HasPrincipalKey(p => new { p.OrgId, p.Id })
+    .OnDelete(DeleteBehavior.Restrict);
+```
+
+Name the alternate key explicitly. EF's default for it is derived inconsistently — plural table name for some entities, singular entity name for others — and it can _change_ when an unrelated relationship is added, producing a spurious constraint rename in a later migration.
+
+A nullable reference stays optional: `org_id` is never null, and MATCH SIMPLE skips the check entirely while the other column is null. Do not make the column required just because the key became composite.
+
+`SchemaGuardTests.Every_foreign_key_between_org_scoped_tables_is_org_constrained` walks the live catalog after migrations and fails CI on any such key that is still single-column, so this covers tables that do not exist yet. It verifies the _pairing_ — that the referenced column at `org_id`'s position is the principal's own `org_id` — not merely that `org_id` appears somewhere in the key. A key that must genuinely stay unconstrained goes in `OrgUnconstrainedForeignKeyAllowlist` with its reason; the allowlist is empty today.
 
 ### Soft spot: `asp_net_users`
 

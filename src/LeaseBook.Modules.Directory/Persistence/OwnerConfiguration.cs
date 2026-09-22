@@ -13,7 +13,7 @@ public sealed class OwnerConfiguration : IEntityTypeConfiguration<Owner>
 
         // (org_id, id) alternate key — target of journal_lines' composite dimension FK (ADR-013, P60),
         // so the constraint enforces org-correctness, not just existence. id alone is already the PK.
-        builder.HasAlternateKey(e => new { e.OrgId, e.Id });
+        builder.HasAlternateKey(e => new { e.OrgId, e.Id }).HasName("ak_owners_org_id_id");
 
         builder.Property(e => e.OrgId).IsRequired();
         builder.Property(e => e.Name).IsRequired();

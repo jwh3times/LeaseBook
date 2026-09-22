@@ -82,3 +82,53 @@ and rework the harness to seed FK targets per test org.**
 If a directory table's primary key ever changes shape, or a new journal-dimension column is added,
 re-state its composite FK in the same migration. ADR-008's `is_system` aggregate-row mechanism and
 its own revisit trigger are unaffected by this change.
+
+## Addendum — the rule is now universal and test-enforced, and two carve-outs above are reversed (2026-09-22)
+
+This record made the right argument and then scoped it too narrowly. An audit of the live schema
+found **fourteen** foreign keys between two org-scoped tables that did not constrain `org_id`,
+across Accounting, Banking, Directory, Operations and the import toolkit. `units.property_id` was
+the one that prompted the audit; it was not special, and neither were the five columns this record
+covered.
+
+The decision is that **every** foreign key between two org-scoped tables pairs `org_id` on both
+sides, and that a guard test enforces it rather than an audit being repeated.
+`SchemaGuardTests.Every_foreign_key_between_org_scoped_tables_is_org_constrained` walks the live
+catalog after migrations, so a table nobody thought of is covered by construction. Its allowlist
+ships empty and is an exception mechanism, not a mute button.
+
+The guard asks a sharper question than "does `org_id` appear in the key". It checks that the column
+the referencing `org_id` is _paired with_ is the principal's own `org_id`. A key shaped
+`FOREIGN KEY (org_id, x_id) REFERENCES t (something_else, id)` contains `org_id` and forces nothing;
+the weaker form reports it as clean. Both forms return the same fourteen rows against the schema as
+it was, so the stronger one costs nothing and closes a shape that would otherwise read as compliant.
+
+### Reversed: FKs into the journal do not stay single-column
+
+The Decision above says they do, on the reasoning that `journal_lines.id` is globally unique and the
+row carries `org_id` under RLS. Global uniqueness prevents an id from being _ambiguous_; it does not
+prevent org A's row from naming org B's row, and RLS is not in the argument at all because
+**referential-integrity checks bypass it** — the sentence directly above the carve-out says so. The
+same reasoning would have excused all fourteen. `bank_line_status.journal_line_id` and
+`.reconciliation_id` are now composite.
+
+### Reversed: the composite FKs live in the EF model
+
+This record authored them as raw `AddForeignKey` calls outside the model, and accepted as a
+consequence that "a future migration touching these columns must re-state the FK by hand". That
+consequence is a standing invitation to lose a constraint silently, and the cost it bought was
+avoiding navigation properties. `HasOne<T>().WithMany().HasForeignKey(...).HasPrincipalKey(...)`
+creates **no** navigation property, so P26 and ADR-008 are satisfied while the model snapshot knows
+the constraint exists and EF's differ will speak up. All of them now live in the model.
+
+One incidental pin came out of that move: EF derives the default alternate-key name inconsistently,
+from the table name for some entity types and the entity-type name for others, and adding a
+relationship can flip it. Every `(org_id, id)` alternate key is now named explicitly, so a future
+relationship cannot produce a rename migration that looks like intent.
+
+## Revisit trigger (addendum)
+
+Revisit if a legitimate case for an org-unconstrained foreign key appears — the allowlist exists for
+it, and the entry has to argue why a row in that table may point at another organization's row. Also
+revisit if `asp_net_users` ever comes under RLS, since it is org-scoped, deliberately RLS-exempt, and
+therefore outside both the guard and this rule.

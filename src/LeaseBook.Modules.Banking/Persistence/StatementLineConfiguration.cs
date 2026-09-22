@@ -12,6 +12,11 @@ public sealed class StatementLineConfiguration : IEntityTypeConfiguration<Statem
 
         builder.HasKey(e => e.Id);
 
+        // (org_id, id) alternate key: the target of every composite FK that points here, so a
+        // referencing row cannot name a row belonging to another organization. FK checks bypass
+        // RLS, so this is what makes the two org_ids provably equal.
+        builder.HasAlternateKey(e => new { e.OrgId, e.Id }).HasName("ak_statement_lines_org_id_id");
+
         builder.Property(e => e.OrgId).IsRequired();
         builder.Property(e => e.BankAccountId).IsRequired();
         builder.Property(e => e.ImportId).IsRequired();
@@ -22,10 +27,12 @@ public sealed class StatementLineConfiguration : IEntityTypeConfiguration<Statem
         builder.Property(e => e.DedupHash).IsRequired();
         builder.Property(e => e.CreatedAt).IsRequired();
 
-        // Same-module FK to the import (both rows carry org_id under RLS); no navigation, RESTRICT.
+        // Same-module FK to the import; no navigation, RESTRICT. Composite on (org_id, import_id):
+        // carrying org_id on both rows is not enough, because the FK check itself bypasses RLS.
         builder.HasOne<StatementImport>()
             .WithMany()
-            .HasForeignKey(e => e.ImportId)
+            .HasForeignKey(e => new { e.OrgId, e.ImportId })
+            .HasPrincipalKey(i => new { i.OrgId, i.Id })
             .OnDelete(DeleteBehavior.Restrict);
 
         // Dedup key (P67): a re-imported line collides here and is skipped. Spans all imports for the

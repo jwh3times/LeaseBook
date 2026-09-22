@@ -87,6 +87,15 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Security
 
+- **The database now enforces that a record cannot reference another organization's record.** Links
+  between records — a unit to its property, a statement line to its import, a journal line to its
+  account — were checked only for the referenced record existing, because the database's own
+  integrity checks run outside the per-organization isolation rules that every query is subject to.
+  Fourteen such links across the product now carry the organization on both sides, so the isolation
+  that always governed reads is now also a property of how records are stored. Nothing about how the
+  application behaves changes; a test walks the schema and fails the build if a future link is added
+  without it.
+
 - **Every cookie the application sets now carries `Secure` outside local development, whatever
   scheme the server itself observes.** Where TLS ends at a load balancer, the application is reached
   over plain HTTP even though the browser used HTTPS, so a cookie that decided the flag from the

@@ -260,6 +260,71 @@ public sealed class OrgIsolationTests(PostgresFixture fixture)
         answer.ShouldBe(42);
     }
 
+    // T10 — the gap RLS structurally cannot close: referential integrity is checked with row-level
+    // security BYPASSED, so a single-column FK only ever proved the referenced row existed in SOME
+    // organization. WITH CHECK does not help — the offending row's own org_id is correct; it is the
+    // row it POINTS AT that belongs to someone else. Composite (org_id, id) keys are what make the
+    // two organizations provably equal (M8_OrgConstrainCompositeForeignKeys), and this is the
+    // behaviour the schema-shape guard in SchemaGuardTests exists to keep true for every such key.
+    [Fact]
+    public async Task A_row_cannot_reference_another_orgs_row_through_a_foreign_key()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var orgA = UuidV7.NewId();
+        var orgB = UuidV7.NewId();
+        var ownerA = UuidV7.NewId();
+        var ownerB = UuidV7.NewId();
+
+        await using var conn = await fixture.OpenAppConnectionAsync(ct);
+        await InsertOwnerAsync(conn, orgA, ownerA, ct);
+        await InsertOwnerAsync(conn, orgB, ownerB, ct);
+
+        // Positive control: the same statement against this organization's OWN owner is accepted, so
+        // the failure below is about the cross-organization reference and not about the insert itself.
+        await using (var ok = await conn.BeginTransactionAsync(ct))
+        {
+            await RlsProbe.SetOrgAsync(conn, ok, orgA, ct);
+            await InsertPropertyAsync(conn, ok, orgA, UuidV7.NewId(), ownerA, ct);
+            await ok.CommitAsync(ct);
+        }
+
+        await using var tx = await conn.BeginTransactionAsync(ct);
+        await RlsProbe.SetOrgAsync(conn, tx, orgA, ct);
+
+        var ex = await Should.ThrowAsync<PostgresException>(
+            async () => await InsertPropertyAsync(conn, tx, orgA, UuidV7.NewId(), ownerB, ct));
+
+        ex.SqlState.ShouldBe(PostgresErrorCodes.ForeignKeyViolation);
+        await tx.RollbackAsync(ct);
+    }
+
+    private static async Task InsertOwnerAsync(NpgsqlConnection conn, Guid orgId, Guid ownerId, CancellationToken ct)
+    {
+        await using var tx = await conn.BeginTransactionAsync(ct);
+        await RlsProbe.SetOrgAsync(conn, tx, orgId, ct);
+
+        await using var cmd = new NpgsqlCommand(
+            "INSERT INTO owners (id, org_id, name, reserve_amount, created_at) " +
+            "VALUES (@id, @org, 'probe', 0, now())", conn, tx);
+        cmd.Parameters.AddWithValue("id", ownerId);
+        cmd.Parameters.AddWithValue("org", orgId);
+        await cmd.ExecuteNonQueryAsync(ct);
+
+        await tx.CommitAsync(ct);
+    }
+
+    private static async Task InsertPropertyAsync(
+        NpgsqlConnection conn, NpgsqlTransaction tx, Guid orgId, Guid propertyId, Guid ownerId, CancellationToken ct)
+    {
+        await using var cmd = new NpgsqlCommand(
+            "INSERT INTO properties (id, org_id, owner_id, address, created_at) " +
+            "VALUES (@id, @org, @owner, 'probe', now())", conn, tx);
+        cmd.Parameters.AddWithValue("id", propertyId);
+        cmd.Parameters.AddWithValue("org", orgId);
+        cmd.Parameters.AddWithValue("owner", ownerId);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
     private static async Task SeedAsync(NpgsqlConnection conn, Guid orgId, int count, CancellationToken ct)
     {
         await using var tx = await conn.BeginTransactionAsync(ct);
