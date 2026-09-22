@@ -53,6 +53,30 @@ public static class AuthTestSupport
         }
     }
 
+    /// <summary>
+    /// A client signed in as the admin of a new, empty org. For tests that create directory rows:
+    /// doing that in the shared demo org would move the counts its golden and seeder tests pin.
+    /// </summary>
+    public static async Task<(Guid OrgId, HttpClient Client)> SignedInToNewOrgAsync(
+        PostgresFixture fixture, string role, CancellationToken ct)
+    {
+        var orgId = UuidV7.NewId();
+        await CreateOrgAsync(fixture, orgId, $"Isolated org {orgId:N}", ct);
+        var email = $"admin-{orgId:N}@isolated.test";
+        await CreateUserAsync(fixture, orgId, email, "Isolated admin", role, ct);
+
+        var client = fixture.Api.CreateClient();
+        await client.PrimeCsrfAsync(ct);
+        var login = await LoginAsync(client, email, ct);
+        if (login.Status != "ok")
+        {
+            throw new InvalidOperationException($"isolated-org login returned '{login.Status}'");
+        }
+
+        await client.PrimeCsrfAsync(ct); // the XSRF token rotates on sign-in
+        return (orgId, client);
+    }
+
     public static async Task<LoginResponse> LoginAsync(HttpClient client, string email, CancellationToken ct)
     {
         var response = await client.PostAsJsonAsync("/api/auth/login", new LoginRequest(email, DefaultPassword), ct);

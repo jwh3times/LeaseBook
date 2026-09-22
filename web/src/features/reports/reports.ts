@@ -185,11 +185,8 @@ export function useReportPreview(
 
 export type ReportsError = ApiError;
 
-export async function deliverStatement(
-  ownerId: string,
-  filters: StatementFilters,
-  toEmail?: string,
-): Promise<void> {
+/** Delivers to the owner's address on file; the server refuses with `owner_email_missing` if none. */
+export async function deliverStatement(ownerId: string, filters: StatementFilters): Promise<void> {
   const { error, response } = await postApiStatementsByOwnerIdDeliver({
     path: { ownerId },
     query: {
@@ -197,7 +194,6 @@ export async function deliverStatement(
       year: filters.year,
       month: filters.month,
       propertyId: filters.propertyId,
-      toEmail,
     },
   });
   if (error || !response?.ok) {

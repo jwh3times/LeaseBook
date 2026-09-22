@@ -2456,7 +2456,6 @@ export type PostApiStatementsByOwnerIdDeliverData = {
         year?: number | string;
         month?: number | string;
         basis?: string;
-        toEmail?: string;
     };
     url: '/api/statements/{ownerId}/deliver';
 };

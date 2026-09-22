@@ -19,6 +19,11 @@ const PASSWORD = 'Tarheel-Trust-2026!';
 const O5_ID = '01923000-0000-7000-8000-000000000a05';
 const O5_NAME = 'Ridgeline Investments';
 
+// O3 = Marcus & Dana Bell. Delivery issues an artifact, which anchors the owner's following month,
+// so it runs against an owner no golden figure or visual baseline reads.
+const O3_ID = '01923000-0000-7000-8000-000000000a03';
+const O3_NAME = 'Marcus & Dana Bell';
+
 async function login(page: Page) {
   await page.goto('/login');
   await page.getByLabel('Email').fill(ADMIN);
@@ -151,6 +156,19 @@ test.describe.serial('M5 reports', () => {
     const text = csv.toString('utf8');
     expect(text).toContain(O5_NAME);
     expect(text).toContain('22640.30');
+  });
+
+  test('deliver to owner issues the statement to the address on file', async ({ page }) => {
+    await login(page);
+    await page.goto(`/owners/${O3_ID}/statement`);
+    await expect(page.locator('.fw7').filter({ hasText: O3_NAME })).toBeVisible({
+      timeout: 15_000,
+    });
+
+    // Drives the real button against the real host: the request names no recipient, and the host
+    // resolves the owner's address on file.
+    await page.getByRole('button', { name: 'Deliver to owner' }).click();
+    await expect(page.getByText(/Queued for delivery/)).toBeVisible();
   });
 
   // ---- Flow B: Report catalog → filter → live preview -------------------------

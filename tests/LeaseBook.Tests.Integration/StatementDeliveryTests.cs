@@ -1,5 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
+using LeaseBook.Modules.Directory.Endpoints;
+using LeaseBook.Modules.Directory.Features.Owners;
 using LeaseBook.Modules.Reporting.Delivery;
 using LeaseBook.Tests.Common;
 using LeaseBook.Tests.Integration.Fixtures;
@@ -21,7 +23,8 @@ namespace LeaseBook.Tests.Integration;
 /// <item>Balanced view → artifact + attempt + <see cref="DeliveryEventKind.Queued"/> event, PDF retrievable.</item>
 /// <item>Acceptance followed by a bounce keeps both facts and reports the bounce (#185's scenario).</item>
 /// <item>A retry is a new attempt against the <b>same</b> artifact, never a new event on the old one.</item>
-/// <item>Endpoint 409 on unbalanced + 200 on balanced + 401 for anon.</item>
+/// <item>Endpoint 409 on unbalanced + 200 on balanced + 401 for anon; the recipient is the owner's
+/// address on file, never one the request supplies, and 409 when there is none.</item>
 /// <item><see cref="SchemaGuardTests"/> passes (migration applied + EnableOrgRls called).</item>
 /// </list>
 /// </summary>
@@ -402,8 +405,7 @@ public sealed class StatementDeliveryTests(PostgresFixture fixture)
         var client = await DemoClientAsync(ct);
 
         // O5 May 2026 is balanced (Fiduciary.Balanced = true per WP-3 golden test).
-        var url = $"/api/statements/{DemoIds.O5}/deliver" +
-                  "?year=2026&month=5&basis=cash&toEmail=owner%40example.com";
+        var url = $"/api/statements/{DemoIds.O5}/deliver?year=2026&month=5&basis=cash";
         var response = await client.PostAsync(url, null, ct);
 
         response.StatusCode.ShouldBe(HttpStatusCode.OK,
@@ -417,17 +419,50 @@ public sealed class StatementDeliveryTests(PostgresFixture fixture)
         result.AttemptId.ShouldNotBe(Guid.Empty);
     }
 
+    /// <summary>
+    /// A statement goes to the owner's address on file — the request names no recipient, and one
+    /// supplied anyway is ignored, so an owner's statement cannot be redirected to another inbox.
+    /// </summary>
     [Fact]
-    public async Task Deliver_endpoint_missing_toEmail_returns_400()
+    public async Task Deliver_endpoint_sends_to_the_owners_address_on_file_and_ignores_a_supplied_one()
     {
         var ct = TestContext.Current.CancellationToken;
         await DemoSeeder.SeedAsync(fixture.Api.Services, ct);
         var client = await DemoClientAsync(ct);
 
-        var url = $"/api/statements/{DemoIds.O5}/deliver?year=2026&month=5&basis=cash";
-        var response = await client.PostAsync(url, null, ct);
+        var owner = await client.GetFromJsonAsync<OwnerDetail>($"/api/directory/owners/{DemoIds.O5}", ct);
+        var onFile = owner!.Contact.Email;
+        onFile.ShouldNotBeNullOrWhiteSpace("the demo seed gives every real owner an address on file");
 
-        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        var url = $"/api/statements/{DemoIds.O5}/deliver" +
+                  "?year=2026&month=5&basis=cash&toEmail=elsewhere%40example.net";
+        var response = await client.PostAsync(url, null, ct);
+        response.StatusCode.ShouldBe(HttpStatusCode.OK, await response.Content.ReadAsStringAsync(ct));
+        var result = await response.Content.ReadFromJsonAsync<DeliveryAttemptResult>(ct);
+
+        await using var migratorDb = fixture.CreateContext(fixture.MigratorConnectionString);
+        var orgId = migratorDb.Users.First(u => u.Email == DemoSeeder.AdminEmail).OrgId;
+        var attempts = await ReadAttemptsAsync(orgId, result!.ArtifactId, ct);
+        attempts.Single().ShouldBe((onFile!, result.AttemptId));
+    }
+
+    [Fact]
+    public async Task Deliver_endpoint_refuses_when_the_owner_has_no_email_on_file()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (_, client) = await AuthTestSupport.SignedInToNewOrgAsync(fixture, Roles.PMAdmin, ct);
+
+        var created = await client.PostAsJsonAsync("/api/directory/owners",
+            new CreateOwner($"No-email owner {Guid.NewGuid():N}", null, null, null, null, 0m), ct);
+        created.StatusCode.ShouldBe(HttpStatusCode.OK, await created.Content.ReadAsStringAsync(ct));
+        var ownerId = (await created.Content.ReadFromJsonAsync<CreatedId>(ct))!.Id;
+
+        var response = await client.PostAsync(
+            $"/api/statements/{ownerId}/deliver?year=2026&month=5&basis=cash&toEmail=owner%40example.com",
+            null, ct);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+        (await response.Content.ReadAsStringAsync(ct)).ShouldContain("owner_email_missing");
     }
 
     [Fact]
@@ -438,8 +473,7 @@ public sealed class StatementDeliveryTests(PostgresFixture fixture)
         // the authorization layer (401) because no login occurred.
         var anonClient = fixture.Api.CreateClient();
         await anonClient.PrimeCsrfAsync(ct);
-        var url = $"/api/statements/{DemoIds.O5}/deliver" +
-                  "?year=2026&month=5&basis=cash&toEmail=owner%40example.com";
+        var url = $"/api/statements/{DemoIds.O5}/deliver?year=2026&month=5&basis=cash";
         var response = await anonClient.PostAsync(url, null, ct);
         response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
     }

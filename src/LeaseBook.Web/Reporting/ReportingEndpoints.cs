@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using LeaseBook.Modules.Accounting.Features.Reconciliation;
+using LeaseBook.Modules.Directory.Features.Owners;
 using LeaseBook.Modules.Reporting.Catalog;
 using LeaseBook.Modules.Reporting.Contracts;
 using LeaseBook.Modules.Reporting.Rendering;
@@ -278,24 +279,26 @@ public sealed class ReportingEndpoints : IEndpointModule
             .Produces<IssuedStatementCoverageResponse>()
             .ProducesProblem(StatusCodes.Status400BadRequest);
 
-        // POST /api/statements/{ownerId}/deliver?propertyId=&year=&month=&basis=&toEmail=
+        // POST /api/statements/{ownerId}/deliver?propertyId=&year=&month=&basis=
         // Issues the statement: renders the PDF, stores the immutable artifact, opens the first
         // delivery attempt, and records that attempt's Queued event (ADR-040). The provider send and
         // the accepted/delivered/bounced events that follow it are Track B. Returns 409 when the
-        // statement's fiduciary tie-out is not balanced (StatementNotBalancedException).
+        // statement's fiduciary tie-out is not balanced (StatementNotBalancedException), or when the
+        // owner has no address on file. The recipient is always that address: the request names
+        // none, so an owner's statement cannot be redirected, and no address travels in a URL.
         group.MapPost("/statements/{ownerId:guid}/deliver",
                 async (Guid ownerId, Guid? propertyId, int? year, int? month, string? basis,
-                    string? toEmail,
-                    StatementAssembler assembler, IStatementDelivery delivery,
+                    StatementAssembler assembler, IStatementDelivery delivery, ISender sender,
                     HttpContext httpContext, CancellationToken ct) =>
                 {
-                    if (string.IsNullOrWhiteSpace(toEmail))
+                    var addresses = await sender.Query(new GetOwnerDeliveryAddresses([ownerId]), ct);
+                    if (!addresses.TryGetValue(ownerId, out var toEmail))
                     {
                         return ProblemResults.Problem(
                             httpContext,
-                            code: "missing_to_email",
-                            detail: "An email address is required.",
-                            status: StatusCodes.Status400BadRequest);
+                            code: "owner_email_missing",
+                            detail: "This owner has no email address on file. Add one to the owner's record, then deliver the statement.",
+                            status: StatusCodes.Status409Conflict);
                     }
 
                     var now = DateTime.UtcNow;
