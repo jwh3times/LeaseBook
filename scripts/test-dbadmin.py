@@ -99,6 +99,21 @@ class DatabaseAdministrationTests(unittest.TestCase):
                 "SELECT has_database_privilege('leasebook_app','leasebook','CREATE'), "
                 "has_schema_privilege('leasebook_app','public','CREATE'), "
                 "has_schema_privilege('leasebook_ops','public','CREATE');"))
+            # The two privileges the Azure script once omitted. BootstrapPrivilegeParityTests pins
+            # that the statements match bootstrap.sql; these pin that they took effect, which is the
+            # part a parity check on text cannot see.
+            self.assertEqual("f|f", self.sql(
+                "SELECT has_schema_privilege('public','public','USAGE'), "
+                "has_schema_privilege('public','public','CREATE');"),
+                "REVOKE ALL ON SCHEMA public FROM PUBLIC did not take effect: every role, including "
+                "ones LeaseBook never creates, can still reach the schema.")
+            self.assertEqual("1", self.sql(
+                "SELECT count(*) FROM pg_default_acl a "
+                "JOIN pg_namespace n ON n.oid = a.defaclnamespace "
+                "WHERE n.nspname = 'public' AND a.defaclobjtype = 'S' "
+                "AND array_to_string(a.defaclacl, ',') LIKE '%leasebook_app=rU%';"),
+                "The sequence default privilege for leasebook_app is missing, so a future "
+                "sequence-backed column would be unusable by the runtime role.")
 
         # Synthetic migrated tables exercise actual role grants/RLS without touching golden data.
         self.sql(f"""
