@@ -22,4 +22,14 @@ public static class SecurityHeaderOptions
     public const string PermissionsPolicy = "camera=(), microphone=(), geolocation=(), payment=()";
 
     public const string ReferrerPolicy = "no-referrer";
+
+    /// <summary>Appended to the CSP only where HSTS is sent. Browsers apply it to localhost too, so in
+    /// Development — plain <c>http://localhost</c> — it would rewrite the SPA's own assets to an https
+    /// origin nothing serves.</summary>
+    public const string UpgradeInsecureRequests = "upgrade-insecure-requests";
+
+    /// <summary>The SPA opens no cross-origin windows and serves nothing meant for other sites.</summary>
+    public const string CrossOriginOpenerPolicy = "same-origin";
+
+    public const string CrossOriginResourcePolicy = "same-origin";
 }
