@@ -22,19 +22,26 @@ public sealed class BankLineStatusConfiguration : IEntityTypeConfiguration<BankL
         builder.Property(e => e.CreatedAt).IsRequired();
         builder.Property(e => e.UpdatedAt).IsRequired();
 
-        // FK into the immutable journal stays single-column (P61): journal_lines.id is globally unique,
-        // and org_id is carried + RLS-scoped. ON DELETE RESTRICT — a line with a state row is never deleted.
+        // FK into the immutable journal, composite on (org_id, journal_line_id). It was single-column
+        // on the reasoning that journal_lines.id is globally unique and RLS scopes the read — but FK
+        // checks run with RLS bypassed, so that only proved the line existed in SOME organization.
+        // ON DELETE RESTRICT — a line with a state row is never deleted.
         builder.HasOne<JournalLine>()
             .WithMany()
-            .HasForeignKey(e => e.JournalLineId)
+            .HasForeignKey(e => new { e.OrgId, e.JournalLineId })
+            .HasPrincipalKey(l => new { l.OrgId, l.Id })
             .OnDelete(DeleteBehavior.Restrict);
 
-        // The reconciliation that locked this line, once reconciled (M4 / WP-04). Same-module single-column
-        // FK (both rows carry org_id under RLS); no navigation, RESTRICT.
+        // The reconciliation that locked this line, once reconciled (M4 / WP-04). Composite for the same
+        // reason; reconciliation_id stays nullable and the check is skipped while it is NULL.
         builder.HasOne<BankReconciliation>()
             .WithMany()
-            .HasForeignKey(e => e.ReconciliationId)
-            .OnDelete(DeleteBehavior.Restrict);
+            .HasForeignKey(e => new { e.OrgId, e.ReconciliationId })
+            .HasPrincipalKey(r => new { r.OrgId, r.Id })
+            .OnDelete(DeleteBehavior.Restrict)
+            // Named explicitly: EF's default for this pair is 64 characters and Postgres truncates it
+            // to 63, leaving a trailing underscore that then shows up in every violation message.
+            .HasConstraintName("fk_bank_line_status_reconciliation_org_id_reconciliation_id");
 
         builder.HasIndex(e => new { e.OrgId, e.Status });
         builder.HasIndex(e => e.ReconciliationId);

@@ -25,7 +25,7 @@ public sealed class JournalEntryConfiguration : IEntityTypeConfiguration<Journal
         });
 
         builder.HasKey(e => e.Id);
-        builder.HasAlternateKey(e => new { e.OrgId, e.Id });
+        builder.HasAlternateKey(e => new { e.OrgId, e.Id }).HasName("ak_journal_entries_org_id_id");
         builder.Property(e => e.OrgId).IsRequired();
         builder.Property(e => e.EntryDate).IsRequired();
         builder.Property(e => e.DueDate);
@@ -42,17 +42,22 @@ public sealed class JournalEntryConfiguration : IEntityTypeConfiguration<Journal
         builder.Property(e => e.CreatedAt).IsRequired();
 
         // One header → many lines, mapped through the read-only Lines collection's backing field.
+        // Composite on (org_id, entry_id) so a line cannot attach to another organization's header.
         builder.HasMany(e => e.Lines)
             .WithOne()
-            .HasForeignKey(l => l.EntryId)
+            .HasForeignKey(l => new { l.OrgId, l.EntryId })
+            .HasPrincipalKey(e => new { e.OrgId, e.Id })
             .OnDelete(DeleteBehavior.Cascade);
         builder.Metadata.FindNavigation(nameof(JournalEntry.Lines))!
             .SetPropertyAccessMode(PropertyAccessMode.Field);
 
-        // Self-reference: a reversal points at the entry it voids (no inverse navigation).
+        // Self-reference: a reversal points at the entry it voids (no inverse navigation). Composite
+        // like the assessment FK below — reverses_entry_id stays nullable, and MATCH SIMPLE skips the
+        // check entirely when it is NULL, so the key is still optional.
         builder.HasOne<JournalEntry>()
             .WithMany()
-            .HasForeignKey(e => e.ReversesEntryId)
+            .HasForeignKey(e => new { e.OrgId, e.ReversesEntryId })
+            .HasPrincipalKey(e => new { e.OrgId, e.Id })
             .OnDelete(DeleteBehavior.Restrict);
 
         // A late-fee assessment points at its specific rent obligation (no inverse navigation).

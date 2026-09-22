@@ -21,10 +21,13 @@ public sealed class StatementMatchConfiguration : IEntityTypeConfiguration<State
         builder.Property(e => e.DecidedAt).IsRequired();
         builder.Property(e => e.DecidedBy);
 
-        // Same-module FK to the statement line; journal_line_id stays a bare reference (no cross-module FK, ADR-007).
+        // Same-module FK to the statement line, composite on (org_id, statement_line_id) so a match
+        // cannot point at another organization's line; journal_line_id stays a bare reference (no
+        // cross-module FK, ADR-007).
         builder.HasOne<StatementLine>()
             .WithMany()
-            .HasForeignKey(e => e.StatementLineId)
+            .HasForeignKey(e => new { e.OrgId, e.StatementLineId })
+            .HasPrincipalKey(l => new { l.OrgId, l.Id })
             .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasIndex(e => e.StatementLineId);
