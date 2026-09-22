@@ -3,7 +3,7 @@
 - **Audience:** Contributors, maintainers, and the external compliance reviewer
 - **Status:** Draft — pending external GLBA/NCREC compliance review
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-09-20
+- **Last reviewed:** 2026-09-22
 
 > **Draft status.** This document is engineering-authored and **not yet accepted**. What blocks
 > acceptance is the external trust-accounting and privacy compliance review — the NCREC-facing review
@@ -126,7 +126,8 @@ organization-scoped and so becomes audited. See
 ### 2.6 Telemetry
 
 Interaction telemetry (`/api/telemetry/budget`) records only a task label, an interaction count, and
-a pass/fail boolean for the product's click-budget goals. It carries **no** names, amounts, or entity
+a pass/fail boolean for the product's click-budget goals. The label must be one of a fixed set of
+budgeted tasks; the host rejects any other value. It carries **no** names, amounts, or entity
 identifiers. When configured, spans are exported to Azure Application Insights.
 
 ### 2.7 Backups
