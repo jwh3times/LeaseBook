@@ -178,6 +178,8 @@ Before requesting review, confirm:
 - [ ] Accounting-adjacent changes keep the invariant/property/golden suites green.
 - [ ] New org-scoped tables have their RLS policy; the schema guard passes.
 - [ ] A regenerated, committed `web/src/api/generated` accompanies any API-contract change (CI's `schema-drift` job enforces it).
+- [ ] Any new `uses:` in `.github/workflows/` names a **full 40-character commit SHA**, with the
+      version as a trailing comment (`uses: owner/repo@<sha> # v1.2.3`).
 - [ ] An ADR accompanies any significant design decision.
 - [ ] No secrets, credentials, or confidential planning material are committed (the secrets scan runs in CI).
 
@@ -186,6 +188,14 @@ applies the migrations to a blank database, seeds the performance fixture and ch
 validates public documentation, type-checks and builds the web app, runs the Playwright e2e suite
 including the accessibility gate, compiles the Bicep templates and parameter files, builds the container
 image and boots the full stack, and scans for secrets on every push and pull request.
+
+Workflow actions are pinned to commit SHAs and the repository enforces it, so a tag-pinned `uses:`
+is rejected by GitHub before any job starts — the run fails with a policy error rather than a test
+failure, which reads like an outage if you are not expecting it. Dependabot's `github-actions`
+ecosystem keeps the pins current and rewrites the trailing version comment, so a pin does not go
+stale. Actions are additionally restricted to GitHub-owned and verified creators plus a short
+allowlist; introducing an action from anywhere else needs that allowlist updated first. Container
+base images are digest-pinned under the same reasoning, maintained by the `docker` ecosystem.
 
 The `bicep` job proves the infrastructure templates compile — syntax, types, and resource schemas. It
 cannot prove a deployment is correct: overlapping address space, a subnet delegated to the wrong service,
