@@ -371,7 +371,6 @@ export type FiduciaryPanel = {
 
 export type HealthResponse = {
     status: string;
-    version: string;
 };
 
 export type ImportBatchError = {

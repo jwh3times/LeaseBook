@@ -5,8 +5,9 @@ using Microsoft.Net.Http.Headers;
 namespace LeaseBook.Web.Security;
 
 /// <summary>Adds fixed security headers to every response. Hand-rolled (no NuGet dependency),
-/// registered early so it covers the SPA and /api alike. HSTS is Production-only (the edge
-/// terminates TLS there; localhost is plain HTTP).</summary>
+/// registered early so it covers the SPA and /api alike. HSTS and the CSP's
+/// <c>upgrade-insecure-requests</c> are sent outside Development only (the edge terminates TLS there;
+/// localhost is plain HTTP).</summary>
 public sealed class SecurityHeadersMiddleware(RequestDelegate next, IWebHostEnvironment environment)
 {
     private readonly bool _emitHsts = !environment.IsDevelopment();
@@ -27,10 +28,17 @@ public sealed class SecurityHeadersMiddleware(RequestDelegate next, IWebHostEnvi
             headers["X-Frame-Options"] = "DENY";
             headers["Referrer-Policy"] = SecurityHeaderOptions.ReferrerPolicy;
             headers["Permissions-Policy"] = SecurityHeaderOptions.PermissionsPolicy;
-            headers["Content-Security-Policy"] = SecurityHeaderOptions.ContentSecurityPolicy;
+            headers["Cross-Origin-Opener-Policy"] = SecurityHeaderOptions.CrossOriginOpenerPolicy;
+            headers["Cross-Origin-Resource-Policy"] = SecurityHeaderOptions.CrossOriginResourcePolicy;
             if (_emitHsts)
             {
+                headers["Content-Security-Policy"] =
+                    $"{SecurityHeaderOptions.ContentSecurityPolicy}; {SecurityHeaderOptions.UpgradeInsecureRequests}";
                 headers[HeaderNames.StrictTransportSecurity] = "max-age=31536000; includeSubDomains";
+            }
+            else
+            {
+                headers["Content-Security-Policy"] = SecurityHeaderOptions.ContentSecurityPolicy;
             }
 
             return Task.CompletedTask;

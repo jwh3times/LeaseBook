@@ -1,4 +1,3 @@
-using System.Reflection;
 using LeaseBook.SharedKernel.Endpoints;
 using LeaseBook.Web.Health;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
@@ -20,7 +19,7 @@ public sealed class MetaEndpoints : IEndpointModule
 
     public void MapEndpoints(IEndpointRouteBuilder app)
     {
-        app.MapGet("/api/health", () => TypedResults.Ok(new HealthResponse("ok", Version)))
+        app.MapGet("/api/health", () => TypedResults.Ok(new HealthResponse("ok")))
             .AllowAnonymous()
             .WithTags("Meta")
             .Produces<HealthResponse>();
@@ -30,11 +29,9 @@ public sealed class MetaEndpoints : IEndpointModule
         // because the generated SPA client has no use for a probe endpoint, and adding a route to the
         // document would move the schema-drift gate for no consumer.
         //
-        // The response writer names each check and its status. There are now two independent reasons
-        // to be 503 — an unreachable capability seam and unseeded roles — and the framework default
-        // writes only the aggregate word "Unhealthy", which would tell an operator staring at a
-        // rolling deploy nothing about which one to chase. Probes read the status code and ignore the
-        // body, so this costs them nothing.
+        // The body is the aggregate status only: the endpoint is anonymous on the public ingress, and
+        // probes read the status code. Which check failed — the thing an operator needs during a
+        // rolling deploy, with two independent reasons to be 503 — goes to the log instead.
         app.MapHealthChecks(
                 ReadinessPath,
                 new HealthCheckOptions
@@ -47,25 +44,12 @@ public sealed class MetaEndpoints : IEndpointModule
             .ExcludeFromDescription();
     }
 
-    /// <summary>
-    /// Plain text, one line per check, deliberately not JSON: this is read by a human during an
-    /// incident and by nothing else. It is excluded from the OpenAPI document, so no generated client
-    /// depends on its shape.
-    /// </summary>
+    /// <summary>Plain text, deliberately not JSON, and deliberately just the aggregate status.</summary>
     private static Task WriteReadinessAsync(HttpContext context, HealthReport report)
     {
         context.Response.ContentType = "text/plain";
-
-        var lines = report.Entries
-            .OrderBy(entry => entry.Key, StringComparer.Ordinal)
-            .Select(entry => $"{entry.Key}: {entry.Value.Status} — {entry.Value.Description}");
-
-        return context.Response.WriteAsync(
-            string.Join(Environment.NewLine, [$"status: {report.Status}", .. lines]));
+        return context.Response.WriteAsync($"status: {report.Status}");
     }
-
-    private static string Version =>
-        Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "0.0.0";
 }
 
-public sealed record HealthResponse(string Status, string Version);
+public sealed record HealthResponse(string Status);
