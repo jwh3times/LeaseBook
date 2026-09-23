@@ -1,6 +1,6 @@
 /**
- * Operations page — the tab-based entry point for the three run types + history.
- * Tab selection is the first click; running a report is the second. ≤ 2 clicks to start a run.
+ * Operations page — the tab-based entry point for the three run types + history. Bulk runs have no
+ * product click budget; `useRunFlow` reports how many interactions each run actually took.
  */
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router';

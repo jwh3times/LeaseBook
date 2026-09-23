@@ -1,19 +1,18 @@
 /**
  * Owner disbursement run screen (M6 WP-5).
  * Per-owner rows: gross equity → management fee → net before reserve → reserve → disburse amount.
- * Selective — operator confirms which owners to disburse. Aligns with the UX budget (≤ 2 clicks).
+ * Selective — the operator ticks which owners to disburse. The flow itself (preview, selection,
+ * confirm, conflict, outcome, interaction count) is `useRunFlow`'s; this screen owns its table.
  */
-import { useState } from 'react';
 import { Badge, Button, Card, CardHeader, EmptyState, Money } from '@/design';
 import { ApiErrorNotice } from '@/components/ApiErrorNotice';
 import { QueryErrorState } from '@/components/QueryErrorState';
-import { trackInteraction } from '@/lib/telemetry';
 import { PeriodPicker } from './PeriodPicker';
-import { currentPeriod } from './periodUtils';
+import { RunConflictNotice } from './RunConflictNotice';
 import { RunResultPanel, excludedLabel } from './RunPreviewGrid';
 import { RunPreviewIssuedStatementNotice } from './RunPreviewIssuedStatementNotice';
-import { useConfirmRun, useRunPreview } from './useRuns';
-import type { PreviewRowSpa, RunError, RunResultSpaResponse } from './useRuns';
+import { useRunFlow } from './useRunFlow';
+import type { PreviewRowSpa } from './useRuns';
 
 /** Disburse detail keys from the strategy: equity / fee / netBeforeReserve / reserve. */
 function DisbursementDetail({ row }: { row: PreviewRowSpa }) {
@@ -31,61 +30,8 @@ function DisbursementDetail({ row }: { row: PreviewRowSpa }) {
 }
 
 export function DisbursementRunScreen() {
-  const [period, setPeriod] = useState(currentPeriod);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [result, setResult] = useState<RunResultSpaResponse | null>(null);
-  const [confirmError, setConfirmError] = useState<RunError | null>(null);
-
-  const preview = useRunPreview('disbursement', period.year, period.month);
-  const confirm = useConfirmRun('disbursement');
-
-  const handlePeriodChange = (y: number, m: number) => {
-    setPeriod({ year: y, month: m });
-    setSelected(new Set());
-  };
-
-  const eligibleRows = preview.data?.rows.filter((r) => !r.excludedReason && !r.alreadyDone) ?? [];
-  const eligibleIds = eligibleRows.map((r) => r.targetId);
-
-  const handleToggle = (id: string) => {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  const handleToggleAll = () => {
-    const allSelected = eligibleIds.length > 0 && eligibleIds.every((id) => selected.has(id));
-    if (allSelected) {
-      setSelected(new Set());
-    } else {
-      setSelected(new Set(eligibleIds));
-    }
-  };
-
-  const handleConfirm = () => {
-    if (!preview.data) return;
-    // Disbursement run: entering Operations + clicking Confirm ≤ 2 clicks.
-    trackInteraction('disbursement-run-confirm', 2, true);
-    confirm.mutate(
-      {
-        year: period.year,
-        month: period.month,
-        selectedTargetIds: Array.from(selected),
-        // Echoed verbatim from the preview whose amounts are on screen — the server compares it.
-        capabilitiesVersion: preview.data.capabilitiesVersion,
-      },
-      {
-        onSuccess: (data) => {
-          setResult(data);
-          setConfirmError(null);
-        },
-        onError: (err) => setConfirmError(err),
-      },
-    );
-  };
+  const flow = useRunFlow('disbursement', 'selective');
+  const { period, preview, result, selected, eligibleIds } = flow;
 
   if (result) {
     return (
@@ -95,10 +41,7 @@ export function DisbursementRunScreen() {
         skipped={Number(result.skipped)}
         excluded={Number(result.excluded)}
         total={Number(result.total)}
-        onDone={() => {
-          setResult(null);
-          setSelected(new Set());
-        }}
+        onDone={flow.done}
       />
     );
   }
@@ -114,11 +57,12 @@ export function DisbursementRunScreen() {
             title="Owner disbursement run"
             sub="Post management fees and disburse net equity to owners."
           />
-          <PeriodPicker year={period.year} month={period.month} onChange={handlePeriodChange} />
+          <PeriodPicker year={period.year} month={period.month} onChange={flow.setPeriod} />
         </div>
       </Card>
 
       <Card pad>
+        <RunConflictNotice show={flow.conflicted} mode="selective" />
         {preview.isPending ? (
           <div className="col gap8">
             {[0, 1, 2, 3].map((i) => (
@@ -130,12 +74,7 @@ export function DisbursementRunScreen() {
             query={preview}
             title="Couldn't load preview"
             fallback="Failed to load the run preview."
-            onRetry={() => {
-              // A refetch returns a fresh row set; a tick from the previous one is no longer a
-              // statement about what is on screen. `handlePeriodChange` clears for the same reason.
-              setSelected(new Set());
-              void preview.refetch();
-            }}
+            onRetry={flow.retry}
           />
         ) : rows.length === 0 ? (
           <EmptyState
@@ -160,7 +99,7 @@ export function DisbursementRunScreen() {
                       type="checkbox"
                       aria-label="Select all eligible"
                       checked={allEligibleSelected}
-                      onChange={handleToggleAll}
+                      onChange={flow.toggleAll}
                     />
                   </th>
                   <th>Owner</th>
@@ -179,13 +118,13 @@ export function DisbursementRunScreen() {
                     <tr
                       key={row.targetId}
                       className={isExcluded || isAlreadyDone ? 'muted' : undefined}
-                      onClick={isEligible ? () => handleToggle(row.targetId) : undefined}
+                      onClick={isEligible ? () => flow.toggle(row.targetId) : undefined}
                       onKeyDown={
                         isEligible
                           ? (e) => {
                               if (e.key === ' ' || e.key === 'Enter') {
                                 e.preventDefault();
-                                handleToggle(row.targetId);
+                                flow.toggle(row.targetId);
                               }
                             }
                           : undefined
@@ -201,7 +140,7 @@ export function DisbursementRunScreen() {
                             type="checkbox"
                             aria-label={`Select ${row.label}`}
                             checked={isSel}
-                            onChange={() => handleToggle(row.targetId)}
+                            onChange={() => flow.toggle(row.targetId)}
                             onClick={(e) => e.stopPropagation()}
                           />
                         )}
@@ -246,15 +185,15 @@ export function DisbursementRunScreen() {
               </div>
             )}
 
-            <ApiErrorNotice error={confirmError} style={{ marginTop: 8 }} />
+            <ApiErrorNotice error={flow.error} style={{ marginTop: 8 }} />
 
             <div className="row gap10" style={{ marginTop: 16 }}>
               <Button
                 variant="primary"
-                disabled={selected.size === 0 || confirm.isPending}
-                onClick={handleConfirm}
+                disabled={selected.size === 0 || flow.isConfirming || flow.isRefreshing}
+                onClick={flow.confirm}
               >
-                {confirm.isPending
+                {flow.isConfirming
                   ? 'Disbursing…'
                   : selected.size === 0
                     ? 'Select owners to disburse'
