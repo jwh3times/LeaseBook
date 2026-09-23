@@ -41,6 +41,7 @@ export function LateFeeRunScreen() {
       </Card>
 
       <Card pad>
+        <RunConflictNotice show={flow.conflicted} mode="selective" />
         {preview.isPending ? (
           <div className="col gap8">
             {[0, 1, 2, 3].map((i) => (
@@ -65,12 +66,11 @@ export function LateFeeRunScreen() {
               onToggleAll={flow.toggleAll}
               issuedCoverage={{ type: 'latefee', year: period.year, month: period.month }}
             />
-            <RunConflictNotice show={flow.conflicted} />
             <ApiErrorNotice error={flow.error} style={{ marginTop: 8 }} />
             <div className="row gap10" style={{ marginTop: 16 }}>
               <Button
                 variant="primary"
-                disabled={selected.size === 0 || flow.isConfirming}
+                disabled={selected.size === 0 || flow.isConfirming || flow.isRefreshing}
                 onClick={flow.confirm}
               >
                 {flow.isConfirming

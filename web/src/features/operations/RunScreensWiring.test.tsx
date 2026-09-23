@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import type { ComponentType } from 'react';
@@ -96,10 +96,14 @@ describe.each(cases)('$name after a capability conflict', ({ type, Screen, confi
     await userEvent.click(screen.getByRole('button', { name: confirm }));
 
     expect(await screen.findByText(/amounts were recalculated/i)).toBeInTheDocument();
-    await waitFor(() => expect(previews).toBe(2));
+    // The re-preview carries different amounts; wait for them, then the tick must be gone.
+    expect(await screen.findByText(/900/)).toBeInTheDocument();
+    expect(previews).toBe(2);
     expect(
       screen.getByRole('checkbox', { name: 'Select Ridgeline Investments' }),
     ).not.toBeChecked();
+    // The server's own wording is replaced, not shown alongside.
+    expect(screen.queryByText(/the features changed/i)).toBeNull();
     expect(screen.queryByRole('button', { name: confirm })).toBeNull();
   });
 });

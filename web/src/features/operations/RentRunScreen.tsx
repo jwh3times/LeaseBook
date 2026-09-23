@@ -43,6 +43,7 @@ export function RentRunScreen() {
       </Card>
 
       <Card pad>
+        <RunConflictNotice show={flow.conflicted} mode="all-eligible" />
         {preview.isPending ? (
           <div className="col gap8">
             {[0, 1, 2, 3].map((i) => (
@@ -65,12 +66,11 @@ export function RentRunScreen() {
               selectable={false}
               issuedCoverage={{ type: 'rent', year: period.year, month: period.month }}
             />
-            <RunConflictNotice show={flow.conflicted} />
             <ApiErrorNotice error={flow.error} style={{ marginTop: 8 }} />
             <div className="row gap10" style={{ marginTop: 16 }}>
               <Button
                 variant="primary"
-                disabled={eligibleCount === 0 || flow.isConfirming}
+                disabled={eligibleCount === 0 || flow.isConfirming || flow.isRefreshing}
                 onClick={flow.confirm}
               >
                 {flow.isConfirming

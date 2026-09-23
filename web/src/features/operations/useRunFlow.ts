@@ -36,8 +36,8 @@ const NONE: ReadonlySet<string> = new Set();
  *
  * **The interaction count is measured**, and reported only for a run that posted, with no pass/fail
  * claim: no product document sets a click budget for bulk runs. Period changes, each toggle,
- * select-all (as one) and Confirm count; a conflict re-preview does not restart the count, because
- * the ticks it took were real effort.
+ * select-all (as one) and Confirm count. Only a posted run restarts the count — a conflict
+ * re-preview or a failed confirm does not, because the effort they took was real.
  */
 export function useRunFlow(type: RunType, mode: RunMode) {
   const [period, setPeriodState] = useState(currentPeriod);
@@ -104,7 +104,9 @@ export function useRunFlow(type: RunType, mode: RunMode) {
   };
 
   const confirm = () => {
-    if (!preview.data) return;
+    // While a preview is refreshing, the rows on screen are about to be replaced — after a conflict
+    // they are the very amounts the server just refused. Confirming them could only fail again.
+    if (!preview.data || preview.isFetching) return;
     interactions.current += 1;
     const confirmedAgainst = rowSetKey;
     setFailure(null);
@@ -147,6 +149,8 @@ export function useRunFlow(type: RunType, mode: RunMode) {
     retry,
     confirm,
     isConfirming: confirmMutation.isPending,
+    /** The preview is being re-read; its rows are about to be replaced, so Confirm is unavailable. */
+    isRefreshing: preview.isFetching,
     error,
     conflicted,
     result,

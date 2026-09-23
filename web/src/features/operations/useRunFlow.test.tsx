@@ -243,6 +243,13 @@ describe('useRunFlow — a row set is what a tick and an error describe', () => 
   });
 
   it('clears the selection and the error when the period changes, even back to a cached period', async () => {
+    // Never stale, so returning to May cannot refetch: only setPeriod's own clearing can pass this.
+    queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false, staleTime: Infinity },
+        mutations: { retry: false },
+      },
+    });
     serve('latefee', [preview('v1')], failure);
     const { result } = await loaded('latefee', 'selective');
     const may = result.current.period;
@@ -250,12 +257,90 @@ describe('useRunFlow — a row set is what a tick and an error describe', () => 
     act(() => result.current.toggle('a'));
     act(() => result.current.confirm());
     await waitFor(() => expect(result.current.error).not.toBeNull());
+    const mayUpdatedAt = result.current.preview.dataUpdatedAt;
 
     act(() => result.current.setPeriod(may.year, may.month - 1 || 12));
     act(() => result.current.setPeriod(may.year, may.month));
     await waitFor(() => expect(result.current.preview.data).toBeDefined());
+    expect(result.current.preview.dataUpdatedAt).toBe(mayUpdatedAt); // the same cached row set
 
     expect(result.current.selected.size).toBe(0);
     expect(result.current.error).toBeNull();
+  });
+});
+
+describe('useRunFlow — the window before the re-preview lands', () => {
+  it('will not confirm the old rows while the preview is refreshing', async () => {
+    let releaseSecondPreview!: () => void;
+    const secondPreviewGate = new Promise<void>((resolve) => (releaseSecondPreview = resolve));
+    const bodies: unknown[] = [];
+    let served = 0;
+    server.use(
+      http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 })),
+      http.get('/api/operations/runs/latefee/preview', async () => {
+        served += 1;
+        if (served > 1) await secondPreviewGate;
+        return HttpResponse.json(preview(served === 1 ? 'v1' : 'v2'));
+      }),
+      http.post('/api/operations/runs/latefee/confirm', async ({ request }) => {
+        bodies.push(await request.json());
+        return conflict();
+      }),
+    );
+    const { result } = await loaded('latefee', 'selective');
+
+    act(() => result.current.toggle('a'));
+    act(() => result.current.confirm());
+    await waitFor(() => expect(result.current.conflicted).toBe(true));
+    await waitFor(() => expect(result.current.isRefreshing).toBe(true));
+
+    // The old rows and ticks are still on screen, but the notice already says they are gone.
+    act(() => result.current.confirm());
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(bodies).toHaveLength(1);
+
+    releaseSecondPreview();
+    await waitFor(() => expect(result.current.preview.data?.capabilitiesVersion).toBe('v2'));
+    expect(result.current.isRefreshing).toBe(false);
+  });
+});
+
+describe('useRunFlow — other outcomes', () => {
+  it('retry clears the ticks and the error', async () => {
+    serve('latefee', [preview('v1')], failure);
+    const { result } = await loaded('latefee', 'selective');
+
+    act(() => result.current.toggle('a'));
+    act(() => result.current.confirm());
+    await waitFor(() => expect(result.current.error).not.toBeNull());
+
+    act(() => result.current.retry());
+    expect(result.current.selected.size).toBe(0);
+    expect(result.current.error).toBeNull();
+  });
+
+  it('a since-prior-run conflict is an error, not a re-preview, and keeps the ticks', async () => {
+    const { previewsServed } = serve('latefee', [preview('v1')], () =>
+      HttpResponse.json(
+        {
+          code: 'capabilities_changed_since_prior_run',
+          detail: 'An earlier run for this period was posted under different features.',
+          correlationId: 'p1',
+        },
+        { status: 409 },
+      ),
+    );
+    const { result } = await loaded('latefee', 'selective');
+
+    act(() => result.current.toggle('a'));
+    act(() => result.current.confirm());
+    await waitFor(() =>
+      expect(result.current.error?.code).toBe('capabilities_changed_since_prior_run'),
+    );
+
+    expect(result.current.conflicted).toBe(false);
+    expect([...result.current.selected]).toEqual(['a']);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(previewsServed()).toBe(1);
   });
 });
