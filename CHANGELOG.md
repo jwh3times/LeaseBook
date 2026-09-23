@@ -32,6 +32,11 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Changed
 
+- **The sign-out button now says what it does: "Sign out everywhere."** Signing out ends your
+  session on every device, not only the one in front of you. The button was labelled just "Sign
+  out", so an operator signed in on a phone and a laptop lost both without warning. Hovering it
+  explains the same in a sentence.
+
 - **"Deliver to owner" now works, and sends only to the owner's email address on file.** The button
   on an owner statement was refused by the server and issued nothing. It now issues the statement to
   the address on the owner's record — the request names no recipient, so a statement cannot be sent

@@ -49,7 +49,7 @@ describe('AppShell', () => {
     localStorage.setItem(RECENT_KEY, '[{"type":"tenant","id":"tenant-1"}]');
     renderAppShell();
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Sign out' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Sign out everywhere' }));
 
     await waitFor(() => expect(localStorage.getItem(RECENT_KEY)).toBeNull());
     expect(await screen.findByText('Login')).toBeInTheDocument();

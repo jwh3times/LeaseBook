@@ -118,7 +118,7 @@ describe('Account security', () => {
     localStorage.setItem('leasebook.palette.recent', '[{"type":"property","id":"property-1"}]');
     renderSecurity(false);
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Sign out' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Sign out everywhere' }));
 
     await waitFor(() => expect(localStorage.getItem('leasebook.palette.recent')).toBeNull());
   });
