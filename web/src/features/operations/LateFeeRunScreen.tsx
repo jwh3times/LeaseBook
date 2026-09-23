@@ -1,76 +1,19 @@
 /**
  * Late-fee run screen (M6 WP-5).
- * Selective — operator picks which delinquent leases to charge. Checkboxes per row.
- * Preview → check boxes → confirm: within the budgeted click depth.
+ * Selective — the operator ticks which delinquent leases to charge. The flow itself (preview,
+ * selection, confirm, conflict, outcome, interaction count) is `useRunFlow`'s.
  */
-import { useState } from 'react';
 import { Button, Card, CardHeader } from '@/design';
 import { ApiErrorNotice } from '@/components/ApiErrorNotice';
 import { QueryErrorState } from '@/components/QueryErrorState';
-import { trackInteraction } from '@/lib/telemetry';
 import { PeriodPicker } from './PeriodPicker';
-import { currentPeriod } from './periodUtils';
+import { RunConflictNotice } from './RunConflictNotice';
 import { RunPreviewGrid, RunResultPanel } from './RunPreviewGrid';
-import { useConfirmRun, useRunPreview } from './useRuns';
-import type { RunError, RunResultSpaResponse } from './useRuns';
+import { useRunFlow } from './useRunFlow';
 
 export function LateFeeRunScreen() {
-  const [period, setPeriod] = useState(currentPeriod);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [result, setResult] = useState<RunResultSpaResponse | null>(null);
-  const [confirmError, setConfirmError] = useState<RunError | null>(null);
-
-  const preview = useRunPreview('latefee', period.year, period.month);
-  const confirm = useConfirmRun('latefee');
-
-  // When period changes, reset selection.
-  const handlePeriodChange = (y: number, m: number) => {
-    setPeriod({ year: y, month: m });
-    setSelected(new Set());
-  };
-
-  const eligibleIds =
-    preview.data?.rows.filter((r) => !r.excludedReason && !r.alreadyDone).map((r) => r.targetId) ??
-    [];
-
-  const handleToggle = (id: string) => {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  const handleToggleAll = () => {
-    const allSelected = eligibleIds.length > 0 && eligibleIds.every((id) => selected.has(id));
-    if (allSelected) {
-      setSelected(new Set());
-    } else {
-      setSelected(new Set(eligibleIds));
-    }
-  };
-
-  const handleConfirm = () => {
-    if (!preview.data) return;
-    trackInteraction('latefee-run-confirm', 2, true);
-    confirm.mutate(
-      {
-        year: period.year,
-        month: period.month,
-        selectedTargetIds: Array.from(selected),
-        // Echoed verbatim from the preview whose amounts are on screen — the server compares it.
-        capabilitiesVersion: preview.data.capabilitiesVersion,
-      },
-      {
-        onSuccess: (data) => {
-          setResult(data);
-          setConfirmError(null);
-        },
-        onError: (err) => setConfirmError(err),
-      },
-    );
-  };
+  const flow = useRunFlow('latefee', 'selective');
+  const { period, preview, result, selected } = flow;
 
   if (result) {
     return (
@@ -80,10 +23,7 @@ export function LateFeeRunScreen() {
         skipped={Number(result.skipped)}
         excluded={Number(result.excluded)}
         total={Number(result.total)}
-        onDone={() => {
-          setResult(null);
-          setSelected(new Set());
-        }}
+        onDone={flow.done}
       />
     );
   }
@@ -96,7 +36,7 @@ export function LateFeeRunScreen() {
             title="Late fee run"
             sub="Selectively charge late fees on delinquent leases."
           />
-          <PeriodPicker year={period.year} month={period.month} onChange={handlePeriodChange} />
+          <PeriodPicker year={period.year} month={period.month} onChange={flow.setPeriod} />
         </div>
       </Card>
 
@@ -112,12 +52,7 @@ export function LateFeeRunScreen() {
             query={preview}
             title="Couldn't load preview"
             fallback="Failed to load the run preview."
-            onRetry={() => {
-              // A refetch returns a fresh row set; a tick from the previous one is no longer a
-              // statement about what is on screen. `handlePeriodChange` clears for the same reason.
-              setSelected(new Set());
-              void preview.refetch();
-            }}
+            onRetry={flow.retry}
           />
         ) : (
           <>
@@ -126,18 +61,19 @@ export function LateFeeRunScreen() {
               exceptions={preview.data?.exceptions ?? []}
               selected={selected}
               selectable
-              onToggle={handleToggle}
-              onToggleAll={handleToggleAll}
+              onToggle={flow.toggle}
+              onToggleAll={flow.toggleAll}
               issuedCoverage={{ type: 'latefee', year: period.year, month: period.month }}
             />
-            <ApiErrorNotice error={confirmError} style={{ marginTop: 8 }} />
+            <RunConflictNotice show={flow.conflicted} />
+            <ApiErrorNotice error={flow.error} style={{ marginTop: 8 }} />
             <div className="row gap10" style={{ marginTop: 16 }}>
               <Button
                 variant="primary"
-                disabled={selected.size === 0 || confirm.isPending}
-                onClick={handleConfirm}
+                disabled={selected.size === 0 || flow.isConfirming}
+                onClick={flow.confirm}
               >
-                {confirm.isPending
+                {flow.isConfirming
                   ? 'Posting…'
                   : selected.size === 0
                     ? 'Select leases to charge'

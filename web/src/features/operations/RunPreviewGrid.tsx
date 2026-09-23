@@ -18,7 +18,7 @@ export interface RunPreviewGridProps {
   rows: PreviewRowSpa[];
   exceptions: string[];
   /** Ids currently selected for confirmation (for selectable runs like LateFee). */
-  selected: Set<string>;
+  selected: ReadonlySet<string>;
   /** Whether rows can be individually selected (Rent = all-or-nothing; LateFee/Disbursement = selective). */
   selectable: boolean;
   onToggle?: (targetId: string) => void;
