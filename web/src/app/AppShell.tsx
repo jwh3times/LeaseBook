@@ -93,7 +93,12 @@ export function AppShell() {
                 <IconButton name="bell" label="Notifications" />
                 <Avatar initials={initialsOf(displayName)} size={32} tone="var(--accent)" />
                 {/* Signing out rotates the security stamp (ADR-043), so it ends every session. */}
-                <Button variant="ghost" size="sm" onClick={signOut} title="Ends your session on every device where you are signed in, not only this one.">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={signOut}
+                  title="Ends your session on every device where you are signed in, not only this one."
+                >
                   Sign out everywhere
                 </Button>
               </>
