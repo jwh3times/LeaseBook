@@ -60,6 +60,17 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Fixed
 
+- **Bulk runs no longer keep a selection made against amounts that changed.** When a late-fee or
+  owner disbursement run is refused because settings changed after the preview loaded, the preview
+  reloads with the recalculated amounts; the boxes ticked against the old amounts used to stay
+  ticked, so one more click would have posted the new amounts unreviewed. The selection now clears,
+  and a notice explains that the amounts were recalculated. A run's error message also no longer
+  lingers after switching to another period.
+- **Bulk-run interaction telemetry now measures.** Rent, late-fee, and disbursement runs reported a
+  fixed "two interactions, within budget" on every run. They now report how many interactions the run
+  really took, counted only for runs that posted, and claim no budget, since none is defined for
+  bulk runs.
+
 - **Every rejected request now appears in the application log.** Sign-in and a few other requests
   that are checked outside the main request pipeline returned their "invalid input" answer without
   logging it, so the diagnostics runbook's validation-rejection event under-counted them. They now

@@ -104,10 +104,9 @@ describe('RentRunScreen capability version token', () => {
     await waitFor(() => expect(previews).toBe(1));
     await userEvent.click(confirmBtn);
 
-    // The operator is told, in words, that the numbers they approved may have moved.
-    expect(
-      await screen.findByText(/features available to this account changed/i),
-    ).toBeInTheDocument();
+    // The operator is told, in words, that the numbers they approved may have moved — in place of
+    // the raw 409, which describes the server's reason rather than what to do next.
+    expect(await screen.findByText(/amounts were recalculated/i)).toBeInTheDocument();
 
     // And the stale preview is refetched, so re-clicking Confirm cannot resubmit the same dead
     // token forever.

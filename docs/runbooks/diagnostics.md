@@ -3,7 +3,7 @@
 - **Audience:** Operators and maintainers
 - **Status:** Living runbook; canonical error-diagnosis reference
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-09-22
+- **Last reviewed:** 2026-09-23
 
 How to turn the reference an operator sees on screen into the full server-side detail in
 Application Insights. See [ADR-025](../adr/ADR-025-error-contract-and-observability.md) for the
@@ -224,7 +224,9 @@ against the `hangfire` schema.
 
 A run confirmation echoes back the capability-version token its preview handed out, and the server
 compares it against the set it resolves at run-confirmation entry. A mismatch is answered with a 409
-`capabilities_changed`; the operator reloads the preview and confirms again, and nothing is posted.
+`capabilities_changed` and nothing is posted. The run screen reloads the preview itself, clears the
+operator's selection — it was made against amounts that may have changed — and says so; the operator
+reviews and confirms again.
 
 One of these is not an incident — it is the guard working. What is worth acting on is a **rate**:
 
