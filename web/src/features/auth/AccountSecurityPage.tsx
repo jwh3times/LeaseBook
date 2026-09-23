@@ -179,8 +179,12 @@ export function AccountSecurityPage() {
           Continue to LeaseBook
         </Link>
       )}
-      <Button onClick={() => void signOut()} disabled={busy}>
-        Sign out
+      <Button
+        onClick={() => void signOut()}
+        disabled={busy}
+        title="Ends your session on every device where you are signed in, not only this one."
+      >
+        Sign out everywhere
       </Button>
     </main>
   );
