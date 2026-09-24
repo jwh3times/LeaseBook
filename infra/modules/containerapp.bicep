@@ -316,8 +316,8 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
 // One-shot migration job. This is how schema changes reach a VNet-injected database: a
 // GitHub-hosted runner has no route to a server with no public endpoint, but a job running inside
 // the Container Apps environment shares the VNet with it. It runs the `migrator` Dockerfile target
-// (an EF bundle, ENTRYPOINT ./efbundle) as leasebook_migrator — never the app image, never the app
-// role, and never at app startup.
+// (an EF bundle launched through its TLS-checking entrypoint) as leasebook_migrator — never the app
+// image, never the app role, and never at app startup.
 //
 // Trigger is Manual: the deploy workflow starts it and waits for the execution to succeed BEFORE
 // swapping the app revision (`az containerapp job start` + poll). It is never started automatically.
@@ -379,14 +379,22 @@ resource migratorJob 'Microsoft.App/jobs@2024-03-01' = {
             cpu: json('0.5')
             memory: '1Gi'
           }
-          env: haveMigrationsSecret
+          env: concat([
+            {
+              // The EF bundle never boots the ASP.NET host, so the host's production security
+              // guards cannot protect this schema-owner connection. The image entrypoint checks it
+              // before launching efbundle; local Compose deliberately leaves this switch off.
+              name: 'LEASEBOOK_REQUIRE_VERIFIED_POSTGRES_TLS'
+              value: 'true'
+            }
+          ], haveMigrationsSecret
             ? [
                 {
                   name: 'ConnectionStrings__Migrations'
                   secretRef: 'connectionstrings-migrations'
                 }
               ]
-            : []
+            : [])
         }
       ]
     }

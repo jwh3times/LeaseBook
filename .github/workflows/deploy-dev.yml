@@ -69,20 +69,7 @@ jobs:
       #
       # The secret is matched, never printed. A failure here reports only which check failed.
       - name: Require certificate-verifying TLS on the migrations connection
-        run: |
-          set -uo pipefail
-          if [ -z "${ConnectionStrings__Migrations}" ]; then
-            echo "::error::MIGRATIONS_CONNECTION_STRING is not set."
-            exit 1
-          fi
-          mode=$(printf '%s' "${ConnectionStrings__Migrations}" \
-            | tr ';' '\n' | grep -iE '^[[:space:]]*(ssl ?mode)[[:space:]]*=' \
-            | head -1 | cut -d= -f2- | tr -d '[:space:]')
-          case "$(printf '%s' "${mode}" | tr '[:upper:]' '[:lower:]')" in
-            verify-full|verifyfull|verify-ca|verifyca) echo "TLS mode verifies the server certificate." ;;
-            "") echo "::error::MIGRATIONS_CONNECTION_STRING sets no SSL Mode. Npgsql defaults to Prefer, which does not verify the server certificate. Add 'SSL Mode=VerifyFull'."; exit 1 ;;
-            *)  echo "::error::MIGRATIONS_CONNECTION_STRING uses an SSL Mode that does not verify the server certificate. Set 'SSL Mode=VerifyFull'."; exit 1 ;;
-          esac
+        run: /bin/sh ./infra/migrator/require-verified-postgres-tls.sh
         env:
           ConnectionStrings__Migrations: ${{ secrets.MIGRATIONS_CONNECTION_STRING }}
 

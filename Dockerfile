@@ -57,12 +57,17 @@ RUN apt-get update \
 WORKDIR /app
 # Owned by the app user so the bundle stays executable after the USER switch below.
 COPY --from=migrations --chown=$APP_UID:$APP_UID /bundle/ ./
+# The production Container Apps Job arms this entrypoint's TLS preflight. Local Compose leaves the
+# switch off because its disposable PostgreSQL container intentionally does not serve TLS.
+COPY infra/migrator/ ./migrator/
 # Non-root, like the runtime stage. This stage holds the schema-owner credential at run time, so it
 # is the last one that should apply migrations as root. apt-get above needs root; everything after
 # this line does not.
 USER $APP_UID
-# Applies all pending migrations to ConnectionStrings__Migrations, then exits 0.
-ENTRYPOINT ["./efbundle"]
+# Validates the production connection before applying pending migrations, then exits with the
+# bundle's status. CMD keeps efbundle replaceable in the guard's container-level tests.
+ENTRYPOINT ["/bin/sh", "./migrator/entrypoint.sh"]
+CMD ["./efbundle"]
 
 # --- Stage 5: runtime (chiseled, non-root) — the application image ---
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled@sha256:9651fa59abcdf177c30392cb44a820605ca5d618429ab37acbf6e7c644510b02 AS runtime
