@@ -38,6 +38,5 @@ public sealed class StatementLineConfiguration : IEntityTypeConfiguration<Statem
         // Dedup key (P67): a re-imported line collides here and is skipped. Spans all imports for the
         // account (bank_account_id is on the row). The composite FK to bank_accounts is DB-only (migration).
         builder.HasIndex(e => new { e.OrgId, e.BankAccountId, e.DedupHash }).IsUnique();
-        builder.HasIndex(e => e.ImportId);
     }
 }

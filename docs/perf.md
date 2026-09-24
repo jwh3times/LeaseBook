@@ -3,7 +3,7 @@
 - **Audience:** Contributors and reviewers
 - **Status:** Living performance record
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-08-19
+- **Last reviewed:** 2026-09-24
 
 LeaseBook budgets **p95 < 300 ms** on the four money-critical read paths at the design scale the
 architecture targets: roughly 300 units across ~25 owners. This page records how that is measured,
@@ -100,6 +100,32 @@ Note the tenant ledger is inherently a small read — one tenant's entries — s
 org size the way the others do. The dashboard (all-owner balances across the portfolio), the bank
 register (a paginated projection over the full journal for one account), and the owner statement
 (assembled from the live journal for a period) are the paths that actually exercise scale.
+
+## Index-overlap measurement
+
+**2026-09-24** — PostgreSQL 18 on the same local Docker topology. The composite-FK hardening added
+`(org_id, foreign_id)` indexes beside three earlier single-column FK indexes. Because FORCE RLS adds
+the organization predicate to runtime reads, the new indexes appeared able to serve the same access
+paths; this check measured that claim before removing the older indexes.
+
+The seeded load organization produced 3,199 `bank_line_status` rows. During the seed, PostgreSQL
+recorded 2,841 scans on `(org_id, reconciliation_id)` and zero on the earlier
+`(reconciliation_id)` index. The load seed deliberately creates no statement imports, so a second,
+rollback-only planner fixture inserted 100 valid imports, 20,000 lines, and 20,000 matches inside the
+load organization's RLS transaction, analyzed them, compared plans, then rolled the transaction back.
+It was a planner/index experiment, not a product-latency measurement, and persisted no fixture data.
+
+| Predicate                         | Before dropping the single index | Composite-only plan                       | Shared buffers |
+| --------------------------------- | -------------------------------- | ----------------------------------------- | -------------- |
+| Status by reconciliation          | Single-column index scan         | `(org_id, reconciliation_id)` bitmap scan | 10 → 10        |
+| Statement lines by import         | Single-column index scan         | `(org_id, import_id)` index scan          | 6 → 6          |
+| Statement match by statement line | Single-column index scan         | `(org_id, statement_line_id)` index scan  | 8 → 8          |
+
+All three predicates retained indexed access with unchanged buffer counts. Absolute sub-millisecond
+times improved in the second run, but cache warmth and run order make that incidental; the decision
+rests on the equivalent access paths and buffers. At the measured size, the three older indexes used
+992 KiB together and added one index update per affected insert. They were removed; the composite
+indexes remain both the FK-supporting indexes and the runtime access paths.
 
 ## When a path misses budget
 
