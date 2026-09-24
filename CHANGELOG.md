@@ -115,6 +115,12 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Security
 
+- **Cookie security now fails the build if a future writer can bypass the application-wide policy.**
+  The response-cookie policy runs before every other application middleware, and architecture tests
+  pin that order, inventory the one reviewed hand-written cookie, and reject direct `Set-Cookie`
+  headers. Adding another cookie path now requires an explicit security review instead of relying on
+  a comment beside the middleware registration.
+
 - **CSV imports now have an explicit size limit.** Bank statements, and the entity and opening
   balance files used during onboarding, are refused above 5 MB with a message that says so — far
   more than a full portfolio's export or years of statement lines. Much larger uploads are refused
