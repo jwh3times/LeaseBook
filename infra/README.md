@@ -64,14 +64,17 @@ a Key Vault secret (resolved via the app's managed identity):
 | `ForwardedHeaders__Enabled`             | app setting, supplied at deploy time                       | whether to honour `X-Forwarded-*` from the ingress (ADR-041)              |
 | `ForwardedHeaders__KnownNetworks__0`    | app setting, supplied at deploy time                       | the ingress network, CIDR — required when the above is `true`             |
 
-**Both connection strings must carry `SSL Mode=VerifyFull`.** Npgsql's default is `SSL Mode=Prefer`,
-which negotiates TLS and then accepts whatever certificate it is handed — encrypted, but
-authenticating nobody, so anyone on the network path can present their own certificate and read the
-credential. Azure Database for PostgreSQL Flexible Server presents certificates that chain to public
-CAs, so no `Root Certificate` parameter is needed. The host **refuses to start** outside Development
-if either string is present with a weaker mode. Dev's migration workflow runs the same preflight
-before `dotnet ef`, and the production migrator image runs it before `efbundle`, so every execution
-path enforces the requirement rather than merely documenting it.
+**Both authored connection strings must carry `SSL Mode=VerifyFull`.** Npgsql's default is
+`SSL Mode=Prefer`, which negotiates TLS and then accepts whatever certificate it is handed —
+encrypted, but authenticating nobody, so anyone on the network path can present their own certificate
+and read the credential. Azure Database for PostgreSQL Flexible Server presents certificates that
+chain to public CAs, so no `Root Certificate` parameter is needed. The executable guards accept
+Npgsql's two certificate-verifying modes (`VerifyCA` and `VerifyFull`) and reject a missing or
+non-verifying mode; `VerifyFull` remains the deployment contract because it also verifies the server
+name. The host performs that check outside Development when either string is present. Dev's migration
+workflow runs the same preflight before `dotnet ef`, and the production migrator image runs it before
+`efbundle`, so every execution path enforces the certificate-verification minimum rather than merely
+documenting it.
 
 The migrator string is the one that decides this. Production application traffic stays inside the
 VNet, but dev migrations run from a GitHub-hosted runner across the public internet carrying the

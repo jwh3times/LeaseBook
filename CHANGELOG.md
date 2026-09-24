@@ -120,6 +120,10 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Security
 
+- **Production migrations now verify the database server before using the schema-owner credential.**
+  The one-shot migration job refuses missing or non-verifying TLS settings before the EF bundle
+  starts, while local disposable-database migrations remain unchanged.
+
 - **Cookie security now fails the build if a future writer can bypass the application-wide policy.**
   The response-cookie policy runs before every other application middleware, and architecture tests
   pin that order, inventory the one reviewed hand-written cookie, and reject direct `Set-Cookie`
