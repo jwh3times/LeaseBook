@@ -32,6 +32,11 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Changed
 
+- **Database writes no longer maintain three redundant foreign-key indexes.** Organization-scoped
+  composite indexes now serve reconciliation and statement-import relationships on their own,
+  preserving the same indexed read plans while avoiding duplicate index updates as those tables
+  grow.
+
 - **The sign-out button now says what it does: "Sign out everywhere."** Signing out ends your
   session on every device, not only the one in front of you. The button was labelled just "Sign
   out", so an operator signed in on a phone and a laptop lost both without warning. Hovering it
