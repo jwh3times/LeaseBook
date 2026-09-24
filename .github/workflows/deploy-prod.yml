@@ -54,7 +54,8 @@ jobs:
           ACR_NAME: ${{ vars.ACR_NAME }}
 
       # The job reads ConnectionStrings__Migrations as a Key Vault reference resolved by its own
-      # managed identity, so the migrator credential never enters the workflow environment.
+      # managed identity, so the migrator credential never enters the workflow environment. Its
+      # image entrypoint checks for certificate-verifying TLS before it launches efbundle.
       #
       # `az containerapp job start` returns when the START succeeds, NOT when the migration
       # finishes, so the exit code of that command says nothing about whether the schema applied.
@@ -97,6 +98,7 @@ jobs:
             --container-name migrate \
             --image "$IMAGE" \
             --env-vars "ConnectionStrings__Migrations=secretref:connectionstrings-migrations" \
+              "LEASEBOOK_REQUIRE_VERIFIED_POSTGRES_TLS=true" \
             --cpu 0.5 --memory 1.0Gi \
             --query 'name' -o tsv 2>/tmp/job-start.err)
           START_RC=$?

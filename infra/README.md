@@ -17,6 +17,8 @@ such as `az bicep build` do not constitute deployment acceptance.
   administration image and its bootstrap/read-only verification actions.
 - `jobs/dbadmin-bootstrap-exec.yaml`, `jobs/dbadmin-verify-exec.yaml` — complete execution templates
   with explicit target and operator; the verification template supplies only ops access.
+- `migrator/entrypoint.sh`, `migrator/require-verified-postgres-tls.sh` — the production migrator's
+  fail-closed TLS preflight; the entrypoint launches `efbundle` only after the check passes.
 - `env/dev.bicepparam`, `env/prod.bicepparam` — per-environment parameters.
 - `jobs/capabilities-exec.yaml` — the execution template an operator copies to run a capability
   command in production. Pinned against `modules/containerapp.bicep` by
@@ -62,12 +64,17 @@ a Key Vault secret (resolved via the app's managed identity):
 | `ForwardedHeaders__Enabled`             | app setting, supplied at deploy time                       | whether to honour `X-Forwarded-*` from the ingress (ADR-041)              |
 | `ForwardedHeaders__KnownNetworks__0`    | app setting, supplied at deploy time                       | the ingress network, CIDR — required when the above is `true`             |
 
-**Both connection strings must carry `SSL Mode=VerifyFull`.** Npgsql's default is `SSL Mode=Prefer`,
-which negotiates TLS and then accepts whatever certificate it is handed — encrypted, but
-authenticating nobody, so anyone on the network path can present their own certificate and read the
-credential. Azure Database for PostgreSQL Flexible Server presents certificates that chain to public
-CAs, so no `Root Certificate` parameter is needed. The host **refuses to start** outside Development
-if either string is present with a weaker mode, so this is enforced rather than merely documented.
+**Both authored connection strings must carry `SSL Mode=VerifyFull`.** Npgsql's default is
+`SSL Mode=Prefer`, which negotiates TLS and then accepts whatever certificate it is handed —
+encrypted, but authenticating nobody, so anyone on the network path can present their own certificate
+and read the credential. Azure Database for PostgreSQL Flexible Server presents certificates that
+chain to public CAs, so no `Root Certificate` parameter is needed. The executable guards accept
+Npgsql's two certificate-verifying modes (`VerifyCA` and `VerifyFull`) and reject a missing or
+non-verifying mode; `VerifyFull` remains the deployment contract because it also verifies the server
+name. The host performs that check outside Development when either string is present. Dev's migration
+workflow runs the same preflight before `dotnet ef`, and the production migrator image runs it before
+`efbundle`, so every execution path enforces the certificate-verification minimum rather than merely
+documenting it.
 
 The migrator string is the one that decides this. Production application traffic stays inside the
 VNet, but dev migrations run from a GitHub-hosted runner across the public internet carrying the
@@ -161,7 +168,15 @@ run from the workflow host. `deploy-prod.yml` builds and pushes the `migrator` i
 `<prefix>-migrate` **Container Apps Job** inside the same environment and polls it to a terminal
 state before updating the app revision. The job reads `ConnectionStrings__Migrations` as a Key Vault
 reference resolved by the shared user-assigned identity, so the migrator credential never enters the
-workflow environment — `MIGRATIONS_CONNECTION_STRING` is not required for prod.
+workflow environment — `MIGRATIONS_CONNECTION_STRING` is not required for prod. The job arms
+`LEASEBOOK_REQUIRE_VERIFIED_POSTGRES_TLS`; the image entrypoint refuses a missing, ambiguous, or
+non-verifying SSL mode before `efbundle` can open the schema-owner connection. Local Compose leaves
+that switch off because its disposable database intentionally does not serve TLS.
+
+Local verification: `python scripts/test-migrator-tls-guard.py` exercises accepted, missing, weak and
+ambiguous modes plus the entrypoint's before-bundle ordering without Azure or real credentials. CI
+runs the same test and the architecture suite pins both the deployed template and per-execution
+override to the armed guard.
 
 Polling is load-bearing: `az containerapp job start` returns when the _start_ succeeds, not when the
 migration finishes. Without it, a failed migration looks like a successful deploy and the new app

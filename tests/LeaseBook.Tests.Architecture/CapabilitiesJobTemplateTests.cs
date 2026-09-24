@@ -34,10 +34,13 @@ public sealed class CapabilitiesJobTemplateTests
     private const string MigratorContainer = "migrate";
     private const string MigratorSecret = "connectionstrings-migrations";
     private const string MigratorConnectionEnv = "ConnectionStrings__Migrations";
+    private const string MigratorTlsGuardEnv = "LEASEBOOK_REQUIRE_VERIFIED_POSTGRES_TLS";
 
     private const string ExecTemplatePath = "infra/jobs/capabilities-exec.yaml";
     private const string BicepPath = "infra/modules/containerapp.bicep";
     private const string DeployProdPath = ".github/workflows/deploy-prod.yml";
+    private const string DockerfilePath = "Dockerfile";
+    private const string MigratorEntrypointPath = "infra/migrator/entrypoint.sh";
 
     /// <summary>
     /// The execution template names the same container the Bicep declares. An execution whose
@@ -269,6 +272,46 @@ public sealed class CapabilitiesJobTemplateTests
             Case.Sensitive,
             "a per-execution override replaces the container's env, so the migrator connection " +
             "string has to be restated or the migration runs with none");
+
+        Regex.IsMatch(
+                bicep,
+                $@"name: '{MigratorTlsGuardEnv}'\r?\n\s+value: 'true'",
+                RegexOptions.Multiline)
+            .ShouldBeTrue(
+                $"{BicepPath} must arm the migrator image's TLS preflight in the deployed job");
+
+        workflow.ShouldContain(
+            $"{MigratorTlsGuardEnv}=true",
+            Case.Sensitive,
+            "a per-execution override replaces the container's env, so the production TLS " +
+            "preflight has to be restated beside the secret-backed connection string");
+    }
+
+    [Fact]
+    public void The_migrator_image_checks_tls_before_starting_the_bundle()
+    {
+        var dockerfile = ReadRepoFile(DockerfilePath);
+        var entrypoint = ReadRepoFile(MigratorEntrypointPath);
+
+        dockerfile.ShouldContain(
+            "COPY infra/migrator/ ./migrator/",
+            Case.Sensitive,
+            "the migrator image must carry the preflight scripts that run inside the VNet");
+        dockerfile.ShouldContain(
+            "ENTRYPOINT [\"/bin/sh\", \"./migrator/entrypoint.sh\"]",
+            Case.Sensitive,
+            "efbundle must be launched through the TLS-checking entrypoint");
+        dockerfile.ShouldContain(
+            "CMD [\"./efbundle\"]",
+            Case.Sensitive,
+            "the entrypoint must receive efbundle as the command it launches after the guard");
+
+        var guard = entrypoint.IndexOf("require-verified-postgres-tls.sh", StringComparison.Ordinal);
+        var bundle = entrypoint.IndexOf("exec \"$@\"", StringComparison.Ordinal);
+        guard.ShouldBeGreaterThanOrEqualTo(0);
+        bundle.ShouldBeGreaterThan(
+            guard,
+            $"{MigratorEntrypointPath} must run the TLS guard before it executes efbundle");
     }
 
     // ── Minimal readers ─────────────────────────────────────────────────────────────────────────

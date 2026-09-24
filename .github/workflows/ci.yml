@@ -351,6 +351,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Build main template
         run: az bicep build --file infra/main.bicep --stdout > /dev/null
+      - name: Exercise the production migrator TLS preflight
+        run: python3 scripts/test-migrator-tls-guard.py
       - name: Build each module independently
         # Modules are also compiled on their own so an error in a module that main.bicep does not
         # yet reference still fails the build rather than waiting to be wired up.

@@ -13,7 +13,9 @@ web/test-results
 .vscode
 private
 docs
-infra
+infra/*
+!infra/migrator/
+!infra/migrator/**
 tests
 *.user
 .env
