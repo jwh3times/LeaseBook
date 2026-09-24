@@ -44,6 +44,5 @@ public sealed class BankLineStatusConfiguration : IEntityTypeConfiguration<BankL
             .HasConstraintName("fk_bank_line_status_reconciliation_org_id_reconciliation_id");
 
         builder.HasIndex(e => new { e.OrgId, e.Status });
-        builder.HasIndex(e => e.ReconciliationId);
     }
 }

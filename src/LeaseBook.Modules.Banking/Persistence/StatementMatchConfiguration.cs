@@ -29,7 +29,5 @@ public sealed class StatementMatchConfiguration : IEntityTypeConfiguration<State
             .HasForeignKey(e => new { e.OrgId, e.StatementLineId })
             .HasPrincipalKey(l => new { l.OrgId, l.Id })
             .OnDelete(DeleteBehavior.Restrict);
-
-        builder.HasIndex(e => e.StatementLineId);
     }
 }
