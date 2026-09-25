@@ -1,4 +1,4 @@
-# Generated from .claude/agents/docs-updater.md by scripts/sync-agent-mirrors.mjs — do not edit by hand.
+# GENERATED — do not edit. Source: .claude/agents/docs-updater.md — regenerate with 'node scripts/sync-agents.mjs'.
 name = "docs-updater"
 description = "Documentation maintainer for LeaseBook. Invoke before creating any PR or pushing to remote. Audits ADR coverage, canonical ownership, public/private classification, navigation, and drift introduced by the current change."
 developer_instructions = '''

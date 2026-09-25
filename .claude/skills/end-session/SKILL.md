@@ -1,5 +1,5 @@
 ---
-# GENERATED — do not edit. Source: .agents/skills/end-session/SKILL.md — regenerate with 'node scripts/sync-agent-mirrors.mjs'.
+# GENERATED — do not edit. Source: .agents/skills/end-session/SKILL.md — regenerate with 'node scripts/sync-agents.mjs'.
 name: end-session
 description: Use at the end of a work session or day, or when the user says "end session", "wrap up", "done for the day", or asks to "clean up the local workspace, update any private/ docs and/or github issues that need it from this session." Sweeps the session for durable discoveries and lands them in memory, GitHub issues, and private/ docs, then cleans the local workspace. LeaseBook-specific.
 ---
@@ -245,7 +245,7 @@ Then the rest of the local environment:
   mirrors must be regenerated and committed or CI fails:
 
   ```
-  node scripts/sync-agent-mirrors.mjs --check
+  node scripts/sync-agents.mjs --check
   ```
 
   If stale, run it without `--check`, then `npm run format` from `web/` **before** re-syncing —

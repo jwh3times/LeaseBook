@@ -1,4 +1,4 @@
-# Generated from .claude/agents/postgres-specialist.md by scripts/sync-agent-mirrors.mjs — do not edit by hand.
+# GENERATED — do not edit. Source: .claude/agents/postgres-specialist.md — regenerate with 'node scripts/sync-agents.mjs'.
 name = "postgres-specialist"
 description = "Specialist for all LeaseBook Postgres work — RLS policy design, migrations, DDL conventions, query patterns, index design, and the three-role model. Use for new tables, migrations, background jobs, analytical queries, or any tenancy-sensitive change. Supersedes rls-tenant-isolation."
 developer_instructions = '''

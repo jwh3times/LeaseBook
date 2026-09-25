@@ -1,4 +1,4 @@
-# Generated from .claude/agents/azure-infrastructure.md by scripts/sync-agent-mirrors.mjs — do not edit by hand.
+# GENERATED — do not edit. Source: .claude/agents/azure-infrastructure.md — regenerate with 'node scripts/sync-agents.mjs'.
 name = "azure-infrastructure"
 description = "Specialist for LeaseBook Azure infrastructure — Bicep authoring/validation, the dev+prod environment model, managed identity + RBAC, the Key Vault secrets contract, the OIDC deploy workflows, Postgres role bootstrap, and PITR/restore. Use before any infra, Bicep, or deployment-wiring work in M8. Authoring is in scope; live Azure deploy is operator-gated."
 developer_instructions = '''

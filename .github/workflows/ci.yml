@@ -105,9 +105,12 @@ jobs:
       # from `.agents/skills/`. Regenerating here and failing on any difference is what keeps the
       # harness copies from drifting apart — editing an agent or skill without re-running the sync
       # is caught before merge.
+      - name: Test the harness mirror sync script
+        working-directory: ${{ github.workspace }}
+        run: node --test scripts/sync-agents.test.mjs
       - name: Verify committed harness mirrors are up to date
         working-directory: ${{ github.workspace }}
-        run: node scripts/sync-agent-mirrors.mjs --check
+        run: node scripts/sync-agents.mjs --check
       # Public docs are formatted, structurally linted, spell-checked, and validated against the
       # repository's metadata, ADR-index, canonical-ownership, and private-link policies.
       - run: npm run docs:check

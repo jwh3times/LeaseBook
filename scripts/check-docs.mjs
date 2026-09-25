@@ -248,7 +248,7 @@ function commandCopyAllowed(file) {
     file === "docs/runbooks/local-dev.md" ||
     file.startsWith(".claude/agents/") ||
     // `.claude/skills/` is generated from the allow-listed `.agents/skills/` sources by
-    // scripts/sync-agent-mirrors.mjs; neither tree is hand-edited to duplicate a canonical command.
+    // scripts/sync-agents.mjs; neither tree is hand-edited to duplicate a canonical command.
     file.startsWith(".claude/skills/") ||
     file.startsWith(".agents/skills/") ||
     file.startsWith("docs/adr/")

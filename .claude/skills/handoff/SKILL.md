@@ -1,5 +1,5 @@
 ---
-# GENERATED — do not edit. Source: .agents/skills/handoff/SKILL.md — regenerate with 'node scripts/sync-agent-mirrors.mjs'.
+# GENERATED — do not edit. Source: .agents/skills/handoff/SKILL.md — regenerate with 'node scripts/sync-agents.mjs'.
 name: handoff
 description: Hand this session to another machine — write a handoff doc to Proton Drive, register it in handoff_map.json, then run end-session.
 argument-hint: "What will the next session be used for?"

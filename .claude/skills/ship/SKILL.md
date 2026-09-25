@@ -1,5 +1,5 @@
 ---
-# GENERATED — do not edit. Source: .agents/skills/ship/SKILL.md — regenerate with 'node scripts/sync-agent-mirrors.mjs'.
+# GENERATED — do not edit. Source: .agents/skills/ship/SKILL.md — regenerate with 'node scripts/sync-agents.mjs'.
 name: ship
 description: Use when a branch is ready for review or the user says "ship it", "open a PR", or "push this" — classifies the release impact as major, minor, or build; refreshes docs and the changelog; flags unlinked issues and missing board entries; runs the fast checks; pushes; and opens or updates the PR. LeaseBook-specific.
 ---

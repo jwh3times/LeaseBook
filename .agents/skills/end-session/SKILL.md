@@ -244,7 +244,7 @@ Then the rest of the local environment:
   mirrors must be regenerated and committed or CI fails:
 
   ```
-  node scripts/sync-agent-mirrors.mjs --check
+  node scripts/sync-agents.mjs --check
   ```
 
   If stale, run it without `--check`, then `npm run format` from `web/` **before** re-syncing —

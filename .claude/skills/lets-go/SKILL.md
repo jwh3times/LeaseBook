@@ -1,5 +1,5 @@
 ---
-# GENERATED — do not edit. Source: .agents/skills/lets-go/SKILL.md — regenerate with 'node scripts/sync-agent-mirrors.mjs'.
+# GENERATED — do not edit. Source: .agents/skills/lets-go/SKILL.md — regenerate with 'node scripts/sync-agents.mjs'.
 name: lets-go
 description: Resume this repo's active handoff from Proton Drive's handoff_map.json, then mark it consumed.
 disable-model-invocation: true

@@ -191,14 +191,16 @@ unless a higher-level invariant in this file conflicts.
 
 **Edit `.claude/agents/` and `.agents/skills/` only** — never `.codex/agents/` or `.claude/skills/`
 directly; both are generated and hand-editing either is overwritten on the next sync. After changing
-an agent or a skill, run `node scripts/sync-agent-mirrors.mjs` (or, from `web/`, `npm run sync:agents`)
-and commit the result. CI regenerates with `--check` and fails the build if a committed mirror is
-stale. Run `npm run format` (from `web/`) **before** the sync, not after — formatting the generated
-copy instead of the authored source just re-drifts it on the next pass. Never reintroduce symlinks
-under `.claude/skills/`: this repo's `core.symlinks` is `false`, so git would silently duplicate every
-file inside a symlinked directory into the repository instead of recording a link (verify with
-`git config core.symlinks` and `git add -n <path>` — a multi-file listing instead of one entry means
-this has happened).
+an agent or a skill, run `node scripts/sync-agents.mjs` (or `npm run sync:agents`) and commit the
+result. CI runs the script's `node:test` suite and regenerates with `--check`, failing the build if a
+committed mirror is stale. `scripts/sync-agents.mjs` and its test are shared verbatim across
+repositories — don't edit them here (they already pass `docs:format` as written); change the
+canonical copy and re-copy it. Run `npm run format` (from `web/`) **before** the sync, not after —
+formatting the generated copy instead of the authored source just re-drifts it on the next pass.
+Never reintroduce symlinks under `.claude/skills/` (the sync script reports and removes them): this
+repo's `core.symlinks` is `false`, so git would silently duplicate every file inside a symlinked
+directory into the repository instead of recording a link (verify with `git config core.symlinks` and
+`git add -n <path>` — a multi-file listing instead of one entry means this has happened).
 
 | Work type                                                               | Read first                               |
 | ----------------------------------------------------------------------- | ---------------------------------------- |
