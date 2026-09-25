@@ -7,6 +7,8 @@
   },
   "scripts": {
     "bootstrap:private": "node ./scripts/bootstrap-private.mjs",
-    "sync:main": "node ./scripts/sync-main.mjs"
+    "sync:main": "node ./scripts/sync-main.mjs",
+    "sync:agents": "node scripts/sync-agents.mjs",
+    "sync:agents:check": "node scripts/sync-agents.mjs --check"
   }
 }

@@ -1,5 +1,5 @@
 ---
-# GENERATED — do not edit. Source: .agents/skills/writing-for-agents/SKILL.md — regenerate with 'node scripts/sync-agent-mirrors.mjs'.
+# GENERATED — do not edit. Source: .agents/skills/writing-for-agents/SKILL.md — regenerate with 'node scripts/sync-agents.mjs'.
 name: writing-for-agents
 description: Writing documents for agents. Use when creating or editing skills, or modifying AGENTS.md or CLAUDE.md.
 ---

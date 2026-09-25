@@ -1,5 +1,5 @@
 ---
-# GENERATED — do not edit. Source: .agents/skills/teach/SKILL.md — regenerate with 'node scripts/sync-agent-mirrors.mjs'.
+# GENERATED — do not edit. Source: .agents/skills/teach/SKILL.md — regenerate with 'node scripts/sync-agents.mjs'.
 name: teach
 description: Teach the user a new skill or concept, within this workspace.
 disable-model-invocation: true

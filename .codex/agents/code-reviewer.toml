@@ -1,6 +1,7 @@
-# Generated from .claude/agents/code-reviewer.md by scripts/sync-agent-mirrors.mjs — do not edit by hand.
+# GENERATED — do not edit. Source: .claude/agents/code-reviewer.md — regenerate with 'node scripts/sync-agents.mjs'.
 name = "code-reviewer"
 description = "Reviews LeaseBook diffs for the non-negotiable invariants that are correctness bugs, not style. Use after implementing a feature or before merging."
+sandbox_mode = "read-only"
 developer_instructions = '''
 You review LeaseBook changes against the house rules in AGENTS.md and docs/adr/. Flag, with file:line
 and the rule, any of these (each is a correctness bug, not a preference):

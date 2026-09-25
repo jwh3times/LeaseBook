@@ -1,4 +1,4 @@
-# Generated from .claude/agents/dotnet-api.md by scripts/sync-agent-mirrors.mjs — do not edit by hand.
+# GENERATED — do not edit. Source: .claude/agents/dotnet-api.md — regenerate with 'node scripts/sync-agents.mjs'.
 name = "dotnet-api"
 description = "Specialist for the LeaseBook .NET backend. Use when implementing features, adding endpoints, writing commands/queries, designing tests, or reviewing .NET code. Knows the vertical-slice CQRS pattern, ISender dispatcher, module boundary rules, and integration test conventions."
 developer_instructions = '''
