@@ -64,5 +64,8 @@
     "markdownlint-cli2": {
       "smol-toml": "1.7.1"
     }
+  },
+  "allowScripts": {
+    "msw": false
   }
 }
