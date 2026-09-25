@@ -34,9 +34,20 @@ function withFixture(fn, { agents = true } = {}) {
     write(
       root,
       ".agents/skills/demo/SKILL.md",
-      ["---", "name: demo", "description: A demo skill.", "---", "", "Body."].join("\n"),
+      [
+        "---",
+        "name: demo",
+        "description: A demo skill.",
+        "---",
+        "",
+        "Body.",
+      ].join("\n"),
     );
-    write(root, ".agents/skills/demo/agents/openai.yaml", "instructions: do the thing\n");
+    write(
+      root,
+      ".agents/skills/demo/agents/openai.yaml",
+      "instructions: do the thing\n",
+    );
     if (agents) {
       write(
         root,
@@ -66,7 +77,10 @@ test("SKILL.md banner is line 2 and strips back to the source", () => {
   const result = injectSkillBanner(".agents/skills/demo/SKILL.md", raw);
   const lines = result.split("\n");
   assert.equal(lines[0], "---");
-  assert.match(lines[1], /^# GENERATED — do not edit\. Source: \.agents\/skills\/demo\/SKILL\.md/);
+  assert.match(
+    lines[1],
+    /^# GENERATED — do not edit\. Source: \.agents\/skills\/demo\/SKILL\.md/,
+  );
   assert.equal(lines[2], "name: demo");
   assert.equal(stripSkillBanner(result), raw);
 });
@@ -96,40 +110,69 @@ test("frontmatter handles quoting, lists, continuations, and comments", () => {
 });
 
 test("frontmatter rejects block scalars and unparseable lines", () => {
-  assert.throws(() => splitFrontmatter("---\ndescription: |\n  x\n---\n", "x.md"), /block scalar/);
-  assert.throws(() => splitFrontmatter("---\n- stray\n---\n", "x.md"), /cannot parse/);
-  assert.throws(() => splitFrontmatter("no frontmatter", "x.md"), /expected YAML frontmatter/);
+  assert.throws(
+    () => splitFrontmatter("---\ndescription: |\n  x\n---\n", "x.md"),
+    /block scalar/,
+  );
+  assert.throws(
+    () => splitFrontmatter("---\n- stray\n---\n", "x.md"),
+    /cannot parse/,
+  );
+  assert.throws(
+    () => splitFrontmatter("no frontmatter", "x.md"),
+    /expected YAML frontmatter/,
+  );
 });
 
 test("Codex agent drops Claude-only fields and marks read-only tool lists", () => {
   withFixture((root) => {
     syncMirrors(root);
     const toml = read(root, ".codex/agents/reviewer.toml");
-    assert.match(toml, /^# GENERATED — do not edit\. Source: \.claude\/agents\/reviewer\.md/);
+    assert.match(
+      toml,
+      /^# GENERATED — do not edit\. Source: \.claude\/agents\/reviewer\.md/,
+    );
     assert.match(toml, /^description = "Reviews a diff: finds bugs\."$/m);
     assert.match(toml, /^sandbox_mode = "read-only"$/m);
-    assert.match(toml, /^developer_instructions = '''\nReview carefully\.'''\n$/m);
+    assert.match(
+      toml,
+      /^developer_instructions = '''\nReview carefully\.'''\n$/m,
+    );
     assert.doesNotMatch(toml, /model|tools/);
   });
 });
 
+const md = (tools) => `---\nname: a\ndescription: d\n${tools}---\nBody`;
+
 test("an agent with a writing tool or no tool list gets no sandbox line", () => {
-  const md = (tools) => `---\nname: a\ndescription: d\n${tools}---\nBody`;
-  assert.doesNotMatch(renderCodexAgent("a.md", md("tools: Read, Edit\n")), /sandbox_mode/);
+  assert.doesNotMatch(
+    renderCodexAgent("a.md", md("tools: Read, Edit\n")),
+    /sandbox_mode/,
+  );
   assert.doesNotMatch(renderCodexAgent("a.md", md("")), /sandbox_mode/);
-  assert.match(renderCodexAgent("a.md", md("tools: [Read, Grep]\n")), /sandbox_mode/);
+  assert.match(
+    renderCodexAgent("a.md", md("tools: [Read, Grep]\n")),
+    /sandbox_mode/,
+  );
 });
 
 test("an agent name must match its filename", () => {
   assert.throws(
-    () => renderCodexAgent(".claude/agents/a.md", "---\nname: b\ndescription: d\n---\nBody"),
+    () =>
+      renderCodexAgent(
+        ".claude/agents/a.md",
+        "---\nname: b\ndescription: d\n---\nBody",
+      ),
     /must match the filename 'a'/,
   );
 });
 
 test("a body a literal string cannot hold falls back to an escaped basic string", () => {
   assert.equal(tomlMultiline("plain \\ path"), "'''\nplain \\ path'''");
-  assert.equal(tomlMultiline("has ''' and \"q\" \\"), '"""\nhas \'\'\' and \\"q\\" \\\\"""');
+  assert.equal(
+    tomlMultiline("has ''' and \"q\" \\"),
+    '"""\nhas \'\'\' and \\"q\\" \\\\"""',
+  );
   assert.match(tomlMultiline("ends with '"), /^"""/);
 });
 
@@ -138,9 +181,19 @@ test("skills are mirrored whole; non-SKILL.md files are copied byte-for-byte", (
     const binary = Buffer.from([0x89, 0x50, 0x00, 0x0d, 0x0a, 0xff]);
     write(root, ".agents/skills/demo/icon.png", binary);
     syncMirrors(root);
-    assert.match(read(root, ".claude/skills/demo/SKILL.md"), /^---\n# GENERATED/);
-    assert.equal(read(root, ".claude/skills/demo/agents/openai.yaml"), "instructions: do the thing\n");
-    assert.ok(readFileSync(path.join(root, ".claude/skills/demo/icon.png")).equals(binary));
+    assert.match(
+      read(root, ".claude/skills/demo/SKILL.md"),
+      /^---\n# GENERATED/,
+    );
+    assert.equal(
+      read(root, ".claude/skills/demo/agents/openai.yaml"),
+      "instructions: do the thing\n",
+    );
+    assert.ok(
+      readFileSync(path.join(root, ".claude/skills/demo/icon.png")).equals(
+        binary,
+      ),
+    );
     assert.deepEqual(syncMirrors(root, { check: true }).stale, []);
   });
 });
@@ -165,7 +218,10 @@ test("--check reports missing and orphaned files without writing; sync prunes th
     const { stale } = syncMirrors(root, { check: true });
     assert.ok(stale.includes(".codex/agents/reviewer.toml (missing)"));
     assert.ok(stale.includes(".claude/skills/demo/SKILL.md (orphaned)"));
-    assert.equal(existsSync(path.join(root, ".codex/agents/reviewer.toml")), false);
+    assert.equal(
+      existsSync(path.join(root, ".codex/agents/reviewer.toml")),
+      false,
+    );
 
     syncMirrors(root);
     assert.equal(existsSync(path.join(root, ".claude/skills/demo")), false);
@@ -179,7 +235,11 @@ test("a stray symlink in a generated tree is reported, then removed without foll
     const stray = path.join(root, ".claude/skills/stray");
     symlinkSync(path.join(root, ".agents/skills/demo"), stray, "junction");
 
-    assert.ok(syncMirrors(root, { check: true }).stale.includes(".claude/skills/stray (orphaned)"));
+    assert.ok(
+      syncMirrors(root, { check: true }).stale.includes(
+        ".claude/skills/stray (orphaned)",
+      ),
+    );
     syncMirrors(root);
     assert.throws(() => lstatSync(stray));
     assert.ok(existsSync(path.join(root, ".agents/skills/demo/SKILL.md")));
@@ -208,12 +268,27 @@ test("the skills direction runs when there are no agents", () => {
   );
 });
 
+const payload = (file) => ({ tool_input: { file_path: file } });
+
 test("the hook fires only for edits under an authored tree", () => {
   const root = path.resolve("/repo");
-  const payload = (file) => ({ tool_input: { file_path: file } });
-  assert.ok(hookTouchesAuthoredTree(payload(path.join(root, ".agents/skills/x/SKILL.md")), root));
+  assert.ok(
+    hookTouchesAuthoredTree(
+      payload(path.join(root, ".agents/skills/x/SKILL.md")),
+      root,
+    ),
+  );
   assert.ok(hookTouchesAuthoredTree(payload(".claude/agents/a.md"), root));
-  assert.equal(hookTouchesAuthoredTree(payload(path.join(root, ".claude/skills/x/SKILL.md")), root), false);
-  assert.equal(hookTouchesAuthoredTree(payload(path.join(root, "src/app.ts")), root), false);
+  assert.equal(
+    hookTouchesAuthoredTree(
+      payload(path.join(root, ".claude/skills/x/SKILL.md")),
+      root,
+    ),
+    false,
+  );
+  assert.equal(
+    hookTouchesAuthoredTree(payload(path.join(root, "src/app.ts")), root),
+    false,
+  );
   assert.equal(hookTouchesAuthoredTree(null, root), false);
 });

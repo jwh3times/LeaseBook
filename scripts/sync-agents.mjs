@@ -45,6 +45,28 @@ function normalizeNewlines(value) {
   return value.replaceAll("\r\n", "\n");
 }
 
+// Code-point order, independent of locale, so every machine lists files identically.
+function byCodePoint(a, b) {
+  if (a < b) return -1;
+  return a > b ? 1 : 0;
+}
+
+// C0 controls and DEL, minus the characters a caller allows. Checked by code point rather than
+// with a regex, so linters' no-control-regex rule has nothing to object to.
+function isControl(code, allowed = "") {
+  return (
+    (code < 0x20 || code === 0x7f) &&
+    !allowed.includes(String.fromCharCode(code))
+  );
+}
+
+function hasControl(text, allowed = "") {
+  for (let i = 0; i < text.length; i += 1) {
+    if (isControl(text.charCodeAt(i), allowed)) return true;
+  }
+  return false;
+}
+
 // --- Frontmatter ---------------------------------------------------------------------------------
 
 function unquote(raw, file, key) {
@@ -53,12 +75,16 @@ function unquote(raw, file, key) {
     try {
       return JSON.parse(value);
     } catch {
-      throw new Error(`${file}: '${key}' has an unterminated or invalid double-quoted value`);
+      throw new Error(
+        `${file}: '${key}' has an unterminated or invalid double-quoted value`,
+      );
     }
   }
   if (value.startsWith("'")) {
     if (!value.endsWith("'") || value.length < 2) {
-      throw new Error(`${file}: '${key}' has an unterminated single-quoted value`);
+      throw new Error(
+        `${file}: '${key}' has an unterminated single-quoted value`,
+      );
     }
     return value.slice(1, -1).replaceAll("''", "'");
   }
@@ -84,7 +110,9 @@ export function splitFrontmatter(raw, file) {
     if (field) {
       const [, key, rest = ""] = field;
       if (/^[|>][+-]?\d*$/.test(rest.trim())) {
-        throw new Error(`${file}: '${key}' uses a block scalar; write it on one line`);
+        throw new Error(
+          `${file}: '${key}' uses a block scalar; write it on one line`,
+        );
       }
       data.set(key, rest.trim() === "" ? [] : unquote(rest, file, key));
       lastKey = key;
@@ -103,13 +131,15 @@ export function splitFrontmatter(raw, file) {
       continue;
     }
 
-    throw new Error(`${file}: cannot parse frontmatter line: ${JSON.stringify(line)}`);
+    throw new Error(
+      `${file}: cannot parse frontmatter line: ${JSON.stringify(line)}`,
+    );
   }
 
   for (const [key, value] of data) {
     const text = Array.isArray(value) ? value.join(",") : value;
     // Tab is fine; every other control character would corrupt a TOML string or a banner.
-    if (/[\u0000-\u0008\u000a-\u001f\u007f]/.test(text)) {
+    if (hasControl(text, "\t")) {
       throw new Error(`${file}: '${key}' contains a control character`);
     }
   }
@@ -139,12 +169,17 @@ export function tomlMultiline(body) {
   if (!body.includes("'''") && !body.endsWith("'")) {
     return `'''\n${body}'''`;
   }
-  const escaped = body
-    .replaceAll("\\", "\\\\")
-    .replaceAll('"', '\\"')
-    .replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, (c) =>
-      `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`,
-    );
+  let escaped = "";
+  for (const char of body) {
+    const code = char.charCodeAt(0);
+    if (char === "\\" || char === '"') {
+      escaped += `\\${char}`;
+    } else if (isControl(code, "\t\n")) {
+      escaped += `\\u${code.toString(16).padStart(4, "0")}`;
+    } else {
+      escaped += char;
+    }
+  }
   return `"""\n${escaped}"""`;
 }
 
@@ -169,7 +204,8 @@ export function renderCodexAgent(sourceFile, raw) {
   // `model`, `color`, and the tool list itself are dropped: they name Claude Code's model ids and
   // tool registry, neither of which transfers. Only the read-only fact survives, as a sandbox.
   const tools = toolList(data.get("tools"));
-  const readOnly = tools !== null && !tools.some((tool) => writingTools.has(tool));
+  const readOnly =
+    tools !== null && !tools.some((tool) => writingTools.has(tool));
 
   return [
     `# GENERATED — do not edit. Source: ${sourceFile} — regenerate with '${regenerateCommand}'.`,
@@ -213,7 +249,8 @@ function listFiles(root, dir, { strays, authored = false } = {}) {
   const absolute = path.join(root, dir);
   if (!existsSync(absolute)) return [];
   if (lstatSync(absolute).isSymbolicLink()) {
-    if (authored) throw new Error(`${dir}: authored tree must not be a symlink`);
+    if (authored)
+      throw new Error(`${dir}: authored tree must not be a symlink`);
     strays?.push(dir);
     return [];
   }
@@ -227,12 +264,14 @@ function listFiles(root, dir, { strays, authored = false } = {}) {
     } else if (entry.isFile()) {
       results.push(relPath);
     } else if (authored) {
-      throw new Error(`${relPath}: symlinks are not allowed in an authored tree; copy the files`);
+      throw new Error(
+        `${relPath}: symlinks are not allowed in an authored tree; copy the files`,
+      );
     } else {
       strays?.push(relPath);
     }
   }
-  return results.sort();
+  return results.toSorted(byCodePoint);
 }
 
 function pruneEmptyDirs(root, dir) {
@@ -256,10 +295,14 @@ export function buildMirrors(root = defaultRoot) {
   for (const sourceRel of listFiles(root, agentSourceDir, { authored: true })) {
     if (!sourceRel.endsWith(".md")) continue;
     const targetRel =
-      agentTargetDir + sourceRel.slice(agentSourceDir.length).replace(/\.md$/, ".toml");
+      agentTargetDir +
+      sourceRel.slice(agentSourceDir.length).replace(/\.md$/, ".toml");
     mirrors.set(
       targetRel,
-      renderCodexAgent(sourceRel, readFileSync(path.join(root, sourceRel), "utf8")),
+      renderCodexAgent(
+        sourceRel,
+        readFileSync(path.join(root, sourceRel), "utf8"),
+      ),
     );
   }
 
@@ -288,7 +331,10 @@ function sameContent(current, content) {
   }
   if (current.equals(content)) return true;
   if (content.includes(0) || current.includes(0)) return false;
-  return normalizeNewlines(current.toString("utf8")) === normalizeNewlines(content.toString("utf8"));
+  return (
+    normalizeNewlines(current.toString("utf8")) ===
+    normalizeNewlines(content.toString("utf8"))
+  );
 }
 
 function findOrphans(root, mirrors) {
@@ -300,7 +346,7 @@ function findOrphans(root, mirrors) {
     }
     orphans.push(...strays);
   }
-  return orphans.sort();
+  return orphans.toSorted(byCodePoint);
 }
 
 export function syncMirrors(root = defaultRoot, { check = false } = {}) {
@@ -316,7 +362,8 @@ export function syncMirrors(root = defaultRoot, { check = false } = {}) {
       stale.push(exists ? target : `${target} (missing)`);
       continue;
     }
-    if (existsSync(absolute) && !exists) rmSync(absolute, { recursive: true, force: true });
+    if (existsSync(absolute) && !exists)
+      rmSync(absolute, { recursive: true, force: true });
     mkdirSync(path.dirname(absolute), { recursive: true });
     writeFileSync(absolute, content);
   }
@@ -329,7 +376,8 @@ export function syncMirrors(root = defaultRoot, { check = false } = {}) {
     for (const target of orphans) {
       rmSync(path.join(root, target), { recursive: true, force: true });
     }
-    for (const dir of [agentTargetDir, skillTargetDir]) pruneEmptyDirs(root, dir);
+    for (const dir of [agentTargetDir, skillTargetDir])
+      pruneEmptyDirs(root, dir);
   }
 
   return { stale, count: mirrors.size };
@@ -338,12 +386,19 @@ export function syncMirrors(root = defaultRoot, { check = false } = {}) {
 // True when a Claude Code PostToolUse payload names a file under an authored tree.
 export function hookTouchesAuthoredTree(payload, root = defaultRoot) {
   const input = payload?.tool_input ?? {};
-  const files = [input.file_path, input.notebook_path, ...(input.file_paths ?? [])].filter(
-    (file) => typeof file === "string",
-  );
+  const files = [
+    input.file_path,
+    input.notebook_path,
+    ...(input.file_paths ?? []),
+  ].filter((file) => typeof file === "string");
   return files.some((file) => {
-    const rel = path.relative(root, path.resolve(root, file)).split(path.sep).join("/");
-    return [agentSourceDir, skillSourceDir].some((dir) => rel.startsWith(`${dir}/`));
+    const rel = path
+      .relative(root, path.resolve(root, file))
+      .split(path.sep)
+      .join("/");
+    return [agentSourceDir, skillSourceDir].some((dir) =>
+      rel.startsWith(`${dir}/`),
+    );
   });
 }
 
@@ -359,7 +414,7 @@ function main(argv) {
   const check = argv.includes("--check");
 
   if (argv.includes("--hook")) {
-    let payload = null;
+    let payload;
     try {
       payload = JSON.parse(readStdin() || "null");
     } catch {
@@ -373,7 +428,9 @@ function main(argv) {
   const { stale, count } = syncMirrors(defaultRoot, { check });
 
   if (!check) {
-    console.log(`Synced ${count} generated file(s) (.codex/agents, .claude/skills).`);
+    console.log(
+      `Synced ${count} generated file(s) (.codex/agents, .claude/skills).`,
+    );
     return 0;
   }
   if (stale.length === 0) {
@@ -390,7 +447,9 @@ function main(argv) {
   if (process.env.GITHUB_ACTIONS === "true") {
     for (const file of stale) {
       const target = file.replace(/ \((missing|orphaned)\)$/, "");
-      console.log(`::error file=${target}::Stale generated file. Run '${regenerateCommand}'.`);
+      console.log(
+        `::error file=${target}::Stale generated file. Run '${regenerateCommand}'.`,
+      );
     }
   }
   return 1;

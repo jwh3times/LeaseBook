@@ -194,7 +194,7 @@ directly; both are generated and hand-editing either is overwritten on the next 
 an agent or a skill, run `node scripts/sync-agents.mjs` (or `npm run sync:agents`) and commit the
 result. CI runs the script's `node:test` suite and regenerates with `--check`, failing the build if a
 committed mirror is stale. `scripts/sync-agents.mjs` and its test are shared verbatim across
-repositories — don't edit or reformat them here (they are excluded from `docs:format`); change the
+repositories — don't edit them here (they already pass `docs:format` as written); change the
 canonical copy and re-copy it. Run `npm run format` (from `web/`) **before** the sync, not after —
 formatting the generated copy instead of the authored source just re-drifts it on the next pass.
 Never reintroduce symlinks under `.claude/skills/` (the sync script reports and removes them): this
