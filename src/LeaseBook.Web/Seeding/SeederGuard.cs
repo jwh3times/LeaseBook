@@ -16,7 +16,7 @@ internal static class SeederGuard
         if (environment.IsProduction())
         {
             throw new InvalidOperationException(
-                "Fixture seeders (demo, cutover, load, scenario) ship a well-known admin password and must never run " +
+                "Fixture seeders (demo, cutover, load, scenario, portal) ship well-known credentials and must never run " +
                 "in Production (account-takeover risk). Provision real orgs via the accounts create-admin CLI; run the fixture seeders only in Development or another non-Production environment.");
         }
     }

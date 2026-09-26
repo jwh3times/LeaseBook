@@ -8,7 +8,7 @@ namespace LeaseBook.Web.Cli;
 /// </summary>
 internal static class CliOrg
 {
-    public const string FixtureNames = "'demo', 'cutover', 'load', or 'scenario'";
+    public const string FixtureNames = "'demo', 'cutover', 'load', 'scenario', or 'portal'";
 
     public static bool TryResolveFixture(string value, out FixtureOrg org)
     {
@@ -18,6 +18,7 @@ internal static class CliOrg
             "cutover" => new FixtureOrg(SeedTarget.Cutover, CutoverSeeder.CutoverOrgId),
             "load" => new FixtureOrg(SeedTarget.Load, LoadSeeder.LoadOrgId),
             "scenario" => new FixtureOrg(SeedTarget.Scenario, ScenarioSeeder.ScenarioOrgId),
+            "portal" => new FixtureOrg(SeedTarget.Portal, PortalSeeder.PortalOrgId),
             _ => default,
         };
 

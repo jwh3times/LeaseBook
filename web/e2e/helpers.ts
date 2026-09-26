@@ -13,6 +13,10 @@ export const CUTOVER_ADMIN: Credentials = {
   email: 'admin@cutover.test',
   password: 'Cutover-Trust-2026!',
 };
+export const PORTAL_RESIDENT: Credentials = {
+  email: 'resident-a@portal.test',
+  password: 'Portal-Fixture-2026!',
+};
 
 // Force a theme deterministically before the app boots. ThemeProvider reads localStorage
 // ('leasebook.theme' → { theme, accent, density }) synchronously on first render and storage wins
@@ -31,7 +35,7 @@ export async function signIn(page: Page, creds: Credentials): Promise<void> {
   await page.getByLabel('Email').fill(creds.email);
   await page.getByLabel('Password').fill(creds.password);
   await page.getByRole('button', { name: /sign in/i }).click();
-  await page.waitForURL(/\/(dashboard|onboarding)/, { timeout: 15_000 });
+  await page.waitForURL(/\/(dashboard|onboarding|portal\/tenant)/, { timeout: 15_000 });
 }
 
 // Opens the ⌘K palette robustly and returns its search combobox. The global keydown listener attaches

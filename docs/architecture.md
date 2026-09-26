@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living architecture guide
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-09-22
+- **Last reviewed:** 2026-09-26
 
 This is the canonical public map of the system **as implemented**. It explains how the pieces fit
 together and links the decisions that shaped them without reproducing every invariant. Accepted
@@ -137,8 +137,21 @@ org-scoped table is created through the migrations RLS helper (column + `USING`/
 `FORCE` binds the migrator role too, so a migration that rewrites existing rows must lift and restore
 it around the statement; an architecture test reads migration source and fails the build on an
 unbracketed data rewrite, which would otherwise match no rows in silence. Portal
-sub-org visibility (an owner sees only their properties) is enforced at the application layer rather
+sub-org visibility is enforced at the application layer rather
 than by stacking more RLS policies — see [ADR-003](adr/ADR-003-portal-suborg-scoping-at-app-layer.md).
+
+The tenant portal uses a host-owned `resident_access` identity link with forced org RLS and composite
+org-consistent references to Identity and Directory. One active link per user identifies their
+tenant financial account; several users may share that account. A Tenant-only policy precedes an
+endpoint-filter authorization check inside the organization transaction. Its scoped handler resolves
+the link, explicitly verifies the RLS-exempt Identity user's org, and asks Directory for a non-system
+resident name on every request. Revocation therefore applies to the next request with an existing
+cookie. The selector-free `/api/portal/tenant/ledger` dispatches the existing Accounting ledger query
+and returns only resident-facing ledger fields, with `Cache-Control: no-store`. The portal displays
+the rent ledger balance, excluding held security deposits. It neither accepts payments nor provides
+an enrollment endpoint. Tenant navigation uses a dedicated shell; staff routes deny access before
+mounting staff queries. Account security and sign-out reuse the existing auth flows. Owner portal
+access remains unsupported.
 
 Layered on top of that organization boundary, the host applies defense-in-depth hardening: a middleware
 that sets security response headers — including same-origin `Cross-Origin-Opener-Policy` and

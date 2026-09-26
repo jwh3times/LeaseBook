@@ -1,6 +1,7 @@
 using FluentValidation;
 using LeaseBook.SharedKernel.Endpoints;
 using LeaseBook.Web.Persistence;
+using LeaseBook.Web.Portal;
 using LeaseBook.Web.Security;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -55,6 +56,9 @@ public static class AuthServiceCollectionExtensions
         // Auth request validators (P23) — executed by the ValidationEndpointFilter.
         services.AddScoped<AccountSecurityAudit>();
         services.AddScoped<AccountAdministration>();
+        services.AddScoped<ResidentAccessService>();
+        services.AddScoped<CurrentResident>();
+        services.AddScoped<IAuthorizationHandler, ResidentAuthorizationHandler>();
         services.Configure<SecurityStampValidatorOptions>(options => options.ValidationInterval = TimeSpan.Zero);
         services.AddScoped<IValidator<RecoveryLoginRequest>, RecoveryLoginRequestValidator>();
         services.AddScoped<IValidator<ChangePasswordRequest>, ChangePasswordRequestValidator>();
@@ -118,6 +122,10 @@ public static class AuthServiceCollectionExtensions
                 .RequireRole(Roles.PMAdmin).AddRequirements(mfaEnrolled))
             .AddPolicy(AuthPolicies.RequirePMStaff, policy => policy
                 .RequireRole(Roles.PMAdmin, Roles.PMStaff).AddRequirements(mfaEnrolled))
+            .AddPolicy(AuthPolicies.RequireTenant, policy => policy
+                .RequireAuthenticatedUser().RequireRole(Roles.Tenant)
+                .RequireAssertion(c => !c.User.IsInRole(Roles.PMAdmin)
+                    && !c.User.IsInRole(Roles.PMStaff) && !c.User.IsInRole(Roles.Owner)))
             .AddPolicy(AuthPolicies.AuthenticatedMfaExempt, policy => policy
                 .RequireAuthenticatedUser());
 

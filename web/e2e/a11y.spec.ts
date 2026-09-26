@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 import {
   CUTOVER_ADMIN,
   DEMO_ADMIN,
+  PORTAL_RESIDENT,
   openPalette,
   paletteOptions,
   runA11y,
@@ -33,6 +34,12 @@ const DEMO_INDEX_ROUTES = [
 ];
 
 for (const theme of THEMES) {
+  test(`no WCAG AA violations on tenant portal (${theme})`, async ({ page }) => {
+    await seedTheme(page, theme);
+    await signIn(page, PORTAL_RESIDENT);
+    await expect(page.getByRole('heading', { name: 'Resident A' })).toBeVisible();
+    await runA11y(page);
+  });
   test.describe(`a11y (${theme}) — demo org pages`, () => {
     for (const route of DEMO_INDEX_ROUTES) {
       test(`no WCAG AA violations on ${route}`, async ({ page }) => {

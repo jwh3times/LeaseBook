@@ -83,8 +83,9 @@ export function LoginPage() {
 
   async function finishSignIn() {
     void primeCsrf();
+    queryClient.clear();
     await queryClient.invalidateQueries({ queryKey: sessionQueryKey });
-    void navigate('/dashboard', { replace: true });
+    void navigate('/', { replace: true });
   }
 
   async function submitPassword(event: FormEvent) {

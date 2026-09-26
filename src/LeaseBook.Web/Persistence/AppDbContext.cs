@@ -55,6 +55,8 @@ public sealed class AppDbContext(
         // names PascalCase; map them explicitly so the whole schema is snake_case (§C.3). These are
         // identity-class (no RLS, pitfall E6) and are allowlisted in the schema guard.
         modelBuilder.Entity<AppUser>().ToTable("asp_net_users");
+        modelBuilder.Entity<AppUser>().HasAlternateKey(u => new { u.OrgId, u.Id })
+            .HasName("ak_asp_net_users_org_id_id");
         modelBuilder.Entity<IdentityRole<Guid>>().ToTable("asp_net_roles");
         modelBuilder.Entity<IdentityUserClaim<Guid>>().ToTable("asp_net_user_claims");
         modelBuilder.Entity<IdentityUserRole<Guid>>().ToTable("asp_net_user_roles");

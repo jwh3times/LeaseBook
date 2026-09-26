@@ -14,6 +14,7 @@ public sealed class SeedVerbTests
     [InlineData("cutover", SeedTarget.Cutover)]
     [InlineData("load", SeedTarget.Load)]
     [InlineData("scenario", SeedTarget.Scenario)]
+    [InlineData("portal", SeedTarget.Portal)]
     [InlineData("DEMO", SeedTarget.Demo)] // case-insensitive, matching the old dispatcher
     public void Known_org_values_resolve(string value, SeedTarget expected)
     {
@@ -26,7 +27,7 @@ public sealed class SeedVerbTests
     {
         SeedVerb.TryResolve(["seed", "--org", "laod"], out _, out var error).ShouldBeFalse();
         error.ShouldContain("laod");
-        error.ShouldContain("'demo', 'cutover', 'load', or 'scenario'");
+        error.ShouldContain("'demo', 'cutover', 'load', 'scenario', or 'portal'");
     }
 
     [Fact]
