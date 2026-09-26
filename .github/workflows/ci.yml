@@ -277,10 +277,11 @@ jobs:
         run: dotnet ef database update --project src/LeaseBook.Web --context AppDbContext
         env:
           ConnectionStrings__Migrations: Host=localhost;Port=5432;Database=leasebook;Username=leasebook_migrator;Password=dev_migrator_pw
-      - name: Seed demo + cutover orgs (app role)
+      - name: Seed demo + cutover + portal fixtures (app role)
         run: |
           dotnet run --project src/LeaseBook.Web -- seed --org demo
           dotnet run --project src/LeaseBook.Web -- seed --org cutover
+          dotnet run --project src/LeaseBook.Web -- seed --org portal
       - name: Install web dependencies
         working-directory: web
         run: npm ci

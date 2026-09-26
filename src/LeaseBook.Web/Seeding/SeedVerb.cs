@@ -53,6 +53,7 @@ internal sealed class SeedVerb : ICliVerb
     {
         var seed = target switch
         {
+            SeedTarget.Portal => PortalSeeder.SeedAsync(services, ct),
             SeedTarget.Cutover => CutoverSeeder.SeedAsync(services, ct),
             SeedTarget.Load => LoadSeeder.SeedAsync(services, ct),
             SeedTarget.Scenario => ScenarioSeeder.SeedAsync(services, ct),
@@ -76,4 +77,5 @@ public enum SeedTarget
     Cutover,
     Load,
     Scenario,
+    Portal,
 }

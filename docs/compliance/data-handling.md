@@ -52,6 +52,7 @@ global-class.
 | Property street address, city, state, ZIP           | `properties` (Directory)                  |                                                     |
 | Managing brokerage legal name, address, phone       | `org_settings` (Directory)                | Firm identity rendered on statements                |
 | User email, phone, username, display name           | `asp_net_users` (host)                    | Application login accounts                          |
+| User-to-tenant identity links                       | `resident_access` (host)                  | Revoked links remain as access history              |
 | Recipient email of a statement send                 | `statement_delivery_attempts` (Reporting) | One row per send of a statement artifact            |
 | Verbatim imported records (names, emails, balances) | `import_rows` (Onboarding)                | Raw and mapped migration data, kept as import audit |
 

@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living runbook; canonical development command reference
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-09-22
+- **Last reviewed:** 2026-09-26
 
 ## Prerequisites
 
@@ -225,6 +225,19 @@ other's figures.
 | `cutover`  | `seed --org cutover`  | Empty org + banks + chart of accounts — the onboarding-wizard e2e fixture. No journal.                                                              |
 | `load`     | `seed --org load`     | ~300 units / 12 months, PRNG-generated at fixed seed — performance fixture (`perf-probe`).                                                          |
 | `scenario` | `seed --org scenario` | The all-scenario org: 5 owners / 11 units, cutover 2026-02-28 + four months (Mar–Jun 2026) exercising every posting template, workflow, and report. |
+| `portal`   | `seed --org portal`   | Three resident logins across two organizations, with isolated rent ledgers and explicit identity links.                                             |
+
+The **portal** fixture (`seed --org portal`) provisions two residents in one organization and a third
+in another, with explicit identity links and journal activity posted through the accounting engine.
+Apply migrations first, then run it in the Development environment. Sign in at `/login`
+as `resident-a@portal.test`, `resident-b@portal.test`, or `resident-c@portal.test`, using the
+development-only password in `PortalSeeder.Password`. Resident A and C each see a $700 rent ledger
+balance; Resident B sees $900. Each ledger includes a voided fee and its reversal. Sign-in lands at
+`/portal/tenant`; direct staff navigation shows access denied. Account security and sign-out remain
+available. Re-running the fixture leaves existing organizations intact. Like the other fixture
+seeders, it refuses Production. These synthetic credentials are not a customer enrollment procedure;
+production invitations and enrollment are deferred. The browser suite requires this fixture alongside
+`demo` and `cutover`.
 
 The **scenario** org is provisioned post-sign-off through the real migration import path (opening
 positions incl. an accrual≠cash delta, a pre-sign-off supersede, and a held-PM-fees position) and
@@ -346,13 +359,14 @@ Chromium browser once:
 npx playwright install chromium
 ```
 
-The suite requires **both** the `demo` and `cutover` orgs to be seeded (the a11y spec checks
-`/onboarding` on the cutover org):
+The suite requires the `demo`, `cutover`, and `portal` fixtures (the a11y spec checks
+`/onboarding` on the cutover org and the tenant portal with a resident login):
 
 ```powershell
 $env:ASPNETCORE_ENVIRONMENT = "Development"
 dotnet run --project src/LeaseBook.Web -- seed --org demo
 dotnet run --project src/LeaseBook.Web -- seed --org cutover
+dotnet run --project src/LeaseBook.Web -- seed --org portal
 ```
 
 Then start the API and SPA (inner-loop mode), and run the suite from `web/`:

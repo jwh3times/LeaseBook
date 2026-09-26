@@ -796,6 +796,22 @@ export type ReportDescriptor = {
     favorite?: boolean;
 };
 
+export type ResidentLedgerResponse = {
+    residentName: string;
+    balance: number | string;
+    rows: Array<ResidentLedgerRow>;
+};
+
+export type ResidentLedgerRow = {
+    date: string;
+    category: string;
+    charge: number | string;
+    payment: number | string;
+    balance: number | string;
+    isVoided: boolean;
+    isReversal: boolean;
+};
+
 export type RowError = {
     rowNumber: number | string;
     message: string;
@@ -2465,6 +2481,22 @@ export type PostApiStatementsByOwnerIdDeliverResponses = {
      */
     200: unknown;
 };
+
+export type GetApiPortalTenantLedgerData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/portal/tenant/ledger';
+};
+
+export type GetApiPortalTenantLedgerResponses = {
+    /**
+     * OK
+     */
+    200: ResidentLedgerResponse;
+};
+
+export type GetApiPortalTenantLedgerResponse = GetApiPortalTenantLedgerResponses[keyof GetApiPortalTenantLedgerResponses];
 
 export type GetApiOperationsRunsByTypePreviewData = {
     body?: never;

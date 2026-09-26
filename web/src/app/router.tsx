@@ -1,5 +1,7 @@
 import type { ReactElement } from 'react';
-import { createBrowserRouter, Navigate } from 'react-router';
+import { createBrowserRouter } from 'react-router';
+import { TenantPortalPage } from '@/features/portal/TenantPortalPage';
+import { HomeRedirect, PersonaGuard } from './PersonaGuard';
 import { KitchenSink } from '@/dev/KitchenSink';
 import { AuditPage } from '@/features/audit';
 import { AccountSecurityPage } from '@/features/auth/AccountSecurityPage';
@@ -59,14 +61,15 @@ export const router = createBrowserRouter([
   {
     element: <RouteGuard />,
     children: [
+      { index: true, element: <HomeRedirect /> },
       { path: '/account/security', element: <AccountSecurityPage /> },
       {
-        element: <AppShell />,
-        children: [
-          { index: true, element: <Navigate to="/dashboard" replace /> },
-          ...pageRoutes,
-          ...detailRoutes,
-        ],
+        element: <PersonaGuard persona="tenant" />,
+        children: [{ path: '/portal/tenant', element: <TenantPortalPage /> }],
+      },
+      {
+        element: <PersonaGuard persona="staff" />,
+        children: [{ element: <AppShell />, children: [...pageRoutes, ...detailRoutes] }],
       },
     ],
   },

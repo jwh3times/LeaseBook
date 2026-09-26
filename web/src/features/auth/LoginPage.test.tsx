@@ -12,7 +12,7 @@ function renderLogin() {
   const router = createMemoryRouter(
     [
       { path: '/login', element: <LoginPage /> },
-      { path: '/dashboard', element: <div>dashboard ready</div> },
+      { path: '/', element: <div>dashboard ready</div> },
     ],
     { initialEntries: ['/login'] },
   );
@@ -21,6 +21,7 @@ function renderLogin() {
       <RouterProvider router={router} />
     </QueryClientProvider>,
   );
+  return queryClient;
 }
 
 async function fillCredentials() {
@@ -31,6 +32,14 @@ async function fillCredentials() {
 }
 
 describe('LoginPage', () => {
+  let queryClient: QueryClient;
+
+  it('clears the previous account’s cached reads after successful sign-in', async () => {
+    queryClient.setQueryData(['resident-ledger'], { residentName: 'Previous resident' });
+    await fillCredentials();
+    await screen.findByText('dashboard ready');
+    expect(queryClient.getQueryData(['resident-ledger'])).toBeUndefined();
+  });
   it('navigates to the dashboard on a successful password login', async () => {
     await fillCredentials();
     expect(await screen.findByText('dashboard ready')).toBeInTheDocument();
@@ -228,6 +237,6 @@ describe('LoginPage', () => {
   });
 
   beforeEach(() => {
-    renderLogin();
+    queryClient = renderLogin();
   });
 });
