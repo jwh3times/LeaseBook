@@ -19,7 +19,7 @@ this one, for current progress.
 - M0-M7 are complete and merged to `main`: foundations; the trust-accounting engine; Directory; the
   tenant ledger action hub; Banking and Reconciliation; Owner Statements and Reporting; Bulk
   Operations; and the Migration toolkit and import-first onboarding.
-- M8, Hardening, Compliance and Beta Launch, is the current frontier. Merged so far:
+- M8, Hardening, Compliance and Beta Launch, remains the Phase 1 frontier. Merged so far:
 
   - CI e2e run plus the automated WCAG 2 AA accessibility gate (ADR-022), visual-regression
     baselines for money-critical states (ADR-023), the full-stack boot gate, and the changelog
@@ -68,6 +68,9 @@ this one, for current progress.
   delivery for the sweep's violation events — and the two ADR-041 first-apply steps: naming the
   ingress network so forwarded-header trust can be enabled and verified, and confirming the keyring's
   Key Vault wrap engages.
+- The first independently demoable Phase 2 slice is merged: a read-only tenant own-ledger portal
+  with per-request identity authorization and a separate `portal` fixture (ADR-003). Production
+  enrollment, online payments, and the owner portal remain future work; M8 operator work stays deferred.
 - `Accounting`, `Directory`, `Banking`, `Reporting`, `Operations`, `Capabilities`, and `Migrator` are
   built. `Payments` is the remaining scaffolded shell for Phase 2.
 
