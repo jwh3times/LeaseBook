@@ -41,6 +41,7 @@ docs/architecture.md          — canonical public map of the system AS IMPLEMEN
 docs/blueprint.md             — HISTORICAL pre-M0 baseline; superseded by ADRs. Do not refresh it
 docs/accounting.md            — double-entry model, trust equation, event catalog
 docs/perf.md                  — read-path p95 method and the recorded numbers
+docs/payments/simulated-payment-spec.md — proposed non-live payment lifecycle and acceptance matrix
 ```
 
 ### ADRs
@@ -69,6 +70,7 @@ docs/compliance/data-handling.md        — GLBA/PII data handling. Its Last rev
                                           EXTERNAL review, not engineering edits — do not bump it
 docs/compliance/privacy-notice-draft.md — privacy notice skeleton; same review-date rule
 docs/research/azure-monitor-opentelemetry-distro.md — point-in-time vendor research, not guidance
+docs/research/stripe-connect-payment-lifecycle.md — dated provider evidence for the payment design
 ```
 
 ### Agent guidance (authored; mirrored to `.codex/agents/` by the sync script)
