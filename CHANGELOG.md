@@ -16,6 +16,20 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Added
 
+- _Nothing yet._
+
+## [0.17.0] - 2026-09-26
+
+### Added
+
+- **Residents can sign in to their own rent ledger.** The tenant portal shows charges, payments,
+  credits, running balances, and voids with their reversals, alongside account security and sign-out.
+  Explicit resident access links are checked on every request, so revocation takes effect with an
+  existing session. Residents cannot open staff pages or another resident's ledger, and the portal
+  omits internal notes, identifiers, owner information, and bank details. A separate development
+  fixture demonstrates three resident accounts across two organizations. Online payments and
+  production enrollment remain outside this slice.
+
 - **LeaseBook now has a browser and application icon.** Tabs, bookmarks, and pinned sites show the
   mark instead of a blank page icon, and a web app manifest supplies the name, theme color, and
   icons a browser uses when the app is added to a phone home screen or a desktop. Browser-chrome
@@ -1081,7 +1095,8 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.16.0...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.17.0...HEAD
+[0.17.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.17.0
 [0.16.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.16.0
 [0.15.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.15.0
 [0.14.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.14.0

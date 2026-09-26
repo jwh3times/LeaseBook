@@ -359,13 +359,14 @@ Chromium browser once:
 npx playwright install chromium
 ```
 
-The suite requires **both** the `demo` and `cutover` orgs to be seeded (the a11y spec checks
-`/onboarding` on the cutover org):
+The suite requires the `demo`, `cutover`, and `portal` fixtures (the a11y spec checks
+`/onboarding` on the cutover org and the tenant portal with a resident login):
 
 ```powershell
 $env:ASPNETCORE_ENVIRONMENT = "Development"
 dotnet run --project src/LeaseBook.Web -- seed --org demo
 dotnet run --project src/LeaseBook.Web -- seed --org cutover
+dotnet run --project src/LeaseBook.Web -- seed --org portal
 ```
 
 Then start the API and SPA (inner-loop mode), and run the suite from `web/`:
