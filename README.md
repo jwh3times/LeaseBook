@@ -14,8 +14,8 @@ level — the way fiduciary trust accounting for residential property management
 
 > **Status: pre-release, under active development.** The foundations, trust-accounting engine, directory,
 > the tenant ledger action hub, banking & reconciliation, owner statements & reporting, bulk operations,
-> and the migration toolkit are implemented and tested; a compliance and hardening pass toward beta is
-> underway. Not yet deployed for production use.
+> the migration toolkit, and a read-only tenant portal are implemented and tested; a compliance and
+> hardening pass toward beta is underway. Not yet deployed for production use.
 
 ---
 
@@ -52,14 +52,15 @@ suite — not by convention. See [`docs/accounting.md`](docs/accounting.md) for 
 | **Trust accounting engine**      | Double-entry journal with dual-basis (cash/accrual) posting templates per business event, a single write path, linked void/reversal, accounting periods, and a continuously-tested invariant suite that also runs as a nightly sweep.                                                                                            |
 | **Directory**                    | Owner, property, and tenant lists and detail pages — with units and lightweight lease records surfaced in context — full-text search, a ⌘K command palette, and a live dashboard with all-owner ending balances.                                                                                                                 |
 | **Tenant ledger action hub**     | Record a payment or charge in place (≤ 3 interactions), collect/hold/apply deposits and prepayments, void with a linked reversal and a per-entry audit drawer, and a filterable, CSV-exportable running-balance ledger.                                                                                                          |
+| **Tenant portal**                | Tenants view their own rent ledger and balance through an explicitly linked account, with account security and sign-out. Access is checked on every request; payments and production enrollment remain future work.                                                                                                              |
 | **Banking & reconciliation**     | A bank register and clearance layer projected from the immutable journal, reconcile-in-place to $0 with finalize + per-account period lock and an immutable reconciliation report, and CSV statement import with auto-match and de-duplication.                                                                                  |
 | **Owner statements & reporting** | Per-owner statements (per property or consolidated) with a structural statement-to-ledger tie-out that blocks issuance on any variance and a computed fiduciary-integrity panel, a filterable report catalog rendered to print-grade PDF (QuestPDF) or CSV, and a one-click trust compliance pack for a fully reconciled period. |
 | **Bulk operations**              | Preview-confirm-post rent charge, late-fee, and owner disbursement runs — idempotent, reviewable before posting, and recorded as auditable runs. Late-fee policy is configurable per organization with per-lease overrides, inside the automatically-applied statutory cap.                                                      |
 | **Migration & onboarding**       | Tolerant AppFolio CSV import with balance-forward opening postings (including un-swept management fees held in trust), pre-sign-off correction of an already-posted opening figure, a hard verification sign-off gate that blocks go-live until imported totals tie, and an import-first onboarding wizard.                      |
 
 On the roadmap: a compliance and hardening pass toward beta (accessibility, security, performance,
-and live deployment) — followed by online payments, owner/tenant portals, and lease/maintenance
-workflows. See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the public product direction.
+and live deployment), alongside further Phase 2 work: online payments, production tenant enrollment,
+an owner portal, and lease/maintenance workflows. See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the public product direction.
 
 ---
 

@@ -3,7 +3,7 @@
 - **Audience:** Evaluators, contributors, and maintainers
 - **Status:** Living public scope
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-08-19
+- **Last reviewed:** 2026-09-26
 
 LeaseBook is property-management software for small residential property managers. Its defining
 requirement is correct trust accounting with low interaction cost for recurring operational work.
@@ -23,6 +23,10 @@ Phase 1 supports property-management staff operating a single organization with:
 - Preview-confirm-post bulk runs for rent, late fees, and owner disbursements.
 - Staged migration imports, balance-forward opening entries, verification, sign-off, and onboarding.
 - Role-based staff access, PostgreSQL row-level-security organization isolation, audit events, and MFA capability.
+
+The first Phase 2 slice adds a read-only tenant portal: explicitly linked tenant accounts can view
+their own rent ledger and use account security and sign-out. Production enrollment and online
+payments remain outside this implemented slice.
 
 The [accounting guide](accounting.md) owns financial behavior, and the
 [architecture guide](architecture.md) owns system boundaries. This scope document does not restate
@@ -53,8 +57,8 @@ seams may exist without making the external product itself part of LeaseBook.
 
 ## Later Product Areas
 
-After Phase 1 and beta readiness, broad planned areas include online payments, owner and tenant
-portals, fuller lease management, maintenance workflows, and vacancy/listing workflows. The
+Further planned areas include online payments, production tenant enrollment, an owner portal, fuller
+lease management, maintenance workflows, and vacancy/listing workflows. The
 [roadmap](ROADMAP.md) communicates direction only; detailed scope is defined at each phase boundary.
 
 ## Public Contribution Boundary

@@ -3,7 +3,7 @@
 - **Audience:** Evaluators, contributors, and maintainers
 - **Status:** Living public direction
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-09-22
+- **Last reviewed:** 2026-09-26
 
 LeaseBook is pre-release software. This page communicates shipped capabilities and broad product
 direction; it is not an implementation plan or a commitment to specific dates. Detailed sequencing,
@@ -60,6 +60,11 @@ Hardening and beta readiness are in progress. Shipped so far:
 - **Authored Azure infrastructure.** Environment templates and deployment workflows exist; enabling
   them requires operator-held cloud access.
 
+The first independently demoable Phase 2 slice is also implemented: a read-only tenant portal with
+own-ledger access, per-request identity checks, account security, and sign-out. A separate development
+fixture demonstrates isolation between tenant accounts and organizations. Production enrollment,
+online payments, and an owner portal remain future work.
+
 ## Near-Term Priorities
 
 Before beta, the project is focused on:
@@ -77,9 +82,9 @@ interaction budgets, and relevant automated gates remain green.
 
 ## Later Direction
 
-After Phase 1 and beta readiness, planned product areas include online payments, owner and tenant
-portals, fuller lease management, maintenance workflows, and vacancy/listing workflows. Detailed scope
-and ordering will be defined at each phase boundary rather than inferred from this summary.
+Further product areas include online payments, production tenant enrollment, an owner portal, fuller
+lease management, maintenance workflows, and vacancy/listing workflows. Detailed scope and ordering
+will be defined at each phase boundary rather than inferred from this summary.
 
 ## Sources of Truth
 
