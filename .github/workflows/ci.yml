@@ -313,6 +313,17 @@ jobs:
       - name: Run e2e (Playwright suite incl. a11y)
         working-directory: web
         run: npm run e2e
+      - name: Initialize isolated payment fixture
+        shell: pwsh
+        run: ./scripts/payment-fixture.ps1 init -Container '${{ job.services.postgres.id }}' -Port 5432
+      - name: Run simulated payment browser flow
+        working-directory: web
+        run: npx playwright test simulated-payment.spec.ts
+        env:
+          PAYMENT_SIMULATION_E2E: '1'
+          Payments__ManifestPath: ${{ github.workspace }}/payment-fixture.local
+          ConnectionStrings__Default: Host=localhost;Port=5432;Database=leasebook_payment_fixture;Username=leasebook_app;Password=dev_app_pw
+          PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report-payments
       - name: Upload Playwright report
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -320,6 +331,7 @@ jobs:
           name: playwright-report
           path: |
             web/playwright-report/
+            web/playwright-report-payments/
             web/test-results/
           retention-days: 7
 

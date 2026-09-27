@@ -68,11 +68,13 @@ this one, for current progress.
   delivery for the sweep's violation events — and the two ADR-041 first-apply steps: naming the
   ingress network so forwarded-header trust can be enabled and verified, and confirming the keyring's
   Key Vault wrap engages.
-- The first independently demoable Phase 2 slice is merged: a read-only tenant own-ledger portal
-  with per-request identity authorization and a separate `portal` fixture (ADR-003). Production
-  enrollment, online payments, and the owner portal remain future work; M8 operator work stays deferred.
-- `Accounting`, `Directory`, `Banking`, `Reporting`, `Operations`, `Capabilities`, and `Migrator` are
-  built. `Payments` is the remaining scaffolded shell for Phase 2.
+- Phase 2 includes the tenant own-ledger portal (ADR-003) and isolated development-only simulated
+  payments (ADR-046). Before running or resetting payment fixtures, read
+  `docs/runbooks/payment-simulation.md`; the dedicated database and generation binding protect
+  ordinary organizations and golden data. Production enrollment, live payments and the owner portal
+  remain future work; M8 operator work stays deferred.
+- `Accounting`, `Directory`, `Banking`, `Reporting`, `Operations`, `Capabilities`, `Payments`, and
+  `Migrator` carry implemented behavior; Payments has no live provider adapter.
 
 The `private/` directory is gitignored by the public repository and is a separately versioned
 confidential checkout for authorized maintainers. Its repository locator and bootstrap details live

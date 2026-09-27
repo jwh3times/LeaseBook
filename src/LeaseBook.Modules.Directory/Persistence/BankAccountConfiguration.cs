@@ -14,7 +14,7 @@ public sealed class BankAccountConfiguration : IEntityTypeConfiguration<BankAcco
         builder.HasKey(e => e.Id);
 
         // (org_id, id) alternate key — target of journal_lines' composite dimension FK (ADR-013, P60).
-        builder.HasAlternateKey(e => new { e.OrgId, e.Id });
+        builder.HasAlternateKey(e => new { e.OrgId, e.Id }).HasName("ak_bank_accounts_org_id_id");
 
         builder.Property(e => e.OrgId).IsRequired();
         builder.Property(e => e.Name).IsRequired();

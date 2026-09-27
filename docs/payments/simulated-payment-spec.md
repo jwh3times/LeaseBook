@@ -1,17 +1,17 @@
 # One-time simulated payment implementation specification
 
 - **Audience:** Implementers and reviewers of issue #456
-- **Status:** Proposed design for #455; no Payments runtime implemented by this document
+- **Status:** Implemented simulation contract for #456; live payments remain unapproved
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-09-26
+- **Last reviewed:** 2026-09-27
 
 ## Evidence and boundary
 
-[ADR-046](../adr/ADR-046-simulated-payment-recognition.md) owns the proposed recognition decision.
+[ADR-046](../adr/ADR-046-simulated-payment-recognition.md) owns the simulation recognition decision.
 [Stripe research](../research/stripe-connect-payment-lifecycle.md) owns dated provider facts.
 `PaymentLifecycleEvidenceTests` exercises the actual Accounting engine, projections and invariant
-sweep. The state/transport tests specified below belong to #456; the evidence suite is not a
-claim that a Payments implementation already exists.
+sweep. `SimulatedPaymentTests` covers durable state, transport, isolation and receipt atomicity.
+The [simulation runbook](../runbooks/payment-simulation.md) owns fixture commands and recovery.
 
 The conventions here apply only to a deterministic, direct-charge-shaped simulator with one
 synthetic connected account bound to one fixture organization and one explicitly selected trust
@@ -38,7 +38,7 @@ continues under a durable system actor: session expiration must not discard fina
 Persist an immutable operation UUID, org/tenant/initiating actor IDs, amount/currency, fixture
 generation, provider-account/bank binding version, request fingerprint, idempotency key and creation
 instant. Scope uniqueness to `(org, initiating user, key)`; fingerprint the canonical tenant,
-amount in integer cents, currency and binding version. Same key/same fingerprint returns the same
+amount in canonical two-decimal form, currency and binding version. Same key/same fingerprint returns the same
 operation, including after completion; same key/different fingerprint returns conflict before any
 dispatch. Two different keys are two explicitly confirmed payments. A confirmed failed collection
 may be retried by a new operation/key; automatic transport recovery always retains the old key.
@@ -180,8 +180,8 @@ resolve uncertain results after provider key expiry; it cannot promise permanent
 ## Transaction and recovery protocol
 
 1. **Submit transaction:** under request org RLS, validate resident/binding and insert operation
-   plus dispatch outbox atomically. Concurrent unique-key losers read and compare the committed
-   winner in a fresh transaction. Return HTTP 202 with an own-tenant operation URL; same request replays
+   plus dispatch outbox atomically. An org/user/key advisory transaction lock serializes competing
+   submissions; the next caller reads and compares the committed operation. Return HTTP 202 with an own-tenant operation URL; same request replays
    that result. Commit before contacting the processor.
 2. **Dispatch claim:** a worker uses a fresh org scope, atomically claims a due outbox row with a
    bounded lease and commits. It calls Submit/Lookup outside the DB transaction. Persist result
@@ -233,8 +233,9 @@ select context. A forged signature or stale timestamp returns generic HTTP 400. 
 unknown account/mode/type is ignored with generic HTTP 204 and bounded, redacted diagnostic counting;
 it cannot create a binding. For a known account but not-yet-mapped object, persist a parked inbox
 record under that org and retry association after dispatch recovery. Only trusted Lookup evidence
-can establish the missing object mapping. Exhausted association retries require review; do not
-adopt caller metadata. Wrong destination, currency or amount is retained for review without posting.
+can establish the missing object mapping. Unmapped observations older than ten minutes appear in
+the staff review count; they remain durable and can associate after dispatch recovery. Do not adopt
+caller metadata. Wrong destination, currency or amount is retained for review without posting.
 
 Simulated verification uses the same raw-body/authenticated-observation seam but does not claim
 Stripe signature compatibility. The later Stripe adapter must use the provider SDK's verification
@@ -256,7 +257,7 @@ In #456, implement these checks in executable startup, submission, callback and 
 - Every submission, inbox association and effect transaction verifies both the configured UUID/
   generation binding and persisted fixture marker. A stale generation, ordinary org or bank outside
   that org fails closed. No public API can add fixture status or choose the scenario.
-- A test/CLI-only scenario driver advances an injected clock and emits signed deterministic events
+- Tests advance an injected clock; a CLI-only scenario driver emits signed deterministic events
   and bank evidence. It uses a separate fixture credential unavailable to portal JavaScript. Its
   persistent provider store maps operation keys to immutable synthetic objects; replay/restart
   never invents a new accepted payment. IDs include fixture generation to isolate reset runs.

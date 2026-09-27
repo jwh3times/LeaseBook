@@ -36,7 +36,7 @@ export default defineConfig({
           ? { ConnectionStrings__Default: process.env.ConnectionStrings__Default }
           : {}),
       },
-      reuseExistingServer: true,
+      reuseExistingServer: !process.env.CI && process.env.PAYMENT_SIMULATION_E2E !== '1',
       timeout: 180_000,
     },
     {

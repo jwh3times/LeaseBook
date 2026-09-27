@@ -620,6 +620,25 @@ export type PagedResponseOfTenantListRow = {
     pageSize: number | string;
 };
 
+export type PaymentView = {
+    id: string;
+    amount: number | string;
+    currency: string;
+    status: string;
+    receiptRecorded: boolean;
+    reason: null | string;
+    createdAt: string;
+    lastAttemptAt: null | string;
+    canRetry: boolean;
+    evidenceReference: null | string;
+};
+
+export type PaymentsResponse = {
+    enabled: boolean;
+    items: Array<PaymentView>;
+    unmatchedObservations?: number | string;
+};
+
 export type PmBrandingRow = {
     companyName: null | string;
     logoBlobRef: null | string;
@@ -923,6 +942,12 @@ export type StatementView = {
     fiduciary: FiduciaryPanel;
     branding: PmBrandingRow;
     asOf: string;
+};
+
+export type SubmitPaymentBody = {
+    key: string;
+    amount: number | string;
+    currency: string;
 };
 
 export type TenantContact = {
@@ -1958,6 +1983,31 @@ export type GetApiSearchResponses = {
 
 export type GetApiSearchResponse = GetApiSearchResponses[keyof GetApiSearchResponses];
 
+export type PostCallbacksPaymentsSimulationData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/callbacks/payments/simulation';
+};
+
+export type PostCallbacksPaymentsSimulationErrors = {
+    /**
+     * Bad Request
+     */
+    400: ProblemDetails;
+};
+
+export type PostCallbacksPaymentsSimulationError = PostCallbacksPaymentsSimulationErrors[keyof PostCallbacksPaymentsSimulationErrors];
+
+export type PostCallbacksPaymentsSimulationResponses = {
+    /**
+     * No Content
+     */
+    204: void;
+};
+
+export type PostCallbacksPaymentsSimulationResponse = PostCallbacksPaymentsSimulationResponses[keyof PostCallbacksPaymentsSimulationResponses];
+
 export type GetApiOnboardingStatusData = {
     body?: never;
     path?: never;
@@ -2497,6 +2547,111 @@ export type GetApiPortalTenantLedgerResponses = {
 };
 
 export type GetApiPortalTenantLedgerResponse = GetApiPortalTenantLedgerResponses[keyof GetApiPortalTenantLedgerResponses];
+
+export type GetApiPortalTenantPaymentsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/portal/tenant/payments';
+};
+
+export type GetApiPortalTenantPaymentsResponses = {
+    /**
+     * OK
+     */
+    200: PaymentsResponse;
+};
+
+export type GetApiPortalTenantPaymentsResponse = GetApiPortalTenantPaymentsResponses[keyof GetApiPortalTenantPaymentsResponses];
+
+export type PostApiPortalTenantPaymentsData = {
+    body: SubmitPaymentBody;
+    path?: never;
+    query?: never;
+    url: '/api/portal/tenant/payments';
+};
+
+export type PostApiPortalTenantPaymentsErrors = {
+    /**
+     * Not Found
+     */
+    404: unknown;
+};
+
+export type PostApiPortalTenantPaymentsResponses = {
+    /**
+     * Accepted
+     */
+    202: PaymentView;
+};
+
+export type PostApiPortalTenantPaymentsResponse = PostApiPortalTenantPaymentsResponses[keyof PostApiPortalTenantPaymentsResponses];
+
+export type GetApiPortalTenantPaymentsByIdData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/portal/tenant/payments/{id}';
+};
+
+export type GetApiPortalTenantPaymentsByIdErrors = {
+    /**
+     * Not Found
+     */
+    404: unknown;
+};
+
+export type GetApiPortalTenantPaymentsByIdResponses = {
+    /**
+     * OK
+     */
+    200: PaymentView;
+};
+
+export type GetApiPortalTenantPaymentsByIdResponse = GetApiPortalTenantPaymentsByIdResponses[keyof GetApiPortalTenantPaymentsByIdResponses];
+
+export type GetApiPaymentsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/payments';
+};
+
+export type GetApiPaymentsResponses = {
+    /**
+     * OK
+     */
+    200: PaymentsResponse;
+};
+
+export type GetApiPaymentsResponse = GetApiPaymentsResponses[keyof GetApiPaymentsResponses];
+
+export type PostApiPaymentsByIdRetryData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/payments/{id}/retry';
+};
+
+export type PostApiPaymentsByIdRetryErrors = {
+    /**
+     * Not Found
+     */
+    404: unknown;
+};
+
+export type PostApiPaymentsByIdRetryResponses = {
+    /**
+     * No Content
+     */
+    204: void;
+};
+
+export type PostApiPaymentsByIdRetryResponse = PostApiPaymentsByIdRetryResponses[keyof PostApiPaymentsByIdRetryResponses];
 
 export type GetApiOperationsRunsByTypePreviewData = {
     body?: never;

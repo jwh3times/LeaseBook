@@ -3,7 +3,7 @@
 - **Audience:** Operators and maintainers
 - **Status:** Living runbook; canonical error-diagnosis reference
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-09-23
+- **Last reviewed:** 2026-09-27
 
 How to turn the reference an operator sees on screen into the full server-side detail in
 Application Insights. See [ADR-025](../adr/ADR-025-error-contract-and-observability.md) for the
@@ -587,3 +587,16 @@ that at Error when startup role seeding first fails, with the exception attached
 Keep `Include Error Detail=true` **out of** production and staging Npgsql connection strings.
 Configuration for those environments should not set it. This is a standing configuration
 requirement, not a per-incident step — verify it once per environment, not per diagnosis.
+
+## Simulated payment processing
+
+The development-only payment worker logs stable events with the operation UUID: `4600`
+(`PaymentProcessed`) records processing latency and `4601` (`PaymentNeedsAttention`) records a
+sanitized failure reason. `4602` (`PaymentCallbackIgnored`) records an unmapped verified observation
+without its payload; `4603` (`PaymentWorkerUnavailable`) records the exception type when a worker
+pass cannot complete. No callback body, signing key or bank credentials belong in these logs.
+
+Staff Operations shows durable payment status, reason, last attempt and evidence reference within
+the current organization. Unassociated observations older than ten minutes appear as a review
+count. Only technical failures offer an administrator retry of the same operation. See the
+[payment simulation runbook](payment-simulation.md) for fixture recovery and the journal boundary.

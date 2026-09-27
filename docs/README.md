@@ -40,6 +40,7 @@ summaries elsewhere should link here rather than restating mutable detail.
 ## Runbooks
 
 - [Local development](runbooks/local-dev.md)
+- [Isolated payment simulation](runbooks/payment-simulation.md)
 - [Point-in-time restore](runbooks/restore.md)
 - [Error diagnostics](runbooks/diagnostics.md)
 

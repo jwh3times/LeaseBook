@@ -56,6 +56,7 @@ docs/adr/ADR-*.md             — the records themselves; historical, not rewrit
 
 ```
 docs/runbooks/local-dev.md    — dev commands, seed workflow, common ops; cites the README port map
+docs/runbooks/payment-simulation.md — dedicated payment fixture, signed driver, restart and reset
 docs/runbooks/restore.md      — disaster recovery / PITR
 docs/runbooks/diagnostics.md  — error contract, event-id catalog, triage. DENSEST bulk-run prose
 docs/migration/parallel-run.md — public parallel-run checklist

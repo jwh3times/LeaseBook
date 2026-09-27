@@ -24,9 +24,11 @@ Phase 1 supports property-management staff operating a single organization with:
 - Staged migration imports, balance-forward opening entries, verification, sign-off, and onboarding.
 - Role-based staff access, PostgreSQL row-level-security organization isolation, audit events, and MFA capability.
 
-The first Phase 2 slice adds a read-only tenant portal: explicitly linked tenant accounts can view
-their own rent ledger and use account security and sign-out. Production enrollment and online
-payments remain outside this implemented slice.
+Phase 2 includes a tenant own-ledger portal, account security and sign-out. A separate isolated
+development fixture supports one-time simulated payments and staff review. Only explicit, complete,
+fee-free simulated bank evidence creates a receipt; no real money moves. Production enrollment and
+live online payments remain outside the implemented scope. The
+[payment simulation runbook](runbooks/payment-simulation.md) owns setup and recovery.
 
 The [accounting guide](accounting.md) owns financial behavior, and the
 [architecture guide](architecture.md) owns system boundaries. This scope document does not restate
