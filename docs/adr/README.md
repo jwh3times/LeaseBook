@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living decision index
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-09-13
+- **Last reviewed:** 2026-09-26
 
 An **Architecture Decision Record** captures a single significant or non-obvious engineering
 decision — the context that forced it, the choice made, and the consequences accepted — so it can be
@@ -70,6 +70,7 @@ form, write it, and add a row to the index below. When a decision is replaced, m
 | [043](ADR-043-account-security-lifecycle.md)                         | Account security has an application and operator lifecycle                      | Accepted                               | 2026-09-06 |
 | [044](ADR-044-audit-log-review-surface.md)                           | Audit-log review is a separate read, and payloads are withheld by origin        | Accepted                               | 2026-09-11 |
 | [045](ADR-045-statement-carry-forward.md)                            | A statement carries forward from the one issued before it                       | Accepted                               | 2026-09-13 |
+| [046](ADR-046-simulated-payment-recognition.md)                      | Recognize simulated payments from explicit bank evidence                        | Proposed                               | 2026-09-26 |
 
 ## Status legend
 

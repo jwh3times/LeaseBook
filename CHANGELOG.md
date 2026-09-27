@@ -16,7 +16,11 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Added
 
-- _Nothing yet._
+- **Simulated payment design is ready for implementation review.** A proposed lifecycle specification
+  separates processor progress from bank-evidenced receipt posting, defines durable retries and
+  fixture isolation, and records fee and return cases that require further policy decisions.
+  Stripe source research and executable accounting examples support the design; this adds no
+  payment-processing capability.
 
 ## [0.17.0] - 2026-09-26
 
