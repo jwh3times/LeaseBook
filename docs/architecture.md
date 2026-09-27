@@ -29,8 +29,9 @@ See the README [port map](../README.md#port-map) for every port the project bind
 Each bounded context is its own project — `Accounting`, `Directory`, `Banking`, `Reporting`,
 `Operations`, `Capabilities`, `Payments`, `Migrator` — over a shared `SharedKernel` that holds only
 cross-cutting primitives (money, ids, the CQRS spine, tenancy, result types). All of them carry real
-behavior except `Payments`, which remains a scaffolded shell for the online-payments phase. A module
-references `SharedKernel`
+behavior. `Payments` implements an isolated development simulator with durable dispatch, signed
+observations and atomic Accounting receipt effects; it has no live provider adapter. See
+[ADR-046](adr/ADR-046-simulated-payment-recognition.md). A module references `SharedKernel`
 and nothing else; the architecture tests (`ModuleBoundaryTests`) enforce this absolutely.
 
 A module **never reads another module's tables or types directly**. A cross-module read goes through
@@ -46,6 +47,11 @@ and the host adapter dispatches the producing module's command inside the ambien
 property ownership transfer uses this path from Directory to Accounting so its append-only ownership
 transition, current Directory owner and deposit-responsibility handoff commit or roll back together. See
 [ADR-036](adr/ADR-036-effective-dated-property-ownership-transfer.md).
+
+Payments uses its own `IPaymentEligibility` batch port to resolve tenant/date/bank eligibility through
+Directory, and `IPaymentLedger` to dispatch Accounting's existing `RecordPayment` command. The receipt,
+payment effect and operation summary share one org transaction. Its `IPaymentProcessor` transport seam
+is called outside that transaction; the host simulator persists provider acceptance independently.
 
 Directory does not persist snapshots of facts already owned by those sources. Tenant financial
 standing is a batch projection from Accounting's journal-derived aging and held-prepayment reads, and
@@ -298,6 +304,13 @@ deliberately not mounted** (attack surface) — job state is observed through lo
 Redis is deliberately deferred until a concrete need appears. Every job must establish organization context
 transactionally before touching data and throw if it is missing. See
 [ADR-001](adr/ADR-001-background-job-scheduler.md) and [ADR-002](adr/ADR-002-defer-redis.md).
+
+The isolated Development payment fixture uses a host `BackgroundService` to poll Payments-owned
+durable dispatch rows once per second. It starts only in Simulation web mode; the CLI can run the same
+worker pass explicitly. Each claim, callback receipt, effect and failure-bookkeeping transaction
+establishes a separate org scope. Thirty-second leases and durable provider lookup recover interrupted
+work. This simulator-only scheduler choice is recorded in the proposed
+[ADR-046](adr/ADR-046-simulated-payment-recognition.md); it does not select a live payment scheduler.
 
 ## Deployment
 

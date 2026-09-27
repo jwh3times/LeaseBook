@@ -5,6 +5,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { Button } from '@/design';
+import { PaymentPanel } from '@/features/payments/PaymentPanel';
 import { DisbursementRunScreen } from './DisbursementRunScreen';
 import { LateFeeRunScreen } from './LateFeeRunScreen';
 import { RentRunScreen } from './RentRunScreen';
@@ -50,6 +51,7 @@ export function OperationsPage() {
       </div>
 
       {/* Tab bar */}
+      <PaymentPanel staff />
       <div className="pf-acct-tabs" style={{ marginBottom: 'var(--gap)' }}>
         {TABS.map((tab) => (
           <Button

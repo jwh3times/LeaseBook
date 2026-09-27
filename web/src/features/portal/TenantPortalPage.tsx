@@ -6,6 +6,7 @@ import { ApiErrorNotice } from '@/components/ApiErrorNotice';
 import { QueryErrorState } from '@/components/QueryErrorState';
 import { Badge, Button, Card, EmptyState, Money } from '@/design';
 import { signOutCurrentSession } from '@/features/auth/signOut';
+import { PaymentPanel } from '@/features/payments/PaymentPanel';
 
 export function TenantPortalPage() {
   const queries = useQueryClient();
@@ -69,6 +70,7 @@ export function TenantPortalPage() {
               held separately.
             </p>
           </Card>
+          <PaymentPanel />
           {ledger.data.rows.length === 0 ? (
             <EmptyState icon="doc" title="No rent ledger activity yet" />
           ) : (

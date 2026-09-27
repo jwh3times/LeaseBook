@@ -21,6 +21,7 @@ node_modules/
 dist/
 .vite/
 playwright-report/
+playwright-report-payments/
 test-results/
 e2e-results/
 *.tsbuildinfo

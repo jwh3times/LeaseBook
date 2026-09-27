@@ -16,6 +16,15 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Added
 
+- **Residents can submit one-time simulated payments in an isolated development fixture.** The
+  portal shows durable processing status and a payment reference across reloads. A receipt reaches
+  the real tenant ledger only after separate, complete, fee-free simulated bank evidence; processor
+  success and payout progress leave the ledger unchanged. Duplicate requests, callbacks and worker
+  recovery retain the same operation and cannot create a second receipt. Staff can review exceptions
+  and administrators can retry technical failures. Late returns preserve the original receipt for
+  review. Dedicated fixture setup and reset commands keep ordinary organizations and golden data
+  separate; production simulation and live provider configuration are refused.
+
 - **Simulated payment design is ready for implementation review.** A proposed lifecycle specification
   separates processor progress from bank-evidenced receipt posting, defines durable retries and
   fixture isolation, and records fee and return cases that require further policy decisions.

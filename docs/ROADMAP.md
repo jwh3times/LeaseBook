@@ -60,10 +60,11 @@ Hardening and beta readiness are in progress. Shipped so far:
 - **Authored Azure infrastructure.** Environment templates and deployment workflows exist; enabling
   them requires operator-held cloud access.
 
-The first independently demoable Phase 2 slice is also implemented: a read-only tenant portal with
-own-ledger access, per-request identity checks, account security, and sign-out. A separate development
-fixture demonstrates isolation between tenant accounts and organizations. Production enrollment,
-online payments, and an owner portal remain future work.
+Phase 2 now includes tenant own-ledger access, per-request identity checks, account security and
+sign-out, plus one-time simulated payments in a dedicated development fixture. Durable processing
+and explicit simulated bank evidence exercise the real Accounting receipt path. Production
+enrollment, live online payments and an owner portal remain future work. See the
+[payment simulation runbook](runbooks/payment-simulation.md).
 
 ## Near-Term Priorities
 

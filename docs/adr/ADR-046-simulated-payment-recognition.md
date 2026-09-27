@@ -32,6 +32,12 @@ the effect record; processor calls occur outside it. A small processor interface
 mechanics. The [implementation specification](../payments/simulated-payment-spec.md) owns states,
 transactions, exact posting behavior, fixture barriers and executable acceptance vectors.
 
+For this isolated Development fixture, a host `BackgroundService` polls Payments-owned durable
+dispatch rows instead of enabling Hangfire. Leases, retry dates and processed-observation counts
+live with the payment operation, and the CLI can invoke the same worker pass. This bounded exception
+to ADR-001 avoids starting a production job server for simulation; live payment scheduling remains
+a separate decision. The simulator implementation does not change this ADR's Proposed status.
+
 The first implementation records late returns as review-required facts and preserves the receipt.
 It does not automatically call the unrestricted reversal service. The evidence tests demonstrate
 both a simple linked reversal and the consumed-credit failure that prevents generalizing it.

@@ -6,6 +6,8 @@ using LeaseBook.Modules.Banking;
 using LeaseBook.Modules.Capabilities;
 using LeaseBook.Modules.Directory;
 using LeaseBook.Modules.Operations;
+using LeaseBook.Modules.Payments.Contracts;
+using LeaseBook.Modules.Payments.Processing;
 using LeaseBook.Modules.Reporting;
 using LeaseBook.SharedKernel.Cqrs;
 using LeaseBook.SharedKernel.Endpoints;
@@ -18,6 +20,7 @@ using LeaseBook.Web.Endpoints;
 using LeaseBook.Web.Health;
 using LeaseBook.Web.Hosting;
 using LeaseBook.Web.Jobs;
+using LeaseBook.Web.Payments;
 using LeaseBook.Web.Persistence;
 using LeaseBook.Web.Reporting;
 using LeaseBook.Web.Security;
@@ -48,6 +51,18 @@ if (process.Error is { } processError)
 
 var lifecycle = process.Lifecycle!;
 var builder = WebApplication.CreateBuilder(args);
+if (builder.Configuration["Payments:ManifestPath"] is { Length: > 0 } paymentManifest)
+{
+    builder.Configuration.AddJsonFile(Path.GetFullPath(paymentManifest), optional: false, reloadOnChange: false);
+}
+var simulation = SimulationSettings.Read(builder.Configuration, builder.Environment);
+builder.Services.AddSingleton(simulation);
+builder.Services.AddScoped<PaymentEngine>();
+builder.Services.AddScoped<IPaymentLedger, PaymentLedgerAdapter>();
+builder.Services.AddScoped<IPaymentEligibility, PaymentEligibilityAdapter>();
+builder.Services.AddSingleton<SimulatedProcessor>();
+builder.Services.AddSingleton<IPaymentProcessor>(sp => sp.GetRequiredService<SimulatedProcessor>());
+builder.Services.AddSingleton<PaymentRunner>();
 
 // No `Server: Kestrel` banner: it names the stack to every anonymous caller and nothing reads it.
 builder.WebHost.ConfigureKestrel(kestrel => kestrel.AddServerHeader = false);
@@ -81,6 +96,7 @@ builder.Services.AddExceptionHandler<AccountingExceptionHandler>();
 // money-path state. Typed so neither falls through to the terminal handler's uncoded 500, which
 // would turn a recoverable rejection into an opaque failure.
 builder.Services.AddExceptionHandler<OperationsExceptionHandler>();
+builder.Services.AddExceptionHandler<PaymentExceptionHandler>();
 // Terminal handler — MUST stay last. Handlers run in registration order; this one claims
 // everything the typed handlers decline, so nothing reaches the framework default (a bodyless
 // 500 with no log).
@@ -118,6 +134,9 @@ builder.Services.Configure<RateLimitingOptions>(builder.Configuration.GetSection
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("payments", http => RateLimitPartition.GetFixedWindowLimiter(
+        http.Connection.RemoteIpAddress?.ToString() ?? "unknown", _ => new FixedWindowRateLimiterOptions
+        { PermitLimit = 60, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
     options.AddPolicy("auth", httpContext =>
     {
         var rateLimiting = httpContext.RequestServices.GetRequiredService<IOptions<RateLimitingOptions>>().Value;

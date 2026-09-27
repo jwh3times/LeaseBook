@@ -98,6 +98,10 @@ internal sealed class HostProcessLifecycle
 
         ConfigureForwardedHeaders(builder);
         ConfigureWebWorkers(builder);
+        if (Payments.SimulationSettings.Read(builder.Configuration, builder.Environment).Enabled)
+        {
+            builder.Services.AddHostedService<Payments.PaymentWorker>();
+        }
         ConfigureScheduledJobs(builder);
     }
 
@@ -285,6 +289,7 @@ internal sealed class HostProcessLifecycle
         }
 
         ProductionSecurityGuards.Validate(app.Configuration, app.Environment);
+        await Payments.SimulationSettings.ValidateFixturesAsync(app.Services, ct);
         await CapabilityRegistryValidator.ValidateAsync(app.Services, app.Environment, ct);
 
         if (_jobsEnabled)
