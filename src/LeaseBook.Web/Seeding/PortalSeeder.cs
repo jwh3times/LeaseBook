@@ -22,6 +22,10 @@ public static class PortalSeeder
     public const string ResidentAEmail = "resident-a@portal.test";
     public const string ResidentBEmail = "resident-b@portal.test";
     public const string ResidentCEmail = "resident-c@portal.test";
+    public const string OwnerAEmail = "owner-a@portal.test";
+    public const string OwnerBEmail = "owner-b@portal.test";
+    public const string OwnerCEmail = "owner-c@portal.test";
+    public const string DepositBankMask = "9876";
 
     public static async Task SeedAsync(IServiceProvider services, CancellationToken ct = default)
     {

@@ -58,6 +58,7 @@ public static class AuthServiceCollectionExtensions
         services.AddScoped<AccountAdministration>();
         services.AddScoped<ResidentAccessService>();
         services.AddScoped<CurrentResident>();
+        services.AddScoped<OwnerAccessService>();
         services.AddScoped<IAuthorizationHandler, ResidentAuthorizationHandler>();
         services.Configure<SecurityStampValidatorOptions>(options => options.ValidationInterval = TimeSpan.Zero);
         services.AddScoped<IValidator<RecoveryLoginRequest>, RecoveryLoginRequestValidator>();
