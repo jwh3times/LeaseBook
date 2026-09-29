@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
 namespace LeaseBook.Tests.Common;
@@ -19,12 +20,74 @@ namespace LeaseBook.Tests.Common;
 /// </summary>
 public static class RlsProbe
 {
-    /// <summary>Sets <c>app.org_id</c> transaction-locally — the parameterized <c>SET LOCAL</c>.</summary>
-    public static async Task SetOrgAsync(NpgsqlConnection conn, NpgsqlTransaction tx, Guid orgId, CancellationToken ct)
+    /// <summary>
+    /// Sets <c>app.org_id</c> transaction-locally — the parameterized <c>SET LOCAL</c> — under the
+    /// organization-wide <c>staff</c> persona.
+    /// <para>
+    /// The persona is part of this on purpose (#314, ADR-048). Every raw test written before the
+    /// persona gate existed means "the app, org-wide" by setting an org, and the gate now admits no
+    /// rows at all without a persona; setting it here keeps that meaning in one place rather than in
+    /// every caller. Tests about the persona boundary itself use
+    /// <see cref="SetOrgContextAsync"/>, which states the persona and user explicitly.
+    /// </para>
+    /// </summary>
+    public static Task SetOrgAsync(NpgsqlConnection conn, NpgsqlTransaction tx, Guid orgId, CancellationToken ct) =>
+        SetOrgContextAsync(conn, tx, orgId, "staff", userId: null, ct);
+
+    /// <summary>
+    /// The raw mirror of what <c>OrgScopedExecutor</c> sets: <c>app.org_id</c>, <c>app.persona</c> and
+    /// <c>app.user_id</c>, transaction-locally. A null <paramref name="persona"/> or
+    /// <paramref name="userId"/> leaves that GUC untouched, so a test can compose the unset case —
+    /// and <paramref name="persona"/> is a string, not the enum, so it can compose an unknown value.
+    /// <para>
+    /// This is the ONLY place in <c>tests/</c> allowed to set these three, and
+    /// <c>OrgContextCallSiteTests</c> enforces it — the same rule <see cref="SetPlatformAsync"/> follows.
+    /// </para>
+    /// </summary>
+    public static async Task SetOrgContextAsync(
+        NpgsqlConnection conn, NpgsqlTransaction tx, Guid orgId, string? persona, Guid? userId, CancellationToken ct)
     {
-        await using var cmd = new NpgsqlCommand("SELECT set_config('app.org_id', @org, true)", conn, tx);
-        cmd.Parameters.AddWithValue("org", orgId.ToString());
-        await cmd.ExecuteNonQueryAsync(ct);
+        await using (var cmd = new NpgsqlCommand("SELECT set_config('app.org_id', @org, true)", conn, tx))
+        {
+            cmd.Parameters.AddWithValue("org", orgId.ToString());
+            await cmd.ExecuteNonQueryAsync(ct);
+        }
+
+        if (persona is not null)
+        {
+            await using var cmd = new NpgsqlCommand("SELECT set_config('app.persona', @persona, true)", conn, tx);
+            cmd.Parameters.AddWithValue("persona", persona);
+            await cmd.ExecuteNonQueryAsync(ct);
+        }
+
+        if (userId is { } user)
+        {
+            await using var cmd = new NpgsqlCommand("SELECT set_config('app.user_id', @user, true)", conn, tx);
+            cmd.Parameters.AddWithValue("user", user.ToString());
+            await cmd.ExecuteNonQueryAsync(ct);
+        }
+    }
+
+    /// <summary>
+    /// The EF-context form of <see cref="SetOrgAsync(NpgsqlConnection, NpgsqlTransaction, Guid, CancellationToken)"/>,
+    /// on a transaction the caller already opened on <paramref name="db"/>. For the tests that read
+    /// through a module's own <c>DbContext</c> without going through the executor.
+    /// </summary>
+    public static async Task SetOrgAsync(DbContext db, Guid orgId, CancellationToken ct)
+    {
+        if (db.Database.CurrentTransaction is null)
+        {
+            throw new InvalidOperationException(
+                "Open a transaction first: the context is set transaction-locally and would die with " +
+                "an implicit one before the next statement ran.");
+        }
+
+        await db.Database.ExecuteSqlAsync(
+            $"""
+             SELECT set_config('app.org_id', {orgId.ToString()}, true),
+                    set_config('app.persona', 'staff', true)
+             """,
+            ct);
     }
 
     /// <summary>
