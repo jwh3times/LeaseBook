@@ -183,6 +183,29 @@ public sealed class InternalNoteNoLeakTests(PostgresFixture fixture)
         }
     }
 
+    /// <summary>
+    /// The notes overlay is a staff route: an owner is refused it even for their own statement, and so
+    /// is a resident. Role denials stay bare 403s (see MiddlewareErrorContractTests), so only the status
+    /// is asserted.
+    /// </summary>
+    [Theory]
+    [InlineData(PortalSeeder.OwnerAEmail)]
+    [InlineData(PortalSeeder.ResidentAEmail)]
+    public async Task Portal_personas_are_refused_the_statement_notes_overlay(string email)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await PortalSeeder.SeedAsync(fixture.Api.Services, ct);
+        var ownerA = await InPortalOrg(async sp => await sp.GetRequiredService<AppDbContext>().Set<Owner>()
+            .Where(o => o.ContactEmail == PortalSeeder.OwnerAEmail).Select(o => o.Id).SingleAsync(ct), ct);
+
+        using var client = await Login(email, ct);
+        var response = await client.GetAsync(
+            $"/api/statements/{ownerA}/internal-notes?year=2026&month=9&basis=cash", ct);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        (await response.Content.ReadAsStringAsync(ct)).ShouldNotContain(PortalSeeder.StaffNoteMarker);
+    }
+
     private static void AssertNoStaffText(string surface, string text)
     {
         foreach (var secret in StaffOnly)
