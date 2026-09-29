@@ -2,8 +2,11 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
+using LeaseBook.Modules.Accounting.Contracts;
 using LeaseBook.Modules.Accounting.Domain;
+using LeaseBook.Modules.Accounting.Features.Posting.Events;
 using LeaseBook.Modules.Directory.Domain;
+using LeaseBook.SharedKernel;
 using LeaseBook.SharedKernel.Tenancy;
 using LeaseBook.Tests.Common;
 using LeaseBook.Tests.Integration.Fixtures;
@@ -16,6 +19,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Shouldly;
 using UglyToad.PdfPig;
 using UglyToad.PdfPig.Content;
+
+using OrgEntity = LeaseBook.Web.Persistence.Org;
 
 namespace LeaseBook.Tests.Integration;
 
@@ -110,6 +115,74 @@ public sealed class InternalNoteNoLeakTests(PostgresFixture fixture)
         }
     }
 
+    /// <summary>
+    /// The carry-forward half (ADR-045): entries posted into an already-issued period reach the owner
+    /// through the next statement's prior-period adjustments, a separate read from the in-period lines.
+    /// A noted charge and a void with a staff-only reason are both back-dated into an issued September,
+    /// so October itemizes them there. Neither note may follow.
+    /// </summary>
+    [Fact]
+    public async Task Internal_notes_never_reach_the_carry_forward_adjustments()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var orgId = UuidV7.NewId();
+        Guid owner = default, property = default, tenant = default;
+        const string ChargeNote = "STAFF-ONLY note: late-keyed charge";
+        const string VoidReason = "STAFF-ONLY void reason: owner dispute";
+
+        // September: one charge, then the September accrual statement is issued.
+        Guid septemberCharge = default;
+        await InOrg(orgId, async sp =>
+        {
+            var db = sp.GetRequiredService<AppDbContext>();
+            db.Orgs.Add(new OrgEntity { Id = orgId, Name = "Carry-forward note org" });
+            var o = new Owner { Id = UuidV7.NewId(), Name = "Carry Owner", ContactEmail = "carry@example.com" };
+            var p = new Property { Id = UuidV7.NewId(), OwnerId = o.Id, Address = "9 Carry Court" };
+            var t = new Tenant { Id = UuidV7.NewId(), DisplayName = "Carry Tenant" };
+            db.AddRange(o, p, t);
+            await db.SaveChangesAsync(ct);
+            await sp.GetRequiredService<IChartOfAccounts>().ProvisionAsync([], ct);
+            (owner, property, tenant) = (o.Id, p.Id, t.Id);
+
+            septemberCharge = await sp.GetRequiredService<IAccountingEvents>().PostAsync(new RentCharged(
+                tenant, property, owner, null, new Money(40m), new DateOnly(2026, 9, 5), "Pet fee"), ct);
+            var september = await sp.GetRequiredService<StatementAssembler>()
+                .BuildAsync([owner], null, 2026, 9, "accrual", ct);
+            await sp.GetRequiredService<IStatementDelivery>().DeliverAsync(september[0], "carry@example.com", ct);
+            return 0;
+        }, ct);
+
+        // After issuance: a noted charge and a void, both dated into the issued September.
+        await InOrg(orgId, async sp =>
+        {
+            await sp.GetRequiredService<IAccountingEvents>().PostAsync(new RentCharged(
+                tenant, property, owner, null, new Money(100m), new DateOnly(2026, 9, 20), "Parking — September",
+                InternalNote: ChargeNote), ct);
+            await sp.GetRequiredService<IReversalService>().ReverseAsync(
+                septemberCharge, VoidReason, new DateOnly(2026, 9, 25), ct);
+            return 0;
+        }, ct);
+
+        var october = await InOrg(orgId, async sp =>
+            (await sp.GetRequiredService<StatementAssembler>().BuildAsync([owner], null, 2026, 10, "accrual", ct))[0], ct);
+
+        october.CarryForward.ShouldNotBeNull("both postings are dated into the issued September");
+        october.CarryForward.Lines.Select(l => l.Description)
+            .ShouldBe(["Parking — September", "Void — Pet fee"], ignoreOrder: true);
+        var pdf = PdfText(StatementPdf.Render(october));
+        pdf.ShouldContain("Parking", Case.Sensitive, "the carry-forward is rendered, or this proves nothing");
+        foreach (var (surface, text) in new[]
+        {
+            ("carry-forward PDF", pdf),
+            ("carry-forward CSV", Encoding.UTF8.GetString(StatementCsv.Write(october))),
+            ("carry-forward JSON", JsonSerializer.Serialize(october)),
+        })
+        {
+            text.ShouldNotContain("STAFF-ONLY", Case.Insensitive, $"{surface} leaked staff-only text");
+            text.ShouldNotContain("owner dispute", Case.Insensitive, $"{surface} leaked the void reason");
+        }
+    }
+
     private static void AssertNoStaffText(string surface, string text)
     {
         foreach (var secret in StaffOnly)
@@ -131,6 +204,15 @@ public sealed class InternalNoteNoLeakTests(PostgresFixture fixture)
         }
 
         return text.ToString();
+    }
+
+    private async Task<T> InOrg<T>(Guid orgId, Func<IServiceProvider, Task<T>> work, CancellationToken ct)
+    {
+        await using var scope = fixture.Api.Services.CreateAsyncScope();
+        T result = default!;
+        await scope.ServiceProvider.GetRequiredService<OrgScopedExecutor>().RunAsSystemAsync(
+            orgId, "test:internal-note-no-leak", async () => result = await work(scope.ServiceProvider), ct);
+        return result;
     }
 
     private async Task<T> InPortalOrg<T>(Func<IServiceProvider, Task<T>> read, CancellationToken ct)
