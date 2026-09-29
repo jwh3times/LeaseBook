@@ -113,13 +113,54 @@ public sealed class InternalNoteTests(PostgresFixture fixture)
         entries[original].Description.ShouldBe("Feb rent");
         entries[original].InternalNote.ShouldBe("original's own note");
 
-        // The reversal still balances per basis — the note changes text, never lines.
-        var lines = await ReadLinesAsync(scope, reversal, ct);
-        foreach (var basis in new[] { EntryBasis.Cash, EntryBasis.Accrual })
+        // The accrual-only rent void has no cash lines, so it balances in cash only as 0 = 0; the
+        // payment void below is what exercises the cash basis.
+        AssertBalancesInBasis(await ReadLinesAsync(scope, reversal, ct), EntryBasis.Accrual);
+    }
+
+    [Fact]
+    public async Task A_void_of_a_cash_entry_keeps_its_note_and_balances_in_both_bases()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var scope = await ProvisionedScopeAsync(
+            fixture, ct, owners: [_owner], tenants: [_tenant], properties: [_property]);
+
+        Guid payment = default, reversal = default;
+        await scope.RunAsync(async () =>
         {
-            var inBasis = lines.Where(l => l.Basis == basis || l.Basis == EntryBasis.Both).ToList();
-            inBasis.Sum(l => l.Debit ?? 0m).ShouldBe(inBasis.Sum(l => l.Credit ?? 0m), $"reversal balances in {basis}");
-        }
+            // A receivable first, so the payment posts cash owner equity as well as the Both-basis bank line.
+            await Events(scope).PostAsync(new RentCharged(
+                _tenant, _property, _owner, null, new Money(1450m), Feb(1), "Feb rent"), ct);
+            payment = await Events(scope).PostAsync(new PaymentReceived(
+                _tenant, _property, _owner, new Money(500m), Feb(3), PaymentMethod.Check, scope.TrustBankId,
+                "Check 1042", InternalNote: "Paid by guarantor"), ct);
+            reversal = await Reversal(scope).ReverseAsync(payment, "Check returned unpaid", Feb(10), ct);
+        }, ct);
+
+        var entries = await ReadEntriesAsync(scope, [payment, reversal], ct);
+        entries[reversal].Description.ShouldBe("Void — Check 1042");
+        entries[reversal].InternalNote.ShouldBe("Check returned unpaid");
+        entries[payment].InternalNote.ShouldBe("Paid by guarantor");
+
+        var lines = await ReadLinesAsync(scope, reversal, ct);
+        lines.ShouldContain(l => l.Basis == EntryBasis.Cash, "owner equity is recognized on the cash basis");
+        lines.ShouldContain(l => l.Basis == EntryBasis.Both, "the bank line is posted on both bases");
+        AssertBalancesInEveryBasis(lines);
+    }
+
+    /// <summary>Σ debits = Σ credits in each basis, over lines that actually exist there (never 0 = 0).</summary>
+    private static void AssertBalancesInEveryBasis(IReadOnlyList<LineView> lines)
+    {
+        AssertBalancesInBasis(lines, EntryBasis.Cash);
+        AssertBalancesInBasis(lines, EntryBasis.Accrual);
+    }
+
+    private static void AssertBalancesInBasis(IReadOnlyList<LineView> lines, EntryBasis basis)
+    {
+        var inBasis = lines.Where(l => l.Basis == basis || l.Basis == EntryBasis.Both).ToList();
+        var debits = inBasis.Sum(l => l.Debit ?? 0m);
+        debits.ShouldBeGreaterThan(0m, $"the reversal must have {basis} lines, or its {basis} balance is vacuous");
+        debits.ShouldBe(inBasis.Sum(l => l.Credit ?? 0m), $"reversal balances in {basis}");
     }
 
     [Fact]
