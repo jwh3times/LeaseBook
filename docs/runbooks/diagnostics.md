@@ -184,7 +184,7 @@ required parameter, or an unknown field on a request that rejects them) answers 
 `invalid_request` and logs the binder's exception. Its message names the parameter and, for a body,
 the JSON path, and it can quote the offending token or query-string value; it never reaches the
 response. The commonest unknown field is a stale client still sending `memo` to a ledger route that
-now takes `description` (ADR-047). Before 2026-09-29 an unreadable request got a bare, bodyless 400
+now takes `description` (ADR-047). Before 2026-09-29 an unreadable request got a bare, body-less 400
 outside Development, so a report from an earlier build has no reference and must be found by route
 and window (ADR-025, 2026-09-29 amendment).
 

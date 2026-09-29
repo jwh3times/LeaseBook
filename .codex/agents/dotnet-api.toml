@@ -191,7 +191,7 @@ passes, because no `Problem` call appeared or disappeared — only the bytes on 
 `[JsonUnmappedMemberHandling(Disallow)]`) reaches `BadRequestExceptionHandler` and answers
 `invalid_request` only because `Program` sets `RouteHandlerOptions.ThrowOnBadRequest` in every
 environment. The framework enables it in Development alone, so turning it off leaves every test
-green while production goes back to a bodyless 400 (ADR-025, 2026-09-29 amendment).
+green while production goes back to a body-less 400 (ADR-025, 2026-09-29 amendment).
 
 ### Sign-in uniformity is a timing property too
 

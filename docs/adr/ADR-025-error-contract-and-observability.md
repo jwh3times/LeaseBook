@@ -717,7 +717,7 @@ Issue #468. A request body the minimal-API binder cannot read — malformed JSON
 kind, a missing required parameter, or an unknown member on a request that disallows them — never
 reached this contract. The binder throws for an exception handler to catch only when
 `RouteHandlerOptions.ThrowOnBadRequest` is on, and the framework turns it on in Development alone.
-Everywhere else the binder wrote a bare, bodyless 400 itself, with no `code` and no reference; in
+Everywhere else the binder wrote a bare, body-less 400 itself, with no `code` and no reference; in
 Development the exception fell through to the terminal handler and became a 500. That also left
 `PaymentExceptionHandler`'s own 400 branch unreachable outside Development.
 
@@ -733,7 +733,7 @@ The first producer is ADR-047: the six ledger requests that renamed `memo` to `d
 unmapped members, so a stale client gets this 400 instead of a post that silently drops its text.
 `MiddlewareErrorContractTests` drives the path with the framework's Development-only default removed,
 because the test host alone would hide the non-Development behavior. Do not turn the option back off
-to match the framework default: the bodyless 400 returns everywhere but Development, and no test
+to match the framework default: the body-less 400 returns everywhere but Development, and no test
 running under Development would notice.
 
 ## Consequences
