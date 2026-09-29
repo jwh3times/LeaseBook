@@ -32,6 +32,7 @@ public sealed class JournalEntryConfiguration : IEntityTypeConfiguration<Journal
         builder.Property(e => e.EventType).IsRequired();
         builder.Property(e => e.EventSubtype);
         builder.Property(e => e.Description);
+        builder.Property(e => e.InternalNote);
         builder.Property(e => e.SourceRef);
         builder.Property(e => e.ReversesEntryId);
         builder.Property(e => e.AssessesEntryId);

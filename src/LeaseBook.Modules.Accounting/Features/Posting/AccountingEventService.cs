@@ -115,7 +115,7 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
                     PropertyId: e.PropertyId, OwnerId: e.OwnerId),
                 new(AccountCodes.TenantReceivable, null, e.Amount, EntryBasis.Accrual,
                     PropertyId: e.PropertyId, OwnerId: e.OwnerId, TenantId: e.TenantId),
-            ]), ct);
+            ], InternalNote: e.InternalNote), ct);
 
     // ----- Cash receipts --------------------------------------------------------------------------
 
@@ -150,7 +150,8 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
         }
 
         return await posting.PostAsync(new PostEntryRequest(
-            e.Date, "PaymentReceived", MethodSubtype(e.Method), e.Description, e.SourceRef, lines), ct);
+            e.Date, "PaymentReceived", MethodSubtype(e.Method), e.Description, e.SourceRef, lines,
+            InternalNote: e.InternalNote), ct);
     }
 
     private Task<Guid> PostDepositCollectedAsync(DepositCollected e, CancellationToken ct) =>
@@ -160,7 +161,7 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
                     BankAccountId: e.DepositBankId),
                 new(AccountCodes.SecurityDepositsHeld, null, e.Amount, EntryBasis.Both,
                     PropertyId: e.PropertyId, OwnerId: e.OwnerId, TenantId: e.TenantId, BankAccountId: e.DepositBankId),
-            ]), ct);
+            ], InternalNote: e.InternalNote), ct);
 
     private Task<Guid> PostDepositResponsibilityTransferredAsync(
         DepositResponsibilityTransferred e,
@@ -189,7 +190,7 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
                     BankAccountId: e.BankAccountId),
                 new(AccountCodes.TenantPrepayments, null, e.Amount, EntryBasis.Both,
                     TenantId: e.TenantId, BankAccountId: e.BankAccountId),
-            ]), ct);
+            ], InternalNote: e.InternalNote), ct);
 
     // ----- Liability applications -----------------------------------------------------------------
 
@@ -246,7 +247,8 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
         }
 
         return await posting.PostAsync(new PostEntryRequest(
-            e.Date, "DepositApplied", null, e.Description, e.SourceRef, lines), ct);
+            e.Date, "DepositApplied", null, e.Description, e.SourceRef, lines,
+            InternalNote: e.InternalNote), ct);
     }
 
     private async Task<Guid> PostPrepaymentAppliedAsync(PrepaymentApplied e, CancellationToken ct)
@@ -276,7 +278,7 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
                     PropertyId: e.PropertyId, OwnerId: e.OwnerId, TenantId: e.TenantId),
                 new(AccountCodes.OwnerEquity, null, e.Amount, EntryBasis.Cash,
                     PropertyId: e.PropertyId, OwnerId: e.OwnerId, BankAccountId: e.BankAccountId),
-            ]), ct);
+            ], InternalNote: e.InternalNote), ct);
     }
 
     // ----- PM income ------------------------------------------------------------------------------
@@ -384,7 +386,7 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
             [
                 new(AccountCodes.PmIncome, e.Amount, null, EntryBasis.Both, BankAccountId: e.BankAccountId),
                 new(bank, null, e.Amount, EntryBasis.Both, BankAccountId: e.BankAccountId),
-            ]), ct);
+            ], InternalNote: e.InternalNote), ct);
     }
 
     private async Task<Guid> PostInterestEarnedAsync(InterestEarned e, CancellationToken ct)
@@ -396,7 +398,7 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
             [
                 new(bank, e.Amount, null, EntryBasis.Both, BankAccountId: e.BankAccountId),
                 new(AccountCodes.PmIncome, null, e.Amount, EntryBasis.Both, BankAccountId: e.BankAccountId),
-            ]), ct);
+            ], InternalNote: e.InternalNote), ct);
     }
 
     private async Task<Guid> PostTrustTransferAsync(TrustTransfer e, CancellationToken ct)
@@ -412,7 +414,7 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
                 new(fromBank, null, e.Amount, EntryBasis.Both, BankAccountId: e.FromBankId),
                 new(AccountCodes.PmIncome, e.Amount, null, EntryBasis.Both, BankAccountId: e.FromBankId),
                 new(AccountCodes.PmIncome, null, e.Amount, EntryBasis.Both, BankAccountId: e.ToBankId),
-            ]), ct);
+            ], InternalNote: e.InternalNote), ct);
     }
 
     /// <summary>The chart code of the bank account representing <paramref name="bankId"/> (trust or PM operating).</summary>

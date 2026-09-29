@@ -7,6 +7,10 @@ namespace LeaseBook.Modules.Accounting.Features.Posting.Events;
 // AccountingEventService. Dimensions are bare uuids in M1 (P26). Amounts are taken as given (P28) — no
 // percentage/fee math here (that is M6). Records are public: the seeder, M3 composer, and M6 runs
 // construct them.
+//
+// Description vs InternalNote (#468): Description (Reason on CreditIssued) is OWNER-FACING — it prints on
+// the owner statement. Every staff-typed event also takes an optional InternalNote, which is staff-only
+// and never read by an owner-facing surface. System-generated events (runs, sweeps, transfers) carry none.
 
 /// <summary>Late/maintenance-recharge/other fee kind; becomes the entry's <c>event_subtype</c>.</summary>
 public enum FeeKind
@@ -43,29 +47,31 @@ public enum RefundSource
 public sealed record RentCharged(
     Guid TenantId, Guid PropertyId, Guid OwnerId, Guid? UnitId,
     Money Amount, DateOnly Date, string Description, string? SourceRef = null,
-    DateOnly? DueDate = null) : AccountingEvent;
+    DateOnly? DueDate = null, string? InternalNote = null) : AccountingEvent;
 
 /// <summary>A non-rent charge (late fee, maintenance recharge, …); same shape as rent (M1: accrues to owner).</summary>
 public sealed record FeeCharged(
     Guid TenantId, Guid PropertyId, Guid OwnerId, Guid? UnitId,
     Money Amount, DateOnly Date, FeeKind Kind, string Description, string? SourceRef = null,
-    Guid? AssessesEntryId = null) : AccountingEvent;
+    Guid? AssessesEntryId = null, string? InternalNote = null) : AccountingEvent;
 
 /// <summary>A goodwill credit reduces what the tenant owes and the owner's accrued income.</summary>
 public sealed record CreditIssued(
     Guid TenantId, Guid PropertyId, Guid OwnerId,
-    Money Amount, DateOnly Date, string Reason, string? SourceRef = null) : AccountingEvent;
+    Money Amount, DateOnly Date, string Reason, string? SourceRef = null,
+    string? InternalNote = null) : AccountingEvent;
 
 /// <summary>A tenant payment into a trust bank; auto-splits receivable vs. prepayment (P31).</summary>
 public sealed record PaymentReceived(
     Guid TenantId, Guid PropertyId, Guid OwnerId,
     Money Amount, DateOnly Date, PaymentMethod Method, Guid BankAccountId,
-    string Description, string? SourceRef = null) : AccountingEvent;
+    string Description, string? SourceRef = null, string? InternalNote = null) : AccountingEvent;
 
 /// <summary>A security deposit into a deposit-trust bank — a liability, never income.</summary>
 public sealed record DepositCollected(
     Guid TenantId, Guid PropertyId, Guid OwnerId,
-    Money Amount, DateOnly Date, Guid DepositBankId, string Description, string? SourceRef = null) : AccountingEvent;
+    Money Amount, DateOnly Date, Guid DepositBankId, string Description, string? SourceRef = null,
+    string? InternalNote = null) : AccountingEvent;
 
 /// <summary>One tenant/bank deposit-liability position moved between owner attribution buckets.</summary>
 public sealed record DepositResponsibilityTransferPosition(Guid TenantId, Guid BankAccountId, Money Amount);
@@ -82,18 +88,21 @@ public sealed record DepositResponsibilityTransferred(
 /// <summary>A prepayment into a trust bank — a liability until applied.</summary>
 public sealed record PrepaymentReceived(
     Guid TenantId, Guid PropertyId, Guid OwnerId,
-    Money Amount, DateOnly Date, Guid BankAccountId, string Description, string? SourceRef = null) : AccountingEvent;
+    Money Amount, DateOnly Date, Guid BankAccountId, string Description, string? SourceRef = null,
+    string? InternalNote = null) : AccountingEvent;
 
 /// <summary>Applies a held deposit (damages → owner income, or against the tenant's charges).</summary>
 public sealed record DepositApplied(
     Guid TenantId, Guid PropertyId, Guid OwnerId,
     Money Amount, DateOnly Date, Guid DepositBankId, Guid OperatingBankId,
-    DepositApplication Target, string Description, string? SourceRef = null) : AccountingEvent;
+    DepositApplication Target, string Description, string? SourceRef = null,
+    string? InternalNote = null) : AccountingEvent;
 
 /// <summary>Applies a held prepayment to the tenant's charges (no bank movement).</summary>
 public sealed record PrepaymentApplied(
     Guid TenantId, Guid PropertyId, Guid OwnerId,
-    Money Amount, DateOnly Date, Guid BankAccountId, string Description, string? SourceRef = null) : AccountingEvent;
+    Money Amount, DateOnly Date, Guid BankAccountId, string Description, string? SourceRef = null,
+    string? InternalNote = null) : AccountingEvent;
 
 /// <summary>The PM's management fee: owner income down, PM income up (held in trust until swept).</summary>
 public sealed record ManagementFeeAssessed(

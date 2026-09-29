@@ -43,7 +43,10 @@ public sealed class ReversalServiceTests(PostgresFixture fixture)
         reversal!.ReversesEntryId.ShouldBe(originalId);
         reversal.EventType.ShouldBe(EventTypes.EntryVoided);
         reversal.EntryDate.ShouldBe(new DateOnly(2026, 3, 1)); // open period, not the original's month
-        reversal.Description.ShouldBe("VOID: entered in error");
+        // #468: the owner-facing description names what the void corrected; the reason is staff-only.
+        // Before #468 this read "VOID: entered in error" — the reason printed on the owner's statement.
+        reversal.Description.ShouldBe("Void — Feb rent");
+        reversal.InternalNote.ShouldBe("entered in error");
 
         // Original was DR receivable / CR owner_equity; the mirror swaps both sides.
         reversal.Lines.Single(l => l.AccountClass == AccountClass.TenantReceivable).Credit!.Value.Amount.ShouldBe(1450m);
