@@ -170,8 +170,8 @@ the link, explicitly verifies the RLS-exempt Identity user's org, and asks Direc
 resident name on every request. Revocation therefore applies to the next request with an existing
 cookie. The selector-free `/api/portal/tenant/ledger` dispatches the existing Accounting ledger query
 and returns only resident-facing ledger fields, with `Cache-Control: no-store`. The portal displays
-the rent ledger balance, excluding held security deposits. It neither accepts payments nor provides
-an enrollment endpoint. Tenant navigation uses a dedicated shell; staff routes deny access before
+the rent ledger balance, excluding held security deposits. It accepts payments only as the isolated,
+development-only simulation (ADR-046) and provides no enrollment endpoint. Tenant navigation uses a dedicated shell; staff routes deny access before
 mounting staff queries. Account security and sign-out reuse the existing auth flows.
 
 The read-only owner portal mirrors that shape. A host-owned `owner_access` link, with the same forced

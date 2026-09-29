@@ -140,9 +140,10 @@ the case the other exists to catch.
   → ~1.3 s) before the wrapper, which the planner estimates at 50%, restored the plans the tables
   had without the gate.
 - The staff read path still pays planning time for the nested policy expansion, a few milliseconds
-  per statement that touches the journal. On the `load` fixture, p95 went from 7–8 ms to 15–18 ms
-  (tenant ledger), 32–36 ms to 40–59 ms (dashboard), 18–23 ms to 20–23 ms (bank register) and
-  18–22 ms to 30–31 ms (owner statement). All are well within the 300 ms budget in `docs/perf.md`.
+  per statement that touches the journal. On the `load` fixture, measured against the final grants,
+  p95 went from 6–8 ms to 19–22 ms (tenant ledger), 33–39 ms to 54–59 ms (dashboard), 18–21 ms to
+  22–24 ms (bank register) and 21–24 ms to 41–47 ms (owner statement). All are well within the
+  300 ms budget; `docs/perf.md` records the runs.
   If that margin ever matters, the next step is to move grant resolution into helper functions
   with declared costs, not to widen a grant.
 - The historical `EnableOrgRls` calls now emit the deny-by-default gate on a fresh database;
