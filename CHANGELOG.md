@@ -30,7 +30,11 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   and to what, but not why. Voids recorded earlier keep their `VOID: {reason}` text; posted entries and
   issued statements are never rewritten.
 - **The ledger API's `memo` field is now `description`**, and it is documented as owner-facing text.
-  The bank-adjustment request is renamed the same way.
+  The bank-adjustment request is renamed the same way. A request that still sends `memo` is rejected
+  rather than posted without its text.
+- **A request the API cannot read now gets a coded error.** Malformed JSON, a value of the wrong kind or
+  an unknown field returns a 400 with an error code and a reference to quote. Outside development it
+  used to be a bare 400 with no body.
 
 ## [0.19.0] - 2026-09-29
 
