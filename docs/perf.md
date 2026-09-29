@@ -3,7 +3,7 @@
 - **Audience:** Contributors and reviewers
 - **Status:** Living performance record
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-09-24
+- **Last reviewed:** 2026-09-29
 
 LeaseBook budgets **p95 < 300 ms** on the four money-critical read paths at the design scale the
 architecture targets: roughly 300 units across ~25 owners. This page records how that is measured,
@@ -101,6 +101,38 @@ org size the way the others do. The dashboard (all-owner balances across the por
 register (a paginated projection over the full journal for one account), and the owner statement
 (assembled from the live journal for a period) are the paths that actually exercise scale.
 
+## Persona-gate measurement
+
+**2026-09-29** — the persona gate
+([ADR-048](adr/ADR-048-per-persona-row-level-security.md)) adds three `RESTRICTIVE` policies to
+every org-scoped table, so every staff read now also evaluates the gate. The probe runs as staff, so
+it measures that cost directly. These are p95 values from two probe runs each, on the same machine,
+against `main` and then against the change.
+
+| Read path       | `main` p95 (run 1 / run 2) | With the gate p95 (run 1 / run 2) | Budget      |
+| --------------- | -------------------------- | --------------------------------- | ----------- |
+| Tenant ledger   | 8.0 / 6.1 ms               | 21.9 / 19.3 ms                    | ✅ < 300 ms |
+| Dashboard       | 38.5 / 33.4 ms             | 59.4 / 53.8 ms                    | ✅ < 300 ms |
+| Bank register   | 20.8 / 18.4 ms             | 24.0 / 22.3 ms                    | ✅ < 300 ms |
+| Owner statement | 23.9 / 20.5 ms             | 47.2 / 41.0 ms                    | ✅ < 300 ms |
+
+Every path rose, and all four remain an order of magnitude inside the budget. The increase is
+mostly planning time for the expanded policy expressions on statements that touch the journal. The
+staff and system personas short-circuit the grant subqueries at run time. If that margin ever
+matters, the ADR's next step is to move grant resolution into helper functions with declared costs,
+not to widen a grant.
+
+The first version of the gate missed the budget by a wide margin, and the cause is worth keeping. The
+gate compared the setting against an array of org-wide personas, and Postgres can estimate
+`$param = ANY(array)` only with its default equality selectivity, roughly 1%. The planner therefore
+believed a staff query would keep almost no rows and chose nested loops, and the bank register's p95
+went from about 20 ms to 1,367 ms. Wrapping the gate as
+`COALESCE((SELECT current_setting('app.persona', true)) IN ('staff', 'system'), false)` makes it an
+opaque boolean estimated at 50%. That restored the plans the tables had without the gate. `NULL`
+and `false` both deny, so the wrapper changes no answer. The sub-select makes Postgres read the
+setting once per statement as an InitPlan rather than once per row. Both wrappers live in
+`Rls.OrgWidePersona` and are pinned by the schema-guard test.
+
 ## Index-overlap measurement
 
 **2026-09-24** — PostgreSQL 18 on the same local Docker topology. The composite-FK hardening added
@@ -131,7 +163,10 @@ indexes remain both the FK-supporting indexes and the runtime access paths.
 
 1. Reproduce it, then get the plan: `EXPLAIN (ANALYZE, BUFFERS)` on the offending query.
 2. Fix the access path. The usual remedies are a covering index leading with `org_id` (queries always
-   filter by org first) or a window-function rewrite.
+   filter by org first) or a window-function rewrite. If the plan's row estimates are far below the
+   actual counts on a table that should return most of its rows, check the RLS predicates first: a
+   policy expression the planner cannot estimate can distort every plan that touches the table, as
+   the [persona-gate measurement](#persona-gate-measurement) shows.
 3. Do **not** introduce a denormalized cache of ledger state. Tenant ledgers, owner ledgers, bank
    registers, and statements are projections of the journal, never independently maintained state.
    Materializing any of them is an architectural decision that needs its own ADR — not a performance

@@ -315,7 +315,9 @@ Add or remove a money-path capability one of these two ways:
 Neither is optional, and neither is a code change: this is release sequencing.
 
 To see what actually differs, read the two runs rather than the log — the log deliberately carries no
-capability state:
+capability state. Run it in a transaction that sets `app.org_id` and `app.persona` to `staff`
+(`set_config(…, true)`); without the persona the gate from
+[ADR-048](../adr/ADR-048-per-persona-row-level-security.md) returns no rows:
 
 ```sql
 SELECT created_at,

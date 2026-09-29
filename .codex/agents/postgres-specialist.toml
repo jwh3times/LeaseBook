@@ -30,35 +30,77 @@ RLS is the real tenancy boundary. EF global query filters are ergonomics, not se
 
 ### Every new org-scoped table goes through the RLS helper
 
-```sql
--- In the migration (always called from the C# migration class)
-migrationBuilder.Sql("""
-    SELECT Rls.EnableOrgRls('schema_name', 'table_name');
-""");
+```csharp
+// In the migration's Up(), after the table (with its org_id NOT NULL column) and indexes exist.
+// Rls is a C# MigrationBuilder extension in src/LeaseBook.Web/Persistence/Rls.cs, not a SQL function.
+migrationBuilder.EnableOrgRls("table_name");
 ```
 
-`Rls.EnableOrgRls` does three things in one call:
+`Rls.EnableOrgRls` does all of this in one call:
 
-1. Adds `org_id UUID NOT NULL` (if not already present — for tables seeded by EF)
-2. Creates `FOR ALL USING (org_id = current_setting('app.org_id', true)::uuid) WITH CHECK (…)` policy
-3. Applies `ALTER TABLE … FORCE ROW LEVEL SECURITY`
+1. Applies `ENABLE` and `FORCE ROW LEVEL SECURITY`
+2. Creates the permissive `{table}_org_isolation` policy, `FOR ALL`, with
+   `org_id = NULLIF(current_setting('app.org_id', true), '')::uuid` as both `USING` and `WITH CHECK`
+3. Grants DML to `leasebook_app` and `SELECT` to `leasebook_ops`
+4. Applies the deny-by-default **persona gate** through `Rls.ApplyPersonaGate` (ADR-048)
 
-Never hand-roll these steps — `SchemaGuardTests` fails CI if any `org_id` table lacks a policy.
+The platform helpers (`EnableOrgRlsWithPlatformEscape`, `EnableGlobalReadPlatformWriteRls`,
+`EnablePlatformOnlyRls`) apply the same gate, with a platform escape.
+
+Never hand-roll these steps. `SchemaGuardTests` fails CI if any `org_id` table lacks its policies,
+and it pins every table's exact policy set and predicates.
+
+### The persona gate (ADR-048)
+
+Every org-scoped table carries three `RESTRICTIVE` policies, which AND with the org or platform
+policy:
+
+- `{table}_persona` (`FOR ALL`): admits `staff` and `system` everywhere. It admits a portal persona
+  (`tenant`, `owner`) only through the table's `portalRead` (`USING`) and `portalInsert`
+  (`WITH CHECK`) grants. An unset, `none` or unknown persona gets nothing.
+- `{table}_persona_no_update` (`FOR UPDATE`, `USING (true)`) and `{table}_persona_no_delete`
+  (`FOR DELETE`) keep updates and deletes with the org-wide personas. They are separate because one
+  `FOR ALL` policy uses its `USING` for both `SELECT` and `DELETE`, and its `WITH CHECK` for both
+  `INSERT` and `UPDATE`.
+
+A new table is therefore **closed to the portals** until a migration grants it by calling
+`migrationBuilder.ApplyPersonaGate(table, portalRead: …, portalInsert: …)`. The call is idempotent,
+and a changed grant is another call. Rules for a grant:
+
+- Derive it from a real portal query footprint, keep it minimal, and add the exact predicate to
+  `SchemaGuardTests`' grant table. The test fails until it is written down.
+- Resolve the caller's owner or tenant at the database, from the active link row: `owner_access` /
+  `resident_access` where `user_id = app.user_id AND revoked_at IS NULL`, joined to a non-system
+  `owners` / `tenants` row. Never add an `app.owner_id` or `app.tenant_id` setting.
+- Keep the policy graph acyclic: the link tables' own grant is `user_id = app.user_id`.
+- Write `WITH CHECK` out explicitly. A read grant must never become a write grant by default.
+- Do not unwrap the org-wide test (`Rls.OrgWidePersona`). Both the `COALESCE(…, false)` and the
+  sub-select are for the planner: bare, `= ANY(array)` is estimated at about 1% selectivity and
+  turned the staff bank register into a 1.3 s nested loop (`docs/perf.md`).
 
 ### Org context is always `SET LOCAL` inside the transaction
 
 ```csharp
-// SharedKernel/Tenancy/OrgScopedExecutor.cs — the one place app.org_id is set.
-// Requests reach it through OrgContextMiddleware; jobs, the CLI and the seeders call it directly.
-// Parameterized set_config, not `SET LOCAL app.org_id = …`: the value argument is text and the
-// RLS policy casts it back with ::uuid.
+// SharedKernel/Tenancy/OrgScopedExecutor.cs — the one production place app.org_id, app.persona and
+// app.user_id are set (OrgContextCallSiteTests). Requests reach it through OrgContextMiddleware,
+// which resolves the persona with PersonaResolver; jobs, the CLI and the seeders call
+// RunAsSystemAsync, which states Persona.System. Parameterized set_config, not `SET LOCAL …`: the
+// value argument is text and the policies cast org and user back with ::uuid. app.user_id is '' for
+// a system actor, which every grant maps to NULL.
 await db.Database.ExecuteSqlAsync(
-    $"SELECT set_config('app.org_id', {orgId.ToString()}, true)", ct);
+    $"""
+     SELECT set_config('app.org_id', {orgId.ToString()}, true),
+            set_config('app.persona', {personaValue}, true),
+            set_config('app.user_id', {actor.UserId?.ToString() ?? string.Empty}, true)
+     """,
+    token);
 ```
 
 The surrounding transaction lives in `SharedKernel/Tenancy/TransactionalUnitOfWork.cs`, shared with the platform plane and refusing to nest. Do not open your own — resolve a scope and use the executor.
 
-**Never `SET app.org_id`** (session-level) — pooled connections would leak context to the next organization. `SET LOCAL` scopes to the transaction and clears on commit/rollback. Missing context fails closed: `current_setting('app.org_id', true)` → NULL → policies match no rows.
+**Never `SET app.org_id`** (session-level) — pooled connections would leak context to the next organization. `SET LOCAL` scopes to the transaction and clears on commit/rollback. Missing context fails closed: `current_setting('app.org_id', true)` → NULL → policies match no rows. A missing persona fails closed the same way. The executor refuses `system` for a user actor and a portal persona for a system actor. `OrgContextCallSiteTests` scans `src/`, `infra/` and `tests/` (code and scripts) for any other setter, including a quoted GUC-name literal. The sanctioned exceptions are `RlsProbe` in tests and `infra/db/verify.sql`.
+
+A hand-written session (psql, pgAdmin, an ad-hoc script) as `leasebook_app` or `leasebook_ops` must set `app.persona` (normally `staff`) as well as `app.org_id` inside its transaction, or it reads zero rows. The migrator is bound too, through `FORCE`.
 
 ### Check WITH CHECK, not just USING
 
@@ -130,8 +172,8 @@ protected override void Up(MigrationBuilder migrationBuilder)
     // Index org_id first (range scans within org); add secondary columns for common filters
     migrationBuilder.CreateIndex("ix_table_name_org_id", "table_name", ["org_id", "created_at"]);
 
-    // RLS — always last, after table + indexes exist
-    migrationBuilder.Sql("SELECT Rls.EnableOrgRls('public', 'table_name');");
+    // RLS — always last, after table + indexes exist. Also applies the deny-by-default persona gate.
+    migrationBuilder.EnableOrgRls("table_name");
 }
 ```
 
@@ -229,19 +271,23 @@ var rows = await db.Database.SqlQuery<RegisterRow>($"""
 Background jobs must establish org context explicitly and fail closed if it's missing:
 
 ```csharp
-// Process one org at a time, one transaction each
+// Process one org at a time, one scope (and therefore one transaction) each
 foreach (var orgId in await GetActiveOrgIdsAsync(ct))
 {
-    await using var tx = await db.Database.BeginTransactionAsync(ct);
-    await db.Database.ExecuteSqlRawAsync("SET LOCAL app.org_id = {0}", orgId.ToString());
-    // … do the work for this org …
-    await tx.CommitAsync(ct);
+    await using var scope = root.CreateAsyncScope();
+    var executor = scope.ServiceProvider.GetRequiredService<OrgScopedExecutor>();
+    await executor.RunAsSystemAsync(orgId, "my-job", async () =>
+    {
+        // … do the work for this org …
+    }, ct);
 }
 ```
 
+Never set the org context by hand in a job. `OrgContextCallSiteTests` fails the build on a second setter, and a hand-rolled `SET LOCAL app.org_id` without `app.persona` now reads zero rows anyway. `RunAsSystemAsync` states the org-wide `system` persona for you.
+
 Never issue a cross-org query without enumerating orgs and scoping each transaction separately. A missing org context that returns empty rows silently is a bug — the job should throw.
 
-The shipped reference implementation is `src/LeaseBook.Web/Jobs/InvariantSweepRunner.cs` (the nightly invariant sweep, ADR-001's first scheduled job). Prefer its shape over hand-rolled `SET LOCAL` above: it takes the **root** `IServiceProvider` and opens one DI scope per org, so each org gets its own `OrgScopedExecutor` transaction and org context — reusing a single scope across orgs would reuse a single transaction, and therefore a single `app.org_id`. Enumerating `orgs` itself is the one legitimate pre-context read (`orgs` is global-class: no `org_id`, no RLS, the org _is_ the isolation boundary); every read after it is org-scoped.
+The shipped reference implementation is `src/LeaseBook.Web/Jobs/InvariantSweepRunner.cs` (the nightly invariant sweep, ADR-001's first scheduled job). Follow its shape: it takes the **root** `IServiceProvider` and opens one DI scope per org, so each org gets its own `OrgScopedExecutor` transaction and org context — reusing a single scope across orgs would reuse a single transaction, and therefore a single `app.org_id`. Enumerating `orgs` itself is the one legitimate pre-context read (`orgs` is global-class: no `org_id`, no RLS, the org _is_ the isolation boundary); every read after it is org-scoped.
 
 ---
 
@@ -252,6 +298,10 @@ Before a migration PR is complete, confirm:
 - [ ] `org_id NOT NULL` present
 - [ ] `Rls.EnableOrgRls(…)` called in `Up()`
 - [ ] `WITH CHECK` correct (not just `USING`)
+- [ ] Persona gate left deny-by-default, unless a portal query needs the table. If it does, grant it
+      with `Rls.ApplyPersonaGate` using a minimal, link-derived predicate, with an explicit
+      `WITH CHECK`. Add the predicate to `SchemaGuardTests`' grant table and a
+      `PersonaIsolationTests` case
 - [ ] `NUMERIC(14,2)` for any money column (no float)
 - [ ] Leading `org_id` in at least one index
 - [ ] Composite `(org_id, id)` FKs for any journal-dimension references

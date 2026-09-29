@@ -134,7 +134,10 @@ Insights once deployed. See [ADR-025](adr/ADR-025-error-contract-and-observabili
 PostgreSQL **row-level security is the organization-isolation boundary** — EF Core global query filters are
 ergonomics layered on top, not the boundary. Organization context is set per-transaction with
 `SET LOCAL app.org_id` (never session-level, which would leak across pooled connections); missing
-context fails closed. Three database roles separate concerns: `leasebook_migrator` (owns the `public`
+context fails closed. `OrgScopedExecutor` is its only production setter, and it sets the persona in
+the same transaction-local statement: `app.persona` (`system`, `staff`, `tenant`, `owner` or `none`)
+and `app.user_id`. The host resolves the persona from the principal's roles before the transaction
+opens. A portal role mixed with any other role, or an unrecognised role, resolves to `none`. Three database roles separate concerns: `leasebook_migrator` (owns the `public`
 schema), `leasebook_app` (runtime, `FORCE ROW LEVEL SECURITY`), and `leasebook_ops` (read-only). The
 runtime role holds no DDL privilege in `public` and none on the database; its single exception is the
 `hangfire` job-storage schema it owns, described under Background work below. Every
@@ -142,9 +145,22 @@ org-scoped table is created through the migrations RLS helper (column + `USING`/
 `FORCE` in one call), and a schema-guard test fails CI if any `org_id` table lacks its policy.
 `FORCE` binds the migrator role too, so a migration that rewrites existing rows must lift and restore
 it around the statement; an architecture test reads migration source and fails the build on an
-unbracketed data rewrite, which would otherwise match no rows in silence. Portal
-sub-org visibility is enforced at the application layer rather
-than by stacking more RLS policies — see [ADR-003](adr/ADR-003-portal-suborg-scoping-at-app-layer.md).
+unbracketed data rewrite, which would otherwise match no rows in silence.
+
+Inside the organization, row-level security also enforces the portal personas
+([ADR-048](adr/ADR-048-per-persona-row-level-security.md), amending
+[ADR-003](adr/ADR-003-portal-suborg-scoping-at-app-layer.md)). Every org-scoped table carries a
+deny-by-default persona gate: three `RESTRICTIVE` policies that combine with the unchanged org or
+platform policies. They admit `staff` and `system` organization-wide and admit a tenant or owner only
+through that table's explicit read or insert grant. An unset, `none` or unknown persona sees nothing,
+and updates and deletes stay with the organization-wide personas. The database derives the caller's
+tenant or owner from its active `resident_access` or `owner_access` link for `app.user_id`, so the
+application never supplies that id and a revocation applies on the next statement. The migrations
+helper gates every new table by default, so a new table is closed to the portals until a migration
+writes its grant, and the schema-guard test pins every grant predicate. Operator sessions are subject
+to the same gate: a `psql` or pgAdmin session must set `app.persona` as well as `app.org_id`. The
+ADR-003 authorization handlers and allow-list projections remain the first layer. They decide which
+endpoint answers and what it may say, and the database decides which rows it can read.
 
 The tenant portal uses a host-owned `resident_access` identity link with forced org RLS and composite
 org-consistent references to Identity and Directory. One active link per user identifies their
