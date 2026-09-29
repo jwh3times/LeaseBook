@@ -58,6 +58,12 @@ exactly that. The companions are the smallest addition that closes both, and the
 companion's `USING (true)` leaves `SELECT … FOR SHARE` (which applies UPDATE policies' `USING`)
 decided by the read grant alone, as the payment eligibility check needs.
 
+Accepted consequence of that choice: a portal persona can take `FOR UPDATE`/`FOR SHARE` row locks
+on rows it can already read. That is contention, not a write — every `UPDATE` and `DELETE` it
+attempts on them is still refused — and the rows are its own. Narrowing it would need the
+companion's `USING` to exclude portal personas, which would also break the `FOR SHARE` lock the
+payment eligibility check takes on the tenant's property.
+
 The gate on `entitlements`, `capability_cohorts` and `platform_audit_events` also admits
 `app.platform = 'on'`, because the platform plane runs with no org and no persona. `Rls.EnableOrgRls`
 and the platform helpers apply the deny-by-default gate to every new table, so a new table is closed
@@ -65,34 +71,44 @@ to portal personas until a migration writes its grant through `Rls.ApplyPersonaG
 
 **The database derives portal identity.** Grants resolve the caller's owner or tenant from the
 active link row — `owner_access` or `resident_access` where `user_id = app.user_id` and
-`revoked_at IS NULL`. The application never sets an owner or tenant id, so a revocation takes
-effect on the next statement. The link tables' own grant is `user_id = app.user_id`, which keeps
-the policy graph acyclic.
+`revoked_at IS NULL` — joined to a non-system `owners` or `tenants` row. A link that names a system
+roll-up row (the foreign key allows one; the services refuse to create it) therefore reaches nothing
+but the link itself, and even the organization-level grants (`org_settings`, the payment fixture
+and its bank account) require an effective link rather than the persona alone. The application
+never sets an owner or tenant id, so a revocation takes effect on the next statement. The link
+tables' own grant is `user_id = app.user_id`, and the `owners`/`tenants` grants use the bare link
+and check `is_system` on their own row; that keeps the policy graph acyclic.
 
 **Minimal grants**, derived from the endpoints' query footprints (`P2_PersonaRls`) and pinned
 predicate by predicate in `SchemaGuardTests`:
 
-| Table                          | Owner reads                      | Tenant reads                       | Portal inserts                                                                                     |
-| ------------------------------ | -------------------------------- | ---------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `owner_access`                 | its own link rows                | —                                  | —                                                                                                  |
-| `resident_access`              | —                                | its own link rows                  | —                                                                                                  |
-| `owners`                       | its non-system owner             | —                                  | —                                                                                                  |
-| `tenants`                      | —                                | its tenant                         | —                                                                                                  |
-| `journal_lines`                | lines with its `owner_id`        | lines with its `tenant_id`         | —                                                                                                  |
-| `journal_entries`              | entries having such a line       | entries having such a line         | —                                                                                                  |
-| `accounts`                     | —                                | accounts its lines reference       | —                                                                                                  |
-| `properties`                   | currently owned, or on its lines | its lease's property               | —                                                                                                  |
-| `statement_artifacts`          | its issued statements            | —                                  | —                                                                                                  |
-| `lease_lite`, `units`          | —                                | its leases and their units         | —                                                                                                  |
-| `property_ownership_transfers` | —                                | its lease property's history       | —                                                                                                  |
-| `bank_accounts`                | —                                | the payment fixture's bank account | —                                                                                                  |
-| `payment_fixtures`             | —                                | all (the simulation fixture)       | —                                                                                                  |
-| `payment_operations`           | —                                | its tenant's operations            | tenant: its own tenant, as itself (`user_id = app.user_id`)                                        |
-| `payment_observations`         | —                                | observations of those operations   | —                                                                                                  |
-| `org_settings`                 | the row                          | the row                            | —                                                                                                  |
-| `audit_events`                 | —                                | —                                  | tenant: `actor_user_id = app.user_id`; owner: only `account-security` rows about itself, as itself |
+| Table                          | Owner reads                      | Tenant reads                       | Portal inserts                                                                                 |
+| ------------------------------ | -------------------------------- | ---------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `owner_access`                 | its own link rows                | —                                  | —                                                                                              |
+| `resident_access`              | —                                | its own link rows                  | —                                                                                              |
+| `owners`                       | its non-system owner             | —                                  | —                                                                                              |
+| `tenants`                      | —                                | its tenant                         | —                                                                                              |
+| `journal_lines`                | lines with its `owner_id`        | lines with its `tenant_id`         | —                                                                                              |
+| `journal_entries`              | entries having such a line       | entries having such a line         | —                                                                                              |
+| `accounts`                     | —                                | accounts its lines reference       | —                                                                                              |
+| `properties`                   | currently owned, or on its lines | its lease's property               | —                                                                                              |
+| `statement_artifacts`          | its issued statements            | —                                  | —                                                                                              |
+| `lease_lite`, `units`          | —                                | its leases and their units         | —                                                                                              |
+| `property_ownership_transfers` | —                                | its lease property's history       | —                                                                                              |
+| `bank_accounts`                | —                                | the payment fixture's bank account | —                                                                                              |
+| `payment_fixtures`             | —                                | the org's simulation fixture       | —                                                                                              |
+| `payment_operations`           | —                                | its tenant's operations            | tenant: a fresh request only — its own tenant, as itself, worker columns unset, fixture bank   |
+| `payment_observations`         | —                                | observations of those operations   | —                                                                                              |
+| `org_settings`                 | the row                          | the row                            | —                                                                                              |
+| `audit_events`                 | —                                | —                                  | both: own `password-changed`/`mfa-enrolled`; tenant also its `payment_operations` `insert` row |
 
-Every other table and command is denied. Two footprints needed code as well as grants:
+Every other table and command is denied. The payment insert grant pins every column the submit
+path fixes — `status = 'Requested'`, no reason, provider id, journal entry, lease or attempts, and the
+org fixture's generation, bank and account. `provider_id` matters most: observations carry no
+operation id, so the observations grant keys on the provider id of the tenant's operations, and only
+the worker, as system, may ever set it.
+
+Two footprints needed code as well as grants:
 
 - `GetOrgSettings` lazily inserted the settings row on first read. The owner portal now reads with
   `CreateIfMissing: false`, which resolves a missing row to its defaults without writing.

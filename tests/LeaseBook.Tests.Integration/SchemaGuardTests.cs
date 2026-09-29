@@ -67,8 +67,17 @@ public sealed class SchemaGuardTests(PostgresFixture fixture)
         ("GATE", "COALESCE((( SELECT current_setting('app.persona'::text, true) AS current_setting) = ANY (ARRAY['staff'::text, 'system'::text])), false)"),
         ("IS_OWNER", "(( SELECT current_setting('app.persona'::text, true) AS current_setting) = 'owner'::text)"),
         ("IS_TENANT", "(( SELECT current_setting('app.persona'::text, true) AS current_setting) = 'tenant'::text)"),
-        ("MY_OWNERS", "( SELECT oa.owner_id FROM owner_access oa WHERE ((oa.user_id = {MY_USER}) AND (oa.revoked_at IS NULL)))"),
-        ("MY_TENANTS", "( SELECT ra.tenant_id FROM resident_access ra WHERE ((ra.user_id = {MY_USER}) AND (ra.revoked_at IS NULL)))"),
+        // The caller's owner/tenant through an active link AND a non-system Directory row (review L2).
+        ("MY_OWNERS", "( SELECT oa.owner_id FROM (owner_access oa JOIN owners o ON ((o.id = oa.owner_id))) WHERE ((oa.user_id = {MY_USER}) AND (oa.revoked_at IS NULL) AND (NOT o.is_system)))"),
+        ("MY_TENANTS", "( SELECT ra.tenant_id FROM (resident_access ra JOIN tenants t ON ((t.id = ra.tenant_id))) WHERE ((ra.user_id = {MY_USER}) AND (ra.revoked_at IS NULL) AND (NOT t.is_system)))"),
+        // The link alone: only the owners/tenants grants use it, checking is_system on their own row,
+        // because joining their own table would make the policy recurse.
+        ("MY_OWNER_LINKS", "( SELECT oa.owner_id FROM owner_access oa WHERE ((oa.user_id = {MY_USER}) AND (oa.revoked_at IS NULL)))"),
+        ("MY_TENANT_LINKS", "( SELECT ra.tenant_id FROM resident_access ra WHERE ((ra.user_id = {MY_USER}) AND (ra.revoked_at IS NULL)))"),
+        // A portal user's own password or MFA-enrolment event (review L3).
+        ("OWN_ACCOUNT_SECURITY", "((actor_kind)::text = 'user'::text) AND (actor_user_id = {MY_USER}) " +
+            "AND ((entity_type)::text = 'account-security'::text) AND (entity_id = {MY_USER}) " +
+            "AND ((action)::text = ANY ((ARRAY['password-changed'::character varying, 'mfa-enrolled'::character varying])::text[]))"),
         ("MY_USER", "(NULLIF(current_setting('app.user_id'::text, true), ''::text))::uuid"),
     ];
 
@@ -97,27 +106,33 @@ public sealed class SchemaGuardTests(PostgresFixture fixture)
 
         // Owner reads: its non-system owner row, its lines and their entries, the properties on its
         // lines or currently its own, its issued statements.
-        ["owners"] = ("({GATE} OR ({IS_OWNER} AND (NOT is_system) AND (id IN {MY_OWNERS})))", "{GATE}"),
+        ["owners"] = ("({GATE} OR ({IS_OWNER} AND (NOT is_system) AND (id IN {MY_OWNER_LINKS})))", "{GATE}"),
         ["statement_artifacts"] = ("({GATE} OR ({IS_OWNER} AND (owner_id IN {MY_OWNERS})))", "{GATE}"),
 
         // Tenant reads: its tenant row, its lease and what the lease names, its ownership history
         // (the payment eligibility check resolves the effective owner), the fixture bank account.
-        ["tenants"] = ("({GATE} OR ({IS_TENANT} AND (id IN {MY_TENANTS})))", "{GATE}"),
+        ["tenants"] = ("({GATE} OR ({IS_TENANT} AND (NOT is_system) AND (id IN {MY_TENANT_LINKS})))", "{GATE}"),
         ["lease_lite"] = ("({GATE} OR ({IS_TENANT} AND (tenant_id IN {MY_TENANTS})))", "{GATE}"),
         ["units"] = ("({GATE} OR ({IS_TENANT} AND (id IN ( SELECT l.unit_id FROM lease_lite l WHERE (l.tenant_id IN {MY_TENANTS})))))", "{GATE}"),
         ["property_ownership_transfers"] =
             ("({GATE} OR ({IS_TENANT} AND (property_id IN ( SELECT u.property_id FROM units u WHERE (u.id IN ( SELECT l.unit_id FROM lease_lite l WHERE (l.tenant_id IN {MY_TENANTS})))))))", "{GATE}"),
         ["accounts"] = ("({GATE} OR ({IS_TENANT} AND (id IN ( SELECT jl.account_id FROM journal_lines jl WHERE (jl.tenant_id IN {MY_TENANTS})))))", "{GATE}"),
-        ["bank_accounts"] = ("({GATE} OR ({IS_TENANT} AND (id IN ( SELECT pf.bank_id FROM payment_fixtures pf))))", "{GATE}"),
-        ["payment_fixtures"] = ("({GATE} OR {IS_TENANT})", "{GATE}"),
+        ["bank_accounts"] = ("({GATE} OR ({IS_TENANT} AND (EXISTS {MY_TENANTS}) AND (id IN ( SELECT pf.bank_id FROM payment_fixtures pf))))", "{GATE}"),
+        ["payment_fixtures"] = ("({GATE} OR ({IS_TENANT} AND (EXISTS {MY_TENANTS})))", "{GATE}"),
         ["payment_observations"] =
             ("({GATE} OR ({IS_TENANT} AND ((provider_id)::text IN ( SELECT po.provider_id FROM payment_operations po WHERE (po.tenant_id IN {MY_TENANTS})))))", "{GATE}"),
 
         // The one portal table with an insert grant besides the audit log: a tenant submits its own
-        // payment, as itself. No UPDATE or DELETE — the _no_update and _no_delete companions see to it.
+        // payment, as itself, and only as a fresh request against the org's fixture (review M1) —
+        // every worker-owned column at its initial value, above all provider_id, which the
+        // observations grant keys on. No UPDATE or DELETE — the companions see to it.
         ["payment_operations"] = (
             "({GATE} OR ({IS_TENANT} AND (tenant_id IN {MY_TENANTS})))",
-            "({GATE} OR ({IS_TENANT} AND (tenant_id IN {MY_TENANTS}) AND (user_id = {MY_USER})))"),
+            "({GATE} OR ({IS_TENANT} AND (tenant_id IN {MY_TENANTS}) AND (user_id = {MY_USER}) " +
+            "AND ((status)::text = 'Requested'::text) AND (reason IS NULL) AND (provider_id IS NULL) AND (journal_id IS NULL) " +
+            "AND (processed_count = 0) AND (attempts = 0) AND (last_attempt_at IS NULL) AND (lease_until IS NULL) " +
+            "AND (lease_claim_id IS NULL) AND (EXISTS ( SELECT 1 FROM payment_fixtures pf WHERE ((pf.id = payment_operations.generation) " +
+            "AND (pf.bank_id = payment_operations.bank_id) AND ((pf.account)::text = (payment_operations.account)::text))))))"),
 
         // Shared by both personas.
         ["journal_lines"] = ("({GATE} OR (({IS_OWNER} AND (owner_id IN {MY_OWNERS})) OR ({IS_TENANT} AND (tenant_id IN {MY_TENANTS}))))", "{GATE}"),
@@ -130,16 +145,16 @@ public sealed class SchemaGuardTests(PostgresFixture fixture)
             "OR ({IS_TENANT} AND (id IN ( SELECT u.property_id FROM units u WHERE (u.id IN ( SELECT l.unit_id FROM lease_lite l WHERE (l.tenant_id IN {MY_TENANTS}))))))))",
             "{GATE}"),
         ["org_settings"] = (
-            "({GATE} OR (( SELECT current_setting('app.persona'::text, true) AS current_setting) = ANY (ARRAY['owner'::text, 'tenant'::text])))",
+            "({GATE} OR (({IS_OWNER} AND (EXISTS {MY_OWNERS})) OR ({IS_TENANT} AND (EXISTS {MY_TENANTS}))))",
             "{GATE}"),
 
         // Write-only: a portal persona records its own account-security events (both personas) and
         // its payment submissions (tenant), attributed to itself, and reads none of it back.
         ["audit_events"] = (
             "{GATE}",
-            "({GATE} OR (({IS_TENANT} AND ((actor_kind)::text = 'user'::text) AND (actor_user_id = {MY_USER})) " +
-            "OR ({IS_OWNER} AND ((actor_kind)::text = 'user'::text) AND (actor_user_id = {MY_USER}) " +
-            "AND ((entity_type)::text = 'account-security'::text) AND (entity_id = {MY_USER}))))"),
+            "({GATE} OR (({IS_TENANT} AND (({OWN_ACCOUNT_SECURITY}) OR (((actor_kind)::text = 'user'::text) " +
+            "AND (actor_user_id = {MY_USER}) AND ((entity_type)::text = 'payment_operations'::text) AND ((action)::text = 'insert'::text)))) " +
+            "OR ({IS_OWNER} AND {OWN_ACCOUNT_SECURITY})))"),
     };
 
     private const string OrgIsolation = "(org_id = (NULLIF(current_setting('app.org_id'::text, true), ''::text))::uuid)";

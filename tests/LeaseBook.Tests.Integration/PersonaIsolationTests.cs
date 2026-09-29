@@ -382,13 +382,139 @@ public sealed class PersonaIsolationTests(PostgresFixture fixture)
         await tx.RollbackAsync(ct);
     }
 
+    /// <summary>
+    /// Review finding M1. The insert grant used to constrain only whose payment it was, so a tenant could
+    /// write its own operation carrying another tenant's provider id — and the observations grant,
+    /// which keys on provider id, then handed it that tenant's bank evidence. Every column the submit
+    /// path fixes is now pinned to what it writes, so a tenant can only ever create a fresh request.
+    /// </summary>
+    [Fact]
+    public async Task A_tenant_can_insert_only_a_fresh_request_and_so_never_borrows_another_tenants_evidence()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var s = await SeedAsync(ct);
+        await using var conn = await fixture.OpenAppConnectionAsync(ct);
+
+        // The attack as reproduced: tenant A's own operation, carrying tenant B's provider id.
+        var stolen = $"prov_{s.OperationB:N}";
+        await using (var tx = await conn.BeginTransactionAsync(ct))
+        {
+            await RlsProbe.SetOrgContextAsync(conn, tx, s.OrgId, "tenant", s.TenantAUser, ct);
+            var ex = await Should.ThrowAsync<PostgresException>(async () =>
+                await ExecAsync(conn, tx, InsertOperationSql(s, s.TenantA, s.TenantAUser, providerId: stolen, account: "acct_other"), ct));
+            ex.SqlState.ShouldBe(PostgresErrorCodes.InsufficientPrivilege);
+            await tx.RollbackAsync(ct);
+        }
+
+        await using (var tx = await conn.BeginTransactionAsync(ct))
+        {
+            await RlsProbe.SetOrgContextAsync(conn, tx, s.OrgId, "tenant", s.TenantAUser, ct);
+            (await IdsAsync(conn, tx, "SELECT id FROM payment_operations", ct)).ShouldBe([s.OperationA]);
+            (await CountAsync(conn, tx, "payment_observations", ct, where: $"provider_id = '{stolen}'")).ShouldBe(0);
+            await tx.RollbackAsync(ct);
+        }
+
+        // Each column the submit path fixes, forged one at a time.
+        foreach (var (what, sql) in new[]
+        {
+            ("a status past Requested", InsertOperationSql(s, s.TenantA, s.TenantAUser, status: "Settled")),
+            ("a failure reason", InsertOperationSql(s, s.TenantA, s.TenantAUser, reason: "technical_failure")),
+            ("a journal entry", InsertOperationSql(s, s.TenantA, s.TenantAUser, journalId: s.EntryA)),
+            ("a processed count", InsertOperationSql(s, s.TenantA, s.TenantAUser, processedCount: 5)),
+            ("attempts", InsertOperationSql(s, s.TenantA, s.TenantAUser, attempts: 1)),
+            ("a worker lease", InsertOperationSql(s, s.TenantA, s.TenantAUser, leased: true)),
+            ("a bank other than the fixture's", InsertOperationSql(s, s.TenantA, s.TenantAUser, bankId: s.DepositBank)),
+            ("an account other than the fixture's", InsertOperationSql(s, s.TenantA, s.TenantAUser, account: "acct_other")),
+            ("a generation other than the fixture's", InsertOperationSql(s, s.TenantA, s.TenantAUser, generation: UuidV7.NewId())),
+        })
+        {
+            (await RejectedAsync(conn, s, "tenant", s.TenantAUser, sql, ct))
+                .ShouldBe(PostgresErrorCodes.InsufficientPrivilege, $"a tenant inserting {what}");
+        }
+
+        // The shape the submit path actually writes is still accepted.
+        (await AffectedAsync(conn, s, "tenant", s.TenantAUser, InsertOperationSql(s, s.TenantA, s.TenantAUser), ct)).ShouldBe(1);
+    }
+
+    /// <summary>
+    /// Review finding L2. A link can name a system roll-up owner or tenant — the services refuse to
+    /// create one, but the foreign key allows it, and a row flipped to system later is the same case.
+    /// Identity is derived through the non-system Directory row, so such a link reaches nothing beyond
+    /// its own link row.
+    /// </summary>
+    [Fact]
+    public async Task A_link_to_a_system_owner_or_tenant_reads_nothing()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var s = await SeedAsync(ct);
+        var tables = await OrgScopedTablesAsync(ct);
+
+        await using (var su = new NpgsqlConnection(SuperuserConnectionString))
+        {
+            await su.OpenAsync(ct);
+            await using var cmd = new NpgsqlCommand(
+                $"UPDATE owners SET is_system = true WHERE id = '{s.OwnerB}'; " +
+                $"UPDATE tenants SET is_system = true WHERE id = '{s.TenantB}';", su);
+            (await cmd.ExecuteNonQueryAsync(ct)).ShouldBe(2);
+        }
+
+        foreach (var (persona, user, linkTable) in new[]
+        {
+            ("owner", s.OwnerBUser, "owner_access"),
+            ("tenant", s.TenantBUser, "resident_access"),
+        })
+        {
+            await using var conn = await fixture.OpenAppConnectionAsync(ct);
+            await using var tx = await conn.BeginTransactionAsync(ct);
+            await RlsProbe.SetOrgContextAsync(conn, tx, s.OrgId, persona, user, ct);
+            foreach (var table in tables.Where(t => t != linkTable))
+            {
+                (await CountAsync(conn, tx, table, ct)).ShouldBe(0, $"{persona} linked to a system row reads {table}");
+            }
+
+            // Its own link row stays readable: the link tables' grant is user_id alone, which is what
+            // keeps the policy graph free of recursion through the Directory rows.
+            (await CountAsync(conn, tx, linkTable, ct)).ShouldBe(1);
+        }
+    }
+
+    /// <summary>
+    /// Review finding L3. A tenant records exactly two kinds of audit row — its payment submission and
+    /// its own account-security events — and nothing else, even attributed to itself.
+    /// </summary>
+    [Fact]
+    public async Task A_tenant_audits_only_its_payment_submissions_and_its_own_account_security()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var s = await SeedAsync(ct);
+        await using var conn = await fixture.OpenAppConnectionAsync(ct);
+
+        (await AffectedAsync(conn, s, "tenant", s.TenantAUser, InsertAuditSql(s.TenantAUser, "payment_operations", UuidV7.NewId()), ct)).ShouldBe(1);
+        (await AffectedAsync(conn, s, "tenant", s.TenantAUser, InsertAuditSql(s.TenantAUser, "account-security", s.TenantAUser, "mfa-enrolled"), ct)).ShouldBe(1);
+
+        foreach (var (what, sql) in new[]
+        {
+            ("a journal-entry row", InsertAuditSql(s.TenantAUser, "journal-entry", UuidV7.NewId(), "created")),
+            ("a payment row that is not an insert", InsertAuditSql(s.TenantAUser, "payment_operations", UuidV7.NewId(), "update")),
+            ("an admin account-security action", InsertAuditSql(s.TenantAUser, "account-security", s.TenantAUser, "mfa-reset")),
+            ("account security about another user", InsertAuditSql(s.TenantAUser, "account-security", s.TenantBUser)),
+        })
+        {
+            (await RejectedAsync(conn, s, "tenant", s.TenantAUser, sql, ct))
+                .ShouldBe(PostgresErrorCodes.InsufficientPrivilege, $"a tenant auditing {what}");
+        }
+
+        (await RejectedAsync(conn, s, "owner", s.OwnerAUser, InsertAuditSql(s.OwnerAUser, "account-security", s.OwnerAUser, "admin-created"), ct))
+            .ShouldBe(PostgresErrorCodes.InsufficientPrivilege, "an owner records only its own password and MFA events");
+    }
+
     // ── Fixture ─────────────────────────────────────────────────────────────────────────────────
 
     private sealed record Seeded(
         Guid OrgId,
         Guid OwnerA, Guid OwnerB, Guid PropertyA, Guid PropertyB, Guid PropertyTransferred,
         Guid UnitA, Guid UnitB, Guid TenantA, Guid TenantB, Guid LeaseA, Guid LeaseB, Guid Bank,
-        Guid Generation, Guid OperationA, Guid OperationB,
+        Guid Generation, Guid OperationA, Guid OperationB, Guid DepositBank, Guid EntryA,
         Guid OwnerAUser, Guid OwnerA2User, Guid OwnerBUser, Guid TenantAUser, Guid TenantA2User, Guid TenantBUser,
         Guid StaffUser);
 
@@ -443,6 +569,8 @@ public sealed class PersonaIsolationTests(PostgresFixture fixture)
             Status = LeaseStatus.Active,
         };
         var bank = new BankAccount { Id = UuidV7.NewId(), Name = "Persona trust", Purpose = DirectoryBankPurpose.Trust };
+        var depositBank = new BankAccount { Id = UuidV7.NewId(), Name = "Persona deposit trust", Purpose = DirectoryBankPurpose.Deposit };
+        var entryA = Guid.Empty;
         var date = new DateOnly(2026, 9, 1);
 
         await using (var scope = fixture.Api.Services.CreateAsyncScope())
@@ -451,14 +579,14 @@ public sealed class PersonaIsolationTests(PostgresFixture fixture)
             await sp.GetRequiredService<OrgScopedExecutor>().RunAsSystemAsync(orgId, "test:persona", async () =>
             {
                 var db = sp.GetRequiredService<AppDbContext>();
-                db.AddRange(ownerA, ownerB, propertyA, propertyB, transferred, unitA, unitB, tenantA, tenantB, leaseA, leaseB, bank);
+                db.AddRange(ownerA, ownerB, propertyA, propertyB, transferred, unitA, unitB, tenantA, tenantB, leaseA, leaseB, bank, depositBank);
                 await db.SaveChangesAsync(ct);
                 await sp.GetRequiredService<IChartOfAccounts>().ProvisionAsync(
                     [new BankAccountSpec(bank.Id, bank.Name, AccountingBankPurpose.Trust)], ct);
                 _ = await sp.GetRequiredService<ISender>().Query(new GetOrgSettings(), ct);
 
                 var events = sp.GetRequiredService<IAccountingEvents>();
-                await events.PostAsync(new RentCharged(tenantA.Id, propertyA.Id, ownerA.Id, unitA.Id,
+                entryA = await events.PostAsync(new RentCharged(tenantA.Id, propertyA.Id, ownerA.Id, unitA.Id,
                     new Money(1000m), date, "persona rent A", $"persona-rent-a-{orgId:N}"), ct);
                 await events.PostAsync(new RentCharged(tenantB.Id, propertyB.Id, ownerB.Id, unitB.Id,
                     new Money(900m), date, "persona rent B", $"persona-rent-b-{orgId:N}"), ct);
@@ -518,19 +646,36 @@ public sealed class PersonaIsolationTests(PostgresFixture fixture)
         }
 
         return new Seeded(orgId, ownerA.Id, ownerB.Id, propertyA.Id, propertyB.Id, transferred.Id,
-            unitA.Id, unitB.Id, tenantA.Id, tenantB.Id, leaseA.Id, leaseB.Id, bank.Id, generation, operationA, operationB,
+            unitA.Id, unitB.Id, tenantA.Id, tenantB.Id, leaseA.Id, leaseB.Id, bank.Id, generation, operationA, operationB, depositBank.Id, entryA,
             ownerAUser, ownerA2User, ownerBUser, tenantAUser, tenantA2User, tenantBUser, staffUser);
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────────────────────────────
 
-    private static string InsertOperationSql(Seeded s, Guid tenant, Guid user) =>
-        "INSERT INTO payment_operations (id, org_id, tenant_id, user_id, key, generation, bank_id, account, amount, currency, fingerprint, created_at, status, processed_count, attempts, due_at) " +
-        $"VALUES ('{UuidV7.NewId()}', '{s.OrgId}', '{tenant}', '{user}', '{UuidV7.NewId()}', '{s.Generation}', '{s.Bank}', 'acct_persona', 5, 'USD', 'fp', now(), 'Requested', 0, 0, now())";
+    /// <summary>
+    /// A payment operation in exactly the shape <c>PaymentEngine.SubmitAsync</c> writes, with any one
+    /// column forgeable for the negative cases.
+    /// </summary>
+    private static string InsertOperationSql(
+        Seeded s, Guid tenant, Guid user, string status = "Requested", string? reason = null, string? providerId = null,
+        Guid? journalId = null, int processedCount = 0, int attempts = 0, bool leased = false, Guid? bankId = null,
+        string account = "acct_persona", Guid? generation = null) =>
+        "INSERT INTO payment_operations (id, org_id, tenant_id, user_id, key, generation, bank_id, account, amount, currency, " +
+        "fingerprint, created_at, status, reason, provider_id, journal_id, processed_count, attempts, due_at, " +
+        "last_attempt_at, lease_until, lease_claim_id) " +
+        $"VALUES ('{UuidV7.NewId()}', '{s.OrgId}', '{tenant}', '{user}', '{UuidV7.NewId()}', '{generation ?? s.Generation}', " +
+        $"'{bankId ?? s.Bank}', '{account}', 5, 'USD', 'fp', now(), '{status}', {Sql(reason)}, {Sql(providerId)}, " +
+        $"{Sql(journalId?.ToString())}, {processedCount}, {attempts}, now(), " +
+        (leased ? $"now(), now() + interval '30 seconds', '{UuidV7.NewId()}')" : "NULL, NULL, NULL)");
 
-    private static string InsertAuditSql(Guid actor, string entityType, Guid entityId) =>
+    private static string Sql(string? value) => value is null ? "NULL" : $"'{value}'";
+
+    /// <summary>An audit row in the shape the app writes: the payment submit's <c>insert</c>, or an
+    /// account-security <c>password-changed</c>, unless <paramref name="action"/> says otherwise.</summary>
+    private static string InsertAuditSql(Guid actor, string entityType, Guid entityId, string? action = null) =>
         "INSERT INTO audit_events (id, org_id, actor_user_id, actor_kind, entity_type, entity_id, action, occurred_at) " +
-        $"VALUES ('{UuidV7.NewId()}', current_setting('app.org_id')::uuid, '{actor}', 'user', '{entityType}', '{entityId}', 'probe', now())";
+        $"VALUES ('{UuidV7.NewId()}', current_setting('app.org_id')::uuid, '{actor}', 'user', '{entityType}', '{entityId}', " +
+        $"'{action ?? (entityType == "account-security" ? "password-changed" : "insert")}', now())";
 
     /// <summary>Runs one statement under the persona, in its own rolled-back transaction, and returns
     /// the affected (or, for a query, returned) row count.</summary>

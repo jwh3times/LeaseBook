@@ -30,13 +30,51 @@ namespace LeaseBook.Web.Migrations
         private const string IsTenant = "(SELECT current_setting('app.persona', true)) = 'tenant'";
         private const string MyUser = "NULLIF(current_setting('app.user_id', true), '')::uuid";
 
-        /// <summary>The owner the caller's active owner link names — never a value the app supplies.</summary>
-        private const string MyOwners =
+        /// <summary>
+        /// The owner the caller's active owner link names — never a value the app supplies. Used only by
+        /// the <c>owners</c> grant itself, which checks <c>is_system</c> on its own row: joining
+        /// <c>owners</c> here would make that policy read its own table (infinite recursion).
+        /// </summary>
+        private const string MyOwnerLinks =
             "SELECT oa.owner_id FROM owner_access oa WHERE oa.user_id = " + MyUser + " AND oa.revoked_at IS NULL";
 
-        /// <summary>The tenant the caller's active resident link names.</summary>
-        private const string MyTenants =
+        /// <summary>
+        /// The caller's owner as every other grant sees it: the active link joined to a non-system
+        /// <c>owners</c> row. A link naming a system roll-up owner — which the foreign key allows —
+        /// therefore reaches nothing (#314 review, L2).
+        /// </summary>
+        private const string MyOwners =
+            "SELECT oa.owner_id FROM owner_access oa JOIN owners o ON o.id = oa.owner_id WHERE oa.user_id = " + MyUser +
+            " AND oa.revoked_at IS NULL AND NOT o.is_system";
+
+        /// <summary>The tenant the caller's active resident link names; the <c>tenants</c> grant's own form.</summary>
+        private const string MyTenantLinks =
             "SELECT ra.tenant_id FROM resident_access ra WHERE ra.user_id = " + MyUser + " AND ra.revoked_at IS NULL";
+
+        /// <summary>The caller's tenant through a non-system <c>tenants</c> row, as every other grant sees it.</summary>
+        private const string MyTenants =
+            "SELECT ra.tenant_id FROM resident_access ra JOIN tenants t ON t.id = ra.tenant_id WHERE ra.user_id = " + MyUser +
+            " AND ra.revoked_at IS NULL AND NOT t.is_system";
+
+        /// <summary>
+        /// The only operation a tenant may create: a fresh request, in exactly the shape
+        /// <c>PaymentEngine.SubmitAsync</c> writes, against the org's payment fixture (#314 review, M1).
+        /// Every column the worker owns is pinned to its initial value — above all <c>provider_id</c>,
+        /// because the observations grant keys on it. <c>amount</c> and <c>currency</c> are bounded by
+        /// their own check constraints; <c>key</c>, <c>fingerprint</c> and the timestamps are the
+        /// caller's to choose and grant nothing.
+        /// </summary>
+        private const string FreshPaymentRequest =
+            "status = 'Requested' AND reason IS NULL AND provider_id IS NULL AND journal_id IS NULL " +
+            "AND processed_count = 0 AND attempts = 0 AND last_attempt_at IS NULL AND lease_until IS NULL " +
+            "AND lease_claim_id IS NULL AND EXISTS (SELECT 1 FROM payment_fixtures pf " +
+            "WHERE pf.id = payment_operations.generation AND pf.bank_id = payment_operations.bank_id " +
+            "AND pf.account = payment_operations.account)";
+
+        /// <summary>Account-security events a portal user writes about itself (change password, enrol MFA).</summary>
+        private const string OwnAccountSecurity =
+            "actor_kind = 'user' AND actor_user_id = " + MyUser + " AND entity_type = 'account-security' " +
+            "AND entity_id = " + MyUser + " AND action IN ('password-changed', 'mfa-enrolled')";
 
         private const string MyLeaseUnits = "SELECT l.unit_id FROM lease_lite l WHERE l.tenant_id IN (" + MyTenants + ")";
 
@@ -72,24 +110,28 @@ namespace LeaseBook.Web.Migrations
 
             // Owner portal: GetOwnerNames, GetOwnerLedger (lines + entries + its reversal EXISTS),
             // GetPropertyAddresses over the property ids on its own rows, GetIssuedOwnerStatements(+Document).
-            ("owners", $"{IsOwner} AND NOT is_system AND id IN ({MyOwners})", null),
+            ("owners", $"{IsOwner} AND NOT is_system AND id IN ({MyOwnerLinks})", null),
             ("statement_artifacts", $"{IsOwner} AND owner_id IN ({MyOwners})", null),
 
             // Tenant portal: GetResidentNames, GetTenantLedger (lines joined to accounts and entries),
             // and the payment flow — fixture check, GetPaymentEligibility (bank, tenant -> lease -> unit ->
             // property FOR SHARE -> ownership transfers), GetPayments (operations + their observations).
-            ("tenants", $"{IsTenant} AND id IN ({MyTenants})", null),
+            ("tenants", $"{IsTenant} AND NOT is_system AND id IN ({MyTenantLinks})", null),
             ("lease_lite", $"{IsTenant} AND tenant_id IN ({MyTenants})", null),
             ("units", $"{IsTenant} AND id IN ({MyLeaseUnits})", null),
             ("property_ownership_transfers", $"{IsTenant} AND property_id IN ({MyLeaseProperties})", null),
             ("accounts", $"{IsTenant} AND id IN (SELECT jl.account_id FROM journal_lines jl WHERE jl.tenant_id IN ({MyTenants}))", null),
-            ("bank_accounts", $"{IsTenant} AND id IN (SELECT pf.bank_id FROM payment_fixtures pf)", null),
-            ("payment_fixtures", IsTenant, null),
+            // Organization-level rows a portal needs are still granted only to a caller with an effective
+            // (active, non-system) link — never to the persona alone (#314 review, L2).
+            ("bank_accounts", $"{IsTenant} AND EXISTS ({MyTenants}) AND id IN (SELECT pf.bank_id FROM payment_fixtures pf)", null),
+            ("payment_fixtures", $"{IsTenant} AND EXISTS ({MyTenants})", null),
+            // Observations carry no operation id, only the provider id — which is why a tenant can never
+            // write one (FreshPaymentRequest): only the worker, as system, sets it on an operation.
             ("payment_observations",
                 $"{IsTenant} AND provider_id IN (SELECT po.provider_id FROM payment_operations po WHERE po.tenant_id IN ({MyTenants}))", null),
             ("payment_operations",
                 $"{IsTenant} AND tenant_id IN ({MyTenants})",
-                $"{IsTenant} AND tenant_id IN ({MyTenants}) AND user_id = {MyUser}"),
+                $"{IsTenant} AND tenant_id IN ({MyTenants}) AND user_id = {MyUser} AND {FreshPaymentRequest}"),
 
             // Both portals.
             ("journal_lines", $"({IsOwner} AND owner_id IN ({MyOwners})) OR ({IsTenant} AND tenant_id IN ({MyTenants}))", null),
@@ -99,14 +141,14 @@ namespace LeaseBook.Web.Migrations
             ("properties",
                 $"({IsOwner} AND (owner_id IN ({MyOwners}) OR id IN (SELECT jl.property_id FROM journal_lines jl WHERE jl.owner_id IN ({MyOwners})))) " +
                 $"OR ({IsTenant} AND id IN ({MyLeaseProperties}))", null),
-            ("org_settings", "(SELECT current_setting('app.persona', true)) IN ('owner', 'tenant')", null),
+            ("org_settings", $"({IsOwner} AND EXISTS ({MyOwners})) OR ({IsTenant} AND EXISTS ({MyTenants}))", null),
 
             // Write-only: account-security events (change password, MFA enrollment) for both personas,
             // and the audit row of a tenant's own payment submission. Never read back.
             ("audit_events", null,
-                $"({IsTenant} AND actor_kind = 'user' AND actor_user_id = {MyUser}) " +
-                $"OR ({IsOwner} AND actor_kind = 'user' AND actor_user_id = {MyUser} " +
-                $"AND entity_type = 'account-security' AND entity_id = {MyUser})"),
+                $"({IsTenant} AND (({OwnAccountSecurity}) OR (actor_kind = 'user' AND actor_user_id = {MyUser} " +
+                "AND entity_type = 'payment_operations' AND action = 'insert'))) " +
+                $"OR ({IsOwner} AND {OwnAccountSecurity})"),
         ];
 
         /// <inheritdoc />
