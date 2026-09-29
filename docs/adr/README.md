@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living decision index
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-09-26
+- **Last reviewed:** 2026-09-29
 
 An **Architecture Decision Record** captures a single significant or non-obvious engineering
 decision — the context that forced it, the choice made, and the consequences accepted — so it can be
@@ -27,7 +27,7 @@ form, write it, and add a row to the index below. When a decision is replaced, m
 | [000](ADR-000-record-architecture-decisions.md)                      | Record architecture decisions                                                   | Accepted                               | 2026-06-12 |
 | [001](ADR-001-background-job-scheduler.md)                           | Background job scheduler — Hangfire on PostgreSQL                               | Accepted                               | 2026-06-12 |
 | [002](ADR-002-defer-redis.md)                                        | Defer Redis                                                                     | Accepted                               | 2026-06-12 |
-| [003](ADR-003-portal-suborg-scoping-at-app-layer.md)                 | Portal sub-org scoping at the application layer, not in RLS                     | Accepted                               | 2026-06-12 |
+| [003](ADR-003-portal-suborg-scoping-at-app-layer.md)                 | Portal sub-org scoping at the application layer, not in RLS                     | Accepted (amended by ADR-048)          | 2026-06-12 |
 | [004](ADR-004-single-appdbcontext-in-host.md)                        | One AppDbContext, owned by the host                                             | Accepted                               | 2026-06-12 |
 | [005](ADR-005-cqrs-owned-dispatcher-no-mediatr.md)                   | CQRS via an owned dispatcher + FluentValidation; no MediatR, no AutoMapper      | Accepted                               | 2026-06-12 |
 | [006](ADR-006-posting-template-catalog.md)                           | Posting-template catalog & dual-basis journal                                   | Accepted                               | 2026-06-12 |
@@ -71,6 +71,7 @@ form, write it, and add a row to the index below. When a decision is replaced, m
 | [044](ADR-044-audit-log-review-surface.md)                           | Audit-log review is a separate read, and payloads are withheld by origin        | Accepted                               | 2026-09-11 |
 | [045](ADR-045-statement-carry-forward.md)                            | A statement carries forward from the one issued before it                       | Accepted                               | 2026-09-13 |
 | [046](ADR-046-simulated-payment-recognition.md)                      | Recognize simulated payments from explicit bank evidence                        | Proposed                               | 2026-09-26 |
+| [048](ADR-048-per-persona-row-level-security.md)                     | Per-persona row-level security inside the organization                          | Accepted                               | 2026-09-29 |
 
 ## Status legend
 
