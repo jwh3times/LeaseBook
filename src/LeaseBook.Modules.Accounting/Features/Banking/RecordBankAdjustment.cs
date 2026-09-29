@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using FluentValidation;
 using LeaseBook.Modules.Accounting.Contracts;
 using LeaseBook.Modules.Accounting.Features.LedgerPosting;
@@ -15,6 +16,8 @@ namespace LeaseBook.Modules.Accounting.Features.Banking;
 /// <c>Description</c> is the entry's register/ledger text; <c>InternalNote</c> is staff-only (#468).
 /// </para>
 /// </summary>
+// A stale client still sending the pre-#468 `memo` gets a 400, not a post that silently drops its text.
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record RecordBankAdjustment(
     string Kind, decimal Amount, DateOnly Date, Guid BankAccountId, Guid? ToBankAccountId,
     string? Description, string SourceRef, string? InternalNote = null) : ICommand<PostResult>;

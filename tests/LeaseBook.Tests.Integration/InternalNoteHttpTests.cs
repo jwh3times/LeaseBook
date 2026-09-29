@@ -248,6 +248,43 @@ public sealed class InternalNoteHttpTests(PostgresFixture fixture)
         notes.ShouldNotContainKey(quiet);
     }
 
+    /// <summary>
+    /// The rename must fail loudly: a stale client still sending <c>memo</c> would otherwise post with the
+    /// default description and silently lose the text it meant to record. Every renamed request rejects
+    /// an unknown member with a contract-shaped 400, and nothing is posted.
+    /// </summary>
+    [Fact]
+    public async Task A_stale_memo_field_is_rejected_rather_than_silently_dropped()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var setup = await SetupAsync(ct);
+        using var client = await LoggedInClientAsync(setup, ct);
+        var tenant = $"/api/accounting/tenants/{setup.TenantId}";
+
+        var requests = new (string Url, object Body)[]
+        {
+            ($"{tenant}/payments", new { amount = 5m, date = Feb3, method = "ach", bankAccountId = setup.TrustBankId, memo = "Check 1042", sourceRef = Key() }),
+            ($"{tenant}/charges", new { amount = 5m, date = Feb1, kind = "rent", memo = "February rent", sourceRef = Key() }),
+            ($"{tenant}/deposits", new { amount = 5m, date = Feb1, depositBankId = setup.DepositBankId, memo = "Deposit", sourceRef = Key() }),
+            ($"{tenant}/prepayments", new { amount = 5m, date = Feb1, bankAccountId = setup.TrustBankId, memo = "Prepayment", sourceRef = Key() }),
+            ($"{tenant}/prepayment-applications", new { amount = 5m, date = Feb1, bankAccountId = setup.TrustBankId, memo = "Applied", sourceRef = Key() }),
+            ($"/api/accounting/banks/{setup.TrustBankId}/adjustments", new { kind = "interest", amount = 5m, date = Feb1, memo = "Interest", sourceRef = Key() }),
+        };
+
+        foreach (var (url, body) in requests)
+        {
+            var response = await client.PostAsJsonAsync(url, body, ct);
+            var text = await response.Content.ReadAsStringAsync(ct);
+            response.StatusCode.ShouldBe(HttpStatusCode.BadRequest, $"{url}: {text}");
+            using var problem = JsonDocument.Parse(text);
+            problem.RootElement.GetProperty("code").GetString().ShouldBe("invalid_request", url);
+            problem.RootElement.GetProperty("correlationId").GetString().ShouldNotBeNullOrWhiteSpace(url);
+        }
+
+        var ledger = await GetJsonAsync(client, $"{tenant}/ledger", ct);
+        ledger["rows"]!.AsArray().ShouldBeEmpty("a rejected request posts nothing");
+    }
+
     private sealed record Setup(Guid OrgId, string Email, Guid OwnerId, Guid TenantId, Guid TrustBankId, Guid DepositBankId);
 
     private static string Key() => UuidV7.NewId().ToString();

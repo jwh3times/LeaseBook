@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using FluentValidation;
 using LeaseBook.Modules.Accounting.Contracts;
 using LeaseBook.Modules.Accounting.Features.Posting.Events;
@@ -12,6 +13,8 @@ namespace LeaseBook.Modules.Accounting.Features.LedgerPosting;
 /// staff-only and never reaches an owner or resident (#468). Both are optional.
 /// </para>
 /// </summary>
+// A stale client still sending the pre-#468 `memo` gets a 400, not a post that silently drops its text.
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record CollectDeposit(
     Guid TenantId, decimal Amount, DateOnly Date, Guid DepositBankId, string? Description, string SourceRef,
     string? InternalNote = null)
