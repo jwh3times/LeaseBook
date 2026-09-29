@@ -19,7 +19,9 @@ public sealed class OwnerPortalReader(ISender sender, ILogger<OwnerPortalReader>
 
     public async Task<OwnerPortalSummary> GetSummaryAsync(OwnerIdentity owner, CancellationToken ct)
     {
-        var basis = (await sender.Query(new GetOrgSettings(), ct)).AccountingBasis;
+        // Read-only: the owner persona may read org_settings but never write it (ADR-048), so a
+        // missing row resolves to its defaults rather than being created here.
+        var basis = (await sender.Query(new GetOrgSettings(CreateIfMissing: false), ct)).AccountingBasis;
         // Owner equity only: the ledger reads owner_equity lines, so deposits (a tenant liability) are
         // not in it, and its balance is exactly GetOwnerBalances' Operating column for this owner.
         var ledger = await sender.Query(new GetOwnerLedger(owner.OwnerId, basis), ct);

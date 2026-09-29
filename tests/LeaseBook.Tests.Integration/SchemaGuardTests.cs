@@ -57,6 +57,132 @@ public sealed class SchemaGuardTests(PostgresFixture fixture)
 
     private const string Unconditional = "true";
 
+    // ── The persona gate (#314, ADR-048) ─────────────────────────────────────────────────────────
+    // Fragments of the predicates the persona migration emits, as Postgres re-prints them. The pins
+    // below are written with {NAME} placeholders for these, so each grant reads as what it admits
+    // rather than as a wall of casts; Expand substitutes them before the literal comparison.
+    private static readonly (string Name, string Sql)[] PersonaFragments =
+    [
+        ("GATE_OR_PLATFORM", "({GATE} OR (current_setting('app.platform'::text, true) = 'on'::text))"),
+        ("GATE", "(( SELECT current_setting('app.persona'::text, true) AS current_setting) = ANY (ARRAY['staff'::text, 'system'::text]))"),
+        ("IS_OWNER", "(( SELECT current_setting('app.persona'::text, true) AS current_setting) = 'owner'::text)"),
+        ("IS_TENANT", "(( SELECT current_setting('app.persona'::text, true) AS current_setting) = 'tenant'::text)"),
+        ("MY_OWNERS", "( SELECT oa.owner_id FROM owner_access oa WHERE ((oa.user_id = {MY_USER}) AND (oa.revoked_at IS NULL)))"),
+        ("MY_TENANTS", "( SELECT ra.tenant_id FROM resident_access ra WHERE ((ra.user_id = {MY_USER}) AND (ra.revoked_at IS NULL)))"),
+        ("MY_USER", "(NULLIF(current_setting('app.user_id'::text, true), ''::text))::uuid"),
+    ];
+
+    /// <summary>The capability tables' gate also admits the platform plane, which has no org or persona.</summary>
+    private static readonly HashSet<string> PlatformGatedTables = new(StringComparer.Ordinal)
+    {
+        "entitlements", "capability_cohorts", "platform_audit_events",
+    };
+
+    /// <summary>
+    /// The portal grant table, pinned: for each table a portal persona may reach, the exact USING
+    /// (reads, and the rows <c>FOR SHARE</c> may lock) and WITH CHECK (new rows) of its
+    /// <c>{table}_persona</c> policy. A table absent here must carry the deny-by-default gate in both.
+    /// <para>
+    /// This is the one place a widened grant has to be written down to pass. The isolation behaviour
+    /// is proven in <c>PersonaIsolationTests</c>; this pins the text, so a grant cannot drift wider in
+    /// a way the fixture happens not to exercise.
+    /// </para>
+    /// </summary>
+    private static readonly Dictionary<string, (string Using, string Check)> PersonaGrants = new(StringComparer.Ordinal)
+    {
+        // The link tables resolve to the caller's own rows by user id alone — no subquery, so no
+        // policy recursion through themselves.
+        ["owner_access"] = ("({GATE} OR ({IS_OWNER} AND (user_id = {MY_USER})))", "{GATE}"),
+        ["resident_access"] = ("({GATE} OR ({IS_TENANT} AND (user_id = {MY_USER})))", "{GATE}"),
+
+        // Owner reads: its non-system owner row, its lines and their entries, the properties on its
+        // lines or currently its own, its issued statements.
+        ["owners"] = ("({GATE} OR ({IS_OWNER} AND (NOT is_system) AND (id IN {MY_OWNERS})))", "{GATE}"),
+        ["statement_artifacts"] = ("({GATE} OR ({IS_OWNER} AND (owner_id IN {MY_OWNERS})))", "{GATE}"),
+
+        // Tenant reads: its tenant row, its lease and what the lease names, its ownership history
+        // (the payment eligibility check resolves the effective owner), the fixture bank account.
+        ["tenants"] = ("({GATE} OR ({IS_TENANT} AND (id IN {MY_TENANTS})))", "{GATE}"),
+        ["lease_lite"] = ("({GATE} OR ({IS_TENANT} AND (tenant_id IN {MY_TENANTS})))", "{GATE}"),
+        ["units"] = ("({GATE} OR ({IS_TENANT} AND (id IN ( SELECT l.unit_id FROM lease_lite l WHERE (l.tenant_id IN {MY_TENANTS})))))", "{GATE}"),
+        ["property_ownership_transfers"] =
+            ("({GATE} OR ({IS_TENANT} AND (property_id IN ( SELECT u.property_id FROM units u WHERE (u.id IN ( SELECT l.unit_id FROM lease_lite l WHERE (l.tenant_id IN {MY_TENANTS})))))))", "{GATE}"),
+        ["accounts"] = ("({GATE} OR ({IS_TENANT} AND (id IN ( SELECT jl.account_id FROM journal_lines jl WHERE (jl.tenant_id IN {MY_TENANTS})))))", "{GATE}"),
+        ["bank_accounts"] = ("({GATE} OR ({IS_TENANT} AND (id IN ( SELECT pf.bank_id FROM payment_fixtures pf))))", "{GATE}"),
+        ["payment_fixtures"] = ("({GATE} OR {IS_TENANT})", "{GATE}"),
+        ["payment_observations"] =
+            ("({GATE} OR ({IS_TENANT} AND ((provider_id)::text IN ( SELECT po.provider_id FROM payment_operations po WHERE (po.tenant_id IN {MY_TENANTS})))))", "{GATE}"),
+
+        // The one portal table with an insert grant besides the audit log: a tenant submits its own
+        // payment, as itself. No UPDATE or DELETE — the _no_update and _no_delete companions see to it.
+        ["payment_operations"] = (
+            "({GATE} OR ({IS_TENANT} AND (tenant_id IN {MY_TENANTS})))",
+            "({GATE} OR ({IS_TENANT} AND (tenant_id IN {MY_TENANTS}) AND (user_id = {MY_USER})))"),
+
+        // Shared by both personas.
+        ["journal_lines"] = ("({GATE} OR (({IS_OWNER} AND (owner_id IN {MY_OWNERS})) OR ({IS_TENANT} AND (tenant_id IN {MY_TENANTS}))))", "{GATE}"),
+        ["journal_entries"] = (
+            "({GATE} OR (({IS_OWNER} AND (id IN ( SELECT jl.entry_id FROM journal_lines jl WHERE (jl.owner_id IN {MY_OWNERS})))) " +
+            "OR ({IS_TENANT} AND (id IN ( SELECT jl.entry_id FROM journal_lines jl WHERE (jl.tenant_id IN {MY_TENANTS}))))))",
+            "{GATE}"),
+        ["properties"] = (
+            "({GATE} OR (({IS_OWNER} AND ((owner_id IN {MY_OWNERS}) OR (id IN ( SELECT jl.property_id FROM journal_lines jl WHERE (jl.owner_id IN {MY_OWNERS}))))) " +
+            "OR ({IS_TENANT} AND (id IN ( SELECT u.property_id FROM units u WHERE (u.id IN ( SELECT l.unit_id FROM lease_lite l WHERE (l.tenant_id IN {MY_TENANTS}))))))))",
+            "{GATE}"),
+        ["org_settings"] = (
+            "({GATE} OR (( SELECT current_setting('app.persona'::text, true) AS current_setting) = ANY (ARRAY['owner'::text, 'tenant'::text])))",
+            "{GATE}"),
+
+        // Write-only: a portal persona records its own account-security events (both personas) and
+        // its payment submissions (tenant), attributed to itself, and reads none of it back.
+        ["audit_events"] = (
+            "{GATE}",
+            "({GATE} OR (({IS_TENANT} AND ((actor_kind)::text = 'user'::text) AND (actor_user_id = {MY_USER})) " +
+            "OR ({IS_OWNER} AND ((actor_kind)::text = 'user'::text) AND (actor_user_id = {MY_USER}) " +
+            "AND ((entity_type)::text = 'account-security'::text) AND (entity_id = {MY_USER}))))"),
+    };
+
+    private const string OrgIsolation = "(org_id = (NULLIF(current_setting('app.org_id'::text, true), ''::text))::uuid)";
+
+    /// <summary>Substitutes the <see cref="PersonaFragments"/> placeholders until none remain.</summary>
+    private static string Expand(string template)
+    {
+        var result = template;
+        for (var pass = 0; pass < 4 && result.Contains('{', StringComparison.Ordinal); pass++)
+        {
+            foreach (var (name, sql) in PersonaFragments)
+            {
+                result = result.Replace("{" + name + "}", sql, StringComparison.Ordinal);
+            }
+        }
+
+        return result;
+    }
+
+    private static string GateFor(string table) =>
+        Expand(PlatformGatedTables.Contains(table) ? "{GATE_OR_PLATFORM}" : "{GATE}");
+
+    /// <summary>The three persona-gate policies a table must carry, fully pinned.</summary>
+    private static PersonaPolicyPin[] ExpectedPersonaGate(string table)
+    {
+        var gate = GateFor(table);
+        var (read, insert) = PersonaGrants.TryGetValue(table, out var grant)
+            ? (Expand(grant.Using), Expand(grant.Check))
+            : (gate, gate);
+
+        return
+        [
+            new($"{table}_persona", "RESTRICTIVE", "ALL", "{public}", read, insert),
+            new($"{table}_persona_no_update", "RESTRICTIVE", "UPDATE", "{public}", Unconditional, gate),
+            new($"{table}_persona_no_delete", "RESTRICTIVE", "DELETE", "{public}", gate, null),
+        ];
+    }
+
+    /// <param name="WithCheck">The stored <c>with_check</c>, not the effective one: the gate always
+    /// writes it out explicitly, so a null here on an ALL/UPDATE policy is itself a finding.</param>
+    private sealed record PersonaPolicyPin(
+        string Name, string Kind, string Command, string Roles, string? Using, string? WithCheck);
+
     /// <summary>
     /// The exact policy set for every platform table (ADR-028), pinned. Any deviation — an added
     /// policy, a removed one, a changed command, a changed role list, a changed predicate — fails,
@@ -87,15 +213,20 @@ public sealed class SchemaGuardTests(PostgresFixture fixture)
     private static readonly Dictionary<string, PolicyPin[]> ExpectedPlatformPolicies = new(StringComparer.Ordinal)
     {
         // An organization reads its OWN rows (or platform reads all); every write is platform-only.
+        // Each org-scoped platform table also carries the persona gate (#314), pinned in full by
+        // Every_org_scoped_table_carries_exactly_its_pinned_policies; listed here so this pin, which
+        // rejects any policy it does not name, stays exhaustive.
         ["entitlements"] =
         [
             new("entitlements_org_read", "SELECT", "{public}", OrgOrPlatform, EffectiveCheck: null),
             new("entitlements_platform_write", "ALL", "{public}", PlatformGate, PlatformGate),
+            .. PersonaGatePins("entitlements"),
         ],
         ["capability_cohorts"] =
         [
             new("capability_cohorts_org_read", "SELECT", "{public}", OrgOrPlatform, EffectiveCheck: null),
             new("capability_cohorts_platform_write", "ALL", "{public}", PlatformGate, PlatformGate),
+            .. PersonaGatePins("capability_cohorts"),
         ],
 
         // Readable anywhere — the capability resolver reads a kill switch inside the ambient request
@@ -110,8 +241,15 @@ public sealed class SchemaGuardTests(PostgresFixture fixture)
         ["platform_audit_events"] =
         [
             new("platform_audit_events_platform_only", "ALL", "{public}", PlatformGate, PlatformGate),
+            .. PersonaGatePins("platform_audit_events"),
         ],
     };
+
+    /// <summary>The persona gate in this pin's shape: the effective new-row check, not the stored one.</summary>
+    private static IEnumerable<PolicyPin> PersonaGatePins(string table) =>
+        ExpectedPersonaGate(table).Select(p => new PolicyPin(
+            p.Name, p.Command, p.Roles, p.Using,
+            p.Command == "DELETE" ? p.Using : p.WithCheck));
 
     /// <summary>
     /// The platform tables' foreign keys, pinned by their full Postgres definition (ADR-028).
@@ -310,6 +448,108 @@ public sealed class SchemaGuardTests(PostgresFixture fixture)
         }
 
         failures.ShouldBeEmpty(failures.Count == 0 ? "" : Environment.NewLine + string.Join(Environment.NewLine, failures));
+    }
+
+    /// <summary>
+    /// Every org-scoped table carries exactly its pinned policy set (#314, ADR-048): the unchanged
+    /// org (or platform) policies, and the three RESTRICTIVE persona-gate policies with the predicates
+    /// in <see cref="PersonaGrants"/>, or the deny-by-default gate for a table that has no grant.
+    /// <para>
+    /// Walks the live catalog, so a new org-scoped table fails here until its migration gates it —
+    /// which <c>Rls.EnableOrgRls</c> does on its own. Exhaustive in both directions: an extra
+    /// RESTRICTIVE policy would silently narrow a table (before this test it passed unnoticed), and
+    /// an extra PERMISSIVE one would widen it, since permissive policies OR together.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task Every_org_scoped_table_carries_exactly_its_pinned_policies()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var conn = new NpgsqlConnection(fixture.MigratorConnectionString);
+        await conn.OpenAsync(ct);
+
+        var orgScoped = (await ReadNamesAsync(conn,
+                "SELECT table_name FROM information_schema.columns " +
+                "WHERE table_schema = 'public' AND column_name = 'org_id'", ct))
+            .Where(table => !IdentityTables.Contains(table))
+            .ToHashSet(StringComparer.Ordinal);
+        var policies = await ReadPolicyShapesAsync(conn, ct);
+        var failures = new List<string>();
+
+        foreach (var table in orgScoped.Order(StringComparer.Ordinal))
+        {
+            var expected = BasePolicies(table).Concat(ExpectedPersonaGate(table)).ToList();
+            var actual = policies.Where(p => p.Table == table).Select(p => p.Pin).ToList();
+
+            foreach (var extra in actual.Where(a => expected.All(e => e.Name != a.Name)))
+            {
+                failures.Add($"{table}: UNEXPECTED {extra.Kind} policy {Describe(extra)}.");
+            }
+
+            foreach (var want in expected)
+            {
+                var got = actual.SingleOrDefault(a => a.Name == want.Name);
+                if (got is null)
+                {
+                    failures.Add($"{table}: MISSING policy {want.Name} — expected {Describe(want)}.");
+                }
+                else if (got != want)
+                {
+                    failures.Add($"{table}: policy {want.Name} DRIFTED.{Environment.NewLine}" +
+                                 $"  expected {Describe(want)}{Environment.NewLine}" +
+                                 $"  actual   {Describe(got)}");
+                }
+            }
+        }
+
+        // A pinned grant for a table that no longer exists would be a pin guarding nothing.
+        foreach (var stale in PersonaGrants.Keys.Where(table => !orgScoped.Contains(table)))
+        {
+            failures.Add($"{stale}: has a pinned persona grant but is not an org-scoped table.");
+        }
+
+        failures.ShouldBeEmpty(failures.Count == 0 ? "" : Environment.NewLine + string.Join(Environment.NewLine, failures));
+
+        // Sanity: the walk covered the schema it exists for.
+        orgScoped.Count.ShouldBeGreaterThanOrEqualTo(37);
+        orgScoped.ShouldContain("journal_lines");
+        orgScoped.ShouldContain("entitlements");
+    }
+
+    /// <summary>The permissive policies each org-scoped table had before the persona gate, unchanged.</summary>
+    private static IEnumerable<PersonaPolicyPin> BasePolicies(string table) =>
+        ExpectedPlatformPolicies.TryGetValue(table, out var platform)
+            ? platform
+                .Where(p => !p.Name.StartsWith($"{table}_persona", StringComparison.Ordinal))
+                .Select(p => new PersonaPolicyPin(
+                    p.Name, "PERMISSIVE", p.Command, p.Roles, p.Qual,
+                    p.Command == "SELECT" ? null : p.EffectiveCheck))
+            : [new($"{table}_org_isolation", "PERMISSIVE", "ALL", "{public}", OrgIsolation, OrgIsolation)];
+
+    private static string Describe(PersonaPolicyPin pin) =>
+        $"[{pin.Kind} {pin.Command} TO {pin.Roles}] USING {pin.Using ?? "<none>"} CHECK {pin.WithCheck ?? "<none>"}";
+
+    private static async Task<List<(string Table, PersonaPolicyPin Pin)>> ReadPolicyShapesAsync(
+        NpgsqlConnection conn, CancellationToken ct)
+    {
+        await using var cmd = new NpgsqlCommand(
+            "SELECT tablename, policyname, permissive, cmd, roles::text, qual, with_check " +
+            "FROM pg_policies WHERE schemaname = 'public'", conn);
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+
+        var result = new List<(string, PersonaPolicyPin)>();
+        while (await reader.ReadAsync(ct))
+        {
+            result.Add((reader.GetString(0), new PersonaPolicyPin(
+                reader.GetString(1),
+                reader.GetString(2),
+                reader.GetString(3),
+                reader.GetString(4),
+                Normalize(reader.IsDBNull(5) ? null : reader.GetString(5)),
+                Normalize(reader.IsDBNull(6) ? null : reader.GetString(6)))));
+        }
+
+        return result;
     }
 
     /// <summary>

@@ -7,6 +7,11 @@ namespace LeaseBook.Web.Persistence;
 /// §C.3). One call emits ENABLE + FORCE ROW LEVEL SECURITY and the bare-equality org-isolation
 /// policy with both USING and WITH CHECK. WP-05's schema guard fails CI if any <c>org_id</c>
 /// table is missing this. Append-only tables additionally call <see cref="RevokeAppendOnly"/>.
+/// <para>
+/// Every org-scoped helper also closes the table to the portal personas (#314, ADR-048) through
+/// <see cref="ApplyPersonaGate"/>, so a new table is invisible to a tenant or owner until a later
+/// migration writes that table's grant.
+/// </para>
 /// </summary>
 public static class Rls
 {
@@ -34,6 +39,7 @@ public static class Rls
             GRANT SELECT, INSERT, UPDATE, DELETE ON {table} TO leasebook_app;
             GRANT SELECT ON {table} TO leasebook_ops;
             """);
+        migrationBuilder.ApplyPersonaGate(table);
     }
 
     /// <summary>
@@ -76,6 +82,7 @@ public static class Rls
             GRANT SELECT, INSERT, UPDATE, DELETE ON {table} TO leasebook_app;
             GRANT SELECT ON {table} TO leasebook_ops;
             """);
+        migrationBuilder.ApplyPersonaGate(table, platformEscape: true);
     }
 
     /// <summary>
@@ -133,6 +140,95 @@ public static class Rls
               WITH CHECK (current_setting('app.platform', true) = 'on');
             GRANT SELECT, INSERT, UPDATE, DELETE ON {table} TO leasebook_app;
             GRANT SELECT ON {table} TO leasebook_ops;
+            """);
+        migrationBuilder.ApplyPersonaGate(table, platformEscape: true);
+    }
+
+    /// <summary>
+    /// The organization-wide personas, as the persona gate tests them. The <c>SELECT</c> wrapper makes
+    /// Postgres evaluate the setting once per statement as an InitPlan instead of once per row, which
+    /// is what keeps the gate off the staff read path's cost (docs/perf.md).
+    /// </summary>
+    public const string OrgWidePersona =
+        "(SELECT current_setting('app.persona', true)) IN ('staff', 'system')";
+
+    /// <summary>
+    /// The gate for the capability tables (ADR-028): organization-wide personas, or the platform plane,
+    /// which runs with no org and no persona at all and must keep working exactly as before.
+    /// </summary>
+    public const string OrgWidePersonaOrPlatform =
+        "(" + OrgWidePersona + " OR current_setting('app.platform', true) = 'on')";
+
+    /// <summary>
+    /// The persona gate (#314, ADR-048): the database boundary <i>inside</i> an organization. Three
+    /// RESTRICTIVE policies, so they AND with whatever permissive policy admits the row — the org
+    /// policy is untouched and still decides which organization; the gate decides which slice of it.
+    /// <list type="bullet">
+    /// <item><c>{table}_persona</c> (FOR ALL) is the grant table: <c>staff</c> and <c>system</c>
+    /// everywhere, a portal persona only through <paramref name="portalRead"/> (reads, and the row
+    /// locks <c>FOR SHARE</c> takes) and <paramref name="portalInsert"/> (new rows), nothing for any
+    /// other value — unset, <c>none</c>, or a string nobody defined. The WITH CHECK is always written
+    /// out, never left to default to the USING, so a read grant can never become a write grant by
+    /// omission.</item>
+    /// <item><c>{table}_persona_no_update</c> (FOR UPDATE) admits a changed row only for the
+    /// organization-wide personas. It is separate because one FOR ALL policy has one WITH CHECK for
+    /// INSERT and UPDATE alike, so a portal insert grant would otherwise also let the persona rewrite
+    /// the rows it inserted. Its USING is <c>true</c> so that <c>SELECT … FOR SHARE</c>, which applies
+    /// UPDATE policies' USING, is still decided by the read grant alone.</item>
+    /// <item><c>{table}_persona_no_delete</c> (FOR DELETE) admits deletion only for the
+    /// organization-wide personas. It is separate because one FOR ALL policy has one USING for SELECT
+    /// and DELETE alike, so a read grant would otherwise be a delete grant.</item>
+    /// </list>
+    /// <para>
+    /// Idempotent — each policy is dropped first — because this is also how a grant changes: a later
+    /// migration calls it again with the new predicates. Called with no grants it is deny-by-default,
+    /// which is what every org-scoped helper above applies to a new table.
+    /// </para>
+    /// <para>
+    /// Grants resolve the caller's owner or tenant at the database, from the active link row for
+    /// <c>app.user_id</c>; no owner or tenant id is ever set by the application, so revoking a link
+    /// takes effect on the next statement. See the <c>P2_PersonaRls</c> migration for the grant table.
+    /// </para>
+    /// </summary>
+    public static void ApplyPersonaGate(
+        this MigrationBuilder migrationBuilder,
+        string table,
+        string? portalRead = null,
+        string? portalInsert = null,
+        bool platformEscape = false)
+    {
+        var gate = platformEscape ? OrgWidePersonaOrPlatform : OrgWidePersona;
+        var read = portalRead is null ? gate : $"{gate} OR ({portalRead})";
+        var insert = portalInsert is null ? gate : $"{gate} OR ({portalInsert})";
+
+        migrationBuilder.Sql($"""
+            DROP POLICY IF EXISTS {table}_persona ON {table};
+            DROP POLICY IF EXISTS {table}_persona_no_update ON {table};
+            DROP POLICY IF EXISTS {table}_persona_no_delete ON {table};
+            CREATE POLICY {table}_persona ON {table}
+              AS RESTRICTIVE
+              FOR ALL
+              USING ({read})
+              WITH CHECK ({insert});
+            CREATE POLICY {table}_persona_no_update ON {table}
+              AS RESTRICTIVE
+              FOR UPDATE
+              USING (true)
+              WITH CHECK ({gate});
+            CREATE POLICY {table}_persona_no_delete ON {table}
+              AS RESTRICTIVE
+              FOR DELETE
+              USING ({gate});
+            """);
+    }
+
+    /// <summary>Removes the persona gate from <paramref name="table"/> — the reversal of <see cref="ApplyPersonaGate"/>.</summary>
+    public static void DropPersonaGate(this MigrationBuilder migrationBuilder, string table)
+    {
+        migrationBuilder.Sql($"""
+            DROP POLICY IF EXISTS {table}_persona ON {table};
+            DROP POLICY IF EXISTS {table}_persona_no_update ON {table};
+            DROP POLICY IF EXISTS {table}_persona_no_delete ON {table};
             """);
     }
 
