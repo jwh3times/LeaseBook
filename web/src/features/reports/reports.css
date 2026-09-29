@@ -537,3 +537,9 @@ html[data-theme='dark'] .pf-report-card {
     grid-template-columns: 1fr;
   }
 }
+
+/* #468: a staff-only note under a statement line wraps rather than pushing the amount aside. */
+.pf-stmt-line .pf-internal-note {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
