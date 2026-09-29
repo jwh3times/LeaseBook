@@ -11,10 +11,13 @@ namespace LeaseBook.Modules.Accounting.Features.Banking;
 /// Records a bank-only adjustment from the register (P65): a service fee, interest, or a transfer between
 /// two of the org's bank accounts. The <c>Kind</c> selects the posting template; all three route through
 /// the existing engine — no new journal write path. Owner-/vendor-/fee-sweep runs are M6, not here.
+/// <para>
+/// <c>Description</c> is the entry's register/ledger text; <c>InternalNote</c> is staff-only (#468).
+/// </para>
 /// </summary>
 public sealed record RecordBankAdjustment(
     string Kind, decimal Amount, DateOnly Date, Guid BankAccountId, Guid? ToBankAccountId,
-    string? Memo, string SourceRef) : ICommand<PostResult>;
+    string? Description, string SourceRef, string? InternalNote = null) : ICommand<PostResult>;
 
 public sealed class RecordBankAdjustmentValidator : AbstractValidator<RecordBankAdjustment>
 {
@@ -48,12 +51,14 @@ internal sealed class RecordBankAdjustmentHandler(IAccountingEvents events)
         var id = command.Kind.ToLowerInvariant() switch
         {
             "fee" => await events.PostAsync(
-                new BankFeeCharged(money, command.Date, command.BankAccountId, command.Memo ?? "Bank fee", command.SourceRef), ct),
+                new BankFeeCharged(money, command.Date, command.BankAccountId, command.Description ?? "Bank fee",
+                    command.SourceRef, command.InternalNote), ct),
             "interest" => await events.PostAsync(
-                new InterestEarned(money, command.Date, command.BankAccountId, command.Memo ?? "Interest", command.SourceRef), ct),
+                new InterestEarned(money, command.Date, command.BankAccountId, command.Description ?? "Interest",
+                    command.SourceRef, command.InternalNote), ct),
             "transfer" => await events.PostAsync(
                 new TrustTransfer(money, command.Date, command.BankAccountId, command.ToBankAccountId!.Value,
-                    command.Memo ?? "Transfer", command.SourceRef), ct),
+                    command.Description ?? "Transfer", command.SourceRef, command.InternalNote), ct),
             _ => throw new ValidationException("Unknown bank-adjustment kind."), // unreachable past the validator
         };
         return new PostResult(id);

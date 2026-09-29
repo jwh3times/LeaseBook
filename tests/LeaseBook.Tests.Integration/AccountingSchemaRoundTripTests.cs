@@ -61,7 +61,8 @@ public sealed class AccountingSchemaRoundTripTests(PostgresFixture fixture)
 
             var entry = JournalEntry.Create(
                 new DateOnly(2026, 2, 1), "RentCharged", null, "Round-trip test", sourceRef: null,
-                reversesEntryId: null, createdBy: Actor.System("test-harness"), postedAt: DateTime.UtcNow);
+                reversesEntryId: null, createdBy: Actor.System("test-harness"), postedAt: DateTime.UtcNow,
+                internalNote: "Staff-only round-trip note");
             entry.AddLine(JournalLine.Create(
                 receivable.Id, AccountClass.TenantReceivable, debit: amount, credit: null, EntryBasis.Accrual,
                 propertyId: propertyId, ownerId: ownerId, tenantId: tenantId));
@@ -85,6 +86,8 @@ public sealed class AccountingSchemaRoundTripTests(PostgresFixture fixture)
         readback.OrgId.ShouldBe(orgId);                       // stamped by the interceptor
         readback.EntryDate.ShouldBe(new DateOnly(2026, 2, 1));
         readback.EventType.ShouldBe("RentCharged");
+        readback.Description.ShouldBe("Round-trip test");
+        readback.InternalNote.ShouldBe("Staff-only round-trip note"); // #468, written by the app role
         readback.CreatedAt.ShouldNotBe(default);              // stamped on insert
         readback.Lines.Count.ShouldBe(2);
 
@@ -116,6 +119,22 @@ public sealed class AccountingSchemaRoundTripTests(PostgresFixture fixture)
         await ShouldBePermissionDeniedAsync(conn, "DELETE FROM journal_entries", ct);
         await ShouldBePermissionDeniedAsync(conn, "UPDATE journal_lines SET memo = 'tamper'", ct);
         await ShouldBePermissionDeniedAsync(conn, "DELETE FROM journal_lines", ct);
+    }
+
+    /// <summary>
+    /// #468: the staff-only note is part of the posted row, so it is append-only like every other column —
+    /// set once at posting, never edited afterwards. The note is not a correction mechanism; a wrong entry
+    /// is voided. Pinned on its own so a future column-level <c>GRANT UPDATE (internal_note)</c> — the
+    /// tempting "let staff fix a typo in a note" shortcut — fails here by name.
+    /// </summary>
+    [Fact]
+    public async Task App_role_cannot_update_an_internal_note()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var conn = await fixture.OpenAppConnectionAsync(ct);
+
+        await ShouldBePermissionDeniedAsync(conn, "UPDATE journal_entries SET internal_note = 'tamper'", ct);
+        await ShouldBePermissionDeniedAsync(conn, "UPDATE journal_entries SET internal_note = NULL", ct);
     }
 
     private static async Task ShouldBePermissionDeniedAsync(NpgsqlConnection conn, string sql, CancellationToken ct)

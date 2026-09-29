@@ -27,7 +27,10 @@ public sealed class CompliancePackZipTests
             TrustLedger:
             [
                 // A formula-injection payload in a free-text cell must be neutralized on export.
-                new RegisterRow(UuidV7.NewId(), new DateOnly(2026, 3, 15), "=cmd|' /C calc'!A0", null, 1200.00m, null, default),
+                new RegisterRow(UuidV7.NewId(), new DateOnly(2026, 3, 15), "=cmd|' /C calc'!A0", null, null, 1200.00m, null, default),
+                // #468: the staff-only note is an audit column here — a void's reason is its internal note.
+                new RegisterRow(UuidV7.NewId(), new DateOnly(2026, 3, 16), "Void — Check 1042", "Bounced, guarantor notified",
+                    null, null, 1200.00m, default),
             ],
             DepositRegister: [new DepositRegisterRow(UuidV7.NewId(), "prepayment", 200.00m)],
             ReconciliationHistory:
@@ -60,6 +63,8 @@ public sealed class CompliancePackZipTests
         ledger.ShouldContain("'=cmd");
         ledger.ShouldNotContain(",=cmd");
         ledger.ShouldContain("1200.00");
+        ledger.ShouldContain("Date,Description,Internal note,Property,Deposit,Withdrawal,Status");
+        ledger.ShouldContain("Void — Check 1042,\"Bounced, guarantor notified\"");
 
         // Immutable reconciliation snapshot is byte-preserved.
         Text(archive, "reconciliation-2026-03.json").ShouldBe("{\"variance\":0}");
