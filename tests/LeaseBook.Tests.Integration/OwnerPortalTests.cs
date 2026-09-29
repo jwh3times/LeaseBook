@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using LeaseBook.Modules.Accounting.Contracts;
 using LeaseBook.Modules.Accounting.Features.Ledgers;
 using LeaseBook.Modules.Directory.Domain;
 using LeaseBook.Modules.Directory.Features.Settings;
@@ -68,6 +69,8 @@ public sealed partial class OwnerPortalTests(PostgresFixture fixture)
                 allOwners.AddRange(await db.Set<Owner>().Where(o => !o.IsSystem).Select(o => o.Id).ToListAsync(ct));
                 allArtifacts.AddRange((await db.Set<StatementArtifact>().ToListAsync(ct))
                     .Select(a => (orgId, a.OwnerId, a.Id, a.ArtifactKey)));
+                // The fixture posts real events (deposit, fee, disbursements, a void): its books must hold.
+                (await sp.GetRequiredService<IInvariantChecks>().CheckCoreAsync(ct)).ShouldBeEmpty();
             }, ct);
         }
 
