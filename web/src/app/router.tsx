@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
 import { createBrowserRouter } from 'react-router';
+import { OwnerPortalPage } from '@/features/portal/OwnerPortalPage';
 import { TenantPortalPage } from '@/features/portal/TenantPortalPage';
 import { HomeRedirect, PersonaGuard } from './PersonaGuard';
 import { KitchenSink } from '@/dev/KitchenSink';
@@ -66,6 +67,10 @@ export const router = createBrowserRouter([
       {
         element: <PersonaGuard persona="tenant" />,
         children: [{ path: '/portal/tenant', element: <TenantPortalPage /> }],
+      },
+      {
+        element: <PersonaGuard persona="owner" />,
+        children: [{ path: '/portal/owner', element: <OwnerPortalPage /> }],
       },
       {
         element: <PersonaGuard persona="staff" />,
