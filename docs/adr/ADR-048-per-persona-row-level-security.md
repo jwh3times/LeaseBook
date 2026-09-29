@@ -117,8 +117,18 @@ the case the other exists to catch.
 - Every connection that reads org data must state a persona. That includes support queries in
   pgAdmin as `leasebook_ops`: `set_config('app.persona', 'staff', true)` alongside `app.org_id`.
 - Policies are longer, and portal reads pay for subqueries. The staff and system paths short-circuit
-  on the first `OR` arm, evaluated once per statement as an InitPlan; `docs/perf.md` records the
-  before and after.
+  at run time on the gate, which is read once per statement as an InitPlan and wrapped in
+  `COALESCE(…, false)`. The wrapper is load-bearing for the planner, not for meaning: bare,
+  `$param = ANY(array)` gets Postgres's default equality selectivity, so the gate looked like it
+  removed ~99% of rows. That turned the load fixture's bank register into a nested loop (p95 ~20 ms
+  → ~1.3 s) before the wrapper, which the planner estimates at 50%, restored the plans the tables
+  had without the gate.
+- The staff read path still pays planning time for the nested policy expansion, a few milliseconds
+  per statement that touches the journal. On the `load` fixture, p95 went from 7–8 ms to 15–18 ms
+  (tenant ledger), 32–36 ms to 40–59 ms (dashboard), 18–23 ms to 20–23 ms (bank register) and
+  18–22 ms to 30–31 ms (owner statement). All are well within the 300 ms budget in `docs/perf.md`.
+  If that margin ever matters, the next step is to move grant resolution into helper functions
+  with declared costs, not to widen a grant.
 - The historical `EnableOrgRls` calls now emit the deny-by-default gate on a fresh database;
   `P2_PersonaRls` drops and recreates each policy, so fresh and upgraded databases converge. Its
   `Down` drops the gate rather than restoring deny-by-default, because the code before it sets no

@@ -64,7 +64,7 @@ public sealed class SchemaGuardTests(PostgresFixture fixture)
     private static readonly (string Name, string Sql)[] PersonaFragments =
     [
         ("GATE_OR_PLATFORM", "({GATE} OR (current_setting('app.platform'::text, true) = 'on'::text))"),
-        ("GATE", "(( SELECT current_setting('app.persona'::text, true) AS current_setting) = ANY (ARRAY['staff'::text, 'system'::text]))"),
+        ("GATE", "COALESCE((( SELECT current_setting('app.persona'::text, true) AS current_setting) = ANY (ARRAY['staff'::text, 'system'::text])), false)"),
         ("IS_OWNER", "(( SELECT current_setting('app.persona'::text, true) AS current_setting) = 'owner'::text)"),
         ("IS_TENANT", "(( SELECT current_setting('app.persona'::text, true) AS current_setting) = 'tenant'::text)"),
         ("MY_OWNERS", "( SELECT oa.owner_id FROM owner_access oa WHERE ((oa.user_id = {MY_USER}) AND (oa.revoked_at IS NULL)))"),

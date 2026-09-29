@@ -145,12 +145,21 @@ public static class Rls
     }
 
     /// <summary>
-    /// The organization-wide personas, as the persona gate tests them. The <c>SELECT</c> wrapper makes
-    /// Postgres evaluate the setting once per statement as an InitPlan instead of once per row, which
-    /// is what keeps the gate off the staff read path's cost (docs/perf.md).
+    /// The organization-wide personas, as the persona gate tests them. Both wrappers are there for the
+    /// staff read path (docs/perf.md), not for meaning:
+    /// <list type="bullet">
+    /// <item>The <c>SELECT</c> makes Postgres read the setting once per statement, as an InitPlan,
+    /// rather than once per row.</item>
+    /// <item>The <c>COALESCE(…, false)</c> is what keeps the planner's row estimates sane. Bare, the
+    /// gate is <c>$param = ANY(array)</c>, which Postgres can only estimate with its default equality
+    /// selectivity — about 1% — so it believed a staff query would keep almost no rows and planned
+    /// nested loops accordingly (the bank register went from ~20 ms to ~1.3 s p95). Wrapped, it is an
+    /// opaque boolean estimated at 50%, and the plans match the ones without the gate. <c>NULL</c> and
+    /// <c>false</c> both deny, so the wrapper changes no answer.</item>
+    /// </list>
     /// </summary>
     public const string OrgWidePersona =
-        "(SELECT current_setting('app.persona', true)) IN ('staff', 'system')";
+        "COALESCE((SELECT current_setting('app.persona', true)) IN ('staff', 'system'), false)";
 
     /// <summary>
     /// The gate for the capability tables (ADR-028): organization-wide personas, or the platform plane,
