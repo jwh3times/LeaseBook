@@ -438,3 +438,34 @@ describe('LedgerPage', () => {
     );
   });
 });
+
+// #468 (ADR-047): staff see an entry's internal note beside its owner-facing description, marked as
+// staff-only in words and a glyph rather than by colour.
+describe('LedgerPage internal notes', () => {
+  const rowOf = (text: string) => screen.getByText(text).closest('[role="row"]') as HTMLElement;
+
+  it('shows a row’s internal note under its description, labelled as internal', async () => {
+    server.use(
+      detailHandler(),
+      ledgerHandler([ROWS[0]!, { ...ROWS[2]!, internalNote: 'Paid at the office, receipt 88' }]),
+    );
+    renderLedger();
+
+    await screen.findByText('Rent payment');
+    const noted = rowOf('Rent payment');
+    expect(within(noted).getByText('Internal note:')).toBeInTheDocument();
+    expect(within(noted).getByText('Paid at the office, receipt 88')).toBeInTheDocument();
+    expect(within(rowOf('Feb rent')).queryByText('Internal note:')).toBeNull();
+  });
+
+  it('tells the void dialog the voided row’s description', async () => {
+    server.use(detailHandler(), ledgerHandler());
+    renderLedger();
+
+    await screen.findByText('Feb rent');
+    await userEvent.click(within(rowOf('Feb rent')).getByRole('button', { name: 'Void entry' }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'Void entry' });
+    expect(within(dialog).getByText('“Void — Feb rent”')).toBeInTheDocument();
+  });
+});

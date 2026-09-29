@@ -1,4 +1,5 @@
 import { Badge, Icon, Money } from '@/design';
+import { InternalNoteText } from '@/components/InternalNote';
 import { num } from '@/lib/directory';
 import { type RegisterRow, STATUS, statusMeta } from './banking';
 
@@ -16,7 +17,8 @@ interface RegisterTableProps {
  * The bank register table (P69): each journal line on the account as a statement-style row — deposit
  * (debit) / withdrawal (credit) / clearance status. In reconcile mode a checkbox column lets the user tick
  * uncleared rows; already-cleared/reconciled rows show a check glyph instead. Status is a labelled badge
- * (icon + word), never color alone (CLAUDE.md).
+ * (icon + word), never color alone (CLAUDE.md). A staff-only internal note (#468) renders under the
+ * description, marked by a lock and its label.
  */
 export function RegisterTable({
   rows,
@@ -91,7 +93,11 @@ export function RegisterTable({
                 <td className="muted" style={{ whiteSpace: 'nowrap' }}>
                   {row.date}
                 </td>
-                <td className="strong">{row.description ?? '—'}</td>
+                <td className="strong">
+                  {row.description ?? '—'}
+                  {/* Staff-only (#468): a labelled secondary line; the owner statement never has it. */}
+                  {row.internalNote && <InternalNoteText note={row.internalNote} />}
+                </td>
                 <td className="muted">{propertyLabel?.(row.propertyId ?? null) ?? '—'}</td>
                 <td className="num">
                   {row.deposit != null ? (
