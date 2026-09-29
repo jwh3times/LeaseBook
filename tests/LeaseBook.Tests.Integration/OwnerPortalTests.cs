@@ -43,6 +43,10 @@ public sealed partial class OwnerPortalTests(PostgresFixture fixture)
 
     // Free text the fixture writes into journal descriptions, void reasons and Directory rows. None of
     // it is owner-portal copy, so none of it may appear in any owner-portal JSON response.
+    // The PDF endpoint is deliberately exempt: it serves the issued statement byte-for-byte, the
+    // document the manager already issued to this owner, and issued statements carry line
+    // descriptions (ADR-003). Scanning its compressed streams for these strings would prove nothing;
+    // the byte-identity test is what pins that endpoint.
     private static readonly string[] SeededSecrets =
     [
         "Internal", "memo", "reason", "reference",
@@ -235,21 +239,53 @@ public sealed partial class OwnerPortalTests(PostgresFixture fixture)
         }
     }
 
-    [Fact]
-    public async Task An_owner_who_also_holds_another_persona_is_refused_by_both_portals()
+    // Discriminating by construction: the user holds Owner *and* a valid owner link, so only the
+    // exclusion clause for the added role can refuse it. A single-role user would be refused by
+    // RequireRole(Owner) alone and could not tell whether the exclusion exists.
+    [Theory]
+    [InlineData(Roles.PMAdmin)]
+    [InlineData(Roles.PMStaff)]
+    [InlineData(Roles.Tenant)]
+    public async Task An_owner_who_also_holds_another_role_is_refused_by_the_owner_portal(string extraRole)
     {
         var ct = TestContext.Current.CancellationToken;
         var setup = await CreateLinkedUser(Roles.Owner, ct);
-        await using (var scope = fixture.Api.Services.CreateAsyncScope())
-        {
-            var users = scope.ServiceProvider.GetRequiredService<UserManager<AppUser>>();
-            var user = await users.FindByIdAsync(setup.UserId.ToString());
-            AccountSecurityAudit.RequireSuccess(await users.AddToRoleAsync(user!, Roles.Tenant));
-        }
+        await AddRole(setup.UserId, extraRole);
 
         using var client = await Login(setup.Email, AuthTestSupport.DefaultPassword, ct);
-        (await client.GetAsync(SummaryPath, ct)).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        foreach (var path in new[] { SummaryPath, StatementsPath, PdfPath(setup.FirstArtifact) })
+        {
+            (await client.GetAsync(path, ct)).StatusCode.ShouldBe(HttpStatusCode.Forbidden, path);
+        }
+    }
+
+    // The mirror case for the tenant portal: Tenant role *and* a valid resident link, so only the
+    // tenant persona's Owner exclusion can refuse it.
+    [Fact]
+    public async Task A_tenant_who_also_holds_Owner_is_refused_by_the_tenant_portal_despite_a_resident_link()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var setup = await CreateLinkedUser(Roles.Owner, ct);
+        await AddRole(setup.UserId, Roles.Tenant);
+        await InOrg(setup.OrgId, async sp =>
+        {
+            var db = sp.GetRequiredService<AppDbContext>();
+            var tenant = new Tenant { Id = UuidV7.NewId(), DisplayName = "Dual-persona resident" };
+            db.Add(tenant);
+            await db.SaveChangesAsync(ct);
+            await sp.GetRequiredService<ResidentAccessService>().GrantAsync(setup.UserId, tenant.Id, ct);
+        }, ct);
+
+        using var client = await Login(setup.Email, AuthTestSupport.DefaultPassword, ct);
         (await client.GetAsync("/api/portal/tenant/ledger", ct)).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+    }
+
+    private async Task AddRole(Guid userId, string role)
+    {
+        await using var scope = fixture.Api.Services.CreateAsyncScope();
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<AppUser>>();
+        var user = await users.FindByIdAsync(userId.ToString());
+        AccountSecurityAudit.RequireSuccess(await users.AddToRoleAsync(user!, role));
     }
 
     [Fact]
