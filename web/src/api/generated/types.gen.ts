@@ -599,6 +599,45 @@ export type OwnerListRow = {
     total: number | string;
 };
 
+export type OwnerPortalActivityRow = {
+    date: string;
+    category: string;
+    propertyAddress: null | string;
+    amount: number | string;
+    balance: number | string;
+    isVoided: boolean;
+    isReversal: boolean;
+};
+
+export type OwnerPortalDisbursement = {
+    date: string;
+    amount: number | string;
+    isVoided: boolean;
+    isReversal: boolean;
+};
+
+export type OwnerPortalStatement = {
+    id: string;
+    periodYear: number | string;
+    periodMonth: number | string;
+    basis: null | string;
+    scope: string;
+    endingBalance: null | number | string;
+    issuedAt: string;
+};
+
+export type OwnerPortalStatements = {
+    statements: Array<OwnerPortalStatement>;
+};
+
+export type OwnerPortalSummary = {
+    ownerName: string;
+    balance: number | string;
+    basis: string;
+    disbursements: Array<OwnerPortalDisbursement>;
+    activity: Array<OwnerPortalActivityRow>;
+};
+
 export type PagedResponseOfOwnerListRow = {
     items: Array<OwnerListRow>;
     total: number | string;
@@ -2526,6 +2565,61 @@ export type PostApiStatementsByOwnerIdDeliverData = {
 };
 
 export type PostApiStatementsByOwnerIdDeliverResponses = {
+    /**
+     * OK
+     */
+    200: unknown;
+};
+
+export type GetApiPortalOwnerSummaryData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/portal/owner/summary';
+};
+
+export type GetApiPortalOwnerSummaryResponses = {
+    /**
+     * OK
+     */
+    200: OwnerPortalSummary;
+};
+
+export type GetApiPortalOwnerSummaryResponse = GetApiPortalOwnerSummaryResponses[keyof GetApiPortalOwnerSummaryResponses];
+
+export type GetApiPortalOwnerStatementsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/portal/owner/statements';
+};
+
+export type GetApiPortalOwnerStatementsResponses = {
+    /**
+     * OK
+     */
+    200: OwnerPortalStatements;
+};
+
+export type GetApiPortalOwnerStatementsResponse = GetApiPortalOwnerStatementsResponses[keyof GetApiPortalOwnerStatementsResponses];
+
+export type GetApiPortalOwnerStatementsByArtifactIdPdfData = {
+    body?: never;
+    path: {
+        artifactId: string;
+    };
+    query?: never;
+    url: '/api/portal/owner/statements/{artifactId}/pdf';
+};
+
+export type GetApiPortalOwnerStatementsByArtifactIdPdfErrors = {
+    /**
+     * Not Found
+     */
+    404: unknown;
+};
+
+export type GetApiPortalOwnerStatementsByArtifactIdPdfResponses = {
     /**
      * OK
      */

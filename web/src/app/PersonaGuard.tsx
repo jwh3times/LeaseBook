@@ -1,12 +1,27 @@
 import { Link, Navigate, Outlet } from 'react-router';
 import { useSession } from '@/features/auth/useSession';
 
+export type Persona = 'staff' | 'tenant' | 'owner';
+
 function homeForRole(role: string | null | undefined) {
   return role === 'Tenant'
     ? '/portal/tenant'
-    : role === 'PMAdmin' || role === 'PMStaff'
-      ? '/dashboard'
-      : '/account/security';
+    : role === 'Owner'
+      ? '/portal/owner'
+      : role === 'PMAdmin' || role === 'PMStaff'
+        ? '/dashboard'
+        : '/account/security';
+}
+
+function admits(persona: Persona, role: string | null | undefined): boolean {
+  switch (persona) {
+    case 'tenant':
+      return role === 'Tenant';
+    case 'owner':
+      return role === 'Owner';
+    case 'staff':
+      return role === 'PMAdmin' || role === 'PMStaff';
+  }
 }
 
 export function HomeRedirect() {
@@ -14,14 +29,13 @@ export function HomeRedirect() {
   return <Navigate to={homeForRole(session?.role)} replace />;
 }
 
-/** Runs above the staff shell, so denied navigation cannot mount staff query hooks. */
-export function PersonaGuard({ persona }: { persona: 'staff' | 'tenant' }) {
+/**
+ * Runs above each persona's shell, so a denied navigation cannot mount another persona's query
+ * hooks. The server is the enforcement; this keeps a wrong-persona link from asking for the data.
+ */
+export function PersonaGuard({ persona }: { persona: Persona }) {
   const { data: session } = useSession();
-  const allowed =
-    persona === 'tenant'
-      ? session?.role === 'Tenant'
-      : session?.role === 'PMAdmin' || session?.role === 'PMStaff';
-  if (allowed) return <Outlet />;
+  if (admits(persona, session?.role)) return <Outlet />;
   return (
     <main className="pf-page col gap16">
       <h1>Access denied</h1>

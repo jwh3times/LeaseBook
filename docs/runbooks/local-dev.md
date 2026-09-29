@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living runbook; canonical development command reference
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-09-26
+- **Last reviewed:** 2026-09-29
 
 ## Prerequisites
 
@@ -225,16 +225,28 @@ other's figures.
 | `cutover`  | `seed --org cutover`  | Empty org + banks + chart of accounts — the onboarding-wizard e2e fixture. No journal.                                                              |
 | `load`     | `seed --org load`     | ~300 units / 12 months, PRNG-generated at fixed seed — performance fixture (`perf-probe`).                                                          |
 | `scenario` | `seed --org scenario` | The all-scenario org: 5 owners / 11 units, cutover 2026-02-28 + four months (Mar–Jun 2026) exercising every posting template, workflow, and report. |
-| `portal`   | `seed --org portal`   | Three resident logins across two organizations, with isolated rent ledgers and explicit identity links.                                             |
+| `portal`   | `seed --org portal`   | Three resident and three owner logins across two organizations, with isolated ledgers, issued owner statements, and explicit identity links.        |
 
 The **portal** fixture (`seed --org portal`) provisions two residents in one organization and a third
 in another, with explicit identity links and journal activity posted through the accounting engine.
+It does the same for owners: `owner-a@portal.test` and `owner-b@portal.test` share the residents'
+organization, and `owner-c@portal.test` is in the other one.
 Apply migrations first, then run it in the Development environment. Sign in at `/login`
 as `resident-a@portal.test`, `resident-b@portal.test`, or `resident-c@portal.test`, using the
 development-only password in `PortalSeeder.Password`. Resident A and C each see a $700 rent ledger
 balance; Resident B sees $900. Each ledger includes a voided fee and its reversal. Sign-in lands at
 `/portal/tenant`; direct staff navigation shows access denied. Account security and sign-out remain
-available. Re-running the fixture leaves existing organizations intact. Like the other fixture
+available.
+
+Owner logins use the same password and land at `/portal/owner`. Each owner has trust activity, a
+disbursement and an issued statement whose PDF opens from the portal. Owner A also carries a tenant
+deposit that the balance excludes, and a voided second disbursement. Staff pages and the tenant
+portal show access denied to an owner.
+
+Re-running the fixture leaves existing organizations intact, so a database seeded with an older
+`portal` fixture keeps its original shape. To add missing logins such as the owners, reset the
+database with `./scripts/dev.ps1 reset-db`, apply migrations, and re-seed the fixtures you need. Like
+the other fixture
 seeders, it refuses Production. These synthetic credentials are not a customer enrollment procedure;
 production invitations and enrollment are deferred. The browser suite requires this fixture alongside
 `demo` and `cutover`.
@@ -360,7 +372,8 @@ npx playwright install chromium
 ```
 
 The suite requires the `demo`, `cutover`, and `portal` fixtures (the a11y spec checks
-`/onboarding` on the cutover org and the tenant portal with a resident login):
+`/onboarding` on the cutover org, the tenant portal with a resident login, and the owner portal with
+an owner login):
 
 ```powershell
 $env:ASPNETCORE_ENVIRONMENT = "Development"

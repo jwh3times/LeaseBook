@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living architecture guide
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-09-26
+- **Last reviewed:** 2026-09-29
 
 This is the canonical public map of the system **as implemented**. It explains how the pieces fit
 together and links the decisions that shaped them without reproducing every invariant. Accepted
@@ -156,8 +156,21 @@ cookie. The selector-free `/api/portal/tenant/ledger` dispatches the existing Ac
 and returns only resident-facing ledger fields, with `Cache-Control: no-store`. The portal displays
 the rent ledger balance, excluding held security deposits. It neither accepts payments nor provides
 an enrollment endpoint. Tenant navigation uses a dedicated shell; staff routes deny access before
-mounting staff queries. Account security and sign-out reuse the existing auth flows. Owner portal
-access remains unsupported.
+mounting staff queries. Account security and sign-out reuse the existing auth flows.
+
+The read-only owner portal mirrors that shape. A host-owned `owner_access` link, with the same forced
+org RLS, composite references and one active link per user, binds an Identity user to a non-system
+Directory owner. The Owner persona is exclusive: its policy refuses a principal that also holds a
+staff role or Tenant, just as the Tenant policy refuses Owner. The endpoint-filter check resolves the
+link and asks Directory for the non-system owner name on every request. The selector-free
+`/api/portal/owner` endpoints are `no-store`. The summary returns owner equity on the organization's
+accounting basis, excluding deposit liabilities, plus disbursement history and categorized activity
+from the existing Accounting owner-ledger query. Property addresses come from Directory, but only for
+properties on the owner's own rows. Statements come from Reporting's issued artifacts, never a live
+assembly: the list shows every issued statement, and the PDF endpoint serves the stored bytes
+unchanged. A foreign or nonexistent artifact id is a bare 404. An owned artifact whose bytes are
+missing is a logged 503 problem, `statement_document_unavailable`. Owner sign-in lands at
+`/portal/owner`, behind its own persona guard. Owner enrollment is not provided.
 
 Layered on top of that organization boundary, the host applies defense-in-depth hardening: a middleware
 that sets security response headers — including same-origin `Cross-Origin-Opener-Policy` and

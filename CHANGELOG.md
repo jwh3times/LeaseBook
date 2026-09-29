@@ -16,6 +16,21 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 - _Nothing yet._
 
+## [0.19.0] - 2026-09-29
+
+### Added
+
+- **Property owners can sign in to a read-only owner portal.** An owner sees the balance held for them
+  in trust on the organization's accounting basis (tenant security deposits are excluded, since they
+  are not the owner's money), their disbursement history, dated activity by property, and every
+  statement their manager has issued to them, downloadable as the issued PDF. Statements are never
+  re-rendered for the portal. Owners reach only their own records: another owner's data in the same
+  organization, any other organization's data, and staff and tenant-portal pages are all refused,
+  and a revoked owner link takes effect on the next request. The owner role is exclusive of staff and
+  tenant roles. A statement whose stored document is missing shows a deliberate "unavailable" message
+  rather than an error. Owner accounts exist only in the non-production portal fixture; production
+  owner invitation and enrollment are not included.
+
 ## [0.18.0] - 2026-09-27
 
 ### Added
@@ -1112,7 +1127,8 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.18.0...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.19.0...HEAD
+[0.19.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.19.0
 [0.18.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.18.0
 [0.17.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.17.0
 [0.16.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.16.0

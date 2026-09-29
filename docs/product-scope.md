@@ -3,7 +3,7 @@
 - **Audience:** Evaluators, contributors, and maintainers
 - **Status:** Living public scope
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-09-26
+- **Last reviewed:** 2026-09-29
 
 LeaseBook is property-management software for small residential property managers. Its defining
 requirement is correct trust accounting with low interaction cost for recurring operational work.
@@ -24,11 +24,13 @@ Phase 1 supports property-management staff operating a single organization with:
 - Staged migration imports, balance-forward opening entries, verification, sign-off, and onboarding.
 - Role-based staff access, PostgreSQL row-level-security organization isolation, audit events, and MFA capability.
 
-Phase 2 includes a tenant own-ledger portal, account security and sign-out. A separate isolated
-development fixture supports one-time simulated payments and staff review. Only explicit, complete,
-fee-free simulated bank evidence creates a receipt; no real money moves. Production enrollment and
-live online payments remain outside the implemented scope. The
-[payment simulation runbook](runbooks/payment-simulation.md) owns setup and recovery.
+Phase 2 includes a tenant own-ledger portal and a read-only owner portal, with account security and
+sign-out. Owners see their own trust balance, disbursements, activity and issued statements. A
+separate isolated development fixture supports one-time simulated payments and staff review. Only
+explicit, complete, fee-free simulated bank evidence creates a receipt; no real money moves.
+Production enrollment, owner-initiated actions and live online payments remain outside the
+implemented scope. The [payment simulation runbook](runbooks/payment-simulation.md) owns setup and
+recovery.
 
 The [accounting guide](accounting.md) owns financial behavior, and the
 [architecture guide](architecture.md) owns system boundaries. This scope document does not restate
@@ -59,8 +61,8 @@ seams may exist without making the external product itself part of LeaseBook.
 
 ## Later Product Areas
 
-Further planned areas include online payments, production tenant enrollment, an owner portal, fuller
-lease management, maintenance workflows, and vacancy/listing workflows. The
+Further planned areas include online payments, production tenant and owner enrollment, fuller lease
+management, maintenance workflows, and vacancy/listing workflows. The
 [roadmap](ROADMAP.md) communicates direction only; detailed scope is defined at each phase boundary.
 
 ## Public Contribution Boundary

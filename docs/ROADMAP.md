@@ -3,7 +3,7 @@
 - **Audience:** Evaluators, contributors, and maintainers
 - **Status:** Living public direction
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-09-26
+- **Last reviewed:** 2026-09-29
 
 LeaseBook is pre-release software. This page communicates shipped capabilities and broad product
 direction; it is not an implementation plan or a commitment to specific dates. Detailed sequencing,
@@ -60,10 +60,12 @@ Hardening and beta readiness are in progress. Shipped so far:
 - **Authored Azure infrastructure.** Environment templates and deployment workflows exist; enabling
   them requires operator-held cloud access.
 
-Phase 2 now includes tenant own-ledger access, per-request identity checks, account security and
-sign-out, plus one-time simulated payments in a dedicated development fixture. Durable processing
-and explicit simulated bank evidence exercise the real Accounting receipt path. Production
-enrollment, live online payments and an owner portal remain future work. See the
+Phase 2 now includes tenant own-ledger access and a read-only owner portal, both with per-request
+identity checks, account security and sign-out. Owners see their balance held in trust, their
+disbursements and activity, and the statements issued to them. Phase 2 also adds one-time simulated
+payments in a dedicated development fixture. Durable processing and explicit simulated bank evidence
+exercise the real Accounting receipt path. Production enrollment, owner-initiated actions and live
+online payments remain future work. See the
 [payment simulation runbook](runbooks/payment-simulation.md).
 
 ## Near-Term Priorities
@@ -83,8 +85,8 @@ interaction budgets, and relevant automated gates remain green.
 
 ## Later Direction
 
-Further product areas include online payments, production tenant enrollment, an owner portal, fuller
-lease management, maintenance workflows, and vacancy/listing workflows. Detailed scope and ordering
+Further product areas include online payments, production tenant and owner enrollment, fuller lease
+management, maintenance workflows, and vacancy/listing workflows. Detailed scope and ordering
 will be defined at each phase boundary rather than inferred from this summary.
 
 ## Sources of Truth
