@@ -340,6 +340,7 @@ export function LedgerPage() {
       {voidEntryId && (
         <VoidDialog
           entryId={voidEntryId}
+          description={allRows.find((row) => row.entryId === voidEntryId)?.description}
           onClose={() => setVoidEntryId(null)}
           onVoided={(reversalId) => {
             setVoidEntryId(null);

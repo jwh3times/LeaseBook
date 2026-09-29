@@ -49,12 +49,24 @@ async function unwrap(
   throw toError(error, response?.status ?? 0);
 }
 
+/** A trimmed free-text field, or null when blank — the server's "not supplied". */
+function textOrNull(value: string | undefined): string | null {
+  const trimmed = (value ?? '').trim();
+  return trimmed === '' ? null : trimmed;
+}
+
 /** The composer/apply fields, pre-coerced. `category` drives which command (and event) is posted. */
 export interface LedgerEntryInput {
   category: string; // 'Payment' | 'Rent' | 'Late Fee' | 'Maintenance' | 'Other' | 'Security Deposit' | 'Prepayment' | 'Credit'
   amount: number;
   date: string; // yyyy-mm-dd
-  memo: string;
+  /**
+   * Owner-facing (#468, ADR-047): prints on the owner statement. For a credit this is the reason the
+   * `IssueCredit` command carries, which is owner-facing too.
+   */
+  description: string;
+  /** Staff-only: shown on staff surfaces, never on an owner's or resident's copy. */
+  internalNote?: string;
   method: string; // ach | card | check | cash (payment)
   bankAccountId: string;
   sourceRef: string;
@@ -100,9 +112,9 @@ export async function submitLedgerEntry(
   tenantId: string,
   input: LedgerEntryInput,
 ): Promise<PostResult> {
-  const { category, amount, date, memo, method, bankAccountId, sourceRef } = input;
-  const trimmed = memo.trim();
-  const memoOrNull = trimmed === '' ? null : trimmed;
+  const { category, amount, date, method, bankAccountId, sourceRef } = input;
+  const description = textOrNull(input.description);
+  const internalNote = textOrNull(input.internalNote);
   const path = { tenantId } as const;
 
   switch (category) {
@@ -116,7 +128,8 @@ export async function submitLedgerEntry(
             date,
             method,
             bankAccountId,
-            description: memoOrNull,
+            description,
+            internalNote,
             sourceRef,
           },
         }),
@@ -130,7 +143,8 @@ export async function submitLedgerEntry(
             amount,
             date,
             depositBankId: bankAccountId,
-            description: memoOrNull,
+            description,
+            internalNote,
             sourceRef,
           },
         }),
@@ -139,14 +153,29 @@ export async function submitLedgerEntry(
       return unwrap(
         postApiAccountingTenantsByTenantIdPrepayments({
           path,
-          body: { tenantId, amount, date, bankAccountId, description: memoOrNull, sourceRef },
+          body: {
+            tenantId,
+            amount,
+            date,
+            bankAccountId,
+            description,
+            internalNote,
+            sourceRef,
+          },
         }),
       );
     case 'Credit':
       return unwrap(
         postApiAccountingTenantsByTenantIdCredits({
           path,
-          body: { tenantId, amount, date, reason: memoOrNull ?? 'Credit', sourceRef },
+          body: {
+            tenantId,
+            amount,
+            date,
+            reason: description ?? 'Credit',
+            internalNote,
+            sourceRef,
+          },
         }),
       );
     default:
@@ -158,7 +187,8 @@ export async function submitLedgerEntry(
             amount,
             date,
             kind: CHARGE_KIND[category] ?? 'other',
-            description: memoOrNull,
+            description,
+            internalNote,
             sourceRef,
           },
         }),
@@ -166,7 +196,19 @@ export async function submitLedgerEntry(
   }
 }
 
-/** Voids a posted entry → a linked reversal (P54 idempotency key; default as-of today server-side). */
+/**
+ * The owner-facing description `ReversalService` gives a reversal: `Void — {original}`, or a bare
+ * `Void` when the original had none. Mirrors the server so the void dialog promises what gets posted.
+ */
+export function voidDescription(original: string | null | undefined): string {
+  return original == null || original.trim() === '' ? 'Void' : `Void — ${original}`;
+}
+
+/**
+ * Voids a posted entry → a linked reversal (P54 idempotency key; default as-of today server-side). The
+ * reason is staff-only: the server stores it as the reversal's internal note, and the owner statement
+ * shows `Void — {original description}` instead (#468, ADR-047).
+ */
 export async function voidEntry(
   entryId: string,
   reason: string,
@@ -186,7 +228,10 @@ export interface ApplyDepositInput {
   depositBankId: string;
   operatingBankId: string;
   target: string; // to-owner-income | against-charges
+  /** Owner-facing: `ApplyDeposit`'s reason prints on the owner statement. */
   reason: string;
+  /** Staff-only. */
+  internalNote?: string;
   sourceRef: string;
 }
 
@@ -205,6 +250,7 @@ export async function applyDeposit(
         operatingBankId: input.operatingBankId,
         target: input.target,
         reason: input.reason,
+        internalNote: textOrNull(input.internalNote),
         sourceRef: input.sourceRef,
       },
     }),
@@ -215,7 +261,10 @@ export interface ApplyPrepaymentInput {
   amount: number;
   date: string;
   bankAccountId: string;
-  memo: string;
+  /** Owner-facing: prints on the owner statement. */
+  description: string;
+  /** Staff-only. */
+  internalNote?: string;
   sourceRef: string;
 }
 
@@ -223,7 +272,6 @@ export async function applyPrepayment(
   tenantId: string,
   input: ApplyPrepaymentInput,
 ): Promise<PostResult> {
-  const memo = input.memo.trim();
   return unwrap(
     postApiAccountingTenantsByTenantIdPrepaymentApplications({
       path: { tenantId },
@@ -232,7 +280,8 @@ export async function applyPrepayment(
         amount: input.amount,
         date: input.date,
         bankAccountId: input.bankAccountId,
-        description: memo === '' ? null : memo,
+        description: textOrNull(input.description),
+        internalNote: textOrNull(input.internalNote),
         sourceRef: input.sourceRef,
       },
     }),

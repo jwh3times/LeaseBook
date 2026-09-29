@@ -1,8 +1,9 @@
 import { useMutation } from '@tanstack/react-query';
-import { useRef, useState, type KeyboardEvent } from 'react';
+import { useId, useRef, useState, type KeyboardEvent } from 'react';
 import { Button, Input, Select } from '@/design';
 import { ApiErrorNotice } from '@/components/ApiErrorNotice';
 import { ErrorAction } from '@/components/ErrorAction';
+import { AudienceHint } from '@/components/InternalNote';
 import { Modal } from '@/components/Modal';
 import { useBankAccounts } from '@/lib/settings';
 import {
@@ -35,7 +36,11 @@ export function ApplyModal({ tenantId, initialKind, onClose, onApplied }: ApplyM
   const [kind, setKind] = useState<Kind>(initialKind);
   const [amount, setAmount] = useState('');
   const [target, setTarget] = useState('against-charges');
-  const [reason, setReason] = useState('');
+  // Owner-facing: a deposit application's reason and a prepayment application's description both
+  // print on the owner statement (#468, ADR-047). The internal note stays on staff surfaces.
+  const [description, setDescription] = useState('');
+  const [internalNote, setInternalNote] = useState('');
+  const fieldId = useId();
   const [error, setError] = useState<LedgerPostError | null>(null);
   const sourceRef = useRef(newSourceRef());
 
@@ -61,7 +66,8 @@ export function ApplyModal({ tenantId, initialKind, onClose, onApplied }: ApplyM
           depositBankId: depositBank!.id,
           operatingBankId: operatingBank!.id,
           target,
-          reason: reason.trim() === '' ? 'Applied' : reason.trim(),
+          reason: description.trim() === '' ? 'Applied' : description.trim(),
+          internalNote,
           sourceRef: sourceRef.current,
         });
       }
@@ -69,7 +75,8 @@ export function ApplyModal({ tenantId, initialKind, onClose, onApplied }: ApplyM
         amount: value,
         date,
         bankAccountId: operatingBank!.id,
-        memo: reason,
+        description,
+        internalNote,
         sourceRef: sourceRef.current,
       });
     },
@@ -199,16 +206,39 @@ export function ApplyModal({ tenantId, initialKind, onClose, onApplied }: ApplyM
           </label>
         )}
 
-        <label className="col gap6">
-          <span className="pf-eyebrow">Reason</span>
+        <div className="col gap6">
+          <span className="pf-field-labelrow">
+            <label className="pf-eyebrow" htmlFor={`${fieldId}-desc`}>
+              Statement description
+            </label>
+            <AudienceHint id={`${fieldId}-desc-hint`} audience="owner" />
+          </span>
           <Input
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
+            id={`${fieldId}-desc`}
+            aria-describedby={`${fieldId}-desc-hint`}
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
             onKeyDown={onKeyDown}
-            placeholder="e.g. move-out settlement"
-            aria-label="Reason"
+            placeholder="e.g. Move-out settlement"
           />
-        </label>
+        </div>
+
+        <div className="col gap6">
+          <span className="pf-field-labelrow">
+            <label className="pf-eyebrow" htmlFor={`${fieldId}-note`}>
+              Internal note
+            </label>
+            <AudienceHint id={`${fieldId}-note-hint`} audience="staff" />
+          </span>
+          <Input
+            id={`${fieldId}-note`}
+            aria-describedby={`${fieldId}-note-hint`}
+            value={internalNote}
+            onChange={(e) => setInternalNote(e.target.value)}
+            onKeyDown={onKeyDown}
+            placeholder="Optional"
+          />
+        </div>
 
         <ApiErrorNotice error={error} />
       </div>
