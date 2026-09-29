@@ -14,7 +14,23 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ## [Unreleased]
 
-- _Nothing yet._
+### Added
+
+- **Staff can keep an internal note on a ledger entry that owners never see.** Payments, charges,
+  credits, deposits, prepayments, their applications and bank adjustments accept an optional internal
+  note beside the description. The note shows on the tenant ledger and its CSV, the bank register (whose
+  search also finds it), the trust-ledger report, the compliance pack and the staff statement view. It
+  never appears on an owner statement (PDF, CSV or issued copy) or in either portal. A note is saved
+  with the entry and cannot be edited afterwards.
+
+### Changed
+
+- **A void's reason is now staff-only.** The reason is kept as the reversal's internal note, and the
+  owner statement shows the reversal as `Void — {original description}`: that a correction happened,
+  and to what, but not why. Voids recorded earlier keep their `VOID: {reason}` text; posted entries and
+  issued statements are never rewritten.
+- **The ledger API's `memo` field is now `description`**, and it is documented as owner-facing text.
+  The bank-adjustment request is renamed the same way.
 
 ## [0.19.0] - 2026-09-29
 

@@ -3,7 +3,7 @@
 - **Audience:** Implementers and reviewers of issue #456
 - **Status:** Implemented simulation contract for #456; live payments remain unapproved
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-09-27
+- **Last reviewed:** 2026-09-29
 
 ## Evidence and boundary
 
@@ -100,7 +100,7 @@ Zero lines are omitted. The exact current template is:
 
 No unit dimension is added by this event. `Both` participates once in each basis. Accrual owner
 equity was recognized by the original charge; receiving cash clears its receivable. Use payment
-method `ach`, memo `Simulated tenant payment`, and stable source reference
+method `ach`, description `Simulated tenant payment`, and stable source reference
 `sim-payment:{operation UUID in N format}:receipt`. The fixture's explicit bank must be an
 org-owned trust bank. The binding is immutable once used; changing the configured bank cannot
 retarget an in-flight operation. Capabilities may gate submission only and cannot change lines.
