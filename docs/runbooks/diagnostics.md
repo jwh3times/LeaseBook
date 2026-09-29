@@ -3,7 +3,7 @@
 - **Audience:** Operators and maintainers
 - **Status:** Living runbook; canonical error-diagnosis reference
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-09-27
+- **Last reviewed:** 2026-09-29
 
 How to turn the reference an operator sees on screen into the full server-side detail in
 Application Insights. See [ADR-025](../adr/ADR-025-error-contract-and-observability.md) for the
@@ -600,3 +600,26 @@ Staff Operations shows durable payment status, reason, last attempt and evidence
 the current organization. Unassociated observations older than ten minutes appear as a review
 count. Only technical failures offer an administrator retry of the same operation. See the
 [payment simulation runbook](payment-simulation.md) for fixture recovery and the journal boundary.
+
+## Owner portal statement document unavailable (4700)
+
+The owner portal serves an issued statement's stored PDF bytes; it never re-renders them. When an
+owner opens a statement that was issued to them but whose bytes the artifact store cannot return, the
+request gets a 503 problem with code `statement_document_unavailable`. The server logs a Warning
+`4700` (`OwnerStatementDocumentUnavailable`) naming the artifact id, the owner id and the statement
+period. A foreign or nonexistent artifact id is a bare 404 and logs nothing.
+
+```kusto
+traces
+| where customDimensions.EventId == 4700
+| order by timestamp desc
+```
+
+The owner cannot fix this, and retrying does not help. The `statement_artifacts` row exists, but the
+store holds no file for its `artifact_key`. The current store is the local file-system
+`LocalArtifactStore`, which is not durable. It writes under `Reporting:ArtifactDirectory`, or the
+system temp directory when that is unset. It loses files when that directory is cleaned, a container
+is replaced or a volume is reset, while the database keeps the row. Restore the file under that key
+from wherever the artifact directory was backed up, if anywhere. A burst across many artifacts means
+the artifact storage itself was lost. Durable artifact storage is outside the owner-portal slice
+([ADR-003](../adr/ADR-003-portal-suborg-scoping-at-app-layer.md)).
