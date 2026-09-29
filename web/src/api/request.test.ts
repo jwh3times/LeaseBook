@@ -1,8 +1,12 @@
 import { http, HttpResponse } from 'msw';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { server } from '@/test/mocks/server';
-import { getApiDashboard, getApiReportsByIdCsv } from './generated';
-import { download, unwrap } from './request';
+import {
+  getApiDashboard,
+  getApiPortalOwnerStatementsByArtifactIdPdf,
+  getApiReportsByIdCsv,
+} from './generated';
+import { download, openDocument, unwrap } from './request';
 import type { ApiError } from './apiError';
 
 describe('unwrap', () => {
@@ -122,5 +126,110 @@ describe('download', () => {
 
     expect(err).toMatchObject({ code: 'period_not_closed', correlationId: 'op-9', status: 422 });
     expect(createObjectURL).not.toHaveBeenCalled();
+  });
+});
+
+describe('openDocument', () => {
+  const createObjectURL = vi.fn(() => 'blob:statement');
+  const revokeObjectURL = vi.fn();
+  const artifactId = '0192a4b0-0000-7000-8000-000000000001';
+  const pdf = () =>
+    getApiPortalOwnerStatementsByArtifactIdPdf({ path: { artifactId }, parseAs: 'blob' });
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['setTimeout'] });
+    document.body.innerHTML = '';
+    createObjectURL.mockClear();
+    revokeObjectURL.mockClear();
+    globalThis.URL.createObjectURL = createObjectURL;
+    globalThis.URL.revokeObjectURL = revokeObjectURL;
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it('opens the fetched PDF in a new tab and keeps its URL alive while the tab loads it', async () => {
+    const requested: string[] = [];
+    server.use(
+      http.get('/api/portal/owner/statements/:artifactId/pdf', ({ request }) => {
+        requested.push(new URL(request.url).pathname);
+        return new HttpResponse(new Blob(['%PDF-1.7']), {
+          headers: { 'Content-Type': 'application/pdf' },
+        });
+      }),
+    );
+    const tab = { opener: {} as unknown } as Window;
+    const open = vi.spyOn(window, 'open').mockReturnValue(tab);
+
+    await openDocument(pdf, 'statement.pdf');
+
+    expect(requested).toEqual([`/api/portal/owner/statements/${artifactId}/pdf`]);
+    expect(open).toHaveBeenCalledWith('blob:statement', '_blank');
+    expect((createObjectURL.mock.calls[0] as unknown as [Blob])[0].type).toBe('application/pdf');
+    expect(tab.opener).toBeNull();
+    expect(revokeObjectURL).not.toHaveBeenCalled();
+    vi.runAllTimers();
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:statement');
+  });
+
+  it('falls back to a download when the browser blocks the tab', async () => {
+    server.use(
+      http.get(
+        '/api/portal/owner/statements/:artifactId/pdf',
+        () =>
+          new HttpResponse(new Blob(['%PDF-1.7']), {
+            headers: { 'Content-Type': 'application/pdf' },
+          }),
+      ),
+    );
+    vi.spyOn(window, 'open').mockReturnValue(null);
+    const clicked: string[] = [];
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      clicked.push(this.download);
+    });
+
+    await openDocument(pdf, 'statement.pdf');
+
+    expect(clicked).toEqual(['statement.pdf']);
+  });
+
+  it('throws the problem code for an unavailable document and opens nothing', async () => {
+    server.use(
+      http.get('/api/portal/owner/statements/:artifactId/pdf', () =>
+        HttpResponse.json(
+          {
+            code: 'statement_document_unavailable',
+            detail: 'This statement was issued, but its document cannot be retrieved right now.',
+            correlationId: 'abc123',
+          },
+          { status: 503 },
+        ),
+      ),
+    );
+    const open = vi.spyOn(window, 'open');
+
+    await expect(openDocument(pdf, 'statement.pdf')).rejects.toMatchObject({
+      code: 'statement_document_unavailable',
+      correlationId: 'abc123',
+      status: 503,
+    });
+    expect(open).not.toHaveBeenCalled();
+    expect(createObjectURL).not.toHaveBeenCalled();
+  });
+
+  it('maps a bare 404 to the caller fallback', async () => {
+    server.use(
+      http.get(
+        '/api/portal/owner/statements/:artifactId/pdf',
+        () => new HttpResponse(null, { status: 404 }),
+      ),
+    );
+
+    await expect(
+      openDocument(pdf, 'statement.pdf', 'This statement is not available.'),
+    ).rejects.toMatchObject({ message: 'This statement is not available.', status: 404 });
   });
 });

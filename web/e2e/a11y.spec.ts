@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 import {
   CUTOVER_ADMIN,
   DEMO_ADMIN,
+  PORTAL_OWNER,
   PORTAL_RESIDENT,
   openPalette,
   paletteOptions,
@@ -38,6 +39,15 @@ for (const theme of THEMES) {
     await seedTheme(page, theme);
     await signIn(page, PORTAL_RESIDENT);
     await expect(page.getByRole('heading', { name: 'Resident A' })).toBeVisible();
+    await runA11y(page);
+  });
+  test(`no WCAG AA violations on owner portal (${theme})`, async ({ page }) => {
+    await seedTheme(page, theme);
+    await signIn(page, PORTAL_OWNER);
+    await expect(page.getByRole('heading', { name: 'Owner A' })).toBeVisible();
+    // Every region resolved, so the scan sees the populated tables rather than skeletons.
+    await expect(page.getByRole('table', { name: /Issued statements/ })).toBeVisible();
+    await expect(page.getByRole('table', { name: 'Trust activity' })).toBeVisible();
     await runA11y(page);
   });
   test.describe(`a11y (${theme}) — demo org pages`, () => {

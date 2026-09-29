@@ -17,6 +17,12 @@ export const PORTAL_RESIDENT: Credentials = {
   email: 'resident-a@portal.test',
   password: 'Portal-Fixture-2026!',
 };
+// Owner A in the portal fixture org (#464): a linked owner login with activity, disbursements and
+// an issued statement (`seed --org portal`).
+export const PORTAL_OWNER: Credentials = {
+  email: 'owner-a@portal.test',
+  password: 'Portal-Fixture-2026!',
+};
 
 // Force a theme deterministically before the app boots. ThemeProvider reads localStorage
 // ('leasebook.theme' → { theme, accent, density }) synchronously on first render and storage wins
@@ -35,7 +41,7 @@ export async function signIn(page: Page, creds: Credentials): Promise<void> {
   await page.getByLabel('Email').fill(creds.email);
   await page.getByLabel('Password').fill(creds.password);
   await page.getByRole('button', { name: /sign in/i }).click();
-  await page.waitForURL(/\/(dashboard|onboarding|portal\/tenant)/, { timeout: 15_000 });
+  await page.waitForURL(/\/(dashboard|onboarding|portal\/(tenant|owner))/, { timeout: 15_000 });
 }
 
 // Opens the ⌘K palette robustly and returns its search combobox. The global keydown listener attaches

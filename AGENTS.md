@@ -68,11 +68,12 @@ this one, for current progress.
   delivery for the sweep's violation events — and the two ADR-041 first-apply steps: naming the
   ingress network so forwarded-header trust can be enabled and verified, and confirming the keyring's
   Key Vault wrap engages.
-- Phase 2 includes the tenant own-ledger portal (ADR-003) and isolated development-only simulated
-  payments (ADR-046). Before running or resetting payment fixtures, read
-  `docs/runbooks/payment-simulation.md`; the dedicated database and generation binding protect
-  ordinary organizations and golden data. Production enrollment, live payments and the owner portal
-  remain future work; M8 operator work stays deferred.
+- Phase 2 includes the tenant own-ledger portal and the read-only owner portal (both ADR-003), and
+  isolated development-only simulated payments (ADR-046). Before running or resetting payment
+  fixtures, read `docs/runbooks/payment-simulation.md`; the dedicated database and generation binding
+  protect ordinary organizations and golden data. Production enrollment for either portal,
+  owner-initiated actions, durable artifact storage and live payments remain future work; M8
+  operator work stays deferred.
 - `Accounting`, `Directory`, `Banking`, `Reporting`, `Operations`, `Capabilities`, `Payments`, and
   `Migrator` carry implemented behavior; Payments has no live provider adapter.
 
