@@ -7,5 +7,5 @@
 // without anything saying otherwise (ADR-025).
 export { primeCsrf } from './client';
 export { asApiError, isNotFound, isSessionExpired, toApiError, type ApiError } from './apiError';
-export { download, unwrap, type ApiResult } from './request';
+export { download, openDocument, unwrap, type ApiResult } from './request';
 export * from './generated';
