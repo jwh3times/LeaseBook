@@ -14,6 +14,10 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ## [Unreleased]
 
+- _Nothing yet._
+
+## [0.20.0] - 2026-09-29
+
 ### Added
 
 - **Staff can keep an internal note on a ledger entry that owners never see.** Payments, charges,
@@ -32,8 +36,9 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 - **The ledger API's `memo` field is now `description`**, and it is documented as owner-facing text.
   The bank-adjustment request is renamed the same way. A request that still sends `memo` is rejected
   rather than posted without its text.
-- **A request the API cannot read now gets a coded error.** Malformed JSON, a value of the wrong kind or
-  an unknown field returns a 400 with an error code and a reference to quote. Outside development it
+- **A request the API cannot read now gets a coded error.** Malformed JSON or a value of the wrong kind
+  returns a 400 with an error code and a reference to quote, as does an unknown field on the renamed
+  ledger requests. Outside development it
   used to be a bare 400 with no body.
 
 ## [0.19.0] - 2026-09-29
@@ -1147,7 +1152,8 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.19.0...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.20.0...HEAD
+[0.20.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.20.0
 [0.19.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.19.0
 [0.18.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.18.0
 [0.17.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.17.0
