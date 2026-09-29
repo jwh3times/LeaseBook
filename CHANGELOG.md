@@ -14,7 +14,22 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ## [Unreleased]
 
-- _Nothing yet._
+### Security
+
+- **The database now enforces what each portal user may see, not only the application.** Every
+  organization-scoped table carries a row-level policy that confines a tenant-portal or owner-portal
+  session to the rows granted to it, derived from its active access link, and denies everything else
+  by default, including any table added later. A query that forgets its owner or tenant filter now
+  returns nothing instead of the organization's data. Portal sessions cannot update or delete rows,
+  and can insert only the payment request and audit records their own actions create. Staff and
+  background work are unaffected within their organization. A session that holds a portal role
+  together with a staff role sees nothing.
+
+### Changed
+
+- **Direct database sessions must declare a persona.** A psql or pgAdmin session connecting as the
+  application or read-only role must set `app.persona` (usually `staff`) as well as `app.org_id`, or
+  every organization-scoped table returns no rows. The restore verification script already does.
 
 ## [0.19.0] - 2026-09-29
 
