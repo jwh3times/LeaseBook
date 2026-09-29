@@ -65,7 +65,7 @@ test('records a payment in ≤ 3 interactions, then voids it with a linked rever
   // Void it → a linked reversal renders, the original is marked voided (back to baseline).
   await paymentRow.getByRole('button', { name: 'Void entry' }).click();
   const voidDialog = page.getByRole('dialog', { name: 'Void entry' });
-  await voidDialog.getByLabel('Reason').fill('e2e cleanup');
+  await voidDialog.getByLabel('Reason (internal note)').fill('e2e cleanup');
   await voidDialog.getByRole('button', { name: 'Void entry' }).click();
 
   // This run's reversal (scoped by the unique amount, since prior runs may have left reversal rows).
@@ -75,12 +75,14 @@ test('records a payment in ≤ 3 interactions, then voids it with a linked rever
       .filter({ hasText: `$${UNIQUE_AMOUNT}` })
       .filter({ hasText: 'Reversal' }),
   ).toBeVisible();
-  // The original payment row (category "Payment", to exclude the "EntryVoided" reversal) now reads Voided.
+  // The original payment row now reads Voided. The reversal's description is "Void — Payment" (#468),
+  // so the category alone no longer tells the two apart.
   await expect(
     page
       .getByRole('row')
       .filter({ hasText: `$${UNIQUE_AMOUNT}` })
-      .filter({ hasText: 'Payment' }),
+      .filter({ hasText: 'Payment' })
+      .filter({ hasNotText: 'Void —' }),
   ).toContainText('Voided');
 });
 
@@ -141,10 +143,11 @@ test('a payment into a month with an issued owner statement shows a notice and s
   const paymentRow = page
     .getByRole('row')
     .filter({ hasText: `$${amount}` })
-    .filter({ hasText: 'Payment' });
+    .filter({ hasText: 'Payment' })
+    .filter({ hasNotText: 'Void —' }); // the reversal reads "Void — Payment" (#468)
   await paymentRow.getByRole('button', { name: 'Void entry' }).click();
   const voidDialog = page.getByRole('dialog', { name: 'Void entry' });
-  await voidDialog.getByLabel('Reason').fill('e2e cleanup');
+  await voidDialog.getByLabel('Reason (internal note)').fill('e2e cleanup');
   await voidDialog.getByRole('button', { name: 'Void entry' }).click();
   await expect(paymentRow).toContainText('Voided');
 });
@@ -184,4 +187,101 @@ test('an over-application of held funds is blocked with a warning and the modal 
   await expect(apply).toBeVisible(); // stays open so the user can lower the amount
   await page.screenshot({ path: 'e2e-results/m3-apply-warn.png', fullPage: true });
   await apply.getByRole('button', { name: 'Cancel' }).click();
+});
+
+// #468 (ADR-047): a void's reason is a staff-only internal note. The owner statement shows that a
+// correction happened, and to what ("Void — {description}"), while the staff view annotates both the
+// payment's note and the void's reason as not on the owner's copy — and the owner-facing CSV carries
+// neither. Jasmine Carter's payment settles her open receivable, a cash owner-equity line on her owner's
+// (O1) statement; it is voided back to baseline, so the demo org's golden figures stay reproducible.
+test('a void’s reason stays staff-only: the statement shows “Void — …” and the note only as a staff annotation', async ({
+  page,
+}) => {
+  await login(page);
+  await openTenantLedger(page);
+
+  const amount = (60 + Math.floor(Math.random() * 90) / 100).toFixed(2);
+  const description = `e2e rent ${amount}`;
+  const paymentNote = `e2e payment note ${amount}`;
+  const voidReason = `e2e void reason ${amount}`;
+
+  await page.getByRole('button', { name: 'Record payment' }).click();
+  const paymentDate = await page
+    .locator('.pf-composer-field')
+    .filter({ hasText: 'Date' })
+    .locator('input')
+    .inputValue();
+  await page.getByLabel('Amount').fill(amount);
+  await page.getByLabel('Statement description').fill(description);
+  await page.getByLabel('Internal note').fill(paymentNote);
+  await page.getByLabel('Internal note').press('Enter');
+
+  // The reversal's description contains the payment's, so the payment row excludes "Void —".
+  const paymentRow = page
+    .getByRole('row')
+    .filter({ hasText: description })
+    .filter({ hasNotText: 'Void —' });
+  await expect(paymentRow).toContainText(`Internal note: ${paymentNote}`);
+
+  await paymentRow.getByRole('button', { name: 'Void entry' }).click();
+  const voidDialog = page.getByRole('dialog', { name: 'Void entry' });
+  await expect(voidDialog).toContainText(`The owner statement will show “Void — ${description}”`);
+  await voidDialog.getByLabel('Reason (internal note)').fill(voidReason);
+  await voidDialog.getByRole('button', { name: 'Void entry' }).click();
+
+  const reversalRow = page.getByRole('row').filter({ hasText: `Void — ${description}` });
+  await expect(reversalRow).toContainText('Reversal');
+  await expect(reversalRow).toContainText(`Internal note: ${voidReason}`);
+  await expect(paymentRow).toContainText('Voided');
+
+  // The staff statement for the month the payment was dated (read from the composer, not the clock).
+  const [year, month] = paymentDate.split('-').map(Number) as [number, number];
+  await page.goto(`/owners/${DEMO_OWNER_O1}/statement`);
+  await expect(page.getByRole('heading', { name: 'Owner statement', exact: true })).toBeVisible();
+  await page.locator('button[aria-haspopup="dialog"]').first().click();
+  const picker = page.getByRole('dialog', { name: 'Select period' });
+  await picker.getByRole('button', { name: String(year) }).click();
+  await picker
+    .getByRole('button', {
+      name: new Date(Date.UTC(year, month - 1, 1)).toLocaleString('en-US', {
+        month: 'short',
+        timeZone: 'UTC',
+      }),
+      exact: true,
+    })
+    .click();
+
+  const statement = page.locator('.pf-stmt-doc');
+  const voidLine = statement.locator('.pf-stmt-line').filter({ hasText: `Void — ${description}` });
+  await expect(voidLine).toBeVisible({ timeout: 15_000 });
+  // The reason appears only as the staff annotation, marked as not on the owner's copy.
+  await expect(voidLine.locator('.pf-internal-note')).toHaveText(
+    `Internal — not on the owner’s copy: ${voidReason}`,
+  );
+  const paymentLine = statement
+    .locator('.pf-stmt-line')
+    .filter({ hasText: description })
+    .filter({ hasNotText: 'Void —' });
+  await expect(paymentLine.locator('.pf-internal-note')).toHaveText(
+    `Internal — not on the owner’s copy: ${paymentNote}`,
+  );
+  // Outside the annotations, the statement's own text never carries either note.
+  const ownerText = await statement.evaluate((doc) => {
+    const copy = doc.cloneNode(true) as HTMLElement;
+    copy.querySelectorAll('.pf-internal-note').forEach((n) => n.remove());
+    return copy.textContent ?? '';
+  });
+  expect(ownerText).toContain(`Void — ${description}`);
+  expect(ownerText).not.toContain(voidReason);
+  expect(ownerText).not.toContain(paymentNote);
+
+  // The owner-facing export — what gets issued and what the owner portal serves — has neither.
+  const csv = await page.request.get(
+    `/api/statements/${DEMO_OWNER_O1}/csv?year=${year}&month=${month}&basis=cash`,
+  );
+  expect(csv.ok(), await csv.text()).toBe(true);
+  const csvText = await csv.text();
+  expect(csvText).toContain(`Void — ${description}`);
+  expect(csvText).not.toContain(voidReason);
+  expect(csvText).not.toContain(paymentNote);
 });
