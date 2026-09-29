@@ -53,6 +53,7 @@ const ROWS: TenantLedgerEntry[] = [
     balance: 1450,
     isVoided: false,
     reversesEntryId: null,
+    internalNote: null,
   },
   {
     entryId: 'e2',
@@ -66,6 +67,7 @@ const ROWS: TenantLedgerEntry[] = [
     balance: 1500,
     isVoided: false,
     reversesEntryId: null,
+    internalNote: null,
   },
   {
     entryId: 'e3',
@@ -79,6 +81,7 @@ const ROWS: TenantLedgerEntry[] = [
     balance: 0,
     isVoided: false,
     reversesEntryId: null,
+    internalNote: null,
   },
 ];
 
@@ -278,6 +281,7 @@ describe('LedgerPage', () => {
         balance: 1450,
         isVoided: true,
         reversesEntryId: null,
+        internalNote: null,
       },
       {
         entryId: 'v2',
@@ -291,6 +295,7 @@ describe('LedgerPage', () => {
         balance: 0,
         isVoided: false,
         reversesEntryId: 'v1',
+        internalNote: null,
       },
     ];
     server.use(detailHandler(), ledgerHandler(rows));

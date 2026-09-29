@@ -110,7 +110,15 @@ export async function submitLedgerEntry(
       return unwrap(
         postApiAccountingTenantsByTenantIdPayments({
           path,
-          body: { tenantId, amount, date, method, bankAccountId, memo: memoOrNull, sourceRef },
+          body: {
+            tenantId,
+            amount,
+            date,
+            method,
+            bankAccountId,
+            description: memoOrNull,
+            sourceRef,
+          },
         }),
       );
     case 'Security Deposit':
@@ -122,7 +130,7 @@ export async function submitLedgerEntry(
             amount,
             date,
             depositBankId: bankAccountId,
-            memo: memoOrNull,
+            description: memoOrNull,
             sourceRef,
           },
         }),
@@ -131,7 +139,7 @@ export async function submitLedgerEntry(
       return unwrap(
         postApiAccountingTenantsByTenantIdPrepayments({
           path,
-          body: { tenantId, amount, date, bankAccountId, memo: memoOrNull, sourceRef },
+          body: { tenantId, amount, date, bankAccountId, description: memoOrNull, sourceRef },
         }),
       );
     case 'Credit':
@@ -150,7 +158,7 @@ export async function submitLedgerEntry(
             amount,
             date,
             kind: CHARGE_KIND[category] ?? 'other',
-            memo: memoOrNull,
+            description: memoOrNull,
             sourceRef,
           },
         }),
@@ -224,7 +232,7 @@ export async function applyPrepayment(
         amount: input.amount,
         date: input.date,
         bankAccountId: input.bankAccountId,
-        memo: memo === '' ? null : memo,
+        description: memo === '' ? null : memo,
         sourceRef: input.sourceRef,
       },
     }),
