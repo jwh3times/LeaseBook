@@ -188,6 +188,13 @@ a bare status: it looks diagnosable and is not.
 different things and neither subsumes the other: revert the #361 fix and `ErrorContractTests` still
 passes, because no `Problem` call appeared or disappeared — only the bytes on the wire changed.
 
+**The binder's 400 is one of those paths, and it is environment-dependent.** An unreadable request
+(malformed JSON, a wrong-typed value, an unknown member on a DTO marked
+`[JsonUnmappedMemberHandling(Disallow)]`) reaches `BadRequestExceptionHandler` and answers
+`invalid_request` only because `Program` sets `RouteHandlerOptions.ThrowOnBadRequest` in every
+environment. The framework enables it in Development alone, so turning it off leaves every test
+green while production goes back to a bodyless 400 (ADR-025, 2026-09-29 amendment).
+
 ### Sign-in uniformity is a timing property too
 
 `AuthEndpoints` answers a wrong password, a locked-out account and an unknown email with one code and

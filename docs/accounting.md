@@ -228,7 +228,9 @@ either portal. Staff see it beside the description on the tenant ledger and its 
 view. The staff statement view reads notes from a separate route,
 `GET /api/statements/{ownerId}/internal-notes`, so the statement record that is rendered and issued
 never carries one. Entries the system posts on its own (runs, sweeps, transfers, opening positions)
-have no note.
+have no note, with one exception: every reversal carries its void reason as its note, including the
+reversal the import supersede path posts. A request that still sends `memo` is rejected with a 400
+rather than posted without its text.
 
 **The over-application rule (ADR-011).** A payment that exceeds what the tenant owes auto-splits the
 excess into a prepayment. An _application_ has no such overflow, so applying a deposit **against charges**

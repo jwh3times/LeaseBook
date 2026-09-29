@@ -124,7 +124,11 @@ on a 403 still means MFA enforcement — and the rate limiter's 429 remain plain
 suite asserts their bareness too, so giving one a body is a deliberate edit rather than a silent
 change. A terminal exception handler, registered last, claims anything the typed handlers decline
 and returns a generic 500 carrying only that reference — never the
-exception message, type, or stack trace. `ILogger` output shares the tracing pipeline's OpenTelemetry
+exception message, type, or stack trace. A request the endpoint binder cannot read — malformed JSON,
+a wrong-typed value, an unknown field on a request that rejects them — gets a coded 400
+`invalid_request` in every environment: the host turns on `ThrowOnBadRequest`, which the framework
+enables only in Development, so the binder throws to a handler instead of writing a bare 400 itself
+(ADR-025, 2026-09-29 amendment). `ILogger` output shares the tracing pipeline's OpenTelemetry
 exporter, so the correlation id an operator sees on screen is directly searchable in Application
 Insights once deployed. See [ADR-025](adr/ADR-025-error-contract-and-observability.md) and the
 [diagnostics runbook](runbooks/diagnostics.md).
@@ -270,6 +274,14 @@ event rather than stored, and a provider acceptance followed by a bounce keeps b
 durable actor — a user id, or the name of the system process that acted — and a write that declares
 neither is refused rather than stored unattributed; see
 [ADR-039](adr/ADR-039-durable-actor-attribution.md).
+
+A journal entry carries two texts for two audiences. Its `description` is owner-facing: the owner
+statement prints it. Its optional `internal_note` is staff-only, written once at posting like every
+other column, and a void's reason is stored there rather than in the reversal's description. The
+owner-statement data, everything issued from it, and both portals never select the note; staff
+ledgers, the bank register, the trust-ledger report and the compliance pack show it, and the staff
+statement view reads it from a separate route so the statement record that is rendered and issued
+has no field for it. See [ADR-047](adr/ADR-047-owner-facing-description-and-internal-note.md).
 
 That audit trail is read by three deliberately different surfaces: the per-entry trail beside a
 journal entry, the money-touching extract the trust compliance pack hands an examiner, and an

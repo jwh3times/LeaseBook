@@ -26,7 +26,9 @@ line-level, not used for display, and set only by opening-position and balance-f
    as `NULL`. `journal_lines.memo` is unrelated and unchanged.
 2. **Staff-typed writes take both.** Every staff-typed business event gains an optional
    `InternalNote`. The request DTOs rename `Memo` to `Description`, so nothing owner-facing is called
-   a memo, and add `internalNote`. On `IssueCredit` and `ApplyDeposit`, `Reason` remains the
+   a memo, and add `internalNote`. Those renamed requests reject unmapped JSON members, so a stale
+   client still sending `memo` gets a coded 400 (`invalid_request`, ADR-025's 2026-09-29 amendment)
+   rather than a post that silently drops its text. On `IssueCredit` and `ApplyDeposit`, `Reason` remains the
    owner-facing text, and each also accepts `internalNote`. System-generated events (rent, late-fee
    and disbursement runs, sweeps, deposit transfers, simulated payments, opening positions) carry no
    note.

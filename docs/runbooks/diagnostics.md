@@ -163,7 +163,7 @@ filter on `customDimensions.EventId` (or the trace message) instead of matching 
 | ---- | --------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1000 | `UnhandledException`              | Error       | The terminal handler caught an exception no typed handler claimed. Always has the exception.                                                                                        |
 | 1001 | `DomainRejection`                 | Warning     | A typed accounting domain rule declined the request (a 404/409/422) — expected, not a defect.                                                                                       |
-| 1002 | `ValidationRejection`             | Warning     | A request failed FluentValidation — a 400 — on either path: a command/query, or an auth or telemetry request DTO. Logs the field count only, never a value.                         |
+| 1002 | `ValidationRejection`             | Warning     | A 400: a request failed FluentValidation (a command/query, or an auth or telemetry DTO), or the binder could not read it (`invalid_request`). The two log differently; see below.   |
 | 1003 | `ImportRowFailed`                 | Error       | One row of a migration import failed after parsing; the batch continued. Has the exception.                                                                                         |
 | 1100 | `SupersedeReversalRace`           | Information | The corrected re-import (supersede) path found the entry already reversed by a racing request; it converges on success anyway — expected, not a defect.                             |
 | 1101 | `HeldFeesShapeRejected`           | Warning     | A balance-import row's pm_income opening violated the held-fees shape at post time — never a 500. What follows depends on the caller; see below.                                    |
@@ -177,6 +177,16 @@ filter on `customDimensions.EventId` (or the trace message) instead of matching 
 (WP-7 — the first block claimed under ADR-025's 1100+ convention); 1200-1299 is scheduled jobs
 (WP-11); 1300-1399 is platform capabilities; 1400-1499 is owner statements (ADR-045). Later domain
 areas take the next hundred-block (1500+, 1600+, …) as they add their own structured events.
+
+A 1002 comes in two shapes. A FluentValidation rejection logs the count of failed fields, never a
+value. A request the binder could not read (malformed JSON, a value of the wrong kind, a missing
+required parameter, or an unknown field on a request that rejects them) answers code
+`invalid_request` and logs the binder's exception. Its message names the parameter and, for a body,
+the JSON path, and it can quote the offending token or query-string value; it never reaches the
+response. The commonest unknown field is a stale client still sending `memo` to a ledger route that
+now takes `description` (ADR-047). Before 2026-09-29 an unreadable request got a bare, bodyless 400
+outside Development, so a report from an earlier build has no reference and must be found by route
+and window (ADR-025, 2026-09-29 amendment).
 
 A `HeldFeesShapeRejected` (1101) means different things on the two import routes, which matters when
 you are reading it after an operator report. On a plain balance import the row is recorded as an
