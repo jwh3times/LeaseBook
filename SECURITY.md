@@ -79,6 +79,47 @@ without a demonstrated impact on LeaseBook — is unlikely to be new to us:
 - Reports against third-party dependencies that should be filed with the upstream project (though we
   appreciate a heads-up).
 
+## Security review history
+
+LeaseBook's security controls have been reviewed twice before beta. Both reviews were **internal**:
+they were performed with an AI coding agent (Claude Code) under maintainer direction, not by an
+independent third-party firm, and they are not a substitute for one.
+
+- **June 2026: white-box code review and grey-box penetration test.** An audit of the application's
+  trust boundaries, followed by authenticated probing of the full stack running in Production mode
+  with two organizations. Organization isolation held under live probing: reads of another
+  organization's records returned not-found or empty results, writes to them were blocked, and
+  nothing distinguished another organization's record from a nonexistent one. No SQL injection,
+  unsafe deserialization, command execution, server-side request forgery, or unsafe HTML rendering
+  was found.
+- **September 2026: follow-up review** of the hardened application, the infrastructure-as-code, the
+  CI pipeline, and repository configuration.
+
+Neither review found a high- or critical-severity issue. The classes of issue found were:
+
+- **Authentication and sessions:** MFA enrollment and recovery, and session lifetime and server-side
+  revocation.
+- **Secrets and key material:** encryption of MFA secrets at rest, durable storage of the
+  application's data-protection keys, and recoverability of vault-held keys.
+- **Transport and browser security:** database TLS certificate validation, cookie `Secure` behavior
+  behind a TLS-terminating proxy, security headers, and host filtering.
+- **Output handling:** spreadsheet formula injection in CSV exports.
+- **Information disclosure:** detail in health endpoints and server banners, and personal data in
+  request URLs.
+- **Audit integrity:** actor attribution on audit records.
+- **Input bounds:** request-size and value limits on uploads and telemetry.
+- **Build and supply chain:** CI action pinning and allow-listing, container image pinning and
+  non-root images, and secret-scanning coverage.
+- **Development and infrastructure configuration:** seeded fixture credentials, local service
+  exposure, and drift between database role-bootstrap scripts.
+- **Documentation accuracy:** places where security documentation had fallen behind the
+  implementation.
+
+Findings were tracked privately and fixed on `main`. A small number of low-severity, design-level
+items were assessed and accepted as residual risk; they remain tracked privately. LeaseBook is not
+yet publicly deployed, so controls that only a live deployment can prove, such as ingress and
+network configuration, are not claimed here and will be verified at deployment.
+
 ## Safe harbor
 
 We consider good-faith security research conducted under this policy to be authorized. We will not pursue
