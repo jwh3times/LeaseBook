@@ -25,8 +25,38 @@ public sealed class OrgContextCallSiteTests
     // ALTER ROLE … SET — from prose such as "the executor, which set app.org_id". The bare
     // "app.x =" form catches a connection-string or PGOPTIONS "-c app.persona=system".
     private static readonly Regex SetsOrgContext = new(
-        $@"set_config\s*\(\s*'{Gucs}'|\bSET\s+(?:LOCAL\s+|SESSION\s+)?{Gucs}\s*(?:=|\bTO\b)|\b{Gucs}\s*=",
+        $@"set_config\s*\(\s*'{Gucs}'|\bSET\s+(?:LOCAL\s+|SESSION\s+)?""?{Gucs}""?\s*(?:=|\bTO\b)|\b{Gucs}\s*=",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    /// <summary>
+    /// A GUC name written as a whole literal — <c>'…'</c>, <c>E'…'</c>, <c>"…"</c> or <c>$$…$$</c> —
+    /// anywhere but as the argument of a <c>current_setting(</c> read. That is the name as a value: in
+    /// a C# constant later passed to <c>set_config(@name, …)</c>, a quoted identifier after
+    /// <c>SET LOCAL</c>, an escape string. The shape checks above cannot see any of those, because
+    /// the name no longer sits where they look for it (#314 review, L1). Prose that mentions a GUC
+    /// inside a longer string is not a whole literal and passes.
+    /// <para>
+    /// Known gap, pinned by a bite case: a name assembled from parts (<c>'app.' || 'persona'</c>) is
+    /// not recognised. Catching that would mean flagging every <c>app.</c> in the tree.
+    /// </para>
+    /// </summary>
+    private static readonly Regex QuotedGucName = new(
+        $@"(?<!current_setting\s*\(\s*)(?:E?'|""|\$\$){Gucs}(?:'|""|\$\$)",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    /// <summary>Scripts can open a connection as well as code can, so they are scanned too.</summary>
+    private static readonly HashSet<string> ScannedExtensions =
+        new([".cs", ".sql", ".py", ".ps1", ".sh", ".mjs"], StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Files allowed a whole-literal GUC name that is neither a setter nor a read, each with its reason.
+    /// An entry here is an argument that the file cannot open context, not a way to quiet the scan.
+    /// </summary>
+    private static readonly Dictionary<string, string> QuotedNameAllowlist = new(StringComparer.Ordinal)
+    {
+        [Path.Combine("tests", "LeaseBook.Tests.Integration", "CapabilityStateReaderTests.cs")] =
+            "asserts that the reader's error message names the GUC it found missing",
+    };
 
     /// <summary>Every <c>set_config</c> of one of the three, with its third (<c>is_local</c>) argument.</summary>
     private static readonly Regex SetConfigCall = new(
@@ -47,7 +77,7 @@ public sealed class OrgContextCallSiteTests
         string[] allowed = [Executor, Probe, RestoreCheck];
         var offenders = new List<string>();
 
-        foreach (var file in RepositorySource.Current.CodeFilesUnder("src", "infra", "tests"))
+        foreach (var file in RepositorySource.Current.FilesUnder(ScannedExtensions, "src", "infra", "scripts", "tests"))
         {
             if (allowed.Contains(file.RelativePath, StringComparer.Ordinal))
             {
@@ -55,6 +85,10 @@ public sealed class OrgContextCallSiteTests
             }
 
             offenders.AddRange(file.Find(SetsOrgContext).Select(match => match.ToString()));
+            if (!QuotedNameAllowlist.ContainsKey(file.RelativePath))
+            {
+                offenders.AddRange(file.Find(QuotedGucName).Select(match => match.ToString()));
+            }
         }
 
         offenders.ShouldBeEmpty(
@@ -69,9 +103,9 @@ public sealed class OrgContextCallSiteTests
     /// them can leak a persona onto a pooled connection.
     /// </summary>
     [Theory]
-    [InlineData("executor", "app.org_id", "app.persona", "app.user_id")]
-    [InlineData("probe", "app.org_id", "app.persona", "app.user_id")]
-    [InlineData("restore-check", "app.org_id", "app.persona")]
+    [InlineData("executor", "app." + "org_id", "app." + "persona", "app." + "user_id")]
+    [InlineData("probe", "app." + "org_id", "app." + "persona", "app." + "user_id")]
+    [InlineData("restore-check", "app." + "org_id", "app." + "persona")]
     public void A_sanctioned_setter_sets_its_gucs_transaction_locally(string setter, params string[] gucs)
     {
         var path = setter switch
@@ -98,9 +132,9 @@ public sealed class OrgContextCallSiteTests
         var source = RepositorySource.Current.File(Executor).Text;
         var statement = Regex.Match(source, @"SELECT set_config\('app\.org_id'.*?set_config\('app\.user_id'[^)]*\)", RegexOptions.Singleline);
 
-        statement.Success.ShouldBeTrue("app.org_id through app.user_id must be one SELECT");
+        statement.Success.ShouldBeTrue("the org, persona and user GUCs must be set in one SELECT");
         // Concatenated so this file's own source is not itself a match for the scan above.
-        statement.Value.ShouldContain("set_config(" + "'app.persona'");
+        statement.Value.ShouldContain("set_config(" + "'app." + "persona'");
         statement.Value.ShouldNotContain(";");
     }
 
@@ -109,17 +143,43 @@ public sealed class OrgContextCallSiteTests
     /// describes the executor is not. Each literal is split so this file is not itself a match.
     /// </summary>
     [Theory]
-    [InlineData("SELECT set_config(" + "'app.persona', 'system', true)", true)]
-    [InlineData("SELECT set_config(" + "'app.user_id', @u, false)", true)]
+    [InlineData("SELECT set_config(" + "'app." + "persona', 'system', true)", true)]
+    [InlineData("SELECT set_config(" + "'app." + "user_id', @u, false)", true)]
     [InlineData("SET LOCAL app." + "persona = 'staff'", true)]
     [InlineData("SET app." + "org_id TO '1'", true)]
     [InlineData("ALTER ROLE leasebook_app SET app." + "persona TO 'system'", true)]
     [InlineData("Host=db;Options=-c app." + "persona=system", true)]
     [InlineData("run inside the request middleware or OrgScopedExecutor, which set app." + "org_id (§C.4).", false)]
-    [InlineData("current_setting(" + "'app.persona', true) = 'owner'", false)]
+    [InlineData("current_setting(" + "'app." + "persona', true) = 'owner'", false)]
+    [InlineData("current_setting(" + "'app." + "persona'::text, true)", false)]
+    [InlineData("\"app.org_id. RLS would filter entitlements\"", false)] // prose that starts a string
+    // The review's four blind spots (#314 follow-up L1).
+    [InlineData("SET LOCAL \"app." + "persona\" = 'system'", true)]           // quoted identifier
+    [InlineData("private const string PersonaGuc = \"app." + "persona\";", true)] // the name in a constant, for set_config(@name, ...)
+    [InlineData("SELECT set_config(E'app." + "persona', 'system', true)", true)] // escape-string literal
+    [InlineData("SELECT set_config($$app." + "persona$$, 'system', true)", true)] // dollar-quoted literal
+    // Known gap, pinned so it is a decision rather than an accident: a name assembled from parts is
+    // not recognised. Catching it would mean flagging every "app." in the tree.
+    [InlineData("SELECT set_config('app.' || 'persona', 'system', true)", false)]
     public void The_scan_recognises_every_setter_shape(string line, bool isSetter)
     {
-        SetsOrgContext.IsMatch(line).ShouldBe(isSetter);
+        IsOrgContextSetter(line).ShouldBe(isSetter);
+    }
+
+    private static bool IsOrgContextSetter(string line) => SetsOrgContext.IsMatch(line) || QuotedGucName.IsMatch(line);
+
+    /// <summary>The scan reaches scripts, and every allowlisted file still exists and still needs its entry.</summary>
+    [Fact]
+    public void The_scan_covers_scripts_and_its_allowlist_is_live()
+    {
+        var files = RepositorySource.Current.FilesUnder(ScannedExtensions, "src", "infra", "scripts", "tests");
+        files.ShouldContain(file => file.RelativePath == Path.Combine("scripts", "test-dbadmin.py"));
+
+        foreach (var (path, reason) in QuotedNameAllowlist)
+        {
+            RepositorySource.Current.File(path).Find(QuotedGucName)
+                .ShouldNotBeEmpty($"{path} is allowlisted ({reason}) but no longer quotes a GUC name — drop the entry");
+        }
     }
 
     /// <summary>The restore spot-check reads org-wide, so it must state the staff persona — nothing wider.</summary>

@@ -87,6 +87,33 @@ internal sealed class RepositorySource
         ];
     }
 
+    /// <summary>
+    /// Every file under <paramref name="relativeRoots"/> whose extension is in
+    /// <paramref name="extensions"/> — for guards that must also read scripts (<c>.py</c>, <c>.ps1</c>,
+    /// <c>.sh</c>, <c>.mjs</c>), which <see cref="CodeFilesUnder"/> deliberately leaves out.
+    /// </summary>
+    public IReadOnlyList<RepositoryFile> FilesUnder(IReadOnlySet<string> extensions, params string[] relativeRoots)
+    {
+        var files = new List<RepositoryFile>();
+        foreach (var relativeRoot in relativeRoots)
+        {
+            var (fullRoot, normalizedRoot) = Resolve(relativeRoot);
+            if (!Directory.Exists(fullRoot))
+            {
+                throw new DirectoryNotFoundException($"Repository directory not found: {normalizedRoot}");
+            }
+
+            files.AddRange(
+                Directory.EnumerateFiles(fullRoot, "*", SearchOption.AllDirectories)
+                    .Where(path => extensions.Contains(Path.GetExtension(path)))
+                    .Where(path => !IsGenerated(path))
+                    .Where(path => !path.Split(Path.DirectorySeparatorChar).Contains("node_modules"))
+                    .Select(path => new RepositoryFile(path, Path.GetRelativePath(root, path))));
+        }
+
+        return [.. files.OrderBy(file => file.RelativePath, StringComparer.Ordinal)];
+    }
+
     public IReadOnlyList<RepositoryFile> CodeFilesUnder(params string[] relativeRoots)
     {
         var files = new List<RepositoryFile>();
@@ -180,9 +207,9 @@ internal readonly record struct RepositoryLine(string RelativePath, int Number, 
         {
             var marker = Path.GetExtension(RelativePath).ToLowerInvariant() switch
             {
-                ".cs" or ".ts" or ".tsx" => "//",
+                ".cs" or ".ts" or ".tsx" or ".mjs" => "//",
                 ".sql" => "--",
-                ".yaml" or ".yml" => "#",
+                ".yaml" or ".yml" or ".py" or ".ps1" or ".sh" => "#",
                 _ => null,
             };
 
