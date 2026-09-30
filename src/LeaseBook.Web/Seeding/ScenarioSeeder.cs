@@ -140,7 +140,8 @@ public static class ScenarioSeeder
         // Imports/sign-off/audit rows should carry a real actor, not "system" (design §2 R4). This
         // used to be a hand-written ActorContext assignment inside the work, because the executor
         // had no way to carry it.
-        await executor.RunAsync(ScenarioOrgId, Actor.User(adminId), async () =>
+        // The admin holds PMAdmin only, so its persona is staff (#314).
+        await executor.RunAsync(ScenarioOrgId, Actor.User(adminId), Persona.Staff, async () =>
         {
             if (await db.Set<JournalEntry>().AnyAsync(ct))
             {

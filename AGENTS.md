@@ -68,7 +68,8 @@ this one, for current progress.
   delivery for the sweep's violation events — and the two ADR-041 first-apply steps: naming the
   ingress network so forwarded-header trust can be enabled and verified, and confirming the keyring's
   Key Vault wrap engages.
-- Phase 2 includes the tenant own-ledger portal and the read-only owner portal (both ADR-003), and
+- Phase 2 includes the tenant own-ledger portal and the read-only owner portal (ADR-003, with
+  database persona enforcement from ADR-048), and
   isolated development-only simulated payments (ADR-046). Before running or resetting payment
   fixtures, read `docs/runbooks/payment-simulation.md`; the dedicated database and generation binding
   protect ordinary organizations and golden data. Production enrollment for either portal,
@@ -350,7 +351,14 @@ Violating these is a correctness bug, not a style issue.
 - Postgres RLS is the security boundary. EF global query filters are ergonomics only.
 - Organization context is set with `SET LOCAL app.org_id` inside the transaction. Never use session-level
   `SET`, because pooled connections would leak context.
-- Missing organization context fails closed.
+- `OrgScopedExecutor` is the only production setter of the org context (ADR-048). In one
+  transaction-local `set_config` statement it sets `app.org_id`, `app.persona`
+  (`system`/`staff`/`tenant`/`owner`/`none`) and `app.user_id`. `PersonaResolver` maps the principal's
+  roles, and a mixed or unrecognised role set resolves to `none`. `OrgContextCallSiteTests` fails the
+  build on a second setter.
+- Missing organization context fails closed. So does a missing persona: every session that reads org
+  data, including an operator's `psql` or pgAdmin session as `leasebook_app` or `leasebook_ops`, must
+  set `app.persona` (for example `staff`) as well as `app.org_id`, or it sees zero rows.
 - There are three DB roles:
   - `leasebook_migrator`: schema owner of `public`, migrations only
   - `leasebook_app`: runtime, RLS-subject via `FORCE ROW LEVEL SECURITY`
@@ -361,8 +369,15 @@ Violating these is a correctness bug, not a style issue.
   privilege anywhere, and it has none on the database or on `public`. Do not "correct" it to
   migrator ownership — that breaks the first Hangfire version bump. Nothing org-scoped lives there.
 - Every new org-scoped table goes through the migrations RLS helper: column, `USING`/`WITH CHECK`
-  policy, and `FORCE ROW LEVEL SECURITY` in one call.
-- A schema guard test fails CI if any `org_id` table lacks its policy.
+  policy, and `FORCE ROW LEVEL SECURITY` in one call. The helper also applies the deny-by-default
+  persona gate (ADR-048): three `RESTRICTIVE` policies (`{t}_persona`, `{t}_persona_no_update`,
+  `{t}_persona_no_delete`) that admit `staff` and `system` organization-wide and a portal persona only
+  through a grant written explicitly with `Rls.ApplyPersonaGate`. A new table is closed to tenants
+  and owners until a migration grants it. Grants derive the caller's owner or tenant from its active
+  `owner_access`/`resident_access` link, never from an id the application sets. The ADR-003
+  application-layer checks remain the first layer.
+- A schema guard test fails CI if any `org_id` table lacks its policy or persona gate, and it pins
+  every persona-gate predicate exactly.
 - `FORCE ROW LEVEL SECURITY` binds the migrator too, so a migration that rewrites data must bracket
   its DML with `ALTER TABLE <t> NO FORCE ROW LEVEL SECURITY` / `... FORCE ROW LEVEL SECURITY` in the
   same `Sql` block — for every forced table the statement names, not just the target. Without the

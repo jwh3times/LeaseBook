@@ -6,8 +6,16 @@ using Microsoft.EntityFrameworkCore;
 
 namespace LeaseBook.Modules.Directory.Features.Settings;
 
-/// <summary>The org's settings (§C.4). Lazily get-or-creates the single row on first read (P46).</summary>
-public sealed record GetOrgSettings : IQuery<OrgSettingsResponse>;
+/// <summary>
+/// The org's settings (§C.4). Lazily get-or-creates the single row on first read (P46).
+/// <para>
+/// <paramref name="CreateIfMissing"/> false resolves a missing row to the same defaults without
+/// writing it. That is the portal's read (#314, ADR-048): a tenant or owner persona holds no write
+/// grant on <c>org_settings</c>, so the lazy insert would be rejected by the database — and a read
+/// by someone outside the organization's staff should not be what materialises its settings anyway.
+/// </para>
+/// </summary>
+public sealed record GetOrgSettings(bool CreateIfMissing = true) : IQuery<OrgSettingsResponse>;
 
 /// <summary>Wire shape for org settings — enums render as their snake_case text (the storage contract).</summary>
 public sealed record OrgSettingsResponse(
@@ -45,6 +53,12 @@ internal sealed class GetOrgSettingsHandler(DbContext db) : IQueryHandler<GetOrg
     public async Task<OrgSettingsResponse> Handle(GetOrgSettings query, CancellationToken ct)
     {
         var settings = await db.Set<OrgSettings>().AsNoTracking().FirstOrDefaultAsync(ct);
+        if (settings is null && !query.CreateIfMissing)
+        {
+            // The defaults the lazy insert below would have persisted, unpersisted.
+            return OrgSettingsResponse.From(new OrgSettings());
+        }
+
         if (settings is null)
         {
             // Lazy get-or-create: defaults (cash / minus). The unique (org_id) index is the backstop if

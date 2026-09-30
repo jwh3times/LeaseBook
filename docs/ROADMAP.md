@@ -61,7 +61,8 @@ Hardening and beta readiness are in progress. Shipped so far:
   them requires operator-held cloud access.
 
 Phase 2 now includes tenant own-ledger access and a read-only owner portal, both with per-request
-identity checks, account security and sign-out. Owners see their balance held in trust, their
+identity checks, database row-level boundaries for each portal persona, account security and
+sign-out. Owners see their balance held in trust, their
 disbursements and activity, and the statements issued to them. Phase 2 also adds one-time simulated
 payments in a dedicated development fixture. Durable processing and explicit simulated bank evidence
 exercise the real Accounting receipt path. Production enrollment, owner-initiated actions and live

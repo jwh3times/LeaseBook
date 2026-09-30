@@ -575,7 +575,7 @@ public sealed class AuditLogReviewTests(PostgresFixture fixture)
         var sp = scope.ServiceProvider;
         var executor = sp.GetRequiredService<OrgScopedExecutor>();
         T result = default!;
-        await executor.RunAsync(orgId, Actor.User(userId), async () => result = await work(sp, ct), ct);
+        await executor.RunAsync(orgId, Actor.User(userId), Persona.Staff, async () => result = await work(sp, ct), ct);
         return result;
     }
 }

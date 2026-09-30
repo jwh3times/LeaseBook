@@ -205,7 +205,7 @@ public sealed class ActorAuditTests(PostgresFixture fixture)
             systemEntry = (await sender.Send(new AddCharge(tenantId, 1450m, Feb1, "rent", null, Key()), ct)).EntryId, ct);
 
         var userEntry = Guid.Empty;
-        await executor.RunAsync(orgId, Actor.User(userId), async () =>
+        await executor.RunAsync(orgId, Actor.User(userId), Persona.Staff, async () =>
             userEntry = (await sender.Send(new AddCharge(tenantId, 1450m, Feb3, "rent", null, Key()), ct)).EntryId, ct);
 
         var stamps = await AsActorAsync(orgId, null, (s, _, c) =>
@@ -514,7 +514,7 @@ public sealed class ActorAuditTests(PostgresFixture fixture)
 
         var executor = sp.GetRequiredService<OrgScopedExecutor>();
         T result = default!;
-        await executor.RunAsync(orgId, actor, async () => result = await work(sp, sp.GetRequiredService<ISender>(), ct), ct);
+        await executor.RunAsync(orgId, actor, actor.IsSystem ? Persona.System : Persona.Staff, async () => result = await work(sp, sp.GetRequiredService<ISender>(), ct), ct);
         return result;
     }
 }

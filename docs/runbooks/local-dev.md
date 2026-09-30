@@ -180,6 +180,24 @@ Verify the app role can connect:
 docker compose exec db psql -U leasebook_app -d leasebook -c "SELECT current_user;"
 ```
 
+`leasebook_app` and `leasebook_ops` are subject to row-level security, so a session that reads
+organization data must state **both** the organization and a persona, transaction-locally
+([ADR-048](../adr/ADR-048-per-persona-row-level-security.md)). Without `app.persona`, every
+org-scoped table returns zero rows without raising an error. The same applies to pgAdmin's query tool:
+
+```sql
+BEGIN;
+SELECT set_config('app.org_id', '<org-uuid>', true),
+       set_config('app.persona', 'staff', true);
+SELECT count(*) FROM journal_entries;
+COMMIT;
+```
+
+Use `staff` for support reads. The `tenant` and `owner` personas also need `app.user_id` and see only
+what that user's active portal link grants. Never set these at session level. The migrator role
+(`./scripts/dev.ps1 psql`) owns the tables but is still bound by `FORCE ROW LEVEL SECURITY`, so it
+needs the same context to read org rows.
+
 ## Migrations and seed
 
 Restore the local tool manifest once (`dotnet tool restore`), then apply migrations as the

@@ -235,8 +235,7 @@ public sealed class CapabilityStateReaderTests(PostgresFixture fixture)
 
         // Context present, but for a different org — the case a plain "is it set?" check would miss.
         await using var tx = await db.Database.BeginTransactionAsync(ct);
-        await db.Database.ExecuteSqlAsync(
-            $"SELECT set_config('app.org_id', {otherOrg.ToString()}, true)", ct);
+        await RlsProbe.SetOrgAsync(db, otherOrg, ct);
 
         var mismatched = await Should.ThrowAsync<InvalidOperationException>(
             async () => await reader.ReadAsync(org, null, ct));
@@ -267,7 +266,7 @@ public sealed class CapabilityStateReaderTests(PostgresFixture fixture)
             ct);
 
         await using var tx = await db.Database.BeginTransactionAsync(ct);
-        await db.Database.ExecuteSqlAsync($"SELECT set_config('app.org_id', {org.ToString()}, true)", ct);
+        await RlsProbe.SetOrgAsync(db, org, ct);
 
         var set = await reader.ReadAsync(org, null, ct);
 

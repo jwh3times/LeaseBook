@@ -92,7 +92,9 @@ Key design decisions (each recorded as an ADR in [`docs/adr/`](docs/adr)):
   per-basis templates so each accounting basis is a _query_, not a transformation.
 - **PostgreSQL row-level security is the security boundary.** Every organization-scoped table carries an `org_id`
   column with a `FORCE ROW LEVEL SECURITY` policy; organization context is set per-transaction with
-  `SET LOCAL app.org_id`. EF Core global query filters are ergonomics layered on top, not the boundary.
+  `SET LOCAL app.org_id`. Inside an organization, a deny-by-default persona gate confines the tenant
+  and owner portals to rows explicitly granted to them. EF Core global query filters are ergonomics
+  layered on top, not the boundary.
   Three database roles separate schema ownership, runtime DML, and read-only access.
 - **CQRS with vertical slices.** Commands and queries dispatch through a small hand-rolled `ISender`
   with a validation/telemetry decorator pipeline (no MediatR/AutoMapper). Endpoints are minimal APIs

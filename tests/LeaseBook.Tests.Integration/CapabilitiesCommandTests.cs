@@ -473,7 +473,7 @@ public sealed class CapabilitiesCommandTests(PostgresFixture fixture)
         var reader = scope.ServiceProvider.GetRequiredService<CapabilityStateReader>();
 
         await using var tx = await db.Database.BeginTransactionAsync(ct);
-        await db.Database.ExecuteSqlAsync($"SELECT set_config('app.org_id', {orgId.ToString()}, true)", ct);
+        await RlsProbe.SetOrgAsync(db, orgId, ct);
 
         var set = await reader.ReadAsync(orgId, null, ct);
         await tx.RollbackAsync(ct);

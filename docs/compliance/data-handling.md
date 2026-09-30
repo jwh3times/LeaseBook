@@ -177,6 +177,12 @@ SECURITY` and an `org_id` isolation policy applied through one migration helper;
   organization context inside a transaction (`set_config('app.org_id', …, is_local => true)`), so the
   setting dies with the transaction and cannot leak across pooled connections. A request with no
   organization context matches no rows — the boundary **fails closed**.
+- **Row-level security also confines the portals inside an organization.** The same transaction-local
+  statement sets the caller's persona (staff, tenant, owner, system, or none), resolved from its roles.
+  Every organization-scoped table carries a deny-by-default persona gate: staff and system processes
+  see the organization, while a tenant or owner sees only the rows explicitly granted to its own
+  active portal link. An unset or unrecognised persona sees nothing. The application-layer
+  authorization checks remain in place as a first layer.
 - **Three least-privilege database roles.** A migrator role owns the application schema and runs
   migrations only; the runtime application role holds data-manipulation rights but owns no table
   holding organization data, so row-level security binds it; a read-only role serves support and
