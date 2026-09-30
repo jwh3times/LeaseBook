@@ -15,7 +15,8 @@ namespace LeaseBook.Web.Tenancy;
 /// This middleware <i>calls</i> the executor rather than reimplementing it. What stays here is the
 /// HTTP policy the executor has no business knowing: turning claims into an org id, and the
 /// deliberate difference that a missing org means <b>no transaction at all</b> here, whereas it
-/// means <b>throw</b> in the executor. Jobs and the CLI have no fail-closed fallback to degrade to,
+/// means <b>throw</b> in the executor. It also turns the principal's roles into the request's
+/// <see cref="Persona"/> (<see cref="PersonaResolver"/>, #314) before the transaction opens. Jobs and the CLI have no fail-closed fallback to degrade to,
 /// so for them a missing org is a bug; for an anonymous request it is the normal case.
 /// </para>
 /// </summary>
@@ -43,6 +44,16 @@ public sealed class OrgContextMiddleware(RequestDelegate next)
                 ? Actor.User(userId)
                 : Actor.System("principal-without-user-id");
 
-        await executor.RunAsync(orgId, actor, () => next(context), context.RequestAborted);
+        // The database boundary inside the org (#314, ADR-048), resolved from the roles before the
+        // transaction opens. A portal persona is granted rows through its user's link, so a principal
+        // with no usable user id has nothing to be granted through: it runs as none, not as a portal
+        // persona the executor would refuse, and never as the org-wide system persona its actor names.
+        var persona = PersonaResolver.Resolve(context.User);
+        if (actor.IsSystem && persona.IsPortal())
+        {
+            persona = Persona.None;
+        }
+
+        await executor.RunAsync(orgId, actor, persona, () => next(context), context.RequestAborted);
     }
 }

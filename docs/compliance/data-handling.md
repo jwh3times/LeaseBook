@@ -53,8 +53,10 @@ global-class.
 | Managing brokerage legal name, address, phone       | `org_settings` (Directory)                | Firm identity rendered on statements                |
 | User email, phone, username, display name           | `asp_net_users` (host)                    | Application login accounts                          |
 | User-to-tenant identity links                       | `resident_access` (host)                  | Revoked links remain as access history              |
+| User-to-owner identity links                        | `owner_access` (host)                     | Revoked links remain as access history              |
 | Recipient email of a statement send                 | `statement_delivery_attempts` (Reporting) | One row per send of a statement artifact            |
 | Verbatim imported records (names, emails, balances) | `import_rows` (Onboarding)                | Raw and mapped migration data, kept as import audit |
+| Journal entry description and internal note         | `journal_entries` (Accounting)            | Staff free text; may contain personal data (§4)     |
 
 ### 2.2 Financial information
 
@@ -175,6 +177,12 @@ SECURITY` and an `org_id` isolation policy applied through one migration helper;
   organization context inside a transaction (`set_config('app.org_id', …, is_local => true)`), so the
   setting dies with the transaction and cannot leak across pooled connections. A request with no
   organization context matches no rows — the boundary **fails closed**.
+- **Row-level security also confines the portals inside an organization.** The same transaction-local
+  statement sets the caller's persona (staff, tenant, owner, system, or none), resolved from its roles.
+  Every organization-scoped table carries a deny-by-default persona gate: staff and system processes
+  see the organization, while a tenant or owner sees only the rows explicitly granted to its own
+  active portal link. An unset or unrecognised persona sees nothing. The application-layer
+  authorization checks remain in place as a first layer.
 - **Three least-privilege database roles.** A migrator role owns the application schema and runs
   migrations only; the runtime application role holds data-manipulation rights but owns no table
   holding organization data, so row-level security binds it; a read-only role serves support and
@@ -189,6 +197,13 @@ SECURITY` and an `org_id` isolation policy applied through one migration helper;
 - **PM income is structurally invisible to owner-facing reads.** Management-fee income cannot appear
   in an owner statement or export by construction — a trust-accounting invariant, not a display
   filter.
+- **Internal notes are staff-only.** A journal entry's description is owner-facing and prints on the
+  owner statement; its optional internal note, and a void's reason, which is stored as one, never do.
+  The note is free text staff type, so it may contain personal data. It is shown only on staff
+  surfaces, including the trust compliance pack, and never selected by the owner statement, an issued
+  statement, or either portal; a test scans those surfaces for seeded notes. Like the rest of the
+  entry it is written once and cannot be edited or removed afterwards. See
+  [ADR-047](../adr/ADR-047-owner-facing-description-and-internal-note.md).
 - **Application authorization is deny-by-default.** Endpoints require an explicit authorization
   policy; ASP.NET Identity enforces a password-length floor and account lockout. Multi-factor
   authentication applies to administrator accounts and is gated by a configuration setting that the

@@ -79,3 +79,40 @@ export async function download(
   }
   saveBlob(data, filename);
 }
+
+/**
+ * How long an opened document's object URL outlives the click. The new tab loads it asynchronously,
+ * so revoking it in the same task — as {@link download} can, because the anchor has already been
+ * followed — would hand the tab a dead URL.
+ */
+const OPENED_DOCUMENT_URL_LIFETIME_MS = 60_000;
+
+/**
+ * Fetches a document through the authenticated client and opens it in a new tab, falling back to a
+ * download when the browser refuses the tab (a popup blocker).
+ *
+ * The request is made here rather than by pointing a link at the endpoint because a failed document
+ * read must stay in the page: navigating straight to a 503 problem body would show the user raw JSON
+ * instead of a message, and lose the ADR-025 code and correlationId the caller switches on. Failures
+ * throw the same {@link ApiError} shape as {@link unwrap} and {@link download}.
+ */
+export async function openDocument(
+  call: () => Promise<ApiResult<unknown>>,
+  filename: string,
+  fallbackMessage = 'Unable to open the document.',
+): Promise<void> {
+  const { data, error, response } = await call();
+  if (error || !(data instanceof Blob)) {
+    throw toApiError(error, response?.status ?? 0, fallbackMessage);
+  }
+  const url = URL.createObjectURL(data);
+  const opened = window.open(url, '_blank');
+  if (!opened) {
+    URL.revokeObjectURL(url);
+    saveBlob(data, filename);
+    return;
+  }
+  // The document is our own, but the tab has no business scripting the portal that opened it.
+  opened.opener = null;
+  window.setTimeout(() => URL.revokeObjectURL(url), OPENED_DOCUMENT_URL_LIFETIME_MS);
+}

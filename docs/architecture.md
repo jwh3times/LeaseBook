@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living architecture guide
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-09-26
+- **Last reviewed:** 2026-09-29
 
 This is the canonical public map of the system **as implemented**. It explains how the pieces fit
 together and links the decisions that shaped them without reproducing every invariant. Accepted
@@ -124,7 +124,11 @@ on a 403 still means MFA enforcement — and the rate limiter's 429 remain plain
 suite asserts their bareness too, so giving one a body is a deliberate edit rather than a silent
 change. A terminal exception handler, registered last, claims anything the typed handlers decline
 and returns a generic 500 carrying only that reference — never the
-exception message, type, or stack trace. `ILogger` output shares the tracing pipeline's OpenTelemetry
+exception message, type, or stack trace. A request the endpoint binder cannot read — malformed JSON,
+a wrong-typed value, an unknown field on a request that rejects them — gets a coded 400
+`invalid_request` in every environment: the host turns on `ThrowOnBadRequest`, which the framework
+enables only in Development, so the binder throws to a handler instead of writing a bare 400 itself
+(ADR-025, 2026-09-29 amendment). `ILogger` output shares the tracing pipeline's OpenTelemetry
 exporter, so the correlation id an operator sees on screen is directly searchable in Application
 Insights once deployed. See [ADR-025](adr/ADR-025-error-contract-and-observability.md) and the
 [diagnostics runbook](runbooks/diagnostics.md).
@@ -134,7 +138,10 @@ Insights once deployed. See [ADR-025](adr/ADR-025-error-contract-and-observabili
 PostgreSQL **row-level security is the organization-isolation boundary** — EF Core global query filters are
 ergonomics layered on top, not the boundary. Organization context is set per-transaction with
 `SET LOCAL app.org_id` (never session-level, which would leak across pooled connections); missing
-context fails closed. Three database roles separate concerns: `leasebook_migrator` (owns the `public`
+context fails closed. `OrgScopedExecutor` is its only production setter, and it sets the persona in
+the same transaction-local statement: `app.persona` (`system`, `staff`, `tenant`, `owner` or `none`)
+and `app.user_id`. The host resolves the persona from the principal's roles before the transaction
+opens. A portal role mixed with any other role, or an unrecognised role, resolves to `none`. Three database roles separate concerns: `leasebook_migrator` (owns the `public`
 schema), `leasebook_app` (runtime, `FORCE ROW LEVEL SECURITY`), and `leasebook_ops` (read-only). The
 runtime role holds no DDL privilege in `public` and none on the database; its single exception is the
 `hangfire` job-storage schema it owns, described under Background work below. Every
@@ -142,9 +149,22 @@ org-scoped table is created through the migrations RLS helper (column + `USING`/
 `FORCE` in one call), and a schema-guard test fails CI if any `org_id` table lacks its policy.
 `FORCE` binds the migrator role too, so a migration that rewrites existing rows must lift and restore
 it around the statement; an architecture test reads migration source and fails the build on an
-unbracketed data rewrite, which would otherwise match no rows in silence. Portal
-sub-org visibility is enforced at the application layer rather
-than by stacking more RLS policies — see [ADR-003](adr/ADR-003-portal-suborg-scoping-at-app-layer.md).
+unbracketed data rewrite, which would otherwise match no rows in silence.
+
+Inside the organization, row-level security also enforces the portal personas
+([ADR-048](adr/ADR-048-per-persona-row-level-security.md), amending
+[ADR-003](adr/ADR-003-portal-suborg-scoping-at-app-layer.md)). Every org-scoped table carries a
+deny-by-default persona gate: three `RESTRICTIVE` policies that combine with the unchanged org or
+platform policies. They admit `staff` and `system` organization-wide and admit a tenant or owner only
+through that table's explicit read or insert grant. An unset, `none` or unknown persona sees nothing,
+and updates and deletes stay with the organization-wide personas. The database derives the caller's
+tenant or owner from its active `resident_access` or `owner_access` link for `app.user_id`, so the
+application never supplies that id and a revocation applies on the next statement. The migrations
+helper gates every new table by default, so a new table is closed to the portals until a migration
+writes its grant, and the schema-guard test pins every grant predicate. Operator sessions are subject
+to the same gate: a `psql` or pgAdmin session must set `app.persona` as well as `app.org_id`. The
+ADR-003 authorization handlers and allow-list projections remain the first layer. They decide which
+endpoint answers and what it may say, and the database decides which rows it can read.
 
 The tenant portal uses a host-owned `resident_access` identity link with forced org RLS and composite
 org-consistent references to Identity and Directory. One active link per user identifies their
@@ -154,10 +174,23 @@ the link, explicitly verifies the RLS-exempt Identity user's org, and asks Direc
 resident name on every request. Revocation therefore applies to the next request with an existing
 cookie. The selector-free `/api/portal/tenant/ledger` dispatches the existing Accounting ledger query
 and returns only resident-facing ledger fields, with `Cache-Control: no-store`. The portal displays
-the rent ledger balance, excluding held security deposits. It neither accepts payments nor provides
-an enrollment endpoint. Tenant navigation uses a dedicated shell; staff routes deny access before
-mounting staff queries. Account security and sign-out reuse the existing auth flows. Owner portal
-access remains unsupported.
+the rent ledger balance, excluding held security deposits. It accepts payments only as the isolated,
+development-only simulation (ADR-046) and provides no enrollment endpoint. Tenant navigation uses a dedicated shell; staff routes deny access before
+mounting staff queries. Account security and sign-out reuse the existing auth flows.
+
+The read-only owner portal mirrors that shape. A host-owned `owner_access` link, with the same forced
+org RLS, composite references and one active link per user, binds an Identity user to a non-system
+Directory owner. The Owner persona is exclusive: its policy refuses a principal that also holds a
+staff role or Tenant, just as the Tenant policy refuses Owner. The endpoint-filter check resolves the
+link and asks Directory for the non-system owner name on every request. The selector-free
+`/api/portal/owner` endpoints are `no-store`. The summary returns owner equity on the organization's
+accounting basis, excluding deposit liabilities, plus disbursement history and categorized activity
+from the existing Accounting owner-ledger query. Property addresses come from Directory, but only for
+properties on the owner's own rows. Statements come from Reporting's issued artifacts, never a live
+assembly: the list shows every issued statement, and the PDF endpoint serves the stored bytes
+unchanged. A foreign or nonexistent artifact id is a bare 404. An owned artifact whose bytes are
+missing is a logged 503 problem, `statement_document_unavailable`. Owner sign-in lands at
+`/portal/owner`, behind its own persona guard. Owner enrollment is not provided.
 
 Layered on top of that organization boundary, the host applies defense-in-depth hardening: a middleware
 that sets security response headers — including same-origin `Cross-Origin-Opener-Policy` and
@@ -257,6 +290,14 @@ event rather than stored, and a provider acceptance followed by a bounce keeps b
 durable actor — a user id, or the name of the system process that acted — and a write that declares
 neither is refused rather than stored unattributed; see
 [ADR-039](adr/ADR-039-durable-actor-attribution.md).
+
+A journal entry carries two texts for two audiences. Its `description` is owner-facing: the owner
+statement prints it. Its optional `internal_note` is staff-only, written once at posting like every
+other column, and a void's reason is stored there rather than in the reversal's description. The
+owner-statement data, everything issued from it, and both portals never select the note; staff
+ledgers, the bank register, the trust-ledger report and the compliance pack show it, and the staff
+statement view reads it from a separate route so the statement record that is rendered and issued
+has no field for it. See [ADR-047](adr/ADR-047-owner-facing-description-and-internal-note.md).
 
 That audit trail is read by three deliberately different surfaces: the per-entry trail beside a
 journal entry, the money-touching extract the trust compliance pack hands an examiner, and an

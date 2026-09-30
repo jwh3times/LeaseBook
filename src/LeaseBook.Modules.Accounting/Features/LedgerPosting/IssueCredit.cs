@@ -5,9 +5,16 @@ using LeaseBook.SharedKernel.Cqrs;
 
 namespace LeaseBook.Modules.Accounting.Features.LedgerPosting;
 
-/// <summary>Issues a goodwill credit to a tenant → <c>CreditIssued</c> (reduces what the tenant owes and the owner's accrued income).</summary>
+/// <summary>
+/// Issues a goodwill credit to a tenant → <c>CreditIssued</c> (reduces what the tenant owes and the owner's accrued income).
+/// <para>
+/// <c>Reason</c> is the <b>owner-facing</b> description: it prints on the owner statement.
+/// <c>InternalNote</c> is optional and staff-only; it never reaches an owner or resident (#468).
+/// </para>
+/// </summary>
 public sealed record IssueCredit(
-    Guid TenantId, decimal Amount, DateOnly Date, string Reason, string SourceRef) : ICommand<PostResult>;
+    Guid TenantId, decimal Amount, DateOnly Date, string Reason, string SourceRef, string? InternalNote = null)
+    : ICommand<PostResult>;
 
 public sealed class IssueCreditValidator : AbstractValidator<IssueCredit>
 {
@@ -29,7 +36,7 @@ internal sealed class IssueCreditHandler(ITenantPostingDimensions dimensions, IA
         var id = await events.PostAsync(
             new CreditIssued(
                 command.TenantId, dims.PropertyId, dims.OwnerId, LedgerPostingMaps.Money(command.Amount),
-                command.Date, command.Reason, command.SourceRef),
+                command.Date, command.Reason, command.SourceRef, command.InternalNote),
             ct);
         return new PostResult(id);
     }

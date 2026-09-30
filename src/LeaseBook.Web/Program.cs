@@ -97,6 +97,11 @@ builder.Services.AddExceptionHandler<AccountingExceptionHandler>();
 // would turn a recoverable rejection into an opaque failure.
 builder.Services.AddExceptionHandler<OperationsExceptionHandler>();
 builder.Services.AddExceptionHandler<PaymentExceptionHandler>();
+// An unreadable request (bad JSON, an unknown member on a strict DTO, a missing required parameter)
+// → a coded 400. The binder only throws for this handler to catch when ThrowOnBadRequest is on; the
+// framework enables it in Development alone and elsewhere writes a bare, bodyless 400 itself (ADR-025).
+builder.Services.Configure<RouteHandlerOptions>(options => options.ThrowOnBadRequest = true);
+builder.Services.AddExceptionHandler<BadRequestExceptionHandler>();
 // Terminal handler — MUST stay last. Handlers run in registration order; this one claims
 // everything the typed handlers decline, so nothing reaches the framework default (a bodyless
 // 500 with no log).

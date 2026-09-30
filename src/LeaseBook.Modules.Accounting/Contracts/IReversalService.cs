@@ -5,6 +5,11 @@ namespace LeaseBook.Modules.Accounting.Contracts;
 /// with debit/credit swapped, <c>reverses_entry_id</c> set, posted <b>through the posting service</b>
 /// (no second write path). The reversal lands in the open period at <c>asOfDate</c> — corrections never
 /// post into a locked period. An entry can be reversed at most once, and a reversal cannot be reversed.
+/// <para>
+/// <c>reason</c> is <b>staff-only</b> (ADR-047): it is stored as the reversal's internal note, and the
+/// reversal's owner-facing description is <c>Void — {original description}</c>. Write the reason for
+/// staff; it never prints on an owner statement.
+/// </para>
 /// </summary>
 public interface IReversalService
 {

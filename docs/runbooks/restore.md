@@ -3,7 +3,7 @@
 - **Audience:** Deployment operators and maintainers
 - **Status:** Draft runbook; blocked on the first live restore drill
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-09-20
+- **Last reviewed:** 2026-09-29
 
 Skeleton procedure for a future deployment. LeaseBook is not publicly deployed; the first restore
 drill is deferred to public distribution under the consolidated deployment handoff. Record real
@@ -56,7 +56,10 @@ firewall-gated:
    ```
 
 3. Verify the restored data (connect as `leasebook_ops`, spot-check the trust equation and recent
-   journal entries on the affected org). In production this connection must originate inside the
+   journal entries on the affected org). Set `app.persona` to `staff` as well as `app.org_id` in the
+   spot-check transaction, or every org-scoped read returns zero rows
+   ([ADR-048](../adr/ADR-048-per-persona-row-level-security.md)); `infra/db/verify.sql` does this
+   already. In production this connection must originate inside the
    VNet — use the administration job above for the org-scoped journal spot-check. It does not
    calculate the trust equation: the separate invariant suite remains required before cutover.
 4. Cut over: update the `ConnectionStrings__Default` / `__Migrations` Key Vault secrets to point at

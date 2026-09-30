@@ -9,10 +9,14 @@ namespace LeaseBook.Modules.Accounting.Features.LedgerPosting;
 /// Applies a held deposit → <c>DepositApplied</c>: as owner income (damages) or against the tenant's
 /// open charges. The engine guards against-charges against the open receivable (P51) and both targets
 /// against the held deposit; over-application surfaces as <c>insufficient_receivable</c>/<c>insufficient_liability</c> (409).
+/// <para>
+/// <c>Reason</c> is the <b>owner-facing</b> description: it prints on the owner statement.
+/// <c>InternalNote</c> is optional and staff-only; it never reaches an owner or resident (#468).
+/// </para>
 /// </summary>
 public sealed record ApplyDeposit(
     Guid TenantId, decimal Amount, DateOnly Date, Guid DepositBankId, Guid OperatingBankId,
-    string Target, string Reason, string SourceRef) : ICommand<PostResult>;
+    string Target, string Reason, string SourceRef, string? InternalNote = null) : ICommand<PostResult>;
 
 public sealed class ApplyDepositValidator : AbstractValidator<ApplyDeposit>
 {
@@ -39,7 +43,8 @@ internal sealed class ApplyDepositHandler(ITenantPostingDimensions dimensions, I
             new DepositApplied(
                 command.TenantId, dims.PropertyId, dims.OwnerId, LedgerPostingMaps.Money(command.Amount),
                 command.Date, command.DepositBankId, command.OperatingBankId,
-                LedgerPostingMaps.DepositTargets[command.Target], command.Reason, command.SourceRef),
+                LedgerPostingMaps.DepositTargets[command.Target], command.Reason, command.SourceRef,
+                command.InternalNote),
             ct);
         return new PostResult(id);
     }

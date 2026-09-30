@@ -11,6 +11,12 @@ namespace LeaseBook.Modules.Accounting.Posting;
 /// reverse an already-reversed entry or a reversal itself, then builds the mirror (debit/credit
 /// swapped, dimensions and basis preserved) and posts it through <see cref="IPostingService"/> dated
 /// <c>asOfDate</c> — so the correction lands in the open period, never the original's locked one.
+/// <para>
+/// The reason is staff-only (#468): it becomes the reversal's <c>internal_note</c>. The reversal's
+/// owner-facing description names what it corrected — <c>Void — {original description}</c> — so the owner
+/// statement shows that a correction happened, and to what, but not why. Reversals posted before #468
+/// keep their <c>VOID: {reason}</c> description; posted rows are never rewritten.
+/// </para>
 /// </summary>
 internal sealed class ReversalService(DbContext db, IOrgContext tenant, IPostingService posting) : IReversalService
 {
@@ -66,10 +72,11 @@ internal sealed class ReversalService(DbContext db, IOrgContext tenant, IPosting
             asOfDate,
             EventTypes.EntryVoided,
             EventSubtype: null,
-            Description: $"VOID: {reason}",
+            Description: VoidDescription(original.Description),
             SourceRef: sourceRef,
             Lines: mirrored,
-            ReversesEntryId: entryId);
+            ReversesEntryId: entryId,
+            InternalNote: reason);
 
         var reversalId = await posting.PostAsync(request, ct);
 
@@ -83,4 +90,8 @@ internal sealed class ReversalService(DbContext db, IOrgContext tenant, IPosting
 
         return reversalId;
     }
+
+    /// <summary>The reversal's owner-facing description: what it voids, never why.</summary>
+    internal static string VoidDescription(string? originalDescription) =>
+        string.IsNullOrWhiteSpace(originalDescription) ? "Void" : $"Void — {originalDescription}";
 }

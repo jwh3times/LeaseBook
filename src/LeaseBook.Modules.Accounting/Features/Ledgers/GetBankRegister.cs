@@ -42,8 +42,12 @@ public sealed class GetBankRegisterValidator : AbstractValidator<GetBankRegister
 
 public sealed record RegisterResponse(IReadOnlyList<RegisterRow> Rows, int Total, RegisterTotals Totals);
 
+/// <param name="InternalNote">
+/// The entry's staff-only note (#468). The register, the trust-ledger report and the compliance pack are
+/// staff and audit surfaces, so they carry it beside the description; the search reads both.
+/// </param>
 public sealed record RegisterRow(
-    Guid JournalLineId, DateOnly Date, string? Description, Guid? PropertyId,
+    Guid JournalLineId, DateOnly Date, string? Description, string? InternalNote, Guid? PropertyId,
     decimal? Deposit, decimal? Withdrawal, BankLineStatus Status);
 
 public sealed record RegisterTotals(
@@ -67,6 +71,7 @@ internal sealed class GetBankRegisterHandler(DbContext db) : IQueryHandler<GetBa
                 SELECT jl.id AS journal_line_id,
                        e.entry_date AS date,
                        e.description,
+                       e.internal_note,
                        jl.property_id,
                        jl.debit AS deposit,
                        jl.credit AS withdrawal,
@@ -87,11 +92,14 @@ internal sealed class GetBankRegisterHandler(DbContext db) : IQueryHandler<GetBa
                   AND ({query.To}::date IS NULL OR e.entry_date <= {query.To})
                   AND (NOT {deposits} OR jl.debit IS NOT NULL)
                   AND (NOT {withdrawals} OR jl.credit IS NOT NULL)
-                  AND ({search}::text IS NULL OR e.description ILIKE '%' || {search}::text || '%')
+                  AND ({search}::text IS NULL
+                       OR e.description ILIKE '%' || {search}::text || '%'
+                       OR e.internal_note ILIKE '%' || {search}::text || '%')
             )
             SELECT journal_line_id,
                    date,
                    description,
+                   internal_note,
                    property_id,
                    deposit,
                    withdrawal,
@@ -125,7 +133,7 @@ internal sealed class GetBankRegisterHandler(DbContext db) : IQueryHandler<GetBa
 
         var mapped = rows
             .Select(r => new RegisterRow(
-                r.JournalLineId, r.Date, r.Description, r.PropertyId,
+                r.JournalLineId, r.Date, r.Description, r.InternalNote, r.PropertyId,
                 r.Deposit, r.Withdrawal, BankLineStatusConverter.FromDb(r.Status)))
             .ToList();
 
@@ -138,7 +146,7 @@ internal sealed class GetBankRegisterHandler(DbContext db) : IQueryHandler<GetBa
     }
 
     private sealed record RegisterSqlRow(
-        Guid JournalLineId, DateOnly Date, string? Description, Guid? PropertyId,
+        Guid JournalLineId, DateOnly Date, string? Description, string? InternalNote, Guid? PropertyId,
         decimal? Deposit, decimal? Withdrawal, string Status, int Total,
         decimal DepositsInView, decimal WithdrawalsInView);
 

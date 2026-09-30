@@ -75,7 +75,9 @@ public sealed class LedgerHttpTests(PostgresFixture fixture)
         var csv = await client.GetAsync($"/api/accounting/tenants/{setup.TenantId}/ledger.csv", ct);
         csv.StatusCode.ShouldBe(HttpStatusCode.OK);
         csv.Content.Headers.ContentType!.MediaType.ShouldBe("text/csv");
-        (await csv.Content.ReadAsStringAsync(ct)).ShouldStartWith("Date,Category,Description,Charge,Payment,Balance,Status");
+        // #468 adds the staff-only "Internal note" column beside the description.
+        (await csv.Content.ReadAsStringAsync(ct)).ShouldStartWith(
+            "Date,Category,Description,Internal note,Charge,Payment,Balance,Status");
     }
 
     [Fact]

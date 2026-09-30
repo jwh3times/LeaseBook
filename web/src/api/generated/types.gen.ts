@@ -17,8 +17,9 @@ export type AddCharge = {
     amount: number | string;
     date: string;
     kind: string;
-    memo: null | string;
+    description: null | string;
     sourceRef: string;
+    internalNote?: null | string;
 };
 
 export type ApplyClearances = {
@@ -35,6 +36,7 @@ export type ApplyDeposit = {
     target: string;
     reason: string;
     sourceRef: string;
+    internalNote?: null | string;
 };
 
 export type ApplyPrepayment = {
@@ -42,8 +44,9 @@ export type ApplyPrepayment = {
     amount: number | string;
     date: string;
     bankAccountId: string;
-    memo: null | string;
+    description: null | string;
     sourceRef: string;
+    internalNote?: null | string;
 };
 
 export type AuditActorOption = {
@@ -199,8 +202,9 @@ export type CollectDeposit = {
     amount: number | string;
     date: string;
     depositBankId: string;
-    memo: null | string;
+    description: null | string;
     sourceRef: string;
+    internalNote?: null | string;
 };
 
 export type CollectPrepayment = {
@@ -208,8 +212,9 @@ export type CollectPrepayment = {
     amount: number | string;
     date: string;
     bankAccountId: string;
-    memo: null | string;
+    description: null | string;
     sourceRef: string;
+    internalNote?: null | string;
 };
 
 export type ColumnMap = {
@@ -416,6 +421,7 @@ export type IssueCredit = {
     date: string;
     reason: string;
     sourceRef: string;
+    internalNote?: null | string;
 };
 
 export type IssuedStatementCoverageResponse = {
@@ -599,6 +605,45 @@ export type OwnerListRow = {
     total: number | string;
 };
 
+export type OwnerPortalActivityRow = {
+    date: string;
+    category: string;
+    propertyAddress: null | string;
+    amount: number | string;
+    balance: number | string;
+    isVoided: boolean;
+    isReversal: boolean;
+};
+
+export type OwnerPortalDisbursement = {
+    date: string;
+    amount: number | string;
+    isVoided: boolean;
+    isReversal: boolean;
+};
+
+export type OwnerPortalStatement = {
+    id: string;
+    periodYear: number | string;
+    periodMonth: number | string;
+    basis: null | string;
+    scope: string;
+    endingBalance: null | number | string;
+    issuedAt: string;
+};
+
+export type OwnerPortalStatements = {
+    statements: Array<OwnerPortalStatement>;
+};
+
+export type OwnerPortalSummary = {
+    ownerName: string;
+    balance: number | string;
+    basis: string;
+    disbursements: Array<OwnerPortalDisbursement>;
+    activity: Array<OwnerPortalActivityRow>;
+};
+
 export type PagedResponseOfOwnerListRow = {
     items: Array<OwnerListRow>;
     total: number | string;
@@ -757,8 +802,9 @@ export type RecordBankAdjustment = {
     date: string;
     bankAccountId: string;
     toBankAccountId: null | string;
-    memo: null | string;
+    description: null | string;
     sourceRef: string;
+    internalNote?: null | string;
 };
 
 export type RecordPayment = {
@@ -767,8 +813,9 @@ export type RecordPayment = {
     date: string;
     method: string;
     bankAccountId: string;
-    memo: null | string;
+    description: null | string;
     sourceRef: string;
+    internalNote?: null | string;
 };
 
 export type RecoveryCodesResponse = {
@@ -790,6 +837,7 @@ export type RegisterRow = {
     journalLineId: string;
     date: string;
     description: null | string;
+    internalNote: null | string;
     propertyId: null | string;
     deposit: null | number | string;
     withdrawal: null | number | string;
@@ -910,6 +958,15 @@ export type StartReconciliation = {
     statementEndingBalance: number | string;
 };
 
+export type StatementInternalNote = {
+    entryId: string;
+    internalNote: string;
+};
+
+export type StatementInternalNotesResponse = {
+    notes: Array<StatementInternalNote>;
+};
+
 export type StatementLineView = {
     entryId: string;
     date: string;
@@ -997,6 +1054,7 @@ export type TenantLedgerEntry = {
     eventSubtype: null | string;
     category: string;
     description: null | string;
+    internalNote: null | string;
     charge: number | string;
     payment: number | string;
     balance: number | string;
@@ -2483,6 +2541,29 @@ export type GetApiStatementsByOwnerIdCsvResponses = {
     200: unknown;
 };
 
+export type GetApiStatementsByOwnerIdInternalNotesData = {
+    body?: never;
+    path: {
+        ownerId: string;
+    };
+    query?: {
+        propertyId?: string;
+        year?: number | string;
+        month?: number | string;
+        basis?: string;
+    };
+    url: '/api/statements/{ownerId}/internal-notes';
+};
+
+export type GetApiStatementsByOwnerIdInternalNotesResponses = {
+    /**
+     * OK
+     */
+    200: StatementInternalNotesResponse;
+};
+
+export type GetApiStatementsByOwnerIdInternalNotesResponse = GetApiStatementsByOwnerIdInternalNotesResponses[keyof GetApiStatementsByOwnerIdInternalNotesResponses];
+
 export type GetApiStatementsIssuedCoverageData = {
     body?: never;
     path?: never;
@@ -2526,6 +2607,61 @@ export type PostApiStatementsByOwnerIdDeliverData = {
 };
 
 export type PostApiStatementsByOwnerIdDeliverResponses = {
+    /**
+     * OK
+     */
+    200: unknown;
+};
+
+export type GetApiPortalOwnerSummaryData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/portal/owner/summary';
+};
+
+export type GetApiPortalOwnerSummaryResponses = {
+    /**
+     * OK
+     */
+    200: OwnerPortalSummary;
+};
+
+export type GetApiPortalOwnerSummaryResponse = GetApiPortalOwnerSummaryResponses[keyof GetApiPortalOwnerSummaryResponses];
+
+export type GetApiPortalOwnerStatementsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/portal/owner/statements';
+};
+
+export type GetApiPortalOwnerStatementsResponses = {
+    /**
+     * OK
+     */
+    200: OwnerPortalStatements;
+};
+
+export type GetApiPortalOwnerStatementsResponse = GetApiPortalOwnerStatementsResponses[keyof GetApiPortalOwnerStatementsResponses];
+
+export type GetApiPortalOwnerStatementsByArtifactIdPdfData = {
+    body?: never;
+    path: {
+        artifactId: string;
+    };
+    query?: never;
+    url: '/api/portal/owner/statements/{artifactId}/pdf';
+};
+
+export type GetApiPortalOwnerStatementsByArtifactIdPdfErrors = {
+    /**
+     * Not Found
+     */
+    404: unknown;
+};
+
+export type GetApiPortalOwnerStatementsByArtifactIdPdfResponses = {
     /**
      * OK
      */

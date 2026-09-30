@@ -190,6 +190,17 @@ public sealed class CapabilityStateReader(DbContext db)
                 "so every capability requiring a grant would resolve to 'off' and look exactly like a " +
                 "deliberate revoke.");
         }
+
+        // The persona gate (ADR-048) is the same hazard one level down: a portal or unset persona
+        // reads zero entitlement and cohort rows, silently, even with the right app.org_id.
+        if (!context.PlatformScope && !context.OrgWidePersona)
+        {
+            throw new InvalidOperationException(
+                $"Capability resolution for org {orgId} ran under a persona that cannot read the " +
+                "organization's entitlements (app.persona is not staff or system). The persona gate " +
+                "would filter them to zero rows without raising, and every capability requiring a " +
+                "grant would resolve to 'off'.");
+        }
     }
 
     private Task<ContextRow> ReadContextAsync(Guid orgId, CancellationToken ct) =>
@@ -198,7 +209,9 @@ public sealed class CapabilityStateReader(DbContext db)
                 $"""
                  SELECT COALESCE(current_setting('app.platform', true) = 'on', false) AS platform_scope,
                         COALESCE(NULLIF(current_setting('app.org_id', true), '')::uuid = {orgId}, false)
-                            AS org_matches
+                            AS org_matches,
+                        COALESCE(current_setting('app.persona', true) IN ('staff', 'system'), false)
+                            AS org_wide_persona
                  """)
             .SingleAsync(ct);
 
@@ -207,7 +220,7 @@ public sealed class CapabilityStateReader(DbContext db)
         "instead of raising, and every paid capability would resolve to 'off' with no error recorded " +
         "anywhere.";
 
-    private sealed record ContextRow(bool PlatformScope, bool OrgMatches);
+    private sealed record ContextRow(bool PlatformScope, bool OrgMatches, bool OrgWidePersona);
 
     private sealed record FlagRow(string Name, bool Enabled);
 

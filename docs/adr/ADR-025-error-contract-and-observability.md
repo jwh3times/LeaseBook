@@ -711,6 +711,31 @@ reference, never the message.
 statement identifiers already on the error path. The response is to enable detail locally against a
 reproduction — not to change deployed configuration.
 
+### 2026-09-29 amendment — a request the binder cannot read
+
+Issue #468. A request body the minimal-API binder cannot read — malformed JSON, a value of the wrong
+kind, a missing required parameter, or an unknown member on a request that disallows them — never
+reached this contract. The binder throws for an exception handler to catch only when
+`RouteHandlerOptions.ThrowOnBadRequest` is on, and the framework turns it on in Development alone.
+Everywhere else the binder wrote a bare, body-less 400 itself, with no `code` and no reference; in
+Development the exception fell through to the terminal handler and became a 500. That also left
+`PaymentExceptionHandler`'s own 400 branch unreachable outside Development.
+
+The host now turns `ThrowOnBadRequest` on in every environment, and `BadRequestExceptionHandler`
+answers the resulting `BadHttpRequestException` with a 400 carrying code `invalid_request` through
+`ProblemResults`, logged at `Warning` under `ValidationRejection` (1002). It is registered after the
+typed handlers, so a route with its own mapping keeps it (payments still answer
+`invalid_payment_request`), and before the terminal handler. The exception message names the
+parameter and the JSON path, and can quote the offending token or query-string value; it goes to the
+log only, never into `detail`.
+
+The first producer is ADR-047: the six ledger requests that renamed `memo` to `description` disallow
+unmapped members, so a stale client gets this 400 instead of a post that silently drops its text.
+`MiddlewareErrorContractTests` drives the path with the framework's Development-only default removed,
+because the test host alone would hide the non-Development behavior. Do not turn the option back off
+to match the framework default: the body-less 400 returns everywhere but Development, and no test
+running under Development would notice.
+
 ## Consequences
 
 - Every error response an operator can screenshot now carries a `Reference: <32-hex>` string they can

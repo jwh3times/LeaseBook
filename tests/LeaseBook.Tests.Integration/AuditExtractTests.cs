@@ -206,7 +206,7 @@ public sealed class AuditExtractTests(PostgresFixture fixture)
 
         var executor = sp.GetRequiredService<OrgScopedExecutor>();
         T result = default!;
-        await executor.RunAsync(orgId, actor, async () => result = await work(sp, sp.GetRequiredService<ISender>(), ct), ct);
+        await executor.RunAsync(orgId, actor, actor.IsSystem ? Persona.System : Persona.Staff, async () => result = await work(sp, sp.GetRequiredService<ISender>(), ct), ct);
         return result;
     }
 }

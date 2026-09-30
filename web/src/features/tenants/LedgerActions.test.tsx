@@ -66,7 +66,7 @@ describe('VoidDialog', () => {
     const onVoided = vi.fn();
     renderWith(<VoidDialog entryId="e1" onClose={vi.fn()} onVoided={onVoided} />);
 
-    await userEvent.type(screen.getByLabelText('Reason'), 'entered in error');
+    await userEvent.type(screen.getByLabelText('Reason (internal note)'), 'entered in error');
     await userEvent.click(screen.getByRole('button', { name: 'Void entry' }));
 
     await vi.waitFor(() => expect(onVoided).toHaveBeenCalledWith('rev1'));
@@ -86,7 +86,7 @@ describe('VoidDialog', () => {
     );
     renderWith(<VoidDialog entryId="e1" onClose={vi.fn()} onVoided={vi.fn()} />);
 
-    await userEvent.type(screen.getByLabelText('Reason'), 'oops');
+    await userEvent.type(screen.getByLabelText('Reason (internal note)'), 'oops');
     await userEvent.click(screen.getByRole('button', { name: 'Void entry' }));
     expect(await screen.findByRole('alert')).toHaveTextContent(/already been voided/i);
   });

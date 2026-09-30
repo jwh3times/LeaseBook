@@ -19,7 +19,8 @@ internal sealed record PostEntryRequest(
     IReadOnlyList<PostLineRequest> Lines,
     Guid? ReversesEntryId = null,
     Guid? AssessesEntryId = null,
-    DateOnly? DueDate = null);
+    DateOnly? DueDate = null,
+    string? InternalNote = null);
 
 /// <summary>
 /// One requested line. Exactly one of <see cref="Debit"/>/<see cref="Credit"/> must be set and

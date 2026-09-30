@@ -117,7 +117,7 @@ public sealed class ReconciliationTests(PostgresFixture fixture)
         // Executor directly with an explicit actor, per OrgScope: RunAsync attributes to a system
         // actor, whose null UserId would make this assertion vacuous.
         var user = UuidV7.NewId();
-        await scope.Executor.RunAsync(scope.OrgId, Actor.User(user), () =>
+        await scope.Executor.RunAsync(scope.OrgId, Actor.User(user), Persona.Staff, () =>
             new FinalizeReconciliationHandler(scope.Db, scope.Actor)
                 .Handle(new FinalizeReconciliation(view.Id), ct), ct);
 

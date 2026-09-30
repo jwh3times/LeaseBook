@@ -7,7 +7,7 @@ namespace LeaseBook.Modules.Accounting.Features.Ledgers;
 
 /// <summary>
 /// Renders a <see cref="TenantLedgerResponse"/> as CSV (P55) — columns mirroring the on-screen ledger:
-/// date, category, description, charge, payment, balance, status. Built from the existing ledger
+/// date, category, description, internal note (staff-only, #468), charge, payment, balance, status. Built from the existing ledger
 /// projection (reused, not re-queried). The general report/CSV catalog is M5; this is the one focused
 /// ledger export. Money columns are fixed 2-decimal invariant strings (never float).
 /// </summary>
@@ -20,7 +20,7 @@ public static class TenantLedgerCsv
         using var buffer = new StringWriter(CultureInfo.InvariantCulture);
         using (var csv = new CsvWriter(buffer, CultureInfo.InvariantCulture))
         {
-            foreach (var header in new[] { "Date", "Category", "Description", "Charge", "Payment", "Balance", "Status" })
+            foreach (var header in new[] { "Date", "Category", "Description", "Internal note", "Charge", "Payment", "Balance", "Status" })
             {
                 csv.WriteField(header);
             }
@@ -35,6 +35,7 @@ public static class TenantLedgerCsv
                 csv.WriteField(row.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
                 csv.WriteField(CsvFormulaGuard.Neutralize(row.Category));
                 csv.WriteField(CsvFormulaGuard.Neutralize(row.Description));
+                csv.WriteField(CsvFormulaGuard.Neutralize(row.InternalNote));
                 csv.WriteField(row.Charge.ToString("0.00", CultureInfo.InvariantCulture));
                 csv.WriteField(row.Payment.ToString("0.00", CultureInfo.InvariantCulture));
                 csv.WriteField(row.Balance.ToString("0.00", CultureInfo.InvariantCulture));

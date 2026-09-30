@@ -41,6 +41,9 @@ public sealed class VoidedStatementTests(PostgresFixture fixture)
             var s = result.ByOwner[owner];
             var income = s.Sections.Single(x => x.Key == StatementSectionKey.Income);
             income.Lines.Count.ShouldBe(2, "the charge and its void both belong to Income");
+            // #468: the void line tells the owner what was corrected, never why — the reason is a
+            // staff-only internal note. (Before #468 this line read "VOID: test void".)
+            income.Lines.Select(l => l.Description).ShouldBe(["rent", "Void — rent"]);
             income.Subtotal.ShouldBe(0m, "a voided charge nets to zero in place");
             s.TieOut.Variance.ShouldBe(0m);
             s.TieOut.Balanced.ShouldBeTrue();

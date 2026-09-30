@@ -30,13 +30,15 @@ public sealed class JournalEntry : IOrgScoped
         Guid? assessesEntryId,
         DateOnly? dueDate,
         Actor createdBy,
-        DateTime postedAt)
+        DateTime postedAt,
+        string? internalNote)
     {
         Id = UuidV7.NewId();
         EntryDate = entryDate;
         EventType = eventType;
         EventSubtype = eventSubtype;
         Description = description;
+        InternalNote = string.IsNullOrWhiteSpace(internalNote) ? null : internalNote;
         SourceRef = sourceRef;
         ReversesEntryId = reversesEntryId;
         AssessesEntryId = assessesEntryId;
@@ -60,7 +62,18 @@ public sealed class JournalEntry : IOrgScoped
     /// <summary>Fee kind or payment method (§C.1); null when the event has no subtype.</summary>
     public string? EventSubtype { get; private set; }
 
+    /// <summary>
+    /// Owner-facing text: printed on the owner statement (PDF, CSV and issued artifact) and read on
+    /// every staff surface. Staff-only context belongs in <see cref="InternalNote"/> (#468).
+    /// </summary>
     public string? Description { get; private set; }
+
+    /// <summary>
+    /// Staff-only note (#468). Written once, at posting, like every other column here — never updated,
+    /// and never a correction mechanism. No owner-facing read (statement data, portals) selects it; staff
+    /// surfaces show it beside <see cref="Description"/>. A void's reason lands here on the reversal.
+    /// </summary>
+    public string? InternalNote { get; private set; }
 
     /// <summary>Idempotency / source-document key; unique per org when present.</summary>
     public string? SourceRef { get; private set; }
@@ -110,9 +123,10 @@ public sealed class JournalEntry : IOrgScoped
         Actor createdBy,
         DateTime postedAt,
         Guid? assessesEntryId = null,
-        DateOnly? dueDate = null) =>
+        DateOnly? dueDate = null,
+        string? internalNote = null) =>
         new(entryDate, eventType, eventSubtype, description, sourceRef, reversesEntryId,
-            assessesEntryId, dueDate, createdBy, postedAt);
+            assessesEntryId, dueDate, createdBy, postedAt, internalNote);
 
     internal void AddLine(JournalLine line)
     {

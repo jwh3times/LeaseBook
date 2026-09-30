@@ -348,3 +348,86 @@ describe('LedgerComposer when the bank list cannot be read', () => {
     await vi.waitFor(() => expect(posted).toBe(true));
   });
 });
+
+// #468 (ADR-047): the description prints on the owner statement, and the note never leaves staff
+// surfaces. The audience is part of each field's accessible description, not just its colour.
+describe('LedgerComposer description and internal note', () => {
+  it('labels the description as owner-facing and the note as staff-only', async () => {
+    server.use(...baseHandlers());
+    renderComposer({ initialMode: 'payment' });
+
+    const description = await screen.findByLabelText('Statement description');
+    expect(description).toHaveAccessibleDescription('Owner sees this');
+    const note = screen.getByLabelText('Internal note');
+    expect(note).toHaveAccessibleDescription('Staff only');
+    // "Memo" read as private while it printed on every owner statement.
+    expect(screen.queryByLabelText(/memo/i)).toBeNull();
+  });
+
+  it('posts the description and the note as separate fields', async () => {
+    let body: Record<string, unknown> | undefined;
+    server.use(
+      ...baseHandlers(),
+      http.post('/api/accounting/tenants/:tenantId/payments', async ({ request }) => {
+        body = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({ entryId: 'pay1' });
+      }),
+    );
+    const { onPosted } = renderComposer({ initialMode: 'payment' });
+
+    await screen.findByText('Operating Trust');
+    await userEvent.type(screen.getByLabelText('Amount'), '1450');
+    await userEvent.type(screen.getByLabelText('Statement description'), ' June rent ');
+    await userEvent.type(screen.getByLabelText('Internal note'), 'Paid at the office');
+    await userEvent.keyboard('{Enter}'); // Enter posts from the note field too
+
+    await vi.waitFor(() => expect(onPosted).toHaveBeenCalledWith('pay1'));
+    expect(body).toMatchObject({ description: 'June rent', internalNote: 'Paid at the office' });
+    expect(body).not.toHaveProperty('memo');
+  });
+
+  it('sends null for blank fields rather than empty strings', async () => {
+    let body: Record<string, unknown> | undefined;
+    server.use(
+      ...baseHandlers(),
+      http.post('/api/accounting/tenants/:tenantId/charges', async ({ request }) => {
+        body = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({ entryId: 'c1' });
+      }),
+    );
+    const { onPosted } = renderComposer({ initialMode: 'charge' });
+
+    await userEvent.type(await screen.findByLabelText('Amount'), '25');
+    await userEvent.type(screen.getByLabelText('Internal note'), '   ');
+    await userEvent.keyboard('{Enter}');
+
+    await vi.waitFor(() => expect(onPosted).toHaveBeenCalledWith('c1'));
+    expect(body).toMatchObject({ description: null, internalNote: null });
+  });
+
+  it('presents a credit’s reason as owner-facing and posts the note beside it', async () => {
+    let body: Record<string, unknown> | undefined;
+    server.use(
+      ...baseHandlers(),
+      http.post('/api/accounting/tenants/:tenantId/credits', async ({ request }) => {
+        body = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({ entryId: 'cr1' });
+      }),
+    );
+    const { onPosted } = renderComposer({ initialMode: 'charge' });
+
+    await userEvent.selectOptions(await screen.findByLabelText('Charge type'), 'Credit');
+    const reason = screen.getByLabelText('Statement reason');
+    expect(reason).toHaveAccessibleDescription('Owner sees this');
+    await userEvent.type(screen.getByLabelText('Amount'), '40');
+    await userEvent.type(reason, 'Goodwill credit');
+    await userEvent.type(screen.getByLabelText('Internal note'), 'Approved by the owner by phone');
+    await userEvent.keyboard('{Enter}');
+
+    await vi.waitFor(() => expect(onPosted).toHaveBeenCalledWith('cr1'));
+    expect(body).toMatchObject({
+      reason: 'Goodwill credit',
+      internalNote: 'Approved by the owner by phone',
+    });
+  });
+});

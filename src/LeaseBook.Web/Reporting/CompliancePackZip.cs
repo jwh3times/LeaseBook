@@ -61,11 +61,13 @@ public static class CompliancePackZip
 
     private static byte[] LedgerCsv(CompliancePack pack) => Csv(
         "Trust account ledger",
-        ["Date", "Description", "Property", "Deposit", "Withdrawal", "Status"],
+        ["Date", "Description", "Internal note", "Property", "Deposit", "Withdrawal", "Status"],
         pack.TrustLedger.Select(r => new[]
         {
             r.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
             r.Description ?? string.Empty,
+            // Staff-only (#468), and audit-relevant here: a void's reason is its internal note.
+            r.InternalNote ?? string.Empty,
             r.PropertyId?.ToString() ?? string.Empty,
             Money(r.Deposit),
             Money(r.Withdrawal),

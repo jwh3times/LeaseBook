@@ -126,6 +126,9 @@ INSERT INTO journal_entries VALUES ('{ORG}', '2026-09-09'),
 ALTER TABLE journal_entries ENABLE ROW LEVEL SECURITY;
 ALTER TABLE journal_entries FORCE ROW LEVEL SECURITY;
 CREATE POLICY org_scope ON journal_entries USING (org_id = current_setting('app.org_id', true)::uuid);
+-- The persona gate (ADR-048): verify must state a persona, or it counts nothing.
+CREATE POLICY persona_gate ON journal_entries AS RESTRICTIVE
+  USING (current_setting('app.persona', true) IN ('staff', 'system'));
 REVOKE UPDATE, DELETE ON journal_entries FROM leasebook_app;
 RESET ROLE;
 """)

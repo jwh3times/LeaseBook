@@ -3,6 +3,9 @@
 - **Status:** Accepted
 - **Date:** 2026-06-12
 - **Deciders:** Engineering
+- **Amended by:** [ADR-048](ADR-048-per-persona-row-level-security.md) — the revisit trigger fired
+  at seven portal endpoints: row-level security now also enforces the portal personas inside the
+  organization, and the application-layer checks below remain as the first layer.
 
 ## Context
 
@@ -55,3 +58,35 @@ marked `no-store`. The rent ledger balance excludes security deposits and is not
 quote. The SPA routes Tenant sign-in to `/portal/tenant`, rejects staff navigation before mounting
 staff data hooks, and reuses account security and sign-out. Owner access, payments, and production
 enrollment remain outside this slice. The non-production `portal` fixture is a demonstration only.
+
+## Owner read-only portal (2026-09-29)
+
+The owner slice mirrors the tenant one. The host-owned `owner_access` table binds an Identity user to
+a non-system Directory owner, with the same composite organization references, forced organization
+RLS policy, one active link per user, revoked-link history and audited provision/revoke without an
+HTTP write surface. The Owner persona is exclusive: its policy and scoped handler refuse a principal
+that also holds PMAdmin, PMStaff or Tenant, and the tenant persona continues to refuse Owner. The link
+and the non-system owner are resolved afresh on every request inside the organization transaction.
+
+`/api/portal/owner` takes no owner, property or organization selector. The summary presents owner
+equity on the organization's accounting basis, labelled with that basis. Deposit liabilities are
+excluded because they are tenants' money, not the owner's. Disbursement history derives from the
+owner's `OwnerDisbursed` ledger rows, and activity rows carry an allow-listed category and the
+address of a property present on the owner's own rows, so a transferred-away property keeps its
+history. The response exposes no descriptions, entry ids, source references, bank details, tenant
+identities or PM-income figures.
+
+Statements are never assembled live for an owner: live assembly carries staff line descriptions and
+the organization-wide bank reconciliation. The portal lists every issued statement artifact for the
+owner with its issue date, without inventing current or superseded labels (ADR-045 leaves amendment
+semantics to compliance review), and serves the stored PDF byte-for-byte. That PDF is the document
+the manager issued to this owner, so it carries whatever issued statements carry, including line
+descriptions; the portal's own no-leak guarantee covers its JSON responses, not that document. A
+foreign, cross-organization or nonexistent artifact id yields the same not-found; an owned artifact
+whose bytes are missing from the artifact store yields a distinct, logged "document unavailable"
+result, since the local store is not durable.
+
+With this slice, the persona-scoped portal surface is seven endpoints: four tenant and three owner.
+The revisit trigger above is evaluated against that count. Owner enrollment, durable artifact
+storage and owner-initiated actions remain outside this slice; the non-production `portal` fixture
+adds owner logins for demonstration only.

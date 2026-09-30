@@ -95,6 +95,19 @@ name is a stable identifier (`seed:demo`, `invariant-sweep`), not a description 
 _Avoid_: user (a person is a person; an actor is the role a person **or** the system fills),
 author, created-by
 
+### Journal text
+
+**Description**:
+The owner-facing text of a journal entry — what the owner statement prints for it. On a credit or a
+deposit application it is supplied as the _reason_. A void's description names what it corrects
+(`Void — {original description}`), never why (ADR-047).
+_Avoid_: memo (it reads as internal; `journal_lines.memo` is a different, line-level field)
+
+**Internal note**:
+Staff-only text on a journal entry, written once when the entry posts and never shown to an owner or
+resident. A void's reason is stored as the reversal's internal note.
+_Avoid_: memo, comment, remark
+
 ### Bank accounts
 
 **Bank account**:

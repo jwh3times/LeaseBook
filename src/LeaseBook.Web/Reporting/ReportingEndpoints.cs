@@ -243,6 +243,23 @@ public sealed class ReportingEndpoints : IEndpointModule
                     return Results.File(bytes, "text/csv", fileName);
                 });
 
+        // GET /api/statements/{ownerId}/internal-notes?propertyId=&year=&month=&basis=
+        // The staff view's note overlay (#468) for the same statement the routes above render: staff-only
+        // notes keyed by entry id. Kept off StatementView so nothing rendered or issued can carry one.
+        group.MapGet("/statements/{ownerId:guid}/internal-notes",
+                async (Guid ownerId, Guid? propertyId, int? year, int? month, string? basis,
+                    StatementAssembler assembler, ISender sender, CancellationToken ct) =>
+                {
+                    var now = DateTime.UtcNow;
+                    var resolvedBasis = basis?.ToLowerInvariant() is "accrual" ? "accrual" : "cash";
+
+                    var views = await assembler.BuildAsync(
+                        [ownerId], propertyId, year ?? now.Year, month ?? now.Month, resolvedBasis, ct);
+
+                    return TypedResults.Ok(await StatementInternalNotes.ReadAsync(views[0], sender, ct));
+                })
+            .Produces<StatementInternalNotesResponse>();
+
         // GET /api/statements/issued-coverage?entryIds=&entryIds=…  |  ?runId=
         // Which already-issued owner statements the given postings will be carried forward into (#377,
         // ADR-045). A read the SPA makes after a successful post — never part of posting — so the notice

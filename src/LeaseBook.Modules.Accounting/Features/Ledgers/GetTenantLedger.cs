@@ -14,9 +14,15 @@ public sealed class GetTenantLedgerValidator : AbstractValidator<GetTenantLedger
 
 public sealed record TenantLedgerResponse(Guid TenantId, decimal Balance, IReadOnlyList<TenantLedgerEntry> Rows);
 
+/// <param name="Description">Owner-facing text — what the owner statement prints for this entry.</param>
+/// <param name="InternalNote">
+/// Staff-only (#468); a void's reason lands here on the reversal row. This is a staff read: the resident
+/// portal projects its own allow-listed row and never carries it.
+/// </param>
 public sealed record TenantLedgerEntry(
     Guid EntryId, DateOnly Date, string EventType, string? EventSubtype, string Category,
-    string? Description, decimal Charge, decimal Payment, decimal Balance, bool IsVoided, Guid? ReversesEntryId);
+    string? Description, string? InternalNote, decimal Charge, decimal Payment, decimal Balance, bool IsVoided,
+    Guid? ReversesEntryId);
 
 internal sealed class GetTenantLedgerHandler(DbContext db) : IQueryHandler<GetTenantLedger, TenantLedgerResponse>
 {
@@ -44,6 +50,7 @@ internal sealed class GetTenantLedgerHandler(DbContext db) : IQueryHandler<GetTe
                    e.event_type,
                    e.event_subtype,
                    e.description,
+                   e.internal_note,
                    tl.charge,
                    tl.payment,
                    SUM(tl.charge - tl.payment) OVER (
@@ -58,7 +65,7 @@ internal sealed class GetTenantLedgerHandler(DbContext db) : IQueryHandler<GetTe
         var entries = rows
             .Select(r => new TenantLedgerEntry(
                 r.EntryId, r.Date, r.EventType, r.EventSubtype, Category(r.EventType, r.EventSubtype),
-                r.Description, r.Charge, r.Payment, r.Balance, r.IsVoided, r.ReversesEntryId))
+                r.Description, r.InternalNote, r.Charge, r.Payment, r.Balance, r.IsVoided, r.ReversesEntryId))
             .ToList();
 
         var balance = entries.Count > 0 ? entries[^1].Balance : 0m;
@@ -81,5 +88,5 @@ internal sealed class GetTenantLedgerHandler(DbContext db) : IQueryHandler<GetTe
 
     private sealed record TenantLedgerSqlRow(
         Guid EntryId, DateOnly Date, string EventType, string? EventSubtype, string? Description,
-        decimal Charge, decimal Payment, decimal Balance, bool IsVoided, Guid? ReversesEntryId);
+        string? InternalNote, decimal Charge, decimal Payment, decimal Balance, bool IsVoided, Guid? ReversesEntryId);
 }

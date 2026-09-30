@@ -58,6 +58,10 @@ public static class AuthServiceCollectionExtensions
         services.AddScoped<AccountAdministration>();
         services.AddScoped<ResidentAccessService>();
         services.AddScoped<CurrentResident>();
+        services.AddScoped<OwnerAccessService>();
+        services.AddScoped<CurrentOwner>();
+        services.AddScoped<OwnerPortalReader>();
+        services.AddScoped<IAuthorizationHandler, OwnerAuthorizationHandler>();
         services.AddScoped<IAuthorizationHandler, ResidentAuthorizationHandler>();
         services.Configure<SecurityStampValidatorOptions>(options => options.ValidationInterval = TimeSpan.Zero);
         services.AddScoped<IValidator<RecoveryLoginRequest>, RecoveryLoginRequestValidator>();
@@ -126,6 +130,10 @@ public static class AuthServiceCollectionExtensions
                 .RequireAuthenticatedUser().RequireRole(Roles.Tenant)
                 .RequireAssertion(c => !c.User.IsInRole(Roles.PMAdmin)
                     && !c.User.IsInRole(Roles.PMStaff) && !c.User.IsInRole(Roles.Owner)))
+            // Exclusive persona: an Owner principal that also holds a staff or Tenant role is refused.
+            .AddPolicy(AuthPolicies.RequireOwner, policy => policy
+                .RequireAuthenticatedUser().RequireRole(Roles.Owner)
+                .RequireAssertion(c => OwnerPersona.Admits(c.User)))
             .AddPolicy(AuthPolicies.AuthenticatedMfaExempt, policy => policy
                 .RequireAuthenticatedUser());
 
