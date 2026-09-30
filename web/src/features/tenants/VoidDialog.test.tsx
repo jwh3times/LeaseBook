@@ -6,14 +6,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { server } from '@/test/mocks/server';
 import { VoidDialog } from './VoidDialog';
 
-function renderDialog() {
+function renderDialog(description?: string | null) {
   const onVoided = vi.fn();
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   render(
     <QueryClientProvider client={queryClient}>
-      <VoidDialog entryId="e1" onClose={vi.fn()} onVoided={onVoided} />
+      <VoidDialog entryId="e1" description={description} onClose={vi.fn()} onVoided={onVoided} />
     </QueryClientProvider>,
   );
   return { onVoided };
@@ -41,11 +41,48 @@ describe('VoidDialog', () => {
     );
     const { onVoided } = renderDialog();
 
-    await userEvent.type(screen.getByLabelText('Reason'), 'entered in error');
+    await userEvent.type(screen.getByLabelText('Reason (internal note)'), 'entered in error');
     await userEvent.click(screen.getByRole('button', { name: 'Void entry' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/reconciled and locked/i);
     expect(onVoided).not.toHaveBeenCalled();
-    expect(screen.getByLabelText('Reason')).toBeInTheDocument();
+    expect(screen.getByLabelText('Reason (internal note)')).toBeInTheDocument();
+  });
+});
+
+// #468 (ADR-047): a void's reason is staff-only. The owner statement shows what was corrected, not why.
+describe('VoidDialog reason as an internal note', () => {
+  it('labels the reason staff-only and says what the owner statement will show', () => {
+    renderDialog('June rent');
+
+    const reason = screen.getByLabelText('Reason (internal note)');
+    expect(reason).toHaveAccessibleDescription('Staff only');
+    expect(screen.getByText('“Void — June rent”')).toBeInTheDocument();
+    expect(screen.getByText(/kept as a staff-only internal note/)).toBeInTheDocument();
+    // "recorded in its history" never said who could read it.
+    expect(screen.queryByText(/recorded in its history/)).toBeNull();
+  });
+
+  it('matches the server’s bare “Void” when the entry had no description', () => {
+    renderDialog(null);
+    expect(screen.getByText('“Void”')).toBeInTheDocument();
+  });
+
+  it('posts the reason, which the server stores as the reversal’s internal note', async () => {
+    let body: Record<string, unknown> | undefined;
+    server.use(
+      http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 })),
+      http.post('/api/accounting/entries/:entryId/void', async ({ request }) => {
+        body = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({ entryId: 'rev1' });
+      }),
+    );
+    const { onVoided } = renderDialog('June rent');
+
+    await userEvent.type(screen.getByLabelText('Reason (internal note)'), 'keyed twice');
+    await userEvent.keyboard('{Enter}');
+
+    await vi.waitFor(() => expect(onVoided).toHaveBeenCalledWith('rev1'));
+    expect(body).toMatchObject({ entryId: 'e1', reason: 'keyed twice' });
   });
 });

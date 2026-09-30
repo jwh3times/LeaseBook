@@ -5,6 +5,11 @@ using LeaseBook.SharedKernel;
 using LeaseBook.Tests.Common;
 using LeaseBook.Tests.Integration.Fixtures;
 using LeaseBook.Web.Auth;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Routing;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Shouldly;
 
 namespace LeaseBook.Tests.Integration.Observability;
@@ -94,6 +99,48 @@ public sealed class MiddlewareErrorContractTests(PostgresFixture fixture)
 
         response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
         await ShouldCarryTheContractAsync(response, "antiforgery_rejected", ct);
+    }
+
+    /// <summary>
+    /// An unreadable request body — here an unknown member on a request DTO that disallows them (the
+    /// pre-#468 <c>memo</c>). Minimal APIs answer that with a bare, bodyless 400 unless
+    /// <c>RouteHandlerOptions.ThrowOnBadRequest</c> is on, and the framework turns it on only in
+    /// Development, so the test host alone would hide the Production behavior. A real non-Development
+    /// host needs startup guards this fixture cannot satisfy (a named host, certificate-verified TLS),
+    /// so the test removes exactly the framework's Development default instead: what is left is what
+    /// every other environment runs, and the host must still route the 400 through the factory.
+    /// </summary>
+    [Fact]
+    public async Task The_unreadable_body_400_carries_the_contract_outside_development()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var orgId = UuidV7.NewId();
+        var email = $"body400-{orgId:N}@example.com";
+        await AuthTestSupport.CreateOrgAsync(fixture, orgId, "Body Contract Org", ct);
+        await AuthTestSupport.CreateUserAsync(fixture, orgId, email, "Staff", Roles.PMStaff, ct);
+
+        var removed = 0;
+        var client = fixture.Api.WithWebHostBuilder(b => b.ConfigureServices(services =>
+        {
+            foreach (var d in services.Where(d =>
+                d.ServiceType == typeof(IConfigureOptions<RouteHandlerOptions>)
+                && d.ImplementationType?.Name == "ConfigureRouteHandlerOptions").ToList())
+            {
+                services.Remove(d);
+                removed++;
+            }
+        })).CreateClient();
+        await client.PrimeCsrfAsync(ct);
+        (await AuthTestSupport.LoginAsync(client, email, ct)).Status.ShouldBe(LoginStatus.Ok);
+        await client.PrimeCsrfAsync(ct); // the token rotates on sign-in
+        removed.ShouldBe(1, "the framework's Development-only default must be what this test switches off");
+
+        var response = await client.PostAsJsonAsync(
+            $"/api/accounting/tenants/{UuidV7.NewId()}/charges",
+            new { amount = 5m, date = "2026-02-01", kind = "rent", memo = "stale field", sourceRef = "k" }, ct);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        await ShouldCarryTheContractAsync(response, "invalid_request", ct);
     }
 
     /// <summary>

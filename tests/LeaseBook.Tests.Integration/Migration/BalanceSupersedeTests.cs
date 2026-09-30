@@ -108,6 +108,35 @@ public sealed class BalanceSupersedeTests(PostgresFixture fixture)
         }, ct);
     }
 
+    /// <summary>
+    /// #468 / ADR-047: the supersede reversal is a void like any other. Its reason is staff-only, kept as
+    /// the reversal's internal note, and its owner-facing description names what it voids.
+    /// </summary>
+    [Fact]
+    public async Task The_supersede_reversal_names_what_it_voids_and_keeps_its_reason_internal()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (setup, ownerId) = await ArrangeTiedSetAsync("VoidText", ct);
+
+        await SupersedeInScopeAsync(setup.OrgId, AppFolioImportCatalog.OwnerBalances,
+            "Owner ID,Owner Name,Cash Balance,Accrual Balance\nO-1,Chain Owner LLC,450.00,450.00\n", Cutover, ct);
+
+        var baseRef = $"opening:{CutoverStr}:owner-equity={ownerId}";
+        await ReadAsync(setup.OrgId, async db =>
+        {
+            var entries = await db.Set<JournalEntry>().AsNoTracking()
+                .Where(e => e.SourceRef == baseRef || e.SourceRef == baseRef + ":void")
+                .ToDictionaryAsync(e => e.SourceRef!, ct);
+            var original = entries[baseRef];
+            var reversal = entries[baseRef + ":void"];
+
+            original.Description.ShouldNotBeNullOrWhiteSpace();
+            reversal.ReversesEntryId.ShouldBe(original.Id);
+            reversal.Description.ShouldBe($"Void — {original.Description}");
+            reversal.InternalNote.ShouldBe("Superseded by corrected re-import");
+        }, ct);
+    }
+
     // ──────────────────────────────────────────────────────────────────────────────────────────────
     // 2. Identical corrected file → every row unchanged, nothing re-posted (S3).
     // ──────────────────────────────────────────────────────────────────────────────────────────────

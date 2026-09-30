@@ -17,8 +17,9 @@ export type AddCharge = {
     amount: number | string;
     date: string;
     kind: string;
-    memo: null | string;
+    description: null | string;
     sourceRef: string;
+    internalNote?: null | string;
 };
 
 export type ApplyClearances = {
@@ -35,6 +36,7 @@ export type ApplyDeposit = {
     target: string;
     reason: string;
     sourceRef: string;
+    internalNote?: null | string;
 };
 
 export type ApplyPrepayment = {
@@ -42,8 +44,9 @@ export type ApplyPrepayment = {
     amount: number | string;
     date: string;
     bankAccountId: string;
-    memo: null | string;
+    description: null | string;
     sourceRef: string;
+    internalNote?: null | string;
 };
 
 export type AuditActorOption = {
@@ -199,8 +202,9 @@ export type CollectDeposit = {
     amount: number | string;
     date: string;
     depositBankId: string;
-    memo: null | string;
+    description: null | string;
     sourceRef: string;
+    internalNote?: null | string;
 };
 
 export type CollectPrepayment = {
@@ -208,8 +212,9 @@ export type CollectPrepayment = {
     amount: number | string;
     date: string;
     bankAccountId: string;
-    memo: null | string;
+    description: null | string;
     sourceRef: string;
+    internalNote?: null | string;
 };
 
 export type ColumnMap = {
@@ -416,6 +421,7 @@ export type IssueCredit = {
     date: string;
     reason: string;
     sourceRef: string;
+    internalNote?: null | string;
 };
 
 export type IssuedStatementCoverageResponse = {
@@ -796,8 +802,9 @@ export type RecordBankAdjustment = {
     date: string;
     bankAccountId: string;
     toBankAccountId: null | string;
-    memo: null | string;
+    description: null | string;
     sourceRef: string;
+    internalNote?: null | string;
 };
 
 export type RecordPayment = {
@@ -806,8 +813,9 @@ export type RecordPayment = {
     date: string;
     method: string;
     bankAccountId: string;
-    memo: null | string;
+    description: null | string;
     sourceRef: string;
+    internalNote?: null | string;
 };
 
 export type RecoveryCodesResponse = {
@@ -829,6 +837,7 @@ export type RegisterRow = {
     journalLineId: string;
     date: string;
     description: null | string;
+    internalNote: null | string;
     propertyId: null | string;
     deposit: null | number | string;
     withdrawal: null | number | string;
@@ -949,6 +958,15 @@ export type StartReconciliation = {
     statementEndingBalance: number | string;
 };
 
+export type StatementInternalNote = {
+    entryId: string;
+    internalNote: string;
+};
+
+export type StatementInternalNotesResponse = {
+    notes: Array<StatementInternalNote>;
+};
+
 export type StatementLineView = {
     entryId: string;
     date: string;
@@ -1036,6 +1054,7 @@ export type TenantLedgerEntry = {
     eventSubtype: null | string;
     category: string;
     description: null | string;
+    internalNote: null | string;
     charge: number | string;
     payment: number | string;
     balance: number | string;
@@ -2521,6 +2540,29 @@ export type GetApiStatementsByOwnerIdCsvResponses = {
      */
     200: unknown;
 };
+
+export type GetApiStatementsByOwnerIdInternalNotesData = {
+    body?: never;
+    path: {
+        ownerId: string;
+    };
+    query?: {
+        propertyId?: string;
+        year?: number | string;
+        month?: number | string;
+        basis?: string;
+    };
+    url: '/api/statements/{ownerId}/internal-notes';
+};
+
+export type GetApiStatementsByOwnerIdInternalNotesResponses = {
+    /**
+     * OK
+     */
+    200: StatementInternalNotesResponse;
+};
+
+export type GetApiStatementsByOwnerIdInternalNotesResponse = GetApiStatementsByOwnerIdInternalNotesResponses[keyof GetApiStatementsByOwnerIdInternalNotesResponses];
 
 export type GetApiStatementsIssuedCoverageData = {
     body?: never;

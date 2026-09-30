@@ -32,6 +32,12 @@ public static class PortalSeeder
     public const string OwnerCEmail = "owner-c@portal.test";
     public const string DepositBankMask = "9876";
 
+    /// <summary>
+    /// Prefix of every staff-only internal note the fixture writes (#468). No owner- or resident-facing
+    /// surface may ever show it; the portal suites scan for it (and for "Internal") in every response.
+    /// </summary>
+    public const string StaffNoteMarker = "STAFF-ONLY note";
+
     public static async Task SeedAsync(IServiceProvider services, CancellationToken ct = default)
     {
         SeederGuard.RequireNonProduction(services);
@@ -82,11 +88,14 @@ public static class PortalSeeder
                 await sp.GetRequiredService<ResidentAccessService>().GrantAsync(resident, tenant.Id, ct);
                 var date = new DateOnly(2026, 9, 1);
                 await events.PostAsync(new RentCharged(tenant.Id, property.Id, owner.Id, null,
-                    new Money(1000m + i * 200m), date, "Internal rent memo", "fixture-rent-" + i), ct);
+                    new Money(1000m + i * 200m), date, "Internal rent memo", "fixture-rent-" + i,
+                    InternalNote: StaffNoteMarker + ": rent"), ct);
                 await events.PostAsync(new PaymentReceived(tenant.Id, property.Id, owner.Id,
-                    new Money(300m), date.AddDays(1), PaymentMethod.Check, bank.Id, "Internal bank reference", "fixture-payment-" + i), ct);
+                    new Money(300m), date.AddDays(1), PaymentMethod.Check, bank.Id, "Internal bank reference", "fixture-payment-" + i,
+                    InternalNote: StaffNoteMarker + ": payment"), ct);
                 var fee = await events.PostAsync(new FeeCharged(tenant.Id, property.Id, owner.Id, null,
-                    new Money(25m), date.AddDays(2), FeeKind.Other, "Internal fee memo", "fixture-fee-" + i), ct);
+                    new Money(25m), date.AddDays(2), FeeKind.Other, "Internal fee memo", "fixture-fee-" + i,
+                    InternalNote: StaffNoteMarker + ": fee"), ct);
                 await sender.Send(new VoidEntry(fee, "Internal correction reason", date.AddDays(3), "fixture-void-" + i), ct);
             }
 
@@ -113,7 +122,8 @@ public static class PortalSeeder
                 await sp.GetRequiredService<IChartOfAccounts>().ProvisionAsync(
                     [new BankAccountSpec(depositBank.Id, depositBank.Name, Modules.Accounting.Contracts.BankPurpose.Deposit)], ct);
                 await events.PostAsync(new DepositCollected(depositor.Id, property.Id, owner.Id,
-                    new Money(1234.56m), september.AddDays(3), depositBank.Id, "Internal deposit memo", "fixture-deposit"), ct);
+                    new Money(1234.56m), september.AddDays(3), depositBank.Id, "Internal deposit memo", "fixture-deposit",
+                    InternalNote: StaffNoteMarker + ": deposit"), ct);
 
                 await events.PostAsync(new OwnerContribution(owner.Id, property.Id, new Money(500m),
                     september.AddDays(4), bank.Id, "Internal owner contribution memo", "fixture-owner-a-contribution"), ct);

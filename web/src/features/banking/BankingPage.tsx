@@ -97,7 +97,13 @@ export function BankingPage() {
       if (propFilter !== 'all' && row.propertyId !== propFilter) return false;
       if (typeFilter === 'deposits' && row.deposit == null) return false;
       if (typeFilter === 'withdrawals' && row.withdrawal == null) return false;
-      if (q && !(row.description ?? '').toLowerCase().includes(q)) return false;
+      // The note is searchable on staff surfaces (#468), matching the server's register search.
+      if (
+        q &&
+        !(row.description ?? '').toLowerCase().includes(q) &&
+        !(row.internalNote ?? '').toLowerCase().includes(q)
+      )
+        return false;
       return true;
     });
   }, [rows, search, propFilter, typeFilter]);

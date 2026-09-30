@@ -20,14 +20,14 @@ internal static class RunEventEntryBuilder
                     PropertyId: e.PropertyId, UnitId: e.UnitId, OwnerId: e.OwnerId, TenantId: e.TenantId),
                 new(AccountCodes.OwnerEquity, null, e.Amount, EntryBasis.Accrual,
                     PropertyId: e.PropertyId, OwnerId: e.OwnerId),
-            ], DueDate: e.DueDate ?? e.Date),
+            ], DueDate: e.DueDate ?? e.Date, InternalNote: e.InternalNote),
             FeeCharged e => new PostEntryRequest(e.Date, "FeeCharged", FeeSubtype(e.Kind), e.Description, e.SourceRef,
                 [
                     new(AccountCodes.TenantReceivable, e.Amount, null, EntryBasis.Accrual,
                     PropertyId: e.PropertyId, UnitId: e.UnitId, OwnerId: e.OwnerId, TenantId: e.TenantId),
                 new(AccountCodes.OwnerEquity, null, e.Amount, EntryBasis.Accrual,
                     PropertyId: e.PropertyId, OwnerId: e.OwnerId),
-            ], AssessesEntryId: e.AssessesEntryId, DueDate: e.Date),
+            ], AssessesEntryId: e.AssessesEntryId, DueDate: e.Date, InternalNote: e.InternalNote),
             ManagementFeeAssessed e => new PostEntryRequest(
                 e.Date, "ManagementFeeAssessed", null, e.Description, e.SourceRef,
                 [

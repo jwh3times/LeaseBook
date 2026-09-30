@@ -1,18 +1,25 @@
 import { useMutation } from '@tanstack/react-query';
-import { useRef, useState, type KeyboardEvent } from 'react';
+import { useId, useRef, useState, type KeyboardEvent } from 'react';
 import { Button, Input } from '@/design';
 import { ApiErrorNotice } from '@/components/ApiErrorNotice';
+import { AudienceHint } from '@/components/InternalNote';
 import { Modal } from '@/components/Modal';
 import {
   type LedgerPostError,
   LOCKED_PERIOD_MESSAGE,
   newSourceRef,
   type PostResult,
+  voidDescription,
   voidEntry,
 } from './ledgerMutations';
 
 interface VoidDialogProps {
   entryId: string;
+  /**
+   * The voided entry's owner-facing description, as the ledger shows it. The reversal's description
+   * is derived from it server-side, so the dialog can say exactly what the owner statement will read.
+   */
+  description?: string | null;
   onClose: () => void;
   onVoided: (reversalEntryId: string) => void;
 }
@@ -21,8 +28,12 @@ interface VoidDialogProps {
  * Void/reverse confirmation (§C.4). A reason is required; on confirm it posts a linked reversal through
  * the WP-01 void command (P54 idempotency key). An already-reversed entry surfaces a friendly message
  * rather than an error; a deduped double-submit is treated as already voided.
+ *
+ * The reason is staff-only (#468, ADR-047): it becomes the reversal's internal note, and the owner
+ * statement shows `Void — {description}` — that a correction happened, and to what, but not why.
  */
-export function VoidDialog({ entryId, onClose, onVoided }: VoidDialogProps) {
+export function VoidDialog({ entryId, description, onClose, onVoided }: VoidDialogProps) {
+  const fieldId = useId();
   const [reason, setReason] = useState('');
   const [error, setError] = useState<LedgerPostError | null>(null);
   const sourceRef = useRef(newSourceRef());
@@ -77,19 +88,27 @@ export function VoidDialog({ entryId, onClose, onVoided }: VoidDialogProps) {
     >
       <div className="pf-modal-body col gap12">
         <p className="t3 fs13">
-          Voiding posts a linked reversal — the original stays in the ledger, struck through, with
-          this reason recorded in its history.
+          Voiding posts a linked reversal — the original stays in the ledger, struck through. The
+          owner statement will show{' '}
+          <b style={{ color: 'var(--text)' }}>“{voidDescription(description)}”</b>; your reason is
+          kept as a staff-only internal note and never appears on it.
         </p>
-        <label className="col gap6">
-          <span className="pf-eyebrow">Reason</span>
+        <div className="col gap6">
+          <span className="pf-field-labelrow">
+            <label className="pf-eyebrow" htmlFor={`${fieldId}-reason`}>
+              Reason (internal note)
+            </label>
+            <AudienceHint id={`${fieldId}-reason-hint`} audience="staff" />
+          </span>
           <Input
+            id={`${fieldId}-reason`}
+            aria-describedby={`${fieldId}-reason-hint`}
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             onKeyDown={onKeyDown}
             placeholder="e.g. entered in error"
-            aria-label="Reason"
           />
-        </label>
+        </div>
         <ApiErrorNotice error={error} />
       </div>
     </Modal>

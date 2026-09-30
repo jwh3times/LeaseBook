@@ -3,7 +3,7 @@
 - **Audience:** Contributors, operators, and reviewers
 - **Status:** Living accounting guide
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-09-14
+- **Last reviewed:** 2026-09-29
 
 This is the canonical public explanation of the shipped trust-accounting model, written so a
 property manager, bookkeeper, or attorney can evaluate it without reading C#. The Accounting module
@@ -178,6 +178,12 @@ debits and credits swapped, linked back to the original, dated into the current 
 closed one). The original and its reversal net to zero in every report. An entry can be reversed at
 most once, and a reversal cannot itself be reversed.
 
+A void needs a reason, and the reason is **staff-only**: it is stored as the reversal's internal note
+(see below). The reversal's owner-facing description names what it corrects, `Void — {original
+description}`, so an owner statement shows that a correction happened and to what, but not why
+(ADR-047). Reversals posted before this change keep their original `VOID: {reason}` text, because posted
+rows and issued statements are never rewritten.
+
 ## Closing a period
 
 Two independent locks keep settled history settled. Each month is an accounting **period** that can be
@@ -190,8 +196,8 @@ reconciliation actually uses. A post is rejected if either lock covers it.
 
 Money first moves through the UI in M3. The tenant-ledger composer never builds journal lines itself —
 it sends a small **command** that the server wraps around the existing posting engine, so there is still
-exactly one write path to the journal. The command carries only a tenant id plus the amount/date/method/
-memo; the owner, property and unit are resolved server-side from the tenant's **lease effective on
+exactly one write path to the journal. The command carries only a tenant id plus the amount/date/method,
+a description and an optional internal note; the owner, property and unit are resolved server-side from the tenant's **lease effective on
 the command's accounting date** (a post with no effective lease is rejected, never guessed). Each
 command maps to one business event:
 
@@ -210,6 +216,21 @@ command maps to one business event:
 Every submit carries a client-minted **idempotency key** (`sourceRef`), so a double-click or retry maps
 to "already posted" rather than posting twice. `GET /tenants/{id}/ledger.csv` exports the on-screen
 ledger.
+
+**Owner-facing descriptions and staff-only notes (ADR-047).** Every entry has one **description**, and
+it is owner-facing: the owner statement prints it, in the PDF, the CSV and the issued copy. The API
+field is `description` (it was called `memo` before, which read as internal); on a credit and a
+deposit application the owner-facing text is the `reason`. Anything the owner should not read goes in
+the optional **internal note** (`internalNote`). The note is written once, when the entry posts, and
+cannot be edited afterwards, like the rest of the entry. It is never read by the owner statement or
+either portal. Staff see it beside the description on the tenant ledger and its CSV, the bank register
+(whose search also matches it), the trust-ledger report, the compliance pack and the staff statement
+view. The staff statement view reads notes from a separate route,
+`GET /api/statements/{ownerId}/internal-notes`, so the statement record that is rendered and issued
+never carries one. Entries the system posts on its own (runs, sweeps, transfers, opening positions)
+have no note, with one exception: every reversal carries its void reason as its note, including the
+reversal the import supersede path posts. A request that still sends `memo` is rejected with a 400
+rather than posted without its text.
 
 **The over-application rule (ADR-011).** A payment that exceeds what the tenant owes auto-splits the
 excess into a prepayment. An _application_ has no such overflow, so applying a deposit **against charges**

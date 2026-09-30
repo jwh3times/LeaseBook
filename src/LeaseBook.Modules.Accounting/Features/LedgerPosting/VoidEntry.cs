@@ -9,6 +9,10 @@ namespace LeaseBook.Modules.Accounting.Features.LedgerPosting;
 /// original is never mutated, M3-E1). The reversal lands in the open period dated <see cref="AsOfDate"/>
 /// (default today, P57). <see cref="SourceRef"/> is the P54 idempotency key, so a double-submitted void
 /// maps to <c>duplicate_source_ref</c> (409) — and a re-void of an already-reversed entry to <c>already_reversed</c>.
+/// <para>
+/// <see cref="Reason"/> is required and <b>staff-only</b> (#468): it is stored as the reversal's internal
+/// note. The owner statement shows the reversal as <c>Void — {original description}</c>, never the reason.
+/// </para>
 /// </summary>
 public sealed record VoidEntry(Guid EntryId, string Reason, DateOnly? AsOfDate, string SourceRef)
     : ICommand<PostResult>;
