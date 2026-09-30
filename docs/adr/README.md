@@ -71,6 +71,7 @@ form, write it, and add a row to the index below. When a decision is replaced, m
 | [044](ADR-044-audit-log-review-surface.md)                           | Audit-log review is a separate read, and payloads are withheld by origin        | Accepted                               | 2026-09-11 |
 | [045](ADR-045-statement-carry-forward.md)                            | A statement carries forward from the one issued before it                       | Accepted                               | 2026-09-13 |
 | [046](ADR-046-simulated-payment-recognition.md)                      | Recognize simulated payments from explicit bank evidence                        | Proposed                               | 2026-09-26 |
+| [047](ADR-047-owner-facing-description-and-internal-note.md)         | A journal entry's description is owner-facing; staff notes are separate         | Accepted                               | 2026-09-29 |
 | [048](ADR-048-per-persona-row-level-security.md)                     | Per-persona row-level security inside the organization                          | Accepted                               | 2026-09-29 |
 
 ## Status legend

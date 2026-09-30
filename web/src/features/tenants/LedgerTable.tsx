@@ -1,6 +1,7 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { Badge, type BadgeTone, Icon, type IconName, Money } from '@/design';
+import { InternalNoteText } from '@/components/InternalNote';
 import { num } from '@/lib/directory';
 import type { TenantLedgerEntry } from './ledger';
 
@@ -39,7 +40,8 @@ function statusOf(entry: TenantLedgerEntry): { label: string; tone: BadgeTone; i
  * The ledger table: virtualized for long histories (P59), keyboard-navigable (arrow keys move a roving
  * selection, focus stays on the grid so it survives virtualization), with the running balance, category
  * badges, a status badge (icon + label, never color alone), struck-through voided rows, linked reversal
- * rows, a new-row flash, and the WP-06 row-action seam. Money renders through <Money> (org neg-display).
+ * rows, a new-row flash, and the WP-06 row-action seam. A staff-only internal note (#468) renders as a
+ * labelled secondary line under the description; the owner never sees it. Money renders through <Money> (org neg-display).
  */
 export function LedgerTable({ rows, flashId, rowActions }: LedgerTableProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -151,7 +153,11 @@ export function LedgerTable({ rows, flashId, rowActions }: LedgerTableProps) {
                 </span>
                 <span role="gridcell" className="desc">
                   {entry.reversesEntryId && <Icon name="refresh" size={12} />}
-                  <span>{entry.description || '—'}</span>
+                  <span className="desc-stack">
+                    <span className="desc-text">{entry.description || '—'}</span>
+                    {/* Staff-only (#468): a secondary line, marked by the lock and its label. */}
+                    {entry.internalNote && <InternalNoteText note={entry.internalNote} />}
+                  </span>
                 </span>
                 <span role="gridcell" className="num">
                   {charge > 0 ? <Money value={charge} plain /> : <span className="t3">—</span>}

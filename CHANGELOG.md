@@ -31,6 +31,31 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   application or read-only role must set `app.persona` (usually `staff`) as well as `app.org_id`, or
   every organization-scoped table returns no rows. The restore verification script already does.
 
+## [0.20.0] - 2026-09-29
+
+### Added
+
+- **Staff can keep an internal note on a ledger entry that owners never see.** Payments, charges,
+  credits, deposits, prepayments, their applications and bank adjustments accept an optional internal
+  note beside the description. The note shows on the tenant ledger and its CSV, the bank register (whose
+  search also finds it), the trust-ledger report, the compliance pack and the staff statement view. It
+  never appears on an owner statement (PDF, CSV or issued copy) or in either portal. A note is saved
+  with the entry and cannot be edited afterwards.
+
+### Changed
+
+- **A void's reason is now staff-only.** The reason is kept as the reversal's internal note, and the
+  owner statement shows the reversal as `Void — {original description}`: that a correction happened,
+  and to what, but not why. Voids recorded earlier keep their `VOID: {reason}` text; posted entries and
+  issued statements are never rewritten.
+- **The ledger API's `memo` field is now `description`**, and it is documented as owner-facing text.
+  The bank-adjustment request is renamed the same way. A request that still sends `memo` is rejected
+  rather than posted without its text.
+- **A request the API cannot read now gets a coded error.** Malformed JSON or a value of the wrong kind
+  returns a 400 with an error code and a reference to quote, as does an unknown field on the renamed
+  ledger requests. Outside development it
+  used to be a bare 400 with no body.
+
 ## [0.19.0] - 2026-09-29
 
 ### Added
@@ -1142,7 +1167,8 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.19.0...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.20.0...HEAD
+[0.20.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.20.0
 [0.19.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.19.0
 [0.18.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.18.0
 [0.17.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.17.0

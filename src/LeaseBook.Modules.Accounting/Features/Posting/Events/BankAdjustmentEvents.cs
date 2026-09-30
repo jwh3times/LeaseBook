@@ -11,12 +11,15 @@ namespace LeaseBook.Modules.Accounting.Features.Posting.Events;
 
 /// <summary>A bank service charge: the PM's held funds in that bank cover it (held fees ↓, bank ↓).</summary>
 public sealed record BankFeeCharged(
-    Money Amount, DateOnly Date, Guid BankAccountId, string Description, string? SourceRef = null) : AccountingEvent;
+    Money Amount, DateOnly Date, Guid BankAccountId, string Description, string? SourceRef = null,
+    string? InternalNote = null) : AccountingEvent;
 
 /// <summary>Interest paid into a bank: accrues to the PM's held position (bank ↑, held fees ↑).</summary>
 public sealed record InterestEarned(
-    Money Amount, DateOnly Date, Guid BankAccountId, string Description, string? SourceRef = null) : AccountingEvent;
+    Money Amount, DateOnly Date, Guid BankAccountId, string Description, string? SourceRef = null,
+    string? InternalNote = null) : AccountingEvent;
 
 /// <summary>Moves the PM's own held funds between two of the org's bank accounts (cash + attribution move together).</summary>
 public sealed record TrustTransfer(
-    Money Amount, DateOnly Date, Guid FromBankId, Guid ToBankId, string Description, string? SourceRef = null) : AccountingEvent;
+    Money Amount, DateOnly Date, Guid FromBankId, Guid ToBankId, string Description, string? SourceRef = null,
+    string? InternalNote = null) : AccountingEvent;

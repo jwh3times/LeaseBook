@@ -203,7 +203,8 @@ internal sealed class PostingService(
             request.SourceRef, request.ReversesEntryId,
             createdBy: postedBy, postedAt: DateTime.UtcNow,
             assessesEntryId: request.AssessesEntryId,
-            dueDate: request.DueDate);
+            dueDate: request.DueDate,
+            internalNote: request.InternalNote);
         foreach (var line in lines)
         {
             entry.AddLine(line);

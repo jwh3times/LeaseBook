@@ -170,7 +170,7 @@ export async function recordBankAdjustment(
     kind: string;
     amount: number;
     date: string;
-    memo: string | null;
+    description: string | null;
     toBankAccountId?: string | null;
     sourceRef: string;
   },

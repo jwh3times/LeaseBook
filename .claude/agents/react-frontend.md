@@ -169,7 +169,7 @@ const register = await unwrap(
 const result = await unwrap(
   postApiAccountingTenantsByTenantIdPayments({
     path: { tenantId },
-    body: { amount, date, memo },
+    body: { amount, date, description },
   }),
   "Failed to record the payment",
 );

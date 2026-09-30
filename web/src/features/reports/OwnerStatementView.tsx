@@ -2,6 +2,8 @@ import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Avatar, Button, Card, Icon, Money } from '@/design';
 import { ApiErrorNotice } from '@/components/ApiErrorNotice';
+import { ErrorAction } from '@/components/ErrorAction';
+import { InternalNoteText } from '@/components/InternalNote';
 import { asApiError } from '@/api';
 import {
   deliverStatement,
@@ -14,15 +16,25 @@ import {
   type StatementFilters,
   type StatementSectionView,
   type StatementView,
+  useStatementInternalNotes,
 } from './reports';
+
+/** Staff-only notes by entry id (#468). Empty while the overlay read is pending or failed. */
+type InternalNotes = ReadonlyMap<string, string>;
+
+const NO_NOTES: InternalNotes = new Map();
+
+/** The marker on a staff annotation: this view otherwise looks like the owner's copy. */
+const INTERNAL_LABEL = 'Internal — not on the owner’s copy';
 
 // ---- StatementSection -------------------------------------------------------
 
 interface StatementSectionProps {
   section: StatementSectionView;
+  notes: InternalNotes;
 }
 
-function StatementSection({ section }: StatementSectionProps) {
+function StatementSection({ section, notes }: StatementSectionProps) {
   return (
     <div className="pf-stmt-section" role="region" aria-label={section.title}>
       <div className="pf-stmt-sectionhd">
@@ -34,12 +46,21 @@ function StatementSection({ section }: StatementSectionProps) {
           <div className="col" style={{ gap: 2 }}>
             <span>{line.description}</span>
             {line.propertyAddress && <span className="t3 fs12">{line.propertyAddress}</span>}
+            <StaffNote note={notes.get(line.entryId)} />
           </div>
           <Money value={num(line.amount)} colorize />
         </div>
       ))}
     </div>
   );
+}
+
+/**
+ * A line's staff-only internal note, annotated onto the staff view only. The owner's copy — the PDF,
+ * the CSV and what gets issued — is built from `StatementView`, which never carries one.
+ */
+function StaffNote({ note }: { note: string | undefined }) {
+  return note ? <InternalNoteText note={note} label={INTERNAL_LABEL} /> : null;
 }
 
 // ---- CarryForward -----------------------------------------------------------
@@ -57,6 +78,7 @@ function shortDate(iso: string): string {
 interface CarryForwardProps {
   carryForward: CarryForwardView;
   beginning: number;
+  notes: InternalNotes;
 }
 
 /**
@@ -65,7 +87,7 @@ interface CarryForwardProps {
  * posted date), and lands on the beginning balance the sections build on. Meaning is carried by labels
  * and signs, never by colour alone.
  */
-function CarryForward({ carryForward: cf, beginning }: CarryForwardProps) {
+function CarryForward({ carryForward: cf, beginning, notes }: CarryForwardProps) {
   const unitemized = num(cf.unitemized);
 
   return (
@@ -93,6 +115,7 @@ function CarryForward({ carryForward: cf, beginning }: CarryForwardProps) {
                 Posted {shortDate(line.postedAt)}
                 {line.propertyAddress ? ` · ${line.propertyAddress}` : ''}
               </span>
+              <StaffNote note={notes.get(line.entryId)} />
             </div>
             <Money value={num(line.amount)} colorize />
           </div>
@@ -309,6 +332,12 @@ export function OwnerStatementView({
   const beginning = num(statement.beginning);
   const ending = num(statement.ending);
 
+  // A secondary read that annotates, never gates: the statement renders whatever this does. While it
+  // is pending nothing is annotated and nothing claims a line has no note; a failure says so above
+  // the statement, with its reference and a retry, rather than passing for "no notes".
+  const internalNotes = useStatementInternalNotes(ownerId, filters);
+  const notes = internalNotes.isSuccess ? internalNotes.data : NO_NOTES;
+
   const initials =
     statement.ownerName
       .split(' ')
@@ -373,6 +402,25 @@ export function OwnerStatementView({
 
       <ApiErrorNotice error={downloadError} kind="read" style={{ marginBottom: 'var(--gap)' }} />
 
+      {internalNotes.isError && (
+        <div className="col gap6" style={{ marginBottom: 'var(--gap)' }}>
+          <span className="t3 fs13">
+            Staff internal notes couldn’t be loaded, so none are shown. The statement itself is
+            complete.
+          </span>
+          <ApiErrorNotice
+            error={internalNotes.error}
+            fallback="Failed to load the internal notes for this statement."
+            kind="read"
+          />
+          <ErrorAction
+            error={internalNotes.error}
+            onRetry={() => void internalNotes.refetch()}
+            retrying={internalNotes.isFetching}
+          />
+        </div>
+      )}
+
       <div className="pf-stmt-layout">
         {/* Statement document */}
         <Card className="pf-stmt-doc">
@@ -394,7 +442,11 @@ export function OwnerStatementView({
 
           {/* Beginning — carried forward from the issued prior statement when one exists */}
           {statement.carryForward ? (
-            <CarryForward carryForward={statement.carryForward} beginning={beginning} />
+            <CarryForward
+              carryForward={statement.carryForward}
+              beginning={beginning}
+              notes={notes}
+            />
           ) : (
             <div className="pf-stmt-begin">
               <span>Beginning balance</span>
@@ -404,7 +456,7 @@ export function OwnerStatementView({
 
           {/* Sections */}
           {statement.sections.map((section) => (
-            <StatementSection key={section.key} section={section} />
+            <StatementSection key={section.key} section={section} notes={notes} />
           ))}
 
           {/* Ending */}

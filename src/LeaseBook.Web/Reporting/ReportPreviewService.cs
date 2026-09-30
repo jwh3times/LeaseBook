@@ -209,6 +209,7 @@ public sealed class ReportPreviewService(ISender sender)
             new ReportColumn<RegisterRow>("journalLineId", row => row.JournalLineId),
             new ReportColumn<RegisterRow>("date", row => row.Date),
             new ReportColumn<RegisterRow>("description", row => row.Description),
+            new ReportColumn<RegisterRow>("internalNote", row => row.InternalNote),
             new ReportColumn<RegisterRow>("deposit", row => row.Deposit),
             new ReportColumn<RegisterRow>("withdrawal", row => row.Withdrawal),
             new ReportColumn<RegisterRow>("status", row => row.Status.ToString()));

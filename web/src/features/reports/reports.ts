@@ -7,6 +7,7 @@ import {
   getApiReportsCompliancePack,
   getApiStatementsByOwnerId,
   getApiStatementsByOwnerIdCsv,
+  getApiStatementsByOwnerIdInternalNotes,
   getApiStatementsByOwnerIdPdf,
   postApiStatementsByOwnerIdDeliver,
   toApiError,
@@ -90,6 +91,9 @@ export interface ReportFilters {
 export const statementKey = (ownerId: string, filters: StatementFilters) =>
   ['statement', ownerId, filters] as const;
 
+export const statementInternalNotesKey = (ownerId: string, filters: StatementFilters) =>
+  ['statement-internal-notes', ownerId, filters] as const;
+
 export const reportCatalogKey = () => ['reports'] as const;
 
 export const reportPreviewKey = (id: string, filters: ReportFilters) =>
@@ -117,6 +121,36 @@ export function useStatement(
         }),
         'Failed to load owner statement',
       );
+    },
+  });
+}
+
+/**
+ * The staff statement view's note overlay (#468, ADR-047): staff-only internal notes keyed by the
+ * entry id a statement line or carry-forward line already carries. A separate read on purpose —
+ * `StatementView` is what gets rendered to PDF and CSV and issued, so it never carries a note.
+ */
+export function useStatementInternalNotes(
+  ownerId: string,
+  filters: StatementFilters,
+): UseQueryResult<ReadonlyMap<string, string>> {
+  return useQuery({
+    queryKey: statementInternalNotesKey(ownerId, filters),
+    enabled: !!ownerId,
+    queryFn: async () => {
+      const { notes } = await unwrap(
+        getApiStatementsByOwnerIdInternalNotes({
+          path: { ownerId },
+          query: {
+            basis: filters.basis,
+            year: filters.year,
+            month: filters.month,
+            propertyId: filters.propertyId,
+          },
+        }),
+        'Failed to load the internal notes for this statement.',
+      );
+      return new Map(notes.map((n) => [n.entryId, n.internalNote]));
     },
   });
 }

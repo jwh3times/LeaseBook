@@ -126,3 +126,61 @@ describe('ApplyModal when the trust banks cannot be read', () => {
     expect(await screen.findByRole('button', { name: /^apply$/i })).toBeEnabled();
   });
 });
+
+// #468 (ADR-047): the application's reason prints on the owner statement; the note does not.
+describe('ApplyModal description and internal note', () => {
+  it('labels both fields with their audience and posts them separately', async () => {
+    let body: Record<string, unknown> | undefined;
+    server.use(
+      http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 })),
+      http.get('/api/settings/banks', () => HttpResponse.json(BANKS)),
+      http.post('/api/accounting/tenants/:tenantId/deposit-applications', async ({ request }) => {
+        body = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({ entryId: 'a1' });
+      }),
+    );
+    const { onApplied } = renderModal();
+
+    await screen.findByText(/Operating Trust/);
+    const description = screen.getByLabelText('Statement description');
+    expect(description).toHaveAccessibleDescription('Owner sees this');
+    const note = screen.getByLabelText('Internal note');
+    expect(note).toHaveAccessibleDescription('Staff only');
+
+    await userEvent.type(screen.getByLabelText('Amount'), '100');
+    await userEvent.type(description, 'Move-out settlement');
+    await userEvent.type(note, 'Carpet damage per inspection photos');
+    await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+
+    await vi.waitFor(() => expect(onApplied).toHaveBeenCalledWith('a1'));
+    expect(body).toMatchObject({
+      reason: 'Move-out settlement',
+      internalNote: 'Carpet damage per inspection photos',
+    });
+  });
+
+  it('posts a prepayment application’s description and note', async () => {
+    let body: Record<string, unknown> | undefined;
+    server.use(
+      http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 })),
+      http.get('/api/settings/banks', () => HttpResponse.json(BANKS)),
+      http.post(
+        '/api/accounting/tenants/:tenantId/prepayment-applications',
+        async ({ request }) => {
+          body = (await request.json()) as Record<string, unknown>;
+          return HttpResponse.json({ entryId: 'p1' });
+        },
+      ),
+    );
+    const { onApplied } = renderModal();
+
+    await screen.findByText(/Operating Trust/);
+    await userEvent.selectOptions(screen.getByLabelText('Source'), 'prepayment');
+    await userEvent.type(screen.getByLabelText('Amount'), '50');
+    await userEvent.type(screen.getByLabelText('Internal note'), 'Tenant asked by email');
+    await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+
+    await vi.waitFor(() => expect(onApplied).toHaveBeenCalledWith('p1'));
+    expect(body).toMatchObject({ description: null, internalNote: 'Tenant asked by email' });
+  });
+});

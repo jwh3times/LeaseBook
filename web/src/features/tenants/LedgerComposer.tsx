@@ -1,8 +1,9 @@
 import { useMutation } from '@tanstack/react-query';
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { Button, Icon, Input, Select } from '@/design';
 import { ApiErrorNotice } from '@/components/ApiErrorNotice';
 import { ErrorAction } from '@/components/ErrorAction';
+import { AudienceHint } from '@/components/InternalNote';
 import { useBankAccounts } from '@/lib/settings';
 import { trackInteraction } from '@/lib/telemetry';
 import {
@@ -51,7 +52,8 @@ export function LedgerComposer({
 }: LedgerComposerProps) {
   const [mode, setMode] = useState<Mode | null>(initialMode ?? null);
   const [amount, setAmount] = useState('');
-  const [memo, setMemo] = useState('');
+  const [description, setDescription] = useState('');
+  const [internalNote, setInternalNote] = useState('');
   const [method, setMethod] = useState(() => localStorage.getItem(LAST_METHOD_KEY) ?? 'ach');
   const [category, setCategory] = useState<string>('Rent');
   const [date, setDate] = useState(todayIso);
@@ -68,6 +70,7 @@ export function LedgerComposer({
   const banks = useBankAccounts(true);
   const banksUnavailable = banks.isPending || banks.isError;
   const open = mode !== null;
+  const fieldId = useId();
   const activeCategory = mode === 'payment' ? 'Payment' : category;
   const needsBank = categoryNeedsBank(activeCategory);
 
@@ -86,7 +89,8 @@ export function LedgerComposer({
     sourceRef.current = newSourceRef();
     interactions.current = (palette ? initialInteractions : undefined) ?? 1;
     setAmount('');
-    setMemo('');
+    setDescription('');
+    setInternalNote('');
     setBankId('');
     setError(null);
     setDate(todayIso());
@@ -98,7 +102,8 @@ export function LedgerComposer({
         category: activeCategory,
         amount: Number.parseFloat(amount),
         date,
-        memo,
+        description,
+        internalNote,
         method,
         bankAccountId: effectiveBankId,
         sourceRef: sourceRef.current,
@@ -280,15 +285,49 @@ export function LedgerComposer({
                 </label>
               ))}
 
-            <label className="pf-composer-field grow">
-              <span>{activeCategory === 'Credit' ? 'Reason' : 'Memo'}</span>
+            {/*
+              Two free-text fields, each saying who reads it (#468, ADR-047). The description prints on
+              the owner statement — issued statements are immutable and the owner portal serves them
+              — so it is never labelled "memo", which reads as private. The internal note stays on
+              staff surfaces. A credit's reason is its description, so it carries the same labelling.
+            */}
+            <div className="pf-composer-field grow">
+              <span className="pf-field-labelrow">
+                <label htmlFor={`${fieldId}-desc`}>
+                  {activeCategory === 'Credit' ? 'Statement reason' : 'Statement description'}
+                </label>
+                <AudienceHint id={`${fieldId}-desc-hint`} audience="owner" />
+              </span>
               <Input
-                value={memo}
-                onChange={(e) => setMemo(e.target.value)}
+                id={`${fieldId}-desc`}
+                aria-describedby={`${fieldId}-desc-hint`}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
                 onKeyDown={onFieldKeyDown}
-                placeholder={mode === 'payment' ? 'e.g. June rent' : 'Description'}
+                placeholder={
+                  mode === 'payment'
+                    ? 'e.g. June rent'
+                    : activeCategory === 'Credit'
+                      ? 'e.g. Goodwill credit'
+                      : 'e.g. Carpet cleaning'
+                }
               />
-            </label>
+            </div>
+
+            <div className="pf-composer-field grow">
+              <span className="pf-field-labelrow">
+                <label htmlFor={`${fieldId}-note`}>Internal note</label>
+                <AudienceHint id={`${fieldId}-note-hint`} audience="staff" />
+              </span>
+              <Input
+                id={`${fieldId}-note`}
+                aria-describedby={`${fieldId}-note-hint`}
+                value={internalNote}
+                onChange={(e) => setInternalNote(e.target.value)}
+                onKeyDown={onFieldKeyDown}
+                placeholder="Optional"
+              />
+            </div>
           </div>
           <div className="pf-composer-foot">
             {error ? (

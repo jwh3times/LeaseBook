@@ -495,3 +495,38 @@ describe('BankingPage read errors on the trust surfaces', () => {
     expect(await screen.findByText('Rent deposit')).toBeInTheDocument();
   });
 });
+
+// #468 (ADR-047): the register shows a line's staff-only note and its search reads it, like the
+// server's register search does.
+describe('BankingPage internal notes', () => {
+  const NOTED = {
+    ...REGISTER,
+    rows: [
+      { ...REGISTER.rows[0]!, internalNote: 'Deposited late; bank hold' },
+      { ...REGISTER.rows[1]!, internalNote: null },
+    ],
+  };
+
+  it('shows the note under the description, labelled as internal', async () => {
+    server.use(...baseHandlers(), registerHandler(NOTED));
+    renderPage();
+
+    const description = await screen.findByText('Rent deposit');
+    const row = description.closest('tr') as HTMLElement;
+    expect(within(row).getByText('Internal note:')).toBeInTheDocument();
+    expect(within(row).getByText('Deposited late; bank hold')).toBeInTheDocument();
+    const other = screen.getByText('Owner draw').closest('tr') as HTMLElement;
+    expect(within(other).queryByText('Internal note:')).toBeNull();
+  });
+
+  it('finds a row by its internal note', async () => {
+    server.use(...baseHandlers(), registerHandler(NOTED));
+    renderPage();
+
+    await screen.findByText('Rent deposit');
+    await userEvent.type(screen.getByLabelText('Search register'), 'bank hold');
+
+    expect(screen.getByText('Rent deposit')).toBeInTheDocument();
+    expect(screen.queryByText('Owner draw')).toBeNull();
+  });
+});
