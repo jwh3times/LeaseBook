@@ -28,7 +28,7 @@ tell you how it collects, shares, and protects your personal information.
 **What?** The types of personal information collected and held depend on your relationship with
 PROVIDER. Drawn from the [data-handling description](data-handling.md), this information can include:
 
-- Name and contact information (email address, phone number)
+- Name and contact information (email address, phone number, and a refund check's mailing address)
 - Property address
 - Account balances and transaction history
 - Bank account identifiers (stored masked — last four digits only)
