@@ -49,7 +49,9 @@ internal static class RefundChecks
 
     /// <summary>
     /// Positive held balances per bucket. Prepayment lines are grouped per bank only, projecting null
-    /// property/owner, so the bucket matches the per-bank guard in the <c>RefundIssued</c> template.
+    /// property/owner, so the bucket matches the per-bank guard in the <c>RefundIssued</c> template. A
+    /// prepayment bucket is also capped at the tenant's prepayment total, as that guard is: applying a
+    /// prepayment against another bank can leave one bucket positive and another negative.
     /// </summary>
     public static async Task<IReadOnlyList<RefundableBalance>> ReadAsync(
         DbContext db, IReadOnlyCollection<Guid> tenantIds, CancellationToken ct)
@@ -75,11 +77,18 @@ internal static class RefundChecks
               AND jl.bank_account_id IS NOT NULL
               AND jl.basis IN ('cash', 'both')
             GROUP BY 1, 2, 3, 4, 5
-            HAVING SUM(COALESCE(jl.credit, 0) - COALESCE(jl.debit, 0)) > 0
             ORDER BY 1, 2, 3
             """).ToListAsync(ct);
 
+        var prepaymentTotals = rows.Where(r => r.Source == "prepayment")
+            .GroupBy(r => r.TenantId)
+            .ToDictionary(g => g.Key, g => g.Sum(r => r.Held));
         return rows
+            .Select(r => r with
+            {
+                Held = r.Source == "prepayment" ? Math.Min(r.Held, prepaymentTotals[r.TenantId]) : r.Held,
+            })
+            .Where(r => r.Held > 0)
             .Select(r => new RefundableBalance(r.TenantId, r.Source, r.BankAccountId, r.PropertyId, r.OwnerId, r.Held))
             .ToArray();
     }

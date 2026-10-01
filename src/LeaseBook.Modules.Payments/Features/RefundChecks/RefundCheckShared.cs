@@ -32,8 +32,9 @@ public sealed class RefundCheckConflictException(string code, string message) : 
 internal static class RefundCheckReads
 {
     /// <summary>
-    /// Serializes refund-check issue within an organization, so the idempotency-key and check-number
-    /// checks cannot race. Taken before Accounting's posting lock, never after it.
+    /// Serializes refund-check issue, void and print within an organization, so the idempotency-key and
+    /// check-number checks cannot race and a print cannot land on a check being voided. Taken before
+    /// Accounting's posting lock, never after it.
     /// </summary>
     public static async Task LockAsync(DbContext db, IOrgContext org, CancellationToken ct)
     {

@@ -349,8 +349,13 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
             ? AccountCodes.TenantPrepayments
             : AccountCodes.SecurityDepositsHeld;
         var subtype = e.Source == RefundSource.Prepayments ? "prepayments" : "deposits";
+        // A prepayment refund is bounded by the bank it draws on AND the tenant's total: applying a
+        // prepayment debits whichever bank its caller names, so one bank's bucket can read positive while
+        // another's is negative and the tenant holds less than that bucket shows (#473).
         var held = e.Source == RefundSource.Prepayments
-            ? await _balances.PrepaymentsHeldAsync(e.TenantId, e.BankAccountId, ct)
+            ? Math.Min(
+                await _balances.PrepaymentsHeldAsync(e.TenantId, e.BankAccountId, ct),
+                await _balances.PrepaymentsHeldAsync(e.TenantId, ct))
             : await _balances.DepositsHeldAsync(
                 e.TenantId, e.PropertyId, e.OwnerId, e.BankAccountId, ct);
 

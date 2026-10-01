@@ -137,6 +137,62 @@ public sealed class RefundCheckLedgerTests(PostgresFixture fixture)
     }
 
     [Fact]
+    public async Task A_prepayment_applied_against_another_bank_cannot_be_refunded_again()
+    {
+        // Applying a prepayment debits the bank the caller names, so per-bank buckets can go negative
+        // while the tenant total is zero. The refund must respect the tenant total too.
+        var ct = TestContext.Current.CancellationToken;
+        var ctx = await SetupAsync(ct);
+        await DispatchAsync(ctx.OrgId, (s, c) => s.Send(
+            new CollectPrepayment(ctx.TenantId, 75m, Feb1, ctx.DepositBankId, null, Key()), c), ct);
+        await DispatchAsync(ctx.OrgId, (s, c) => s.Send(new AddCharge(ctx.TenantId, 75m, Feb1, "rent", null, Key()), c), ct);
+        await DispatchAsync(ctx.OrgId, (s, c) => s.Send(
+            new ApplyPrepayment(ctx.TenantId, 75m, Feb1, ctx.TrustBankId, null, Key()), c), ct);
+
+        var balances = await DispatchAsync(ctx.OrgId, (s, c) => s.Query(new GetRefundableBalances([ctx.TenantId]), c), ct);
+        balances.ShouldBeEmpty();
+        await Should.ThrowAsync<InsufficientLiabilityException>(() => DispatchAsync(ctx.OrgId, (s, c) => s.Send(
+            new PostRefundCheck(ctx.TenantId, "prepayment", 75m, Mar2, UuidV7.NewId(), 2001,
+                new RefundBucket(ctx.DepositBankId, null, null)), c), ct));
+    }
+
+    [Fact]
+    public async Task A_bucket_offered_for_refund_never_exceeds_the_tenant_total()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var ctx = await SetupAsync(ct);
+        await DispatchAsync(ctx.OrgId, (s, c) => s.Send(
+            new CollectPrepayment(ctx.TenantId, 150m, Feb1, ctx.DepositBankId, null, Key()), c), ct);
+        await DispatchAsync(ctx.OrgId, (s, c) => s.Send(new AddCharge(ctx.TenantId, 50m, Feb1, "rent", null, Key()), c), ct);
+        await DispatchAsync(ctx.OrgId, (s, c) => s.Send(
+            new ApplyPrepayment(ctx.TenantId, 50m, Feb1, ctx.TrustBankId, null, Key()), c), ct);
+
+        // Deposit bank +150, trust bank −50: the tenant holds 100 in total.
+        var balances = await DispatchAsync(ctx.OrgId, (s, c) => s.Query(new GetRefundableBalances([ctx.TenantId]), c), ct);
+        balances.ShouldHaveSingleItem().Held.ShouldBe(100m);
+        await Should.ThrowAsync<InsufficientLiabilityException>(() => DispatchAsync(ctx.OrgId, (s, c) => s.Send(
+            new PostRefundCheck(ctx.TenantId, "prepayment", 150m, Mar2, UuidV7.NewId(), 2001), c), ct));
+        await DispatchAsync(ctx.OrgId, (s, c) => s.Send(
+            new PostRefundCheck(ctx.TenantId, "prepayment", 100m, Mar2, UuidV7.NewId(), 2001), c), ct);
+        await AssertTrustEquationAsync(ctx.OrgId, ct);
+    }
+
+    [Fact]
+    public async Task Voiding_a_voided_check_again_is_already_reversed_not_cleared()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var ctx = await SetupAsync(ct);
+        await DispatchAsync(ctx.OrgId, (s, c) => s.Send(
+            new CollectDeposit(ctx.TenantId, 1450m, Feb1, ctx.DepositBankId, null, Key()), c), ct);
+        var posted = await DispatchAsync(ctx.OrgId, (s, c) => s.Send(
+            new PostRefundCheck(ctx.TenantId, "deposit", 1450m, Mar2, UuidV7.NewId(), 1043), c), ct);
+        await DispatchAsync(ctx.OrgId, (s, c) => s.Send(new VoidRefundCheck(posted.EntryId, "Misprinted", Mar2), c), ct);
+
+        await Should.ThrowAsync<AlreadyReversedException>(() => DispatchAsync(ctx.OrgId, (s, c) => s.Send(
+            new VoidRefundCheck(posted.EntryId, "Misprinted", Mar2), c), ct));
+    }
+
+    [Fact]
     public async Task A_bucket_that_holds_nothing_is_rejected()
     {
         var ct = TestContext.Current.CancellationToken;

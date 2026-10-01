@@ -3,6 +3,7 @@ using FluentValidation;
 using LeaseBook.Modules.Payments.Contracts;
 using LeaseBook.Modules.Payments.Domain;
 using LeaseBook.SharedKernel.Cqrs;
+using LeaseBook.SharedKernel.Tenancy;
 using Microsoft.EntityFrameworkCore;
 
 namespace LeaseBook.Modules.Payments.Features.RefundChecks;
@@ -23,11 +24,13 @@ public sealed class VoidIssuedRefundCheckValidator : AbstractValidator<VoidIssue
     }
 }
 
-internal sealed class VoidIssuedRefundCheckHandler(DbContext db, IRefundCheckLedger ledger)
+internal sealed class VoidIssuedRefundCheckHandler(DbContext db, IOrgContext org, IRefundCheckLedger ledger)
     : ICommandHandler<VoidIssuedRefundCheck, RefundCheckView?>
 {
     public async Task<RefundCheckView?> Handle(VoidIssuedRefundCheck c, CancellationToken ct)
     {
+        // Serialized with issue and print, so a print can never be recorded against a check being voided.
+        await RefundCheckReads.LockAsync(db, org, ct);
         var check = await db.Set<RefundCheck>().AsNoTracking().FirstOrDefaultAsync(x => x.Id == c.Id, ct);
         if (check is null)
         {
@@ -50,11 +53,12 @@ internal sealed class VoidIssuedRefundCheckHandler(DbContext db, IRefundCheckLed
 /// </summary>
 public sealed record RecordRefundCheckPrint(Guid Id) : ICommand<RefundCheckView?>;
 
-internal sealed class RecordRefundCheckPrintHandler(DbContext db, IRefundCheckLedger ledger)
+internal sealed class RecordRefundCheckPrintHandler(DbContext db, IOrgContext org, IRefundCheckLedger ledger)
     : ICommandHandler<RecordRefundCheckPrint, RefundCheckView?>
 {
     public async Task<RefundCheckView?> Handle(RecordRefundCheckPrint c, CancellationToken ct)
     {
+        await RefundCheckReads.LockAsync(db, org, ct);
         var check = await db.Set<RefundCheck>().AsNoTracking().FirstOrDefaultAsync(x => x.Id == c.Id, ct);
         if (check is null)
         {

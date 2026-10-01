@@ -18,8 +18,9 @@ public sealed record RefundCheckDocument(
 /// and words, the window-envelope address block and the memo. Each stub repeats the record for the file
 /// copy and the payee.
 /// <para>
-/// Every field is placed absolutely and shifted by the bank account's calibration offsets (points), so
-/// one adjustment moves the whole page onto the stock's boxes. Positions are clamped inside the page.
+/// Every field is placed absolutely in its own fixed box, shrinking to fit rather than overflowing, and
+/// the whole page is shifted by the bank account's calibration offsets (points), so one adjustment moves
+/// every field onto the stock's boxes together.
 /// </para>
 /// </summary>
 public static class RefundCheckPdf
@@ -47,28 +48,28 @@ public static class RefundCheckPdf
             page.Size(PageSizes.Letter);
             page.Margin(0);
             page.DefaultTextStyle(FieldStyle);
-            page.Content().Layers(layers =>
+            // One offset moves the whole page, so every field shifts by exactly the calibration
+            // offset; anything pushed past the sheet edge is simply clipped.
+            page.Content().OffsetX(dx).OffsetY(dy).Layers(layers =>
             {
                 layers.PrimaryLayer().Height(PageHeight).Width(PageWidth);
 
-                void Place(float x, float y, float width, Action<IContainer> content)
-                {
-                    var left = Math.Clamp(x + dx, 0f, PageWidth - 20f);
-                    var top = Math.Clamp(y + dy, 0f, PageHeight - 20f);
-                    content(layers.Layer().PaddingLeft(left).PaddingTop(top).Width(Math.Min(width, PageWidth - left)));
-                }
+                // Each field owns a fixed box and shrinks to fit it, so a long but valid payee or address
+                // can never run into the next field on the stock.
+                void Place(float x, float y, float width, float height, Action<IContainer> content) =>
+                    content(layers.Layer().PaddingLeft(x).PaddingTop(y).Width(width).Height(height).ScaleToFit());
 
                 if (check.AlignmentTest)
                 {
-                    Place(150, 18, 320, c => c.Text("ALIGNMENT TEST — NOT A CHECK").Bold().FontSize(12));
+                    Place(150, 18, 320, 18, c => c.Text("ALIGNMENT TEST — NOT A CHECK").Bold().FontSize(12));
                 }
 
                 // The check face.
-                Place(468, 48, 120, c => c.Text(date));
-                Place(72, 86, 380, c => c.Text(check.PayeeName));
-                Place(468, 86, 120, c => c.Text(amount).Bold());
-                Place(36, 118, 430, c => c.Text(words));
-                Place(72, 150, 300, c => c.Column(col =>
+                Place(468, 48, 120, 16, c => c.Text(date));
+                Place(72, 86, 380, 16, c => c.Text(check.PayeeName));
+                Place(468, 86, 120, 16, c => c.Text(amount).Bold());
+                Place(36, 118, 430, 16, c => c.Text(words));
+                Place(72, 150, 300, 58, c => c.Column(col =>
                 {
                     foreach (var line in check.AddressLines)
                     {
@@ -77,13 +78,13 @@ public static class RefundCheckPdf
                 }));
                 if (!string.IsNullOrWhiteSpace(check.Memo))
                 {
-                    Place(54, 212, 280, c => c.Text(check.Memo));
+                    Place(54, 212, 280, 14, c => c.Text(check.Memo));
                 }
 
                 // Two identical stubs: the file copy and the payee's copy.
                 foreach (var top in new[] { 270f, 540f })
                 {
-                    Place(36, top, 540, c => c.Column(col =>
+                    Place(36, top, 540, 220, c => c.Column(col =>
                     {
                         col.Spacing(3);
                         col.Item().Text($"Refund check #{check.CheckNumber.ToString(CultureInfo.InvariantCulture)}").Style(StubTitleStyle);

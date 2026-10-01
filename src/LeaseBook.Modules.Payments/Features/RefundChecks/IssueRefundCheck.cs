@@ -14,7 +14,7 @@ namespace LeaseBook.Modules.Payments.Features.RefundChecks;
 /// from the held liability and guards the amount — and records the check in the same transaction. The
 /// check number is the one on the stock in the printer; it must be unused on the derived bank
 /// (<c>check_number_taken</c>). A retried <see cref="Key"/> returns the original check without posting;
-/// the same key with different data is <c>refund_check_conflict</c>.
+/// the same key with any different field is <c>refund_check_conflict</c>.
 /// </summary>
 public sealed record IssueRefundCheck(
     Guid Key, Guid TenantId, string Source, decimal Amount, DateOnly Date, int CheckNumber,
@@ -54,7 +54,11 @@ internal sealed class IssueRefundCheckHandler(DbContext db, IOrgContext org, IRe
         if (existing is not null)
         {
             if (existing.TenantId != c.TenantId || existing.Source != c.Source || existing.Amount != c.Amount
-                || existing.CheckNumber != c.CheckNumber)
+                || existing.CheckNumber != c.CheckNumber || existing.IssueDate != c.Date
+                || existing.PayeeName != c.PayeeName.Trim() || existing.AddressLine1 != c.AddressLine1.Trim()
+                || existing.AddressLine2 != Optional(c.AddressLine2) || existing.City != c.City.Trim()
+                || existing.State != c.State || existing.PostalCode != c.PostalCode || existing.Memo != Optional(c.Memo)
+                || (c.Bucket is { } bucket && bucket.BankAccountId != existing.BankAccountId))
             {
                 throw RefundCheckConflictException.KeyReused();
             }
@@ -86,11 +90,11 @@ internal sealed class IssueRefundCheckHandler(DbContext db, IOrgContext org, IRe
             IssueDate = c.Date,
             PayeeName = c.PayeeName.Trim(),
             AddressLine1 = c.AddressLine1.Trim(),
-            AddressLine2 = string.IsNullOrWhiteSpace(c.AddressLine2) ? null : c.AddressLine2.Trim(),
+            AddressLine2 = Optional(c.AddressLine2),
             City = c.City.Trim(),
             State = c.State,
             PostalCode = c.PostalCode,
-            Memo = string.IsNullOrWhiteSpace(c.Memo) ? null : c.Memo.Trim(),
+            Memo = Optional(c.Memo),
             EntryId = posting.EntryId,
         };
         db.Add(check);
@@ -113,4 +117,6 @@ internal sealed class IssueRefundCheckHandler(DbContext db, IOrgContext org, IRe
         }));
         return (await RefundCheckReads.ViewsAsync(db, ledger, [check], ct))[0];
     }
+
+    private static string? Optional(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }
