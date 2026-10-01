@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
+import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { server } from '@/test/mocks/server';
 import { VoidDialog } from './VoidDialog';
@@ -84,5 +85,51 @@ describe('VoidDialog reason as an internal note', () => {
 
     await vi.waitFor(() => expect(onVoided).toHaveBeenCalledWith('rev1'));
     expect(body).toMatchObject({ entryId: 'e1', reason: 'keyed twice' });
+  });
+});
+
+// #473: a refund check is voided from its check record, never through the generic entry void.
+describe('VoidDialog on a refund check entry', () => {
+  it('points the user to the refund check list on Banking instead of a generic error', async () => {
+    server.use(
+      http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 })),
+      http.post('/api/accounting/entries/:entryId/void', () =>
+        HttpResponse.json(
+          {
+            code: 'refund_check_void_required',
+            detail: 'This entry is a refund check. Void it from the check instead.',
+          },
+          { status: 409 },
+        ),
+      ),
+    );
+    const onVoided = vi.fn();
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <VoidDialog
+            entryId="e1"
+            description="Refund check #1043 — security deposit"
+            onClose={vi.fn()}
+            onVoided={onVoided}
+          />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    await userEvent.type(screen.getByLabelText('Reason (internal note)'), 'misprint');
+    await userEvent.click(screen.getByRole('button', { name: 'Void entry' }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('This entry is refund check #1043.');
+    expect(alert).toHaveTextContent('Void it from the refund check list on Banking');
+    expect(screen.getByRole('link', { name: 'Open refund checks on Banking' })).toHaveAttribute(
+      'href',
+      '/banking',
+    );
+    expect(onVoided).not.toHaveBeenCalled();
   });
 });

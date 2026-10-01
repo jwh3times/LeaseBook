@@ -33,6 +33,9 @@ public sealed class AccountingExceptionStatusTests
         (new InvalidAssessmentTargetException(Guid.NewGuid()),
             StatusCodes.Status422UnprocessableEntity),
         (new NoTrustAccountException(), StatusCodes.Status409Conflict),
+        (new RefundBucketAmbiguousException(Guid.NewGuid()), StatusCodes.Status409Conflict),
+        (new RefundCheckClearedException(Guid.NewGuid()), StatusCodes.Status409Conflict),
+        (new RefundCheckVoidRequiredException(Guid.NewGuid()), StatusCodes.Status409Conflict),
         // One row per held-fees shape reason: each carries its own wire code, and the corrected
         // re-import route depends on all four landing on 409 (the batch has rolled back by then).
         (new InvalidOpeningPositionException(InvalidOpeningPositionReason.HeldFeesBasisMustBeBoth),

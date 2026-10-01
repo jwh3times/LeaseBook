@@ -3,7 +3,7 @@
 - **Audience:** Contributors, operators, and reviewers
 - **Status:** Living accounting guide
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-09-29
+- **Last reviewed:** 2026-10-01
 
 This is the canonical public explanation of the shipped trust-accounting model, written so a
 property manager, bookkeeper, or attorney can evaluate it without reading C#. The Accounting module
@@ -184,6 +184,22 @@ description}`, so an owner statement shows that a correction happened and to wha
 (ADR-047). Reversals posted before this change keep their original `VOID: {reason}` text, because posted
 rows and issued statements are never rewritten.
 
+## Refund checks
+
+A held deposit or prepaid credit goes back to the tenant as a **refund check**
+([ADR-050](adr/ADR-050-refund-checks.md)). Issuing the check posts `RefundIssued` on the issue date:
+the held liability and the trust bank fall together, so the trust equation holds throughout. The bank is
+the one that **holds the liability** — the deposit's exact collection bucket (bank, property and owner,
+ADR-026) or the bank holding the prepayment — never a bank the user picks. When a tenant's held funds
+sit in more than one bucket, the user chooses the bucket. The check number is part of the posted
+description (`Refund check #1043 — security deposit`), and is unique per bank account.
+
+Until the bank pays it, the check is an outstanding withdrawal in the register; it clears and reconciles
+like any other line. A refund check is voided **from the check**, not with the generic void (which
+refuses it): the void is refused once the check has cleared, and otherwise posts a linked reversal that
+restores the held funds and clears the withdrawal and its reversal together, since neither reaches the
+bank. A misprinted check is voided and reissued on the next number.
+
 ## Closing a period
 
 Two independent locks keep settled history settled. Each month is an accounting **period** that can be
@@ -210,6 +226,7 @@ command maps to one business event:
 | `POST /tenants/{id}/prepayments`                      | `PrepaymentReceived`                                                             |
 | `POST /tenants/{id}/deposit-applications`             | `DepositApplied` (to owner income, or against charges)                           |
 | `POST /tenants/{id}/prepayment-applications`          | `PrepaymentApplied`                                                              |
+| `POST /api/refund-checks`                             | `RefundIssued` (a refund check; see "Refund checks")                             |
 | `POST /entries/{id}/void`                             | a linked reversal (see "Fixing mistakes")                                        |
 | `POST /directory/properties/{id}/ownership-transfers` | `DepositResponsibilityTransferred` plus the effective-dated Directory transition |
 

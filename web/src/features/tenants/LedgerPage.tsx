@@ -14,6 +14,11 @@ import { readSpentInteractions } from '@/lib/telemetry';
 import { IssuedStatementNotice } from '@/components/IssuedStatementNotice';
 import { QueryErrorState } from '@/components/QueryErrorState';
 import { PortalAccessPanel } from '@/features/portal/PortalAccessPanel';
+import { RefundCheckModal } from '@/features/refundChecks/RefundCheckModal';
+import {
+  invalidateAfterRefundCheck,
+  useRefundCheckOptions,
+} from '@/features/refundChecks/refundChecks';
 import { RecordQuickSwitch } from '@/components/RecordQuickSwitch';
 import { TenantFinancialStandingBadges, TenantLifecycleBadge } from '@/components/StatusBadge';
 import { ApplyModal } from './ApplyModal';
@@ -80,6 +85,11 @@ export function LedgerPage() {
   const [voidEntryId, setVoidEntryId] = useState<string | null>(null);
   const [auditEntryId, setAuditEntryId] = useState<string | null>(null);
   const [applyKind, setApplyKind] = useState<'deposit' | 'prepayment' | null>(null);
+  const [refundOpen, setRefundOpen] = useState(false);
+  // What a refund check could draw on (#473). Read here so the action can say "nothing to refund"
+  // before it is opened, and so the dialog opens on loaded funds.
+  const refundOptions = useRefundCheckOptions(id);
+  const nothingToRefund = refundOptions.isSuccess && refundOptions.data.funds.length === 0;
 
   // A successful post refetches the ledger (and the header balance/deposit) and flashes the new row —
   // the "appears without navigation" contract (P59).
@@ -220,14 +230,35 @@ export function LedgerPage() {
                 <span className="fs12" style={{ color: 'var(--accent-strong)' }}>
                   Liability · not income
                 </span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  icon="arrowUpRight"
-                  onClick={() => setApplyKind('deposit')}
-                >
-                  Apply…
-                </Button>
+                <span className="row gap4">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon="arrowUpRight"
+                    onClick={() => setApplyKind('deposit')}
+                  >
+                    Apply…
+                  </Button>
+                  {/*
+                    Disabled only on a confirmed "nothing held": while the funds are loading, or the
+                    read failed, the dialog opens and says which — a failed read is not a fact.
+                  */}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon="doc"
+                    disabled={nothingToRefund}
+                    aria-describedby={nothingToRefund ? 'ledger-refund-why' : undefined}
+                    onClick={() => setRefundOpen(true)}
+                  >
+                    Refund…
+                  </Button>
+                </span>
+                {nothingToRefund && (
+                  <span id="ledger-refund-why" className="t3 fs12">
+                    No held deposit or prepaid credit to refund
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -361,6 +392,21 @@ export function LedgerPage() {
           onApplied={(entryId) => {
             setApplyKind(null);
             handlePosted(entryId);
+          }}
+        />
+      )}
+      {refundOpen && detail.data && (
+        <RefundCheckModal
+          tenantId={id}
+          tenant={detail.data}
+          onClose={() => setRefundOpen(false)}
+          onIssued={(check) => {
+            // The dialog stays open on its print step; the page refreshes behind it.
+            invalidateAfterRefundCheck(queryClient, {
+              tenantId: id,
+              bankAccountId: check.bankAccountId,
+            });
+            handlePosted(check.entryId);
           }}
         />
       )}
