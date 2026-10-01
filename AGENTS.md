@@ -410,6 +410,7 @@ These flows are instrumented in telemetry; regressions fail the release checklis
 - Owner ending balances are visible at 0 clicks.
 - Uncleared trust items are visible in no more than 1 click.
 - Start reconciliation in no more than 2 clicks, completed in place.
+- Issue a refund check in no more than 4 interactions, including printing it.
 - UI must use design tokens and primitives ported from the prototype.
 - Money renders with tabular numerals.
 - Status is never conveyed by color alone.

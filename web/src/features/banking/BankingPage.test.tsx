@@ -530,3 +530,49 @@ describe('BankingPage internal notes', () => {
     expect(screen.queryByText('Owner draw')).toBeNull();
   });
 });
+
+// #473: the selected account's refund checks sit under its register.
+describe('BankingPage refund checks', () => {
+  it('lists the refund checks drawn on the selected account', async () => {
+    const requested: (string | null)[] = [];
+    server.use(
+      ...baseHandlers(),
+      registerHandler(REGISTER),
+      http.get('/api/refund-checks', ({ request }) => {
+        requested.push(new URL(request.url).searchParams.get('bankAccountId'));
+        return HttpResponse.json([
+          {
+            id: 'c1',
+            tenantId: 't1',
+            bankAccountId: 'acct1',
+            checkNumber: 2101,
+            source: 'prepayment',
+            amount: 75,
+            issueDate: '2026-02-04',
+            payeeName: 'Devon Pryor',
+            addressLine1: '1 Main St',
+            addressLine2: null,
+            city: 'Asheville',
+            state: 'NC',
+            postalCode: '28801',
+            memo: null,
+            entryId: 'e9',
+            status: 'outstanding',
+            voidEntryId: null,
+            printCount: 0,
+            lastPrintedAt: null,
+            createdAt: '2026-02-04T10:00:00Z',
+          },
+        ]);
+      }),
+    );
+    renderPage();
+
+    const table = await screen.findByRole('table', { name: 'Refund checks on Operating Trust' });
+    expect(within(table).getByText('Devon Pryor')).toBeInTheDocument();
+    expect(within(table).getByText('Outstanding')).toBeInTheDocument();
+    expect(within(table).getByRole('button', { name: 'Print check #2101' })).toBeEnabled();
+    expect(requested).toContain('acct1');
+    expect(screen.getByRole('button', { name: 'Print settings' })).toBeInTheDocument();
+  });
+});

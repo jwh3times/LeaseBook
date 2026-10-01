@@ -53,6 +53,7 @@ public static class BudgetTasks
         "rent-run-confirm",
         "latefee-run-confirm",
         "disbursement-run-confirm",
+        "issue-refund-check",
     ];
 
     /// <summary>

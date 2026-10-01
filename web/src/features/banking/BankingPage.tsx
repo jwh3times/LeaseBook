@@ -7,6 +7,7 @@ import { ErrorAction } from '@/components/ErrorAction';
 import { QueryErrorState } from '@/components/QueryErrorState';
 import { num, useProperties } from '@/lib/directory';
 import { trackInteraction } from '@/lib/telemetry';
+import { RefundChecksPanel } from '@/features/refundChecks/RefundChecksPanel';
 import { ImportWizard } from './ImportWizard';
 import { ReconcileBar } from './ReconcileBar';
 import { ReconciliationHistory } from './ReconciliationHistory';
@@ -425,6 +426,17 @@ export function BankingPage() {
           />
         )}
       </Card>
+
+      <div style={{ marginTop: 'var(--gap)' }}>
+        {/* Keyed on the account: dialogs and print errors belong to the account they were opened on. */}
+        <RefundChecksPanel
+          key={acctId}
+          bankAccountId={acctId}
+          bankName={
+            balances.data.find((bank) => bank.bankAccountId === acctId)?.name ?? 'this account'
+          }
+        />
+      </div>
 
       <div style={{ marginTop: 'var(--gap)' }}>
         <ReconciliationHistory bankAccountId={acctId} />

@@ -146,7 +146,7 @@ export type BanksPanel = {
 };
 
 export type BudgetTelemetryRequest = {
-    task: 'record-payment' | 'add-charge' | 'owner-balances-visible' | 'start-reconcile' | 'entity-jump' | 'rent-run-confirm' | 'latefee-run-confirm' | 'disbursement-run-confirm';
+    task: 'record-payment' | 'add-charge' | 'owner-balances-visible' | 'start-reconcile' | 'entity-jump' | 'rent-run-confirm' | 'latefee-run-confirm' | 'disbursement-run-confirm' | 'issue-refund-check';
     interactions: number | string;
     met: null | boolean;
 };

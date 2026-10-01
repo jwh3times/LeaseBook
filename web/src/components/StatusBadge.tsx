@@ -1,4 +1,4 @@
-import { Badge, type BadgeTone } from '@/design';
+import { Badge, type BadgeTone, type IconName } from '@/design';
 
 // Status is never color-alone (CLAUDE.md UX contract): every badge pairs a dot + the capitalized label.
 const TENANT_LIFECYCLE_TONE: Record<string, BadgeTone> = {
@@ -78,6 +78,29 @@ export function UnitAvailabilityBadge({ availability }: { availability: string }
   return (
     <Badge tone={UNIT_AVAILABILITY_TONE[availability] ?? 'neutral'} dot>
       {titleCase(availability)}
+    </Badge>
+  );
+}
+
+// A refund check's lifecycle (#473): derived server-side from the bank line's clearance or a linked
+// reversal. Each status carries its own glyph as well as its word, so the four stay distinguishable
+// with no colour at all.
+const REFUND_CHECK_STATUS: Record<string, { tone: BadgeTone; icon: IconName; label: string }> = {
+  outstanding: { tone: 'warn', icon: 'clock', label: 'Outstanding' },
+  cleared: { tone: 'accent', icon: 'check', label: 'Cleared' },
+  reconciled: { tone: 'pos', icon: 'lock', label: 'Reconciled' },
+  voided: { tone: 'neutral', icon: 'x', label: 'Voided' },
+};
+
+export function RefundCheckStatusBadge({ status }: { status: string }) {
+  const meta = REFUND_CHECK_STATUS[status] ?? {
+    tone: 'neutral' as const,
+    icon: 'info' as const,
+    label: titleCase(status),
+  };
+  return (
+    <Badge tone={meta.tone} icon={meta.icon}>
+      {meta.label}
     </Badge>
   );
 }

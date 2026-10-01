@@ -82,6 +82,33 @@ for (const theme of THEMES) {
       await runA11y(page);
     });
 
+    // #473: the refund-check dialog over the ledger, on loaded funds and prefilled fields. Opening it
+    // posts nothing, so the scan leaves the freshly seeded org untouched.
+    test('no WCAG AA violations with the refund check dialog open', async ({ page }) => {
+      await seedTheme(page, theme);
+      await signIn(page, DEMO_ADMIN);
+      await page.goto('/tenants', { waitUntil: 'networkidle' });
+      await page.getByText('Jasmine Carter').click();
+      await page.waitForURL(/\/tenants\//);
+      await page.getByRole('heading', { name: 'Jasmine Carter' }).waitFor();
+      await page.getByRole('button', { name: 'Refund…' }).click();
+      const dialog = page.getByRole('dialog', { name: 'Refund check' });
+      await expect(dialog.getByLabel('Amount')).toBeVisible();
+      await expect(dialog.getByText('Security Deposit Trust')).toBeVisible();
+      await runA11y(page);
+    });
+
+    // #473: the per-account check print calibration, read but not saved.
+    test('no WCAG AA violations with the check print settings dialog open', async ({ page }) => {
+      await seedTheme(page, theme);
+      await signIn(page, DEMO_ADMIN);
+      await page.goto('/banking', { waitUntil: 'networkidle' });
+      await page.getByRole('button', { name: 'Print settings' }).click();
+      const dialog = page.getByRole('dialog', { name: 'Check print settings' });
+      await expect(dialog.getByLabel('Horizontal offset (points)')).toBeEnabled();
+      await runA11y(page);
+    });
+
     test('no WCAG AA violations on an owner detail', async ({ page }) => {
       await seedTheme(page, theme);
       await signIn(page, DEMO_ADMIN);

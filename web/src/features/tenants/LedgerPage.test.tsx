@@ -469,3 +469,77 @@ describe('LedgerPage internal notes', () => {
     expect(within(dialog).getByText('“Void — Feb rent”')).toBeInTheDocument();
   });
 });
+
+// #473: the refund-check action beside "Apply…" under the deposit held.
+describe('LedgerPage refund checks', () => {
+  const DEPOSIT_FUND = {
+    source: 'deposit',
+    bankAccountId: 'dep1',
+    propertyId: null,
+    ownerId: 'o1',
+    held: 1450,
+    nextCheckNumber: 1043,
+  };
+
+  it('disables Refund… with a reason only once the read confirms nothing is held', async () => {
+    server.use(
+      detailHandler(),
+      ledgerHandler(),
+      http.get('/api/refund-checks/options', () => HttpResponse.json({ funds: [] })),
+    );
+    renderLedger();
+
+    const refund = await screen.findByRole('button', { name: 'Refund…' });
+    await vi.waitFor(() => expect(refund).toBeDisabled());
+    expect(refund).toHaveAccessibleDescription('No held deposit or prepaid credit to refund');
+  });
+
+  it('keeps Refund… available when the funds read fails, so the dialog can report it', async () => {
+    server.use(
+      detailHandler(),
+      ledgerHandler(),
+      http.get('/api/settings/banks', () => HttpResponse.json([])),
+      http.get('/api/refund-checks/options', () =>
+        HttpResponse.json(
+          { detail: 'Funds unavailable.', correlationId: 'abcdabcdabcdabcdabcdabcdabcdabcd' },
+          { status: 500 },
+        ),
+      ),
+    );
+    renderLedger();
+
+    const refund = await screen.findByRole('button', { name: 'Refund…' });
+    expect(refund).toBeEnabled();
+    await userEvent.click(refund);
+    const dialog = await screen.findByRole('dialog', { name: 'Refund check' });
+    expect(await within(dialog).findByText('Funds unavailable.')).toBeInTheDocument();
+    expect(within(dialog).queryByText(/No held deposit/)).toBeNull();
+  });
+
+  it('opens the refund dialog prefilled from the tenant header', async () => {
+    server.use(
+      detailHandler(),
+      ledgerHandler(),
+      http.get('/api/settings/banks', () =>
+        HttpResponse.json([
+          {
+            id: 'dep1',
+            name: 'Security Deposit Trust',
+            institution: null,
+            mask: null,
+            purpose: 'deposit',
+            isActive: true,
+          },
+        ]),
+      ),
+      http.get('/api/refund-checks/options', () => HttpResponse.json({ funds: [DEPOSIT_FUND] })),
+    );
+    renderLedger();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Refund…' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Refund check' });
+    expect(await within(dialog).findByLabelText('Amount')).toHaveValue('1450.00');
+    expect(within(dialog).getByLabelText('Pay to the order of')).toHaveValue('Jasmine Carter');
+    expect(within(dialog).getByLabelText('Mailing address')).toHaveValue('412 Oakmont Ave');
+  });
+});
