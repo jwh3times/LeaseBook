@@ -3,6 +3,9 @@ import { http, HttpResponse } from 'msw';
 // Default §C.6 handlers — baseline is logged-out (GET /me → 401). Tests override per scenario with
 // server.use(...). WP-08 builds against these; the Integration Gate flips dev to the real API.
 export const handlers = [
+  http.get('/api/portal-access/:persona/:targetId', () =>
+    HttpResponse.json({ canManage: false, invitations: [], users: [] }),
+  ),
   http.get('/api/portal/tenant/payments', () => HttpResponse.json({ enabled: false, items: [] })),
   http.get('/api/payments', () => HttpResponse.json({ enabled: false, items: [] })),
   http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 })),

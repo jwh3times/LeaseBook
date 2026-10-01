@@ -61,7 +61,7 @@ function withDisplayMessage(error: ApiError): ApiError {
   return error;
 }
 
-export function LoginPage() {
+export function LoginPage({ onSignedIn }: { onSignedIn?: () => void } = {}) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [email, setEmail] = useState('');
@@ -85,7 +85,8 @@ export function LoginPage() {
     void primeCsrf();
     queryClient.clear();
     await queryClient.invalidateQueries({ queryKey: sessionQueryKey });
-    void navigate('/', { replace: true });
+    if (onSignedIn) onSignedIn();
+    else void navigate('/', { replace: true });
   }
 
   async function submitPassword(event: FormEvent) {
@@ -146,7 +147,11 @@ export function LoginPage() {
   return (
     <div
       className="row"
-      style={{ minHeight: '100vh', justifyContent: 'center', background: 'var(--bg)' }}
+      style={{
+        minHeight: onSignedIn ? undefined : '100vh',
+        justifyContent: 'center',
+        background: 'var(--bg)',
+      }}
     >
       <Card pad className="pf-fade">
         <div style={{ width: 320 }} className="col gap16">

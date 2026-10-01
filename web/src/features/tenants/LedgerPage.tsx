@@ -13,6 +13,7 @@ import { num, useTenantDetail } from '@/lib/directory';
 import { readSpentInteractions } from '@/lib/telemetry';
 import { IssuedStatementNotice } from '@/components/IssuedStatementNotice';
 import { QueryErrorState } from '@/components/QueryErrorState';
+import { PortalAccessPanel } from '@/features/portal/PortalAccessPanel';
 import { RecordQuickSwitch } from '@/components/RecordQuickSwitch';
 import { TenantFinancialStandingBadges, TenantLifecycleBadge } from '@/components/StatusBadge';
 import { ApplyModal } from './ApplyModal';
@@ -336,6 +337,10 @@ export function LedgerPage() {
           <LedgerTable rows={display} flashId={flashId} rowActions={rowActions} />
         )}
       </Card>
+
+      {detail.isSuccess && detail.data && (
+        <PortalAccessPanel key={id} persona="tenant" targetId={id} />
+      )}
 
       {voidEntryId && (
         <VoidDialog

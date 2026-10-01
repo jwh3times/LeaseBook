@@ -32,6 +32,7 @@ public sealed class OrgSettingsConfiguration : IEntityTypeConfiguration<OrgSetti
         builder.Property(e => e.Zip);
         builder.Property(e => e.Phone);
         builder.Property(e => e.LogoBlobRef);
+        builder.Property(e => e.StaffCanManagePortalAccess).IsRequired().HasDefaultValue(true);
         builder.Property(e => e.CreatedAt).IsRequired();
 
         // Late-fee org defaults (WP-3 / NC §42-46).

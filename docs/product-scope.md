@@ -28,8 +28,10 @@ Phase 2 includes a tenant own-ledger portal and a read-only owner portal, with a
 sign-out. Owners see their own trust balance, disbursements, activity and issued statements. A
 separate isolated development fixture supports one-time simulated payments and staff review. Only
 explicit, complete, fee-free simulated bank evidence creates a receipt; no real money moves.
-Production enrollment, owner-initiated actions and live online payments remain outside the
-implemented scope. The [payment simulation runbook](runbooks/payment-simulation.md) owns setup and
+Tenant and owner invitations and enrollment can be exercised locally with an admin-configurable
+staff permission and a development test inbox. Real email delivery, production enrollment,
+owner-initiated actions and live online payments remain outside the implemented scope.
+The [payment simulation runbook](runbooks/payment-simulation.md) owns setup and
 recovery.
 
 The [accounting guide](accounting.md) owns financial behavior, and the

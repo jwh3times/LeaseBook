@@ -1,6 +1,7 @@
 import { useNavigate, useParams } from 'react-router';
 import { Card, CardHeader, Money, StatCard, Table, type TableColumn } from '@/design';
 import { DetailPage } from '@/components/DetailPage';
+import { PortalAccessPanel } from '@/features/portal/PortalAccessPanel';
 import { num, useOwnerDetail, type OwnerDetail, type PropertyListRow } from '@/lib/directory';
 
 const propertyColumns: TableColumn<PropertyListRow> = {
@@ -73,6 +74,7 @@ export function OwnerDetailPage() {
               onRowClick={(r) => navigate(`/properties/${r.id}`)}
             />
           </Card>
+          <PortalAccessPanel key={id} persona="owner" targetId={id} />
         </div>
       )}
     </DetailPage>

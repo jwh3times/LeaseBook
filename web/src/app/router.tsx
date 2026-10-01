@@ -2,6 +2,8 @@ import type { ReactElement } from 'react';
 import { createBrowserRouter } from 'react-router';
 import { OwnerPortalPage } from '@/features/portal/OwnerPortalPage';
 import { TenantPortalPage } from '@/features/portal/TenantPortalPage';
+import { PortalEnrollmentPage } from '@/features/portal/PortalEnrollmentPage';
+import { PortalTestInboxPage } from '@/features/portal/PortalTestInboxPage';
 import { HomeRedirect, PersonaGuard } from './PersonaGuard';
 import { KitchenSink } from '@/dev/KitchenSink';
 import { AuditPage } from '@/features/audit';
@@ -54,10 +56,12 @@ const detailRoutes = [
   { path: '/properties/:id', element: <PropertyDetailPage /> },
   { path: '/onboarding', element: <OnboardingPage /> },
   { path: '/onboarding/parallel-run', element: <ParallelRunReference /> },
+  { path: '/portal/test-inbox', element: <PortalTestInboxPage /> },
 ];
 
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
+  { path: '/portal/enroll', element: <PortalEnrollmentPage /> },
   { path: '/dev/kitchen-sink', element: <KitchenSink /> },
   {
     element: <RouteGuard />,

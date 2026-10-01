@@ -3,9 +3,11 @@
 - **Status:** Accepted
 - **Date:** 2026-06-12
 - **Deciders:** Engineering
-- **Amended by:** [ADR-048](ADR-048-per-persona-row-level-security.md) — the revisit trigger fired
+- **Amended by:** [ADR-048](ADR-048-per-persona-row-level-security.md),
+  [ADR-049](ADR-049-portal-invitations-and-enrollment.md) — the revisit trigger fired
   at seven portal endpoints: row-level security now also enforces the portal personas inside the
-  organization, and the application-layer checks below remain as the first layer.
+  organization, and the application-layer checks below remain as the first layer. Delegated
+  invitations and enrollment supplement the original fixture-only provisioning paths.
 
 ## Context
 

@@ -98,6 +98,10 @@ internal sealed class HostProcessLifecycle
 
         ConfigureForwardedHeaders(builder);
         ConfigureWebWorkers(builder);
+        if (builder.Environment.IsDevelopment())
+        {
+            builder.Services.AddHostedService<Portal.PortalInvitationWorker>();
+        }
         if (Payments.SimulationSettings.Read(builder.Configuration, builder.Environment).Enabled)
         {
             builder.Services.AddHostedService<Payments.PaymentWorker>();
