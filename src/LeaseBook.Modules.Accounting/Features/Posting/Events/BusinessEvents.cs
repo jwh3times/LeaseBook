@@ -134,9 +134,10 @@ public sealed record VendorPaid(
 /// <paramref name="OwnerId"/>/<paramref name="PropertyId"/> attribute a <see cref="RefundSource.Deposits"/>
 /// refund to the owner whose deposit liability is being released — they must match the collecting credit
 /// or the owner-attributed deposit column never comes back down (I7). Prepayments are collected with no
-/// owner dim, so a <see cref="RefundSource.Prepayments"/> refund leaves both null.
+/// owner dim, so a <see cref="RefundSource.Prepayments"/> refund leaves both null. Both sources are
+/// guarded per bank: <paramref name="BankAccountId"/> must hold the refunded amount (#473, #308).
 /// </remarks>
 public sealed record RefundIssued(
     Guid TenantId, Money Amount, DateOnly Date, Guid BankAccountId, RefundSource Source,
     string Description, string? SourceRef = null,
-    Guid? PropertyId = null, Guid? OwnerId = null) : AccountingEvent;
+    Guid? PropertyId = null, Guid? OwnerId = null, string? InternalNote = null) : AccountingEvent;

@@ -350,7 +350,7 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
             : AccountCodes.SecurityDepositsHeld;
         var subtype = e.Source == RefundSource.Prepayments ? "prepayments" : "deposits";
         var held = e.Source == RefundSource.Prepayments
-            ? await _balances.PrepaymentsHeldAsync(e.TenantId, ct)
+            ? await _balances.PrepaymentsHeldAsync(e.TenantId, e.BankAccountId, ct)
             : await _balances.DepositsHeldAsync(
                 e.TenantId, e.PropertyId, e.OwnerId, e.BankAccountId, ct);
 
@@ -372,7 +372,7 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
                     TenantId: e.TenantId, BankAccountId: e.BankAccountId),
                 new(AccountCodes.TrustBank(e.BankAccountId), null, e.Amount, EntryBasis.Both,
                     BankAccountId: e.BankAccountId),
-            ]), ct);
+            ], InternalNote: e.InternalNote), ct);
     }
 
     // ----- Bank adjustments (M4 / ADR-014) --------------------------------------------------------
