@@ -28,7 +28,8 @@ public sealed record UpdateOrgSettings(
     int? LateFeeGraceDays = null,
     string? LateFeeKind = null,
     decimal? LateFeeAmount = null,
-    int? LateFeeRateBps = null) : ICommand<OrgSettingsResponse>;
+    int? LateFeeRateBps = null,
+    bool? StaffCanManagePortalAccess = null) : ICommand<OrgSettingsResponse>;
 
 public sealed class UpdateOrgSettingsValidator : AbstractValidator<UpdateOrgSettings>
 {
@@ -86,6 +87,8 @@ internal sealed class UpdateOrgSettingsHandler(DbContext db) : ICommandHandler<U
         if (command.LateFeeKind is not null) settings.LateFeeKind = LateFeeKindConverter.FromDb(command.LateFeeKind);
         if (command.LateFeeAmount.HasValue) settings.LateFeeAmount = command.LateFeeAmount.Value;
         if (command.LateFeeRateBps.HasValue) settings.LateFeeRateBps = command.LateFeeRateBps.Value;
+        if (command.StaffCanManagePortalAccess.HasValue)
+            settings.StaffCanManagePortalAccess = command.StaffCanManagePortalAccess.Value;
 
         await db.SaveChangesAsync(ct);
         return OrgSettingsResponse.From(settings);

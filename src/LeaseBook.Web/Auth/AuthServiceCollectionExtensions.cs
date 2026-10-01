@@ -57,6 +57,11 @@ public static class AuthServiceCollectionExtensions
         services.AddScoped<AccountSecurityAudit>();
         services.AddScoped<AccountAdministration>();
         services.AddScoped<ResidentAccessService>();
+        services.AddScoped<PortalEnrollmentService>();
+        services.AddScoped<IValidator<InvitePortalUser>, InvitePortalUserValidator>();
+        services.AddSingleton<PortalInvitationProof>();
+        services.AddSingleton<IPortalInvitationDelivery, LocalPortalInvitationDelivery>();
+        services.AddScoped<PortalInvitationDispatcher>();
         services.AddScoped<CurrentResident>();
         services.AddScoped<OwnerAccessService>();
         services.AddScoped<CurrentOwner>();

@@ -27,6 +27,9 @@ public sealed class AuthorizationMatrixTests(PostgresFixture fixture)
         "/api/auth/mfa",
         // The second-factor recovery step requires the temporary cookie from password login.
         "/api/auth/mfa/recovery",
+        // Mailbox proof authenticates the invitation before its organization scope is selected.
+        "/api/portal-enrollment/inspect",
+        "/api/portal-enrollment/accept",
         // dev-only; MapOpenApi()'s registered route template, not the resolved "/openapi/v1.json" path.
         "/openapi/{documentName}.json",
     };

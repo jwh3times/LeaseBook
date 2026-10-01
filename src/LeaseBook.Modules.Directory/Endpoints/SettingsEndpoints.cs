@@ -33,6 +33,12 @@ public sealed class SettingsEndpoints : IEndpointModule
             .RequireAuthorization("RequirePMAdmin")
             .Produces<OrgSettingsResponse>();
 
+        group.MapPut("/portal-access",
+                async (UpdatePortalAccessSettings body, ISender sender, CancellationToken ct) =>
+                    TypedResults.Ok(await sender.Send(body, ct)))
+            .RequireAuthorization("RequirePMAdmin")
+            .Produces<OrgSettingsResponse>();
+
         group.MapGet("/banks",
                 async (bool? activeOnly, ISender sender, CancellationToken ct) =>
                     TypedResults.Ok(await sender.Query(new ListBankAccounts(activeOnly ?? false), ct)))

@@ -175,7 +175,7 @@ resident name on every request. Revocation therefore applies to the next request
 cookie. The selector-free `/api/portal/tenant/ledger` dispatches the existing Accounting ledger query
 and returns only resident-facing ledger fields, with `Cache-Control: no-store`. The portal displays
 the rent ledger balance, excluding held security deposits. It accepts payments only as the isolated,
-development-only simulation (ADR-046) and provides no enrollment endpoint. Tenant navigation uses a dedicated shell; staff routes deny access before
+development-only simulation (ADR-046). Tenant navigation uses a dedicated shell; staff routes deny access before
 mounting staff queries. Account security and sign-out reuse the existing auth flows.
 
 The read-only owner portal mirrors that shape. A host-owned `owner_access` link, with the same forced
@@ -190,7 +190,20 @@ properties on the owner's own rows. Statements come from Reporting's issued arti
 assembly: the list shows every issued statement, and the PDF endpoint serves the stored bytes
 unchanged. A foreign or nonexistent artifact id is a bare 404. An owned artifact whose bytes are
 missing is a logged 503 problem, `statement_document_unavailable`. Owner sign-in lands at
-`/portal/owner`, behind its own persona guard. Owner enrollment is not provided.
+`/portal/owner`, behind its own persona guard.
+
+Portal invitations ([ADR-049](adr/ADR-049-portal-invitations-and-enrollment.md)) bind a manager-selected
+Directory record to a recipient address in the host-owned, organization-scoped `portal_invitations`
+table. Admins and staff manage invitations and access through `/api/portal-access`; an admin-only
+organization setting can restrict staff mutations. `/api/portal-enrollment` authenticates a protected
+invitation before opening a fresh named-system organization transaction, then atomically consumes it
+with account and access-link changes. Existing users sign in normally, including MFA, and cannot
+change their organization, persona or historical financial target through an invitation. Organization
+transaction locks serialize acceptance against cancellation, replacement and revocation. Invitation
+rows retain no redeemable proof. A Development-only web worker dispatches committed pending rows to
+a local test inbox outside static files; status distinguishes queued, failed and locally stored
+messages. Enrollment and management are disabled outside Development until real delivery is added.
+The SPA removes proof from the URL fragment and keeps it only in component memory through sign-in.
 
 Layered on top of that organization boundary, the host applies defense-in-depth hardening: a middleware
 that sets security response headers — including same-origin `Cross-Origin-Opener-Policy` and
@@ -352,6 +365,13 @@ worker pass explicitly. Each claim, callback receipt, effect and failure-bookkee
 establishes a separate org scope. Thirty-second leases and durable provider lookup recover interrupted
 work. This simulator-only scheduler choice is recorded in the proposed
 [ADR-046](adr/ADR-046-simulated-payment-recognition.md); it does not select a live payment scheduler.
+
+Portal invitation delivery uses a Development-only web `BackgroundService` to poll durable invitation
+rows once per second, independently of `Jobs:Enabled`. Each organization receives a separate system
+scope; delivery writes only to the local test inbox. CLI and OpenAPI modes start no invitation worker.
+This bounded exception to ADR-001 is recorded in
+[ADR-049](adr/ADR-049-portal-invitations-and-enrollment.md); production delivery and its scheduler remain
+future work.
 
 ## Deployment
 

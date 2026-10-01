@@ -35,7 +35,8 @@ public sealed record OrgSettingsResponse(
     int LateFeeGraceDays,
     string LateFeeKind,
     decimal LateFeeAmount,
-    int LateFeeRateBps)
+    int LateFeeRateBps,
+    bool StaffCanManagePortalAccess = true)
 {
     public static OrgSettingsResponse From(OrgSettings s) => new(
         AccountingBasisConverter.ToDb(s.AccountingBasis),
@@ -45,7 +46,8 @@ public sealed record OrgSettingsResponse(
         s.LateFeeGraceDays,
         LateFeeKindConverter.ToDb(s.LateFeeKind),
         s.LateFeeAmount,
-        s.LateFeeRateBps);
+        s.LateFeeRateBps,
+        s.StaffCanManagePortalAccess);
 }
 
 internal sealed class GetOrgSettingsHandler(DbContext db) : IQueryHandler<GetOrgSettings, OrgSettingsResponse>

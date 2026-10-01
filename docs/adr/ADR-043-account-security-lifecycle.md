@@ -3,6 +3,8 @@
 - **Status:** Accepted
 - **Date:** 2026-09-06
 - **Deciders:** Maintainers
+- **Amended by:** [ADR-049](ADR-049-portal-invitations-and-enrollment.md) — delegated portal
+  invitations; existing-account acceptance preserves ordinary sign-in and MFA.
 
 ## Context
 

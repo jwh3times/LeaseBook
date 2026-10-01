@@ -438,6 +438,41 @@ on a local (Windows) `npm run e2e` — baselines are Linux (`*-chromium-linux.pn
 - **Review a failure:** download the `playwright-report` artifact from the failed `e2e` run and
   inspect the diff image; if the change was intended, re-baseline via the workflow.
 
+## Portal invitations and the local test inbox
+
+[ADR-049](../adr/ADR-049-portal-invitations-and-enrollment.md) owns the enrollment policy. Apply the
+latest migrations, seed the demo organization and run the API in `Development` with Vite as above.
+No real email is sent. The delivery worker runs only in the Development web host, never in a seed,
+migration or OpenAPI process. Management and acceptance are disabled outside Development.
+
+1. Sign in as a PM admin or staff member. Open a tenant ledger or owner detail page and find
+   **Portal access**. Confirm the intended person and record before entering an invitation address.
+2. Choose **Send invitation**. The invitation expires after 72 hours. Its delivery status is
+   separate from whether the invitation is pending, accepted, replaced or cancelled.
+3. Choose **Open test inbox**, then **Refresh inbox** if the worker has not stored the message yet.
+   Copy the recipient link into a separate private browser session; the staff session cannot accept
+   a recipient's invitation. The inbox lives outside static files under the current user's local
+   application-data directory, in `LeaseBook/portal-test-inbox/<org>/<invitation>.json`.
+4. New recipients choose a name and password, accept, then sign in normally. Existing recipients
+   sign in with their existing password and MFA before accepting. An incompatible account or a
+   different financial-record history is refused; an invitation is not an account-recovery tool.
+   The link is removed from the address bar. If the recipient refreshes before accepting, reopen
+   the original link; it is deliberately not retained in browser storage.
+5. On the manager's page, **Replace invitation** invalidates the old link and creates a new one.
+   **Cancel invitation** prevents acceptance. **Retry test delivery** retries a failed local write.
+   If delivery fails repeatedly, check local application-data write access and the configured base
+   URL, then retry; exception text and invitation secrets are not published to the audit log.
+6. **Revoke access** requires confirmation and takes effect on the recipient's next portal request,
+   including an existing session. It also cancels pending invitations for that account and target.
+   A deliberate new invitation can restore the same historical relationship.
+7. In **Settings → Portal permissions**, an admin can turn off **Allow staff to manage portal
+   invitations and access**. Admins retain access. The server rechecks the setting on each mutation.
+
+`PortalEnrollment__BaseUrl` optionally changes the trusted origin used in links; the default is
+`http://localhost:5373`, the SPA's inner-loop address in the [port map](../../README.md#port-map).
+Never infer that origin from an incoming Host header. A real provider, authorized live recipients
+and production enrollment require later delivery engineering and deployment acceptance.
+
 ## Account provisioning and recovery
 
 [ADR-043](../adr/ADR-043-account-security-lifecycle.md) owns the account-security lifecycle.

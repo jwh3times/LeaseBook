@@ -3,6 +3,7 @@ using System;
 using LeaseBook.Web.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace LeaseBook.Web.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260930214410_Phase2_PortalAccessManagementPolicy")]
+    partial class Phase2_PortalAccessManagementPolicy
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -2301,111 +2304,6 @@ namespace LeaseBook.Web.Migrations
                     b.ToTable("owner_access", (string)null);
                 });
 
-            modelBuilder.Entity("LeaseBook.Web.Portal.PortalInvitation", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<DateTimeOffset?>("AcceptedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("accepted_at");
-
-                    b.Property<Guid?>("AcceptedByUserId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("accepted_by_user_id");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<Guid>("CreatedByUserId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("created_by_user_id");
-
-                    b.Property<int>("DeliveryAttempts")
-                        .HasColumnType("integer")
-                        .HasColumnName("delivery_attempts");
-
-                    b.Property<string>("DeliveryError")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("delivery_error");
-
-                    b.Property<string>("DeliveryStatus")
-                        .IsRequired()
-                        .HasMaxLength(16)
-                        .HasColumnType("character varying(16)")
-                        .HasColumnName("delivery_status");
-
-                    b.Property<string>("Email")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)")
-                        .HasColumnName("email");
-
-                    b.Property<DateTimeOffset>("ExpiresAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("expires_at");
-
-                    b.Property<string>("NormalizedEmail")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)")
-                        .HasColumnName("normalized_email");
-
-                    b.Property<Guid>("OrgId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("org_id");
-
-                    b.Property<Guid?>("OwnerId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("owner_id");
-
-                    b.Property<string>("Persona")
-                        .IsRequired()
-                        .HasMaxLength(16)
-                        .HasColumnType("character varying(16)")
-                        .HasColumnName("persona");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(16)
-                        .HasColumnType("character varying(16)")
-                        .HasColumnName("status");
-
-                    b.Property<Guid?>("TenantId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("tenant_id");
-
-                    b.HasKey("Id")
-                        .HasName("pk_portal_invitations");
-
-                    b.HasIndex("OrgId", "AcceptedByUserId")
-                        .HasDatabaseName("ix_portal_invitations_org_id_accepted_by_user_id");
-
-                    b.HasIndex("OrgId", "CreatedByUserId")
-                        .HasDatabaseName("ix_portal_invitations_org_id_created_by_user_id");
-
-                    b.HasIndex("OrgId", "OwnerId")
-                        .HasDatabaseName("ix_portal_invitations_org_id_owner_id");
-
-                    b.HasIndex("OrgId", "TenantId")
-                        .HasDatabaseName("ix_portal_invitations_org_id_tenant_id");
-
-                    b.ToTable("portal_invitations", null, t =>
-                        {
-                            t.HasCheckConstraint("ck_portal_invitations_delivery_attempts", "delivery_attempts >= 0");
-
-                            t.HasCheckConstraint("ck_portal_invitations_delivery_status", "delivery_status IN ('pending', 'delivered', 'failed')");
-
-                            t.HasCheckConstraint("ck_portal_invitations_status", "status IN ('pending', 'accepted', 'cancelled', 'replaced')");
-
-                            t.HasCheckConstraint("ck_portal_invitations_target", "(persona = 'tenant' AND tenant_id IS NOT NULL AND owner_id IS NULL) OR (persona = 'owner' AND owner_id IS NOT NULL AND tenant_id IS NULL)");
-                        });
-                });
-
             modelBuilder.Entity("LeaseBook.Web.Portal.ResidentAccess", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3003,38 +2901,6 @@ namespace LeaseBook.Web.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_owner_access_asp_net_users_org_id_user_id");
-                });
-
-            modelBuilder.Entity("LeaseBook.Web.Portal.PortalInvitation", b =>
-                {
-                    b.HasOne("LeaseBook.Web.Auth.AppUser", null)
-                        .WithMany()
-                        .HasForeignKey("OrgId", "AcceptedByUserId")
-                        .HasPrincipalKey("OrgId", "Id")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .HasConstraintName("fk_portal_invitations_asp_net_users_org_id_accepted_by_user_id");
-
-                    b.HasOne("LeaseBook.Web.Auth.AppUser", null)
-                        .WithMany()
-                        .HasForeignKey("OrgId", "CreatedByUserId")
-                        .HasPrincipalKey("OrgId", "Id")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
-                        .HasConstraintName("fk_portal_invitations_asp_net_users_org_id_created_by_user_id");
-
-                    b.HasOne("LeaseBook.Modules.Directory.Domain.Owner", null)
-                        .WithMany()
-                        .HasForeignKey("OrgId", "OwnerId")
-                        .HasPrincipalKey("OrgId", "Id")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .HasConstraintName("fk_portal_invitations_owner_org_id_owner_id");
-
-                    b.HasOne("LeaseBook.Modules.Directory.Domain.Tenant", null)
-                        .WithMany()
-                        .HasForeignKey("OrgId", "TenantId")
-                        .HasPrincipalKey("OrgId", "Id")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .HasConstraintName("fk_portal_invitations_tenant_org_id_tenant_id");
                 });
 
             modelBuilder.Entity("LeaseBook.Web.Portal.ResidentAccess", b =>

@@ -32,6 +32,9 @@ public sealed class OrgSettings : IOrgScoped
     /// <summary>Upload wiring is M5/M8; M2 stores the ref only.</summary>
     public string? LogoBlobRef { get; set; }
 
+    /// <summary>Admins may restrict portal invitations and access management to administrators.</summary>
+    public bool StaffCanManagePortalAccess { get; set; } = true;
+
     // ── Late-fee org defaults (WP-3 / NC §42-46) ─────────────────────────────
     // These columns supply the org-wide defaults; individual leases may override any field via
     // the nullable LateFee*Override columns on LeaseLite. GetLateFeePolicies resolves

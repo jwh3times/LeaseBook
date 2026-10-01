@@ -14,7 +14,14 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ## [Unreleased]
 
-- _Nothing yet._
+### Added
+
+- **Portal invitations and enrollment with a local test inbox.** Property managers can invite a
+  tenant from their ledger or an owner from their detail page, replace or cancel invitations, retry
+  failed test delivery and revoke access. Administrators can restrict these actions to administrators.
+  Invitations expire after 72 hours and can be accepted once; existing accounts keep their password
+  and MFA. Enrollment and the test inbox are available only in Development; production email delivery
+  remains future work.
 
 ## [0.21.0] - 2026-09-29
 

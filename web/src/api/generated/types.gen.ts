@@ -4,6 +4,12 @@ export type ClientOptions = {
     baseUrl: `${string}://${string}` | (string & {});
 };
 
+export type AcceptPortalInvitation = {
+    token: string;
+    displayName?: null | string;
+    password?: null | string;
+};
+
 export type ActionItem = {
     id: string;
     kind: string;
@@ -415,6 +421,14 @@ export type ImportStatement = {
     columnMap: ColumnMap;
 };
 
+export type InspectPortalInvitation = {
+    token: string;
+};
+
+export type InvitePortalUser = {
+    email: string;
+};
+
 export type IssueCredit = {
     tenantId: string;
     amount: number | string;
@@ -518,6 +532,7 @@ export type OrgSettingsResponse = {
     lateFeeKind: string;
     lateFeeAmount: number | string;
     lateFeeRateBps: number | string;
+    staffCanManagePortalAccess?: boolean;
 };
 
 export type OwnerBalanceHeroRow = {
@@ -688,6 +703,48 @@ export type PmBrandingRow = {
     companyName: null | string;
     logoBlobRef: null | string;
     parenthesizedNegatives: boolean;
+};
+
+export type PortalAccessResponse = {
+    canManage: boolean;
+    invitations: Array<PortalInvitationSummary>;
+    users: Array<PortalAccessUser>;
+};
+
+export type PortalAccessUpdated = {
+    success?: boolean;
+};
+
+export type PortalAccessUser = {
+    userId: string;
+    email: string;
+    displayName: null | string;
+};
+
+export type PortalEnrollmentAccepted = {
+    persona: string;
+};
+
+export type PortalEnrollmentInspection = {
+    email: string;
+    displayName: string;
+    persona: string;
+    requiresSignIn: boolean;
+    requiresPassword: boolean;
+};
+
+export type PortalInvitationSummary = {
+    id: string;
+    email: string;
+    status: string;
+    expiresAt: string;
+    deliveryStatus: string;
+};
+
+export type PortalTestMessage = {
+    invitationId: string;
+    email: string;
+    acceptUrl: string;
 };
 
 export type PostResult = {
@@ -1149,6 +1206,7 @@ export type UpdateOrgSettings = {
     lateFeeKind?: null | string;
     lateFeeAmount?: null | number | string;
     lateFeeRateBps?: null | number | string;
+    staffCanManagePortalAccess?: null | boolean;
 };
 
 export type UpdateOwner = {
@@ -1159,6 +1217,10 @@ export type UpdateOwner = {
     contactPhone: null | string;
     defaultMgmtFeeBps: null | number | string;
     reserveAmount: number | string;
+};
+
+export type UpdatePortalAccessSettings = {
+    staffCanManagePortalAccess: boolean;
 };
 
 export type UpdateProperty = {
@@ -2180,6 +2242,22 @@ export type PutApiSettingsOrgResponses = {
 
 export type PutApiSettingsOrgResponse = PutApiSettingsOrgResponses[keyof PutApiSettingsOrgResponses];
 
+export type PutApiSettingsPortalAccessData = {
+    body: UpdatePortalAccessSettings;
+    path?: never;
+    query?: never;
+    url: '/api/settings/portal-access';
+};
+
+export type PutApiSettingsPortalAccessResponses = {
+    /**
+     * OK
+     */
+    200: OrgSettingsResponse;
+};
+
+export type PutApiSettingsPortalAccessResponse = PutApiSettingsPortalAccessResponses[keyof PutApiSettingsPortalAccessResponses];
+
 export type GetApiSettingsBanksData = {
     body?: never;
     path?: never;
@@ -2667,6 +2745,166 @@ export type GetApiPortalOwnerStatementsByArtifactIdPdfResponses = {
      */
     200: unknown;
 };
+
+export type GetApiPortalAccessByPersonaByTargetIdData = {
+    body?: never;
+    path: {
+        persona: string;
+        targetId: string;
+    };
+    query?: never;
+    url: '/api/portal-access/{persona}/{targetId}';
+};
+
+export type GetApiPortalAccessByPersonaByTargetIdResponses = {
+    /**
+     * OK
+     */
+    200: PortalAccessResponse;
+};
+
+export type GetApiPortalAccessByPersonaByTargetIdResponse = GetApiPortalAccessByPersonaByTargetIdResponses[keyof GetApiPortalAccessByPersonaByTargetIdResponses];
+
+export type PostApiPortalAccessByPersonaByTargetIdData = {
+    body: InvitePortalUser;
+    path: {
+        persona: string;
+        targetId: string;
+    };
+    query?: never;
+    url: '/api/portal-access/{persona}/{targetId}';
+};
+
+export type PostApiPortalAccessByPersonaByTargetIdResponses = {
+    /**
+     * OK
+     */
+    200: PortalInvitationSummary;
+};
+
+export type PostApiPortalAccessByPersonaByTargetIdResponse = PostApiPortalAccessByPersonaByTargetIdResponses[keyof PostApiPortalAccessByPersonaByTargetIdResponses];
+
+export type PostApiPortalAccessInvitationsByIdReplaceData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/portal-access/invitations/{id}/replace';
+};
+
+export type PostApiPortalAccessInvitationsByIdReplaceResponses = {
+    /**
+     * OK
+     */
+    200: PortalInvitationSummary;
+};
+
+export type PostApiPortalAccessInvitationsByIdReplaceResponse = PostApiPortalAccessInvitationsByIdReplaceResponses[keyof PostApiPortalAccessInvitationsByIdReplaceResponses];
+
+export type PostApiPortalAccessInvitationsByIdCancelData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/portal-access/invitations/{id}/cancel';
+};
+
+export type PostApiPortalAccessInvitationsByIdCancelResponses = {
+    /**
+     * OK
+     */
+    200: PortalAccessUpdated;
+};
+
+export type PostApiPortalAccessInvitationsByIdCancelResponse = PostApiPortalAccessInvitationsByIdCancelResponses[keyof PostApiPortalAccessInvitationsByIdCancelResponses];
+
+export type PostApiPortalAccessInvitationsByIdRetryData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/portal-access/invitations/{id}/retry';
+};
+
+export type PostApiPortalAccessInvitationsByIdRetryResponses = {
+    /**
+     * OK
+     */
+    200: PortalAccessUpdated;
+};
+
+export type PostApiPortalAccessInvitationsByIdRetryResponse = PostApiPortalAccessInvitationsByIdRetryResponses[keyof PostApiPortalAccessInvitationsByIdRetryResponses];
+
+export type PostApiPortalAccessByPersonaByTargetIdUsersByUserIdRevokeData = {
+    body?: never;
+    path: {
+        persona: string;
+        targetId: string;
+        userId: string;
+    };
+    query?: never;
+    url: '/api/portal-access/{persona}/{targetId}/users/{userId}/revoke';
+};
+
+export type PostApiPortalAccessByPersonaByTargetIdUsersByUserIdRevokeResponses = {
+    /**
+     * OK
+     */
+    200: PortalAccessUpdated;
+};
+
+export type PostApiPortalAccessByPersonaByTargetIdUsersByUserIdRevokeResponse = PostApiPortalAccessByPersonaByTargetIdUsersByUserIdRevokeResponses[keyof PostApiPortalAccessByPersonaByTargetIdUsersByUserIdRevokeResponses];
+
+export type GetApiPortalAccessTestInboxData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/portal-access/test-inbox';
+};
+
+export type GetApiPortalAccessTestInboxResponses = {
+    /**
+     * OK
+     */
+    200: Array<PortalTestMessage>;
+};
+
+export type GetApiPortalAccessTestInboxResponse = GetApiPortalAccessTestInboxResponses[keyof GetApiPortalAccessTestInboxResponses];
+
+export type PostApiPortalEnrollmentInspectData = {
+    body: InspectPortalInvitation;
+    path?: never;
+    query?: never;
+    url: '/api/portal-enrollment/inspect';
+};
+
+export type PostApiPortalEnrollmentInspectResponses = {
+    /**
+     * OK
+     */
+    200: PortalEnrollmentInspection;
+};
+
+export type PostApiPortalEnrollmentInspectResponse = PostApiPortalEnrollmentInspectResponses[keyof PostApiPortalEnrollmentInspectResponses];
+
+export type PostApiPortalEnrollmentAcceptData = {
+    body: AcceptPortalInvitation;
+    path?: never;
+    query?: never;
+    url: '/api/portal-enrollment/accept';
+};
+
+export type PostApiPortalEnrollmentAcceptResponses = {
+    /**
+     * OK
+     */
+    200: PortalEnrollmentAccepted;
+};
+
+export type PostApiPortalEnrollmentAcceptResponse = PostApiPortalEnrollmentAcceptResponses[keyof PostApiPortalEnrollmentAcceptResponses];
 
 export type GetApiPortalTenantLedgerData = {
     body?: never;
