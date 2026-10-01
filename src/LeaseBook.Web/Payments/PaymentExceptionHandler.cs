@@ -1,3 +1,4 @@
+using LeaseBook.Modules.Payments.Features.RefundChecks;
 using LeaseBook.Modules.Payments.Processing;
 using LeaseBook.SharedKernel.Endpoints;
 using Microsoft.AspNetCore.Diagnostics;
@@ -12,6 +13,11 @@ public sealed class PaymentExceptionHandler : IExceptionHandler
             && context.Request.Path.StartsWithSegments("/api/portal/tenant/payments"))
         {
             await ProblemResults.Problem(context, "invalid_payment_request", "The payment request is invalid.", 400).ExecuteAsync(context);
+            return true;
+        }
+        if (exception is RefundCheckConflictException refund)
+        {
+            await ProblemResults.Problem(context, refund.Code, refund.Message, 409).ExecuteAsync(context);
             return true;
         }
         if (exception is not (PaymentConflictException or PaymentUnavailableException)) { return false; }
