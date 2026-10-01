@@ -33,6 +33,12 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 - **A refund check can no longer be voided from the ledger's generic void.** It must be voided from
   the check, which refuses a check that has already cleared the bank.
 
+### Fixed
+
+- **Voided ledger rows are readable.** A voided entry was shown faded, which took its text below the
+  WCAG AA contrast minimum. It now stays at full contrast and is marked by its struck-through
+  description and its Voided badge.
+
 ## [0.22.0] - 2026-09-30
 
 ### Added

@@ -317,11 +317,10 @@
   background: var(--surface-2);
 }
 
-.pf-ledger-row.voided {
-  opacity: 0.6;
-}
-
+/* A voided row reads as voided through the struck-through description and its "Voided" badge, not
+   through row opacity: blending every cell toward the background took its text below WCAG AA (#477). */
 .pf-ledger-row.voided .desc-text {
+  color: var(--text-2);
   text-decoration: line-through;
 }
 
