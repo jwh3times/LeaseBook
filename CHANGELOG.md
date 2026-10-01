@@ -14,6 +14,10 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ## [Unreleased]
 
+- _Nothing yet._
+
+## [0.22.0] - 2026-09-30
+
 ### Added
 
 - **Portal invitations and enrollment with a local test inbox.** Property managers can invite a
@@ -1178,7 +1182,8 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.21.0...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.22.0...HEAD
+[0.22.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.22.0
 [0.21.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.21.0
 [0.20.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.20.0
 [0.19.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.19.0
