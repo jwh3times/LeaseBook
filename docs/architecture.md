@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living architecture guide
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-09-29
+- **Last reviewed:** 2026-10-01
 
 This is the canonical public map of the system **as implemented**. It explains how the pieces fit
 together and links the decisions that shaped them without reproducing every invariant. Accepted
@@ -31,7 +31,9 @@ Each bounded context is its own project — `Accounting`, `Directory`, `Banking`
 cross-cutting primitives (money, ids, the CQRS spine, tenancy, result types). All of them carry real
 behavior. `Payments` implements an isolated development simulator with durable dispatch, signed
 observations and atomic Accounting receipt effects; it has no live provider adapter. See
-[ADR-046](adr/ADR-046-simulated-payment-recognition.md). A module references `SharedKernel`
+[ADR-046](adr/ADR-046-simulated-payment-recognition.md). It also owns refund checks: the check record,
+its print history and per-bank print calibration
+([ADR-050](adr/ADR-050-refund-checks.md)). A module references `SharedKernel`
 and nothing else; the architecture tests (`ModuleBoundaryTests`) enforce this absolutely.
 
 A module **never reads another module's tables or types directly**. A cross-module read goes through
@@ -52,6 +54,12 @@ Payments uses its own `IPaymentEligibility` batch port to resolve tenant/date/ba
 Directory, and `IPaymentLedger` to dispatch Accounting's existing `RecordPayment` command. The receipt,
 payment effect and operation summary share one org transaction. Its `IPaymentProcessor` transport seam
 is called outside that transaction; the host simulator persists provider acceptance independently.
+
+Refund checks use a separate `IRefundCheckLedger` port into Accounting. Accounting derives the refund's
+bank from the held deposit or prepayment bucket, writes the posted text, guards the void and reports
+each check's status from its bank line; Payments stores only the check record, written in the same org
+transaction as the `RefundIssued` entry. A per-organization advisory lock serializes issue ahead of
+Accounting's posting lock.
 
 Directory does not persist snapshots of facts already owned by those sources. Tenant financial
 standing is a batch projection from Accounting's journal-derived aging and held-prepayment reads, and

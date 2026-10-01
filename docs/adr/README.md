@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living decision index
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-09-29
+- **Last reviewed:** 2026-10-01
 
 An **Architecture Decision Record** captures a single significant or non-obvious engineering
 decision — the context that forced it, the choice made, and the consequences accepted — so it can be
@@ -74,6 +74,7 @@ form, write it, and add a row to the index below. When a decision is replaced, m
 | [047](ADR-047-owner-facing-description-and-internal-note.md)         | A journal entry's description is owner-facing; staff notes are separate         | Accepted                               | 2026-09-29 |
 | [048](ADR-048-per-persona-row-level-security.md)                     | Per-persona row-level security inside the organization                          | Accepted                               | 2026-09-29 |
 | [049](ADR-049-portal-invitations-and-enrollment.md)                  | Portal invitations bind an explicit identity before granting access             | Accepted                               | 2026-09-30 |
+| [050](ADR-050-refund-checks.md)                                      | Refund checks post at issue and derive their status from the bank register      | Accepted                               | 2026-10-01 |
 
 ## Status legend
 

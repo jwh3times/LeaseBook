@@ -14,7 +14,20 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ## [Unreleased]
 
-- _Nothing yet._
+### Added
+
+- **Refund checks for held deposits and prepaid credit.** From a tenant's ledger, staff can issue a
+  refund check for a held security deposit or prepaid credit and print it on the organization's
+  pre-printed check stock, with per-bank print offsets and an alignment page. The refund is drawn on
+  the bank account that holds the money, never a bank chosen by hand, and posts when the check is
+  issued. Each bank account's refund checks are listed on Banking as outstanding, cleared, reconciled
+  or voided. A check can be voided until it clears, which restores the held funds; check numbers are
+  unique per bank account and appear in the register.
+
+### Changed
+
+- **A refund check can no longer be voided from the ledger's generic void.** It must be voided from
+  the check, which refuses a check that has already cleared the bank.
 
 ## [0.22.0] - 2026-09-30
 
