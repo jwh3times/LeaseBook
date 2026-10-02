@@ -1,4 +1,4 @@
-using LeaseBook.Modules.Payments.Features.RefundChecks;
+using LeaseBook.Modules.Payments.Domain;
 using LeaseBook.Web.Payments;
 using LeaseBook.Web.Reporting;
 using QuestPDF.Fluent;
@@ -34,7 +34,7 @@ public sealed class MicrLineRenderingTests
         page.NumberOfImages.ShouldBe(0);
 
         var glyphs = Glyphs(page);
-        var expected = Line.Characters.OrderBy(c => c.Position).ToList();
+        var expected = Line.Characters.ToList();
         glyphs.Count.ShouldBe(expected.Count);
 
         for (var i = 0; i < expected.Count; i++)
@@ -59,7 +59,7 @@ public sealed class MicrLineRenderingTests
             box.Top.ShouldBeLessThanOrEqualTo(72 * 7.0 / 16 + Tolerance);
         }
 
-        foreach (var (box, (_, character)) in glyphs.Zip(Line.Characters.OrderBy(c => c.Position)))
+        foreach (var (box, (_, character)) in glyphs.Zip(Line.Characters))
         {
             if (char.IsAsciiDigit(character))
             {

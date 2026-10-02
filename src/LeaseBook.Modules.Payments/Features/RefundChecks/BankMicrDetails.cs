@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using FluentValidation;
 using FluentValidation.Results;
 using LeaseBook.Modules.Payments.Domain;
@@ -51,10 +50,10 @@ public sealed class SaveBankMicrDetailsValidator : AbstractValidator<SaveBankMic
         RuleFor(x => x.BankAccountId).NotEmpty();
         RuleFor(x => x.StockKind).Must(k => CheckStockKinds.All.Contains(k))
             .WithMessage("Stock kind must be 'preprinted' or 'blank'.");
-        RuleFor(x => x.RoutingNumber!).Must(BankMicr.IsValidRoutingNumber)
+        RuleFor(x => x.RoutingNumber!).Must(MicrLine.IsValidRoutingNumber)
             .When(x => x.RoutingNumber is not null)
             .WithMessage("The routing number must be nine digits with a valid check digit.");
-        RuleFor(x => x.OnUsAccountNumber!).Must(BankMicr.IsValidOnUsField)
+        RuleFor(x => x.OnUsAccountNumber!).Must(MicrLine.IsValidOnUsField)
             .When(x => x.OnUsAccountNumber is not null)
             .WithMessage("The On-Us field must be at most 18 digits, dashes, spaces or 'U' symbols, with at least four digits.");
         RuleFor(x => x.MicrOffsetXPoints).InclusiveBetween(-BankMicr.OffsetLimitPoints, BankMicr.OffsetLimitPoints)
@@ -100,39 +99,10 @@ internal sealed class SaveBankMicrDetailsHandler(DbContext db, TimeProvider cloc
 }
 
 /// <summary>Rules for a bank account's MICR numbers (#474; evidence in docs/research/micr-e13b-refund-checks.md).</summary>
-public static partial class BankMicr
+public static class BankMicr
 {
     /// <summary>How far the MICR line may be moved from its nominal position: a quarter inch either way.</summary>
     public const decimal OffsetLimitPoints = 18m;
-
-    /// <summary>
-    /// An ABA routing number: nine digits whose weighted sum (3, 7, 1 repeating) is a multiple of ten.
-    /// All zeros passes the arithmetic but names no institution, so it is refused.
-    /// </summary>
-    public static bool IsValidRoutingNumber(string value)
-    {
-        if (value.Length != 9 || !value.All(char.IsAsciiDigit) || value == "000000000")
-        {
-            return false;
-        }
-
-        int[] weights = [3, 7, 1, 3, 7, 1, 3, 7, 1];
-        var sum = 0;
-        for (var i = 0; i < 9; i++)
-        {
-            sum += (value[i] - '0') * weights[i];
-        }
-
-        return sum % 10 == 0;
-    }
-
-    /// <summary>
-    /// The On-Us field as the bank's specification sheet prints it, left to right: digits, <c>-</c> for the
-    /// dash symbol, a space for an empty position and <c>U</c> for the On-Us symbol; at most 18 characters
-    /// (positions 14–31) and at least four digits.
-    /// </summary>
-    public static bool IsValidOnUsField(string value) =>
-        OnUsField().IsMatch(value) && value.Count(char.IsAsciiDigit) >= 4;
 
     internal static BankMicrDetailsView View(Guid bankAccountId, BankMicrProfile? row) => new(
         bankAccountId,
@@ -159,7 +129,4 @@ public static partial class BankMicr
 
     private static string? LastFourDigits(string? value) =>
         value is null ? null : new string(value.Where(char.IsAsciiDigit).TakeLast(4).ToArray());
-
-    [GeneratedRegex("^[0-9U\\- ]{1,18}$")]
-    private static partial Regex OnUsField();
 }

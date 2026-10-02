@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using LeaseBook.Modules.Payments.Domain;
 
 namespace LeaseBook.Web.Payments;
 
@@ -9,12 +10,14 @@ namespace LeaseBook.Web.Payments;
 /// shipped or embedded: the MICR line is drawn as paths, so nothing depends on a font licence or on fonts
 /// the runtime image does not have.
 /// <para>
-/// Every Std 006 dimension is a multiple of 0.165 mm, so the outlines are integer polygons on a grid of
+/// Nearly every Std 006 dimension is a multiple of 0.165 mm, so the outlines are polygons on a grid of
 /// <see cref="UnitInches"/> (0.0065 in = 0.1651 mm): a character is 18 units tall, its horizontal centre
 /// line at 9, and 8 to 14 units wide. Coordinates here run from the character's left edge (x) and bottom
 /// edge (y). Corners are rounded as the figures require (notes 1–2: every radius 0.165 mm — one unit —
-/// blended with both edges; the zero's are 0.660 mm outside and 0.330 mm inside). The one figure that is
-/// not on the grid is the seven's slanted joint, read from the figure to a quarter unit.
+/// blended with both edges; the zero's are 0.660 mm outside and 0.330 mm inside). Off the grid: the
+/// seven's slanted joint, placed where Fig. 1.8.8 dimensions it (0.271 mm above and 0.216 mm below the
+/// centre line) at the figure's slope with the 2-unit stroke kept; and the amount symbol's 0.743 mm, which
+/// is not drawn because a drawer never prints it.
 /// </para>
 /// <para>
 /// <c>E13BGlyphTests</c> compares these against an independent drawing of the same figures.
@@ -51,21 +54,22 @@ public static class E13BGlyphs
         // Fig. 1.8.7
         ['6'] = [new([(0, 0), (12, 0), (12, 8), (2, 8), (2, 16), (6, 16), (6, 13), (8, 13), (8, 18), (0, 18)]),
                  new([(2, 2), (2, 6), (10, 6), (10, 2)])],
-        // Fig. 1.8.8: the slanted joint between the upper right stroke and the lower stem.
-        ['7'] = [new([(4, 0), (6, 0), (6, 8.25), (10, 10.5), (10, 18), (0, 18), (0, 12), (2, 12), (2, 16), (8, 16), (8, 11.5), (4, 9.25)])],
+        // Fig. 1.8.8: the slanted joint between the upper right stroke and the lower stem. Its outer edge
+        // leaves the right stroke 0.271 mm above the centre line and meets the stem 0.216 mm below it (the
+        // one-unit fillets put those tangent points 0.68 units from the corners below); slope 0.4 as drawn,
+        // the inner edge parallel two units away.
+        ['7'] = [new([(4, 0), (6, 0), (6, 8.37), (10, 9.97), (10, 18), (0, 18), (0, 12), (2, 12), (2, 16), (8, 16), (8, 11.32), (4, 9.72)])],
         // Fig. 1.8.9
         ['8'] = [new([(0, 0), (14, 0), (14, 9), (12, 9), (12, 18), (2, 18), (2, 9), (0, 9)]),
                  new([(4, 2), (4, 8), (10, 8), (10, 2)]), new([(4, 10), (4, 16), (10, 16), (10, 10)])],
         // Fig. 1.8.10
         ['9'] = [new([(8, 0), (12, 0), (12, 18), (0, 18), (0, 8), (8, 8)]), new([(2, 10), (2, 16), (10, 16), (10, 10)])],
         // Fig. 1.8.11: transit ⑆
-        ['T'] = [Rect(0, 3, 4, 15), Rect(8, 0, 14, 6), Rect(8, 12, 14, 18)],
-        // Fig. 1.8.12: amount ⑇ (never printed by the drawer; kept so the set is complete)
-        ['A'] = [Rect(0, 0, 4, 8), Rect(6, 4.5, 8, 13.5), Rect(10, 10, 14, 18)],
+        [MicrLine.Transit] = [Rect(0, 3, 4, 15), Rect(8, 0, 14, 6), Rect(8, 12, 14, 18)],
         // Fig. 1.8.13: On-Us ⑈
-        ['U'] = [Rect(0, 3, 2, 15), Rect(4, 3, 6, 15), Rect(8, 9, 14, 17)],
-        // Fig. 1.8.14: dash ⑉
-        ['-'] = [Rect(0, 5, 4, 13), Rect(6, 5, 10, 13), Rect(12, 5, 14, 13)],
+        [MicrLine.OnUs] = [Rect(0, 3, 2, 15), Rect(4, 3, 6, 15), Rect(8, 9, 14, 17)],
+        // Fig. 1.8.14: dash ⑉ (Fig. 1.8.12, the amount symbol, belongs to the bank of first deposit)
+        [MicrLine.Dash] = [Rect(0, 5, 4, 13), Rect(6, 5, 10, 13), Rect(12, 5, 14, 13)],
     };
 
     /// <summary>The width of <paramref name="character"/> in grid units.</summary>
@@ -87,15 +91,19 @@ public static class E13BGlyphs
         return path.ToString().TrimEnd();
     }
 
+    /// <summary>The corner points of each ring of <paramref name="character"/>, before rounding (y up).</summary>
+    internal static IReadOnlyList<IReadOnlyList<(double X, double Y)>> Corners(char character) =>
+        Get(character).Select(r => (IReadOnlyList<(double X, double Y)>)r.Points).ToArray();
+
     private static Ring[] Get(char character) =>
         Outlines.TryGetValue(character, out var rings)
             ? rings
             : throw new ArgumentOutOfRangeException(nameof(character), character, "Not an E-13B character.");
 
     /// <summary>
-    /// One closed ring with every corner replaced by an arc tangent to both edges. For a corner of interior
-    /// angle φ the tangent points sit r / tan(φ/2) from it (r at a right angle), clamped so two arcs never
-    /// overlap on a short edge.
+    /// One closed ring with every corner replaced by an arc tangent to both edges. With φ the angle between
+    /// the two edges at the corner (at most 180°, whether the corner is convex or concave), the tangent points
+    /// sit r / tan(φ/2) from it — r at a right angle — clamped so two arcs never overlap on a short edge.
     /// </summary>
     private static void AppendRing(StringBuilder path, Ring ring, double dx, double dy)
     {
@@ -111,7 +119,7 @@ public static class E13BGlyphs
             var (inX, inY, inLength) = Direction(prev, cur);
             var (outX, outY, outLength) = Direction(cur, next);
 
-            // Interior angle between the edges back to prev and on to next.
+            // The angle between the edges back to prev and on to next.
             var cosPhi = Math.Clamp(-inX * outX - inY * outY, -1, 1);
             var halfTan = Math.Tan(Math.Acos(cosPhi) / 2);
             var tangent = Math.Min(ring.Radius / halfTan, Math.Min(inLength, outLength) / 2);
@@ -120,16 +128,17 @@ public static class E13BGlyphs
             corners[i] = (cur.X - inX * tangent, cur.Y - inY * tangent, cur.X + outX * tangent, cur.Y + outY * tangent, radius, sweep);
         }
 
-        path.Append(CultureInfo.InvariantCulture, $"M{F(corners[0].AX)},{F(corners[0].AY)} ");
+        path.Append(CultureInfo.InvariantCulture, $"M{SvgNumber.Format(corners[0].AX)},{SvgNumber.Format(corners[0].AY)} ");
         for (var i = 0; i < n; i++)
         {
             var c = corners[i];
             if (i > 0)
             {
-                path.Append(CultureInfo.InvariantCulture, $"L{F(c.AX)},{F(c.AY)} ");
+                path.Append(CultureInfo.InvariantCulture, $"L{SvgNumber.Format(c.AX)},{SvgNumber.Format(c.AY)} ");
             }
 
-            path.Append(CultureInfo.InvariantCulture, $"A{F(c.R)},{F(c.R)} 0 0 {c.Sweep} {F(c.BX)},{F(c.BY)} ");
+            path.Append(CultureInfo.InvariantCulture,
+                $"A{SvgNumber.Format(c.R)},{SvgNumber.Format(c.R)} 0 0 {c.Sweep} {SvgNumber.Format(c.BX)},{SvgNumber.Format(c.BY)} ");
         }
 
         path.Append("Z ");
@@ -142,5 +151,4 @@ public static class E13BGlyphs
         return (x / length, y / length, length);
     }
 
-    private static string F(double value) => Math.Round(value, 4).ToString("0.####", CultureInfo.InvariantCulture);
 }

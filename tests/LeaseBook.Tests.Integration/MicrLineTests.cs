@@ -1,4 +1,4 @@
-using LeaseBook.Modules.Payments.Features.RefundChecks;
+using LeaseBook.Modules.Payments.Domain;
 using Shouldly;
 
 namespace LeaseBook.Tests.Integration;

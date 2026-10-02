@@ -1,4 +1,6 @@
-namespace LeaseBook.Modules.Payments.Features.RefundChecks;
+using System.Text.RegularExpressions;
+
+namespace LeaseBook.Modules.Payments.Domain;
 
 /// <summary>
 /// The characters of a refund check's MICR line by position (#474, ADR-051). Positions count from the
@@ -13,7 +15,7 @@ namespace LeaseBook.Modules.Payments.Features.RefundChecks;
 /// gaps are in <c>docs/research/micr-e13b-refund-checks.md</c>.
 /// </para>
 /// </summary>
-public sealed class MicrLine
+public sealed partial class MicrLine
 {
     public const char Transit = 'T';
     public const char OnUs = 'U';
@@ -43,12 +45,12 @@ public sealed class MicrLine
 
     public static MicrLine Compose(string routingNumber, string onUsField, int checkNumber)
     {
-        if (!BankMicr.IsValidRoutingNumber(routingNumber))
+        if (!IsValidRoutingNumber(routingNumber))
         {
             throw new ArgumentException("The routing number is not a valid ABA routing number.", nameof(routingNumber));
         }
 
-        if (!BankMicr.IsValidOnUsField(onUsField))
+        if (!IsValidOnUsField(onUsField))
         {
             throw new ArgumentException("The On-Us field holds characters the MICR font cannot print.", nameof(onUsField));
         }
@@ -65,6 +67,38 @@ public sealed class MicrLine
         PlaceRightAligned(characters, $"{OnUs}{serial}{OnUs}", AuxiliaryOnUsLastDigitPosition - 1);
         return new MicrLine(characters);
     }
+
+    /// <summary>
+    /// An ABA routing number: nine digits whose weighted sum (3, 7, 1 repeating) is a multiple of ten.
+    /// All zeros passes the arithmetic but names no institution, so it is refused.
+    /// </summary>
+    public static bool IsValidRoutingNumber(string value)
+    {
+        if (value.Length != 9 || !value.All(char.IsAsciiDigit) || value == "000000000")
+        {
+            return false;
+        }
+
+        int[] weights = [3, 7, 1, 3, 7, 1, 3, 7, 1];
+        var sum = 0;
+        for (var i = 0; i < 9; i++)
+        {
+            sum += (value[i] - '0') * weights[i];
+        }
+
+        return sum % 10 == 0;
+    }
+
+    /// <summary>
+    /// The On-Us field as the bank's specification sheet prints it, left to right: digits,
+    /// <see cref="Dash"/> for the dash symbol, a space for an empty position and <see cref="OnUs"/> for the
+    /// On-Us symbol; at most 18 characters (positions 14–31) and at least four digits.
+    /// </summary>
+    public static bool IsValidOnUsField(string value) =>
+        OnUsField().IsMatch(value) && value.Count(char.IsAsciiDigit) >= 4;
+
+    [GeneratedRegex("^[0-9U\\- ]{1,18}$")]
+    private static partial Regex OnUsField();
 
     /// <summary>The line read left to right, from <see cref="HighestPosition"/> down to 1; blanks are spaces.</summary>
     public override string ToString() =>

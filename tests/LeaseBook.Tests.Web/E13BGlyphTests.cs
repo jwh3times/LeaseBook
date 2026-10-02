@@ -3,15 +3,16 @@ using System.Text.RegularExpressions;
 using LeaseBook.Web.Payments;
 using Shouldly;
 
-namespace LeaseBook.Tests.Integration;
+namespace LeaseBook.Tests.Web;
 
 /// <summary>
 /// #474 part 2: LeaseBook's own E-13B glyphs (drawn from the dimensioned figures of Payments Canada
 /// Standard 006, Appendix I §1.8) against an independent drawing of the same figures — the OFL-licensed
 /// outlines in <c>Fixtures/MicrE13BReference</c> (see its README). Two people reading the same scanned
 /// figures and landing on the same shape is the check; agreeing with our own reading would prove nothing.
-/// Both are compared in E-13B grid units of 0.0065 in (0.1651 mm), the module every Std 006 dimension is a
-/// multiple of. Where the two disagree, the figure decides, and the disagreement is pinned here with why.
+/// Both are compared in E-13B grid units of 0.0065 in (0.1651 mm), the module nearly every Std 006 dimension is
+/// a multiple of (the amount symbol's 0.743 mm and the seven's slant are the exceptions). Where the two
+/// disagree, the figure decides, and the disagreement is pinned here with why.
 /// </summary>
 public sealed partial class E13BGlyphTests
 {
@@ -22,7 +23,7 @@ public sealed partial class E13BGlyphTests
     {
         { '0', "u0030" }, { '1', "u0031" }, { '2', "u0032" }, { '3', "u0033" }, { '4', "u0034" },
         { '5', "u0035" }, { '6', "u0036" }, { '7', "u0037" }, { '8', "u0038" }, { '9', "u0039" },
-        { 'T', "u2446" }, { 'A', "u2447" }, { 'U', "u2448" }, { '-', "u2449" },
+        { 'T', "u2446" }, { 'U', "u2448" }, { '-', "u2449" },
     };
 
     [Theory]
@@ -82,14 +83,60 @@ public sealed partial class E13BGlyphTests
     }
 
     [Fact]
-    public void The_amount_symbol_is_drawable_but_every_other_character_is_what_a_line_prints()
+    public void Only_the_characters_a_line_prints_have_outlines()
     {
-        foreach (var c in "0123456789TU-A")
+        foreach (var c in "0123456789TU-")
         {
             E13BGlyphs.OutlinePath(c).ShouldNotBeNullOrWhiteSpace();
         }
 
+        // The amount symbol belongs to the bank of first deposit; a drawer never prints it.
+        Should.Throw<ArgumentOutOfRangeException>(() => E13BGlyphs.OutlinePath('A'));
         Should.Throw<ArgumentOutOfRangeException>(() => E13BGlyphs.OutlinePath('X'));
+    }
+
+    [Fact]
+    public void The_zero_s_hole_is_where_the_figure_puts_it()
+    {
+        // Fig. 1.8.1: inner left edge 1.816 mm (11 units) left of the centre line, inner right edge 0.165 mm
+        // (1 unit) short of it, inner top and bottom 1.156 mm (7 units) from the horizontal centre line. With
+        // the outer left edge 13 units left of the centre line, that is x 2..12 and, from the top, y 2..16.
+        var hole = Bounds([Rings(E13BGlyphs.OutlinePath('0'))[1]]);
+        (hole.X, hole.Y, hole.Width, hole.Height).ShouldBe((2, 2, 10, 14));
+    }
+
+    [Fact]
+    public void The_seven_s_slant_meets_its_strokes_where_the_figure_dimensions_it()
+    {
+        // Fig. 1.8.8 locates the slanted joint by where it leaves the straight strokes: 0.271 mm above the
+        // horizontal centre line on the outer right edge (x = 10) and 0.216 mm below it on the stem's right
+        // edge (x = 6). In SVG units from the top, the centre line is at 9.
+        var points = Rings(E13BGlyphs.OutlinePath('7'))[0];
+        var rightEdgeLowest = points.Where(p => Math.Abs(p.X - 10) < 1e-6).Max(p => p.Y);
+        var stemEdgeHighest = points.Where(p => Math.Abs(p.X - 6) < 1e-6).Min(p => p.Y);
+
+        rightEdgeLowest.ShouldBe(9 - 0.271 / 0.1651, ToleranceUnits);
+        stemEdgeHighest.ShouldBe(9 + 0.216 / 0.1651, ToleranceUnits);
+    }
+
+    [Fact]
+    public void No_outline_has_a_repeated_or_collinear_corner()
+    {
+        // A repeated point has no direction, and a straight-through point has no corner to round: either
+        // would put NaN or a degenerate arc into the path data.
+        foreach (var c in "0123456789TU-")
+        {
+            foreach (var ring in E13BGlyphs.Corners(c))
+            {
+                for (var i = 0; i < ring.Count; i++)
+                {
+                    var (prev, cur, next) = (ring[(i + ring.Count - 1) % ring.Count], ring[i], ring[(i + 1) % ring.Count]);
+                    (cur.X == prev.X && cur.Y == prev.Y).ShouldBeFalse($"'{c}' repeats {cur}");
+                    var cross = (cur.X - prev.X) * (next.Y - cur.Y) - (cur.Y - prev.Y) * (next.X - cur.X);
+                    Math.Abs(cross).ShouldBeGreaterThan(1e-9, $"'{c}' runs straight through {cur}");
+                }
+            }
+        }
     }
 
     // ---- geometry helpers (test-only) -----------------------------------------------------------------

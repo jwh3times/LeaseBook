@@ -1,6 +1,6 @@
 using System.Globalization;
 using System.Text;
-using LeaseBook.Modules.Payments.Features.RefundChecks;
+using LeaseBook.Modules.Payments.Domain;
 using QuestPDF.Fluent;
 using QuestPDF.Infrastructure;
 
@@ -37,8 +37,8 @@ public static class MicrLineRenderer
 
         var svg = new StringBuilder();
         svg.Append(CultureInfo.InvariantCulture,
-            $"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{F(widthPoints)}\" height=\"{F(ClearBandInches * 72)}\" ");
-        svg.Append(CultureInfo.InvariantCulture, $"viewBox=\"0 0 {F(widthUnits)} {F(heightUnits)}\">");
+            $"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{SvgNumber.Format(widthPoints)}\" height=\"{SvgNumber.Format(ClearBandInches * 72)}\" ");
+        svg.Append(CultureInfo.InvariantCulture, $"viewBox=\"0 0 {SvgNumber.Format(widthUnits)} {SvgNumber.Format(heightUnits)}\">");
         foreach (var (position, character) in line.Characters)
         {
             var rightEdge = widthUnits
@@ -60,6 +60,4 @@ public static class MicrLineRenderer
     public static void MicrLine(this IContainer container, MicrLine line, decimal micrOffsetXPoints, decimal micrOffsetYPoints) =>
         container.Height((float)(ClearBandInches * 72))
             .Svg(size => Svg(line, size.Width, (double)micrOffsetXPoints, (double)micrOffsetYPoints));
-
-    private static string F(double value) => Math.Round(value, 4).ToString("0.####", CultureInfo.InvariantCulture);
 }
