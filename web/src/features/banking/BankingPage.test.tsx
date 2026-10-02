@@ -540,30 +540,35 @@ describe('BankingPage refund checks', () => {
       registerHandler(REGISTER),
       http.get('/api/refund-checks', ({ request }) => {
         requested.push(new URL(request.url).searchParams.get('bankAccountId'));
-        return HttpResponse.json([
-          {
-            id: 'c1',
-            tenantId: 't1',
-            bankAccountId: 'acct1',
-            checkNumber: 2101,
-            source: 'prepayment',
-            amount: 75,
-            issueDate: '2026-02-04',
-            payeeName: 'Devon Pryor',
-            addressLine1: '1 Main St',
-            addressLine2: null,
-            city: 'Asheville',
-            state: 'NC',
-            postalCode: '28801',
-            memo: null,
-            entryId: 'e9',
-            status: 'outstanding',
-            voidEntryId: null,
-            printCount: 0,
-            lastPrintedAt: null,
-            createdAt: '2026-02-04T10:00:00Z',
-          },
-        ]);
+        return HttpResponse.json({
+          total: 1,
+          page: 1,
+          pageSize: 50,
+          items: [
+            {
+              id: 'c1',
+              tenantId: 't1',
+              bankAccountId: 'acct1',
+              checkNumber: 2101,
+              source: 'prepayment',
+              amount: 75,
+              issueDate: '2026-02-04',
+              payeeName: 'Devon Pryor',
+              addressLine1: '1 Main St',
+              addressLine2: null,
+              city: 'Asheville',
+              state: 'NC',
+              postalCode: '28801',
+              memo: null,
+              entryId: 'e9',
+              status: 'outstanding',
+              voidEntryId: null,
+              printCount: 0,
+              lastPrintedAt: null,
+              createdAt: '2026-02-04T10:00:00Z',
+            },
+          ],
+        });
       }),
     );
     renderPage();

@@ -59,7 +59,7 @@ public sealed class RefundCheckHttpTests(PostgresFixture fixture)
         issued.PayeeName.ShouldBe("Jasmine Carter");
         issued.PrintCount.ShouldBe(0);
 
-        var list = await GetAsync<IReadOnlyList<RefundCheckView>>(client, $"/api/refund-checks?bankAccountId={setup.DepositBankId}", ct);
+        var list = (await GetAsync<CheckPage>(client, $"/api/refund-checks?bankAccountId={setup.DepositBankId}", ct)).Items;
         list.ShouldHaveSingleItem().Id.ShouldBe(issued.Id);
 
         var pdf = await client.PostAsync($"/api/refund-checks/{issued.Id}/pdf", null, ct);
@@ -73,7 +73,7 @@ public sealed class RefundCheckHttpTests(PostgresFixture fixture)
         text.ShouldContain("1043");
         text.ShouldContain("412 Oakmont Ave");
 
-        var printed = await GetAsync<IReadOnlyList<RefundCheckView>>(client, $"/api/refund-checks?tenantId={setup.TenantId}", ct);
+        var printed = (await GetAsync<CheckPage>(client, $"/api/refund-checks?tenantId={setup.TenantId}", ct)).Items;
         printed.ShouldHaveSingleItem().PrintCount.ShouldBe(1);
 
         var voided = await PostOkAsync<RefundCheckView>(client, $"/api/refund-checks/{issued.Id}/void", new { reason = "Misprinted" }, ct);
@@ -139,11 +139,76 @@ public sealed class RefundCheckHttpTests(PostgresFixture fixture)
         line.Description.ShouldBe("Refund check #1043 — security deposit");
         await PostOkAsync<JsonElement>(client, "/api/accounting/banks/clearances", new { journalLineIds = new[] { line.JournalLineId } }, ct);
 
-        var cleared = await GetAsync<IReadOnlyList<RefundCheckView>>(client, $"/api/refund-checks?tenantId={setup.TenantId}", ct);
+        var cleared = (await GetAsync<CheckPage>(client, $"/api/refund-checks?tenantId={setup.TenantId}", ct)).Items;
         cleared.ShouldHaveSingleItem().Status.ShouldBe("cleared");
 
         var voidCleared = await client.PostAsJsonAsync($"/api/refund-checks/{issued.Id}/void", new { reason = "Lost" }, ct);
         await ShouldBeProblemAsync(voidCleared, HttpStatusCode.Conflict, "refund_check_cleared", ct);
+    }
+
+    [Fact]
+    public async Task The_list_pages_newest_first_and_reports_the_total_beyond_the_page()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var setup = await SetupAsync(ct);
+        var client = await LoggedInClientAsync(setup.StaffEmail, ct);
+        foreach (var number in new[] { 1043, 1044, 1045 })
+        {
+            await PostOkAsync<RefundCheckView>(client, "/api/refund-checks", Body(setup, number, amount: 450m), ct);
+        }
+
+        var url = $"/api/refund-checks?bankAccountId={setup.DepositBankId}&pageSize=2";
+        var first = await GetAsync<CheckPage>(client, $"{url}&page=1", ct);
+        first.Items.Select(c => c.CheckNumber).ShouldBe([1045, 1044]);
+        (first.Total, first.Page, first.PageSize).ShouldBe((3, 1, 2));
+
+        var second = await GetAsync<CheckPage>(client, $"{url}&page=2", ct);
+        second.Items.Select(c => c.CheckNumber).ShouldBe([1043]);
+        second.Total.ShouldBe(3);
+    }
+
+    [Fact]
+    public async Task The_outstanding_filter_leaves_out_voided_and_cleared_checks_and_counts_only_the_rest()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var setup = await SetupAsync(ct);
+        var client = await LoggedInClientAsync(setup.StaffEmail, ct);
+        var issued = new Dictionary<int, RefundCheckView>();
+        foreach (var number in new[] { 1043, 1044, 1045, 1046 })
+        {
+            issued[number] = await PostOkAsync<RefundCheckView>(client, "/api/refund-checks", Body(setup, number, amount: 300m), ct);
+        }
+
+        await PostOkAsync<RefundCheckView>(client, $"/api/refund-checks/{issued[1044].Id}/void", new { reason = "Misprinted" }, ct);
+        var register = await GetAsync<RegisterResponse>(client, $"/api/accounting/banks/{setup.DepositBankId}/register", ct);
+        var line = register.Rows.Single(r => r.Description == "Refund check #1046 — security deposit");
+        await PostOkAsync<JsonElement>(client, "/api/accounting/banks/clearances", new { journalLineIds = new[] { line.JournalLineId } }, ct);
+
+        var url = $"/api/refund-checks?bankAccountId={setup.DepositBankId}&status=outstanding&pageSize=1";
+        var first = await GetAsync<CheckPage>(client, $"{url}&page=1", ct);
+        first.Items.Select(c => c.CheckNumber).ShouldBe([1045]);
+        first.Total.ShouldBe(2);
+        var second = await GetAsync<CheckPage>(client, $"{url}&page=2", ct);
+        second.Items.Select(c => (c.CheckNumber, c.Status)).ShouldBe([(1043, "outstanding")]);
+
+        var all = await GetAsync<CheckPage>(client, $"/api/refund-checks?bankAccountId={setup.DepositBankId}", ct);
+        all.Total.ShouldBe(4);
+    }
+
+    [Theory]
+    [InlineData("page=0")]
+    [InlineData("pageSize=0")]
+    [InlineData("pageSize=201")]
+    [InlineData("status=cleared")]
+    public async Task An_out_of_range_page_or_an_unknown_status_is_a_validation_error(string parameter)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var setup = await SetupAsync(ct);
+        var client = await LoggedInClientAsync(setup.StaffEmail, ct);
+
+        var response = await client.GetAsync($"/api/refund-checks?bankAccountId={setup.DepositBankId}&{parameter}", ct);
+        // The query's validator, not the binder (whose 400 is `invalid_request`), refused it.
+        await ShouldBeProblemAsync(response, HttpStatusCode.BadRequest, "validation_failed", ct);
     }
 
     [Fact]
@@ -195,7 +260,7 @@ public sealed class RefundCheckHttpTests(PostgresFixture fixture)
 
         var other = await SetupAsync(ct);
         var otherStaff = await LoggedInClientAsync(other.StaffEmail, ct);
-        (await otherStaff.GetFromJsonAsync<IReadOnlyList<RefundCheckView>>($"/api/refund-checks?tenantId={setup.TenantId}", ct))
+        (await otherStaff.GetFromJsonAsync<CheckPage>($"/api/refund-checks?tenantId={setup.TenantId}", ct))!.Items
             .ShouldBeEmpty();
         (await otherStaff.PostAsync($"/api/refund-checks/{issued.Id}/pdf", null, ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
         (await otherStaff.PostAsJsonAsync($"/api/refund-checks/{issued.Id}/void", new { reason = "x" }, ct))
@@ -203,6 +268,9 @@ public sealed class RefundCheckHttpTests(PostgresFixture fixture)
         var foreignTenant = await otherStaff.PostAsJsonAsync("/api/refund-checks", Body(setup, 1044), ct);
         foreignTenant.StatusCode.ShouldBe(HttpStatusCode.Conflict); // no held funds visible in org B
     }
+
+    /// <summary>The list's wire shape, read independently of the production record.</summary>
+    private sealed record CheckPage(IReadOnlyList<RefundCheckView> Items, int Total, int Page, int PageSize);
 
     private sealed record Setup(Guid OrgId, string StaffEmail, string RolelessEmail, Guid TenantId, Guid DepositBankId);
 

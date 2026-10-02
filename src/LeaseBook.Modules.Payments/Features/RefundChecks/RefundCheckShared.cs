@@ -31,6 +31,9 @@ public sealed class RefundCheckConflictException(string code, string message) : 
 
 internal static class RefundCheckReads
 {
+    /// <summary>The status of a check whose bank line has not cleared and that was not voided.</summary>
+    public const string Outstanding = "outstanding";
+
     /// <summary>
     /// Serializes refund-check issue, void and print within an organization, so the idempotency-key and
     /// check-number checks cannot race and a print cannot land on a check being voided. Taken before
@@ -43,8 +46,14 @@ internal static class RefundCheckReads
             $"SELECT pg_advisory_xact_lock(hashtextextended('lb:refund-check:' || {orgId.ToString()}, 0))", ct);
     }
 
+    /// <summary>A check's status from the ledger's statuses; no ledger status means it is still outstanding.</summary>
+    public static string StatusOf(IReadOnlyDictionary<Guid, RefundLedgerStatus> statuses, Guid entryId) =>
+        statuses.GetValueOrDefault(entryId)?.Status ?? Outstanding;
+
+    /// <param name="statuses">The ledger statuses when the caller already read them; otherwise read here.</param>
     public static async Task<IReadOnlyList<RefundCheckView>> ViewsAsync(
-        DbContext db, IRefundCheckLedger ledger, IReadOnlyList<RefundCheck> checks, CancellationToken ct)
+        DbContext db, IRefundCheckLedger ledger, IReadOnlyList<RefundCheck> checks, CancellationToken ct,
+        IReadOnlyDictionary<Guid, RefundLedgerStatus>? statuses = null)
     {
         if (checks.Count == 0)
         {
@@ -57,7 +66,7 @@ internal static class RefundCheckReads
             .GroupBy(p => p.CheckId)
             .Select(g => new { CheckId = g.Key, Count = g.Count(), Last = g.Max(p => p.CreatedAt) })
             .ToDictionaryAsync(p => p.CheckId, ct);
-        var statuses = await ledger.GetStatusesAsync(checks.Select(c => c.EntryId).ToArray(), ct);
+        statuses ??= await ledger.GetStatusesAsync(checks.Select(c => c.EntryId).ToArray(), ct);
 
         return checks.Select(c =>
         {
@@ -65,7 +74,7 @@ internal static class RefundCheckReads
             var printed = prints.GetValueOrDefault(c.Id);
             return new RefundCheckView(c.Id, c.TenantId, c.BankAccountId, c.CheckNumber, c.Source, c.Amount, c.IssueDate,
                 c.PayeeName, c.AddressLine1, c.AddressLine2, c.City, c.State, c.PostalCode, c.Memo, c.EntryId,
-                status?.Status ?? "outstanding", status?.VoidEntryId, printed?.Count ?? 0, printed?.Last, c.CreatedAt);
+                StatusOf(statuses, c.EntryId), status?.VoidEntryId, printed?.Count ?? 0, printed?.Last, c.CreatedAt);
         }).ToArray();
     }
 }

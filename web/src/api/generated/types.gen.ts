@@ -926,6 +926,13 @@ export type RefundCheckOptions = {
     funds: Array<RefundCheckFund>;
 };
 
+export type RefundCheckPage = {
+    items: Array<RefundCheckView>;
+    total: number | string;
+    page: number | string;
+    pageSize: number | string;
+};
+
 export type RefundCheckView = {
     id: string;
     tenantId: string;
@@ -3126,6 +3133,9 @@ export type GetApiRefundChecksData = {
     query?: {
         bankAccountId?: string;
         tenantId?: string;
+        status?: string;
+        page?: number | string;
+        pageSize?: number | string;
     };
     url: '/api/refund-checks';
 };
@@ -3134,7 +3144,7 @@ export type GetApiRefundChecksResponses = {
     /**
      * OK
      */
-    200: Array<RefundCheckView>;
+    200: RefundCheckPage;
 };
 
 export type GetApiRefundChecksResponse = GetApiRefundChecksResponses[keyof GetApiRefundChecksResponses];

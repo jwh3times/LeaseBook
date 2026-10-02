@@ -35,8 +35,10 @@ public sealed class RefundCheckEndpoints : IEndpointModule
         group.MapGet("/options", async (Guid tenantId, ISender sender, CancellationToken ct) =>
             TypedResults.Ok(await sender.Query(new GetRefundCheckOptions(tenantId), ct)));
 
-        group.MapGet("", async (Guid? bankAccountId, Guid? tenantId, ISender sender, CancellationToken ct) =>
-            TypedResults.Ok(await sender.Query(new GetRefundChecks(bankAccountId, tenantId), ct)));
+        group.MapGet("", async (Guid? bankAccountId, Guid? tenantId, string? status, int? page, int? pageSize,
+            ISender sender, CancellationToken ct) =>
+            TypedResults.Ok(await sender.Query(new GetRefundChecks(
+                bankAccountId, tenantId, Status: status, Page: page ?? 1, PageSize: pageSize ?? 50), ct)));
 
         group.MapPost("", async (IssueRefundCheckBody body, ISender sender, CancellationToken ct) =>
             TypedResults.Ok(await sender.Send(new IssueRefundCheck(
