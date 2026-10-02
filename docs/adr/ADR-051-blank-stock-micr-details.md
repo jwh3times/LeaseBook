@@ -35,6 +35,18 @@ position comes from Standard 006. A per-account offset of at most a quarter inch
 whole line, independently of the print offsets that move the other fields, so an operator can match
 the bank's specification sheet. Bank test-check approval is the operator's gate before any live check.
 
+**The line is laid out by position, from the right edge.** Character n's right edge sits
+5/16 in + (n − 1) × 1/8 in from the check's right edge (Standard 006 §4.4.1 and §4.5.3, which measure
+spacing between right edges; the 1/8 in pitch matches X9's glossary), and a full character is centred on
+5/16 in above the bottom edge, inside the 3/16–7/16 in print band (§4.4). From the right: positions 1–13
+stay blank for the bank of first deposit; the On-Us field ends at position 14; the transit field
+⑆ + routing number + ⑆ fills 33–43; the External Processing Code (44/45) stays blank; and the check number
+is the Auxiliary On-Us field, right-justified so its last digit is at position 48 between On-Us symbols —
+the Federal Reserve's X9.37 guide places that field's digits at "positions 48 - 62" of the MICR line. Every
+Standard 006 glyph dimension is a multiple of 0.165 mm, so the glyphs are integer outlines on a
+0.0065 in grid; an independent OFL-licensed drawing of the same figures is the tests' cross-check, and
+where the two disagree (its zero) the figure decides.
+
 **Blank stock fails closed until the MICR line prints.** The setting ships before the MICR rendering
 does. Until it lands, printing a check or an alignment page on an account set to blank stock is
 refused with `blank_stock_unsupported` (409), and the settings dialog says so, because a check on
