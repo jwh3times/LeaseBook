@@ -110,6 +110,41 @@ public sealed class PrepaymentApplicationBankTests(PostgresFixture fixture)
             new ApplyPrepayment(ctx.TenantId, 100m, Feb5, Guid.Empty, null, Key()), c), ct));
     }
 
+    [Fact]
+    public async Task A_pre_475_cross_bank_application_is_cleared_by_voiding_and_reapplying_from_the_holding_bank()
+    {
+        // The remediation ADR-050's addendum gives operators for an I10 violation in an existing journal.
+        var ct = TestContext.Current.CancellationToken;
+        var ctx = await SetupAsync(ct);
+        await DispatchAsync(ctx.OrgId, (s, c) => s.Send(
+            new CollectPrepayment(ctx.TenantId, 75m, Feb1, ctx.DepositBankId, null, Key()), c), ct);
+        await DispatchAsync(ctx.OrgId, (s, c) => s.Send(new AddCharge(ctx.TenantId, 75m, Feb1, "rent", null, Key()), c), ct);
+
+        // The shape the old path wrote: released from the operating trust, which never held it.
+        Guid historical = default;
+        await DispatchScopeAsync(ctx.OrgId, async (_, services) => historical =
+            await services.GetRequiredService<IPostingService>().PostAsync(
+                new PostEntryRequest(Feb1, "PrepaymentApplied", null, "Historical cross-bank application", Key(),
+                [
+                    new PostLineRequest(AccountCodes.TenantPrepayments, new Money(75m), null, EntryBasis.Both,
+                        TenantId: ctx.TenantId, BankAccountId: ctx.TrustBankId),
+                    new PostLineRequest(AccountCodes.TenantReceivable, null, new Money(75m), EntryBasis.Accrual,
+                        PropertyId: ctx.PropertyId, OwnerId: ctx.OwnerId, TenantId: ctx.TenantId),
+                    new PostLineRequest(AccountCodes.OwnerEquity, null, new Money(75m), EntryBasis.Cash,
+                        PropertyId: ctx.PropertyId, OwnerId: ctx.OwnerId, BankAccountId: ctx.TrustBankId),
+                ]), ct), ct);
+        (await SweepAsync(ctx.OrgId, ct)).ShouldHaveSingleItem().Invariant.ShouldBe("I10");
+
+        await DispatchAsync(ctx.OrgId, (s, c) => s.Send(
+            new VoidEntry(historical, "Applied from the wrong bank (#475)", Feb5, Key()), c), ct);
+        var reapplied = await DispatchAsync(ctx.OrgId, (s, c) => s.Send(
+            new ApplyPrepayment(ctx.TenantId, 75m, Feb5, null, null, Key()), c), ct);
+
+        (await ReadLinesAsync(ctx.OrgId, reapplied.EntryId, ct))
+            .ShouldContain(l => l.AccountClass == AccountClass.OwnerEquity && l.BankAccountId == ctx.DepositBankId);
+        await AssertSweepCleanAsync(ctx.OrgId, ct);
+    }
+
     /// <summary>Prepaid credit of 100 in the operating trust and 200 in the deposit trust, against 300 owed.</summary>
     private async Task HoldInBothBanksAsync(Ctx ctx, CancellationToken ct)
     {
@@ -120,7 +155,7 @@ public sealed class PrepaymentApplicationBankTests(PostgresFixture fixture)
         await DispatchAsync(ctx.OrgId, (s, c) => s.Send(new AddCharge(ctx.TenantId, 300m, Feb1, "rent", null, Key()), c), ct);
     }
 
-    private sealed record Ctx(Guid OrgId, Guid TenantId, Guid TrustBankId, Guid DepositBankId);
+    private sealed record Ctx(Guid OrgId, Guid OwnerId, Guid PropertyId, Guid TenantId, Guid TrustBankId, Guid DepositBankId);
 
     private sealed record LineView(AccountClass AccountClass, decimal? Debit, decimal? Credit, Guid? BankAccountId);
 
@@ -143,8 +178,15 @@ public sealed class PrepaymentApplicationBankTests(PostgresFixture fixture)
     }
 
     private async Task AssertSweepCleanAsync(Guid orgId, CancellationToken ct) =>
+        (await SweepAsync(orgId, ct)).ShouldBeEmpty();
+
+    private async Task<IReadOnlyList<InvariantViolation>> SweepAsync(Guid orgId, CancellationToken ct)
+    {
+        IReadOnlyList<InvariantViolation> violations = [];
         await DispatchScopeAsync(orgId, async (_, services) =>
-            (await services.GetRequiredService<IInvariantChecks>().CheckCoreAsync(ct)).ShouldBeEmpty(), ct);
+            violations = await services.GetRequiredService<IInvariantChecks>().CheckCoreAsync(ct), ct);
+        return violations;
+    }
 
     private async Task<Ctx> SetupAsync(CancellationToken ct)
     {
@@ -165,7 +207,7 @@ public sealed class PrepaymentApplicationBankTests(PostgresFixture fixture)
             await s.Send(new CreateLease(tenantId, unitId, new DateOnly(2025, 6, 1), new DateOnly(2026, 5, 31), 1450m, 1450m, "active"), ct);
             var trust = await s.Send(new CreateBankAccount("Operating Trust", null, null, "trust"), ct);
             var deposit = await s.Send(new CreateBankAccount("Deposit Trust", null, null, "deposit"), ct);
-            ctx = new Ctx(orgId, tenantId, trust.Id, deposit.Id);
+            ctx = new Ctx(orgId, ownerId, propertyId, tenantId, trust.Id, deposit.Id);
         }, ct);
         return ctx;
     }
