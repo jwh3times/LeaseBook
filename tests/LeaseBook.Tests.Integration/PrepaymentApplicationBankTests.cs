@@ -1,3 +1,4 @@
+using FluentValidation;
 using LeaseBook.Modules.Accounting.Contracts;
 using LeaseBook.Modules.Accounting.Domain;
 using LeaseBook.Modules.Accounting.Features.LedgerPosting;
@@ -95,6 +96,18 @@ public sealed class PrepaymentApplicationBankTests(PostgresFixture fixture)
         lines.ShouldContain(l => l.AccountClass == AccountClass.OwnerEquity && l.Credit == 150m
             && l.BankAccountId == ctx.DepositBankId);
         await AssertSweepCleanAsync(ctx.OrgId, ct);
+    }
+
+    [Fact]
+    public async Task An_empty_bank_id_is_a_validation_error_not_a_derivation()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var ctx = await SetupAsync(ct);
+        await HoldInBothBanksAsync(ctx, ct);
+
+        // A nullable Guid's NotEmpty only rejects null; Guid.Empty must still be refused as malformed.
+        await Should.ThrowAsync<ValidationException>(() => DispatchAsync(ctx.OrgId, (s, c) => s.Send(
+            new ApplyPrepayment(ctx.TenantId, 100m, Feb5, Guid.Empty, null, Key()), c), ct));
     }
 
     /// <summary>Prepaid credit of 100 in the operating trust and 200 in the deposit trust, against 300 owed.</summary>

@@ -47,14 +47,11 @@ internal sealed class PostRefundCheckHandler(DbContext db, IPostingLock postingL
     public async Task<RefundCheckPosted> Handle(PostRefundCheck command, CancellationToken ct)
     {
         var source = RefundChecks.Sources[command.Source];
-        var sourceName = source == RefundSource.Deposits ? "deposit" : "prepayment";
 
         // Read the buckets under the same per-org lock the template takes, so the bucket chosen here is
         // the one the template's guard then re-reads (the lock is re-entrant within the transaction).
         await postingLock.AcquireAsync(ct);
-        var buckets = (await RefundChecks.ReadAsync(db, [command.TenantId], ct))
-            .Where(b => b.Source == sourceName)
-            .ToArray();
+        var buckets = await RefundChecks.HeldBucketsAsync(db, command.TenantId, source, ct);
 
         RefundableBalance? chosen;
         if (command.Bucket is { } requested)
@@ -62,7 +59,7 @@ internal sealed class PostRefundCheckHandler(DbContext db, IPostingLock postingL
             chosen = buckets.FirstOrDefault(b => b.BankAccountId == requested.BankAccountId
                 && b.PropertyId == requested.PropertyId && b.OwnerId == requested.OwnerId);
         }
-        else if (buckets.Length > 1)
+        else if (buckets.Count > 1)
         {
             throw new RefundBucketAmbiguousException(command.TenantId);
         }

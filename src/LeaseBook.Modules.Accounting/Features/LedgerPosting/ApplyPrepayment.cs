@@ -35,7 +35,9 @@ public sealed class ApplyPrepaymentValidator : AbstractValidator<ApplyPrepayment
     public ApplyPrepaymentValidator()
     {
         RuleFor(x => x.TenantId).NotEmpty();
-        RuleFor(x => x.BankAccountId).NotEmpty().When(x => x.BankAccountId is not null);
+        // NotEmpty on a Guid? rejects only null, so an explicit Guid.Empty needs its own rule.
+        RuleFor(x => x.BankAccountId).Must(id => id != Guid.Empty)
+            .WithMessage("'Bank Account Id' must not be empty.");
         RuleFor(x => x.SourceRef).NotEmpty();
         LedgerPostingMaps.RuleForAmount(this, x => x.Amount);
     }
@@ -65,8 +67,7 @@ internal sealed class ApplyPrepaymentHandler(
     private async Task<Guid> HoldingBankAsync(ApplyPrepayment command, CancellationToken ct)
     {
         await postingLock.AcquireAsync(ct);
-        var banks = (await RefundChecks.ReadAsync(db, [command.TenantId], ct))
-            .Where(b => b.Source == "prepayment")
+        var banks = (await RefundChecks.HeldBucketsAsync(db, command.TenantId, RefundSource.Prepayments, ct))
             .Select(b => b.BankAccountId)
             .ToArray();
 

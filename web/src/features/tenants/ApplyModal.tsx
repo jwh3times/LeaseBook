@@ -1,11 +1,12 @@
 import { useMutation } from '@tanstack/react-query';
 import { useId, useRef, useState, type KeyboardEvent } from 'react';
-import { Button, formatMoneyPlain, Input, Select } from '@/design';
+import { Button, Input, Money, Select } from '@/design';
 import { ApiErrorNotice } from '@/components/ApiErrorNotice';
 import { ErrorAction } from '@/components/ErrorAction';
 import { AudienceHint } from '@/components/InternalNote';
 import { Modal } from '@/components/Modal';
-import { useRefundCheckOptions } from '@/features/refundChecks/refundChecks';
+import { type RefundCheckFund, useRefundCheckOptions } from '@/features/refundChecks/refundChecks';
+import '@/features/refundChecks/refundChecks.css';
 import { num } from '@/lib/directory';
 import { useBankAccounts } from '@/lib/settings';
 import {
@@ -47,14 +48,19 @@ export function ApplyModal({ tenantId, initialKind, onClose, onApplied }: ApplyM
   const fieldId = useId();
   const [error, setError] = useState<LedgerPostError | null>(null);
   const sourceRef = useRef(newSourceRef());
-  // Set once the server reports the prepaid credit spans banks; until then the server picks the bank.
-  const [needsBank, setNeedsBank] = useState(false);
+  // Set once the server reports the prepaid credit spans banks (#475); until then the server picks the
+  // bank. From then on the user must pick one — like the server, the dialog never guesses.
+  const [bankAmbiguous, setBankAmbiguous] = useState(false);
   const [chosenBank, setChosenBank] = useState<string | null>(null);
-  const funds = useRefundCheckOptions(tenantId, { enabled: needsBank });
-  const prepaymentBanks = (funds.data?.funds ?? []).filter((fund) => fund.source === 'prepayment');
-  const prepaymentBank = needsBank
-    ? (chosenBank ?? prepaymentBanks[0]?.bankAccountId ?? null)
-    : null;
+  const funds = useRefundCheckOptions(tenantId, { enabled: bankAmbiguous });
+  const prepaymentBanks = funds.isSuccess
+    ? funds.data.funds.filter((fund) => fund.source === 'prepayment')
+    : undefined;
+  // A choice a refetch no longer lists is no choice at all.
+  const prepaymentBank = prepaymentBanks?.find((fund) => fund.bankAccountId === chosenBank);
+  /** The holding banks are a prerequisite read once the server has asked for a choice. */
+  const holdingBanksUnavailable =
+    kind === 'prepayment' && bankAmbiguous && (funds.isPending || funds.isError);
 
   const banks = useBankAccounts(true);
   const depositBank = banks.data?.find((bank) => bank.purpose === 'deposit') ?? banks.data?.[0];
@@ -88,7 +94,7 @@ export function ApplyModal({ tenantId, initialKind, onClose, onApplied }: ApplyM
       return applyPrepayment(tenantId, {
         amount: value,
         date,
-        bankAccountId: prepaymentBank,
+        bankAccountId: prepaymentBank?.bankAccountId ?? null,
         description,
         internalNote,
         sourceRef: sourceRef.current,
@@ -103,8 +109,8 @@ export function ApplyModal({ tenantId, initialKind, onClose, onApplied }: ApplyM
         setError({ ...err, message: LOCKED_PERIOD_MESSAGE });
       } else if (err.code === 'prepayment_bank_ambiguous') {
         // The server's message asks for the choice; the picker below supplies it.
-        setNeedsBank(true);
-        if (needsBank) void funds.refetch();
+        if (bankAmbiguous) void funds.refetch();
+        setBankAmbiguous(true);
         setError(err);
       } else {
         // insufficient_receivable / insufficient_liability messages already name the limit hit.
@@ -133,6 +139,11 @@ export function ApplyModal({ tenantId, initialKind, onClose, onApplied }: ApplyM
       setError({ message: 'No trust bank is configured for this org.' });
       return;
     }
+    if (holdingBanksUnavailable) return; // Apply is disabled; Enter must not slip past it.
+    if (kind === 'prepayment' && prepaymentBanks && prepaymentBanks.length > 0 && !prepaymentBank) {
+      setError({ message: 'Choose which account to apply from.' });
+      return;
+    }
     setError(null);
     mutation.mutate();
   };
@@ -156,7 +167,7 @@ export function ApplyModal({ tenantId, initialKind, onClose, onApplied }: ApplyM
           <Button
             variant="primary"
             icon="check"
-            disabled={mutation.isPending || banksUnavailable || (needsBank && funds.isPending)}
+            disabled={mutation.isPending || banksUnavailable || holdingBanksUnavailable}
             onClick={submit}
           >
             Apply
@@ -195,21 +206,17 @@ export function ApplyModal({ tenantId, initialKind, onClose, onApplied }: ApplyM
           <p className="t3 fs12">{`From ${depositBank.name} → ${operatingBank.name}`}</p>
         )}
 
-        {kind === 'prepayment' && needsBank && prepaymentBanks.length > 0 && (
-          <label className="col gap6">
-            <span className="pf-eyebrow">Apply from</span>
-            <Select
-              value={prepaymentBank ?? ''}
-              onChange={(e) => setChosenBank(e.target.value)}
-              aria-label="Apply from"
-            >
-              {prepaymentBanks.map((fund) => (
-                <option key={fund.bankAccountId} value={fund.bankAccountId}>
-                  {`${bankName(fund.bankAccountId)} — ${formatMoneyPlain(num(fund.held))}`}
-                </option>
-              ))}
-            </Select>
-          </label>
+        {kind === 'prepayment' && bankAmbiguous && (
+          <HoldingBankPicker
+            funds={funds}
+            banks={prepaymentBanks}
+            chosen={prepaymentBank?.bankAccountId ?? null}
+            bankName={bankName}
+            onChoose={(id) => {
+              setChosenBank(id);
+              setError(null);
+            }}
+          />
         )}
 
         <label className="col gap6">
@@ -275,5 +282,66 @@ export function ApplyModal({ tenantId, initialKind, onClose, onApplied }: ApplyM
         <ApiErrorNotice error={error} />
       </div>
     </Modal>
+  );
+}
+
+interface HoldingBankPickerProps {
+  funds: ReturnType<typeof useRefundCheckOptions>;
+  /** The prepayment buckets, or undefined until the read succeeds. */
+  banks: RefundCheckFund[] | undefined;
+  chosen: string | null;
+  bankName: (id: string) => string;
+  onChoose: (bankAccountId: string) => void;
+}
+
+/**
+ * The banks holding the tenant's prepaid credit, offered once the server refused to pick one (#475).
+ * Error before loading, and an empty list only on a successful read — the dialog blocks Apply meanwhile.
+ */
+function HoldingBankPicker({ funds, banks, chosen, bankName, onChoose }: HoldingBankPickerProps) {
+  const name = useId();
+  if (funds.isError) {
+    return (
+      <div className="col gap6">
+        <ApiErrorNotice
+          error={funds.error}
+          fallback="Couldn’t load the accounts holding this prepaid credit."
+          kind="read"
+        />
+        <ErrorAction
+          error={funds.error}
+          onRetry={() => void funds.refetch()}
+          retrying={funds.isFetching}
+        />
+      </div>
+    );
+  }
+  if (!banks) {
+    return funds.fetchStatus === 'fetching' ? (
+      <p className="t3 fs12">Loading the accounts holding this prepaid credit…</p>
+    ) : null;
+  }
+  if (banks.length === 0) {
+    return <p className="t3 fs12">This tenant no longer holds prepaid credit in any account.</p>;
+  }
+  return (
+    <fieldset className="pf-refund-funds">
+      <legend className="pf-eyebrow">Apply from</legend>
+      {banks.map((fund) => (
+        <label key={fund.bankAccountId} className="pf-refund-fund">
+          <input
+            type="radio"
+            name={name}
+            value={fund.bankAccountId}
+            checked={chosen === fund.bankAccountId}
+            onChange={() => onChoose(fund.bankAccountId)}
+          />
+          {bankName(fund.bankAccountId)}
+          <span className="pf-refund-fund-held">
+            <span className="t3 fs12">Held</span> <Money value={num(fund.held)} plain />
+          </span>
+        </label>
+      ))}
+    </fieldset>
   );
 }
