@@ -59,3 +59,24 @@ public sealed class CheckPrintSettingConfiguration : IEntityTypeConfiguration<Ch
         b.Property(x => x.OffsetYPoints).HasPrecision(6, 2);
     }
 }
+
+public sealed class BankMicrProfileConfiguration : IEntityTypeConfiguration<BankMicrProfile>
+{
+    public void Configure(EntityTypeBuilder<BankMicrProfile> b)
+    {
+        b.ToTable("bank_micr_profiles", t =>
+        {
+            t.HasCheckConstraint("ck_bank_micr_profiles_stock_kind", "stock_kind IN ('preprinted', 'blank')");
+            t.HasCheckConstraint("ck_bank_micr_profiles_micr_offset_x", "micr_offset_x_points BETWEEN -18 AND 18");
+            t.HasCheckConstraint("ck_bank_micr_profiles_micr_offset_y", "micr_offset_y_points BETWEEN -18 AND 18");
+        });
+        b.HasKey(x => x.Id);
+        b.HasIndex(x => new { x.OrgId, x.BankAccountId }).IsUnique();
+        b.Property(x => x.StockKind).HasMaxLength(16);
+        // Ciphertext from the host's Data Protection converter: unbounded text, never a plaintext width.
+        b.Property(x => x.RoutingNumber).HasColumnType("text");
+        b.Property(x => x.OnUsAccountNumber).HasColumnType("text");
+        b.Property(x => x.MicrOffsetXPoints).HasPrecision(6, 2);
+        b.Property(x => x.MicrOffsetYPoints).HasPrecision(6, 2);
+    }
+}

@@ -144,6 +144,17 @@ An issued check whose bank line has not cleared. It is already out of the book b
 uncleared withdrawal in the register until the bank pays it.
 _Avoid_: pending check, open check
 
+**Check stock**:
+The paper a bank account's checks print on, set per bank account. Pre-printed stock already carries the
+bank's MICR line; on blank stock LeaseBook must print that line itself (ADR-051).
+_Avoid_: check paper, check format
+
+**On-Us field**:
+The bank-defined MICR field that carries the account number, stored exactly as the bank's specification
+sheet prints it, symbols and spacing included. It is not the bare account number and never includes the
+check number (ADR-051).
+_Avoid_: account number (when naming what the MICR line prints)
+
 ### Dashboard financial metrics
 
 **Trust total**:

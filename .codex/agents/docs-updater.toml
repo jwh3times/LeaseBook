@@ -69,6 +69,7 @@ docs/compliance/data-handling.md        — GLBA/PII data handling. Its Last rev
                                           EXTERNAL review, not engineering edits — do not bump it
 docs/compliance/privacy-notice-draft.md — privacy notice skeleton; same review-date rule
 docs/research/azure-monitor-opentelemetry-distro.md — point-in-time vendor research, not guidance
+docs/research/micr-e13b-refund-checks.md — dated MICR glyph, placement and bank-acceptance evidence
 docs/research/stripe-connect-payment-lifecycle.md — dated provider evidence for the payment design
 ```
 

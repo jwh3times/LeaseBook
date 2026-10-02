@@ -14,6 +14,17 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ## [Unreleased]
 
+### Added
+
+- **Bank accounts can hold their MICR details for checks on blank stock.** In a bank account's check
+  print settings, an administrator can record the routing number, the On-Us field as the bank's MICR
+  specification sheet prints it, whether the account's checks use pre-printed or blank stock, and how
+  far to move the MICR line. The routing number's check digit is verified. Both numbers are encrypted,
+  every screen shows only their last four digits, staff see them read-only, and the audit trail
+  records that they changed but never what they were. Printing on blank stock is not available yet:
+  until LeaseBook prints the MICR line, a check or alignment page for an account set to blank stock is
+  refused rather than printed without one.
+
 ### Fixed
 
 - **Prepaid credit is applied from the bank that holds it.** Applying a tenant's prepayment to their

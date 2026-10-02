@@ -109,23 +109,40 @@ public sealed class AuditPayloadExposureTests(PostgresFixture fixture)
     }
 
     /// <summary>
-    /// A column whose name says "secret" is masked by <see cref="AuditFieldRedaction"/> from the day it
-    /// lands — but masking it is the fallback, not the decision. The decision is whether a table holding
-    /// one should be audited at all, and this is the prompt to make it.
+    /// A column whose name says "secret" is withheld by <see cref="AuditFieldRedaction"/> from the day it
+    /// lands — at write time, so its value never reaches <c>audit_events</c> (#474) — but withholding it
+    /// is the fallback, not the decision. The decision is whether a table holding one should be audited
+    /// at all, and this is the prompt to make it. A decided column goes in
+    /// <see cref="DecidedSecretColumns"/> with its reason.
     /// </summary>
     [Fact]
-    public void No_audited_column_looks_like_a_secret()
+    public void No_audited_column_looks_like_a_secret_unless_decided()
     {
         var secrets = AuditedProperties()
-            .Where(p => AuditFieldRedaction.SensitiveNameFragments
-                .Any(fragment => p.Property.Contains(fragment, StringComparison.OrdinalIgnoreCase)))
+            .Where(p => AuditFieldRedaction.IsSecretName(p.Property))
             .ToList();
 
-        secrets.ShouldBeEmpty(
+        var undecided = secrets.Where(p => !DecidedSecretColumns.Contains(p)).ToList();
+        undecided.ShouldBeEmpty(
             "an audited entity gained a secret-shaped column. Its value is already withheld by name, " +
             "but decide whether the row should be audited at all before relying on that: " +
-            $"{Describe(secrets)}");
+            $"{Describe(undecided)}");
+
+        // A decision about a column that no longer exists (or no longer looks secret) is stale.
+        DecidedSecretColumns.Except(secrets).ShouldBeEmpty("a decided secret column is gone or renamed");
     }
+
+    /// <summary>
+    /// Secret-shaped audited columns whose rows are audited on purpose. Each value is withheld when the
+    /// audit row is written, so the trail records that it changed and never what it was.
+    /// </summary>
+    private static readonly HashSet<(string Entity, string Property)> DecidedSecretColumns =
+    [
+        // #474: who changed a bank account's MICR details, and when, is exactly what an administrator's
+        // review needs; the routing number and the On-Us field (which carries the account number) are not.
+        ("BankMicrProfile", "RoutingNumber"),
+        ("BankMicrProfile", "OnUsAccountNumber"),
+    ];
 
     /// <summary>
     /// Anything from ASP.NET Identity, by namespace rather than by base class — the six stores do not

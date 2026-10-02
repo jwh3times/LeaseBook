@@ -27,6 +27,15 @@ public sealed class RefundCheckConflictException(string code, string message) : 
 
     public static RefundCheckConflictException Voided() => new(
         "refund_check_voided", "This check has been voided and cannot be printed.");
+
+    /// <summary>
+    /// #474: the account is set to blank stock, but LeaseBook does not print the MICR line yet. A check on
+    /// blank paper without one is not a check a bank can read, so nothing prints until it does.
+    /// </summary>
+    public static RefundCheckConflictException BlankStockUnsupported() => new(
+        "blank_stock_unsupported",
+        "This bank account is set to blank check stock, which LeaseBook cannot print on yet. " +
+        "Switch it back to pre-printed stock in its print settings to print.");
 }
 
 internal static class RefundCheckReads
