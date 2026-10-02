@@ -295,6 +295,7 @@ violation:
 | I7  | Deposit attribution symmetry — a held deposit stays ≥ 0 per owner bucket, not just per tenant |
 | I8  | Every event type posting an owner-attributed `owner_equity` line has a statement section      |
 | I9  | `migration_clearing` nets to $0 per basis                                                     |
+| I10 | Prepayment bank attribution — a held prepayment stays ≥ 0 per bank, not just per tenant       |
 
 **I5** and **I6** are not in that table and never will be: they are relational or conditional
 assertions proven in the test harness rather than swept per-org — I5 is cash/accrual basis

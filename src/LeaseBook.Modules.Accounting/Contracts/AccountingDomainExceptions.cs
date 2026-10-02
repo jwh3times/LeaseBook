@@ -293,6 +293,19 @@ public sealed class RefundBucketAmbiguousException(Guid tenantId)
     public Guid TenantId { get; } = tenantId;
 }
 
+/// <summary>
+/// Applying a prepayment would draw on a tenant's prepaid credit held in more than one bank, and the caller
+/// did not name one (409, #475). As with refunds, the bank is never guessed: the caller picks one that
+/// holds the prepayment.
+/// </summary>
+public sealed class PrepaymentBankAmbiguousException(Guid tenantId)
+    : AccountingDomainException(
+        "prepayment_bank_ambiguous",
+        "This tenant's prepaid credit sits in more than one account. Choose which one to apply from.")
+{
+    public Guid TenantId { get; } = tenantId;
+}
+
 /// <summary>A refund check whose bank line is cleared or reconciled can no longer be voided (409, #473).</summary>
 public sealed class RefundCheckClearedException(Guid entryId)
     : AccountingDomainException(

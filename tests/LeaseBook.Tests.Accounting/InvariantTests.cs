@@ -251,6 +251,38 @@ public sealed class InvariantTests(PostgresFixture fixture)
         violations.ShouldContain(v => v.Invariant == "I7");
     }
 
+    [Fact]
+    public async Task The_I10_sweep_catches_a_prepayment_applied_against_a_bank_that_never_held_it()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var scope = await ProvisionedScopeAsync(
+            fixture, ct, owners: [Owner], tenants: [Tenant], properties: [Property]);
+
+        await scope.RunAsync(async () =>
+        {
+            await Events(scope).PostAsync(new PrepaymentReceived(
+                Tenant, Property, Owner, new Money(400m), D(1), scope.DepositBankId, "prepay"), ct);
+
+            // The pre-#475 application shape: it debited whichever bank the caller named. Written through
+            // the lower-level posting seam, because the public path now refuses it. Every entry balances,
+            // each bank's trust equation holds, and the tenant nets to zero (I4 clean) — only the per-bank
+            // attribution is wrong: the deposit bank still shows +400 held, the trust bank −400.
+            await Posting(scope).PostAsync(new PostEntryRequest(
+                D(28), "PrepaymentApplied", null, "Historical cross-bank application", "bad-apply",
+                [
+                    new PostLineRequest(AccountCodes.TenantPrepayments, new Money(400m), null, EntryBasis.Both,
+                        TenantId: Tenant, BankAccountId: scope.TrustBankId),
+                    new PostLineRequest(AccountCodes.TenantReceivable, null, new Money(400m), EntryBasis.Accrual,
+                        PropertyId: Property, OwnerId: Owner, TenantId: Tenant),
+                    new PostLineRequest(AccountCodes.OwnerEquity, null, new Money(400m), EntryBasis.Cash,
+                        PropertyId: Property, OwnerId: Owner, BankAccountId: scope.TrustBankId),
+                ]), ct);
+        }, ct);
+
+        var violations = await CheckCoreAsync(scope, ct);
+        violations.ShouldHaveSingleItem().Invariant.ShouldBe("I10");
+    }
+
     private static async Task<decimal> OwnerDeposits(OrgScope scope, CancellationToken ct)
     {
         decimal deposits = 0;

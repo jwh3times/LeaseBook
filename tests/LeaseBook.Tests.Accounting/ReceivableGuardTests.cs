@@ -98,6 +98,23 @@ public sealed class ReceivableGuardTests(PostgresFixture fixture)
         (await CheckCoreAsync(scope, ct)).ShouldBeEmpty();
     }
 
+    [Fact]
+    public async Task Prepayment_application_from_a_bank_that_does_not_hold_it_is_rejected()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var scope = await ScopeAsync(ct);
+
+        await PostAsync(scope, new RentCharged(Tenant, Property, Owner, Unit, new Money(500m), D(1), "rent"), ct);
+        await PostAsync(scope, new PrepaymentReceived(Tenant, Property, Owner, new Money(800m), D(1), scope.DepositBankId, "pp"), ct);
+
+        // 500 ≤ 800 held by the tenant and ≤ 500 owed, but none of it sits in the operating trust (#475).
+        var refused = await Should.ThrowAsync<InsufficientLiabilityException>(() => scope.RunAsync(() =>
+            Events(scope).PostAsync(new PrepaymentApplied(
+                Tenant, Property, Owner, new Money(500m), D(28), scope.TrustBankId, "wrong bank"), ct), ct));
+        refused.Held.ShouldBe(0m);
+        (await CheckCoreAsync(scope, ct)).ShouldBeEmpty();
+    }
+
     private Task<OrgScope> ScopeAsync(CancellationToken ct) =>
         ProvisionedScopeAsync(fixture, ct, owners: [Owner], tenants: [Tenant], properties: [Property], units: [Unit]);
 

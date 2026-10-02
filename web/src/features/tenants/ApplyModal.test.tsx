@@ -184,3 +184,107 @@ describe('ApplyModal description and internal note', () => {
     expect(body).toMatchObject({ description: null, internalNote: 'Tenant asked by email' });
   });
 });
+
+// #475: a prepayment is applied from the bank that holds it, which only the server knows.
+describe('ApplyModal prepayment bank', () => {
+  it('leaves the bank to the server instead of naming the operating trust', async () => {
+    let body: Record<string, unknown> | undefined;
+    server.use(
+      http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 })),
+      http.get('/api/settings/banks', () => HttpResponse.json(BANKS)),
+      http.post(
+        '/api/accounting/tenants/:tenantId/prepayment-applications',
+        async ({ request }) => {
+          body = (await request.json()) as Record<string, unknown>;
+          return HttpResponse.json({ entryId: 'p1' });
+        },
+      ),
+    );
+    const { onApplied } = renderModal();
+
+    await screen.findByText(/Operating Trust/);
+    await userEvent.selectOptions(screen.getByLabelText('Source'), 'prepayment');
+    expect(screen.queryByText(/Operating Trust/)).toBeNull();
+    await userEvent.type(screen.getByLabelText('Amount'), '50');
+    await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+
+    await vi.waitFor(() => expect(onApplied).toHaveBeenCalledWith('p1'));
+    expect(body).toMatchObject({ bankAccountId: null });
+  });
+
+  it('asks which bank to apply from when the prepaid credit sits in more than one', async () => {
+    const bodies: Record<string, unknown>[] = [];
+    server.use(
+      http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 })),
+      http.get('/api/settings/banks', () => HttpResponse.json(BANKS)),
+      http.get('/api/refund-checks/options', () =>
+        HttpResponse.json({
+          funds: [
+            {
+              source: 'deposit',
+              bankAccountId: 'dep1',
+              propertyId: 'p',
+              ownerId: 'o',
+              held: 1450,
+              nextCheckNumber: 1,
+            },
+            {
+              source: 'prepayment',
+              bankAccountId: 'trust1',
+              propertyId: null,
+              ownerId: null,
+              held: 100,
+              nextCheckNumber: 1,
+            },
+            {
+              source: 'prepayment',
+              bankAccountId: 'dep1',
+              propertyId: null,
+              ownerId: null,
+              held: 200,
+              nextCheckNumber: 1,
+            },
+          ],
+        }),
+      ),
+      http.post(
+        '/api/accounting/tenants/:tenantId/prepayment-applications',
+        async ({ request }) => {
+          const body = (await request.json()) as Record<string, unknown>;
+          bodies.push(body);
+          return body.bankAccountId === null
+            ? HttpResponse.json(
+                {
+                  code: 'prepayment_bank_ambiguous',
+                  detail:
+                    "This tenant's prepaid credit sits in more than one account. Choose which one to apply from.",
+                },
+                { status: 409 },
+              )
+            : HttpResponse.json({ entryId: 'p2' });
+        },
+      ),
+    );
+    const { onApplied } = renderModal();
+
+    await screen.findByText(/Operating Trust/);
+    await userEvent.selectOptions(screen.getByLabelText('Source'), 'prepayment');
+    await userEvent.type(screen.getByLabelText('Amount'), '150');
+    await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/more than one account/i);
+    const bank = await screen.findByLabelText('Apply from');
+    // Only the banks holding prepaid credit are offered, with what each holds.
+    expect(Array.from((bank as HTMLSelectElement).options).map((o) => o.textContent)).toEqual([
+      'Operating Trust — $100.00',
+      'Deposit Trust — $200.00',
+    ]);
+    expect(onApplied).not.toHaveBeenCalled();
+
+    await userEvent.selectOptions(bank, 'dep1');
+    await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+
+    await vi.waitFor(() => expect(onApplied).toHaveBeenCalledWith('p2'));
+    expect(bodies.at(-1)).toMatchObject({ bankAccountId: 'dep1', amount: 150 });
+  });
+});

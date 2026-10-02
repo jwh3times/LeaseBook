@@ -50,8 +50,8 @@ internal static class RefundChecks
     /// <summary>
     /// Positive held balances per bucket. Prepayment lines are grouped per bank only, projecting null
     /// property/owner, so the bucket matches the per-bank guard in the <c>RefundIssued</c> template. A
-    /// prepayment bucket is also capped at the tenant's prepayment total, as that guard is: applying a
-    /// prepayment against another bank can leave one bucket positive and another negative.
+    /// prepayment bucket is also capped at the tenant's prepayment total, as that guard is: before #475 an
+    /// application could draw on another bank, leaving one bucket positive and another negative.
     /// </summary>
     public static async Task<IReadOnlyList<RefundableBalance>> ReadAsync(
         DbContext db, IReadOnlyCollection<Guid> tenantIds, CancellationToken ct)

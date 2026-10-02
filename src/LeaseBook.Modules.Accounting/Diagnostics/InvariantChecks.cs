@@ -19,6 +19,7 @@ internal sealed class InvariantChecks(DbContext db) : IInvariantChecks
         violations.AddRange(await CheckPmIncomeIsolationAsync(ct));
         violations.AddRange(await CheckDepositLiabilitiesNonNegativeAsync(ct));
         violations.AddRange(await CheckDepositAttributionSymmetricAsync(ct));
+        violations.AddRange(await CheckPrepaymentBankAttributionAsync(ct));
         violations.AddRange(await CheckMigrationClearingBalancedAsync(ct));
         violations.AddRange(await CheckStatementSectionCoverageAsync(ct));
         return violations;
@@ -161,6 +162,30 @@ internal sealed class InvariantChecks(DbContext db) : IInvariantChecks
             .ToList();
     }
 
+    // I10: held prepayment is ≥ 0 per (tenant, bank) — the prepayment counterpart of I7. An application
+    // that draws on a bank which never held the prepayment leaves the tenant's total at zero (I4 clean)
+    // and every bank's trust equation balanced (I2 clean), yet one bank still reports a prepayment held
+    // for a tenant who holds nothing while another goes negative, and the owner's equity sits on a bank
+    // the cash never reached (#475).
+    public async Task<IReadOnlyList<InvariantViolation>> CheckPrepaymentBankAttributionAsync(CancellationToken ct)
+    {
+        var rows = await db.Database.SqlQuery<PrepaymentBankBucket>(
+            $"""
+            SELECT jl.tenant_id, jl.bank_account_id, SUM(COALESCE(jl.credit, 0) - COALESCE(jl.debit, 0)) AS held
+            FROM journal_lines jl JOIN accounts a ON a.id = jl.account_id
+            WHERE a.code = 'tenant_prepayments' AND jl.basis IN ('cash', 'both')
+            GROUP BY jl.tenant_id, jl.bank_account_id
+            HAVING SUM(COALESCE(jl.credit, 0) - COALESCE(jl.debit, 0)) < 0
+            """).ToListAsync(ct);
+
+        return rows
+            .Select(r => new InvariantViolation("I10",
+                $"held prepayment for tenant {r.TenantId} in bank "
+                + $"{(r.BankAccountId is null ? "(none)" : r.BankAccountId.ToString())} is negative ({r.Held:0.00}) "
+                + "— more prepaid credit was released from this bank than it ever held"))
+            .ToList();
+    }
+
     // I8: every event_type carrying an owner-attributed owner_equity line has a statement section.
     // Unlike I1-I7 this asserts over the *shape* of the journal rather than its balances, because the
     // defect it catches is a reachability one: StatementSectionMap.Section throws
@@ -212,6 +237,8 @@ internal sealed class InvariantChecks(DbContext db) : IInvariantChecks
     private sealed record NegativeLiability(Guid? TenantId, string Code, decimal Held);
 
     private sealed record AttributionBucket(Guid? TenantId, Guid? OwnerId, decimal Held);
+
+    private sealed record PrepaymentBankBucket(Guid? TenantId, Guid? BankAccountId, decimal Held);
 
     private sealed record ClearingVariance(string BasisName, decimal Net);
 

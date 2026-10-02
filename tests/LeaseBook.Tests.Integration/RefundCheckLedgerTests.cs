@@ -139,15 +139,15 @@ public sealed class RefundCheckLedgerTests(PostgresFixture fixture)
     [Fact]
     public async Task A_prepayment_applied_against_another_bank_cannot_be_refunded_again()
     {
-        // Applying a prepayment debits the bank the caller names, so per-bank buckets can go negative
-        // while the tenant total is zero. The refund must respect the tenant total too.
+        // Before #475 an application debited the bank its caller named, so journals written then can hold a
+        // per-bank bucket that is positive beside a negative one while the tenant total is zero. The refund
+        // must respect the tenant total too.
         var ct = TestContext.Current.CancellationToken;
         var ctx = await SetupAsync(ct);
         await DispatchAsync(ctx.OrgId, (s, c) => s.Send(
             new CollectPrepayment(ctx.TenantId, 75m, Feb1, ctx.DepositBankId, null, Key()), c), ct);
         await DispatchAsync(ctx.OrgId, (s, c) => s.Send(new AddCharge(ctx.TenantId, 75m, Feb1, "rent", null, Key()), c), ct);
-        await DispatchAsync(ctx.OrgId, (s, c) => s.Send(
-            new ApplyPrepayment(ctx.TenantId, 75m, Feb1, ctx.TrustBankId, null, Key()), c), ct);
+        await PostHistoricalCrossBankApplicationAsync(ctx, 75m, ct);
 
         var balances = await DispatchAsync(ctx.OrgId, (s, c) => s.Query(new GetRefundableBalances([ctx.TenantId]), c), ct);
         balances.ShouldBeEmpty();
@@ -164,8 +164,7 @@ public sealed class RefundCheckLedgerTests(PostgresFixture fixture)
         await DispatchAsync(ctx.OrgId, (s, c) => s.Send(
             new CollectPrepayment(ctx.TenantId, 150m, Feb1, ctx.DepositBankId, null, Key()), c), ct);
         await DispatchAsync(ctx.OrgId, (s, c) => s.Send(new AddCharge(ctx.TenantId, 50m, Feb1, "rent", null, Key()), c), ct);
-        await DispatchAsync(ctx.OrgId, (s, c) => s.Send(
-            new ApplyPrepayment(ctx.TenantId, 50m, Feb1, ctx.TrustBankId, null, Key()), c), ct);
+        await PostHistoricalCrossBankApplicationAsync(ctx, 50m, ct);
 
         // Deposit bank +150, trust bank −50: the tenant holds 100 in total.
         var balances = await DispatchAsync(ctx.OrgId, (s, c) => s.Query(new GetRefundableBalances([ctx.TenantId]), c), ct);
@@ -329,6 +328,22 @@ public sealed class RefundCheckLedgerTests(PostgresFixture fixture)
             await sender.Send(new ApplyClearances([lineId]), ct);
         }, ct);
     }
+
+    /// <summary>
+    /// The pre-#475 application shape — the prepayment released from the operating trust although the
+    /// deposit trust holds it. Written through the posting seam because the public path now refuses it.
+    /// </summary>
+    private async Task PostHistoricalCrossBankApplicationAsync(Ctx ctx, decimal amount, CancellationToken ct) =>
+        await DispatchScopeAsync(ctx.OrgId, (_, services) => services.GetRequiredService<IPostingService>().PostAsync(
+            new PostEntryRequest(Feb1, "PrepaymentApplied", null, "Historical cross-bank application", Key(),
+            [
+                new PostLineRequest(AccountCodes.TenantPrepayments, new Money(amount), null, EntryBasis.Both,
+                    TenantId: ctx.TenantId, BankAccountId: ctx.TrustBankId),
+                new PostLineRequest(AccountCodes.TenantReceivable, null, new Money(amount), EntryBasis.Accrual,
+                    PropertyId: ctx.PropertyId, OwnerId: ctx.OwnerId, TenantId: ctx.TenantId),
+                new PostLineRequest(AccountCodes.OwnerEquity, null, new Money(amount), EntryBasis.Cash,
+                    PropertyId: ctx.PropertyId, OwnerId: ctx.OwnerId, BankAccountId: ctx.TrustBankId),
+            ]), ct), ct);
 
     private async Task AssertTrustEquationAsync(Guid orgId, CancellationToken ct)
     {

@@ -260,7 +260,11 @@ export async function applyDeposit(
 export interface ApplyPrepaymentInput {
   amount: number;
   date: string;
-  bankAccountId: string;
+  /**
+   * Left out, the server applies from the one bank that holds the prepayment (#475). Named only when the
+   * credit sits in several and the server answered `prepayment_bank_ambiguous`.
+   */
+  bankAccountId?: string | null;
   /** Owner-facing: prints on the owner statement. */
   description: string;
   /** Staff-only. */
@@ -279,7 +283,7 @@ export async function applyPrepayment(
         tenantId,
         amount: input.amount,
         date: input.date,
-        bankAccountId: input.bankAccountId,
+        bankAccountId: input.bankAccountId ?? null,
         description: textOrNull(input.description),
         internalNote: textOrNull(input.internalNote),
         sourceRef: input.sourceRef,

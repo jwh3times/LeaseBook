@@ -254,7 +254,13 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
     private async Task<Guid> PostPrepaymentAppliedAsync(PrepaymentApplied e, CancellationToken ct)
     {
         await postingLock.AcquireAsync(ct);
-        var held = await _balances.PrepaymentsHeldAsync(e.TenantId, ct);
+        // Bounded by the bank it draws on AND the tenant's total (#475): an application against a bank that
+        // never held the prepayment would leave that bank's bucket negative and the collecting bank's
+        // positive, with the owner's equity on a bank the cash never reached (I10). The total still bounds
+        // it because journals from before this guard can hold a positive bucket beside a negative one.
+        var held = Math.Min(
+            await _balances.PrepaymentsHeldAsync(e.TenantId, e.BankAccountId, ct),
+            await _balances.PrepaymentsHeldAsync(e.TenantId, ct));
         if (e.Amount.Amount > held)
         {
             throw new InsufficientLiabilityException(LiabilityKind.Prepayment, e.Amount.Amount, held, e.TenantId);
@@ -269,7 +275,7 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
                 ReceivableSource.Prepayment, e.Amount.Amount, owed, e.TenantId);
         }
 
-        // No bank movement — both positions sit in the same operating trust.
+        // No bank movement — the liability and the owner's income both sit in the bank that holds the cash.
         return await posting.PostAsync(new PostEntryRequest(e.Date, "PrepaymentApplied", null, e.Description, e.SourceRef,
             [
                 new(AccountCodes.TenantPrepayments, e.Amount, null, EntryBasis.Both,
@@ -349,9 +355,9 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
             ? AccountCodes.TenantPrepayments
             : AccountCodes.SecurityDepositsHeld;
         var subtype = e.Source == RefundSource.Prepayments ? "prepayments" : "deposits";
-        // A prepayment refund is bounded by the bank it draws on AND the tenant's total: applying a
-        // prepayment debits whichever bank its caller names, so one bank's bucket can read positive while
-        // another's is negative and the tenant holds less than that bucket shows (#473).
+        // A prepayment refund is bounded by the bank it draws on AND the tenant's total: before #475 an
+        // application debited whichever bank its caller named, so a journal from then can show one bank's
+        // bucket positive while another's is negative and the tenant holds less than that bucket shows (#473).
         var held = e.Source == RefundSource.Prepayments
             ? Math.Min(
                 await _balances.PrepaymentsHeldAsync(e.TenantId, e.BankAccountId, ct),
