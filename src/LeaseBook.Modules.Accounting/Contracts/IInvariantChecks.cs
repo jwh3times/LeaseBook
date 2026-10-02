@@ -22,7 +22,8 @@ public interface IInvariantChecks
     /// I7: held security deposit is ≥ 0 per (tenant, owner) bucket — dimension symmetry between a
     /// collection and its disposition.
     /// I8: every event_type posting an owner-attributed owner_equity line has a statement section.
-    /// I9: migration_clearing nets to $0 per basis.</summary>
+    /// I9: migration_clearing nets to $0 per basis.
+    /// I10: held prepayment is ≥ 0 per (tenant, bank) — the bank an application or refund draws on held it.</summary>
     Task<IReadOnlyList<InvariantViolation>> CheckCoreAsync(CancellationToken ct);
 
     Task<IReadOnlyList<InvariantViolation>> CheckEntriesBalanceAsync(CancellationToken ct);
@@ -34,6 +35,8 @@ public interface IInvariantChecks
     Task<IReadOnlyList<InvariantViolation>> CheckDepositLiabilitiesNonNegativeAsync(CancellationToken ct);
 
     Task<IReadOnlyList<InvariantViolation>> CheckDepositAttributionSymmetricAsync(CancellationToken ct);
+
+    Task<IReadOnlyList<InvariantViolation>> CheckPrepaymentBankAttributionAsync(CancellationToken ct);
 
     /// <summary>
     /// I8: reachability, not arithmetic. An owner-equity event type absent from

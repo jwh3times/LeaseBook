@@ -34,6 +34,7 @@ public sealed class AccountingExceptionStatusTests
             StatusCodes.Status422UnprocessableEntity),
         (new NoTrustAccountException(), StatusCodes.Status409Conflict),
         (new RefundBucketAmbiguousException(Guid.NewGuid()), StatusCodes.Status409Conflict),
+        (new PrepaymentBankAmbiguousException(Guid.NewGuid()), StatusCodes.Status409Conflict),
         (new RefundCheckClearedException(Guid.NewGuid()), StatusCodes.Status409Conflict),
         (new RefundCheckVoidRequiredException(Guid.NewGuid()), StatusCodes.Status409Conflict),
         // One row per held-fees shape reason: each carries its own wire code, and the corrected

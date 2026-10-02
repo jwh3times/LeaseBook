@@ -36,6 +36,22 @@ internal static class RefundChecks
 
     public static string SourceRef(Guid checkId) => SourceRefPrefix + checkId;
 
+    /// <summary>The source's name in a <see cref="RefundableBalance"/> and on the wire.</summary>
+    public static string SourceName(RefundSource source) =>
+        source == RefundSource.Deposits ? "deposit" : "prepayment";
+
+    /// <summary>
+    /// One tenant's positive held buckets for one source — what a refund (#473) or a prepayment
+    /// application (#475) may draw on. Callers read it under the posting lock, so the bucket they choose
+    /// is the one the template's guard re-reads.
+    /// </summary>
+    public static async Task<IReadOnlyList<RefundableBalance>> HeldBucketsAsync(
+        DbContext db, Guid tenantId, RefundSource source, CancellationToken ct)
+    {
+        var name = SourceName(source);
+        return (await ReadAsync(db, [tenantId], ct)).Where(b => b.Source == name).ToArray();
+    }
+
     /// <summary>Deterministic, so a second void of the same check is a duplicate rather than a re-post.</summary>
     public static string VoidSourceRef(Guid entryId) => $"refund-check-void:{entryId}";
 
@@ -50,8 +66,8 @@ internal static class RefundChecks
     /// <summary>
     /// Positive held balances per bucket. Prepayment lines are grouped per bank only, projecting null
     /// property/owner, so the bucket matches the per-bank guard in the <c>RefundIssued</c> template. A
-    /// prepayment bucket is also capped at the tenant's prepayment total, as that guard is: applying a
-    /// prepayment against another bank can leave one bucket positive and another negative.
+    /// prepayment bucket is also capped at the tenant's prepayment total, as that guard is: before #475 an
+    /// application could draw on another bank, leaving one bucket positive and another negative.
     /// </summary>
     public static async Task<IReadOnlyList<RefundableBalance>> ReadAsync(
         DbContext db, IReadOnlyCollection<Guid> tenantIds, CancellationToken ct)
@@ -80,13 +96,13 @@ internal static class RefundChecks
             ORDER BY 1, 2, 3
             """).ToListAsync(ct);
 
-        var prepaymentTotals = rows.Where(r => r.Source == "prepayment")
+        var prepaymentTotals = rows.Where(r => r.Source == SourceName(RefundSource.Prepayments))
             .GroupBy(r => r.TenantId)
             .ToDictionary(g => g.Key, g => g.Sum(r => r.Held));
         return rows
             .Select(r => r with
             {
-                Held = r.Source == "prepayment" ? Math.Min(r.Held, prepaymentTotals[r.TenantId]) : r.Held,
+                Held = r.Source == SourceName(RefundSource.Prepayments) ? Math.Min(r.Held, prepaymentTotals[r.TenantId]) : r.Held,
             })
             .Where(r => r.Held > 0)
             .Select(r => new RefundableBalance(r.TenantId, r.Source, r.BankAccountId, r.PropertyId, r.OwnerId, r.Held))

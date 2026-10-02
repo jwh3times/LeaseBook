@@ -49,7 +49,7 @@ export type ApplyPrepayment = {
     tenantId: string;
     amount: number | string;
     date: string;
-    bankAccountId: string;
+    bankAccountId: null | string;
     description: null | string;
     sourceRef: string;
     internalNote?: null | string;

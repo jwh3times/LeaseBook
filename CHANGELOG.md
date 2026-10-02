@@ -14,7 +14,17 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ## [Unreleased]
 
-- _Nothing yet._
+### Fixed
+
+- **Prepaid credit is applied from the bank that holds it.** Applying a tenant's prepayment to their
+  charges used to draw on the operating trust account whatever account the credit was collected into,
+  so one account went on reporting a prepayment for a tenant who no longer had one while another went
+  negative, and the owner's income sat in an account the cash never reached. The application now draws
+  on the account holding the credit, as a refund check does. When the credit is split across accounts,
+  the Apply dialog lists them with what each holds and asks which one to use; an account that holds
+  less than the amount is refused. The nightly invariant sweep gains a check (I10) that flags any
+  account whose held prepayment for a tenant is negative, which catches the shape in journals posted
+  before this fix.
 
 ## [0.23.0] - 2026-10-01
 

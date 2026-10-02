@@ -176,7 +176,8 @@ describe('ApplyModal', () => {
       <ApplyModal tenantId="t1" initialKind="prepayment" onClose={vi.fn()} onApplied={onApplied} />,
     );
 
-    await screen.findByText(/From Operating Trust/);
+    // A prepayment names no bank (#475), so the banks-loaded signal is the Apply button enabling.
+    await vi.waitFor(() => expect(screen.getByRole('button', { name: 'Apply' })).toBeEnabled());
     await userEvent.type(screen.getByLabelText('Amount'), '300');
     await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
 

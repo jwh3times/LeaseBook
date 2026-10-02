@@ -143,8 +143,10 @@ public sealed class PaymentLifecycleEvidenceTests(PostgresFixture fixture)
             var checks = new InvariantChecks(scope.Db);
             (await checks.CheckTrustEquationAsync(ct)).ShouldBeEmpty();
             var violations = await checks.CheckCoreAsync(ct);
-            violations.ShouldContain(v => v.Invariant == "I4");
-            violations.ShouldAllBe(v => v.Invariant == "I4");
+            // The same negative prepayment at both granularities: the tenant's total (I4) and, since it
+            // was all held in one bank, that bank's bucket (I10). Nothing else — the entry balances and the
+            // trust equation holds, which is what makes this return unsafe rather than visibly broken.
+            violations.Select(v => v.Invariant).Distinct().Order().ShouldBe(["I10", "I4"]);
         }, ct);
     }
 

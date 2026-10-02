@@ -159,9 +159,11 @@ demand.
 
 The same sweep checks the companion rules: every entry balances in each basis, no management-fee
 income line carries an owner's name, no held deposit or prepayment can go negative — and, because a
-deposit is owner-tagged, no _owner's_ held-deposit position can go negative either. That last check is
+deposit is owner-tagged, no _owner's_ held-deposit position can go negative either. That check is
 what catches a release booked against a different owner than the collection: the tenant's own total
-would still come to zero while the owner's column silently stayed high.
+would still come to zero while the owner's column silently stayed high. Prepayments get the same check
+per **bank**: no bank's held prepayment for a tenant can go negative, which catches credit applied from
+a bank that never received it.
 
 The sweep also checks one thing that is not about balances at all: that every kind of event crediting
 an owner is one the statement knows how to present. If a new kind of transaction reaches an owner's
@@ -255,6 +257,13 @@ excess into a prepayment. An _application_ has no such overflow, so applying a d
 (`insufficient_receivable`); the composer asks the user to lower the amount. Applying a deposit **to owner
 income** (damages) is deliberately _not_ capped — damages legitimately exceed any rent owed. This sits
 alongside the existing rule that an application can never exceed the deposit/prepayment actually held.
+
+**Which bank a prepayment is applied from.** Applying a prepayment draws on the bank that **holds** it,
+as a refund does ([ADR-050](adr/ADR-050-refund-checks.md), addendum) — the liability release and the
+owner's income both land on the bank the cash was collected into, never on one that did not receive
+it. When the tenant's prepaid credit sits in more than one bank, the apply dialog lists those banks
+with what each holds and the user chooses one (`prepayment_bank_ambiguous`); a bank that holds less
+than the amount is refused (`insufficient_liability`), even when the tenant's total would cover it.
 
 ### Open charges, allocation and aging
 
