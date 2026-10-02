@@ -141,6 +141,11 @@ Rules:
   (ADR-025): a literal throw discards the `code` and `correlationId` the server already sent, which
   is exactly what kept failed reads from ever rendering a support reference.
 - Export the key fn so mutations can invalidate by the same key
+- **A write carrying a secret skips `useMutation`.** The mutation cache keeps each call's `variables`,
+  so a bank routing or account number sent through `useMutation` stays in memory, readable from the
+  query client, after the save. Call the write function directly with local pending/error state, clear
+  the inputs on success, and cache only the server's masked response — as `BankMicrSection` does
+  (#474, ADR-051). Its test asserts neither cache holds the digits
 - Handle domain error codes (e.g., `'account_period_locked'`, `'duplicate_source_ref'`, `'insufficient_receivable'`) in `onError`, not via generic toast
 
 ---

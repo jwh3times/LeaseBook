@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using FluentValidation;
+using FluentValidation.Results;
 using LeaseBook.Modules.Payments.Domain;
 using LeaseBook.SharedKernel;
 using LeaseBook.SharedKernel.Cqrs;
@@ -34,7 +35,14 @@ internal sealed class GetBankMicrDetailsHandler(DbContext db) : IQueryHandler<Ge
 /// </summary>
 public sealed record SaveBankMicrDetails(
     Guid BankAccountId, string StockKind, string? RoutingNumber, string? OnUsAccountNumber,
-    decimal MicrOffsetXPoints, decimal MicrOffsetYPoints) : ICommand<BankMicrDetailsView>;
+    decimal MicrOffsetXPoints, decimal MicrOffsetYPoints) : ICommand<BankMicrDetailsView>
+{
+    /// <summary>A record prints every member; this one never prints the numbers.</summary>
+    public override string ToString() =>
+        $"{nameof(SaveBankMicrDetails)} {{ BankAccountId = {BankAccountId}, StockKind = {StockKind}, " +
+        $"RoutingNumber = {BankMicr.Redacted(RoutingNumber)}, OnUsAccountNumber = {BankMicr.Redacted(OnUsAccountNumber)}, " +
+        $"MicrOffsetXPoints = {MicrOffsetXPoints}, MicrOffsetYPoints = {MicrOffsetYPoints} }}";
+}
 
 public sealed class SaveBankMicrDetailsValidator : AbstractValidator<SaveBankMicrDetails>
 {
@@ -72,7 +80,12 @@ internal sealed class SaveBankMicrDetailsHandler(DbContext db, TimeProvider cloc
         var onUs = c.OnUsAccountNumber ?? row.OnUsAccountNumber;
         if (c.StockKind == CheckStockKinds.Blank && (routing is null || onUs is null))
         {
-            throw new ValidationException("Blank check stock needs the routing number and the On-Us field.");
+            // A field failure, so the 400 carries the reason the form shows (a bare message does not).
+            throw new ValidationException(
+            [
+                new ValidationFailure(nameof(SaveBankMicrDetails.StockKind),
+                    "Blank check stock needs the routing number and the On-Us field."),
+            ]);
         }
 
         row.StockKind = c.StockKind;
@@ -128,6 +141,21 @@ public static partial class BankMicr
         LastFourDigits(row?.OnUsAccountNumber),
         row?.MicrOffsetXPoints ?? 0m,
         row?.MicrOffsetYPoints ?? 0m);
+
+    /// <summary>How a number appears in any printed form of a request: whether it was sent, never what it is.</summary>
+    public static string Redacted(string? value) => value is null ? "null" : "[redacted]";
+
+    /// <summary>
+    /// Refuses to print a check or an alignment page on an account set to blank stock until the MICR line
+    /// can be printed (#474); see <see cref="RefundCheckConflictException.BlankStockUnsupported"/>.
+    /// </summary>
+    public static void EnsurePrintable(BankMicrDetailsView details)
+    {
+        if (details.StockKind == CheckStockKinds.Blank)
+        {
+            throw RefundCheckConflictException.BlankStockUnsupported();
+        }
+    }
 
     private static string? LastFourDigits(string? value) =>
         value is null ? null : new string(value.Where(char.IsAsciiDigit).TakeLast(4).ToArray());

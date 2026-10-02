@@ -212,6 +212,40 @@ public sealed class RefundCheckHttpTests(PostgresFixture fixture)
     }
 
     [Fact]
+    public async Task Nothing_prints_for_a_blank_stock_account_until_the_micr_line_can_be_printed()
+    {
+        // #474: blank stock is a saved setting before the MICR line exists. Printing a check on blank
+        // paper without it would produce a check no bank can read, so the print paths refuse.
+        var ct = TestContext.Current.CancellationToken;
+        var setup = await SetupAsync(ct);
+        var staff = await LoggedInClientAsync(setup.StaffEmail, ct);
+        var admin = await LoggedInClientAsync(await CreateUserAsync(setup.OrgId, "admin", Roles.PMAdmin, ct), ct);
+        var issued = await PostOkAsync<RefundCheckView>(staff, "/api/refund-checks", Body(setup, 1043), ct);
+
+        var saved = await admin.PutAsJsonAsync($"/api/refund-checks/micr/{setup.DepositBankId}", new
+        {
+            stockKind = "blank",
+            routingNumber = "111000012",
+            onUsAccountNumber = "123456789U",
+            micrOffsetXPoints = 0m,
+            micrOffsetYPoints = 0m,
+        }, ct);
+        saved.StatusCode.ShouldBe(HttpStatusCode.OK, await saved.Content.ReadAsStringAsync(ct));
+
+        var pdf = await staff.PostAsync($"/api/refund-checks/{issued.Id}/pdf", null, ct);
+        await ShouldBeProblemAsync(pdf, HttpStatusCode.Conflict, "blank_stock_unsupported", ct);
+        var alignment = await staff.PostAsync($"/api/refund-checks/print-settings/{setup.DepositBankId}/alignment", null, ct);
+        await ShouldBeProblemAsync(alignment, HttpStatusCode.Conflict, "blank_stock_unsupported", ct);
+
+        // Back on pre-printed stock it prints as before, and the refused attempt recorded no print.
+        (await admin.PutAsJsonAsync($"/api/refund-checks/micr/{setup.DepositBankId}",
+            new { stockKind = "preprinted", micrOffsetXPoints = 0m, micrOffsetYPoints = 0m }, ct)).StatusCode.ShouldBe(HttpStatusCode.OK);
+        (await staff.PostAsync($"/api/refund-checks/{issued.Id}/pdf", null, ct)).StatusCode.ShouldBe(HttpStatusCode.OK);
+        (await GetAsync<CheckPage>(staff, $"/api/refund-checks?tenantId={setup.TenantId}", ct)).Items
+            .ShouldHaveSingleItem().PrintCount.ShouldBe(1);
+    }
+
+    [Fact]
     public async Task A_payee_address_is_required()
     {
         var ct = TestContext.Current.CancellationToken;

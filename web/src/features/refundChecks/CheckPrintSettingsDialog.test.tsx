@@ -211,6 +211,12 @@ describe('CheckPrintSettingsDialog', () => {
       expect(
         within(micr).getByText('Only an administrator can change the MICR details.'),
       ).toBeInTheDocument();
+      // Until LeaseBook prints the MICR line, a blank-stock account prints nothing — and says so.
+      expect(
+        within(micr).getByText(
+          'Checks on this account won’t print until LeaseBook can print the MICR line.',
+        ),
+      ).toBeInTheDocument();
       expect(within(micr).queryByRole('textbox')).toBeNull();
       expect(within(micr).queryByRole('button', { name: 'Save MICR details' })).toBeNull();
     });

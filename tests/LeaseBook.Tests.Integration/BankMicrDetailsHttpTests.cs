@@ -84,7 +84,11 @@ public sealed class BankMicrDetailsHttpTests(PostgresFixture fixture)
         var url = $"/api/refund-checks/micr/{setup.BankId}";
         var body = new { stockKind = "blank", routingNumber = Routing, onUsAccountNumber = OnUs, micrOffsetXPoints = 0m, micrOffsetYPoints = 0m };
 
-        (await staff.PutAsJsonAsync(url, body, ct)).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        var refused = await staff.PutAsJsonAsync(url, body, ct);
+        refused.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        var refusedBody = await refused.Content.ReadAsStringAsync(ct);
+        refusedBody.ShouldNotContain(Routing);
+        refusedBody.ShouldNotContain("123456789");
         (await ReadAsync(staff, url, ct)).RoutingNumberLast4.ShouldBeNull();
 
         (await admin.PutAsJsonAsync(url, body, ct)).StatusCode.ShouldBe(HttpStatusCode.OK);
@@ -100,6 +104,7 @@ public sealed class BankMicrDetailsHttpTests(PostgresFixture fixture)
         var setup = await SetupAsync(ct);
         var admin = await LoggedInClientAsync(setup.AdminEmail, ct);
         var url = $"/api/refund-checks/micr/{setup.BankId}";
+
         (await admin.PutAsJsonAsync(url, new { stockKind = "blank", routingNumber = Routing, onUsAccountNumber = OnUs, micrOffsetXPoints = 0m, micrOffsetYPoints = 0m }, ct))
             .StatusCode.ShouldBe(HttpStatusCode.OK);
         (await admin.PutAsJsonAsync(url, new { stockKind = "blank", routingNumber = "540900071", micrOffsetXPoints = 0m, micrOffsetYPoints = 0m }, ct))
@@ -176,6 +181,28 @@ public sealed class BankMicrDetailsHttpTests(PostgresFixture fixture)
         var body = await response.Content.ReadAsStringAsync(ct);
         response.StatusCode.ShouldBe(HttpStatusCode.BadRequest, body);
         JsonDocument.Parse(body).RootElement.GetProperty("code").GetString().ShouldBe("validation_failed");
+
+        // A refusal never echoes what was submitted.
+        foreach (var submitted in new[] { routing, onUs }.Where(v => v is { Length: >= 4 }))
+        {
+            body.ShouldNotContain(new string(submitted!.Where(char.IsAsciiDigit).ToArray()));
+        }
+    }
+
+    [Fact]
+    public async Task Blank_stock_without_numbers_is_refused_with_a_reason_the_form_can_show()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var setup = await SetupAsync(ct);
+        var admin = await LoggedInClientAsync(setup.AdminEmail, ct);
+
+        var response = await admin.PutAsJsonAsync($"/api/refund-checks/micr/{setup.BankId}",
+            new { stockKind = "blank", micrOffsetXPoints = 0m, micrOffsetYPoints = 0m }, ct);
+        var body = await response.Content.ReadAsStringAsync(ct);
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest, body);
+        var errors = JsonDocument.Parse(body).RootElement.GetProperty("errors");
+        errors.GetProperty("StockKind")[0].GetString()
+            .ShouldBe("Blank check stock needs the routing number and the On-Us field.");
     }
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);

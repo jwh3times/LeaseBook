@@ -35,6 +35,11 @@ position comes from Standard 006. A per-account offset of at most a quarter inch
 whole line, independently of the print offsets that move the other fields, so an operator can match
 the bank's specification sheet. Bank test-check approval is the operator's gate before any live check.
 
+**Blank stock fails closed until the MICR line prints.** The setting ships before the MICR rendering
+does. Until it lands, printing a check or an alignment page on an account set to blank stock is
+refused with `blank_stock_unsupported` (409), and the settings dialog says so, because a check on
+blank paper without a MICR line is one no bank can read. No print is recorded for a refused attempt.
+
 **The numbers are write-only, encrypted, and administrator-owned.** `bank_micr_profiles` (Payments,
 RLS-scoped with the deny-by-default persona gate) holds, per bank account, the stock kind, the
 routing number, the On-Us field and the MICR line offsets.

@@ -137,7 +137,16 @@ export function BankMicrSection({ bankAccountId }: BankMicrSectionProps) {
       ) : (
         <>
           <ul className="pf-micr-summary t2 fs13">
-            <li>{STOCK_LABEL[stockKindOf(details.data)]}</li>
+            <li>
+              {STOCK_LABEL[stockKindOf(details.data)]}
+              {stockKindOf(details.data) === 'blank' && (
+                // #474 ships in steps: the setting exists before the MICR line does, and the server
+                // refuses to print on blank stock until it does (blank_stock_unsupported).
+                <div className="t3 fs12">
+                  Checks on this account won’t print until LeaseBook can print the MICR line.
+                </div>
+              )}
+            </li>
             <li>
               {details.data.routingNumberLast4
                 ? `Routing number ending ${details.data.routingNumberLast4}`

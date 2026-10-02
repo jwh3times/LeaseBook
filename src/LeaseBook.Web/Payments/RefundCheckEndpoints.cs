@@ -24,7 +24,14 @@ public sealed record CheckPrintSettingsBody(decimal OffsetXPoints, decimal Offse
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record BankMicrDetailsBody(
     string StockKind, string? RoutingNumber, string? OnUsAccountNumber, decimal MicrOffsetXPoints,
-    decimal MicrOffsetYPoints);
+    decimal MicrOffsetYPoints)
+{
+    /// <summary>A record prints every member; this one never prints the numbers.</summary>
+    public override string ToString() =>
+        $"{nameof(BankMicrDetailsBody)} {{ StockKind = {StockKind}, RoutingNumber = {BankMicr.Redacted(RoutingNumber)}, " +
+        $"OnUsAccountNumber = {BankMicr.Redacted(OnUsAccountNumber)}, MicrOffsetXPoints = {MicrOffsetXPoints}, " +
+        $"MicrOffsetYPoints = {MicrOffsetYPoints} }}";
+}
 
 /// <summary>
 /// Staff refund-check surface (#473). Issue, list and void ride the ordinary organization transaction;
@@ -94,6 +101,7 @@ public sealed class RefundCheckEndpoints : IEndpointModule
         group.MapPost("/print-settings/{bankAccountId:guid}/alignment", async (
             Guid bankAccountId, ISender sender, TimeProvider clock, HttpContext http, CancellationToken ct) =>
         {
+            BankMicr.EnsurePrintable(await sender.Query(new GetBankMicrDetails(bankAccountId), ct));
             var settings = await sender.Query(new GetCheckPrintSettings(bankAccountId), ct);
             var sample = RefundCheckPdf.AlignmentSample(DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime));
             http.Response.Headers.CacheControl = "no-store";

@@ -38,4 +38,18 @@ public sealed class BankMicrRulesTests
     [InlineData("", false)]
     public void The_on_us_field_takes_only_what_the_micr_font_prints(string field, bool valid) =>
         BankMicr.IsValidOnUsField(field).ShouldBe(valid);
+
+    [Fact]
+    public void Printing_the_command_or_the_request_body_never_shows_the_numbers()
+    {
+        var command = new SaveBankMicrDetails(Guid.NewGuid(), "blank", "111000012", "123456789U", 1m, 2m);
+        var body = new LeaseBook.Web.Payments.BankMicrDetailsBody("blank", "111000012", "123456789U", 1m, 2m);
+
+        foreach (var text in new[] { command.ToString(), body.ToString() })
+        {
+            text.ShouldNotContain("111000012");
+            text.ShouldNotContain("123456789");
+            text.ShouldContain("blank"); // still useful in a log line
+        }
+    }
 }
