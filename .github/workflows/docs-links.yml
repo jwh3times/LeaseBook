@@ -73,12 +73,20 @@ jobs:
           # genuinely rots, and this repository does not add open-ended ignores without an un-mute
           # signal. If resets persist despite this, the next step is a scoped exclude PLUS a check
           # that fails when the excluded link starts working again.
+          #
+          # --remap github.com/<owner>/<repo>/blob/<ref>/<path> → raw.githubusercontent.com: GitHub's
+          # rendered file page answers bots with a sustained 503 (every source-file citation failed on
+          # main and on PR #485 for over an hour on 2026-10-02, and again from a laptop) while the
+          # raw file answers 200. The raw URL still proves what the link claims — that file exists at
+          # that ref — and answers 404 when it does not, so a citation that rots still fails. Not an
+          # exclude: nothing stops being checked. (No cited blob link carries a #fragment.)
           args: >-
             --no-progress
             --include-fragments
             --max-concurrency 16
             --retry-wait-time 3
             --accept '200..=299, 429'
+            --remap '^https://github\.com/([^/]+)/([^/]+)/blob/(.+)$ https://raw.githubusercontent.com/$1/$2/$3'
             --exclude '^https?://(localhost|127\.0\.0\.1)'
             --exclude '${{ steps.release-links.outputs.compare }}'
             --exclude '${{ steps.release-links.outputs.release }}'
