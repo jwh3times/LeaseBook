@@ -23,7 +23,7 @@ namespace LeaseBook.Tests.Integration;
 /// only an administrator may change them, and each org sees only its own. Each test seeds its own org.
 /// </summary>
 [Collection(nameof(DatabaseCollection))]
-public sealed class BankMicrDetailsHttpTests(PostgresFixture fixture)
+public sealed partial class BankMicrDetailsHttpTests(PostgresFixture fixture)
 {
     private const string Password = "Tarheel-Trust-2026!";
     private const string Routing = "111000012";
@@ -182,10 +182,17 @@ public sealed class BankMicrDetailsHttpTests(PostgresFixture fixture)
         response.StatusCode.ShouldBe(HttpStatusCode.BadRequest, body);
         JsonDocument.Parse(body).RootElement.GetProperty("code").GetString().ShouldBe("validation_failed");
 
-        // A refusal never echoes what was submitted.
-        foreach (var submitted in new[] { routing, onUs }.Where(v => v is { Length: >= 4 }))
+        // A refusal never echoes what was submitted. Compared without the random support references — a
+        // 32-hex correlation id contains "12" about one run in ten — and only for runs of four or more
+        // digits, the shortest that could say anything about an account.
+        var echoable = RandomReferences().Replace(body, "\"\"");
+        foreach (var submitted in new[] { routing, onUs })
         {
-            body.ShouldNotContain(new string(submitted!.Where(char.IsAsciiDigit).ToArray()));
+            var digits = new string((submitted ?? "").Where(char.IsAsciiDigit).ToArray());
+            if (digits.Length >= 4)
+            {
+                echoable.ShouldNotContain(digits);
+            }
         }
     }
 
@@ -206,6 +213,10 @@ public sealed class BankMicrDetailsHttpTests(PostgresFixture fixture)
     }
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+
+    /// <summary>The problem body's per-request references (W3C trace id), which are random hex.</summary>
+    [System.Text.RegularExpressions.GeneratedRegex("\"(?:correlationId|traceId)\"\\s*:\\s*\"[^\"]*\"")]
+    private static partial System.Text.RegularExpressions.Regex RandomReferences();
 
     /// <summary>The wire shape, read independently of the production record.</summary>
     private sealed record MicrView(Guid BankAccountId, string StockKind, string? RoutingNumberLast4,
