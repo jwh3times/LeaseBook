@@ -1,4 +1,9 @@
-import { useQuery, type QueryClient, type UseQueryResult } from '@tanstack/react-query';
+import {
+  keepPreviousData,
+  useQuery,
+  type QueryClient,
+  type UseQueryResult,
+} from '@tanstack/react-query';
 import {
   download,
   getApiRefundChecks,
@@ -14,20 +19,34 @@ import {
   type IssueRefundCheckBody,
   type RefundCheckFund,
   type RefundCheckOptions,
+  type RefundCheckPage,
   type RefundCheckView,
 } from '@/api';
 import { num } from '@/lib/directory';
 
-export type { CheckPrintSettingsView, IssueRefundCheckBody, RefundCheckFund, RefundCheckView };
+export type {
+  CheckPrintSettingsView,
+  IssueRefundCheckBody,
+  RefundCheckFund,
+  RefundCheckPage,
+  RefundCheckView,
+};
 
 // ---- keys ------------------------------------------------------------------
 
 /** What one tenant's refund check can draw on — every held bucket and its bank's next number. */
 export const refundOptionsKey = (tenantId: string) => ['refund-check-options', tenantId] as const;
 
-/** The check list. Both filters are optional server-side; the SPA always passes exactly one. */
-export const refundChecksKey = (filter: { bankAccountId?: string; tenantId?: string }) =>
-  ['refund-checks', filter] as const;
+/**
+ * The check list. Both filters are optional server-side; the SPA always passes exactly one. A page and
+ * status ride in the same object, so invalidating `{ bankAccountId }` refreshes every page and filter.
+ */
+export const refundChecksKey = (filter: {
+  bankAccountId?: string;
+  tenantId?: string;
+  status?: RefundCheckFilter;
+  page?: number;
+}) => ['refund-checks', filter] as const;
 
 export const checkPrintSettingsKey = (bankAccountId: string) =>
   ['check-print-settings', bankAccountId] as const;
@@ -49,13 +68,30 @@ export function useRefundCheckOptions(
   });
 }
 
-export function useRefundChecks(bankAccountId: string): UseQueryResult<RefundCheckView[]> {
+/** `all` lists every check; `outstanding` asks the server for the ones not yet cleared or voided (#476). */
+export type RefundCheckFilter = 'all' | 'outstanding';
+
+export const REFUND_CHECK_PAGE_SIZE = 50;
+
+export function useRefundChecks(
+  bankAccountId: string,
+  { status, page }: { status: RefundCheckFilter; page: number },
+): UseQueryResult<RefundCheckPage> {
   return useQuery({
-    queryKey: refundChecksKey({ bankAccountId }),
+    queryKey: refundChecksKey({ bankAccountId, status, page }),
     enabled: bankAccountId !== '',
+    // Paging and filtering swap the key; keeping the last rows mounted keeps the pager (and focus).
+    placeholderData: keepPreviousData,
     queryFn: () =>
       unwrap(
-        getApiRefundChecks({ query: { bankAccountId } }),
+        getApiRefundChecks({
+          query: {
+            bankAccountId,
+            status: status === 'outstanding' ? 'outstanding' : undefined,
+            page,
+            pageSize: REFUND_CHECK_PAGE_SIZE,
+          },
+        }),
         'Failed to load the refund checks for this account.',
       ),
   });

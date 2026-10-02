@@ -3,7 +3,7 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { RefundCheckView } from '@/api';
+import type { RefundCheckPage, RefundCheckView } from '@/api';
 import { server } from '@/test/mocks/server';
 import { RefundChecksPanel } from './RefundChecksPanel';
 
@@ -46,6 +46,14 @@ const CHECKS = [
   check({ id: 'c1', checkNumber: 1043, status: 'voided', voidEntryId: 'rev1', printCount: 1 }),
 ];
 
+/** One page of the list as the server sends it; `total` defaults to a single complete page. */
+function pageOf(
+  items: RefundCheckView[],
+  { total = items.length, page = 1, pageSize = 50 } = {},
+): RefundCheckPage {
+  return { items, total, page, pageSize };
+}
+
 function renderPanel() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -73,7 +81,7 @@ beforeEach(() => {
 
 describe('RefundChecksPanel', () => {
   it('labels every status in words with its own icon, and says why an action is unavailable', async () => {
-    server.use(http.get('/api/refund-checks', () => HttpResponse.json(CHECKS)));
+    server.use(http.get('/api/refund-checks', () => HttpResponse.json(pageOf(CHECKS))));
     renderPanel();
 
     await screen.findByRole('table', { name: 'Refund checks on Security Deposit Trust' });
@@ -113,7 +121,7 @@ describe('RefundChecksPanel', () => {
   });
 
   it('shows an empty state only for a read that succeeded with no checks', async () => {
-    server.use(http.get('/api/refund-checks', () => HttpResponse.json([])));
+    server.use(http.get('/api/refund-checks', () => HttpResponse.json(pageOf([]))));
     renderPanel();
     expect(await screen.findByText('No refund checks on this account')).toBeInTheDocument();
   });
@@ -141,7 +149,7 @@ describe('RefundChecksPanel', () => {
     server.use(
       http.get('/api/refund-checks', () => {
         listReads += 1;
-        return HttpResponse.json(CHECKS);
+        return HttpResponse.json(pageOf(CHECKS));
       }),
       http.post('/api/refund-checks/:id/pdf', ({ params }) => {
         printed = params.id as string;
@@ -162,7 +170,7 @@ describe('RefundChecksPanel', () => {
   it('voids with a required reason and reports a check that cleared meanwhile', async () => {
     let body: unknown;
     server.use(
-      http.get('/api/refund-checks', () => HttpResponse.json(CHECKS)),
+      http.get('/api/refund-checks', () => HttpResponse.json(pageOf(CHECKS))),
       http.post('/api/refund-checks/:id/void', async ({ request }) => {
         body = await request.json();
         return HttpResponse.json(
@@ -194,11 +202,13 @@ describe('RefundChecksPanel', () => {
     server.use(
       http.get('/api/refund-checks', () =>
         HttpResponse.json(
-          voided
-            ? CHECKS.map((c) =>
-                c.id === 'c4' ? { ...c, status: 'voided', voidEntryId: 'rev' } : c,
-              )
-            : CHECKS,
+          pageOf(
+            voided
+              ? CHECKS.map((c) =>
+                  c.id === 'c4' ? { ...c, status: 'voided', voidEntryId: 'rev' } : c,
+                )
+              : CHECKS,
+          ),
         ),
       ),
       http.post('/api/refund-checks/:id/void', () => {
@@ -217,5 +227,150 @@ describe('RefundChecksPanel', () => {
 
     await vi.waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     await vi.waitFor(() => expect(within(rowFor(1046)).getByText('Voided')).toBeInTheDocument());
+  });
+
+  it('pages through every check on the server and counts all of them, not just the page', async () => {
+    const requested: { page: string | null; status: string | null }[] = [];
+    server.use(
+      http.get('/api/refund-checks', ({ request }) => {
+        const query = new URL(request.url).searchParams;
+        requested.push({ page: query.get('page'), status: query.get('status') });
+        const page = Number(query.get('page') ?? '1');
+        return HttpResponse.json(
+          pageOf([check({ id: `p${page}`, checkNumber: 2000 + page })], { total: 120, page }),
+        );
+      }),
+    );
+    renderPanel();
+
+    expect(await screen.findByText('120 checks · Security Deposit Trust')).toBeInTheDocument();
+    expect(screen.getByText('1–50 of 120')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Previous page' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: 'Next page' }));
+    expect(await screen.findByText('51–100 of 120')).toBeInTheDocument();
+    expect(rowFor(2002)).toBeDefined();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Next page' }));
+    expect(await screen.findByText('101–120 of 120')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Next page' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+    expect(requested.map((r) => r.page)).toEqual(['1', '2', '3']);
+    expect(requested.every((r) => r.status === null)).toBe(true);
+  });
+
+  it('filters to outstanding checks on the server and starts again from the first page', async () => {
+    const requested: { page: string | null; status: string | null }[] = [];
+    server.use(
+      http.get('/api/refund-checks', ({ request }) => {
+        const query = new URL(request.url).searchParams;
+        const status = query.get('status');
+        const page = Number(query.get('page') ?? '1');
+        requested.push({ page: query.get('page'), status });
+        return HttpResponse.json(
+          status === 'outstanding'
+            ? pageOf([check({ id: 'o1', checkNumber: 1001 })], { total: 3 })
+            : pageOf([check({ id: `p${page}`, checkNumber: 2000 + page })], { total: 120, page }),
+        );
+      }),
+    );
+    renderPanel();
+
+    const all = await screen.findByRole('button', { name: 'All' });
+    expect(all).toHaveAttribute('aria-pressed', 'true');
+    await userEvent.click(await screen.findByRole('button', { name: 'Next page' }));
+    await screen.findByText('51–100 of 120');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Outstanding' }));
+    expect(await screen.findByText('3 outstanding · Security Deposit Trust')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Outstanding' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(rowFor(1001)).toBeDefined();
+    // Everything fits on one page, so there is nothing to page through.
+    expect(screen.queryByRole('button', { name: 'Next page' })).toBeNull();
+    expect(requested.at(-1)).toEqual({ page: '1', status: 'outstanding' });
+  });
+
+  it('says there is nothing outstanding rather than nothing at all when the filter is empty', async () => {
+    server.use(
+      http.get('/api/refund-checks', ({ request }) =>
+        HttpResponse.json(
+          new URL(request.url).searchParams.get('status') === 'outstanding'
+            ? pageOf([])
+            : pageOf(CHECKS),
+        ),
+      ),
+    );
+    renderPanel();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Outstanding' }));
+    expect(
+      await screen.findByText('No outstanding refund checks on this account'),
+    ).toBeInTheDocument();
+    expect(screen.getByText('0 outstanding · Security Deposit Trust')).toBeInTheDocument();
+  });
+
+  it('steps back a page when the page it is on empties, instead of claiming there are no checks', async () => {
+    let total = 51;
+    server.use(
+      http.get('/api/refund-checks', ({ request }) => {
+        const page = Number(new URL(request.url).searchParams.get('page') ?? '1');
+        if (page === 1) return HttpResponse.json(pageOf([check({ id: 'first' })], { total }));
+        return HttpResponse.json(
+          total > 50
+            ? pageOf([check({ id: 'last', checkNumber: 1099 })], { total, page })
+            : pageOf([], { total, page }),
+        );
+      }),
+      http.post('/api/refund-checks/:id/pdf', () => {
+        // Meanwhile another check was voided elsewhere: the refreshed list is one shorter.
+        total = 50;
+        return new HttpResponse(new Blob(['%PDF-1.7']), {
+          headers: { 'Content-Type': 'application/pdf' },
+        });
+      }),
+    );
+    renderPanel();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Next page' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Print check #1099' }));
+
+    expect(await screen.findByText('50 checks · Security Deposit Trust')).toBeInTheDocument();
+    await vi.waitFor(() => expect(rowFor(1043)).toBeDefined());
+    expect(screen.queryByText('No refund checks on this account')).toBeNull();
+  });
+
+  it('keeps keyboard focus on the pager while the next page loads and at the last page', async () => {
+    server.use(
+      http.get('/api/refund-checks', async ({ request }) => {
+        const page = Number(new URL(request.url).searchParams.get('page') ?? '1');
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        return HttpResponse.json(
+          pageOf([check({ id: `p${page}`, checkNumber: 2000 + page })], { total: 60, page }),
+        );
+      }),
+    );
+    renderPanel();
+
+    const next = await screen.findByRole('button', { name: 'Next page' });
+    next.focus();
+    await userEvent.keyboard('{Enter}');
+    expect(await screen.findByText('51–60 of 60')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Next page' })).toHaveFocus();
+    expect(screen.getByRole('button', { name: 'Next page' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+
+    // At the end, Enter again changes nothing.
+    await userEvent.keyboard('{Enter}');
+    expect(screen.getByText('51–60 of 60')).toBeInTheDocument();
   });
 });

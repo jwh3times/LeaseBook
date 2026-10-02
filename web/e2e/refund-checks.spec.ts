@@ -4,8 +4,8 @@ import { captureDownload, DEMO_ADMIN, runA11y, signIn } from './helpers';
 
 // Refund checks (#473), end to end against the seeded demo org: issue a check for Jasmine Carter's
 // held security deposit (1,450.00 on the Security Deposit Trust — DemoJournalSeed's `DepositCr(T1, O1)`)
-// inside the ≤ 4 interaction budget, print it, find it Outstanding on Banking, void it, and see the
-// deposit held restored.
+// inside the ≤ 4 interaction budget, print it, find it Outstanding on Banking — also with the list
+// narrowed to outstanding checks (#476) — void it, and see the deposit held restored.
 //
 // Like the M3 ledger specs, this mutates the demo org only with a check it then voids: the reversal
 // restores the held deposit and nets the withdrawal out of the register, so the golden journal figures
@@ -123,12 +123,26 @@ test('issues, prints and voids a deposit refund check within the ≤ 4 interacti
   await expect(row).toContainText('Outstanding');
   await expect(row).toContainText('1×');
 
-  // Void it with a reason.
+  // Narrowed to outstanding checks (#476) — a filter the server applies — the check is still listed.
+  const filter = page.getByRole('group', { name: 'Show' });
+  await filter.getByRole('button', { name: 'Outstanding' }).click();
+  await expect(filter.getByRole('button', { name: 'Outstanding' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await expect(page.getByText(/^\d+ outstanding · Security Deposit Trust$/)).toBeVisible();
+  await expect(row).toContainText('Outstanding');
+
+  // Void it with a reason. Once voided it is no longer outstanding, so it leaves this view.
   await row.getByRole('button', { name: `Void check #${checkNumber}` }).click();
   const voidDialog = page.getByRole('dialog', { name: `Void check #${checkNumber}` });
   await voidDialog.getByLabel('Reason (internal note)').fill('e2e cleanup');
   await voidDialog.getByRole('button', { name: 'Void check' }).click();
   await expect(voidDialog).toBeHidden();
+  await expect(row).toHaveCount(0);
+
+  // Every check, voided ones included, is back under All.
+  await filter.getByRole('button', { name: 'All' }).click();
   await expect(row).toContainText('Voided');
   await expect(row.getByRole('button', { name: `Void check #${checkNumber}` })).toBeDisabled();
   await expect(row.getByRole('button', { name: /print check #/i })).toBeDisabled();

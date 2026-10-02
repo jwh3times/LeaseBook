@@ -91,3 +91,29 @@ label.pf-refund-fund:has(input:focus-visible) {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
+
+/* #476: the All/Outstanding filter beside Print settings, and the pager under the check list. */
+.pf-refund-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--gap);
+}
+.pf-refund-filter {
+  display: flex;
+  gap: 6px;
+}
+.pf-refund-pager {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--gap);
+  padding: var(--gap);
+  border-top: 1px solid var(--border);
+}
+/* The pager's ends are aria-disabled rather than disabled so focus stays put; look the same as :disabled. */
+.pf-refund-pager .pf-btn[aria-disabled='true'] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
