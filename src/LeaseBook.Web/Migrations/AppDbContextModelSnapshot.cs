@@ -1417,6 +1417,54 @@ namespace LeaseBook.Web.Migrations
                     b.ToTable("bulk_run_items", (string)null);
                 });
 
+            modelBuilder.Entity("LeaseBook.Modules.Payments.Domain.CheckPrintSetting", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("BankAccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("bank_account_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<decimal>("OffsetXPoints")
+                        .HasPrecision(6, 2)
+                        .HasColumnType("numeric(6,2)")
+                        .HasColumnName("offset_x_points");
+
+                    b.Property<decimal>("OffsetYPoints")
+                        .HasPrecision(6, 2)
+                        .HasColumnType("numeric(6,2)")
+                        .HasColumnName("offset_y_points");
+
+                    b.Property<Guid>("OrgId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("org_id");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_check_print_settings");
+
+                    b.HasIndex("OrgId", "BankAccountId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_check_print_settings_org_id_bank_account_id");
+
+                    b.ToTable("check_print_settings", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_check_print_settings_offset_x", "offset_x_points BETWEEN -72 AND 72");
+
+                            t.HasCheckConstraint("ck_check_print_settings_offset_y", "offset_y_points BETWEEN -72 AND 72");
+                        });
+                });
+
             modelBuilder.Entity("LeaseBook.Modules.Payments.Domain.PaymentEffect", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1766,6 +1814,155 @@ namespace LeaseBook.Web.Migrations
 
                             t.HasCheckConstraint("ck_payment_operation_status", "status IN ('Requested','Processing','Failed','Settled','NeedsReview')");
                         });
+                });
+
+            modelBuilder.Entity("LeaseBook.Modules.Payments.Domain.RefundCheck", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("AddressLine1")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("address_line1");
+
+                    b.Property<string>("AddressLine2")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("address_line2");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(14, 2)
+                        .HasColumnType("numeric(14,2)")
+                        .HasColumnName("amount");
+
+                    b.Property<Guid>("BankAccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("bank_account_id");
+
+                    b.Property<int>("CheckNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("check_number");
+
+                    b.Property<string>("City")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("city");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("EntryId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("entry_id");
+
+                    b.Property<DateOnly>("IssueDate")
+                        .HasColumnType("date")
+                        .HasColumnName("issue_date");
+
+                    b.Property<Guid>("Key")
+                        .HasColumnType("uuid")
+                        .HasColumnName("key");
+
+                    b.Property<string>("Memo")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("memo");
+
+                    b.Property<Guid>("OrgId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("org_id");
+
+                    b.Property<string>("PayeeName")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("payee_name");
+
+                    b.Property<string>("PostalCode")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("postal_code");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("source");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(2)
+                        .HasColumnType("character varying(2)")
+                        .HasColumnName("state");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_refund_checks");
+
+                    b.HasAlternateKey("OrgId", "Id")
+                        .HasName("ak_refund_checks_org_id_id");
+
+                    b.HasIndex("OrgId", "EntryId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_refund_checks_org_id_entry_id");
+
+                    b.HasIndex("OrgId", "Key")
+                        .IsUnique()
+                        .HasDatabaseName("ix_refund_checks_org_id_key");
+
+                    b.HasIndex("OrgId", "TenantId")
+                        .HasDatabaseName("ix_refund_checks_org_id_tenant_id");
+
+                    b.HasIndex("OrgId", "BankAccountId", "CheckNumber")
+                        .IsUnique()
+                        .HasDatabaseName("ix_refund_checks_org_id_bank_account_id_check_number");
+
+                    b.ToTable("refund_checks", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_refund_checks_amount", "amount > 0");
+
+                            t.HasCheckConstraint("ck_refund_checks_check_number", "check_number > 0");
+
+                            t.HasCheckConstraint("ck_refund_checks_source", "source IN ('deposit','prepayment')");
+                        });
+                });
+
+            modelBuilder.Entity("LeaseBook.Modules.Payments.Domain.RefundCheckPrint", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("CheckId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("check_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("OrgId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("org_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_refund_check_prints");
+
+                    b.HasIndex("OrgId", "CheckId")
+                        .HasDatabaseName("ix_refund_check_prints_org_id_check_id");
+
+                    b.ToTable("refund_check_prints", (string)null);
                 });
 
             modelBuilder.Entity("LeaseBook.Modules.Payments.Domain.SimulatedCollection", b =>
@@ -2937,6 +3134,17 @@ namespace LeaseBook.Web.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_payment_operations_asp_net_users_org_id_user_id");
+                });
+
+            modelBuilder.Entity("LeaseBook.Modules.Payments.Domain.RefundCheckPrint", b =>
+                {
+                    b.HasOne("LeaseBook.Modules.Payments.Domain.RefundCheck", null)
+                        .WithMany()
+                        .HasForeignKey("OrgId", "CheckId")
+                        .HasPrincipalKey("OrgId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_refund_check_prints_refund_checks_org_id_check_id");
                 });
 
             modelBuilder.Entity("LeaseBook.Modules.Reporting.Delivery.StatementDeliveryAttempt", b =>

@@ -133,6 +133,17 @@ _Avoid_: deposit account, deposit bank
 The property management company's own non-trust bank account. It is outside the trust equation.
 _Avoid_: operating account, management operating account
 
+**Refund check**:
+A check that returns a tenant's held security deposit or prepaid credit. It posts when issued, draws on
+the bank account that holds that liability, and is identified by its number on that bank account. It is
+voided from the check, never with the generic void (ADR-050).
+_Avoid_: refund payment, disbursement (a disbursement pays an owner)
+
+**Outstanding check**:
+An issued check whose bank line has not cleared. It is already out of the book balance and shows as an
+uncleared withdrawal in the register until the bank pays it.
+_Avoid_: pending check, open check
+
 ### Dashboard financial metrics
 
 **Trust total**:

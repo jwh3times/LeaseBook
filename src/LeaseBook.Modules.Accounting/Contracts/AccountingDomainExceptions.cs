@@ -279,3 +279,50 @@ public sealed class NoTrustAccountException()
     : AccountingDomainException(
         "no_trust_account",
         "No active trust bank account was found. Create one before running disbursements.");
+
+/// <summary>
+/// A refund check would draw on a tenant's held liability that sits in more than one bucket (bank, and
+/// for deposits property/owner), and the caller did not name one (409, #473). The bank is never inferred
+/// by guessing: the caller picks one of the held buckets.
+/// </summary>
+public sealed class RefundBucketAmbiguousException(Guid tenantId)
+    : AccountingDomainException(
+        "refund_bucket_ambiguous",
+        "This tenant's held funds sit in more than one account. Choose which one to refund from.")
+{
+    public Guid TenantId { get; } = tenantId;
+}
+
+/// <summary>
+/// Applying a prepayment would draw on a tenant's prepaid credit held in more than one bank, and the caller
+/// did not name one (409, #475). As with refunds, the bank is never guessed: the caller picks one that
+/// holds the prepayment.
+/// </summary>
+public sealed class PrepaymentBankAmbiguousException(Guid tenantId)
+    : AccountingDomainException(
+        "prepayment_bank_ambiguous",
+        "This tenant's prepaid credit sits in more than one account. Choose which one to apply from.")
+{
+    public Guid TenantId { get; } = tenantId;
+}
+
+/// <summary>A refund check whose bank line is cleared or reconciled can no longer be voided (409, #473).</summary>
+public sealed class RefundCheckClearedException(Guid entryId)
+    : AccountingDomainException(
+        "refund_check_cleared",
+        "This check has cleared the bank, so it can no longer be voided.")
+{
+    public Guid EntryId { get; } = entryId;
+}
+
+/// <summary>
+/// The generic entry void was asked to reverse a refund check (409, #473). Checks are voided through the
+/// refund-check void, which keeps the check record, its clearance and its number in step.
+/// </summary>
+public sealed class RefundCheckVoidRequiredException(Guid entryId)
+    : AccountingDomainException(
+        "refund_check_void_required",
+        "This entry is a refund check. Void it from the check instead.")
+{
+    public Guid EntryId { get; } = entryId;
+}

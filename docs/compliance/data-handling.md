@@ -57,6 +57,7 @@ global-class.
 | Recipient email of a statement send                 | `statement_delivery_attempts` (Reporting) | One row per send of a statement artifact            |
 | Verbatim imported records (names, emails, balances) | `import_rows` (Onboarding)                | Raw and mapped migration data, kept as import audit |
 | Journal entry description and internal note         | `journal_entries` (Accounting)            | Staff free text; may contain personal data (§4)     |
+| Refund check payee name and mailing address         | `refund_checks` (Payments)                | Written once at issue; staff-only (§4)              |
 
 ### 2.2 Financial information
 
@@ -70,6 +71,8 @@ global-class.
 | Rents, deposits, lease-level fee terms                         | `units`, `lease_lite` (Directory)                                       |
 | Bulk run headers and line results (rent/late-fee/disbursement) | `bulk_runs`, `bulk_run_items` (Operations)                              |
 | Migration opening balances and verification figures            | `import_batches`, `migration_verifications` (host)                      |
+| Refund check number, amount, date, memo and print history      | `refund_checks`, `refund_check_prints` (Payments)                       |
+| Per-bank-account check print alignment offsets                 | `check_print_settings` (Payments)                                       |
 
 ### 2.3 Credentials and authentication data
 
@@ -93,7 +96,8 @@ the ending balance the statement presented and when its figures were read, so th
 statement can carry forward from exactly what they were given (ADR-045); like the rest of the delivery
 history, the row is append-only. The store is a local filesystem today and moves to
 Azure Blob Storage at go-live (two containers — `statements` and `documents`). Compliance packs,
-report CSVs, and on-demand statement downloads are streamed to the requester and **not** persisted.
+report CSVs, on-demand statement downloads, and refund-check PDFs (which carry the payee, mailing
+address, and amount) are streamed to the requester and **not** persisted.
 
 ### 2.5 Audit trail
 

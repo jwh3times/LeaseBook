@@ -3,7 +3,7 @@
 - **Audience:** Contributors, operators, and reviewers
 - **Status:** Living accounting guide
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-09-29
+- **Last reviewed:** 2026-10-01
 
 This is the canonical public explanation of the shipped trust-accounting model, written so a
 property manager, bookkeeper, or attorney can evaluate it without reading C#. The Accounting module
@@ -159,9 +159,11 @@ demand.
 
 The same sweep checks the companion rules: every entry balances in each basis, no management-fee
 income line carries an owner's name, no held deposit or prepayment can go negative — and, because a
-deposit is owner-tagged, no _owner's_ held-deposit position can go negative either. That last check is
+deposit is owner-tagged, no _owner's_ held-deposit position can go negative either. That check is
 what catches a release booked against a different owner than the collection: the tenant's own total
-would still come to zero while the owner's column silently stayed high.
+would still come to zero while the owner's column silently stayed high. Prepayments get the same check
+per **bank**: no bank's held prepayment for a tenant can go negative, which catches credit applied from
+a bank that never received it.
 
 The sweep also checks one thing that is not about balances at all: that every kind of event crediting
 an owner is one the statement knows how to present. If a new kind of transaction reaches an owner's
@@ -183,6 +185,22 @@ A void needs a reason, and the reason is **staff-only**: it is stored as the rev
 description}`, so an owner statement shows that a correction happened and to what, but not why
 (ADR-047). Reversals posted before this change keep their original `VOID: {reason}` text, because posted
 rows and issued statements are never rewritten.
+
+## Refund checks
+
+A held deposit or prepaid credit goes back to the tenant as a **refund check**
+([ADR-050](adr/ADR-050-refund-checks.md)). Issuing the check posts `RefundIssued` on the issue date:
+the held liability and the trust bank fall together, so the trust equation holds throughout. The bank is
+the one that **holds the liability** — the deposit's exact collection bucket (bank, property and owner,
+ADR-026) or the bank holding the prepayment — never a bank the user picks. When a tenant's held funds
+sit in more than one bucket, the user chooses the bucket. The check number is part of the posted
+description (`Refund check #1043 — security deposit`), and is unique per bank account.
+
+Until the bank pays it, the check is an outstanding withdrawal in the register; it clears and reconciles
+like any other line. A refund check is voided **from the check**, not with the generic void (which
+refuses it): the void is refused once the check has cleared, and otherwise posts a linked reversal that
+restores the held funds and clears the withdrawal and its reversal together, since neither reaches the
+bank. A misprinted check is voided and reissued on the next number.
 
 ## Closing a period
 
@@ -210,6 +228,7 @@ command maps to one business event:
 | `POST /tenants/{id}/prepayments`                      | `PrepaymentReceived`                                                             |
 | `POST /tenants/{id}/deposit-applications`             | `DepositApplied` (to owner income, or against charges)                           |
 | `POST /tenants/{id}/prepayment-applications`          | `PrepaymentApplied`                                                              |
+| `POST /api/refund-checks`                             | `RefundIssued` (a refund check; see "Refund checks")                             |
 | `POST /entries/{id}/void`                             | a linked reversal (see "Fixing mistakes")                                        |
 | `POST /directory/properties/{id}/ownership-transfers` | `DepositResponsibilityTransferred` plus the effective-dated Directory transition |
 
@@ -238,6 +257,13 @@ excess into a prepayment. An _application_ has no such overflow, so applying a d
 (`insufficient_receivable`); the composer asks the user to lower the amount. Applying a deposit **to owner
 income** (damages) is deliberately _not_ capped — damages legitimately exceed any rent owed. This sits
 alongside the existing rule that an application can never exceed the deposit/prepayment actually held.
+
+**Which bank a prepayment is applied from.** Applying a prepayment draws on the bank that **holds** it,
+as a refund does ([ADR-050](adr/ADR-050-refund-checks.md), addendum) — the liability release and the
+owner's income both land on the bank the cash was collected into, never on one that did not receive
+it. When the tenant's prepaid credit sits in more than one bank, the apply dialog lists those banks
+with what each holds and the user chooses one (`prepayment_bank_ambiguous`); a bank that holds less
+than the amount is refused (`insufficient_liability`), even when the tenant's total would cover it.
 
 ### Open charges, allocation and aging
 

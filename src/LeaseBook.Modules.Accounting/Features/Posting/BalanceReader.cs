@@ -52,6 +52,20 @@ internal sealed class BalanceReader(DbContext db)
     public Task<decimal> PrepaymentsHeldAsync(Guid tenantId, CancellationToken ct) =>
         HeldLiabilityByCodeAsync(AccountCodes.TenantPrepayments, tenantId, ct);
 
+    /// <summary>
+    /// Prepayment held for a tenant in one trust bank. Refunds use this per-bank read (#473) so a
+    /// positive tenant total cannot mask a bank that holds less than the refund draws from it.
+    /// </summary>
+    public Task<decimal> PrepaymentsHeldAsync(Guid tenantId, Guid bankAccountId, CancellationToken ct) =>
+        db.Database.SqlQuery<decimal>(
+            $"""
+            SELECT COALESCE(SUM(COALESCE(jl.credit, 0) - COALESCE(jl.debit, 0)), 0) AS "Value"
+            FROM journal_lines jl JOIN accounts a ON a.id = jl.account_id
+            WHERE a.code = {AccountCodes.TenantPrepayments} AND jl.tenant_id = {tenantId}
+              AND jl.bank_account_id = {bankAccountId}
+              AND jl.basis IN ('cash', 'both')
+            """).SingleAsync(ct);
+
     /// <summary>PM fees held in a given trust bank (pm_income CR-positive on that bank dim), cash+both.</summary>
     public Task<decimal> HeldFeesAsync(Guid bankAccountId, CancellationToken ct) =>
         db.Database.SqlQuery<decimal>(

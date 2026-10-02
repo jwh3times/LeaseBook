@@ -1,6 +1,7 @@
 import { useMutation } from '@tanstack/react-query';
 import { useId, useRef, useState, type KeyboardEvent } from 'react';
-import { Button, Input } from '@/design';
+import { Link } from 'react-router';
+import { Button, Icon, Input } from '@/design';
 import { ApiErrorNotice } from '@/components/ApiErrorNotice';
 import { AudienceHint } from '@/components/InternalNote';
 import { Modal } from '@/components/Modal';
@@ -37,12 +38,19 @@ export function VoidDialog({ entryId, description, onClose, onVoided }: VoidDial
   const [reason, setReason] = useState('');
   const [error, setError] = useState<LedgerPostError | null>(null);
   const sourceRef = useRef(newSourceRef());
+  const [refundCheckRequired, setRefundCheckRequired] = useState(false);
+  const refundCheckNumber = /Refund check #(\d+)/.exec(description ?? '')?.[1];
 
   const mutation = useMutation<PostResult, LedgerPostError>({
     mutationFn: () => voidEntry(entryId, reason.trim(), sourceRef.current),
     onSuccess: (result) => onVoided(result.entryId),
     onError: (err) => {
-      if (err.code === 'already_reversed') {
+      if (err.code === 'refund_check_void_required') {
+        // #473: a refund check is voided from its check record, which keeps the number and the bank
+        // clearance in step with the reversal. The generic void refuses it, so say where to go.
+        setError(null);
+        setRefundCheckRequired(true);
+      } else if (err.code === 'already_reversed') {
         setError({ ...err, message: 'This entry has already been voided.' });
       } else if (err.code === 'duplicate_source_ref' && err.existingEntryId) {
         onVoided(err.existingEntryId);
@@ -61,6 +69,7 @@ export function VoidDialog({ entryId, description, onClose, onVoided }: VoidDial
       return;
     }
     setError(null);
+    setRefundCheckRequired(false);
     mutation.mutate();
   };
 
@@ -110,6 +119,21 @@ export function VoidDialog({ entryId, description, onClose, onVoided }: VoidDial
           />
         </div>
         <ApiErrorNotice error={error} />
+        {refundCheckRequired && (
+          <div className="pf-api-error col gap6" role="alert">
+            <span>
+              <Icon name="alert" size={14} />{' '}
+              {refundCheckNumber
+                ? `This entry is refund check #${refundCheckNumber}.`
+                : 'This entry is a refund check.'}{' '}
+              Void it from the refund check list on Banking, which keeps the check number and its
+              bank clearance in step with the reversal.
+            </span>
+            <Link to="/banking" className="fw6">
+              Open refund checks on Banking
+            </Link>
+          </div>
+        )}
       </div>
     </Modal>
   );

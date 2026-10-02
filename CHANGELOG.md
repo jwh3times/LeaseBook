@@ -14,7 +14,40 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ## [Unreleased]
 
-- _Nothing yet._
+### Fixed
+
+- **Prepaid credit is applied from the bank that holds it.** Applying a tenant's prepayment to their
+  charges used to draw on the operating trust account whatever account the credit was collected into,
+  so one account went on reporting a prepayment for a tenant who no longer had one while another went
+  negative, and the owner's income sat in an account the cash never reached. The application now draws
+  on the account holding the credit, as a refund check does. When the credit is split across accounts,
+  the Apply dialog lists them with what each holds and asks which one to use; an account that holds
+  less than the amount is refused. The nightly invariant sweep gains a check (I10) that flags any
+  account whose held prepayment for a tenant is negative, which catches the shape in journals posted
+  before this fix.
+
+## [0.23.0] - 2026-10-01
+
+### Added
+
+- **Refund checks for held deposits and prepaid credit.** From a tenant's ledger, staff can issue a
+  refund check for a held security deposit or prepaid credit and print it on the organization's
+  pre-printed check stock, with per-bank print offsets and an alignment page. The refund is drawn on
+  the bank account that holds the money, never a bank chosen by hand, and posts when the check is
+  issued. Each bank account's refund checks are listed on Banking as outstanding, cleared, reconciled
+  or voided. A check can be voided until it clears, which restores the held funds; check numbers are
+  unique per bank account and appear in the register.
+
+### Changed
+
+- **A refund check can no longer be voided from the ledger's generic void.** It must be voided from
+  the check, which refuses a check that has already cleared the bank.
+
+### Fixed
+
+- **Voided ledger rows are readable.** A voided entry was shown faded, which took its text below the
+  WCAG AA contrast minimum. It now stays at full contrast and is marked by its struck-through
+  description and its Voided badge.
 
 ## [0.22.0] - 2026-09-30
 
@@ -1182,7 +1215,8 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.22.0...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.23.0...HEAD
+[0.23.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.23.0
 [0.22.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.22.0
 [0.21.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.21.0
 [0.20.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.20.0

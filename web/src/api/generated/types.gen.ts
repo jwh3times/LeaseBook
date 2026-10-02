@@ -49,7 +49,7 @@ export type ApplyPrepayment = {
     tenantId: string;
     amount: number | string;
     date: string;
-    bankAccountId: string;
+    bankAccountId: null | string;
     description: null | string;
     sourceRef: string;
     internalNote?: null | string;
@@ -146,7 +146,7 @@ export type BanksPanel = {
 };
 
 export type BudgetTelemetryRequest = {
-    task: 'record-payment' | 'add-charge' | 'owner-balances-visible' | 'start-reconcile' | 'entity-jump' | 'rent-run-confirm' | 'latefee-run-confirm' | 'disbursement-run-confirm';
+    task: 'record-payment' | 'add-charge' | 'owner-balances-visible' | 'start-reconcile' | 'entity-jump' | 'rent-run-confirm' | 'latefee-run-confirm' | 'disbursement-run-confirm' | 'issue-refund-check';
     interactions: number | string;
     met: null | boolean;
 };
@@ -197,6 +197,17 @@ export type CarryForwardView = {
 export type ChangePasswordRequest = {
     currentPassword: string;
     newPassword: string;
+};
+
+export type CheckPrintSettingsBody = {
+    offsetXPoints: number | string;
+    offsetYPoints: number | string;
+};
+
+export type CheckPrintSettingsView = {
+    bankAccountId: string;
+    offsetXPoints: number | string;
+    offsetYPoints: number | string;
 };
 
 export type ClearancesResult = {
@@ -436,6 +447,24 @@ export type IssueCredit = {
     reason: string;
     sourceRef: string;
     internalNote?: null | string;
+};
+
+export type IssueRefundCheckBody = {
+    key: string;
+    tenantId: string;
+    source: string;
+    amount: number | string;
+    date: string;
+    checkNumber: number | string;
+    payeeName: string;
+    addressLine1: string;
+    addressLine2: null | string;
+    city: string;
+    state: string;
+    postalCode: string;
+    memo: null | string;
+    internalNote: null | string;
+    bucket?: null | RefundFundsBucket;
 };
 
 export type IssuedStatementCoverageResponse = {
@@ -884,6 +913,48 @@ export type RecoveryLoginRequest = {
     code: string;
 };
 
+export type RefundCheckFund = {
+    source: string;
+    bankAccountId: string;
+    propertyId: null | string;
+    ownerId: null | string;
+    held: number | string;
+    nextCheckNumber: null | number | string;
+};
+
+export type RefundCheckOptions = {
+    funds: Array<RefundCheckFund>;
+};
+
+export type RefundCheckView = {
+    id: string;
+    tenantId: string;
+    bankAccountId: string;
+    checkNumber: number | string;
+    source: string;
+    amount: number | string;
+    issueDate: string;
+    payeeName: string;
+    addressLine1: string;
+    addressLine2: null | string;
+    city: string;
+    state: string;
+    postalCode: string;
+    memo: null | string;
+    entryId: string;
+    status: string;
+    voidEntryId: null | string;
+    printCount: number | string;
+    lastPrintedAt: null | string;
+    createdAt: string;
+};
+
+export type RefundFundsBucket = {
+    bankAccountId: string;
+    propertyId: null | string;
+    ownerId: null | string;
+};
+
 export type RegisterResponse = {
     rows: Array<RegisterRow>;
     total: number | string;
@@ -1279,6 +1350,10 @@ export type VoidEntry = {
     reason: string;
     asOfDate: null | string;
     sourceRef: string;
+};
+
+export type VoidRefundCheckBody = {
+    reason: string;
 };
 
 export type GetApiAccountingTenantsByTenantIdLedgerData = {
@@ -3026,6 +3101,159 @@ export type PostApiPaymentsByIdRetryResponses = {
 };
 
 export type PostApiPaymentsByIdRetryResponse = PostApiPaymentsByIdRetryResponses[keyof PostApiPaymentsByIdRetryResponses];
+
+export type GetApiRefundChecksOptionsData = {
+    body?: never;
+    path?: never;
+    query: {
+        tenantId: string;
+    };
+    url: '/api/refund-checks/options';
+};
+
+export type GetApiRefundChecksOptionsResponses = {
+    /**
+     * OK
+     */
+    200: RefundCheckOptions;
+};
+
+export type GetApiRefundChecksOptionsResponse = GetApiRefundChecksOptionsResponses[keyof GetApiRefundChecksOptionsResponses];
+
+export type GetApiRefundChecksData = {
+    body?: never;
+    path?: never;
+    query?: {
+        bankAccountId?: string;
+        tenantId?: string;
+    };
+    url: '/api/refund-checks';
+};
+
+export type GetApiRefundChecksResponses = {
+    /**
+     * OK
+     */
+    200: Array<RefundCheckView>;
+};
+
+export type GetApiRefundChecksResponse = GetApiRefundChecksResponses[keyof GetApiRefundChecksResponses];
+
+export type PostApiRefundChecksData = {
+    body: IssueRefundCheckBody;
+    path?: never;
+    query?: never;
+    url: '/api/refund-checks';
+};
+
+export type PostApiRefundChecksResponses = {
+    /**
+     * OK
+     */
+    200: RefundCheckView;
+};
+
+export type PostApiRefundChecksResponse = PostApiRefundChecksResponses[keyof PostApiRefundChecksResponses];
+
+export type PostApiRefundChecksByIdVoidData = {
+    body: VoidRefundCheckBody;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/refund-checks/{id}/void';
+};
+
+export type PostApiRefundChecksByIdVoidErrors = {
+    /**
+     * Not Found
+     */
+    404: unknown;
+};
+
+export type PostApiRefundChecksByIdVoidResponses = {
+    /**
+     * OK
+     */
+    200: RefundCheckView;
+};
+
+export type PostApiRefundChecksByIdVoidResponse = PostApiRefundChecksByIdVoidResponses[keyof PostApiRefundChecksByIdVoidResponses];
+
+export type PostApiRefundChecksByIdPdfData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/refund-checks/{id}/pdf';
+};
+
+export type PostApiRefundChecksByIdPdfErrors = {
+    /**
+     * Not Found
+     */
+    404: unknown;
+};
+
+export type PostApiRefundChecksByIdPdfResponses = {
+    /**
+     * OK
+     */
+    200: unknown;
+};
+
+export type GetApiRefundChecksPrintSettingsByBankAccountIdData = {
+    body?: never;
+    path: {
+        bankAccountId: string;
+    };
+    query?: never;
+    url: '/api/refund-checks/print-settings/{bankAccountId}';
+};
+
+export type GetApiRefundChecksPrintSettingsByBankAccountIdResponses = {
+    /**
+     * OK
+     */
+    200: CheckPrintSettingsView;
+};
+
+export type GetApiRefundChecksPrintSettingsByBankAccountIdResponse = GetApiRefundChecksPrintSettingsByBankAccountIdResponses[keyof GetApiRefundChecksPrintSettingsByBankAccountIdResponses];
+
+export type PutApiRefundChecksPrintSettingsByBankAccountIdData = {
+    body: CheckPrintSettingsBody;
+    path: {
+        bankAccountId: string;
+    };
+    query?: never;
+    url: '/api/refund-checks/print-settings/{bankAccountId}';
+};
+
+export type PutApiRefundChecksPrintSettingsByBankAccountIdResponses = {
+    /**
+     * OK
+     */
+    200: CheckPrintSettingsView;
+};
+
+export type PutApiRefundChecksPrintSettingsByBankAccountIdResponse = PutApiRefundChecksPrintSettingsByBankAccountIdResponses[keyof PutApiRefundChecksPrintSettingsByBankAccountIdResponses];
+
+export type PostApiRefundChecksPrintSettingsByBankAccountIdAlignmentData = {
+    body?: never;
+    path: {
+        bankAccountId: string;
+    };
+    query?: never;
+    url: '/api/refund-checks/print-settings/{bankAccountId}/alignment';
+};
+
+export type PostApiRefundChecksPrintSettingsByBankAccountIdAlignmentResponses = {
+    /**
+     * OK
+     */
+    200: unknown;
+};
 
 export type GetApiOperationsRunsByTypePreviewData = {
     body?: never;

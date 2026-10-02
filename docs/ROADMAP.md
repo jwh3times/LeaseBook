@@ -3,7 +3,7 @@
 - **Audience:** Evaluators, contributors, and maintainers
 - **Status:** Living public direction
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-09-29
+- **Last reviewed:** 2026-10-01
 
 LeaseBook is pre-release software. This page communicates shipped capabilities and broad product
 direction; it is not an implementation plan or a commitment to specific dates. Detailed sequencing,
@@ -65,8 +65,9 @@ identity checks, database row-level boundaries for each portal persona, account 
 sign-out. Owners see their balance held in trust, their
 disbursements and activity, and the statements issued to them. Phase 2 also adds one-time simulated
 payments in a dedicated development fixture. Durable processing and explicit simulated bank evidence
-exercise the real Accounting receipt path. Production enrollment, owner-initiated actions and live
-online payments remain future work. See the
+exercise the real Accounting receipt path. Staff can issue, print and void refund checks for held
+deposits and prepaid credit on pre-printed check stock. Production enrollment, owner-initiated actions,
+blank-stock check printing and live online payments remain future work. See the
 [payment simulation runbook](runbooks/payment-simulation.md).
 
 ## Near-Term Priorities
