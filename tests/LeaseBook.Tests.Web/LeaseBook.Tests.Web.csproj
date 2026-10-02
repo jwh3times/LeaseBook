@@ -19,4 +19,9 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- #474: an independent E-13B drawing (SIL OFL 1.1) the glyph tests compare LeaseBook's own against. -->
+    <None Include="Fixtures\MicrE13BReference\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

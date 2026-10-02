@@ -1,3 +1,4 @@
+using LeaseBook.Modules.Payments.Domain;
 using LeaseBook.Modules.Payments.Features.RefundChecks;
 using Shouldly;
 
@@ -14,7 +15,7 @@ public sealed class BankMicrRulesTests
     [InlineData("111000012")]
     [InlineData("540900071")]
     public void A_real_routing_number_passes(string routing) =>
-        BankMicr.IsValidRoutingNumber(routing).ShouldBeTrue();
+        MicrLine.IsValidRoutingNumber(routing).ShouldBeTrue();
 
     [Theory]
     [InlineData("111000013")] // last digit
@@ -25,7 +26,7 @@ public sealed class BankMicrRulesTests
     [InlineData("11100001a")] // not a digit
     [InlineData("000000000")] // sums to zero, names no institution
     public void Anything_else_fails(string routing) =>
-        BankMicr.IsValidRoutingNumber(routing).ShouldBeFalse();
+        MicrLine.IsValidRoutingNumber(routing).ShouldBeFalse();
 
     [Theory]
     [InlineData("123456789U", true)]
@@ -37,7 +38,7 @@ public sealed class BankMicrRulesTests
     [InlineData("1234A", false)]               // not an E-13B character
     [InlineData("", false)]
     public void The_on_us_field_takes_only_what_the_micr_font_prints(string field, bool valid) =>
-        BankMicr.IsValidOnUsField(field).ShouldBe(valid);
+        MicrLine.IsValidOnUsField(field).ShouldBe(valid);
 
     [Fact]
     public void Printing_the_command_or_the_request_body_never_shows_the_numbers()
