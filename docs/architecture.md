@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living architecture guide
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-01
+- **Last reviewed:** 2026-10-02
 
 This is the canonical public map of the system **as implemented**. It explains how the pieces fit
 together and links the decisions that shaped them without reproducing every invariant. Accepted
@@ -33,7 +33,8 @@ behavior. `Payments` implements an isolated development simulator with durable d
 observations and atomic Accounting receipt effects; it has no live provider adapter. See
 [ADR-046](adr/ADR-046-simulated-payment-recognition.md). It also owns refund checks: the check record,
 its print history and per-bank print calibration
-([ADR-050](adr/ADR-050-refund-checks.md)). A module references `SharedKernel`
+([ADR-050](adr/ADR-050-refund-checks.md)), and each bank account's check stock and write-only MICR
+details ([ADR-051](adr/ADR-051-blank-stock-micr-details.md)). A module references `SharedKernel`
 and nothing else; the architecture tests (`ModuleBoundaryTests`) enforce this absolutely.
 
 A module **never reads another module's tables or types directly**. A cross-module read goes through
@@ -220,7 +221,8 @@ that sets security response headers — including same-origin `Cross-Origin-Open
 Development; Kestrel's `Server` header is suppressed, which the CI full-stack smoke job checks against
 the real container. The host also applies rate
 limiting on the authentication endpoints, config-gated multi-factor enforcement for admin accounts,
-and encryption of sensitive authentication data at rest. These controls are environment- and
+and encryption at rest of sensitive authentication data and of the bank routing number and On-Us
+field stored for check printing. These controls are environment- and
 config-gated — permissive in Development and tests — and a non-Development environment fails fast at
 startup if required security configuration is missing. The security model is this section together
 with [data handling and retention](compliance/data-handling.md); the vulnerability reporting process
@@ -329,8 +331,11 @@ trail never ships the payloads underneath it, and the CSV export is the same fil
 capped, with a truncated export saying so in its own first row. Payloads are withheld by the **origin
 of their content** rather than by a guess at sensitivity: the one audited column LeaseBook does not
 author — a row of the customer's previous system's export, verbatim — renders as a marker, as does a
-payload that is not a flat object or a column whose name is secret-shaped. Credentials never reach the
-table at all, because Identity is deliberately not organization-scoped. Filter vocabularies come from
+payload that is not a flat object. A column whose name is secret-shaped is withheld earlier, when the
+snapshot is written: the stored value is a marker, with a distinct one on the after side of an update
+that changed it, so the trail shows that a bank number changed but never what it was or became
+([ADR-051](adr/ADR-051-blank-stock-micr-details.md)). Credentials never reach the table at all,
+because Identity is deliberately not organization-scoped. Filter vocabularies come from
 the EF model and from enumerated source catalogs rather than `SELECT DISTINCT`, so the filter names
 the events that _can_ occur rather than the rows that happen to exist; build-time guards fail on a
 hand-written `entity_type` or `action` outside its catalog, and on an audited entity that gains an
