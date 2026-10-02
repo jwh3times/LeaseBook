@@ -25,6 +25,11 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   less than the amount is refused. The nightly invariant sweep gains a check (I10) that flags any
   account whose held prepayment for a tenant is negative, which catches the shape in journals posted
   before this fix.
+- **Every refund check on a bank account stays in reach.** Banking's refund-check list showed only the
+  newest 200 checks and silently dropped the rest, so an old check that had not cleared could vanish
+  from the list used to find it. The list now pages through every check with Previous and Next, its
+  count is the account's true total rather than the rows on screen, and an Outstanding filter narrows
+  it to the checks that have neither cleared the bank nor been voided.
 
 ## [0.23.0] - 2026-10-01
 
