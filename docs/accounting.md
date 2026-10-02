@@ -259,11 +259,11 @@ income** (damages) is deliberately _not_ capped — damages legitimately exceed 
 alongside the existing rule that an application can never exceed the deposit/prepayment actually held.
 
 **Which bank a prepayment is applied from.** Applying a prepayment draws on the bank that **holds** it,
-as a refund does — the liability release and the owner's income both land on the bank the cash was
-collected into, never on one the user picks. When the tenant's prepaid credit sits in more than one bank,
-the apply dialog lists those banks with what each holds and the user chooses one
-(`prepayment_bank_ambiguous`); a bank that holds less than the amount is refused
-(`insufficient_liability`), even when the tenant's total would cover it.
+as a refund does ([ADR-050](adr/ADR-050-refund-checks.md), addendum) — the liability release and the
+owner's income both land on the bank the cash was collected into, never on one that did not receive
+it. When the tenant's prepaid credit sits in more than one bank, the apply dialog lists those banks
+with what each holds and the user chooses one (`prepayment_bank_ambiguous`); a bank that holds less
+than the amount is refused (`insufficient_liability`), even when the tenant's total would cover it.
 
 ### Open charges, allocation and aging
 

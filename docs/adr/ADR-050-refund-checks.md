@@ -78,3 +78,31 @@ stale-dates a check, reports unclaimed property, or produces a positive-pay file
 Revisit before printing on blank stock or generating a MICR line (#474), adopting a print-and-mail
 vendor, issuing owner or vendor checks, automating stale-dating or escheatment, matching statements
 by check number, or when the attorney review changes the check-record requirements.
+
+## Addendum — a prepayment application draws on the bank that holds it (invariant I10) (2026-10-01)
+
+Applying a prepayment still took its bank from the caller, and the apply dialog always sent the
+operating trust account. The `PrepaymentApplied` template guarded only the tenant's total, so credit
+collected into one bank and applied from another released the liability and credited the owner on a
+bank the cash never reached. Neither the trust equation (I2) nor the per-tenant liability check (I4)
+sees that: every bank still balances and the tenant's total is right, while one bank's prepayment for
+the tenant goes negative and another's stays positive.
+
+**The bank comes from the liability here too.** `ApplyPrepayment`'s bank is optional. Left out,
+Accounting derives it from the tenant's positive prepayment buckets, the same read a refund uses,
+under the same posting lock. With one bucket that bank is used; with none the application is refused
+(`insufficient_liability`); with several the caller must name one (`prepayment_bank_ambiguous`).
+Because a prepayment bucket is only a bank, the caller names a bank rather than a bucket, and a named
+bank must itself hold the amount: `PrepaymentApplied` now guards the smaller of that bank's held
+prepayment and the tenant's total, as `RefundIssued` does for prepayments. Both guards keep the total
+because a journal written before this change can hold a positive bucket beside a negative one.
+
+**Invariant I10 sweeps it:** a tenant's held prepayment is ≥ 0 per bank, the prepayment counterpart
+of I7 ([ADR-026](ADR-026-deposit-disposition-owner-attribution.md)). An application posted before
+this change against a bank that never held the credit fails I10 until it is voided and re-applied
+from the holding bank.
+
+## Revisit trigger (addendum)
+
+Revisit if prepaid credit ever needs to move between trust banks. That is a transfer with its own
+event, not an application drawn on a bank that does not hold the credit.
