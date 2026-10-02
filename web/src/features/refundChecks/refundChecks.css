@@ -117,3 +117,25 @@ label.pf-refund-fund:has(input:focus-visible) {
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* #474: the MICR details section of the check print settings dialog. */
+.pf-micr {
+  margin: 0;
+  padding: var(--gap) 0 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+  min-width: 0;
+}
+.pf-micr > legend {
+  padding: 0;
+}
+.pf-micr-summary {
+  margin: 0;
+  padding-left: 18px;
+}
+.pf-micr-stock {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}

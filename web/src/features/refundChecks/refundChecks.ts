@@ -8,13 +8,17 @@ import {
   download,
   getApiRefundChecks,
   getApiRefundChecksOptions,
+  getApiRefundChecksMicrByBankAccountId,
   getApiRefundChecksPrintSettingsByBankAccountId,
   postApiRefundChecks,
   postApiRefundChecksByIdPdf,
   postApiRefundChecksByIdVoid,
   postApiRefundChecksPrintSettingsByBankAccountIdAlignment,
+  putApiRefundChecksMicrByBankAccountId,
   putApiRefundChecksPrintSettingsByBankAccountId,
   unwrap,
+  type BankMicrDetailsBody,
+  type BankMicrDetailsView,
   type CheckPrintSettingsView,
   type IssueRefundCheckBody,
   type RefundCheckFund,
@@ -25,6 +29,8 @@ import {
 import { num } from '@/lib/directory';
 
 export type {
+  BankMicrDetailsBody,
+  BankMicrDetailsView,
   CheckPrintSettingsView,
   IssueRefundCheckBody,
   RefundCheckFund,
@@ -47,6 +53,9 @@ export const refundChecksKey = (filter: {
   status?: RefundCheckFilter;
   page?: number;
 }) => ['refund-checks', filter] as const;
+
+/** A bank account's MICR details as the server shows them: last four digits only, never the numbers. */
+export const bankMicrKey = (bankAccountId: string) => ['bank-micr', bankAccountId] as const;
 
 export const checkPrintSettingsKey = (bankAccountId: string) =>
   ['check-print-settings', bankAccountId] as const;
@@ -112,6 +121,33 @@ export function useCheckPrintSettings(
 }
 
 // ---- writes ----------------------------------------------------------------
+
+export function useBankMicrDetails(bankAccountId: string): UseQueryResult<BankMicrDetailsView> {
+  return useQuery({
+    queryKey: bankMicrKey(bankAccountId),
+    enabled: bankAccountId !== '',
+    queryFn: () =>
+      unwrap(
+        getApiRefundChecksMicrByBankAccountId({ path: { bankAccountId } }),
+        'Failed to load the MICR details for this account.',
+      ),
+  });
+}
+
+/**
+ * Saves a bank account's MICR details (#474). Called directly rather than through `useMutation`, whose
+ * cache would keep the full routing and account numbers as the mutation's variables; the response the
+ * caller caches carries only their last four digits.
+ */
+export async function saveBankMicrDetails(
+  bankAccountId: string,
+  body: BankMicrDetailsBody,
+): Promise<BankMicrDetailsView> {
+  return unwrap(
+    putApiRefundChecksMicrByBankAccountId({ path: { bankAccountId }, body }),
+    'Failed to save the MICR details.',
+  );
+}
 
 export async function issueRefundCheck(body: IssueRefundCheckBody): Promise<RefundCheckView> {
   return unwrap(postApiRefundChecks({ body }), 'Failed to issue the refund check.');
@@ -264,9 +300,12 @@ export function newIssueKey(): string {
 /** Print offsets are bounded to one inch either way, in hundredths of a point at most. */
 export const OFFSET_LIMIT_POINTS = 72;
 
-export function parseOffset(text: string): number | null {
+export function parseOffset(text: string, limit = OFFSET_LIMIT_POINTS): number | null {
   const trimmed = text.trim();
   if (!/^[-−]?\d{1,2}(\.\d{1,2})?$/.test(trimmed)) return null;
   const value = Number(trimmed.replace('−', '-'));
-  return Math.abs(value) <= OFFSET_LIMIT_POINTS ? value : null;
+  return Math.abs(value) <= limit ? value : null;
 }
+
+/** The MICR line moves at most a quarter inch from its nominal position, in hundredths of a point. */
+export const MICR_OFFSET_LIMIT_POINTS = 18;

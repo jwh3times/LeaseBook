@@ -64,3 +64,36 @@ public sealed class CheckPrintSetting : IOrgScoped
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 }
+
+/// <summary>
+/// A bank account's MICR details for printing complete checks on blank stock (#474). The routing number
+/// and the bank's On-Us field are encrypted at rest by the host, never leave the server in full (reads
+/// carry the last four digits), and never enter an audit snapshot. <see cref="OnUsAccountNumber"/> is the
+/// On-Us field exactly as the bank's specification sheet prints it — the account number with any codes,
+/// dashes and On-Us symbols — and its name keeps it on the audit layer's secret-name list.
+/// </summary>
+public sealed class BankMicrProfile : IOrgScoped
+{
+    public Guid Id { get; set; }
+    public Guid OrgId { get; set; }
+    public Guid BankAccountId { get; set; }
+    public string StockKind { get; set; } = CheckStockKinds.PrePrinted;
+    public string? RoutingNumber { get; set; }
+    public string? OnUsAccountNumber { get; set; }
+    public decimal MicrOffsetXPoints { get; set; }
+    public decimal MicrOffsetYPoints { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
+}
+
+/// <summary>What a bank account's checks are printed on.</summary>
+public static class CheckStockKinds
+{
+    /// <summary>Stock that already carries the MICR line, bank and organization blocks (#473).</summary>
+    public const string PrePrinted = "preprinted";
+
+    /// <summary>Blank stock: LeaseBook prints the whole check, MICR line included (#474).</summary>
+    public const string Blank = "blank";
+
+    public static readonly IReadOnlyList<string> All = [PrePrinted, Blank];
+}

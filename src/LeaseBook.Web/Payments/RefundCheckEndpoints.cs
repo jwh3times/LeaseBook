@@ -20,6 +20,12 @@ public sealed record VoidRefundCheckBody(string Reason);
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record CheckPrintSettingsBody(decimal OffsetXPoints, decimal OffsetYPoints);
 
+/// <summary>A null number keeps the saved one (#474): reads never return the full values to resend.</summary>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record BankMicrDetailsBody(
+    string StockKind, string? RoutingNumber, string? OnUsAccountNumber, decimal MicrOffsetXPoints,
+    decimal MicrOffsetYPoints);
+
 /// <summary>
 /// Staff refund-check surface (#473). Issue, list and void ride the ordinary organization transaction;
 /// the PDF routes are POSTs because each records a print, and their responses are <c>no-store</c> —
@@ -73,6 +79,17 @@ public sealed class RefundCheckEndpoints : IEndpointModule
             Guid bankAccountId, CheckPrintSettingsBody body, ISender sender, CancellationToken ct) =>
             TypedResults.Ok(await sender.Send(
                 new SaveCheckPrintSettings(bankAccountId, body.OffsetXPoints, body.OffsetYPoints), ct)));
+
+        // #474: staff read the masked view (they print the checks); only an administrator changes the numbers.
+        group.MapGet("/micr/{bankAccountId:guid}", async (Guid bankAccountId, ISender sender, CancellationToken ct) =>
+            TypedResults.Ok(await sender.Query(new GetBankMicrDetails(bankAccountId), ct)));
+
+        group.MapPut("/micr/{bankAccountId:guid}", async (
+            Guid bankAccountId, BankMicrDetailsBody body, ISender sender, CancellationToken ct) =>
+            TypedResults.Ok(await sender.Send(new SaveBankMicrDetails(
+                bankAccountId, body.StockKind, body.RoutingNumber, body.OnUsAccountNumber, body.MicrOffsetXPoints,
+                body.MicrOffsetYPoints), ct)))
+            .RequireAuthorization(AuthPolicies.RequirePMAdmin);
 
         group.MapPost("/print-settings/{bankAccountId:guid}/alignment", async (
             Guid bankAccountId, ISender sender, TimeProvider clock, HttpContext http, CancellationToken ct) =>

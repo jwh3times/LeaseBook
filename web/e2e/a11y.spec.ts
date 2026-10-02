@@ -98,14 +98,17 @@ for (const theme of THEMES) {
       await runA11y(page);
     });
 
-    // #473: the per-account check print calibration, read but not saved.
+    // #473: the per-account check print calibration, read but not saved — and, since #474, the
+    // account's MICR details as an administrator sees them (the editable form, loaded).
     test('no WCAG AA violations with the check print settings dialog open', async ({ page }) => {
       await seedTheme(page, theme);
       await signIn(page, DEMO_ADMIN);
       await page.goto('/banking', { waitUntil: 'networkidle' });
       await page.getByRole('button', { name: 'Print settings' }).click();
       const dialog = page.getByRole('dialog', { name: 'Check print settings' });
-      await expect(dialog.getByLabel('Horizontal offset (points)')).toBeEnabled();
+      // Exact: the MICR line's own offsets are labelled "MICR line horizontal offset (points)".
+      await expect(dialog.getByLabel('Horizontal offset (points)', { exact: true })).toBeEnabled();
+      await expect(dialog.getByLabel('Routing number')).toBeVisible();
       await runA11y(page);
     });
 
