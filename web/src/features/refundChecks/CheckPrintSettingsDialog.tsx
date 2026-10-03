@@ -6,6 +6,7 @@ import { ApiErrorNotice } from '@/components/ApiErrorNotice';
 import { ErrorAction } from '@/components/ErrorAction';
 import { Modal } from '@/components/Modal';
 import { num } from '@/lib/directory';
+import { BankMicrSection } from './BankMicrSection';
 import {
   checkPrintSettingsKey,
   type CheckPrintSettingsView,
@@ -234,6 +235,7 @@ export function CheckPrintSettingsDialog({
           fallback="Couldn’t print the alignment page."
           kind="read"
         />
+        <BankMicrSection bankAccountId={bankAccountId} />
       </div>
     </Modal>
   );

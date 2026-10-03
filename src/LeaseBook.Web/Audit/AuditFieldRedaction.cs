@@ -69,9 +69,24 @@ public static class AuditFieldRedaction
         "accountnumber",
     ];
 
+    /// <summary>
+    /// What a secret-named field's <c>after</c> value is written as when an update changed it (#474). The
+    /// drawer detects a change by comparing the stored before and after; with the same marker on both
+    /// sides a changed routing number would vanish from the review, and storing anything derived from the
+    /// value (a hash of nine digits is a lookup table away) would leak it.
+    /// </summary>
+    public const string ChangedMarker = "[redacted] (changed)";
+
+    /// <summary>
+    /// True when <paramref name="field"/> is named like a secret. Such a value is withheld when the audit
+    /// row is <i>written</i>, not only when it is rendered (#474): a bank routing or account number must not
+    /// sit in <c>audit_events</c> at all. <see cref="UnboundedContentFields"/> are deliberately not in this
+    /// set — that content is stored and governed by its import batch, and only its rendering is withheld.
+    /// </summary>
+    public static bool IsSecretName(string field) =>
+        SensitiveNameFragments.Any(fragment => field.Contains(fragment, StringComparison.OrdinalIgnoreCase));
+
     /// <summary>True when <paramref name="field"/>'s value must never leave the server.</summary>
     public static bool IsRedacted(string field) =>
-        UnboundedContentFields.Contains(field, StringComparer.OrdinalIgnoreCase)
-        || SensitiveNameFragments.Any(fragment =>
-            field.Contains(fragment, StringComparison.OrdinalIgnoreCase));
+        UnboundedContentFields.Contains(field, StringComparer.OrdinalIgnoreCase) || IsSecretName(field);
 }

@@ -141,6 +141,23 @@ export type BankBalancesResponse = {
 
 export type BankLineStatus = number;
 
+export type BankMicrDetailsBody = {
+    stockKind: string;
+    routingNumber: null | string;
+    onUsAccountNumber: null | string;
+    micrOffsetXPoints: number | string;
+    micrOffsetYPoints: number | string;
+};
+
+export type BankMicrDetailsView = {
+    bankAccountId: string;
+    stockKind: string;
+    routingNumberLast4: null | string;
+    onUsAccountNumberLast4: null | string;
+    micrOffsetXPoints: number | string;
+    micrOffsetYPoints: number | string;
+};
+
 export type BanksPanel = {
     rows: Array<DashboardBankRow>;
 };
@@ -3248,6 +3265,42 @@ export type PutApiRefundChecksPrintSettingsByBankAccountIdResponses = {
 };
 
 export type PutApiRefundChecksPrintSettingsByBankAccountIdResponse = PutApiRefundChecksPrintSettingsByBankAccountIdResponses[keyof PutApiRefundChecksPrintSettingsByBankAccountIdResponses];
+
+export type GetApiRefundChecksMicrByBankAccountIdData = {
+    body?: never;
+    path: {
+        bankAccountId: string;
+    };
+    query?: never;
+    url: '/api/refund-checks/micr/{bankAccountId}';
+};
+
+export type GetApiRefundChecksMicrByBankAccountIdResponses = {
+    /**
+     * OK
+     */
+    200: BankMicrDetailsView;
+};
+
+export type GetApiRefundChecksMicrByBankAccountIdResponse = GetApiRefundChecksMicrByBankAccountIdResponses[keyof GetApiRefundChecksMicrByBankAccountIdResponses];
+
+export type PutApiRefundChecksMicrByBankAccountIdData = {
+    body: BankMicrDetailsBody;
+    path: {
+        bankAccountId: string;
+    };
+    query?: never;
+    url: '/api/refund-checks/micr/{bankAccountId}';
+};
+
+export type PutApiRefundChecksMicrByBankAccountIdResponses = {
+    /**
+     * OK
+     */
+    200: BankMicrDetailsView;
+};
+
+export type PutApiRefundChecksMicrByBankAccountIdResponse = PutApiRefundChecksMicrByBankAccountIdResponses[keyof PutApiRefundChecksMicrByBankAccountIdResponses];
 
 export type PostApiRefundChecksPrintSettingsByBankAccountIdAlignmentData = {
     body?: never;

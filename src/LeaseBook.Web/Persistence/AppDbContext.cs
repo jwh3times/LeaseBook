@@ -1,7 +1,9 @@
 using System.Reflection;
 using System.Text.Json;
+using LeaseBook.Modules.Payments.Domain;
 using LeaseBook.SharedKernel;
 using LeaseBook.SharedKernel.Tenancy;
+using LeaseBook.Web.Audit;
 using LeaseBook.Web.Auth;
 using LeaseBook.Web.Tenancy;
 using Microsoft.AspNetCore.DataProtection;
@@ -73,6 +75,11 @@ public sealed class AppDbContext(
             modelBuilder.Entity<IdentityUserToken<Guid>>()
                 .Property(t => t.Value)
                 .HasConversion(converter);
+
+            // #474: a bank account's routing number and On-Us field (which carries the account number).
+            var micr = new EncryptedStringConverter(_dataProtection.CreateProtector("LeaseBook.BankMicr.v1"));
+            modelBuilder.Entity<BankMicrProfile>().Property(p => p.RoutingNumber).HasConversion(micr);
+            modelBuilder.Entity<BankMicrProfile>().Property(p => p.OnUsAccountNumber).HasConversion(micr);
         }
 
         foreach (var assembly in PersistenceAssemblies.ModelAssemblies)
@@ -288,22 +295,39 @@ public sealed class AppDbContext(
             EntityId = entry.Property("Id").CurrentValue is Guid id ? id : Guid.Empty,
             Action = action,
             Before = entry.State is EntityState.Modified or EntityState.Deleted
-                ? Serialize(entry.OriginalValues) : null,
+                ? Serialize(entry, entry.OriginalValues, isAfter: false) : null,
             After = entry.State is EntityState.Added or EntityState.Modified
-                ? Serialize(entry.CurrentValues) : null,
+                ? Serialize(entry, entry.CurrentValues, isAfter: true) : null,
             OccurredAt = DateTime.UtcNow,
         };
     }
 
-    private static string Serialize(PropertyValues values)
+    private static string Serialize(EntityEntry entry, PropertyValues values, bool isAfter)
     {
         var snapshot = new Dictionary<string, object?>(values.Properties.Count);
         foreach (var property in values.Properties)
         {
-            snapshot[property.Name] = values[property.Name];
+            var value = values[property.Name];
+            snapshot[property.Name] = AuditFieldRedaction.IsSecretName(property.Name) && value is not null
+                ? SecretMarker(entry, property.Name, isAfter)
+                : value;
         }
 
         return JsonSerializer.Serialize(snapshot);
+    }
+
+    /// <summary>
+    /// A secret-named value is never written to <c>audit_events</c> (#474). The after side of an update
+    /// that moved it carries <see cref="AuditFieldRedaction.ChangedMarker"/>, so the review still sees that
+    /// it changed without any trace of what it was or became.
+    /// </summary>
+    private static string SecretMarker(EntityEntry entry, string propertyName, bool isAfter)
+    {
+        var property = entry.Property(propertyName);
+        var changed = isAfter
+            && entry.State == EntityState.Modified
+            && !Equals(property.OriginalValue, property.CurrentValue);
+        return changed ? AuditFieldRedaction.ChangedMarker : AuditFieldRedaction.Marker;
     }
 
     private void StampCreatedAt()

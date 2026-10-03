@@ -68,13 +68,14 @@ form, write it, and add a row to the index below. When a decision is replaced, m
 | [041](ADR-041-durable-keyring-and-proxy-trust.md)                    | The keyring is durable, and proxy trust is declared                             | Accepted                               | 2026-08-18 |
 | [042](ADR-042-explicit-host-process-lifecycle.md)                    | Make host process lifecycle explicit                                            | Accepted                               | 2026-09-02 |
 | [043](ADR-043-account-security-lifecycle.md)                         | Account security has an application and operator lifecycle                      | Accepted (amended by ADR-049)          | 2026-09-06 |
-| [044](ADR-044-audit-log-review-surface.md)                           | Audit-log review is a separate read, and payloads are withheld by origin        | Accepted                               | 2026-09-11 |
+| [044](ADR-044-audit-log-review-surface.md)                           | Audit-log review is a separate read, and payloads are withheld by origin        | Accepted (amended by ADR-051)          | 2026-09-11 |
 | [045](ADR-045-statement-carry-forward.md)                            | A statement carries forward from the one issued before it                       | Accepted                               | 2026-09-13 |
 | [046](ADR-046-simulated-payment-recognition.md)                      | Recognize simulated payments from explicit bank evidence                        | Proposed                               | 2026-09-26 |
 | [047](ADR-047-owner-facing-description-and-internal-note.md)         | A journal entry's description is owner-facing; staff notes are separate         | Accepted                               | 2026-09-29 |
 | [048](ADR-048-per-persona-row-level-security.md)                     | Per-persona row-level security inside the organization                          | Accepted                               | 2026-09-29 |
 | [049](ADR-049-portal-invitations-and-enrollment.md)                  | Portal invitations bind an explicit identity before granting access             | Accepted                               | 2026-09-30 |
 | [050](ADR-050-refund-checks.md)                                      | Refund checks post at issue and derive their status from the bank register      | Accepted                               | 2026-10-01 |
+| [051](ADR-051-blank-stock-micr-details.md)                           | Blank-stock checks draw their own E-13B glyphs, and bank numbers are write-only | Accepted                               | 2026-10-02 |
 
 ## Status legend
 

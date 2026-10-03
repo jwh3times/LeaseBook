@@ -3,6 +3,8 @@
 - **Status:** Accepted
 - **Date:** 2026-09-11
 - **Deciders:** Maintainers
+- **Amended by:** [ADR-051](ADR-051-blank-stock-micr-details.md) — secret-named values are withheld
+  when the audit row is written, not only when it is rendered.
 
 ## Context
 

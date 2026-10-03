@@ -3,7 +3,7 @@
 - **Audience:** Deployment operators and maintainers
 - **Status:** Draft runbook; blocked on the first live restore drill
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-09-29
+- **Last reviewed:** 2026-10-02
 
 Skeleton procedure for a future deployment. LeaseBook is not publicly deployed; the first restore
 drill is deferred to public distribution under the consolidated deployment handoff. Record real
@@ -72,9 +72,10 @@ A PITR restores the database, and the Data Protection keyring is persisted in th
 keyring is wrapped by the `dataprotection` RSA key in `lb-<env>-kv` ([ADR-041](../adr/ADR-041-durable-keyring-and-proxy-trust.md)),
 whose private half never leaves the vault and is therefore not part of any database backup. The two
 have to be recoverable together: without the key, a restored database's `asp_net_user_tokens.value`
-(TOTP secrets and two-factor recovery codes) cannot be decrypted and existing auth/antiforgery
-cookies cannot be validated. Prod's vault carries purge protection (`infra/modules/vault.bicep`), so
-the first recovery path is the vault's own soft-delete window:
+(TOTP secrets and two-factor recovery codes) and the routing numbers and On-Us fields in
+`bank_micr_profiles` ([ADR-051](../adr/ADR-051-blank-stock-micr-details.md)) cannot be decrypted, and
+existing auth/antiforgery cookies cannot be validated. Prod's vault carries purge protection
+(`infra/modules/vault.bicep`), so the first recovery path is the vault's own soft-delete window:
 
 ```bash
 # The key still exists in the vault but was deleted — recover it in place.

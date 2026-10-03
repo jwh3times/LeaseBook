@@ -1417,6 +1417,70 @@ namespace LeaseBook.Web.Migrations
                     b.ToTable("bulk_run_items", (string)null);
                 });
 
+            modelBuilder.Entity("LeaseBook.Modules.Payments.Domain.BankMicrProfile", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("BankAccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("bank_account_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<decimal>("MicrOffsetXPoints")
+                        .HasPrecision(6, 2)
+                        .HasColumnType("numeric(6,2)")
+                        .HasColumnName("micr_offset_x_points");
+
+                    b.Property<decimal>("MicrOffsetYPoints")
+                        .HasPrecision(6, 2)
+                        .HasColumnType("numeric(6,2)")
+                        .HasColumnName("micr_offset_y_points");
+
+                    b.Property<string>("OnUsAccountNumber")
+                        .HasColumnType("text")
+                        .HasColumnName("on_us_account_number");
+
+                    b.Property<Guid>("OrgId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("org_id");
+
+                    b.Property<string>("RoutingNumber")
+                        .HasColumnType("text")
+                        .HasColumnName("routing_number");
+
+                    b.Property<string>("StockKind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("stock_kind");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_bank_micr_profiles");
+
+                    b.HasIndex("OrgId", "BankAccountId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_bank_micr_profiles_org_id_bank_account_id");
+
+                    b.ToTable("bank_micr_profiles", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_bank_micr_profiles_micr_offset_x", "micr_offset_x_points BETWEEN -18 AND 18");
+
+                            t.HasCheckConstraint("ck_bank_micr_profiles_micr_offset_y", "micr_offset_y_points BETWEEN -18 AND 18");
+
+                            t.HasCheckConstraint("ck_bank_micr_profiles_stock_kind", "stock_kind IN ('preprinted', 'blank')");
+                        });
+                });
+
             modelBuilder.Entity("LeaseBook.Modules.Payments.Domain.CheckPrintSetting", b =>
                 {
                     b.Property<Guid>("Id")

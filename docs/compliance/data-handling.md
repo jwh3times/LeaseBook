@@ -73,6 +73,7 @@ global-class.
 | Migration opening balances and verification figures            | `import_batches`, `migration_verifications` (host)                      |
 | Refund check number, amount, date, memo and print history      | `refund_checks`, `refund_check_prints` (Payments)                       |
 | Per-bank-account check print alignment offsets                 | `check_print_settings` (Payments)                                       |
+| Check MICR details: routing number, On-Us field, stock kind    | `bank_micr_profiles` (Payments) — full numbers, **encrypted** (§3)      |
 
 ### 2.3 Credentials and authentication data
 
@@ -168,6 +169,12 @@ PostgreSQL data above for the retention window.
   keys are not used in the beta design.
 - **Live —** authenticator keys and two-factor recovery codes are encrypted in the identity token
   store with ASP.NET Data Protection, above the database's own at-rest encryption.
+- **Live —** a bank account's routing number and On-Us field (which carries the account number),
+  held for printing checks on blank stock, are encrypted with ASP.NET Data Protection under their own
+  purpose. Every read returns their last four digits only; they are decrypted solely to draw the MICR
+  line of a printed blank-stock check or specimen, which carries them as any check does. Only an
+  administrator may change them, and audit rows record that they changed without the values
+  ([ADR-051](../adr/ADR-051-blank-stock-micr-details.md)).
 - **Live —** the Data Protection keyring itself persists to PostgreSQL rather than to a container
   filesystem, and is wrapped by a Key Vault key wherever deployment configuration names one, so the
   keys protecting the ciphertext are not stored only alongside it
