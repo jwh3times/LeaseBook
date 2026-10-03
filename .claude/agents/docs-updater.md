@@ -57,6 +57,7 @@ docs/adr/ADR-*.md             — the records themselves; historical, not rewrit
 ```
 docs/runbooks/local-dev.md    — dev commands, seed workflow, common ops; cites the README port map
 docs/runbooks/payment-simulation.md — dedicated payment fixture, signed driver, restart and reset
+docs/runbooks/blank-stock-checks.md — blank-stock refund checks: bank spec sheet, MICR setup, specimen, bank approval
 docs/runbooks/restore.md      — disaster recovery / PITR
 docs/runbooks/diagnostics.md  — error contract, event-id catalog, triage. DENSEST bulk-run prose
 docs/migration/parallel-run.md — public parallel-run checklist
@@ -199,6 +200,10 @@ shipped-state summaries for in-progress work.
 - A port changes
 
 `docs/runbooks/restore.md` documents the PITR procedure. Update if backup/restore tooling changes.
+
+`docs/runbooks/blank-stock-checks.md` walks an operator from the bank's MICR specification sheet to
+approved test checks. Update it when the blank-stock face, the MICR line's layout or offsets, the MICR
+details form, or a refusal code on the print routes changes.
 
 ### 6. `docs/accounting.md` and `docs/architecture.md`
 
