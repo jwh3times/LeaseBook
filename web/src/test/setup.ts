@@ -4,7 +4,7 @@ import { afterAll, afterEach, beforeAll } from 'vitest';
 import { server } from './mocks/server';
 
 // Mock the API for the whole web suite; tests override handlers per scenario via server.use(...).
-beforeAll(() => server.listen({ onUnhandledRequest: 'bypass' }));
+beforeAll(() => server.listen({ onUnhandledFrame: 'bypass' }));
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 
