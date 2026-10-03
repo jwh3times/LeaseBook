@@ -408,7 +408,13 @@ test("records a payment", async () => {
 - Never mock `fetch` directly — always MSW
 - Wrap with `QueryClientProvider` with `retry: false` (prevents test retries on expected errors)
 - `server.use(…)` per-test for happy path; `server.use(http.get(…, () => HttpResponse.error()))` for error states
-- `beforeEach(() => server.resetHandlers())` is in setup.ts — don't repeat it
+- `afterEach(() => server.resetHandlers())` is in setup.ts — don't repeat it
+- setup.ts holds every test open until each request it sent has reached the mock server, then resets
+  the handlers (`web/src/test/requestLeakGuard.ts`, #488). msw resolves a request's handlers a few
+  ticks after the send, so a test ending inside that gap used to have its request answered by the
+  next test's handlers. A test fails with "sent a request that never reached the mock server" only
+  when one never arrives. The guard covers dispatch, not completion — still wait for what a request
+  produces before asserting on it
 
 ---
 
