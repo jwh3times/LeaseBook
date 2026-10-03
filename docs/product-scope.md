@@ -30,9 +30,11 @@ separate isolated development fixture supports one-time simulated payments and s
 explicit, complete, fee-free simulated bank evidence creates a receipt; no real money moves.
 Tenant and owner invitations and enrollment can be exercised locally with an admin-configurable
 staff permission and a development test inbox. Staff can issue refund checks for held security
-deposits and prepaid credit, print them on pre-printed check stock and void them until they clear.
-Real email delivery, production enrollment, owner-initiated actions, blank-stock check printing,
-stale-check handling and live online payments remain outside the implemented scope.
+deposits and prepaid credit, print them on pre-printed check stock or on blank stock with a MICR line
+LeaseBook prints itself, and void them until they clear. Blank stock still needs the bank's approval of
+test checks before live use ([blank-stock runbook](runbooks/blank-stock-checks.md)). Real email
+delivery, production enrollment, owner-initiated actions, stale-check handling and live online payments
+remain outside the implemented scope.
 The [payment simulation runbook](runbooks/payment-simulation.md) owns setup and
 recovery.
 

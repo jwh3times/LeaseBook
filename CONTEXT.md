@@ -146,7 +146,8 @@ _Avoid_: pending check, open check
 
 **Check stock**:
 The paper a bank account's checks print on, set per bank account. Pre-printed stock already carries the
-bank's MICR line; on blank stock LeaseBook must print that line itself (ADR-051).
+bank, the organization and the MICR line; on blank stock LeaseBook prints the whole check, MICR line
+included (ADR-051).
 _Avoid_: check paper, check format
 
 **On-Us field**:

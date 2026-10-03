@@ -29,7 +29,7 @@ public sealed class MicrLineTests
             "        " +          // 31..24: unused On-Us positions
             "123456789U" +        // 23..14: the bank's On-Us field, ending at 14
             new string(' ', 13);  // 13..1: blank, amount field included
-        line.ToString().ShouldBe(expected);
+        line.Read().ShouldBe(expected);
 
         line.At(14).ShouldBe('U');
         line.At(33).ShouldBe('T');
@@ -47,7 +47,7 @@ public sealed class MicrLineTests
     {
         var line = MicrLine.Compose("540900071", "U12-3456 789U", 12345678);
 
-        line.ToString().ShouldBe(
+        line.Read().ShouldBe(
             "U12345678U" +        // 55..46
             "  " +                // 45..44
             "T540900071T" +       // 43..33
@@ -62,7 +62,7 @@ public sealed class MicrLineTests
     {
         // The alignment page on blank stock doubles as the bank's test sample: the real transit and On-Us
         // fields, and a serial no check can ever carry.
-        MicrLine.Specimen("111000012", "123456789U").ToString().ShouldBe(
+        MicrLine.Specimen("111000012", "123456789U").Read().ShouldBe(
             "U0000U" +            // 51..46
             "  " +                // 45..44
             "T111000012T" +       // 43..33

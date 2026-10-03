@@ -29,7 +29,14 @@ public sealed class RefundCheckBlankStockPdfTests
 
     private static readonly BlankCheckStock Stock = new(
         "Blue Ridge Property Management LLC", ["18 Haywood St, Suite 200", "Asheville, NC 28801", "(828) 555-0142"],
-        "First Mountain Bank", new BankMicrNumbers("111000012", "123456789U"), 0m, 0m);
+        "First Mountain Bank", new BankMicrPrint(new BankMicrNumbers("111000012", "123456789U"), 0m, 0m));
+
+    private static readonly BlankCheckStock LongestStock = Stock with
+    {
+        OrganizationName = new string('W', 200),
+        OrganizationAddress = [new string('W', 200), new string('W', 120), new string('W', 40)],
+        BankName = new string('W', 120),
+    };
 
     [Fact]
     public void Blank_stock_prints_what_pre_printed_stock_would_have_carried()
@@ -49,25 +56,37 @@ public sealed class RefundCheckBlankStockPdfTests
         face.ShouldNotContain("SPECIMEN");
     }
 
-    public static TheoryData<bool, int, int> Corners() => new()
+    public static TheoryData<string, int, int> Corners() => new()
     {
-        { false, 0, 0 }, { false, -18, -18 }, { false, 18, 18 }, { false, -18, 18 }, { false, 18, -18 },
-        { true, 0, 0 }, { true, 18, 18 }, { true, -18, -18 },
+        { "check", 0, 0 }, { "check", -18, -18 }, { "check", 18, 18 }, { "check", -18, 18 }, { "check", 18, -18 },
+        { "longest", 0, 0 }, { "longest", 18, 18 }, { "longest", -18, -18 },
+        { "specimen", 0, 0 }, { "specimen", 18, 18 }, { "specimen", -18, -18 },
     };
 
     [Theory]
     [MemberData(nameof(Corners))]
-    public void Nothing_but_the_micr_line_prints_in_the_clear_band(bool longest, int micrOffsetX, int micrOffsetY)
+    public void Nothing_but_the_micr_line_prints_in_the_clear_band(string kind, int micrOffsetX, int micrOffsetY)
     {
-        var check = longest ? Longest : Check;
-        var stock = Stock with { MicrOffsetXPoints = micrOffsetX, MicrOffsetYPoints = micrOffsetY };
+        var check = kind switch
+        {
+            "longest" => Longest,
+            "specimen" => RefundCheckPdf.AlignmentSample(new DateOnly(2026, 3, 2)),
+            _ => Check,
+        };
+        var stock = (kind == "longest" ? LongestStock : Stock) with
+        {
+            Micr = Stock.Micr with { MicrOffsetXPoints = micrOffsetX, MicrOffsetYPoints = micrOffsetY },
+        };
+        var expected = kind == "specimen"
+            ? MicrLine.Specimen("111000012", "123456789U")
+            : MicrLine.Compose("111000012", "123456789U", check.CheckNumber);
         using var document = PdfDocument.Open(RefundCheckPdf.RenderBlank(check, stock));
         var page = document.GetPage(1);
 
         page.Letters.Where(l => Intersects(l.BoundingBox.Bottom, l.BoundingBox.Top)).Select(l => l.Value)
             .ShouldBeEmpty();
         page.NumberOfImages.ShouldBe(0);
-        Same(BandPaths(page), Reference(MicrLine.Compose("111000012", "123456789U", check.CheckNumber), micrOffsetX, micrOffsetY))
+        Same(BandPaths(page), Reference(expected, micrOffsetX, micrOffsetY))
             .ShouldBeTrue("the clear band holds exactly the MICR line");
     }
 
@@ -92,6 +111,8 @@ public sealed class RefundCheckBlankStockPdfTests
         face.ShouldContain("SPECIMEN");
         face.ShouldContain("NON-NEGOTIABLE");
         face.ShouldContain("VOID");
+        face.ShouldContain("No. 0000");
+        page.GetWords().Count(w => w.Text == "#0000").ShouldBe(2); // both stubs match the face
         Same(BandPaths(page), Reference(MicrLine.Specimen("111000012", "123456789U"), 0, 0)).ShouldBeTrue();
     }
 

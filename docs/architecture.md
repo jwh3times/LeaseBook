@@ -34,7 +34,8 @@ observations and atomic Accounting receipt effects; it has no live provider adap
 [ADR-046](adr/ADR-046-simulated-payment-recognition.md). It also owns refund checks: the check record,
 its print history and per-bank print calibration
 ([ADR-050](adr/ADR-050-refund-checks.md)), and each bank account's check stock and write-only MICR
-details ([ADR-051](adr/ADR-051-blank-stock-micr-details.md)). A module references `SharedKernel`
+details, decrypted only to draw a blank-stock check's MICR line
+([ADR-051](adr/ADR-051-blank-stock-micr-details.md)). A module references `SharedKernel`
 and nothing else; the architecture tests (`ModuleBoundaryTests`) enforce this absolutely.
 
 A module **never reads another module's tables or types directly**. A cross-module read goes through

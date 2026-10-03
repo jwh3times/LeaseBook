@@ -56,7 +56,7 @@ stock LeaseBook prints what pre-printed stock carried: the organization's legal 
 the words "Trust Account" that 21 NCAC 58A .0117(b)
 requires on every check drawn on a trust account (refund checks draw only on trust accounts); the
 bank's name; the check number, which is also the MICR serial; and the field labels and lines. Every face
-field ends at least 12 pt above the clear band.
+field and line ends at least 11 pt above the clear band.
 
 - The print offsets do not apply on blank stock. They exist to line fields up with pre-printed boxes,
   and blank stock has none; applied, they could push a field into the band, and QuestPDF cannot clip.
@@ -80,7 +80,9 @@ routing number, the On-Us field and the MICR line offsets.
 
 - The routing number and the On-Us field are encrypted at rest with ASP.NET Data Protection (purpose
   `LeaseBook.BankMicr.v1`) over the durable keyring of [ADR-041](ADR-041-durable-keyring-and-proxy-trust.md).
-- Every read, for staff and administrators alike, carries only the last four digits of each. A save
+- Every read, for staff and administrators alike, carries only the last four digits of each. The one
+  exception is a printed blank-stock check or specimen, whose MICR line is the numbers: staff print
+  checks, so whoever holds one can read them, exactly as on pre-printed stock. A save
   that leaves a number empty keeps the saved one, so no form ever needs the full value back.
 - Only `PMAdmin` may save. Staff read the masked view, since they print the checks.
 - The routing number must be nine digits with a valid ABA check digit (weights 3, 7, 1). The On-Us
@@ -107,8 +109,9 @@ and withheld on display. An audited entity that gains a secret-named column stil
   geometry error is caught only by a bank test.
 - Deferring US placement to bank testing and a per-account offset keeps the feature buildable without
   the paid standard, at the price of a systematic offset error surfacing late, at the bank.
-- Nobody can read a saved number back through LeaseBook. Correcting one means typing it again, and an
-  operator who needs to confirm it reads it from the bank's sheet.
+- No screen or response shows a saved number back. Correcting one means typing it again, and an
+  operator who needs to confirm it reads it from the bank's sheet. The printed MICR line carries the
+  numbers, as any check does, and staff can print a specimen as well as a check.
 - A changed routing number is visible in the audit trail as a change, but its old and new values are
   not recoverable from the trail.
 - On blank stock a printer that registers the page off its nominal position is corrected only through

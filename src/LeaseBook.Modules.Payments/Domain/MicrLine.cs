@@ -111,9 +111,15 @@ public sealed partial class MicrLine
     [GeneratedRegex("^[0-9U\\- ]{1,18}$")]
     private static partial Regex OnUsField();
 
-    /// <summary>The line read left to right, from <see cref="HighestPosition"/> down to 1; blanks are spaces.</summary>
-    public override string ToString() =>
+    /// <summary>
+    /// The line read left to right, from <see cref="HighestPosition"/> down to 1; blanks are spaces. It holds
+    /// the full routing number and On-Us field, so it is never what <see cref="ToString"/> returns.
+    /// </summary>
+    public string Read() =>
         new(Enumerable.Range(1, HighestPosition).Reverse().Select(p => At(p) ?? ' ').ToArray());
+
+    /// <summary>A log line or an exception message that interpolates a line shows that it exists, never its numbers.</summary>
+    public override string ToString() => $"{nameof(MicrLine)} {{ Positions = {HighestPosition} }}";
 
     /// <summary>Places <paramref name="text"/> so its right-most character lands on <paramref name="rightPosition"/>.</summary>
     private static void PlaceRightAligned(Dictionary<int, char> characters, string text, int rightPosition)

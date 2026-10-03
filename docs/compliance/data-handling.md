@@ -171,8 +171,9 @@ PostgreSQL data above for the retention window.
   store with ASP.NET Data Protection, above the database's own at-rest encryption.
 - **Live —** a bank account's routing number and On-Us field (which carries the account number),
   held for printing checks on blank stock, are encrypted with ASP.NET Data Protection under their own
-  purpose. Every read returns their last four digits only, only an administrator may change them, and
-  audit rows record that they changed without the values
+  purpose. Every read returns their last four digits only; they are decrypted solely to draw the MICR
+  line of a printed blank-stock check or specimen, which carries them as any check does. Only an
+  administrator may change them, and audit rows record that they changed without the values
   ([ADR-051](../adr/ADR-051-blank-stock-micr-details.md)).
 - **Live —** the Data Protection keyring itself persists to PostgreSQL rather than to a container
   filesystem, and is wrapped by a Key Vault key wherever deployment configuration names one, so the

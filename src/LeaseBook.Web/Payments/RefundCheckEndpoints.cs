@@ -138,8 +138,7 @@ public sealed class RefundCheckEndpoints : IEndpointModule
         var address = new[] { org.Address, Join(" ", Join(", ", org.City, org.State), org.Zip), org.Phone }
             .Where(line => !string.IsNullOrWhiteSpace(line)).Select(line => line!).ToList();
 
-        return RefundCheckPdf.RenderBlank(document, new BlankCheckStock(
-            org.LegalName, address, bank.Institution, micr.Numbers, micr.MicrOffsetXPoints, micr.MicrOffsetYPoints));
+        return RefundCheckPdf.RenderBlank(document, new BlankCheckStock(org.LegalName, address, bank.Institution, micr));
     }
 
     internal static RefundCheckDocument ToDocument(RefundCheckView check)

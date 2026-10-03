@@ -15,11 +15,10 @@ public sealed record RefundCheckDocument(
 
 /// <summary>
 /// What blank stock needs that pre-printed stock already carries (#474): the organization's name and address,
-/// the bank's name, the account's MICR numbers and the bank's MICR line offsets (points).
+/// the bank's name, and the account's MICR numbers with the bank's MICR line offsets.
 /// </summary>
 public sealed record BlankCheckStock(
-    string OrganizationName, IReadOnlyList<string> OrganizationAddress, string BankName, BankMicrNumbers Micr,
-    decimal MicrOffsetXPoints, decimal MicrOffsetYPoints);
+    string OrganizationName, IReadOnlyList<string> OrganizationAddress, string BankName, BankMicrPrint Micr);
 
 /// <summary>
 /// Renders a refund check onto check-on-top voucher stock (US Letter: the check in the top 3.5 inches, two
@@ -95,7 +94,7 @@ public static class RefundCheckPdf
                     Place(54, 212, 280, 14, c => c.Text(check.Memo));
                 }
 
-                Stubs(Place, check, date);
+                Stubs(Place, check, check.CheckNumber.ToString(CultureInfo.InvariantCulture), date);
             });
         })).GeneratePdf();
     }
@@ -108,7 +107,7 @@ public static class RefundCheckPdf
     /// edge, composed from the account's numbers and this check's own number — or, on the alignment page, an
     /// all-zero specimen serial.
     /// <para>
-    /// The 5/8 in clear band holds nothing but the MICR line: every face field ends at least 12 pt above it.
+    /// The 5/8 in clear band holds nothing but the MICR line: every face field and line ends at least 11 pt above it.
     /// The print offsets do not apply, because they exist to line fields up with pre-printed boxes and blank
     /// stock has none; were they applied, a field could be pushed into the band. Only the bank's MICR offset
     /// moves anything, and it moves only the MICR line.
@@ -117,9 +116,10 @@ public static class RefundCheckPdf
     public static byte[] RenderBlank(RefundCheckDocument check, BlankCheckStock stock)
     {
         QuestPdfSetup.Ensure();
+        var numbers = stock.Micr.Numbers;
         var micr = check.AlignmentTest
-            ? MicrLine.Specimen(stock.Micr.RoutingNumber, stock.Micr.OnUsField)
-            : MicrLine.Compose(stock.Micr.RoutingNumber, stock.Micr.OnUsField, check.CheckNumber);
+            ? MicrLine.Specimen(numbers.RoutingNumber, numbers.OnUsField)
+            : MicrLine.Compose(numbers.RoutingNumber, numbers.OnUsField, check.CheckNumber);
         var amount = "**" + check.Amount.ToString("N2", Invariant);
         var words = CheckAmountWords.Format(check.Amount) + " *****";
         var date = check.Date.ToString("MM/dd/yyyy", Invariant);
@@ -197,22 +197,23 @@ public static class RefundCheckPdf
 
                 // The MICR clear band: the check's bottom 5/8 in, holding the MICR line and nothing else.
                 layers.Layer().PaddingTop(CheckHeight - ClearBandHeight).Width(PageWidth)
-                    .MicrLine(micr, stock.MicrOffsetXPoints, stock.MicrOffsetYPoints);
+                    .MicrLine(micr, stock.Micr.MicrOffsetXPoints, stock.Micr.MicrOffsetYPoints);
 
-                Stubs(Place, check, date);
+                Stubs(Place, check, number, date);
             });
         })).GeneratePdf();
     }
 
     /// <summary>Two identical stubs below the check: the file copy and the payee's copy.</summary>
-    private static void Stubs(Action<float, float, float, float, Action<IContainer>> place, RefundCheckDocument check, string date)
+    private static void Stubs(
+        Action<float, float, float, float, Action<IContainer>> place, RefundCheckDocument check, string number, string date)
     {
         foreach (var top in new[] { 270f, 540f })
         {
             place(36, top, 540, 220, c => c.Column(col =>
             {
                 col.Spacing(3);
-                col.Item().Text($"Refund check #{check.CheckNumber.ToString(CultureInfo.InvariantCulture)}").Style(StubTitleStyle);
+                col.Item().Text($"Refund check #{number}").Style(StubTitleStyle);
                 col.Item().Text($"Date: {date}").Style(StubStyle);
                 col.Item().Text($"Payee: {check.PayeeName}").Style(StubStyle);
                 col.Item().Text($"Amount: {check.Amount.ToString("N2", Invariant)}").Style(StubStyle);
