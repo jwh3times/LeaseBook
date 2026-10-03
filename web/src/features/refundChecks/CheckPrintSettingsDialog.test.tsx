@@ -211,10 +211,11 @@ describe('CheckPrintSettingsDialog', () => {
       expect(
         within(micr).getByText('Only an administrator can change the MICR details.'),
       ).toBeInTheDocument();
-      // Until LeaseBook prints the MICR line, a blank-stock account prints nothing — and says so.
+      // Blank stock prints the whole face, so the print offsets stop applying — and the dialog says so,
+      // along with what the face needs and the bank's approval it waits on.
       expect(
         within(micr).getByText(
-          'Checks on this account won’t print until LeaseBook can print the MICR line.',
+          'LeaseBook prints the whole check on this account, so the print offsets don’t apply. It needs the organization’s legal name and this bank’s name, and the bank’s approval of test checks before live ones.',
         ),
       ).toBeInTheDocument();
       expect(within(micr).queryByRole('textbox')).toBeNull();

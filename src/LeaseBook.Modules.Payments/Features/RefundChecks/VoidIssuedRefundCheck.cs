@@ -71,12 +71,6 @@ internal sealed class RecordRefundCheckPrintHandler(DbContext db, IOrgContext or
             throw RefundCheckConflictException.Voided();
         }
 
-        if (await db.Set<BankMicrProfile>().AnyAsync(
-                p => p.BankAccountId == check.BankAccountId && p.StockKind == CheckStockKinds.Blank, ct))
-        {
-            throw RefundCheckConflictException.BlankStockUnsupported();
-        }
-
         db.Add(new RefundCheckPrint { Id = LeaseBook.SharedKernel.UuidV7.NewId(), CheckId = check.Id });
         await db.SaveChangesAsync(ct);
         return (await RefundCheckReads.ViewsAsync(db, ledger, [check], ct))[0];

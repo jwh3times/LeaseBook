@@ -9,8 +9,9 @@ namespace LeaseBook.Tests.Integration;
 /// the amount field (1–12) and position 13 stay blank for the bank of first deposit; the On-Us field
 /// ends at position 14 (X9 TR 100 def. 197; Fed X9.37 guide "positions 14 and 31"); the transit field
 /// is ⑆ + nine digits + ⑆ at 33–43; the EPC (44/45) stays blank; and the check number sits in the
-/// Auxiliary On-Us field, right-justified so its last digit is at position 48 (Fed X9.37 guide
-/// "positions 48 - 62"), between On-Us symbols. In the strings, T is ⑆, U is ⑈ and - is ⑉.
+/// Auxiliary On-Us field between On-Us symbols, the closing symbol at 46 so that two blank positions
+/// separate it from the transit field — the most Standard 006 §4.5 allows (ADR-051, amended in part 3;
+/// the Fed X9.37 guide's "positions 48 - 62" would leave three). In the strings, T is ⑆, U is ⑈ and - is ⑉.
 /// </summary>
 public sealed class MicrLineTests
 {
@@ -21,21 +22,24 @@ public sealed class MicrLineTests
 
         // Read left to right, position 52 down to position 1; a space is a blank position.
         var expected =
-            "U1043U" +            // 52..47: Auxiliary On-Us — closing ⑈, the number ending at 48, opening ⑈
-            "   " +               // 46..44: blank, EPC included
+            "U1043U" +            // 51..46: Auxiliary On-Us — opening ⑈, the number ending at 47, closing ⑈
+            "  " +                // 45..44: blank, the EPC
             "T111000012T" +       // 43..33: transit field
             " " +                 // 32: blank between fields
             "        " +          // 31..24: unused On-Us positions
             "123456789U" +        // 23..14: the bank's On-Us field, ending at 14
             new string(' ', 13);  // 13..1: blank, amount field included
-        line.ToString().ShouldBe(expected);
+        line.Read().ShouldBe(expected);
 
         line.At(14).ShouldBe('U');
         line.At(33).ShouldBe('T');
         line.At(43).ShouldBe('T');
-        line.At(48).ShouldBe('3');
+        line.At(46).ShouldBe('U');
+        line.At(47).ShouldBe('3');
+        line.At(44).ShouldBeNull();
+        line.At(45).ShouldBeNull();
         line.At(1).ShouldBeNull();
-        line.HighestPosition.ShouldBe(52);
+        line.HighestPosition.ShouldBe(51);
     }
 
     [Fact]
@@ -43,13 +47,28 @@ public sealed class MicrLineTests
     {
         var line = MicrLine.Compose("540900071", "U12-3456 789U", 12345678);
 
-        line.ToString().ShouldBe(
-            "U12345678U" +        // 56..47
-            "   " +               // 46..44
+        line.Read().ShouldBe(
+            "U12345678U" +        // 55..46
+            "  " +                // 45..44
             "T540900071T" +       // 43..33
             " " +                 // 32
             "     " +             // 31..27
             "U12-3456 789U" +     // 26..14, the dash and the empty position kept
+            new string(' ', 13)); // 13..1
+    }
+
+    [Fact]
+    public void A_specimen_carries_the_account_s_numbers_and_an_all_zero_serial()
+    {
+        // The alignment page on blank stock doubles as the bank's test sample: the real transit and On-Us
+        // fields, and a serial no check can ever carry.
+        MicrLine.Specimen("111000012", "123456789U").Read().ShouldBe(
+            "U0000U" +            // 51..46
+            "  " +                // 45..44
+            "T111000012T" +       // 43..33
+            " " +                 // 32
+            "        " +          // 31..24
+            "123456789U" +        // 23..14
             new string(' ', 13)); // 13..1
     }
 

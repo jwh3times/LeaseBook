@@ -53,4 +53,19 @@ public sealed class BankMicrRulesTests
             text.ShouldContain("blank"); // still useful in a log line
         }
     }
+
+    [Fact]
+    public void Printing_what_a_blank_stock_print_carries_never_shows_the_numbers()
+    {
+        // Part 3 decrypts the numbers for the renderer; every shape that holds them prints without them.
+        var print = new BankMicrPrint(new BankMicrNumbers("111000012", "123456789U"), 1m, 2m);
+        var stock = new LeaseBook.Web.Payments.BlankCheckStock("Org LLC", ["1 Main St"], "First Bank", print);
+        var line = MicrLine.Compose("111000012", "123456789U", 1043);
+
+        foreach (var text in new[] { print.ToString(), print.Numbers.ToString(), stock.ToString(), line.ToString() })
+        {
+            text.ShouldNotContain("111000012");
+            text.ShouldNotContain("123456789");
+        }
+    }
 }

@@ -10,9 +10,10 @@ namespace LeaseBook.Modules.Payments.Domain;
 /// <para>
 /// Layout, from the right: positions 1–13 blank (amount field and the gap after it); the bank's On-Us
 /// field ending at position 14; position 32 blank; the transit field ⑆ + routing number + ⑆ at 33–43;
-/// the External Processing Code (44/45) blank; and the check number in the Auxiliary On-Us field,
-/// right-justified so its last digit is at position 48, between On-Us symbols. Sources and the evidence
-/// gaps are in <c>docs/research/micr-e13b-refund-checks.md</c>.
+/// the External Processing Code (44/45) blank; and the check number in the Auxiliary On-Us field between
+/// On-Us symbols, the closing one at position 46, so two blank positions separate it from the transit field
+/// — the most Standard 006 §4.5 allows. Sources and the evidence gaps are in
+/// <c>docs/research/micr-e13b-refund-checks.md</c>.
 /// </para>
 /// </summary>
 public sealed partial class MicrLine
@@ -23,7 +24,7 @@ public sealed partial class MicrLine
 
     private const int OnUsLastPosition = 14;
     private const int TransitRightPosition = 33;
-    private const int AuxiliaryOnUsLastDigitPosition = 48;
+    private const int AuxiliaryOnUsClosingPosition = 46;
 
     private readonly Dictionary<int, char> _characters;
 
@@ -45,6 +46,22 @@ public sealed partial class MicrLine
 
     public static MicrLine Compose(string routingNumber, string onUsField, int checkNumber)
     {
+        if (checkNumber <= 0)
+        {
+            throw new ArgumentException("A check number is required.", nameof(checkNumber));
+        }
+
+        return Build(routingNumber, onUsField, checkNumber.ToString(System.Globalization.CultureInfo.InvariantCulture));
+    }
+
+    /// <summary>
+    /// The alignment page's line on blank stock: the account's real transit and On-Us fields, so it can
+    /// serve as the bank's test sample, and an all-zero serial that no check can carry.
+    /// </summary>
+    public static MicrLine Specimen(string routingNumber, string onUsField) => Build(routingNumber, onUsField, "0000");
+
+    private static MicrLine Build(string routingNumber, string onUsField, string serial)
+    {
         if (!IsValidRoutingNumber(routingNumber))
         {
             throw new ArgumentException("The routing number is not a valid ABA routing number.", nameof(routingNumber));
@@ -55,16 +72,10 @@ public sealed partial class MicrLine
             throw new ArgumentException("The On-Us field holds characters the MICR font cannot print.", nameof(onUsField));
         }
 
-        if (checkNumber <= 0)
-        {
-            throw new ArgumentException("A check number is required.", nameof(checkNumber));
-        }
-
         var characters = new Dictionary<int, char>();
         PlaceRightAligned(characters, onUsField, OnUsLastPosition);
         PlaceRightAligned(characters, $"{Transit}{routingNumber}{Transit}", TransitRightPosition);
-        var serial = checkNumber.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        PlaceRightAligned(characters, $"{OnUs}{serial}{OnUs}", AuxiliaryOnUsLastDigitPosition - 1);
+        PlaceRightAligned(characters, $"{OnUs}{serial}{OnUs}", AuxiliaryOnUsClosingPosition);
         return new MicrLine(characters);
     }
 
@@ -100,9 +111,15 @@ public sealed partial class MicrLine
     [GeneratedRegex("^[0-9U\\- ]{1,18}$")]
     private static partial Regex OnUsField();
 
-    /// <summary>The line read left to right, from <see cref="HighestPosition"/> down to 1; blanks are spaces.</summary>
-    public override string ToString() =>
+    /// <summary>
+    /// The line read left to right, from <see cref="HighestPosition"/> down to 1; blanks are spaces. It holds
+    /// the full routing number and On-Us field, so it is never what <see cref="ToString"/> returns.
+    /// </summary>
+    public string Read() =>
         new(Enumerable.Range(1, HighestPosition).Reverse().Select(p => At(p) ?? ' ').ToArray());
+
+    /// <summary>A log line or an exception message that interpolates a line shows that it exists, never its numbers.</summary>
+    public override string ToString() => $"{nameof(MicrLine)} {{ Positions = {HighestPosition} }}";
 
     /// <summary>Places <paramref name="text"/> so its right-most character lands on <paramref name="rightPosition"/>.</summary>
     private static void PlaceRightAligned(Dictionary<int, char> characters, string text, int rightPosition)

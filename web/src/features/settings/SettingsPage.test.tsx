@@ -1,9 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { server } from '@/test/mocks/server';
 import { SettingsPage } from './SettingsPage';
 
@@ -232,6 +232,49 @@ describe('SettingsPage', () => {
     expect(screen.getByText(/management company's own non-trust bank account/i)).toHaveTextContent(
       /outside the trust equation.*cannot be changed after creation/i,
     );
+  });
+
+  it('edits an existing account’s name, institution and mask, keeping its purpose', async () => {
+    // #474: a blank-stock check prints the bank's name, so an account created without an institution
+    // must be able to gain one here — the print refusal (blank_stock_incomplete) points at this form.
+    let body: unknown;
+    server.use(
+      http.get('/api/settings/org', () => HttpResponse.json(ORG)),
+      http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 })),
+      http.get('/api/settings/banks', () =>
+        HttpResponse.json([{ ...ACTIVE_BANK, institution: null }]),
+      ),
+      http.put('/api/settings/banks/:id', async ({ request, params }) => {
+        body = { id: params.id, ...((await request.json()) as object) };
+        return HttpResponse.json({ ...ACTIVE_BANK, institution: 'First Mountain Bank' });
+      }),
+    );
+
+    renderSettings();
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit Operating Trust' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Edit bank account' });
+    expect(within(dialog).getByLabelText('Name')).toHaveValue('Operating Trust');
+    expect(within(dialog).getByLabelText('Mask (last 4)')).toHaveValue('4021');
+    expect(within(dialog).queryByLabelText('Purpose')).toBeNull();
+
+    server.use(
+      http.get('/api/settings/banks', () =>
+        HttpResponse.json([{ ...ACTIVE_BANK, institution: 'First Mountain Bank' }]),
+      ),
+    );
+    await userEvent.type(within(dialog).getByLabelText('Institution'), 'First Mountain Bank');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+
+    await vi.waitFor(() =>
+      expect(body).toEqual({
+        id: 'b1',
+        name: 'Operating Trust',
+        institution: 'First Mountain Bank',
+        mask: '4021',
+      }),
+    );
+    expect(await screen.findByText('First Mountain Bank')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Edit bank account' })).toBeNull();
   });
 
   it('deactivates a bank account and flips the badge to Inactive', async () => {

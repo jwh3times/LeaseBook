@@ -14,6 +14,10 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ## [Unreleased]
 
+- _Nothing yet._
+
+## [0.24.0] - 2026-10-02
+
 ### Added
 
 - **Bank accounts can hold their MICR details for checks on blank stock.** In a bank account's check
@@ -21,9 +25,19 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   specification sheet prints it, whether the account's checks use pre-printed or blank stock, and how
   far to move the MICR line. The routing number's check digit is verified. Both numbers are encrypted,
   every screen shows only their last four digits, staff see them read-only, and the audit trail
-  records that they changed but never what they were. Printing on blank stock is not available yet:
-  until LeaseBook prints the MICR line, a check or alignment page for an account set to blank stock is
-  refused rather than printed without one.
+  records that they changed but never what they were.
+- **Refund checks print on blank stock, MICR line included.** For a bank account set to blank stock,
+  LeaseBook prints the whole check: the organization's legal name and address with the words "Trust
+  Account", the bank's name, the check number, and the routing number, On-Us field and check number in
+  E-13B along the bottom edge, with nothing else in the MICR clear band. The alignment page becomes a
+  specimen marked non-negotiable and void, carrying the account's real MICR line, for the bank's test.
+  Printing is refused until the organization's legal name and the bank's name are saved, and the print
+  offsets apply to pre-printed stock only. The bank must approve test checks before live use; the
+  [blank-stock runbook](docs/runbooks/blank-stock-checks.md) walks through it. Checks on pre-printed
+  stock print exactly as before.
+- **A bank account's name, institution and mask can be corrected.** Settings → Bank accounts gains an
+  Edit action for an existing account; its purpose stays fixed. A blank-stock check prints the
+  institution, so an account created without one can now gain it.
 
 ### Fixed
 
@@ -1231,7 +1245,8 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.23.0...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.24.0...HEAD
+[0.24.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.24.0
 [0.23.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.23.0
 [0.22.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.22.0
 [0.21.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.21.0

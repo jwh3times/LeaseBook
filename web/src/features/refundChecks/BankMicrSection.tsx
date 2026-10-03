@@ -140,10 +140,12 @@ export function BankMicrSection({ bankAccountId }: BankMicrSectionProps) {
             <li>
               {STOCK_LABEL[stockKindOf(details.data)]}
               {stockKindOf(details.data) === 'blank' && (
-                // #474 ships in steps: the setting exists before the MICR line does, and the server
-                // refuses to print on blank stock until it does (blank_stock_unsupported).
+                // #474: the server refuses a blank-stock print while the face is missing the legal name
+                // or the bank's name (blank_stock_incomplete), and ignores the print offsets.
                 <div className="t3 fs12">
-                  Checks on this account won’t print until LeaseBook can print the MICR line.
+                  LeaseBook prints the whole check on this account, so the print offsets don’t
+                  apply. It needs the organization’s legal name and this bank’s name, and the bank’s
+                  approval of test checks before live ones.
                 </div>
               )}
             </li>

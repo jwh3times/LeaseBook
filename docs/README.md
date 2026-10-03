@@ -43,6 +43,7 @@ summaries elsewhere should link here rather than restating mutable detail.
 
 - [Local development](runbooks/local-dev.md)
 - [Isolated payment simulation](runbooks/payment-simulation.md)
+- [Blank-stock refund checks](runbooks/blank-stock-checks.md)
 - [Point-in-time restore](runbooks/restore.md)
 - [Error diagnostics](runbooks/diagnostics.md)
 
