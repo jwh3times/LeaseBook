@@ -9,6 +9,7 @@ using LeaseBook.Modules.Directory.Features.Owners;
 using LeaseBook.Modules.Directory.Features.Properties;
 using LeaseBook.Modules.Directory.Features.Tenants;
 using LeaseBook.Modules.Directory.Features.Units;
+using LeaseBook.Modules.Payments.Domain;
 using LeaseBook.Modules.Payments.Features.RefundChecks;
 using LeaseBook.SharedKernel;
 using LeaseBook.SharedKernel.Cqrs;
@@ -209,6 +210,87 @@ public sealed class RefundCheckHttpTests(PostgresFixture fixture)
         var response = await client.GetAsync($"/api/refund-checks?bankAccountId={setup.DepositBankId}&{parameter}", ct);
         // The query's validator, not the binder (whose 400 is `invalid_request`), refused it.
         await ShouldBeProblemAsync(response, HttpStatusCode.BadRequest, "validation_failed", ct);
+    }
+
+    [Fact]
+    public async Task A_blank_stock_account_prints_its_own_face_and_micr_line_once_it_has_what_the_face_needs()
+    {
+        // #474: blank stock prints what pre-printed stock carried — the organization's legal name and the bank's
+        // name among it — so a print is refused until both exist, and the refusal records no print and carries
+        // no number. Once they do, the check prints with its MICR line, and the print offsets, which line fields
+        // up with pre-printed boxes, no longer move anything.
+        var ct = TestContext.Current.CancellationToken;
+        var setup = await SetupAsync(ct);
+        var staff = await LoggedInClientAsync(setup.StaffEmail, ct);
+        var admin = await LoggedInClientAsync(await CreateUserAsync(setup.OrgId, "admin", Roles.PMAdmin, ct), ct);
+        var issued = await PostOkAsync<RefundCheckView>(staff, "/api/refund-checks", Body(setup, 1043), ct);
+
+        var saved = await admin.PutAsJsonAsync($"/api/refund-checks/micr/{setup.DepositBankId}", new
+        {
+            stockKind = "blank",
+            routingNumber = "111000012",
+            onUsAccountNumber = "123456789U",
+            micrOffsetXPoints = 0m,
+            micrOffsetYPoints = 0m,
+        }, ct);
+        saved.StatusCode.ShouldBe(HttpStatusCode.OK, await saved.Content.ReadAsStringAsync(ct));
+        (await admin.PutAsJsonAsync($"/api/refund-checks/print-settings/{setup.DepositBankId}",
+            new { offsetXPoints = 36m, offsetYPoints = 36m }, ct)).StatusCode.ShouldBe(HttpStatusCode.OK);
+
+        var pdf = await staff.PostAsync($"/api/refund-checks/{issued.Id}/pdf", null, ct);
+        var refusal = await pdf.Content.ReadAsStringAsync(ct);
+        refusal.ShouldNotContain("111000012");
+        refusal.ShouldNotContain("123456789");
+        await ShouldBeProblemAsync(pdf, HttpStatusCode.Conflict, "blank_stock_incomplete", ct);
+        var alignment = await staff.PostAsync($"/api/refund-checks/print-settings/{setup.DepositBankId}/alignment", null, ct);
+        await ShouldBeProblemAsync(alignment, HttpStatusCode.Conflict, "blank_stock_incomplete", ct);
+        (await GetAsync<CheckPage>(staff, $"/api/refund-checks?tenantId={setup.TenantId}", ct)).Items
+            .ShouldHaveSingleItem().PrintCount.ShouldBe(0);
+
+        (await admin.PutAsJsonAsync("/api/settings/org", new
+        {
+            legalName = "Blue Ridge Property Management LLC",
+            address = "18 Haywood St, Suite 200",
+            city = "Asheville",
+            state = "NC",
+            zip = "28801",
+        }, ct)).StatusCode.ShouldBe(HttpStatusCode.OK);
+        (await admin.PutAsJsonAsync($"/api/settings/banks/{setup.DepositBankId}",
+            new { name = "Deposit Trust", institution = "First Mountain Bank" }, ct)).StatusCode.ShouldBe(HttpStatusCode.OK);
+
+        var printed = await staff.PostAsync($"/api/refund-checks/{issued.Id}/pdf", null, ct);
+        var bytes = await printed.Content.ReadAsByteArrayAsync(ct);
+        printed.StatusCode.ShouldBe(HttpStatusCode.OK, System.Text.Encoding.UTF8.GetString(bytes));
+        using (var document = PdfDocument.Open(bytes))
+        {
+            var page = document.GetPage(1);
+            var text = string.Join(" ", page.GetWords().Select(w => w.Text));
+            text.ShouldContain("Blue Ridge Property Management LLC");
+            text.ShouldContain("Asheville, NC 28801");
+            text.ShouldContain("TRUST ACCOUNT");
+            text.ShouldContain("First Mountain Bank");
+            text.ShouldContain("No. 1043");
+            text.ShouldNotContain("111000012");
+            text.ShouldNotContain("123456789");
+            // The MICR line: filled paths in the check's 5/8 in clear band (PDF y 540–585).
+            page.Paths.Count(p => p.IsFilled && p.GetBoundingRectangle() is { } r && r.Bottom >= 540 && r.Top <= 585)
+                .ShouldBe(MicrLine.Compose("111000012", "123456789U", 1043).Characters.Count());
+            // Saved print offsets of half an inch would have moved the payee off its line.
+            page.GetWords().First(w => w.Text == "Jasmine").BoundingBox.Left.ShouldBe(104, tolerance: 0.5);
+        }
+
+        var specimen = await staff.PostAsync($"/api/refund-checks/print-settings/{setup.DepositBankId}/alignment", null, ct);
+        specimen.StatusCode.ShouldBe(HttpStatusCode.OK);
+        PdfText(await specimen.Content.ReadAsByteArrayAsync(ct)).ShouldContain("SPECIMEN");
+        (await GetAsync<CheckPage>(staff, $"/api/refund-checks?tenantId={setup.TenantId}", ct)).Items
+            .ShouldHaveSingleItem().PrintCount.ShouldBe(1);
+
+        // Back on pre-printed stock it prints as before, the stock carrying the face.
+        (await admin.PutAsJsonAsync($"/api/refund-checks/micr/{setup.DepositBankId}",
+            new { stockKind = "preprinted", micrOffsetXPoints = 0m, micrOffsetYPoints = 0m }, ct)).StatusCode.ShouldBe(HttpStatusCode.OK);
+        var preprinted = await staff.PostAsync($"/api/refund-checks/{issued.Id}/pdf", null, ct);
+        preprinted.StatusCode.ShouldBe(HttpStatusCode.OK);
+        PdfText(await preprinted.Content.ReadAsByteArrayAsync(ct)).ShouldNotContain("TRUST ACCOUNT");
     }
 
     [Fact]

@@ -11,6 +11,7 @@ import {
   useCreateBankAccount,
   useOrgSettings,
   useSetBankAccountActive,
+  useUpdateBankAccount,
   useUpdateOrgSettings,
   type BankAccount,
   type OrgSettings,
@@ -390,6 +391,7 @@ function BankAccountsSection() {
   const banks = useBankAccounts();
   const setActive = useSetBankAccountActive();
   const [showNew, setShowNew] = useState(false);
+  const [editing, setEditing] = useState<BankAccount | null>(null);
   const [rowError, setRowError] = useState<ApiError | null>(null);
 
   const bankColumns: TableColumn<BankAccount>[] = [
@@ -424,23 +426,33 @@ function BankAccountsSection() {
       key: 'actions',
       header: '',
       render: (b) => (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={async () => {
-            setRowError(null);
-            try {
-              await setActive.mutateAsync({ id: b.id, isActive: !b.isActive });
-            } catch (e) {
-              // Was a hardcoded copy of the `bank_account_has_uncleared` 409's detail, which made
-              // every other failure of this mutation — a 500, a dropped connection — claim the
-              // account had uncleared items and dropped the support reference (#360).
-              setRowError(asApiError(e, 'Could not change this account.'));
-            }
-          }}
-        >
-          {b.isActive ? 'Deactivate' : 'Reactivate'}
-        </Button>
+        <div className="row gap6">
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-label={`Edit ${b.name}`}
+            onClick={() => setEditing(b)}
+          >
+            Edit
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={async () => {
+              setRowError(null);
+              try {
+                await setActive.mutateAsync({ id: b.id, isActive: !b.isActive });
+              } catch (e) {
+                // Was a hardcoded copy of the `bank_account_has_uncleared` 409's detail, which made
+                // every other failure of this mutation — a 500, a dropped connection — claim the
+                // account had uncleared items and dropped the support reference (#360).
+                setRowError(asApiError(e, 'Could not change this account.'));
+              }
+            }}
+          >
+            {b.isActive ? 'Deactivate' : 'Reactivate'}
+          </Button>
+        </div>
       ),
     },
   ];
@@ -479,7 +491,82 @@ function BankAccountsSection() {
         </div>
       )}
       {showNew && <NewBankModal onClose={() => setShowNew(false)} />}
+      {editing && <EditBankModal bank={editing} onClose={() => setEditing(null)} />}
     </Card>
+  );
+}
+
+/**
+ * Corrects an account's display fields. Purpose is fixed at creation and is not offered. A blank-stock
+ * refund check prints the institution, so this is where an account created without one gains it (#474).
+ */
+function EditBankModal({ bank, onClose }: { bank: BankAccount; onClose: () => void }) {
+  const update = useUpdateBankAccount();
+  const [name, setName] = useState(bank.name);
+  const [institution, setInstitution] = useState(bank.institution ?? '');
+  const [mask, setMask] = useState(bank.mask ?? '');
+  const [error, setError] = useState<ApiError | null>(null);
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    setError(null);
+    try {
+      await update.mutateAsync({
+        id: bank.id,
+        name,
+        institution: institution || null,
+        mask: mask || null,
+      });
+      onClose();
+    } catch (e) {
+      setError(asApiError(e, 'Could not save the account. Check the fields and try again.'));
+    }
+  }
+
+  return (
+    <Modal
+      title="Edit bank account"
+      onClose={onClose}
+      footer={
+        <>
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="primary" size="sm" onClick={submit} disabled={update.isPending || !name}>
+            {update.isPending ? 'Saving…' : 'Save'}
+          </Button>
+        </>
+      }
+    >
+      <form className="pf-modal-body" onSubmit={submit}>
+        <div className="pf-formrow">
+          <label htmlFor="eb-name">Name</label>
+          <Input id="eb-name" value={name} onChange={(e) => setName(e.target.value)} required />
+        </div>
+        <div className="pf-formrow">
+          <label htmlFor="eb-inst">Institution</label>
+          <Input
+            id="eb-inst"
+            value={institution}
+            aria-describedby="eb-inst-help"
+            onChange={(e) => setInstitution(e.target.value)}
+          />
+          <span id="eb-inst-help" className="t3 fs12">
+            Printed on checks drawn on blank stock.
+          </span>
+        </div>
+        <div className="pf-formrow">
+          <label htmlFor="eb-mask">Mask (last 4)</label>
+          <Input
+            id="eb-mask"
+            value={mask}
+            maxLength={4}
+            onChange={(e) => setMask(e.target.value)}
+          />
+        </div>
+        {error && <ApiErrorNotice error={error} fallback="Could not save the account." />}
+      </form>
+    </Modal>
   );
 }
 

@@ -27,6 +27,16 @@ public sealed class RefundCheckConflictException(string code, string message) : 
 
     public static RefundCheckConflictException Voided() => new(
         "refund_check_voided", "This check has been voided and cannot be printed.");
+
+    /// <summary>
+    /// #474: the account is set to blank stock, which prints what pre-printed stock carried — the
+    /// organization's legal name and the bank's name among it — and one of them is missing. A check without
+    /// them does not say who draws it or on which bank, so nothing prints until both are saved.
+    /// </summary>
+    public static RefundCheckConflictException BlankStockIncomplete() => new(
+        "blank_stock_incomplete",
+        "Checks on blank stock print the organization's legal name and the bank's name. " +
+        "Add the legal name in organization settings and the bank's name on this bank account, then print again.");
 }
 
 internal static class RefundCheckReads

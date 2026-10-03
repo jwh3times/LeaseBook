@@ -75,8 +75,10 @@ stale-dates a check, reports unclaimed property, or produces a positive-pay file
 
 ## Revisit trigger
 
-Revisit before printing on blank stock or generating a MICR line (#474), adopting a print-and-mail
-vendor, issuing owner or vendor checks, automating stale-dating or escheatment, matching statements
+Blank-stock printing and the MICR line (#474), once a trigger here, are decided in
+[ADR-051](ADR-051-blank-stock-micr-details.md).
+
+Revisit before adopting a print-and-mail vendor, issuing owner or vendor checks, automating stale-dating or escheatment, matching statements
 by check number, or when the attorney review changes the check-record requirements.
 
 ## Addendum — a prepayment application draws on the bank that holds it (invariant I10) (2026-10-01)

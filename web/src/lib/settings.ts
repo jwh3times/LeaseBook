@@ -3,12 +3,14 @@ import {
   getApiSettingsBanks,
   getApiSettingsOrg,
   postApiSettingsBanks,
+  putApiSettingsBanksById,
   putApiSettingsBanksByIdActive,
   putApiSettingsOrg,
   unwrap,
   type BankAccountResponse,
   type CreateBankAccount,
   type OrgSettingsResponse,
+  type UpdateBankAccountRequest,
   type UpdateOrgSettings,
 } from '@/api';
 
@@ -54,6 +56,20 @@ export function useSetBankAccountActive() {
     mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) => {
       return unwrap(
         putApiSettingsBanksByIdActive({ path: { id }, body: { isActive } }),
+        'Failed to update the bank account',
+      );
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['bank-accounts'] }),
+  });
+}
+
+/** Renames an account or corrects its institution or mask; its purpose never changes (#474). */
+export function useUpdateBankAccount() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...body }: UpdateBankAccountRequest & { id: string }) => {
+      return unwrap(
+        putApiSettingsBanksById({ path: { id }, body }),
         'Failed to update the bank account',
       );
     },
