@@ -35,6 +35,9 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   offsets apply to pre-printed stock only. The bank must approve test checks before live use; the
   [blank-stock runbook](docs/runbooks/blank-stock-checks.md) walks through it. Checks on pre-printed
   stock print exactly as before.
+- **A bank account's name, institution and mask can be corrected.** Settings → Bank accounts gains an
+  Edit action for an existing account; its purpose stays fixed. A blank-stock check prints the
+  institution, so an account created without one can now gain it.
 
 ### Fixed
 
