@@ -38,13 +38,14 @@ Ask the bank that holds the trust account for its **MICR specification sheet**. 
 
 An administrator does each step.
 
-1. **Organization settings:** enter the legal name and address. They print at the top left of every
-   check, above "Trust Account".
+1. **Organization settings:** enter the legal name and address. The legal name prints at the top left
+   of every check, with "Trust Account" and then the address below it.
 2. **Bank account:** enter the bank's name (Institution). It prints at the top of the check.
 3. **Check print settings → MICR details:** choose **Blank stock** and enter:
    - the nine-digit routing number;
    - the On-Us field exactly as the sheet prints it, left to right: digits, `-` for the dash symbol, a
-     space for an empty position and `U` for the On-Us symbol, at most 18 characters. Leave the check
+     space for an empty position and `U` for the On-Us symbol, at most 18 characters with at least four
+     digits. Leave the check
      number out; LeaseBook prints it in its own field.
 
    Saved numbers are never shown again, only their last four digits. To correct one, type it again.

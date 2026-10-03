@@ -14,6 +14,10 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ## [Unreleased]
 
+- _Nothing yet._
+
+## [0.24.0] - 2026-10-02
+
 ### Added
 
 - **Bank accounts can hold their MICR details for checks on blank stock.** In a bank account's check
@@ -1238,7 +1242,8 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.23.0...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.24.0...HEAD
+[0.24.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.24.0
 [0.23.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.23.0
 [0.22.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.22.0
 [0.21.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.21.0
