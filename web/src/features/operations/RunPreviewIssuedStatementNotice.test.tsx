@@ -59,9 +59,11 @@ function renderNotice(selectedTargetIds: ReadonlySet<string>) {
 }
 
 describe('RunPreviewIssuedStatementNotice', () => {
-  it('shows that issued statements are being checked while the coverage read is pending', () => {
+  it('shows that issued statements are being checked while the coverage read is pending', async () => {
+    let requested = false;
     server.use(
       http.get('/api/operations/runs/rent/preview/issued-coverage', async () => {
+        requested = true;
         await delay('infinite');
         return HttpResponse.json({ rows: [] });
       }),
@@ -75,6 +77,9 @@ describe('RunPreviewIssuedStatementNotice', () => {
     expect(
       screen.getByLabelText('Checking for issued statements affected by this run'),
     ).toBeVisible();
+    // Hold the read under this test's handler; dispatched after the test ended, it would land on the
+    // next test's handler and be counted there.
+    await vi.waitFor(() => expect(requested).toBe(true));
   });
 
   it('uses future-tense wording and filters the loaded answer as targets are selected', async () => {

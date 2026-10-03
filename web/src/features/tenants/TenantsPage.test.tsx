@@ -149,6 +149,8 @@ describe('TenantsPage', () => {
     );
     renderTenants();
     const search = await screen.findByLabelText('Filter tenants…');
+    // The search box renders before the list arrives; ↓ and Enter act on the rows, so wait for them.
+    await screen.findByText('Devon Pryor');
     search.focus();
     await userEvent.keyboard('{ArrowDown}{Enter}'); // first ↓ selects index 1 (Devon Pryor)
     expect(await screen.findByRole('heading', { name: 'Devon Pryor' })).toBeInTheDocument();

@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { trackInteraction } from '@/lib/telemetry';
 import { server } from '@/test/mocks/server';
 import { useRunFlow } from './useRunFlow';
@@ -92,6 +92,13 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
+// A test that ends with a fetch or a confirm still in flight hands that request to the next test's
+// handlers, where it consumes a one-shot response (the first confirm's conflict, the first preview) and
+// fails a test that did nothing wrong. Let every request finish under the handlers of the test that sent it.
+afterEach(async () => {
+  await waitFor(() => expect(queryClient.isFetching() + queryClient.isMutating()).toBe(0));
+});
+
 describe('useRunFlow — confirming', () => {
   it('posts the ticked targets with the preview token and reports the measured interactions', async () => {
     const { bodies } = serve('latefee', [preview('v1')]);
@@ -165,10 +172,11 @@ describe('useRunFlow — confirming', () => {
 
     act(() => result.current.toggle('b'));
     act(() => result.current.confirm());
+    // Wait for the second run itself: the first run already reported ('latefee-run-confirm', 2), so a
+    // last-call assertion alone passes at once and leaves this confirm in flight into the next test.
+    await waitFor(() => expect(trackInteraction).toHaveBeenCalledTimes(2));
     // The counter restarted: one tick and Confirm, not the first run's interactions as well.
-    await waitFor(() =>
-      expect(trackInteraction).toHaveBeenLastCalledWith('latefee-run-confirm', 2, undefined),
-    );
+    expect(trackInteraction).toHaveBeenLastCalledWith('latefee-run-confirm', 2, undefined);
   });
 });
 
