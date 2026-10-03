@@ -41,20 +41,38 @@ spacing between right edges; the 1/8 in pitch matches X9's glossary), and a full
 5/16 in above the bottom edge, inside the 3/16–7/16 in print band (§4.4). From the right: positions 1–13
 stay blank for the bank of first deposit; the On-Us field ends at position 14; the transit field
 ⑆ + routing number + ⑆ fills 33–43; the External Processing Code (44/45) stays blank; and the check number
-is the Auxiliary On-Us field, right-justified so its last digit is at position 48 between On-Us symbols —
-the Federal Reserve's X9.37 guide places that field's digits at "positions 48 - 62" of the MICR line. That
-leaves three blank positions (44–46) between the transit field and the check number, where Standard 006
-§4.5 allows at most two for Canadian items; the US layout is followed, and the bank test-check is where a
-bank that wants it closer says so. Nearly every Standard 006 glyph dimension is a multiple of 0.165 mm, so
+is the Auxiliary On-Us field between On-Us symbols, the closing symbol at position 46, so the two EPC
+positions are the only blanks between it and the transit field. Standard 006 §4.5 allows at most two
+there. The Federal Reserve's X9.37 guide places the field's digits at "positions 48 - 62", which would
+leave three; the line follows the stricter rule, and the bank test-check is where a bank that wants the
+guide's placement says so. Nearly every Standard 006 glyph dimension is a multiple of 0.165 mm, so
 the glyphs are outlines on a 0.0065 in grid; the exceptions are the seven's slanted joint, placed by its
 0.271 mm and 0.216 mm dimensions, and the amount symbol, which is not drawn. An independent OFL-licensed
 drawing of the same figures is the tests' cross-check, and where the two disagree (its zero) the figure
 decides.
 
-**Blank stock fails closed until the MICR line prints.** The setting ships before the MICR rendering
-does. Until it lands, printing a check or an alignment page on an account set to blank stock is
-refused with `blank_stock_unsupported` (409), and the settings dialog says so, because a check on
-blank paper without a MICR line is one no bank can read. No print is recorded for a refused attempt.
+**Blank stock prints the whole face, and nothing but the MICR line enters the clear band.** On blank
+stock LeaseBook prints what pre-printed stock carried: the organization's legal name and address, with
+the words "Trust Account" that 21 NCAC 58A .0117(b)
+requires on every check drawn on a trust account (refund checks draw only on trust accounts); the
+bank's name; the check number, which is also the MICR serial; and the field labels and lines. Every face
+field ends at least 12 pt above the clear band.
+
+- The print offsets do not apply on blank stock. They exist to line fields up with pre-printed boxes,
+  and blank stock has none; applied, they could push a field into the band, and QuestPDF cannot clip.
+  Only the MICR offset moves anything, and it moves only the MICR line.
+- A print is refused with `blank_stock_incomplete` (409) while the organization's legal name or the
+  bank's name is missing. A refused print records nothing.
+- The alignment page on blank stock is a specimen marked non-negotiable and void. It carries the
+  account's real transit and On-Us fields and an all-zero serial, so it can serve as the bank's test
+  sample.
+- The full numbers are decrypted in Payments for the two print routes alone and go nowhere but the
+  renderer. On the page they are paths, never text.
+- Pre-printed output is unchanged. QuestPDF stamps a creation date into every file, so the bytes never
+  repeat; the page's drawing operations do, and a test pins them by hash.
+
+The settings shipped before the MICR line printed (part 1), and until part 3 a blank-stock print was
+refused outright.
 
 **The numbers are write-only, encrypted, and administrator-owned.** `bank_micr_profiles` (Payments,
 RLS-scoped with the deny-by-default persona gate) holds, per bank account, the stock kind, the
@@ -93,6 +111,9 @@ and withheld on display. An audited entity that gains a secret-named column stil
   operator who needs to confirm it reads it from the bank's sheet.
 - A changed routing number is visible in the audit trail as a change, but its old and new values are
   not recoverable from the trail.
+- On blank stock a printer that registers the page off its nominal position is corrected only through
+  the MICR offset; the face moves with the paper. The [operator runbook](../runbooks/blank-stock-checks.md)
+  owns the bank's test-check approval.
 
 ## Revisit trigger
 

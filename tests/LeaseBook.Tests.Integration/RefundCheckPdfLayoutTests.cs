@@ -98,10 +98,39 @@ public sealed class RefundCheckPdfLayoutTests
         text.ShouldContain("ALIGNMENT TEST — NOT A CHECK");
     }
 
+    [Theory]
+    [InlineData(0, 0, false, "433370066b8be88d5ed05e350b0cf377949053c3a9370b32dc22d958d47ec3fa")]
+    [InlineData(9, 6, false, "df9d1fb2070f99565a7c50b846656878e0d8d307f20696aaf1320719cc33f6cc")]
+    [InlineData(-72, 72, false, "fb8e23056975601aaf82b8ed25d3c8ecb6636a722642f5ca9a95f60bb9020b5f")]
+    [InlineData(0, 0, true, "0b4ef9d5abc9c46b2f7cdc021154d2a0bf0b8fba38d1e5256dcfd211692b2ab5")]
+    public void Pre_printed_output_is_unchanged_by_blank_stock_support(int offsetX, int offsetY, bool alignment, string sha256)
+    {
+        // #474 part 3: blank stock gets its own layout, and pre-printed stock must keep printing exactly as it
+        // did. QuestPDF stamps a creation date into every file, so the bytes never repeat; the page's drawing
+        // operations do, and they are everything the printer sees. The hashes were taken from the renderer
+        // before blank-stock support existed (main at 31e6206).
+        var check = alignment ? RefundCheckPdf.AlignmentSample(new DateOnly(2026, 3, 2)) : Check;
+
+        PageOperationsSha256(RefundCheckPdf.Render(check, offsetX, offsetY)).ShouldBe(sha256);
+    }
+
     // The face's payee is the first "Jasmine" on the page (the address block and stubs come later).
     private static PdfRectangle Payee(IReadOnlyList<Word> words) =>
         words.Where(w => w.Text == "Jasmine").OrderByDescending(w => w.BoundingBox.Bottom).ThenBy(w => w.BoundingBox.Left)
             .First().BoundingBox;
+
+    private static string PageOperationsSha256(byte[] pdf)
+    {
+        using var document = PdfDocument.Open(pdf);
+        document.NumberOfPages.ShouldBe(1);
+        using var operations = new MemoryStream();
+        foreach (var operation in document.GetPage(1).Operations)
+        {
+            operation.Write(operations);
+        }
+
+        return Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(operations.ToArray()));
+    }
 
     private static IReadOnlyList<Word> Words(byte[] pdf)
     {

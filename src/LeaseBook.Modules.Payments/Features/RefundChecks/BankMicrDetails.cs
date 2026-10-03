@@ -18,6 +18,43 @@ public sealed record BankMicrDetailsView(
 
 public sealed record GetBankMicrDetails(Guid BankAccountId) : IQuery<BankMicrDetailsView>;
 
+/// <summary>
+/// A blank-stock account's full MICR numbers, decrypted for the check renderer and nothing else (#474): never
+/// a response body, a log line or a cache entry. A record prints every member; this one never prints them.
+/// </summary>
+public sealed record BankMicrNumbers(string RoutingNumber, string OnUsField)
+{
+    public override string ToString() =>
+        $"{nameof(BankMicrNumbers)} {{ RoutingNumber = {BankMicr.Redacted(RoutingNumber)}, OnUsField = {BankMicr.Redacted(OnUsField)} }}";
+}
+
+/// <summary>What printing on blank stock needs from Payments: the full numbers and the bank's MICR line offsets.</summary>
+public sealed record BankMicrPrint(BankMicrNumbers Numbers, decimal MicrOffsetXPoints, decimal MicrOffsetYPoints);
+
+/// <summary>
+/// The MICR details a check print needs (#474): null for an account on pre-printed stock, whose stock already
+/// carries its MICR line. Only the host's print routes dispatch it, and only into the renderer.
+/// </summary>
+public sealed record GetBankMicrPrint(Guid BankAccountId) : IQuery<BankMicrPrint?>;
+
+internal sealed class GetBankMicrPrintHandler(DbContext db) : IQueryHandler<GetBankMicrPrint, BankMicrPrint?>
+{
+    public async Task<BankMicrPrint?> Handle(GetBankMicrPrint q, CancellationToken ct)
+    {
+        var row = await db.Set<BankMicrProfile>().AsNoTracking().FirstOrDefaultAsync(x => x.BankAccountId == q.BankAccountId, ct);
+        if (row is not { StockKind: CheckStockKinds.Blank })
+        {
+            return null;
+        }
+
+        // A save to blank stock requires both numbers, so a blank-stock row without them is corruption.
+        var numbers = new BankMicrNumbers(
+            row.RoutingNumber ?? throw new InvalidOperationException("A blank-stock MICR profile has no routing number."),
+            row.OnUsAccountNumber ?? throw new InvalidOperationException("A blank-stock MICR profile has no On-Us field."));
+        return new BankMicrPrint(numbers, row.MicrOffsetXPoints, row.MicrOffsetYPoints);
+    }
+}
+
 internal sealed class GetBankMicrDetailsHandler(DbContext db) : IQueryHandler<GetBankMicrDetails, BankMicrDetailsView>
 {
     public async Task<BankMicrDetailsView> Handle(GetBankMicrDetails q, CancellationToken ct)
@@ -114,18 +151,6 @@ public static class BankMicr
 
     /// <summary>How a number appears in any printed form of a request: whether it was sent, never what it is.</summary>
     public static string Redacted(string? value) => value is null ? "null" : "[redacted]";
-
-    /// <summary>
-    /// Refuses to print a check or an alignment page on an account set to blank stock until the MICR line
-    /// can be printed (#474); see <see cref="RefundCheckConflictException.BlankStockUnsupported"/>.
-    /// </summary>
-    public static void EnsurePrintable(BankMicrDetailsView details)
-    {
-        if (details.StockKind == CheckStockKinds.Blank)
-        {
-            throw RefundCheckConflictException.BlankStockUnsupported();
-        }
-    }
 
     private static string? LastFourDigits(string? value) =>
         value is null ? null : new string(value.Where(char.IsAsciiDigit).TakeLast(4).ToArray());
