@@ -231,6 +231,10 @@ export type ClearancesResult = {
     affected: number | string;
 };
 
+export type ClosePaymentReviewBody = {
+    note: string;
+};
+
 export type CollectDeposit = {
     tenantId: string;
     amount: number | string;
@@ -737,6 +741,12 @@ export type PaymentView = {
     lastAttemptAt: null | string;
     canRetry: boolean;
     evidenceReference: null | string;
+    canPostReturn?: boolean;
+    canCloseReview?: boolean;
+    receiptEntryId?: null | string;
+    returnEntryId?: null | string;
+    reviewNote?: null | string;
+    reviewClosedAt?: null | string;
 };
 
 export type PaymentsResponse = {
@@ -3125,6 +3135,56 @@ export type PostApiPaymentsByIdRetryResponses = {
 };
 
 export type PostApiPaymentsByIdRetryResponse = PostApiPaymentsByIdRetryResponses[keyof PostApiPaymentsByIdRetryResponses];
+
+export type PostApiPaymentsByIdReturnData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/payments/{id}/return';
+};
+
+export type PostApiPaymentsByIdReturnErrors = {
+    /**
+     * Not Found
+     */
+    404: unknown;
+};
+
+export type PostApiPaymentsByIdReturnResponses = {
+    /**
+     * OK
+     */
+    200: PaymentView;
+};
+
+export type PostApiPaymentsByIdReturnResponse = PostApiPaymentsByIdReturnResponses[keyof PostApiPaymentsByIdReturnResponses];
+
+export type PostApiPaymentsByIdCloseReviewData = {
+    body: ClosePaymentReviewBody;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/payments/{id}/close-review';
+};
+
+export type PostApiPaymentsByIdCloseReviewErrors = {
+    /**
+     * Not Found
+     */
+    404: unknown;
+};
+
+export type PostApiPaymentsByIdCloseReviewResponses = {
+    /**
+     * OK
+     */
+    200: PaymentView;
+};
+
+export type PostApiPaymentsByIdCloseReviewResponse = PostApiPaymentsByIdCloseReviewResponses[keyof PostApiPaymentsByIdCloseReviewResponses];
 
 export type GetApiRefundChecksOptionsData = {
     body?: never;

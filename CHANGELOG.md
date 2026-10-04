@@ -16,6 +16,20 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 - _Nothing yet._
 
+## [0.25.0] - 2026-10-04
+
+### Added
+
+- **A returned simulated payment can be posted or closed.** In the development payment fixture, a
+  payment the bank returns after its receipt posted used to wait in review with no action. An
+  administrator can now post a full return from Operations: the receipt is reversed on the bank's
+  return date and the tenant owes the amount again. The return is refused, with the reason shown, when
+  the money has since been used: prepaid credit applied, the owner paid out, or the date in a locked
+  period. Partial returns, refunds and disputes are never posted. Any review can instead be closed
+  with a required note once staff have corrected the ledger by hand; closing posts nothing, and later
+  evidence reopens it. Nothing posts on the bank's notice alone, and no returned-payment fee is
+  charged.
+
 ## [0.24.0] - 2026-10-02
 
 ### Added
@@ -1245,7 +1259,8 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.24.0...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.25.0...HEAD
+[0.25.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.25.0
 [0.24.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.24.0
 [0.23.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.23.0
 [0.22.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.22.0

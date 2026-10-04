@@ -3,7 +3,7 @@
 - **Audience:** Implementers and reviewers of issue #456
 - **Status:** Implemented simulation contract for #456; live payments remain unapproved
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-09-29
+- **Last reviewed:** 2026-10-04
 
 ## Evidence and boundary
 
@@ -56,14 +56,15 @@ Maintain independent collection, payout and accounting facts; derive the public 
 An event's timestamp is not a version number. Append a late observation, then reduce the complete
 validated fact set. Contradictory facts require review, except the explicitly allowed late return.
 
-| Derived status      | Meaning and next allowed outcome                                                                                                                              | Tenant wording                                                              | PM wording/action                                                       |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| Requested           | Intent/outbox committed; provider acceptance unknown. Dispatch to Processing or confirmed Failed.                                                             | Simulation requested                                                        | Awaiting dispatch; inspect stalled retries                              |
-| Processing          | Accepted or provider progress seen; no journal receipt. May become Settled, Failed, or Needs review.                                                          | Simulated payment processing — not yet on your ledger                       | Awaiting bank evidence or retrying technical delivery                   |
-| Failed              | Authenticated definitive collection failure before any bank credit. Terminal for this attempt; a new request can retry.                                       | Simulated payment failed — no payment recorded                              | Collection failed; no ledger effect                                     |
-| Settled             | Complete gross bank-credit evidence and receipt journal link committed together. A late return can lead to Needs review.                                      | Simulated payment recorded                                                  | Bank evidence matched; receipt posted                                   |
-| Needs review        | Conflicting/unsupported evidence, posting rejection or return requiring an accounting decision. Technical recoverable failures remain Processing.             | Simulated payment needs review; show whether a receipt was already recorded | Stable reason code, evidence reference, last attempt and allowed action |
-| Returned / reversed | Return evidence plus a linked reversal committed. Reserved for a later guarded return implementation; #456 never derives it from a return notification alone. | Simulated payment reversed                                                  | Receipt and linked reversal references                                  |
+| Derived status | Meaning and next allowed outcome                                                                                                                    | Tenant wording                                                              | PM wording/action                                                       |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| Requested      | Intent/outbox committed; provider acceptance unknown. Dispatch to Processing or confirmed Failed.                                                   | Simulation requested                                                        | Awaiting dispatch; inspect stalled retries                              |
+| Processing     | Accepted or provider progress seen; no journal receipt. May become Settled, Failed, or Needs review.                                                | Simulated payment processing — not yet on your ledger                       | Awaiting bank evidence or retrying technical delivery                   |
+| Failed         | Authenticated definitive collection failure before any bank credit. Terminal for this attempt; a new request can retry.                             | Simulated payment failed — no payment recorded                              | Collection failed; no ledger effect                                     |
+| Settled        | Complete gross bank-credit evidence and receipt journal link committed together. A late return can lead to Needs review.                            | Simulated payment recorded                                                  | Bank evidence matched; receipt posted                                   |
+| Needs review   | Conflicting/unsupported evidence, posting rejection or return requiring an accounting decision. Technical recoverable failures remain Processing.   | Simulated payment needs review; show whether a receipt was already recorded | Stable reason code, evidence reference, last attempt and allowed action |
+| Returned       | Return evidence plus a linked reversal committed by a PMAdmin through the guarded return (ADR-052). Never derived from a return notification alone. | Simulated payment returned by the bank — the receipt was reversed           | Receipt and linked reversal references                                  |
+| Review closed  | A PMAdmin closed a review with a note and no posting (ADR-052). A later observation reopens it as Needs review.                                     | Simulated payment review closed; show whether a receipt remains recorded    | The note, the reason and the evidence reference                         |
 
 Failed is terminal for ordinary notifications, not permission to discard a contradictory bank
 credit. Such a credit changes the exception summary to Needs review and produces no posting. Settled
@@ -112,32 +113,62 @@ retarget an in-flight operation. Capabilities may gate submission only and canno
 | Gross bank credit, fee 0, net equals gross, exact currency/account/operation match | Receipt above, bank evidence date             | Settled atomically with journal link                |
 | Fee or gross/net mismatch; batch mixes payments, refunds or reserves               | None; no receipt for either gross or net      | Needs review: unsupported settlement                |
 | Pre-posting return contradicts credit evidence                                     | None                                          | Needs review; do not post and immediately reverse   |
-| Late full/partial return, refund or disputed payment                               | None automatically; preserve original receipt | Needs review; future guarded return policy required |
+| Late full/partial return, refund or disputed payment                               | None automatically; preserve original receipt | Needs review; a PMAdmin posts or closes it (below)  |
 | Locked receipt period or missing attribution                                       | None; transaction rolled back                 | Needs review; retain original evidence date         |
 | Technical failure or serialization contention                                      | None if rolled back                           | Retry same effect/date; re-evaluate committed facts |
 
-The future simple full-return candidate mirrors every receipt line, in the same basis and original
-dimensions: credit bank G, debit receivable A (accrual), debit owner equity A (cash), debit
-prepayment E (both), linked to the receipt. It uses the evidenced return date in an open period,
-not the receipt date or server today, and one durable return-effect identity. This is **evidence,
-not an authorized #456 posting path**: consumed credit, disbursed owner funds, partial returns,
-fee liabilities and locked periods need explicit guarded policies. A raw reversal call does not
-enforce those policies. No automatic cascading reversals or period unlocking are allowed.
+### Posting a return (ADR-052)
+
+A full return mirrors every receipt line, in the same basis and original dimensions: credit bank G,
+debit receivable A (accrual), debit owner equity A (cash), debit prepayment E (both), linked to the
+receipt. It uses the evidenced return date in an open period, not the receipt date or server today,
+with source reference `sim-payment:{operation UUID in N format}:return` and one durable `Return`
+effect per operation.
+
+Nothing posts on return evidence alone. A PMAdmin posts it with `POST /api/payments/{id}/return`,
+which calls Accounting's `ReturnTenantPayment`. A raw reversal call enforces none of the policies
+below, so Payments never calls one. No automatic cascading reversals or period unlocking are allowed.
+
+| Condition                                                                  | Outcome                                            |
+| -------------------------------------------------------------------------- | -------------------------------------------------- |
+| One complete full return, receipt untouched, return date in an open month  | Linked reversal posted; Returned                   |
+| Reversal would leave the tenant's prepaid credit in that bank below zero   | 409 `return_prepayment_consumed`; nothing posted   |
+| Reversal would leave the owner's cash equity below zero, per bank or total | 409 `return_owner_funds_disbursed`; nothing posted |
+| Return date before the receipt date                                        | 409 `return_precedes_receipt`                      |
+| Return date in a closed period or a reconciled bank month                  | 409 `return_period_locked`; no date substitution   |
+| Return amount differs from the payment, carries a fee, or is incomplete    | 409 `return_partial_unsupported`                   |
+| A refund or dispute, with or without a return                              | 409 `return_kind_unsupported`                      |
+| Conflicting observations, or returns that disagree                         | 409 `return_conflicting_evidence`                  |
+
+"Below zero" means the lowest end-of-day balance on or after the return date, not today's balance:
+the reversal is backdated, so money that arrived later cannot cover it.
+
+A refusal is recorded as the operation's reason and the payment stays in Needs review. A PMAdmin can
+then close the review with `POST /api/payments/{id}/close-review` and a required note of at most 500
+characters. Closing posts nothing and keeps every observation; the note is returned to staff only.
+An observation that arrives after the closure returns the payment to Needs review. A review with
+reason `technical_failure` cannot be closed; it is retried. No returned-payment fee is charged by
+either action.
+
+A refund, a dispute, or a return that disagrees with the posted one, arriving after a return was
+posted, returns the payment to Needs review with reason `evidence_after_return`. It can be closed but
+not posted again. The tenant view reports every `return_*` reason and `evidence_after_return` as
+`return_requires_review`.
 
 ### Reviewer examples
 
 Fresh fixtures have a $1,000 rent charge. Examples use independent runs, not new golden values.
 
-| Case                                              | Expected result                                                                                           |
-| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| $600 gross receipt                                | Bank +600, receivable 400; cash equity +600; accrual charge equity unchanged                              |
-| $1,200 gross receipt                              | Bank +1,200, receivable 0, prepayment +200; receipt cash equity +1,000                                    |
-| $1,000 gross, $30 withheld, bank evidence $970    | Reject settlement; gross receipt would overstate bank by $30, net receipt would leave tenant owing $30    |
-| Confirmed failure                                 | No receipt; original $1,000 receivable remains                                                            |
-| Full $1,200 return with excess untouched          | Real reversal example restores original balances; first simulator still routes return to review           |
-| Excess consumed before full return                | Existing raw reversal can make prepayment negative; evidence must expose I4 failure                       |
-| Receipt date in a locked period                   | No receipt or effect record committed; no date substitution                                               |
-| Duplicate source ref, identical or changed amount | Existing Accounting rejects duplicate; Payments supplies durable payload comparison and idempotent replay |
+| Case                                              | Expected result                                                                                             |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| $600 gross receipt                                | Bank +600, receivable 400; cash equity +600; accrual charge equity unchanged                                |
+| $1,200 gross receipt                              | Bank +1,200, receivable 0, prepayment +200; receipt cash equity +1,000                                      |
+| $1,000 gross, $30 withheld, bank evidence $970    | Reject settlement; gross receipt would overstate bank by $30, net receipt would leave tenant owing $30      |
+| Confirmed failure                                 | No receipt; original $1,000 receivable remains                                                              |
+| Full $1,200 return with excess untouched          | A PMAdmin posts it; the linked reversal restores the original balances                                      |
+| Excess consumed before full return                | The guarded return refuses it (`return_prepayment_consumed`); a raw reversal would make prepayment negative |
+| Receipt date in a locked period                   | No receipt or effect record committed; no date substitution                                                 |
+| Duplicate source ref, identical or changed amount | Existing Accounting rejects duplicate; Payments supplies durable payload comparison and idempotent replay   |
 
 The existing sweep checks a bank-book equation; it does not inspect external bank evidence.
 Adding a clearing asset without changing the model would place entitlement on one side while
@@ -166,8 +197,9 @@ tables nor create connections/transactions:
   This gives early feedback; posting still performs authoritative date-effective validation.
 
 Host authorization supplies the bound tenant and initiating actor. Payments never imports Identity
-or ResidentAccess entity types. A future reversal command must live in Accounting, guard financial
-preconditions under posting locks, and be exposed through a new narrow port only when approved.
+or ResidentAccess entity types. The return command lives in Accounting, guards its financial
+preconditions under the posting lock, and is reached through `IPaymentLedger.ReturnSettledReceiptAsync`,
+which answers a guard refusal as a result so the caller can record it on the same transaction.
 
 One Payments-owned `IPaymentProcessor` hides provider mechanics with three operations:
 `SubmitAsync(immutable request, stable provider key)`, `LookupAsync(stable operation identity)`,

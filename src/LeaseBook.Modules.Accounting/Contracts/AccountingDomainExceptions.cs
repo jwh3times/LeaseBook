@@ -315,6 +315,43 @@ public sealed class RefundCheckClearedException(Guid entryId)
     public Guid EntryId { get; } = entryId;
 }
 
+public enum PaymentReturnBlock
+{
+    PrepaymentConsumed,
+    OwnerFundsDisbursed,
+    ReturnPrecedesReceipt,
+}
+
+/// <summary>
+/// A returned tenant payment cannot be posted as a linked reversal (409, #490): mirroring the receipt
+/// would leave the tenant's prepaid credit or the owner's cash equity below zero on or after the return
+/// date, because part of what the receipt created was applied or paid out, or the return is dated before
+/// the receipt. Nothing is posted.
+/// </summary>
+public sealed class PaymentReturnBlockedException(Guid entryId, PaymentReturnBlock block)
+    : AccountingDomainException(CodeFor(block), Describe(block))
+{
+    public Guid EntryId { get; } = entryId;
+
+    public PaymentReturnBlock Block { get; } = block;
+
+    public static string CodeFor(PaymentReturnBlock block) => block switch
+    {
+        PaymentReturnBlock.PrepaymentConsumed => "return_prepayment_consumed",
+        PaymentReturnBlock.ReturnPrecedesReceipt => "return_precedes_receipt",
+        _ => "return_owner_funds_disbursed",
+    };
+
+    private static string Describe(PaymentReturnBlock block) => block switch
+    {
+        PaymentReturnBlock.PrepaymentConsumed =>
+            "Part of this payment became prepaid credit that has since been used, so the return cannot be posted automatically.",
+        PaymentReturnBlock.ReturnPrecedesReceipt =>
+            "The return is dated before the payment it returns, so it cannot be posted.",
+        _ => "Funds from this payment have since left the owner's balance, so the return cannot be posted automatically.",
+    };
+}
+
 /// <summary>
 /// The generic entry void was asked to reverse a refund check (409, #473). Checks are voided through the
 /// refund-check void, which keeps the check record, its clearance and its number in step.

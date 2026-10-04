@@ -1,3 +1,4 @@
+using LeaseBook.Modules.Accounting.Contracts;
 using LeaseBook.Modules.Accounting.Features.LedgerPosting;
 using LeaseBook.Modules.Directory.Features.Tenants;
 using LeaseBook.Modules.Payments.Contracts;
@@ -11,6 +12,24 @@ internal sealed class PaymentLedgerAdapter(ISender sender) : IPaymentLedger
         DateOnly date, string sourceRef, CancellationToken ct) =>
         (await sender.Send(new RecordPayment(tenantId, amount, date, "ach", bankId,
             "Simulated tenant payment", sourceRef), ct)).EntryId;
+
+    public async Task<PaymentReturnOutcome> ReturnSettledReceiptAsync(Guid receiptJournalId, DateOnly date,
+        string sourceRef, string note, CancellationToken ct)
+    {
+        try
+        {
+            return new((await sender.Send(new ReturnTenantPayment(receiptJournalId, date, sourceRef, note), ct)).EntryId, null);
+        }
+        // Each of these is thrown before the posting service adds anything to the unit of work, so the
+        // caller may keep using this transaction to record the refusal. Any other failure propagates
+        // and rolls the request back.
+        catch (AccountingDomainException e) when (e.Code is "return_prepayment_consumed"
+            or "return_owner_funds_disbursed" or "return_precedes_receipt" or "period_closed"
+            or "account_period_locked")
+        {
+            return new(null, e.Code.StartsWith("return_", StringComparison.Ordinal) ? e.Code : "return_period_locked");
+        }
+    }
 }
 
 internal sealed class PaymentEligibilityAdapter(ISender sender) : IPaymentEligibility

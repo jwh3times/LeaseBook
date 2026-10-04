@@ -86,6 +86,68 @@ internal sealed class BalanceReader(DbContext db)
               AND basis IN ('cash', 'both')
             """).SingleAsync(ct);
 
+    // The three "floor" reads serve a backdated posting (a payment return, #490). They answer with the
+    // LOWEST end-of-day balance on or after a date, not today's: a debit dated in the past lowers every
+    // balance from that day on, so a balance that has since recovered can still have been too low then.
+    // The zero row at the date makes the balance carried into it part of the minimum.
+
+    /// <summary>The lowest prepayment held for a tenant in one trust bank on or after <paramref name="from"/>.</summary>
+    public Task<decimal> PrepaymentsHeldFloorAsync(
+        Guid tenantId, Guid bankAccountId, DateOnly from, CancellationToken ct) =>
+        db.Database.SqlQuery<decimal>(
+            $"""
+            SELECT MIN(running) AS "Value" FROM (
+              SELECT d, SUM(delta) OVER (ORDER BY d) AS running FROM (
+                SELECT je.entry_date AS d, SUM(COALESCE(jl.credit, 0) - COALESCE(jl.debit, 0)) AS delta
+                FROM journal_lines jl
+                JOIN journal_entries je ON je.id = jl.entry_id
+                JOIN accounts a ON a.id = jl.account_id
+                WHERE a.code = {AccountCodes.TenantPrepayments} AND jl.tenant_id = {tenantId}
+                  AND jl.bank_account_id = {bankAccountId}
+                  AND jl.basis IN ('cash', 'both')
+                GROUP BY je.entry_date
+                UNION ALL SELECT {from}, 0
+              ) days
+            ) balances WHERE d >= {from}
+            """).SingleAsync(ct);
+
+    /// <summary>The lowest cash equity an owner holds, across all banks, on or after <paramref name="from"/>.</summary>
+    public Task<decimal> OwnerEquityCashFloorAsync(Guid ownerId, DateOnly from, CancellationToken ct) =>
+        db.Database.SqlQuery<decimal>(
+            $"""
+            SELECT MIN(running) AS "Value" FROM (
+              SELECT d, SUM(delta) OVER (ORDER BY d) AS running FROM (
+                SELECT je.entry_date AS d, SUM(COALESCE(jl.credit, 0) - COALESCE(jl.debit, 0)) AS delta
+                FROM journal_lines jl JOIN journal_entries je ON je.id = jl.entry_id
+                WHERE jl.account_class = 'owner_equity' AND jl.owner_id = {ownerId}
+                  AND jl.basis IN ('cash', 'both')
+                GROUP BY je.entry_date
+                UNION ALL SELECT {from}, 0
+              ) days
+            ) balances WHERE d >= {from}
+            """).SingleAsync(ct);
+
+    /// <summary>
+    /// The lowest cash equity an owner holds in one trust bank on or after <paramref name="from"/>. Read
+    /// alongside the all-bank floor, so equity held in another bank cannot cover a reversal drawn on this one.
+    /// </summary>
+    public Task<decimal> OwnerEquityCashFloorAsync(
+        Guid ownerId, Guid bankAccountId, DateOnly from, CancellationToken ct) =>
+        db.Database.SqlQuery<decimal>(
+            $"""
+            SELECT MIN(running) AS "Value" FROM (
+              SELECT d, SUM(delta) OVER (ORDER BY d) AS running FROM (
+                SELECT je.entry_date AS d, SUM(COALESCE(jl.credit, 0) - COALESCE(jl.debit, 0)) AS delta
+                FROM journal_lines jl JOIN journal_entries je ON je.id = jl.entry_id
+                WHERE jl.account_class = 'owner_equity' AND jl.owner_id = {ownerId}
+                  AND jl.bank_account_id = {bankAccountId}
+                  AND jl.basis IN ('cash', 'both')
+                GROUP BY je.entry_date
+                UNION ALL SELECT {from}, 0
+              ) days
+            ) balances WHERE d >= {from}
+            """).SingleAsync(ct);
+
     private Task<decimal> HeldLiabilityByCodeAsync(string accountCode, Guid tenantId, CancellationToken ct) =>
         db.Database.SqlQuery<decimal>(
             $"""

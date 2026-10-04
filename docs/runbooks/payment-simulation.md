@@ -3,7 +3,7 @@
 - **Audience:** Developers and test operators
 - **Status:** Implemented, non-live only
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-09-27
+- **Last reviewed:** 2026-10-04
 
 The simulator exercises the real Payments and Accounting path. It has no provider network client
 and cannot move real money. Production and Staging reject Simulation; live/provider configuration
@@ -61,7 +61,11 @@ event is idempotent. `payment-simulation step` runs one worker pass without star
 
 Other event kinds are `Processing`, `Succeeded`, `Available`, `PayoutPending`, `PayoutFailed`,
 `Failed`, `Return`, `Refund` and `Dispute`. A return after receipt preserves that receipt and routes
-the operation to review; it never invokes an unrestricted reversal. Technical retries use delays
+the operation to review; it never invokes an unrestricted reversal. A PMAdmin then resolves it on the
+Operations page (ADR-052): **Post return** posts a full return as the receipt's linked reversal, dated
+on the return evidence date, or reports the reason it cannot; **Close review…** records a note and
+posts nothing, for a return staff have corrected by hand. Sign in as `admin-a@payments.test` with the
+fixture password to try it. Technical retries use delays
 of 1, 5, 30, 120 and 600 seconds, then require PMAdmin retry of the same operation. Unsupported
 money cases offer no force-post action. Unmapped objects remain in the durable inbox; after ten
 minutes the staff read reports their count for fixture-operator review.
