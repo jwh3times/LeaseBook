@@ -1274,6 +1274,20 @@ export type UnlockReconciliation = {
     reason: string;
 };
 
+export type UnmatchedObservationView = {
+    id: string;
+    receivedAt: string;
+    kind: string;
+    amount: number | string;
+    currency: string;
+    providerReference: string;
+    ageMinutes: number | string;
+};
+
+export type UnmatchedObservationsResponse = {
+    items: Array<UnmatchedObservationView>;
+};
+
 export type UpdateBankAccountRequest = {
     name: string;
     institution: null | string;
@@ -3135,6 +3149,29 @@ export type PostApiPaymentsByIdRetryResponses = {
 };
 
 export type PostApiPaymentsByIdRetryResponse = PostApiPaymentsByIdRetryResponses[keyof PostApiPaymentsByIdRetryResponses];
+
+export type GetApiPaymentsUnmatchedData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/payments/unmatched';
+};
+
+export type GetApiPaymentsUnmatchedErrors = {
+    /**
+     * Not Found
+     */
+    404: unknown;
+};
+
+export type GetApiPaymentsUnmatchedResponses = {
+    /**
+     * OK
+     */
+    200: UnmatchedObservationsResponse;
+};
+
+export type GetApiPaymentsUnmatchedResponse = GetApiPaymentsUnmatchedResponses[keyof GetApiPaymentsUnmatchedResponses];
 
 export type PostApiPaymentsByIdReturnData = {
     body?: never;

@@ -266,7 +266,10 @@ unknown account/mode/type is ignored with generic HTTP 204 and bounded, redacted
 it cannot create a binding. For a known account but not-yet-mapped object, persist a parked inbox
 record under that org and retry association after dispatch recovery. Only trusted Lookup evidence
 can establish the missing object mapping. Unmapped observations older than ten minutes appear in
-the staff review count; they remain durable and can associate after dispatch recovery. Do not adopt
+the staff review count and in the staff list at `GET /api/payments/unmatched`, newest first and at
+most 100. The list is read-only and shows only the received time, kind, amount, provider reference and
+age; it never returns the payload, signature, account, bank, bank evidence or payout identifier.
+They remain durable and can associate after dispatch recovery, after which they leave the list. Do not adopt
 caller metadata. Wrong destination, currency or amount is retained for review without posting.
 
 Simulated verification uses the same raw-body/authenticated-observation seam but does not claim

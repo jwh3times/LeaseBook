@@ -523,6 +523,64 @@ public sealed class SimulatedPaymentTests(PostgresFixture fixture)
         Routes(fixture.Api.Services).ShouldNotContain(x => x != null && x.StartsWith("/api/payments/{id:guid}/"));
     }
 
+    [Fact]
+    public async Task Staff_see_unmatched_observations_narrowly_and_only_until_a_payment_answers_for_them()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var a = await Setup(ct);
+        await using var b = await Setup(ct);
+        using var tenant = await a.Login(1, ct);
+        using var admin = await a.LoginAdmin(ct);
+        using var otherAdmin = await b.LoginAdmin(ct);
+        // Not dispatched yet, so the payment carries no provider reference and answers for nothing.
+        var op = await Submit(tenant, 125.50m, ct);
+        var early = a.Observation(op, "Succeeded");
+        var orphan = a.Observation(op, "BankCredit") with
+        {
+            EventId = "orphan-event",
+            ProviderId = "sim_orphan",
+            Gross = 77.25m,
+            Net = 77.25m,
+        };
+        await a.Deliver(early, ct);
+        await a.Deliver(orphan, ct);
+
+        // Inside the ten-minute window a notification may simply be ahead of its payment.
+        (await Unmatched(admin, ct)).ShouldBeEmpty();
+        a.Clock.Advance(TimeSpan.FromMinutes(11));
+
+        var body = await admin.GetStringAsync("/api/payments/unmatched", ct);
+        var items = await Unmatched(admin, ct);
+        items.Select(x => (x.Kind, x.Amount, x.Currency, x.ProviderReference)).ShouldBe(
+            [("BankCredit", 77.25m, "USD", "sim_orphan"), ("Succeeded", 125.50m, "USD", early.ProviderId)], ignoreOrder: true);
+        items.ShouldAllBe(x => x.AgeMinutes >= 10 && x.AgeMinutes <= 12 && x.ReceivedAt != default);
+        (await admin.GetFromJsonAsync<PaymentsResponse>("/api/payments", ct))!.UnmatchedObservations.ShouldBe(items.Count);
+
+        // The view is the whole disclosure: these seven fields, and nothing that identifies the bank,
+        // the account, the bank evidence or the payout.
+        JsonDocument.Parse(body).RootElement.GetProperty("items")[0].EnumerateObject().Select(x => x.Name).ShouldBe(
+            ["id", "receivedAt", "kind", "amount", "currency", "providerReference", "ageMinutes"], ignoreOrder: true);
+        foreach (var secret in new[] { orphan.EvidenceId, orphan.PayoutId, a.Binding.Account, a.Binding.BankId.ToString(),
+            a.Binding.Generation.ToString(), orphan.EventId })
+        { body.ShouldNotContain(secret, Case.Insensitive); }
+
+        // Once the payment is dispatched it carries the reference, and its notification is no longer unmatched.
+        await a.Tick(ct);
+        (await Unmatched(admin, ct)).Select(x => x.ProviderReference).ShouldBe(["sim_orphan"]);
+        (await admin.GetFromJsonAsync<PaymentsResponse>("/api/payments", ct))!.UnmatchedObservations.ShouldBe(1);
+
+        b.Clock.Advance(TimeSpan.FromMinutes(11));
+        (await Unmatched(otherAdmin, ct)).ShouldBeEmpty();
+        (await tenant.GetAsync("/api/payments/unmatched", ct)).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        a.App.Services.GetRequiredService<EndpointDataSource>().Endpoints.OfType<RouteEndpoint>()
+            .Select(x => x.RoutePattern.RawText).ShouldContain("/api/payments/unmatched");
+        fixture.Api.Services.GetRequiredService<EndpointDataSource>().Endpoints.OfType<RouteEndpoint>()
+            .Select(x => x.RoutePattern.RawText).ShouldNotContain("/api/payments/unmatched");
+    }
+
+    private static async Task<IReadOnlyList<UnmatchedObservationView>> Unmatched(HttpClient staff, CancellationToken ct) =>
+        (await staff.GetFromJsonAsync<UnmatchedObservationsResponse>("/api/payments/unmatched", ct))!.Items;
+
     private static async Task<PaymentView> Staff(HttpClient admin, Guid id, CancellationToken ct) =>
         (await admin.GetFromJsonAsync<PaymentsResponse>("/api/payments", ct))!.Items.Single(x => x.Id == id);
 
@@ -570,6 +628,7 @@ public sealed class SimulatedPaymentTests(PostgresFixture fixture)
         private DateTimeOffset _now = DateTimeOffset.UtcNow;
         public override DateTimeOffset GetUtcNow() => _now;
         public void Advance() => _now = _now.AddSeconds(2);
+        public void Advance(TimeSpan by) => _now = _now.Add(by);
     }
     private sealed class AfterPostingFailure { public bool Fail { get; set; } = true; }
     private sealed class FailingLedger(ISender sender, AfterPostingFailure fault) : IPaymentLedger

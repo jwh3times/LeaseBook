@@ -14,7 +14,12 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ## [Unreleased]
 
-- _Nothing yet._
+### Added
+
+- **Staff can see the unmatched simulated payment notifications, not only count them.** In the
+  development payment fixture, Operations lists each notification that no payment has answered for in
+  more than ten minutes: when it arrived, its kind, amount, provider reference and age. The list is
+  read-only and shows nothing that identifies the bank or the account.
 
 ## [0.25.0] - 2026-10-04
 
