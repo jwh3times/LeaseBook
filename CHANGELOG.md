@@ -14,6 +14,10 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ## [Unreleased]
 
+- _Nothing yet._
+
+## [0.25.0] - 2026-10-04
+
 ### Added
 
 - **A returned simulated payment can be posted or closed.** In the development payment fixture, a
@@ -1255,7 +1259,8 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.24.0...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.25.0...HEAD
+[0.25.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.25.0
 [0.24.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.24.0
 [0.23.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.23.0
 [0.22.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.22.0
