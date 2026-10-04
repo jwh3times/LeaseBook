@@ -12,6 +12,8 @@ namespace LeaseBook.Web.Payments;
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record SubmitPaymentBody(Guid Key, decimal Amount, string Currency);
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record ClosePaymentReviewBody(string Note);
 public sealed record PaymentsResponse(bool Enabled, IReadOnlyList<PaymentView> Items, int UnmatchedObservations = 0);
 
 public sealed class PaymentEndpoints : IEndpointModule
@@ -66,6 +68,28 @@ public sealed class PaymentEndpoints : IEndpointModule
             var binding = settings.ForOrg(org.OrgId);
             return binding is not null && await engine.RetryAsync(binding, id, ct)
                 ? TypedResults.NoContent() : TypedResults.NotFound();
+        }).RequireAuthorization(AuthPolicies.RequirePMAdmin).RequireRateLimiting("payments");
+
+        // A refused return is answered as a 409 RESULT, not an exception: the request transaction then
+        // commits, which is what keeps the reason the payment stays in review.
+        staff.MapPost("/{id:guid}/return", async Task<Results<Ok<PaymentView>, NotFound, ProblemHttpResult>> (Guid id,
+            IOrgContext org, ISender sender, HttpContext http, CancellationToken ct) =>
+        {
+            var binding = settings.ForOrg(org.OrgId);
+            if (binding is null || await sender.Send(new PostPaymentReturn(binding, id), ct) is not { } result)
+            { return TypedResults.NotFound(); }
+            return result.Refusal is { } refusal
+                ? ProblemResults.TypedProblem(http, refusal, PaymentReviewResult.Describe(refusal), StatusCodes.Status409Conflict)
+                : TypedResults.Ok(result.Payment);
+        }).RequireAuthorization(AuthPolicies.RequirePMAdmin).RequireRateLimiting("payments");
+
+        staff.MapPost("/{id:guid}/close-review", async Task<Results<Ok<PaymentView>, NotFound>> (Guid id,
+            ClosePaymentReviewBody body, IOrgContext org, IActorContext actor, ISender sender, CancellationToken ct) =>
+        {
+            var binding = settings.ForOrg(org.OrgId);
+            return binding is not null && await sender.Send(
+                new ClosePaymentReview(binding, id, actor.UserId!.Value, body.Note), ct) is { } result
+                ? TypedResults.Ok(result.Payment) : TypedResults.NotFound();
         }).RequireAuthorization(AuthPolicies.RequirePMAdmin).RequireRateLimiting("payments");
 
         // Outside cookie-authenticated /api: signature authentication replaces CSRF. This handler

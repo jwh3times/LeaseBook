@@ -37,6 +37,11 @@ public sealed class PaymentOperation : IOrgScoped
     public DateTime? LastAttemptAt { get; set; }
     public DateTime? LeaseUntil { get; set; }
     public Guid? LeaseClaimId { get; set; }
+    // A staff member closed the review without a posting (#490). An observation arriving later makes
+    // the operation claimable again, and the reducer reopens the review; the note stays as history.
+    public string? ReviewNote { get; set; }
+    public DateTime? ReviewClosedAt { get; set; }
+    public Guid? ReviewClosedBy { get; set; }
 }
 
 public sealed class PaymentObservation : IOrgScoped
@@ -70,6 +75,7 @@ public sealed class PaymentEffect : IOrgScoped
     public Guid OperationId { get; set; }
     public Guid ObservationId { get; set; }
     public Guid JournalId { get; set; }
+    // "Receipt" or "Return"; unique per operation, so each posts at most once.
     public string Kind { get; set; } = "Receipt";
     public DateTime CreatedAt { get; set; }
 }

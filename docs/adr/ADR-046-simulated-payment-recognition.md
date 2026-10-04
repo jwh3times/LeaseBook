@@ -1,8 +1,10 @@
 # ADR-046: Recognize simulated payments from explicit bank evidence
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-09-26
-- **Deciders:** Maintainer review pending
+- **Deciders:** Jerry Holland
+- **Amended by:** [ADR-052](ADR-052-guarded-simulated-payment-return.md) — a full return can be
+  posted by an administrator through a guarded command, and a review can be closed with a note.
 
 ## Context
 
@@ -20,7 +22,7 @@ consumed. These are demonstrated by the
 
 ## Decision
 
-Propose a deliberately bounded simulator: isolated non-production fixtures, USD, fee-free gross
+Adopt a deliberately bounded simulator: isolated non-production fixtures, USD, fee-free gross
 settlements, one payment per settlement, and explicit simulated bank evidence. Only that evidence
 permits the existing Accounting receipt event. Provider success and payout notifications produce
 durable Payments facts but no journal lines. No processor clearing account is introduced for this
@@ -36,10 +38,11 @@ For this isolated Development fixture, a host `BackgroundService` polls Payments
 dispatch rows instead of enabling Hangfire. Leases, retry dates and processed-observation counts
 live with the payment operation, and the CLI can invoke the same worker pass. This bounded exception
 to ADR-001 avoids starting a production job server for simulation; live payment scheduling remains
-a separate decision. The simulator implementation does not change this ADR's Proposed status.
+a separate decision.
 
-The first implementation records late returns as review-required facts and preserves the receipt.
-It does not automatically call the unrestricted reversal service. The evidence tests demonstrate
+Late returns are recorded as review-required facts and the receipt is preserved. Nothing
+automatically calls the unrestricted reversal service; a person posts a full return through the
+guarded command in [ADR-052](ADR-052-guarded-simulated-payment-return.md). The evidence tests demonstrate
 both a simple linked reversal and the consumed-credit failure that prevents generalizing it.
 Fees, netting, partial returns, refunds, historical-period corrections and real-money clearing
 require subsequent accounting decisions and guarded commands before automatic posting.

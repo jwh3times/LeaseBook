@@ -3,7 +3,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   getApiPayments,
   getApiPortalTenantPayments,
+  postApiPaymentsByIdCloseReview,
   postApiPaymentsByIdRetry,
+  postApiPaymentsByIdReturn,
   postApiPortalTenantPayments,
   unwrap,
   type PaymentView,
@@ -25,6 +27,12 @@ function description(payment: PaymentView) {
       return 'Simulated payment failed — no payment recorded';
     case 'Settled':
       return 'Simulated payment recorded';
+    case 'Returned':
+      return 'Simulated payment returned by the bank — the receipt was reversed';
+    case 'ReviewClosed':
+      return payment.receiptRecorded
+        ? 'Simulated payment review closed — original receipt remains recorded'
+        : 'Simulated payment review closed — no receipt recorded';
     default:
       return payment.receiptRecorded
         ? 'Simulated payment needs review — original receipt remains recorded'
@@ -40,7 +48,25 @@ const REASONS: Record<string, string> = {
   attribution_unavailable:
     'The trust bank or lease attribution is unavailable for the evidence date. Review the bank and lease records.',
   return_requires_review:
-    'A return, refund or dispute needs an approved accounting decision. No automatic reversal was made.',
+    'A return, refund or dispute arrived after the receipt posted. No automatic reversal was made. An administrator can post a full return, or close the review after correcting the ledger.',
+  return_prepayment_consumed:
+    'The return was not posted: part of this payment became prepaid credit that has since been used. Correct the ledger, then close the review.',
+  return_owner_funds_disbursed:
+    'The return was not posted: funds from this payment have since left the owner’s balance. Correct the ledger, then close the review.',
+  return_precedes_receipt:
+    'The return was not posted: it is dated before the payment it returns. Review the evidence, then close the review.',
+  evidence_after_return:
+    'More return, refund or dispute evidence arrived after the return was posted. Review the evidence and the ledger, then close the review.',
+  return_period_locked:
+    'The return was not posted: it is dated in a locked period, and the date cannot be changed. Correct the ledger, then close the review.',
+  return_partial_unsupported:
+    'The return was not posted: only a full return can be posted. Correct the ledger, then close the review.',
+  return_kind_unsupported:
+    'The return was not posted: a refund or dispute cannot be posted as a return. Correct the ledger, then close the review.',
+  return_conflicting_evidence:
+    'The return was not posted: the return evidence conflicts. Review the evidence, then close the review.',
+  return_rejected:
+    'The return was not posted: accounting refused it. Review the ledger, then close the review.',
   unsupported_settlement:
     'Settlement includes an unsupported amount, fee or destination. Review the evidence; no force-post action is available.',
   conflicting_evidence:
@@ -56,6 +82,7 @@ export function PaymentPanel({ staff = false }: { staff?: boolean }) {
   const session = useSession();
   const [amount, setAmount] = useState('');
   const request = useRef<SubmitPaymentBody | null>(null);
+  const [closing, setClosing] = useState<{ id: string; note: string } | null>(null);
   const list = useQuery({
     queryKey: ['simulated-payments', staff],
     queryFn: () =>
@@ -92,6 +119,25 @@ export function PaymentPanel({ staff = false }: { staff?: boolean }) {
       unwrap(postApiPaymentsByIdRetry({ path: { id } }), 'Unable to retry the simulated payment.'),
     onSuccess: () => void queries.invalidateQueries({ queryKey: ['simulated-payments'] }),
   });
+  // A refused return is a 409 that still changed the payment: its reason now names what stopped it.
+  const postReturn = useMutation({
+    mutationFn: (id: string) =>
+      unwrap(postApiPaymentsByIdReturn({ path: { id } }), 'Unable to post the return.'),
+    onSettled: () => void queries.invalidateQueries({ queryKey: ['simulated-payments'] }),
+    onSuccess: () => void queries.invalidateQueries({ queryKey: ['tenant-ledger'] }),
+  });
+  const closeReview = useMutation({
+    mutationFn: (body: { id: string; note: string }) =>
+      unwrap(
+        postApiPaymentsByIdCloseReview({ path: { id: body.id }, body: { note: body.note } }),
+        'Unable to close the review.',
+      ),
+    onSuccess: () => {
+      setClosing(null);
+      void queries.invalidateQueries({ queryKey: ['simulated-payments'] });
+    },
+  });
+  const admin = session.data?.role === 'PMAdmin';
   function send() {
     request.current ??= { key: crypto.randomUUID(), amount, currency: 'USD' };
     submit.mutate(request.current);
@@ -173,6 +219,18 @@ export function PaymentPanel({ staff = false }: { staff?: boolean }) {
           <ErrorAction error={retry.error} />
         </>
       )}
+      {postReturn.isError && (
+        <>
+          <ApiErrorNotice error={postReturn.error} fallback="Unable to post the return." />
+          <ErrorAction error={postReturn.error} />
+        </>
+      )}
+      {closeReview.isError && (
+        <>
+          <ApiErrorNotice error={closeReview.error} fallback="Unable to close the review." />
+          <ErrorAction error={closeReview.error} />
+        </>
+      )}
       <div aria-live="polite" aria-atomic="false">
         {list.data.items.length === 0 ? (
           <p>No simulated payments yet.</p>
@@ -196,11 +254,65 @@ export function PaymentPanel({ staff = false }: { staff?: boolean }) {
                       <span>Evidence reference: {payment.evidenceReference}</span>
                     )}
                     {payment.lastAttemptAt && <span>Last attempt: {payment.lastAttemptAt}</span>}
-                    {payment.canRetry && session.data?.role === 'PMAdmin' && (
+                    {payment.receiptEntryId && <span>Receipt entry: {payment.receiptEntryId}</span>}
+                    {payment.returnEntryId && <span>Reversal entry: {payment.returnEntryId}</span>}
+                    {payment.reviewNote && (
+                      <span>Review closed by staff: {payment.reviewNote}</span>
+                    )}
+                    {payment.canRetry && admin && (
                       <Button disabled={retry.isPending} onClick={() => retry.mutate(payment.id)}>
                         Retry operation
                       </Button>
                     )}
+                    {payment.canPostReturn && admin && (
+                      <Button
+                        disabled={postReturn.isPending}
+                        onClick={() => postReturn.mutate(payment.id)}
+                      >
+                        Post return
+                      </Button>
+                    )}
+                    {payment.canCloseReview &&
+                      admin &&
+                      (closing?.id === payment.id ? (
+                        <form
+                          className="col gap8"
+                          onSubmit={(event) => {
+                            event.preventDefault();
+                            closeReview.mutate(closing);
+                          }}
+                        >
+                          <label htmlFor={`close-note-${payment.id}`}>
+                            How was this resolved? (staff only)
+                          </label>
+                          <Input
+                            id={`close-note-${payment.id}`}
+                            value={closing.note}
+                            maxLength={500}
+                            required
+                            autoFocus
+                            onChange={(event) =>
+                              setClosing({ id: payment.id, note: event.target.value })
+                            }
+                          />
+                          <p>Closing posts nothing. The evidence and this note are kept.</p>
+                          <div className="row gap8">
+                            <Button
+                              type="submit"
+                              disabled={closeReview.isPending || closing.note.trim() === ''}
+                            >
+                              Close review
+                            </Button>
+                            <Button type="button" onClick={() => setClosing(null)}>
+                              Cancel
+                            </Button>
+                          </div>
+                        </form>
+                      ) : (
+                        <Button onClick={() => setClosing({ id: payment.id, note: '' })}>
+                          Close review…
+                        </Button>
+                      ))}
                   </>
                 )}
               </li>

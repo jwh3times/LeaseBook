@@ -23,7 +23,7 @@ public sealed class PaymentOperationConfiguration : IEntityTypeConfiguration<Pay
         {
             t.HasCheckConstraint("ck_payment_operation_amount", "amount > 0 AND amount <= 10000");
             t.HasCheckConstraint("ck_payment_operation_currency", "currency = 'USD'");
-            t.HasCheckConstraint("ck_payment_operation_status", "status IN ('Requested','Processing','Failed','Settled','NeedsReview')");
+            t.HasCheckConstraint("ck_payment_operation_status", "status IN ('Requested','Processing','Failed','Settled','NeedsReview','Returned','ReviewClosed')");
         });
         b.HasKey(x => x.Id);
         b.HasAlternateKey(x => new { x.OrgId, x.Id }).HasName("ak_payment_operations_org_id_id");
@@ -40,6 +40,7 @@ public sealed class PaymentOperationConfiguration : IEntityTypeConfiguration<Pay
         b.Property(x => x.Fingerprint).HasMaxLength(64);
         b.Property(x => x.Status).HasMaxLength(20);
         b.Property(x => x.Reason).HasMaxLength(60);
+        b.Property(x => x.ReviewNote).HasMaxLength(500);
     }
 }
 

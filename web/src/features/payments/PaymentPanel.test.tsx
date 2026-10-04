@@ -90,5 +90,128 @@ describe('simulated payments', () => {
     ).toBeVisible();
     expect(screen.getByText(/No automatic reversal was made/)).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Retry operation' })).not.toBeInTheDocument();
+    // Signed out in this test: the review actions belong to an administrator.
+    expect(screen.queryByRole('button', { name: 'Post return' })).not.toBeInTheDocument();
+  });
+
+  const inReview = {
+    id: 'operation',
+    amount: 600,
+    currency: 'USD',
+    status: 'NeedsReview',
+    receiptRecorded: true,
+    reason: 'return_requires_review',
+    createdAt: '2026-09-27T00:00:00Z',
+    lastAttemptAt: null,
+    canRetry: false,
+    canPostReturn: true,
+    canCloseReview: true,
+    receiptEntryId: 'receipt-entry',
+  };
+  function asAdmin(...items: object[]) {
+    let current = items;
+    server.use(
+      http.get('/api/auth/me', () =>
+        HttpResponse.json({
+          userId: 'user',
+          name: 'Admin',
+          email: 'admin@example.com',
+          role: 'PMAdmin',
+          orgId: 'org',
+          orgName: 'Fixture',
+        }),
+      ),
+      http.get('/api/payments', () => HttpResponse.json({ enabled: true, items: current })),
+    );
+    return (...next: object[]) => {
+      current = next;
+    };
+  }
+
+  it('posts a return and shows the receipt and reversal references', async () => {
+    const setItems = asAdmin(inReview);
+    const returned = {
+      ...inReview,
+      status: 'Returned',
+      reason: null,
+      canPostReturn: false,
+      canCloseReview: false,
+      returnEntryId: 'reversal-entry',
+    };
+    server.use(
+      http.post('/api/payments/operation/return', () => {
+        setItems(returned);
+        return HttpResponse.json(returned);
+      }),
+    );
+    show(true);
+    await userEvent.click(await screen.findByRole('button', { name: 'Post return' }));
+    expect(
+      await screen.findByText('Simulated payment returned by the bank — the receipt was reversed'),
+    ).toBeVisible();
+    expect(screen.getByText('Receipt entry: receipt-entry')).toBeVisible();
+    expect(screen.getByText('Reversal entry: reversal-entry')).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Post return' })).not.toBeInTheDocument();
+  });
+
+  it('shows why a return was refused, with its support reference, and keeps the close action', async () => {
+    const setItems = asAdmin(inReview);
+    server.use(
+      http.post('/api/payments/operation/return', () => {
+        setItems({ ...inReview, reason: 'return_owner_funds_disbursed' });
+        return HttpResponse.json(
+          {
+            code: 'return_owner_funds_disbursed',
+            detail: 'Funds from this payment have since left the owner’s balance.',
+            correlationId: '1234567890abcdef1234567890abcdef',
+          },
+          { status: 409 },
+        );
+      }),
+    );
+    show(true);
+    await userEvent.click(await screen.findByRole('button', { name: 'Post return' }));
+    expect(
+      await screen.findByText('Funds from this payment have since left the owner’s balance.'),
+    ).toBeVisible();
+    expect(screen.getByText('Reference: 1234567890abcdef1234567890abcdef')).toBeVisible();
+    expect(await screen.findByText('Reason: return_owner_funds_disbursed')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Close review…' })).toBeVisible();
+  });
+
+  it('closes a review only with a note and then shows the note', async () => {
+    const setItems = asAdmin(inReview);
+    const bodies: unknown[] = [];
+    server.use(
+      http.post('/api/payments/operation/close-review', async ({ request }) => {
+        bodies.push(await request.json());
+        const closed = {
+          ...inReview,
+          status: 'ReviewClosed',
+          canPostReturn: false,
+          canCloseReview: false,
+          reviewNote: 'Corrected by adjustment.',
+        };
+        setItems(closed);
+        return HttpResponse.json(closed);
+      }),
+    );
+    show(true);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Close review…' }));
+    const submit = screen.getByRole('button', { name: 'Close review' });
+    expect(submit).toBeDisabled();
+    await user.type(
+      screen.getByLabelText('How was this resolved? (staff only)'),
+      'Corrected by adjustment.',
+    );
+    await user.click(submit);
+    expect(
+      await screen.findByText('Review closed by staff: Corrected by adjustment.'),
+    ).toBeVisible();
+    expect(bodies).toEqual([{ note: 'Corrected by adjustment.' }]);
+    expect(
+      screen.getByText('Simulated payment review closed — original receipt remains recorded'),
+    ).toBeVisible();
   });
 });

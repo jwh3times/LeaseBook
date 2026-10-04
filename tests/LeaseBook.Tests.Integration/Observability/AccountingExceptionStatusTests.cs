@@ -36,6 +36,12 @@ public sealed class AccountingExceptionStatusTests
         (new RefundBucketAmbiguousException(Guid.NewGuid()), StatusCodes.Status409Conflict),
         (new PrepaymentBankAmbiguousException(Guid.NewGuid()), StatusCodes.Status409Conflict),
         (new RefundCheckClearedException(Guid.NewGuid()), StatusCodes.Status409Conflict),
+        (new PaymentReturnBlockedException(Guid.NewGuid(), PaymentReturnBlock.PrepaymentConsumed),
+            StatusCodes.Status409Conflict),
+        (new PaymentReturnBlockedException(Guid.NewGuid(), PaymentReturnBlock.OwnerFundsDisbursed),
+            StatusCodes.Status409Conflict),
+        (new PaymentReturnBlockedException(Guid.NewGuid(), PaymentReturnBlock.ReturnPrecedesReceipt),
+            StatusCodes.Status409Conflict),
         (new RefundCheckVoidRequiredException(Guid.NewGuid()), StatusCodes.Status409Conflict),
         // One row per held-fees shape reason: each carries its own wire code, and the corrected
         // re-import route depends on all four landing on 409 (the batch has rolled back by then).

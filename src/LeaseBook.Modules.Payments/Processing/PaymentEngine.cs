@@ -12,6 +12,7 @@ namespace LeaseBook.Modules.Payments.Processing;
 
 public sealed class PaymentConflictException : Exception;
 public sealed class PaymentUnavailableException : Exception;
+public sealed record PaymentReturnDecision(PaymentOperation Operation, string? Refusal);
 
 /// <summary>All methods run on the caller's org transaction. No provider I/O occurs here.</summary>
 public sealed class PaymentEngine(DbContext db, IOrgContext org, TimeProvider clock,
@@ -128,7 +129,8 @@ public sealed class PaymentEngine(DbContext db, IOrgContext org, TimeProvider cl
         if (op is null || op.DueAt > Now || op.LeaseUntil > Now) { return null; }
         MatchBinding(op, binding);
         var count = op.ProviderId is null ? 0 : await db.Set<PaymentObservation>().CountAsync(x => x.ProviderId == op.ProviderId, ct);
-        if (op.Status is "Settled" or "Failed" or "NeedsReview" && count == op.ProcessedCount) { return null; }
+        if (op.Status is "Settled" or "Failed" or "NeedsReview" or "Returned" or "ReviewClosed"
+            && count == op.ProcessedCount) { return null; }
         op.LeaseClaimId = UuidV7.NewId(); op.LeaseUntil = Now.AddSeconds(30); op.LastAttemptAt = Now;
         await db.SaveChangesAsync(ct);
         return op;
@@ -160,7 +162,18 @@ public sealed class PaymentEngine(DbContext db, IOrgContext org, TimeProvider cl
         else if (credits.Select(x => (x.EvidenceId, x.PayoutId, x.BankDate)).Distinct().Count() > 1)
         { reason = "conflicting_evidence"; }
 
-        if (reason is not null) { op.Status = "NeedsReview"; op.Reason = reason; }
+        // A posted return answers the evidence it was posted from, and nothing else: a refund, a dispute
+        // or a return that disagrees with it arriving afterwards still needs a person.
+        if (reason == "return_requires_review" && await db.Set<PaymentEffect>().AsNoTracking()
+            .SingleOrDefaultAsync(x => x.OperationId == op.Id && x.Kind == "Return", ct) is { } posted)
+        {
+            var answered = facts.Single(x => x.Id == posted.ObservationId);
+            if (facts.All(x => x.Kind is not ("Refund" or "Dispute")) && facts.Where(x => x.Kind == "Return")
+                .All(x => (x.EvidenceId, x.BankDate, x.Gross) == (answered.EvidenceId, answered.BankDate, answered.Gross)))
+            { op.Status = "Returned"; op.Reason = null; }
+            else { op.Status = "NeedsReview"; op.Reason = "evidence_after_return"; }
+        }
+        else if (reason is not null) { op.Status = "NeedsReview"; op.Reason = reason; }
         else if (op.JournalId is not null) { op.Status = "Settled"; op.Reason = null; }
         else if (facts.Any(x => x.Kind == "Failed")) { op.Status = "Failed"; op.Reason = "collection_failed"; }
         else if (op.Reason is not null && op.Reason != "technical_failure") { op.Status = "NeedsReview"; }
@@ -210,10 +223,79 @@ public sealed class PaymentEngine(DbContext db, IOrgContext org, TimeProvider cl
         var op = await db.Set<PaymentOperation>().SingleOrDefaultAsync(x => x.Id == id, ct);
         if (op is null) { return false; }
         if (op.JournalId is not null) { return true; }
-        if (op.Reason != "technical_failure") { throw new PaymentConflictException(); }
+        if (op.Status != "NeedsReview" || op.Reason != "technical_failure") { throw new PaymentConflictException(); }
         op.Status = "Processing"; op.Reason = null; op.DueAt = Now; op.Attempts = 0;
         await db.SaveChangesAsync(ct);
         return true;
+    }
+
+    /// <summary>
+    /// Posts a full bank return as the receipt's linked reversal (#490, ADR-052). Only a person starts
+    /// this; return evidence alone never posts. A refusal leaves the payment in review under a
+    /// <c>return_*</c> reason naming what stopped it, and posts nothing.
+    /// </summary>
+    public async Task<PaymentReturnDecision?> PostReturnAsync(FixtureBinding binding, Guid id, CancellationToken ct)
+    {
+        await RequireFixtureAsync(binding, ct);
+        await LockAsync(id.ToString(), ct);
+        var op = await db.Set<PaymentOperation>().SingleOrDefaultAsync(x => x.Id == id, ct);
+        if (op is null) { return null; }
+        MatchBinding(op, binding);
+        // The effect is the idempotency record: a repeat finds it and posts nothing.
+        if (op.Status == "Returned") { return new(op, null); }
+        if (op.Status != "NeedsReview" || op.JournalId is null || op.ProviderId is null
+            || op.Reason?.StartsWith("return_", StringComparison.Ordinal) != true)
+        { throw new PaymentConflictException(); }
+
+        var facts = await db.Set<PaymentObservation>().AsNoTracking().Where(x => x.ProviderId == op.ProviderId).ToListAsync(ct);
+        var returns = facts.Where(x => x.Kind == "Return").ToArray();
+        string? refusal = null;
+        if (facts.Any(x => x.Kind == "Conflict")
+            || returns.Select(x => (x.EvidenceId, x.BankDate, x.Gross)).Distinct().Count() > 1)
+        { refusal = "return_conflicting_evidence"; }
+        else if (returns.Length == 0 || facts.Any(x => x.Kind is "Refund" or "Dispute"))
+        { refusal = "return_kind_unsupported"; }
+        else if (returns.Any(x => x.Gross != op.Amount || x.Fee != 0 || x.Net != op.Amount || !x.Complete
+            || x.Currency != op.Currency || x.BankId != op.BankId || x.Generation != op.Generation
+            || x.BankDate == default))
+        { refusal = "return_partial_unsupported"; }
+        else
+        {
+            var evidence = returns[0];
+            var outcome = await ledger.ReturnSettledReceiptAsync(op.JournalId.Value, evidence.BankDate,
+                $"sim-payment:{op.Id:N}:return", "Bank returned this simulated tenant payment.", ct);
+            if (outcome.JournalId is { } journalId)
+            {
+                // Reversal, effect and status commit in this ONE transaction, like the receipt.
+                db.Add(new PaymentEffect { Id = UuidV7.NewId(), OperationId = op.Id, ObservationId = evidence.Id, JournalId = journalId, Kind = "Return" });
+                op.Status = "Returned"; op.Reason = null;
+            }
+            else { refusal = outcome.Refusal ?? "return_rejected"; }
+        }
+        if (refusal is not null) { op.Reason = refusal; }
+        op.LastAttemptAt = Now; await db.SaveChangesAsync(ct);
+        return new(op, refusal);
+    }
+
+    /// <summary>
+    /// Closes a review without posting (#490): staff have corrected the books by hand, or decided nothing
+    /// is owed. The note is required and the evidence stays. An observation that arrives afterwards
+    /// reopens the review.
+    /// </summary>
+    public async Task<PaymentOperation?> CloseReviewAsync(FixtureBinding binding, Guid id, Guid userId, string note, CancellationToken ct)
+    {
+        await RequireFixtureAsync(binding, ct);
+        await LockAsync(id.ToString(), ct);
+        var op = await db.Set<PaymentOperation>().SingleOrDefaultAsync(x => x.Id == id, ct);
+        if (op is null) { return null; }
+        MatchBinding(op, binding);
+        if (op.Status == "ReviewClosed") { return op; }
+        // A technical failure is not closed: its way out is Retry, and a closed operation that kept that
+        // reason would still post its receipt the next time evidence arrived.
+        if (op.Status != "NeedsReview" || op.Reason == "technical_failure") { throw new PaymentConflictException(); }
+        op.Status = "ReviewClosed"; op.ReviewNote = note; op.ReviewClosedAt = Now; op.ReviewClosedBy = userId;
+        await db.SaveChangesAsync(ct);
+        return op;
     }
 
     private static void MatchBinding(PaymentOperation op, FixtureBinding binding)

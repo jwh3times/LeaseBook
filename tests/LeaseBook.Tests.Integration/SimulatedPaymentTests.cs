@@ -5,6 +5,7 @@ using LeaseBook.Modules.Accounting.Contracts;
 using LeaseBook.Modules.Accounting.Diagnostics;
 using LeaseBook.Modules.Accounting.Domain;
 using LeaseBook.Modules.Accounting.Features.Ledgers;
+using LeaseBook.Modules.Accounting.Features.Posting.Events;
 using LeaseBook.Modules.Accounting.Periods;
 using LeaseBook.Modules.Payments.Contracts;
 using LeaseBook.Modules.Payments.Domain;
@@ -19,6 +20,7 @@ using LeaseBook.Web.Payments;
 using LeaseBook.Web.Persistence;
 using LeaseBook.Web.Portal;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -320,6 +322,210 @@ public sealed class SimulatedPaymentTests(PostgresFixture fixture)
         (await h.Balance(1, ct)).ShouldBe(1000m);
     }
 
+    [Fact]
+    public async Task A_full_return_posts_one_linked_reversal_on_the_evidence_date_only_when_an_admin_asks()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var h = await Setup(ct);
+        using var tenant = await h.Login(1, ct);
+        using var admin = await h.LoginAdmin(ct);
+        var op = await Submit(tenant, 600m, ct);
+        await h.Emit(op, "BankCredit", ct);
+        var returned = h.Observation(op, "Return");
+        await h.Deliver(returned, ct);
+        await h.Tick(ct);
+
+        // Evidence alone posts nothing: the receipt stands until a person acts.
+        (await h.Balance(1, ct)).ShouldBe(400m);
+        var inReview = await Staff(admin, op.Id, ct);
+        inReview.Status.ShouldBe("NeedsReview");
+        inReview.CanPostReturn.ShouldBeTrue();
+        // The tenant's view carries none of the staff review surface.
+        var mine = await Read(tenant, op.Id, ct);
+        (mine.CanPostReturn, mine.CanCloseReview, mine.ReceiptEntryId, mine.ReviewNote).ShouldBe((false, false, null, null));
+        (await tenant.PostAsync($"/api/payments/{op.Id}/return", null, ct)).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+
+        var response = await admin.PostAsync($"/api/payments/{op.Id}/return", null, ct);
+        response.StatusCode.ShouldBe(HttpStatusCode.OK, await response.Content.ReadAsStringAsync(ct));
+        var posted = (await response.Content.ReadFromJsonAsync<PaymentView>(ct))!;
+        posted.Status.ShouldBe("Returned");
+        posted.Reason.ShouldBeNull();
+        posted.ReceiptEntryId.ShouldNotBeNull();
+        posted.ReturnEntryId.ShouldNotBeNull();
+        (await h.Balance(1, ct)).ShouldBe(1000m);
+
+        // A repeated action and a replayed observation both find the effect and post nothing more.
+        (await admin.PostAsync($"/api/payments/{op.Id}/return", null, ct)).StatusCode.ShouldBe(HttpStatusCode.OK);
+        await h.Deliver(returned, ct);
+        await h.Deliver(returned with { EventId = "replayed-return" }, ct);
+        await h.Tick(ct);
+        (await Read(tenant, op.Id, ct)).Status.ShouldBe("Returned");
+        await h.InOrg(async sp =>
+        {
+            var db = sp.GetRequiredService<AppDbContext>();
+            var reversal = await db.Set<JournalEntry>().SingleAsync(x => x.ReversesEntryId == posted.ReceiptEntryId, ct);
+            reversal.Id.ShouldBe(posted.ReturnEntryId!.Value);
+            reversal.EntryDate.ShouldBe(returned.BankDate);
+            reversal.SourceRef.ShouldBe($"sim-payment:{op.Id:N}:return");
+            (await db.Set<PaymentEffect>().Where(x => x.OperationId == op.Id).Select(x => x.Kind).ToListAsync(ct))
+                .ShouldBe(["Receipt", "Return"], ignoreOrder: true);
+            (await new InvariantChecks(db).CheckCoreAsync(ct)).ShouldBeEmpty();
+        }, ct);
+        (await h.Balance(1, ct)).ShouldBe(1000m);
+
+        // A posted return answers the evidence it was posted from, not what arrives afterwards.
+        await h.Deliver(h.Observation(op, "Dispute"), ct);
+        await h.Tick(ct);
+        var again = await Staff(admin, op.Id, ct);
+        (again.Status, again.Reason, again.CanPostReturn, again.CanCloseReview)
+            .ShouldBe(("NeedsReview", "evidence_after_return", false, true));
+        again.ReturnEntryId.ShouldBe(posted.ReturnEntryId);
+        (await admin.PostAsync($"/api/payments/{op.Id}/return", null, ct)).StatusCode.ShouldBe(HttpStatusCode.Conflict);
+        (await h.Balance(1, ct)).ShouldBe(1000m);
+    }
+
+    [Theory]
+    [InlineData("prepayment", "return_prepayment_consumed")]
+    [InlineData("disbursed", "return_owner_funds_disbursed")]
+    [InlineData("locked", "return_period_locked")]
+    public async Task A_return_that_would_break_a_balance_or_a_lock_is_refused_by_name_and_posts_nothing(string guard, string code)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var h = await Setup(ct);
+        using var tenant = await h.Login(1, ct);
+        using var admin = await h.LoginAdmin(ct);
+        var op = await Submit(tenant, 1200m, ct); // 1,000 to the receivable, 200 to prepaid credit
+        await h.Emit(op, "BankCredit", ct);
+        await h.Emit(op, "Return", ct);
+        var today = DateOnly.FromDateTime(h.Clock.GetUtcNow().UtcDateTime);
+        await h.InOrg(async sp =>
+        {
+            var db = sp.GetRequiredService<AppDbContext>();
+            var receipt = await db.Set<JournalEntry>().SingleAsync(x => x.SourceRef == $"sim-payment:{op.Id:N}:receipt", ct);
+            var dims = await db.Set<JournalLine>().SingleAsync(x => x.EntryId == receipt.Id
+                && x.AccountClass == AccountClass.TenantReceivable, ct);
+            var events = sp.GetRequiredService<IAccountingEvents>();
+            switch (guard)
+            {
+                case "prepayment":
+                    await events.PostAsync(new RentCharged(dims.TenantId!.Value, dims.PropertyId!.Value, dims.OwnerId!.Value,
+                        null, new Money(200m), today, "Second charge"), ct);
+                    await events.PostAsync(new PrepaymentApplied(dims.TenantId.Value, dims.PropertyId.Value, dims.OwnerId.Value,
+                        new Money(200m), today, h.Binding.BankId, "Consume the excess"), ct);
+                    break;
+                case "disbursed":
+                    await events.PostAsync(new OwnerDisbursed(dims.OwnerId!.Value, new Money(1000m), today,
+                        h.Binding.BankId, "Owner draw"), ct);
+                    break;
+                default:
+                    await sp.GetRequiredService<IAccountingPeriods>().CloseAsync(today.Year, today.Month, ct);
+                    break;
+            }
+        }, ct);
+        var before = await h.Balance(1, ct);
+
+        var refused = await admin.PostAsync($"/api/payments/{op.Id}/return", null, ct);
+        var body = await refused.Content.ReadAsStringAsync(ct);
+        refused.StatusCode.ShouldBe(HttpStatusCode.Conflict, body);
+        JsonDocument.Parse(body).RootElement.GetProperty("code").GetString().ShouldBe(code);
+
+        // The refusal is durable, the payment is still in review, and it can still be closed.
+        var view = await Staff(admin, op.Id, ct);
+        (view.Status, view.Reason, view.CanCloseReview, view.ReturnEntryId).ShouldBe(("NeedsReview", code, true, null));
+        // Why it was refused describes the owner's and the ledger's position; the tenant is not told.
+        (await Read(tenant, op.Id, ct)).Reason.ShouldBe("return_requires_review");
+        (await h.Balance(1, ct)).ShouldBe(before);
+        await h.InOrg(async sp =>
+        {
+            var db = sp.GetRequiredService<AppDbContext>();
+            (await db.Set<JournalEntry>().CountAsync(x => x.ReversesEntryId != null, ct)).ShouldBe(0);
+            (await db.Set<PaymentEffect>().CountAsync(x => x.Kind == "Return", ct)).ShouldBe(0);
+        }, ct);
+    }
+
+    [Theory]
+    [InlineData("Return", 50, "return_partial_unsupported")]
+    [InlineData("Refund", 600, "return_kind_unsupported")]
+    [InlineData("Dispute", 600, "return_kind_unsupported")]
+    public async Task Partial_returns_refunds_and_disputes_cannot_be_posted_and_close_with_a_note(string kind, decimal gross, string code)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var h = await Setup(ct);
+        using var tenant = await h.Login(1, ct);
+        using var admin = await h.LoginAdmin(ct);
+        var op = await Submit(tenant, 600m, ct);
+        await h.Emit(op, "BankCredit", ct);
+        await h.Deliver(h.Observation(op, kind) with { Gross = gross, Net = gross }, ct);
+        await h.Tick(ct);
+
+        var refused = await admin.PostAsync($"/api/payments/{op.Id}/return", null, ct);
+        var body = await refused.Content.ReadAsStringAsync(ct);
+        refused.StatusCode.ShouldBe(HttpStatusCode.Conflict, body);
+        JsonDocument.Parse(body).RootElement.GetProperty("code").GetString().ShouldBe(code);
+
+        var close = $"/api/payments/{op.Id}/close-review";
+        (await admin.PostAsJsonAsync(close, new ClosePaymentReviewBody("   "), ct)).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await tenant.PostAsJsonAsync(close, new ClosePaymentReviewBody("mine"), ct)).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        (await Staff(admin, op.Id, ct)).Status.ShouldBe("NeedsReview");
+
+        var response = await admin.PostAsJsonAsync(close, new ClosePaymentReviewBody(" Corrected by journal adjustment. "), ct);
+        response.StatusCode.ShouldBe(HttpStatusCode.OK, await response.Content.ReadAsStringAsync(ct));
+        var closed = await Staff(admin, op.Id, ct);
+        (closed.Status, closed.Reason, closed.ReviewNote, closed.CanCloseReview, closed.CanPostReturn)
+            .ShouldBe(("ReviewClosed", code, "Corrected by journal adjustment.", false, false));
+        closed.ReviewClosedAt.ShouldNotBeNull();
+        closed.EvidenceReference.ShouldNotBeNull();
+        (await Read(tenant, op.Id, ct)).ReviewNote.ShouldBeNull();
+        (await h.Balance(1, ct)).ShouldBe(400m); // closing posts nothing: the receipt still stands
+        // A closed review is not a posted return.
+        (await admin.PostAsync($"/api/payments/{op.Id}/return", null, ct)).StatusCode.ShouldBe(HttpStatusCode.Conflict);
+
+        await h.InOrg(async sp =>
+        {
+            var db = sp.GetRequiredService<AppDbContext>();
+            (await db.Set<JournalEntry>().CountAsync(x => x.ReversesEntryId != null, ct)).ShouldBe(0);
+            var adminId = (await db.Users.SingleAsync(x => x.Email == h.AdminEmail, ct)).Id;
+            var audit = await db.AuditEvents.Where(x => x.EntityType == "payment_operations" && x.EntityId == op.Id)
+                .OrderByDescending(x => x.OccurredAt).FirstAsync(ct);
+            audit.ActorUserId.ShouldBe(adminId);
+            audit.After!.ShouldContain("ReviewClosed");
+        }, ct);
+
+        // Evidence arriving after the closure reopens the review instead of hiding behind it.
+        await h.Deliver(h.Observation(op, "Dispute") with { EventId = "late-dispute" }, ct);
+        await h.Tick(ct);
+        var reopened = await Staff(admin, op.Id, ct);
+        (reopened.Status, reopened.CanCloseReview).ShouldBe(("NeedsReview", true));
+    }
+
+    [Fact]
+    public async Task Review_actions_are_bound_to_the_organization_and_absent_without_the_simulation()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var a = await Setup(ct);
+        await using var b = await Setup(ct);
+        using var tenant = await a.Login(1, ct);
+        using var otherAdmin = await b.LoginAdmin(ct);
+        var op = await Submit(tenant, 600m, ct);
+        await a.Emit(op, "BankCredit", ct);
+        await a.Emit(op, "Return", ct);
+
+        (await otherAdmin.PostAsync($"/api/payments/{op.Id}/return", null, ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        (await otherAdmin.PostAsJsonAsync($"/api/payments/{op.Id}/close-review", new ClosePaymentReviewBody("not mine"), ct))
+            .StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        using var admin = await a.LoginAdmin(ct);
+        (await Staff(admin, op.Id, ct)).Status.ShouldBe("NeedsReview");
+
+        string?[] Routes(IServiceProvider services) => services.GetRequiredService<EndpointDataSource>().Endpoints
+            .OfType<RouteEndpoint>().Select(x => x.RoutePattern.RawText).ToArray();
+        Routes(a.App.Services).ShouldContain("/api/payments/{id:guid}/return");
+        Routes(a.App.Services).ShouldContain("/api/payments/{id:guid}/close-review");
+        Routes(fixture.Api.Services).ShouldNotContain(x => x != null && x.StartsWith("/api/payments/{id:guid}/"));
+    }
+
+    private static async Task<PaymentView> Staff(HttpClient admin, Guid id, CancellationToken ct) =>
+        (await admin.GetFromJsonAsync<PaymentsResponse>("/api/payments", ct))!.Items.Single(x => x.Id == id);
+
     private static async Task<PaymentView> Submit(HttpClient client, decimal amount, CancellationToken ct)
     {
         var response = await client.PostAsJsonAsync(Path, new SubmitPaymentBody(UuidV7.NewId(), amount, "USD"), ct);
@@ -374,6 +580,9 @@ public sealed class SimulatedPaymentTests(PostgresFixture fixture)
             if (fault.Fail) { fault.Fail = false; throw new IOException("Injected crash after ledger SaveChanges"); }
             return result.EntryId;
         }
+
+        public Task<PaymentReturnOutcome> ReturnSettledReceiptAsync(Guid receiptJournalId, DateOnly date, string sourceRef, string note, CancellationToken ct) =>
+            throw new NotSupportedException("The failing ledger exercises receipts only.");
     }
     private sealed class Harness(ApiFactory factory, WebApplicationFactory<Program> app, FixtureBinding binding, string suffix, PaymentClock clock) : IAsyncDisposable
     {
@@ -385,6 +594,13 @@ public sealed class SimulatedPaymentTests(PostgresFixture fixture)
         {
             var client = app.CreateClient(); await client.PrimeCsrfAsync(ct);
             (await client.PostAsJsonAsync("/api/auth/login", new { email = Email(tenant), password = PaymentFixtureBootstrap.Password }, ct)).EnsureSuccessStatusCode();
+            await client.PrimeCsrfAsync(ct); return client;
+        }
+        public string AdminEmail => $"admin-{suffix}@payments.test";
+        public async Task<HttpClient> LoginAdmin(CancellationToken ct)
+        {
+            var client = app.CreateClient(); await client.PrimeCsrfAsync(ct);
+            (await client.PostAsJsonAsync("/api/auth/login", new { email = AdminEmail, password = PaymentFixtureBootstrap.Password }, ct)).EnsureSuccessStatusCode();
             await client.PrimeCsrfAsync(ct); return client;
         }
         public async Task InOrg(Func<IServiceProvider, Task> work, CancellationToken ct)

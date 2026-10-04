@@ -139,6 +139,12 @@ the bank account that holds that liability, and is identified by its number on t
 voided from the check, never with the generic void (ADR-050).
 _Avoid_: refund payment, disbursement (a disbursement pays an owner)
 
+**Returned payment**:
+A tenant payment the bank took back after its receipt posted. It is posted only as a linked reversal
+of that receipt, only for the full amount, and only when an administrator confirms it; nothing posts
+on the bank's notice alone (ADR-052).
+_Avoid_: refund (a refund pays held money out), bounced payment, chargeback
+
 **Outstanding check**:
 An issued check whose bank line has not cleared. It is already out of the book balance and shows as an
 uncleared withdrawal in the register until the bank pays it.

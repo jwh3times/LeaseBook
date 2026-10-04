@@ -7,6 +7,7 @@ import { signIn } from './helpers';
 test('simulation survives reload and posts only after separate bank evidence', async ({
   page,
   request,
+  browser,
 }) => {
   test.skip(
     process.env.PAYMENT_SIMULATION_E2E !== '1',
@@ -81,5 +82,23 @@ test('simulation survives reload and posts only after separate bank evidence', a
   await emit('Return');
   await expect(
     page.getByText('Simulated payment needs review — original receipt remains recorded'),
+  ).toBeVisible();
+
+  // Return evidence posts nothing by itself. An administrator posts the return (#490); the tenant
+  // then sees the payment as returned and the rent owed again.
+  const staff = await browser.newContext();
+  const admin = await staff.newPage();
+  await signIn(admin, { email: 'admin-a@payments.test', password: 'Payment-Fixture-2026!' });
+  await admin.goto('/operations');
+  const payment = admin.getByRole('listitem').filter({ hasText: operation.id });
+  await payment.getByRole('button', { name: 'Post return', exact: true }).click();
+  await expect(
+    payment.getByText('Simulated payment returned by the bank — the receipt was reversed'),
+  ).toBeVisible();
+  await expect(payment.getByText(/^Reversal entry: /)).toBeVisible();
+  await staff.close();
+
+  await expect(
+    page.getByText('Simulated payment returned by the bank — the receipt was reversed'),
   ).toBeVisible();
 });
