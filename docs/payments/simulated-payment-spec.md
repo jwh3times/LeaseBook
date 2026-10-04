@@ -3,7 +3,7 @@
 - **Audience:** Implementers and reviewers of issue #456
 - **Status:** Implemented simulation contract for #456; live payments remain unapproved
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-09-29
+- **Last reviewed:** 2026-10-04
 
 ## Evidence and boundary
 
@@ -159,16 +159,16 @@ not posted again. The tenant view reports every `return_*` reason and `evidence_
 
 Fresh fixtures have a $1,000 rent charge. Examples use independent runs, not new golden values.
 
-| Case                                              | Expected result                                                                                           |
-| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| $600 gross receipt                                | Bank +600, receivable 400; cash equity +600; accrual charge equity unchanged                              |
-| $1,200 gross receipt                              | Bank +1,200, receivable 0, prepayment +200; receipt cash equity +1,000                                    |
-| $1,000 gross, $30 withheld, bank evidence $970    | Reject settlement; gross receipt would overstate bank by $30, net receipt would leave tenant owing $30    |
-| Confirmed failure                                 | No receipt; original $1,000 receivable remains                                                            |
-| Full $1,200 return with excess untouched          | Real reversal example restores original balances; first simulator still routes return to review           |
-| Excess consumed before full return                | Existing raw reversal can make prepayment negative; evidence must expose I4 failure                       |
-| Receipt date in a locked period                   | No receipt or effect record committed; no date substitution                                               |
-| Duplicate source ref, identical or changed amount | Existing Accounting rejects duplicate; Payments supplies durable payload comparison and idempotent replay |
+| Case                                              | Expected result                                                                                             |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| $600 gross receipt                                | Bank +600, receivable 400; cash equity +600; accrual charge equity unchanged                                |
+| $1,200 gross receipt                              | Bank +1,200, receivable 0, prepayment +200; receipt cash equity +1,000                                      |
+| $1,000 gross, $30 withheld, bank evidence $970    | Reject settlement; gross receipt would overstate bank by $30, net receipt would leave tenant owing $30      |
+| Confirmed failure                                 | No receipt; original $1,000 receivable remains                                                              |
+| Full $1,200 return with excess untouched          | A PMAdmin posts it; the linked reversal restores the original balances                                      |
+| Excess consumed before full return                | The guarded return refuses it (`return_prepayment_consumed`); a raw reversal would make prepayment negative |
+| Receipt date in a locked period                   | No receipt or effect record committed; no date substitution                                                 |
+| Duplicate source ref, identical or changed amount | Existing Accounting rejects duplicate; Payments supplies durable payload comparison and idempotent replay   |
 
 The existing sweep checks a bank-book equation; it does not inspect external bank evidence.
 Adding a clearing asset without changing the model would place entitlement on one side while

@@ -14,7 +14,17 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ## [Unreleased]
 
-- _Nothing yet._
+### Added
+
+- **A returned simulated payment can be posted or closed.** In the development payment fixture, a
+  payment the bank returns after its receipt posted used to wait in review with no action. An
+  administrator can now post a full return from Operations: the receipt is reversed on the bank's
+  return date and the tenant owes the amount again. The return is refused, with the reason shown, when
+  the money has since been used: prepaid credit applied, the owner paid out, or the date in a locked
+  period. Partial returns, refunds and disputes are never posted. Any review can instead be closed
+  with a required note once staff have corrected the ledger by hand; closing posts nothing, and later
+  evidence reopens it. Nothing posts on the bank's notice alone, and no returned-payment fee is
+  charged.
 
 ## [0.24.0] - 2026-10-02
 

@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living architecture guide
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-02
+- **Last reviewed:** 2026-10-04
 
 This is the canonical public map of the system **as implemented**. It explains how the pieces fit
 together and links the decisions that shaped them without reproducing every invariant. Accepted
@@ -54,7 +54,10 @@ transition, current Directory owner and deposit-responsibility handoff commit or
 
 Payments uses its own `IPaymentEligibility` batch port to resolve tenant/date/bank eligibility through
 Directory, and `IPaymentLedger` to dispatch Accounting's existing `RecordPayment` command. The receipt,
-payment effect and operation summary share one org transaction. Its `IPaymentProcessor` transport seam
+payment effect and operation summary share one org transaction. The same port carries a returned
+payment to Accounting's guarded `ReturnTenantPayment`, which an administrator starts and which posts
+the receipt's linked reversal or refuses by name
+([ADR-052](adr/ADR-052-guarded-simulated-payment-return.md)). Its `IPaymentProcessor` transport seam
 is called outside that transaction; the host simulator persists provider acceptance independently.
 
 Refund checks use a separate `IRefundCheckLedger` port into Accounting. Accounting derives the refund's
@@ -377,7 +380,7 @@ The isolated Development payment fixture uses a host `BackgroundService` to poll
 durable dispatch rows once per second. It starts only in Simulation web mode; the CLI can run the same
 worker pass explicitly. Each claim, callback receipt, effect and failure-bookkeeping transaction
 establishes a separate org scope. Thirty-second leases and durable provider lookup recover interrupted
-work. This simulator-only scheduler choice is recorded in the proposed
+work. This simulator-only scheduler choice is recorded in
 [ADR-046](adr/ADR-046-simulated-payment-recognition.md); it does not select a live payment scheduler.
 
 Portal invitation delivery uses a Development-only web `BackgroundService` to poll durable invitation
