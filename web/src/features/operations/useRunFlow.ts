@@ -56,9 +56,11 @@ export function useRunFlow(type: RunType, mode: RunMode) {
   const rowSetKey = preview.data
     ? `${type}:${period.year}:${period.month}:${preview.dataUpdatedAt}`
     : '';
-  const eligibleIds =
-    preview.data?.rows.filter((r) => !r.excludedReason && !r.alreadyDone).map((r) => r.targetId) ??
-    [];
+  const eligibleRows = preview.data?.rows.filter((r) => !r.excludedReason && !r.alreadyDone) ?? [];
+  const eligibleIds = eligibleRows.map((r) => r.targetId);
+  // A cautioned row is eligible but is never swept up by "select all": the operator ticks it by
+  // itself or not at all. Today that is a tenant with a payment on its way to the bank.
+  const sweepIds = eligibleRows.filter((r) => !r.caution).map((r) => r.targetId);
 
   const selected: ReadonlySet<string> =
     mode === 'all-eligible'
@@ -94,8 +96,11 @@ export function useRunFlow(type: RunType, mode: RunMode) {
   const toggleAll = () => {
     if (mode === 'all-eligible') return;
     interactions.current += 1;
-    const allSelected = eligibleIds.length > 0 && eligibleIds.every((id) => selected.has(id));
-    setSelection({ key: rowSetKey, ids: allSelected ? NONE : new Set(eligibleIds) });
+    const allSelected = sweepIds.length > 0 && sweepIds.every((id) => selected.has(id));
+    // Clearing clears everything; selecting takes every uncautioned row and keeps any cautioned row
+    // the operator had already ticked by hand.
+    const kept = sweepIds.length > 0 ? [...selected].filter((id) => !sweepIds.includes(id)) : [];
+    setSelection({ key: rowSetKey, ids: allSelected ? NONE : new Set([...sweepIds, ...kept]) });
   };
 
   const retry = () => {

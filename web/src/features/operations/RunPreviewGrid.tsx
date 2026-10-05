@@ -38,6 +38,14 @@ export const EXCLUDED_LABELS: Record<string, string> = {
   zero_rent: 'Zero rent amount',
 };
 
+export const CAUTION_LABELS: Record<string, string> = {
+  payment_in_transit: 'Payment in transit',
+};
+
+export function cautionLabel(caution: string): string {
+  return CAUTION_LABELS[caution] ?? caution.replace(/_/g, ' ');
+}
+
 export function excludedLabel(reason: string): string {
   return EXCLUDED_LABELS[reason] ?? reason.replace(/_/g, ' ');
 }
@@ -61,7 +69,8 @@ export function RunPreviewGrid({
     );
   }
 
-  const eligibleRows = rows.filter((r) => !r.excludedReason && !r.alreadyDone);
+  // "Select all" covers the eligible rows that carry no caution; a cautioned row is ticked by itself.
+  const eligibleRows = rows.filter((r) => !r.excludedReason && !r.alreadyDone && !r.caution);
   const allEligibleSelected =
     eligibleRows.length > 0 && eligibleRows.every((r) => selected.has(r.targetId));
 
@@ -165,6 +174,19 @@ export function RunPreviewGrid({
                     <Badge tone="accent" icon="check">
                       Already done
                     </Badge>
+                  ) : row.caution ? (
+                    <div className="col gap4">
+                      <Badge tone="warn" icon="alert">
+                        {cautionLabel(row.caution)}
+                      </Badge>
+                      {row.caution === 'payment_in_transit' && row.detail.inTransit && (
+                        <span className="fs13 t3">
+                          Paid <Money value={Number(row.detail.inTransit)} />
+                          {row.detail.paidOn ? ` on ${row.detail.paidOn}` : ''}; not yet at the
+                          bank. Not included in "select all".
+                        </span>
+                      )}
+                    </div>
                   ) : (
                     <Badge tone="pos" icon="check">
                       Eligible

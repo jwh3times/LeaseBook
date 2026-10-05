@@ -272,6 +272,7 @@ builder.Services.AddScoped<LeaseBook.Modules.Operations.Contracts.IPostedSourceR
 // WP-3: Late-fee run ports — policy resolution and delinquency signal (ADR-007 / WP-3).
 builder.Services.AddScoped<LeaseBook.Modules.Operations.Contracts.ILateFeePolicyData, LateFeePolicyDataAdapter>();
 builder.Services.AddScoped<LeaseBook.Modules.Operations.Contracts.IDelinquencyData, DelinquencyDataAdapter>();
+builder.Services.AddScoped<LeaseBook.Modules.Operations.Contracts.IFundsInTransit, FundsInTransitAdapter>();
 
 // Fix A (M6 final): IPeriodChargeGuard — structural cross-source double-charge guard (ADR-007).
 // Detects charges posted by any means (manual, seed, import) in a period, not just bulk-run keys.

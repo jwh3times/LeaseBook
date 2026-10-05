@@ -190,7 +190,13 @@ posted batch contains the payment. The organization figure is the sum over tenan
 
 It is a read over Payments' own records. It is never posted, never added to a tenant's balance and
 never used as an input to a posting. The tenant sees "paid on {date}, on its way to the bank" beside
-a balance that still includes the amount. Staff see the organization total and each tenant's figure.
+a balance that still includes the amount, and their own total in transit. Staff see the organization
+total on Operations, and each tenant's figure where it changes a decision: on that tenant's row in the
+late-fee preview.
+
+As built, "collected" is a payment still waiting for its bank evidence whose processor success has
+been observed. A payment that failed, was returned, is held for review or had its review closed is
+not in transit.
 
 ## Late fees and payments in transit
 
@@ -199,7 +205,9 @@ The journal date of the receipt remains the bank date.
 
 The late-fee run preview reads, through a port Operations owns, the tenants with funds in transit and
 each one's paid date and amount. It marks those tenants and leaves them unselected by default. Staff
-may select them. The run posts the same fee for a selected tenant as it would otherwise: this rule
+may select them. A late-fee run starts with nothing selected, so "by default" means "select all" skips
+a marked tenant: the operator ticks that row by itself or not at all, and a row ticked by hand
+survives a later "select all". The run posts the same fee for a selected tenant as it would otherwise: this rule
 changes selection, never an amount. A payment that later fails leaves transit, and the next run
 treats the tenant as it would any other.
 
@@ -251,7 +259,8 @@ This list is the input to the implementation issue. Items marked built exist in 
   `payment-simulation payout`, which produces a clean payout, a shortfall, a surplus, a return, a
   standalone fee, an untied payout and an unsupported line or payout type. The
   [runbook](../runbooks/payment-simulation.md) has the commands.
-- **Operations:** a consumer-owned port for tenants with funds in transit, and the preview flag.
+- **Operations (built):** the consumer-owned `IFundsInTransit` port, and the caution on a late-fee
+  preview row.
 - **Banking:** group matching of one statement line against a payout's bank lines.
 - **Staff and tenant surfaces:** the fee quote before confirm, the receipt showing ledger amount and
   fee, funds in transit, and the batch review with its one posting action.

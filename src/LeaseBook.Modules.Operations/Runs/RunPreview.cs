@@ -22,6 +22,12 @@ public sealed record RunPeriod(int Year, int Month)
 /// <param name="AlreadyDone">True when a source_ref match exists — confirming would produce a Skipped item.</param>
 /// <param name="ExcludedReason">Non-null when this target is ineligible and should not be selected.</param>
 /// <param name="Detail">Strategy-specific key/value metadata shown in the UI.</param>
+/// <param name="OwnerId">The owner whose equity the posting would move.</param>
+/// <param name="Caution">
+/// Non-null when the target is eligible but the operator should look before selecting it. A cautioned
+/// row is never selected by "select all"; it can still be selected by itself, and what posts for it is
+/// exactly what would post without the caution.
+/// </param>
 public sealed record PreviewRow(
     RunTargetKind TargetKind,
     Guid TargetId,
@@ -30,7 +36,8 @@ public sealed record PreviewRow(
     bool AlreadyDone,
     string? ExcludedReason,
     IReadOnlyDictionary<string, string> Detail,
-    Guid? OwnerId = null);
+    Guid? OwnerId = null,
+    string? Caution = null);
 
 /// <summary>An eligible preview target and the owner whose equity its posting would move.</summary>
 public sealed record EligibleRunTarget(Guid TargetId, Guid OwnerId);

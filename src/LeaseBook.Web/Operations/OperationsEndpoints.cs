@@ -77,7 +77,8 @@ public sealed class OperationsEndpoints : IEndpointModule
                         r.Amount,
                         r.AlreadyDone,
                         r.ExcludedReason,
-                        r.Detail)).ToList();
+                        r.Detail,
+                        r.Caution)).ToList();
 
                     return Results.Ok(new RunPreviewSpaResponse(
                         runType.ToString(),
@@ -258,7 +259,8 @@ public sealed record PreviewRowSpa(
     decimal Amount,
     bool AlreadyDone,
     string? ExcludedReason,
-    IReadOnlyDictionary<string, string> Detail);
+    IReadOnlyDictionary<string, string> Detail,
+    string? Caution = null);
 
 /// <summary>
 /// SPA shape for GET /api/operations/runs/{type}/preview.

@@ -387,4 +387,50 @@ describe('simulated payments', () => {
       screen.getByText('Simulated payment review closed — original receipt remains recorded'),
     ).toBeVisible();
   });
+
+  const collected = {
+    id: 'operation',
+    amount: 500,
+    currency: 'USD',
+    status: 'Processing',
+    receiptRecorded: false,
+    reason: null,
+    createdAt: '2026-10-05T00:00:00Z',
+    paidAt: '2026-10-05T14:30:00Z',
+    lastAttemptAt: null,
+    canRetry: false,
+  };
+
+  it('tells a tenant what is in transit and that their balance still includes it', async () => {
+    server.use(
+      http.get('/api/portal/tenant/payments', () =>
+        HttpResponse.json({ enabled: true, items: [collected], fundsInTransit: 500 }),
+      ),
+    );
+    show();
+    const notice = await screen.findByRole('status');
+    expect(notice).toHaveTextContent('In transit: $500.00.');
+    expect(notice).toHaveTextContent('Your balance still includes it until it arrives.');
+    expect(
+      screen.getByText('Paid on 2026-10-05 — on its way to the bank, not yet on your ledger'),
+    ).toBeVisible();
+  });
+
+  it('tells staff the organization total in transit and says nothing when there is none', async () => {
+    let inTransit = 850;
+    server.use(
+      http.get('/api/payments', () =>
+        HttpResponse.json({ enabled: true, items: [], fundsInTransit: inTransit }),
+      ),
+    );
+    show(true);
+    const notice = await screen.findByRole('status');
+    expect(notice).toHaveTextContent('In transit: $850.00.');
+    expect(notice).toHaveTextContent('Tenant balances and the bank book do not include it.');
+
+    inTransit = 0;
+    await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument(), {
+      timeout: 4000,
+    });
+  });
 });

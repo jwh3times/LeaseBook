@@ -928,6 +928,7 @@ public static class ScenarioSeeder
                 services.GetRequiredService<IDelinquencyData>(),
                 services.GetRequiredService<ILateFeePolicyData>(),
                 services.GetRequiredService<IPostedSourceRefs>(),
+                services.GetRequiredService<IFundsInTransit>(),
                 clock));
 
         return new RunEngine(

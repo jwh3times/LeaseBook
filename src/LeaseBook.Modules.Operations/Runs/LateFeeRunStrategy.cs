@@ -40,8 +40,12 @@ public sealed class LateFeeRunStrategy(
     IDelinquencyData delinquency,
     ILateFeePolicyData policies,
     IPostedSourceRefs postedRefs,
+    IFundsInTransit fundsInTransit,
     TimeProvider clock) : IRunStrategy
 {
+    /// <summary>The caution on a preview row whose tenant has a payment in transit.</summary>
+    public const string PaymentInTransit = "payment_in_transit";
+
     /// <inheritdoc />
     public RunType RunType => RunType.LateFee;
 
@@ -70,6 +74,12 @@ public sealed class LateFeeRunStrategy(
             .ToList();
         var alreadyPosted = await BatchRead.SetOrEmptyAsync(
             allKeys, keys => postedRefs.GetExistingAsync(keys, ct));
+
+        // A tenant who has paid online is delinquent in the journal until the bank shows the money
+        // (ADR-053). The run still offers them, at the same fee, but says so and never sweeps them up
+        // in "select all": charging a late fee to someone whose payment is on its way is a decision.
+        var inTransit = await BatchRead.MapOrEmptyAsync(
+            delinquentRows.Select(r => r.TenantId).Distinct().ToList(), ids => fundsInTransit.GetAsync(ids, ct));
 
         var previewRows = new List<PreviewRow>(delinquentRows.Count);
         var exceptions = new List<string>();
@@ -100,6 +110,12 @@ public sealed class LateFeeRunStrategy(
                 ["feeKind"] = charge.Kind.ToString(),
                 ["monthlyRent"] = row.Rent.ToString("F2"),
             };
+            var paying = inTransit.TryGetValue(row.TenantId, out var transit);
+            if (paying)
+            {
+                detail["inTransit"] = transit!.Amount.ToString("F2");
+                detail["paidOn"] = transit.PaidOn.ToString("yyyy-MM-dd");
+            }
 
             previewRows.Add(new PreviewRow(
                 TargetKind: RunTargetKind.Lease,
@@ -109,7 +125,8 @@ public sealed class LateFeeRunStrategy(
                 AlreadyDone: alreadyPosted.Contains(SourceRef(charge.RentObligationEntryId)),
                 ExcludedReason: null,
                 Detail: detail,
-                OwnerId: row.OwnerId));
+                OwnerId: row.OwnerId,
+                Caution: paying ? PaymentInTransit : null));
         }
 
         return new StrategyPreview(previewRows, exceptions);

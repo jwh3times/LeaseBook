@@ -25,7 +25,9 @@ function description(payment: PaymentView) {
     case 'Requested':
       return 'Simulation requested';
     case 'Processing':
-      return 'Simulated payment processing — not yet on your ledger';
+      return payment.paidAt
+        ? `Paid on ${payment.paidAt.slice(0, 10)} — on its way to the bank, not yet on your ledger`
+        : 'Simulated payment processing — not yet on your ledger';
     case 'Failed':
       return 'Simulated payment failed — no payment recorded';
     case 'Settled':
@@ -214,6 +216,14 @@ export function PaymentPanel({ staff = false }: { staff?: boolean }) {
     <Card>
       <h3>Simulated payments</h3>
       <Badge dot>Simulation — no real money moves</Badge>
+      {Number(list.data.fundsInTransit ?? 0) > 0 && (
+        <p role="status">
+          In transit: <Money value={Number(list.data.fundsInTransit)} />.{' '}
+          {staff
+            ? 'Collected by the processor and not yet at the bank. Tenant balances and the bank book do not include it.'
+            : 'Paid and on its way to the bank. Your balance still includes it until it arrives.'}
+        </p>
+      )}
       {staff && <UnmatchedObservations count={Number(list.data.unmatchedObservations ?? 0)} />}
       {!staff && (
         <form

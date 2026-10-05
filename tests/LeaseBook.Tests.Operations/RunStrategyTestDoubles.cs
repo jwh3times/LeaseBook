@@ -36,6 +36,14 @@ internal sealed class StubPostedSourceRefs(IReadOnlySet<string>? existing = null
         Task.FromResult(existing ?? (IReadOnlySet<string>)new HashSet<string>());
 }
 
+internal sealed class StubFundsInTransit(IReadOnlyDictionary<Guid, TenantFundsInTransit>? paying = null) : IFundsInTransit
+{
+    public Task<IReadOnlyDictionary<Guid, TenantFundsInTransit>> GetAsync(IReadOnlyList<Guid> tenantIds, CancellationToken ct) =>
+        Task.FromResult<IReadOnlyDictionary<Guid, TenantFundsInTransit>>(
+            (paying ?? new Dictionary<Guid, TenantFundsInTransit>()).Where(x => tenantIds.Contains(x.Key))
+                .ToDictionary(x => x.Key, x => x.Value));
+}
+
 internal sealed class StubPeriodChargeGuard(IReadOnlySet<Guid>? chargedTenants = null)
     : IPeriodChargeGuard
 {

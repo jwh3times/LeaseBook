@@ -352,3 +352,42 @@ describe('useRunFlow — other outcomes', () => {
     expect(previewsServed()).toBe(1);
   });
 });
+
+describe('useRunFlow — a cautioned row', () => {
+  const cautioned = row('b', {
+    caution: 'payment_in_transit',
+    detail: { inTransit: '650.00', paidOn: '2026-05-02' },
+  });
+
+  it('is left out of select-all, can be ticked by itself, and is then confirmed like any other', async () => {
+    const { bodies } = serve('latefee', [preview('v1', [row('a'), cautioned, row('c')])]);
+    const { result } = await loaded('latefee', 'selective');
+
+    act(() => result.current.toggleAll());
+    expect([...result.current.selected].sort()).toEqual(['a', 'c']);
+
+    // Ticked by hand, it is selected; and select-all now reads as complete, so it clears everything.
+    act(() => result.current.toggle('b'));
+    expect([...result.current.selected].sort()).toEqual(['a', 'b', 'c']);
+    act(() => result.current.toggleAll());
+    expect([...result.current.selected]).toEqual([]);
+
+    // Ticked first, it survives a select-all.
+    act(() => result.current.toggle('b'));
+    act(() => result.current.toggleAll());
+    expect([...result.current.selected].sort()).toEqual(['a', 'b', 'c']);
+
+    act(() => result.current.confirm());
+    await waitFor(() => expect(bodies).toHaveLength(1));
+    expect(new Set(bodies[0]?.selectedTargetIds as string[])).toEqual(new Set(['a', 'b', 'c']));
+  });
+
+  it('is never selected by select-all when it is the only eligible row', async () => {
+    serve('latefee', [preview('v1', [cautioned])]);
+    const { result } = await loaded('latefee', 'selective');
+
+    act(() => result.current.toggleAll());
+
+    expect([...result.current.selected]).toEqual([]);
+  });
+});

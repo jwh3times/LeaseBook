@@ -681,6 +681,61 @@ public sealed partial class SimulatedPaymentTests
         return (await response.Content.ReadFromJsonAsync<PaymentView>(ct))!;
     }
 
+    [Fact]
+    public async Task Funds_in_transit_are_what_was_collected_and_not_yet_banked_and_never_touch_a_balance_or_the_journal()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var h = await Setup(ct);
+        using var one = await h.Login(1, ct);
+        using var two = await h.Login(2, ct);
+        using var admin = await h.LoginAdmin(ct);
+        (await admin.PutAsJsonAsync("/api/settings/payment-fees", FeeRules, ct)).EnsureSuccessStatusCode();
+        var first = await Pay(h, one, 500m, ct);  // charged 515.24: only the 500.00 is the tenant's ledger amount
+        var second = await Pay(h, two, 250m, ct);
+        var failing = await Pay(h, two, 100m, ct);
+        var entries = await JournalEntries(h, ct);
+
+        // Submitted and accepted is not collected: nothing is in transit until the processor says so.
+        (await InTransit(one, ct), await InTransit(two, ct), await InTransit(admin, ct, staff: true)).ShouldBe((0m, 0m, 0m));
+        foreach (var op in new[] { first, second, failing }) { await h.Emit(op, "Succeeded", ct); }
+
+        // Each tenant sees their own; staff see the organization's. The ledger amount, never the charge.
+        (await InTransit(one, ct), await InTransit(two, ct), await InTransit(admin, ct, staff: true)).ShouldBe((500m, 350m, 850m));
+        // It is a figure beside the balance. The balance and the journal have not moved.
+        (await h.Balance(1, ct), await h.Balance(2, ct), await JournalEntries(h, ct)).ShouldBe((1000m, 1000m, entries));
+
+        // What Operations reads through its own port: per tenant, with the date the tenant paid.
+        await h.InOrg(async sp =>
+        {
+            var db = sp.GetRequiredService<AppDbContext>();
+            var tenants = await db.Set<PaymentOperation>().Where(x => x.Id == first.Id || x.Id == second.Id)
+                .ToDictionaryAsync(x => x.Id, x => x.TenantId, ct);
+            var paidOn = DateOnly.FromDateTime(h.Clock.GetUtcNow().UtcDateTime);
+            var map = await sp.GetRequiredService<Modules.Operations.Contracts.IFundsInTransit>()
+                .GetAsync([tenants[first.Id], tenants[second.Id], UuidV7.NewId()], ct);
+            map.Count.ShouldBe(2);
+            (map[tenants[first.Id]].Amount, map[tenants[first.Id]].PaidOn).ShouldBe((500m, paidOn));
+            map[tenants[second.Id]].Amount.ShouldBe(350m);
+        }, ct);
+
+        // A payment that fails leaves transit; one the bank receives leaves it for the ledger.
+        await h.Emit(failing, "Failed", ct);
+        (await InTransit(two, ct)).ShouldBe(250m);
+        await h.Settle(h.Payout("po_1", 500m, h.Line("1", "Payment", first, first.ChargedAmount, first.QuotedFee, 500m)), ct);
+        (await InTransit(one, ct), await InTransit(admin, ct, staff: true)).ShouldBe((0m, 250m));
+        (await h.Balance(1, ct)).ShouldBe(500m);
+    }
+
+    private static async Task<decimal> InTransit(HttpClient client, CancellationToken ct, bool staff = false) =>
+        (await client.GetFromJsonAsync<PaymentsResponse>(staff ? "/api/payments" : Path, ct))!.FundsInTransit;
+
+    private static async Task<int> JournalEntries(Harness h, CancellationToken ct)
+    {
+        var count = 0;
+        await h.InOrg(async sp => count = await sp.GetRequiredService<AppDbContext>().Set<JournalEntry>().CountAsync(ct), ct);
+        return count;
+    }
+
     // Submits a payment at the fee quoted for it, and runs the worker so that the provider reference exists.
     private static async Task<PaymentView> Pay(Harness h, HttpClient tenant, decimal amount, CancellationToken ct)
     {
