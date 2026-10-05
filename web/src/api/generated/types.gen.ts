@@ -583,6 +583,12 @@ export type OrgSettingsResponse = {
     lateFeeAmount: number | string;
     lateFeeRateBps: number | string;
     staffCanManagePortalAccess?: boolean;
+    cardFeeRateBps?: number | string;
+    cardFeeFixed?: number | string;
+    cardFeeCap?: null | number | string;
+    achFeeRateBps?: number | string;
+    achFeeFixed?: number | string;
+    achFeeCap?: null | number | string;
 };
 
 export type OwnerBalanceHeroRow = {
@@ -1336,6 +1342,15 @@ export type UpdateOwner = {
     contactPhone: null | string;
     defaultMgmtFeeBps: null | number | string;
     reserveAmount: number | string;
+};
+
+export type UpdatePaymentFeeSettings = {
+    cardFeeRateBps: null | number | string;
+    cardFeeFixed: null | number | string;
+    cardFeeCap: null | number | string;
+    achFeeRateBps: null | number | string;
+    achFeeFixed: null | number | string;
+    achFeeCap: null | number | string;
 };
 
 export type UpdatePortalAccessSettings = {
@@ -2380,6 +2395,22 @@ export type PutApiSettingsPortalAccessResponses = {
 };
 
 export type PutApiSettingsPortalAccessResponse = PutApiSettingsPortalAccessResponses[keyof PutApiSettingsPortalAccessResponses];
+
+export type PutApiSettingsPaymentFeesData = {
+    body: UpdatePaymentFeeSettings;
+    path?: never;
+    query?: never;
+    url: '/api/settings/payment-fees';
+};
+
+export type PutApiSettingsPaymentFeesResponses = {
+    /**
+     * OK
+     */
+    200: OrgSettingsResponse;
+};
+
+export type PutApiSettingsPaymentFeesResponse = PutApiSettingsPaymentFeesResponses[keyof PutApiSettingsPaymentFeesResponses];
 
 export type GetApiSettingsBanksData = {
     body?: never;

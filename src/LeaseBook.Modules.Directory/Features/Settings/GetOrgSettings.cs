@@ -36,7 +36,14 @@ public sealed record OrgSettingsResponse(
     string LateFeeKind,
     decimal LateFeeAmount,
     int LateFeeRateBps,
-    bool StaffCanManagePortalAccess = true)
+    bool StaffCanManagePortalAccess = true,
+    // Convenience-fee rules for online payments (ADR-053). Appended for the same reason.
+    int CardFeeRateBps = 0,
+    decimal CardFeeFixed = 0m,
+    decimal? CardFeeCap = null,
+    int AchFeeRateBps = 0,
+    decimal AchFeeFixed = 0m,
+    decimal? AchFeeCap = null)
 {
     public static OrgSettingsResponse From(OrgSettings s) => new(
         AccountingBasisConverter.ToDb(s.AccountingBasis),
@@ -47,7 +54,9 @@ public sealed record OrgSettingsResponse(
         LateFeeKindConverter.ToDb(s.LateFeeKind),
         s.LateFeeAmount,
         s.LateFeeRateBps,
-        s.StaffCanManagePortalAccess);
+        s.StaffCanManagePortalAccess,
+        s.CardFeeRateBps, s.CardFeeFixed, s.CardFeeCap,
+        s.AchFeeRateBps, s.AchFeeFixed, s.AchFeeCap);
 }
 
 internal sealed class GetOrgSettingsHandler(DbContext db) : IQueryHandler<GetOrgSettings, OrgSettingsResponse>

@@ -39,6 +39,13 @@ public sealed class SettingsEndpoints : IEndpointModule
             .RequireAuthorization("RequirePMAdmin")
             .Produces<OrgSettingsResponse>();
 
+        group.MapPut("/payment-fees",
+                async (UpdatePaymentFeeSettings body, ISender sender, CancellationToken ct) =>
+                    TypedResults.Ok(await sender.Send(body, ct)))
+            .RequireAuthorization("RequirePMAdmin")
+            .WithDescription("Sets the convenience-fee rule for each online payment method: a rate in basis points, a fixed amount and an optional cap. Both rates and both fixed amounts are required; an omitted cap means no cap.")
+            .Produces<OrgSettingsResponse>();
+
         group.MapGet("/banks",
                 async (bool? activeOnly, ISender sender, CancellationToken ct) =>
                     TypedResults.Ok(await sender.Query(new ListBankAccounts(activeOnly ?? false), ct)))
