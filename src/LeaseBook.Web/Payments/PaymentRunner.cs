@@ -85,6 +85,49 @@ public sealed class PaymentRunner(IServiceScopeFactory scopes, SimulationSetting
         }, ct);
     }
 
+    /// <summary>
+    /// Stores a payout's evidence, then checks and posts it. Two transactions on purpose: the evidence
+    /// is durable even when the posting attempt fails, and a refusal is recorded on the stored payout.
+    /// </summary>
+    public async Task<Guid?> ReceiveSettlementAsync(ProcessorSettlement evidence, CancellationToken ct)
+    {
+        var binding = settings.ForAccount(evidence.Account);
+        if (binding is null || evidence.Mode != "Simulation" || evidence.Generation != binding.Generation)
+        {
+            log.LogInformation(new EventId(4602, "PaymentCallbackIgnored"), "Unmapped simulated payout evidence ignored");
+            return null;
+        }
+        if (await InOrg(binding, sp => sp.GetRequiredService<SettlementEngine>().ReceiveAsync(binding, evidence, ct), ct) is not { } id)
+        {
+            log.LogInformation(new EventId(4602, "PaymentCallbackIgnored"), "Malformed simulated payout evidence ignored");
+            return null;
+        }
+        try
+        {
+            var settlement = await InOrg(binding, sp => sp.GetRequiredService<SettlementEngine>().EvaluateAsync(binding, id, null, ct), ct);
+            log.LogInformation(new EventId(4604, "PaymentSettlementEvaluated"),
+                "Simulated payout {SettlementId} is {Status} ({Reason})", id, settlement?.Status, settlement?.Reason ?? "none");
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (PaymentConflictException)
+        {
+            // A redelivery of a payout already closed or marked as conflicting: nothing more to do.
+        }
+        catch (Exception ex)
+        {
+            // The evidence is stored and the failed attempt rolled back. Say so on the payout, so that
+            // it shows as waiting with both ways out instead of sitting unseen as merely received.
+            await InOrg(binding, async sp =>
+            {
+                await sp.GetRequiredService<SettlementEngine>().MarkFailedAsync(binding, id, ct);
+                return true;
+            }, ct);
+            log.LogWarning(new EventId(4605, "PaymentSettlementNeedsAttention"),
+                "Simulated payout {SettlementId} could not be checked ({ExceptionType})", id, ex.GetType().Name);
+        }
+        return id;
+    }
+
     private async Task<T> InOrg<T>(FixtureBinding binding, Func<IServiceProvider, Task<T>> work, CancellationToken ct)
     {
         if (settings.ForOrg(binding.OrgId) != binding) { throw new PaymentUnavailableException(); }

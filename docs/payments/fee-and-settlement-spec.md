@@ -1,7 +1,7 @@
 # Processor fee and batched settlement specification
 
 - **Audience:** Reviewers of issue #498 and implementers of the slice that follows it
-- **Status:** Proposed model; the fee rules, the quote and the fee on a payment are built in the simulation, batches are not, and live payments remain unapproved
+- **Status:** Proposed model; fees and payout batches are built in the simulation but no evidence channel delivers a payout yet, and live payments remain unapproved
 - **Owner:** Maintainers
 - **Last reviewed:** 2026-10-05
 
@@ -100,8 +100,14 @@ A batch is one unit of work. It posts completely or not at all.
    charged amount equals the payment's stored charged amount. Otherwise: `settlement_untied`.
 3. **Check for unsupported content.** A reserve, a hold, an instant or manual payout, a partial
    refund or a non-USD item: `unsupported_settlement`.
-4. **Check for negative items.** If any item is a return, refund or dispute, stop:
+4. **Check for negative items.** If any item is a return, stop:
    `settlement_requires_confirmation`. An administrator posts the batch with one action.
+
+   As built, a refund or a dispute is not a line the batch can post at all. It is caught at step 3 as
+   `unsupported_settlement`, in line with ADR-052, which posts neither. So is a return of less than
+   the whole charge. A processor fee with no payment beside it is a shortfall and does not, by itself,
+   need a person.
+
 5. **Post.** Under the posting lock, post every item's lines and record one effect per item. A
    refused guard — the shortfall guard, any ADR-052 return guard, a locked period — rolls the whole
    batch back and records the refusal as the batch's reason.
@@ -113,6 +119,43 @@ A batch is one unit of work. It posts completely or not at all.
 
 A payout whose items net to a bank debit is a batch like any other, with a negative bank amount.
 Nothing is posted from a processor's notice that a payout was paid; only bank evidence opens a batch.
+
+Evidence for a payout is stored once. A redelivery is ignored. The same payout arriving with different
+content is not stored and marks the stored payout `conflicting_evidence`, unless it has already posted.
+A payout is checked when it arrives and again each time an administrator posts it; nothing rechecks a
+waiting payout by itself.
+
+A line for a payment that already has a receipt, or a return of a payment already returned, is
+`conflicting_evidence`: the single-payment evidence of the earlier simulation still posts a clean
+payment, and whichever arrives second is refused, never posted twice. So is a line that contradicts a
+decision already recorded on the payment: a payment line for anything but a payment still waiting for
+its bank evidence, or a return line for anything but a settled payment or one whose return is waiting
+for a decision. A payout does not settle a failed payment, or reverse one whose return review staff
+closed by hand.
+
+### What each line must say
+
+A line's net must follow from its own gross and fee, and its fee is bounded by what the payment says.
+Without this a line could tie the payout to the bank while naming an arbitrary net, and the difference
+would post as the PM's fee surplus.
+
+| Line    | Gross              | Fee                                                   | Net            | Fee difference         |
+| ------- | ------------------ | ----------------------------------------------------- | -------------- | ---------------------- |
+| Payment | The charged amount | What the processor kept; zero or more                 | Gross less fee | Ledger amount less net |
+| Return  | The charged amount | What the processor gives back; zero to the quoted fee | Fee less gross | Quoted fee less fee    |
+| Fee     | Zero               | The processor's fee; above zero                       | Minus the fee  | The fee                |
+
+A return can never produce a surplus: the most the processor can give back is the fee that was
+quoted. What it does not give back is a shortfall, and so is any fee it charges for the return.
+
+### Evidence that is not kept, and checks that do not finish
+
+Evidence that cannot be stored as it arrived is not stored: a line reference used twice or left
+blank, or text longer than its field. It is refused the way an unverifiable callback is. Evidence that
+can be stored is stored whatever it says, including another currency, and is held as unsupported.
+
+If checking or posting a payout fails for a technical reason, the stored payout is marked
+`technical_failure`. An administrator can post it to try again, or close it.
 
 ### Worked batch
 
@@ -171,20 +214,24 @@ offered as a one-to-one match.
 
 ## Review reasons
 
-| Reason                             | Meaning                                                             | Way out                                    |
-| ---------------------------------- | ------------------------------------------------------------------- | ------------------------------------------ |
-| `settlement_incomplete`            | An item maps to no payment, or to more than one.                    | More evidence, or close with a note        |
-| `settlement_untied`                | Items do not sum to the bank amount, or a charged amount differs.   | Corrected evidence, or close with a note   |
-| `unsupported_settlement`           | A reserve, hold, instant or manual payout, partial refund, non-USD. | Close with a note after correcting by hand |
-| `settlement_requires_confirmation` | The batch contains a return, refund or dispute.                     | An administrator posts the batch           |
-| `pm_fees_insufficient`             | A shortfall would take held PM fees below zero.                     | Fund held fees, then post; or close        |
-| `return_*`                         | A return in the batch failed an ADR-052 guard.                      | As ADR-052                                 |
+| Reason                             | Meaning                                                               | Way out                                    |
+| ---------------------------------- | --------------------------------------------------------------------- | ------------------------------------------ |
+| `settlement_incomplete`            | An item maps to no payment, or to more than one.                      | More evidence, or close with a note        |
+| `settlement_untied`                | Items do not sum to the bank amount, or a charged amount differs.     | Corrected evidence, or close with a note   |
+| `unsupported_settlement`           | A reserve, hold, instant or manual payout, partial refund, non-USD.   | Close with a note after correcting by hand |
+| `settlement_requires_confirmation` | The batch contains a return, refund or dispute.                       | An administrator posts the batch           |
+| `pm_fees_insufficient`             | A shortfall would take held PM fees below zero.                       | Fund held fees, then post; or close        |
+| `return_*`                         | A return in the batch failed an ADR-052 guard.                        | As ADR-052                                 |
+| `conflicting_evidence`             | The payout contradicts itself, an earlier copy, or a payment's state. | Close with a note                          |
+| `settlement_period_locked`         | The bank date is in a closed period or a reconciled bank month.       | Close with a note after correcting by hand |
+| `attribution_unavailable`          | A tenant in the payout has no lease on the bank date.                 | Correct the lease, then post; or close     |
+| `technical_failure`                | Checking or posting did not finish.                                   | Post to try again, or close                |
 
 Closing a batch with a note posts nothing, as closing a payment review does today.
 
 ## What an implementation needs
 
-This list is the input to the implementation issue. The Accounting posting template, the fee rules in organization settings, the quote and the payment record are built; nothing below them is.
+This list is the input to the implementation issue. Items marked built exist in the simulation; the rest do not.
 
 - **Organization settings (built):** per payment method, a rate in basis points, a fixed amount and an
   optional cap, set as a whole by an administrator through `PUT /api/settings/payment-fees`, validated
@@ -192,11 +239,14 @@ This list is the input to the implementation issue. The Accounting posting templ
 - **Payment record (built):** the ledger amount, quoted fee, method and paid date, with the charged
   amount derived. The tenant is quoted the fee before confirming, and a clean item settles from
   single-payment evidence.
-- **Batch record:** a payout with its bank evidence, its items, its status and reason, and one effect
-  per posted item. Today an effect belongs to a single payment.
+- **Batch record (built):** a payout with its bank evidence, its lines, its status and reason, the
+  entries each line posted, and one effect per payment. Staff list payouts at
+  `GET /api/payments/settlements`; an administrator posts or closes one with
+  `POST /api/payments/settlements/{id}/post` and `.../close`. Nothing delivers payout evidence to the
+  simulation yet, so these are reachable only from tests.
 - **Accounting (built):** the `ProcessorFeeDifference` posting template, in both directions and with
-  the shortfall guard, and the `PostPaymentSettlement` command that posts a whole payout or nothing.
-  Payments does not call it yet; its port and adapter come with the batch record.
+  the shortfall guard, and the `PostPaymentSettlement` command that posts a whole payout or nothing,
+  reached from Payments through `IPaymentLedger.PostSettlementAsync`.
 - **Simulator:** bank evidence that names a payout with several items, each with gross, fee and net;
   the CLI and callback shapes to drive a shortfall, a surplus, a return inside a payout and an untied
   batch.

@@ -1125,6 +1125,38 @@ export type SetBankActiveRequest = {
     isActive: boolean;
 };
 
+export type SettlementItemView = {
+    item: string;
+    kind: string;
+    paymentId: null | string;
+    gross: number | string;
+    fee: number | string;
+    net: number | string;
+    entryId: null | string;
+    feeEntryId: null | string;
+};
+
+export type SettlementView = {
+    id: string;
+    payoutReference: string;
+    bankDate: string;
+    bankAmount: number | string;
+    status: string;
+    reason: null | string;
+    reasonItem: null | string;
+    createdAt: string;
+    postedAt: null | string;
+    reviewNote: null | string;
+    reviewClosedAt: null | string;
+    canPost: boolean;
+    canClose: boolean;
+    items: Array<SettlementItemView>;
+};
+
+export type SettlementsResponse = {
+    items: Array<SettlementView>;
+};
+
 export type SignoffResult = {
     signedVerificationId: string;
     signedOffAt: string;
@@ -3242,6 +3274,79 @@ export type GetApiPaymentsUnmatchedResponses = {
 };
 
 export type GetApiPaymentsUnmatchedResponse = GetApiPaymentsUnmatchedResponses[keyof GetApiPaymentsUnmatchedResponses];
+
+export type GetApiPaymentsSettlementsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/payments/settlements';
+};
+
+export type GetApiPaymentsSettlementsErrors = {
+    /**
+     * Not Found
+     */
+    404: unknown;
+};
+
+export type GetApiPaymentsSettlementsResponses = {
+    /**
+     * OK
+     */
+    200: SettlementsResponse;
+};
+
+export type GetApiPaymentsSettlementsResponse = GetApiPaymentsSettlementsResponses[keyof GetApiPaymentsSettlementsResponses];
+
+export type PostApiPaymentsSettlementsByIdPostData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/payments/settlements/{id}/post';
+};
+
+export type PostApiPaymentsSettlementsByIdPostErrors = {
+    /**
+     * Not Found
+     */
+    404: unknown;
+};
+
+export type PostApiPaymentsSettlementsByIdPostResponses = {
+    /**
+     * OK
+     */
+    200: SettlementView;
+};
+
+export type PostApiPaymentsSettlementsByIdPostResponse = PostApiPaymentsSettlementsByIdPostResponses[keyof PostApiPaymentsSettlementsByIdPostResponses];
+
+export type PostApiPaymentsSettlementsByIdCloseData = {
+    body: ClosePaymentReviewBody;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/payments/settlements/{id}/close';
+};
+
+export type PostApiPaymentsSettlementsByIdCloseErrors = {
+    /**
+     * Not Found
+     */
+    404: unknown;
+};
+
+export type PostApiPaymentsSettlementsByIdCloseResponses = {
+    /**
+     * OK
+     */
+    200: SettlementView;
+};
+
+export type PostApiPaymentsSettlementsByIdCloseResponse = PostApiPaymentsSettlementsByIdCloseResponses[keyof PostApiPaymentsSettlementsByIdCloseResponses];
 
 export type PostApiPaymentsByIdReturnData = {
     body?: never;

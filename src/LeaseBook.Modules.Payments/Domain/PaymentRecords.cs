@@ -89,9 +89,12 @@ public sealed class PaymentEffect : IOrgScoped
     public Guid Id { get; set; }
     public Guid OrgId { get; set; }
     public Guid OperationId { get; set; }
-    public Guid ObservationId { get; set; }
+    // The evidence the entry was posted from: a single-payment observation, or a payout batch.
+    public Guid? ObservationId { get; set; }
+    public Guid? SettlementId { get; set; }
     public Guid JournalId { get; set; }
-    // "Receipt" or "Return"; unique per operation, so each posts at most once.
+    // "Receipt", "Return", "PaymentFee" or "ReturnFee"; unique per operation, so each posts at most once.
+    // A processor fee with no payment beside it has no effect row: it belongs to the payout.
     public string Kind { get; set; } = "Receipt";
     public DateTime CreatedAt { get; set; }
 }

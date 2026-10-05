@@ -8,7 +8,7 @@ using LeaseBook.SharedKernel.Cqrs;
 
 namespace LeaseBook.Web.Payments;
 
-internal sealed class PaymentLedgerAdapter(ISender sender) : IPaymentLedger
+internal sealed partial class PaymentLedgerAdapter(ISender sender) : IPaymentLedger
 {
     public async Task<Guid> RecordSettledReceiptAsync(Guid tenantId, Guid bankId, decimal amount,
         DateOnly date, string method, string sourceRef, CancellationToken ct) =>
@@ -31,6 +31,34 @@ internal sealed class PaymentLedgerAdapter(ISender sender) : IPaymentLedger
         {
             return new(null, e.Code.StartsWith("return_", StringComparison.Ordinal) ? e.Code : "return_period_locked");
         }
+    }
+}
+
+internal sealed partial class PaymentLedgerAdapter
+{
+    public async Task<SettlementOutcome> PostSettlementAsync(Guid bankId, DateOnly bankDate, string payoutReference,
+        IReadOnlyList<SettlementLineRequest> lines, CancellationToken ct)
+    {
+        var result = await sender.Send(new PostPaymentSettlement(bankId, bankDate, payoutReference, lines.Select(
+            SettlementLine (line) => line.Kind switch
+            {
+                SettlementItemKinds.Payment => new SettlementReceipt(line.Item, line.TenantId!.Value, line.Amount,
+                    line.Method, "Simulated tenant payment", line.FeeDifference),
+                SettlementItemKinds.Return => new SettlementReturn(line.Item, line.ReceiptJournalId!.Value, line.FeeDifference),
+                _ => new SettlementFee(line.Item, line.FeeDifference),
+            }).ToArray()), ct);
+        // Accounting names the rule that refused. Payments keeps its own vocabulary for why a payout waits.
+        var refusal = result.Refusal switch
+        {
+            null => null,
+            "pm_fees_insufficient" or "attribution_unavailable" => result.Refusal,
+            "period_closed" or "account_period_locked" => "settlement_period_locked",
+            "duplicate_source_ref" or "already_reversed" => "conflicting_evidence",
+            var code when code.StartsWith("return_", StringComparison.Ordinal) => code,
+            _ => "accounting_rejected",
+        };
+        return new(result.Postings.Select(x => new SettlementPostingResult(x.Item, x.Kind, x.EntryId)).ToArray(),
+            refusal, result.RefusedItem);
     }
 }
 

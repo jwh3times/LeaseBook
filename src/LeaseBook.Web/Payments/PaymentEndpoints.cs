@@ -17,6 +17,7 @@ public sealed record SubmitPaymentBody(Guid Key, decimal Amount, string Currency
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record ClosePaymentReviewBody(string Note);
 public sealed record UnmatchedObservationsResponse(IReadOnlyList<UnmatchedObservationView> Items);
+public sealed record SettlementsResponse(IReadOnlyList<SettlementView> Items);
 public sealed record PaymentsResponse(bool Enabled, IReadOnlyList<PaymentView> Items, int UnmatchedObservations = 0);
 
 public sealed class PaymentEndpoints : IEndpointModule
@@ -95,6 +96,38 @@ public sealed class PaymentEndpoints : IEndpointModule
             return TypedResults.Ok(new UnmatchedObservationsResponse(
                 await sender.Query(new GetUnmatchedPaymentObservationList(), ct)));
         });
+
+        // Payout batches (ADR-053). Like a refused return, a payout that still cannot post is answered
+        // as a 409 RESULT so that the reason it waits is committed.
+        staff.MapGet("/settlements", async Task<Results<Ok<SettlementsResponse>, NotFound>> (
+            IOrgContext org, ISender sender, PaymentEngine engine, HttpContext http, CancellationToken ct) =>
+        {
+            http.Response.Headers.CacheControl = "no-store";
+            var binding = settings.ForOrg(org.OrgId);
+            if (binding is null) { return TypedResults.NotFound(); }
+            await engine.RequireFixtureAsync(binding, ct);
+            return TypedResults.Ok(new SettlementsResponse(await sender.Query(new GetSettlements(), ct)));
+        });
+
+        staff.MapPost("/settlements/{id:guid}/post", async Task<Results<Ok<SettlementView>, NotFound, ProblemHttpResult>> (
+            Guid id, IOrgContext org, IActorContext actor, ISender sender, HttpContext http, CancellationToken ct) =>
+        {
+            var binding = settings.ForOrg(org.OrgId);
+            if (binding is null || await sender.Send(new PostSettlement(binding, id, actor.UserId!.Value), ct) is not { } result)
+            { return TypedResults.NotFound(); }
+            return result.Refusal is { } refusal
+                ? ProblemResults.TypedProblem(http, refusal, SettlementReviewResult.Describe(refusal), StatusCodes.Status409Conflict)
+                : TypedResults.Ok(result.Settlement);
+        }).RequireAuthorization(AuthPolicies.RequirePMAdmin).RequireRateLimiting("payments");
+
+        staff.MapPost("/settlements/{id:guid}/close", async Task<Results<Ok<SettlementView>, NotFound>> (Guid id,
+            ClosePaymentReviewBody body, IOrgContext org, IActorContext actor, ISender sender, CancellationToken ct) =>
+        {
+            var binding = settings.ForOrg(org.OrgId);
+            return binding is not null && await sender.Send(
+                new CloseSettlementReview(binding, id, actor.UserId!.Value, body.Note), ct) is { } result
+                ? TypedResults.Ok(result.Settlement) : TypedResults.NotFound();
+        }).RequireAuthorization(AuthPolicies.RequirePMAdmin).RequireRateLimiting("payments");
 
         // A refused return is answered as a 409 RESULT, not an exception: the request transaction then
         // commits, which is what keeps the reason the payment stays in review.
