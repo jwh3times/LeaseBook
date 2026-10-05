@@ -106,6 +106,11 @@ A batch is one unit of work. It posts completely or not at all.
    refused guard — the shortfall guard, any ADR-052 return guard, a locked period — rolls the whole
    batch back and records the refusal as the batch's reason.
 
+   The items post in an order that lets the payout pay for itself: receipts, then fee surpluses, then
+   returns, then fee shortfalls. A shortfall may be covered by a surplus in the same payout, and a
+   return by another tenant's receipt for the same owner. Accounting undoes a refused batch to a
+   savepoint, so the refusal is an answer the caller can record, not a failed transaction.
+
 A payout whose items net to a bank debit is a batch like any other, with a negative bank amount.
 Nothing is posted from a processor's notice that a payout was paid; only bank evidence opens a batch.
 
@@ -189,8 +194,9 @@ This list is the input to the implementation issue. The Accounting posting templ
   single-payment evidence.
 - **Batch record:** a payout with its bank evidence, its items, its status and reason, and one effect
   per posted item. Today an effect belongs to a single payment.
-- **Accounting:** a narrow port for Payments to post a whole batch in one transaction. The posting
-  template for a processor fee difference, in both directions and with the shortfall guard, exists.
+- **Accounting (built):** the `ProcessorFeeDifference` posting template, in both directions and with
+  the shortfall guard, and the `PostPaymentSettlement` command that posts a whole payout or nothing.
+  Payments does not call it yet; its port and adapter come with the batch record.
 - **Simulator:** bank evidence that names a payout with several items, each with gross, fee and net;
   the CLI and callback shapes to drive a shortfall, a surplus, a return inside a payout and an untied
   batch.
