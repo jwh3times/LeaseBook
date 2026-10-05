@@ -48,7 +48,7 @@ RUN dotnet ef migrations bundle \
 # --- Stage 4: migrator image (one-shot) ---
 # aspnet (not chiseled): the bundle loads the Web assembly to reach the design-time factory, so it
 # needs the full ASP.NET shared framework. Size is irrelevant — this is local/CD migration tooling.
-FROM mcr.microsoft.com/dotnet/aspnet:10.0@sha256:2d584d8147faddb0d678c5748d47953e5b8e18621ed4fb7049a91381d9d7746f AS migrator
+FROM mcr.microsoft.com/dotnet/aspnet:10.0@sha256:222759b391a1aaf241166672c8f99b2d4ada452e7b5319f3c6e8f265a37b5ad4 AS migrator
 # Npgsql probes for the Kerberos/GSSAPI library when opening a connection; the slim base omits it,
 # which prints a scary (but non-fatal, password auth still works) load error. Add it so apply is clean.
 RUN apt-get update \
@@ -70,7 +70,7 @@ ENTRYPOINT ["/bin/sh", "./migrator/entrypoint.sh"]
 CMD ["./efbundle"]
 
 # --- Stage 5: runtime (chiseled, non-root) — the application image ---
-FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled@sha256:9651fa59abcdf177c30392cb44a820605ca5d618429ab37acbf6e7c644510b02 AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled@sha256:48e51f2f6798897be7ac4e775c049ed8fe60d3190f637e1f9c9dc7513efa659c AS runtime
 WORKDIR /app
 COPY --from=build /app/publish ./
 ENV ASPNETCORE_HTTP_PORTS=8080
