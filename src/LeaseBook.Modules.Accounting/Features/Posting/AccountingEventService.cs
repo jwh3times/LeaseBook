@@ -418,34 +418,44 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
 
     private async Task<Guid> PostProcessorFeeDifferenceAsync(ProcessorFeeDifference e, CancellationToken ct)
     {
-        var bank = await BankCodeAsync(e.BankAccountId, ct);
-        var pmFees = new PostLineRequest(AccountCodes.PmIncome,
-            e.Direction == FeeDifferenceDirection.Shortfall ? e.Amount : null,
-            e.Direction == FeeDifferenceDirection.Surplus ? e.Amount : null,
-            EntryBasis.Both, BankAccountId: e.BankAccountId);
-        var cash = new PostLineRequest(bank,
-            e.Direction == FeeDifferenceDirection.Surplus ? e.Amount : null,
-            e.Direction == FeeDifferenceDirection.Shortfall ? e.Amount : null,
-            EntryBasis.Both, BankAccountId: e.BankAccountId);
-
-        if (e.Direction == FeeDifferenceDirection.Shortfall)
+        var shortfall = e.Direction == FeeDifferenceDirection.Shortfall;
+        if (shortfall)
         {
             // The PM covers the shortfall from its own held funds in that bank, and only from them. Past
             // zero the entry would still balance and the trust equation would still hold, but the bank
             // would hold less than owners and tenants are owed. The bank-fee template leaves that rule
             // to procedure (ADR-014); this one enforces it.
+            //
+            // The entry is dated on the bank date, which may be in the past, so the read is the lowest
+            // balance on or after that date: fees earned since must not cover a day they were not there.
             await postingLock.AcquireAsync(ct);
-            var held = await _balances.HeldFeesAsync(e.BankAccountId, ct);
+            var held = await _balances.HeldFeesFloorAsync(e.BankAccountId, e.Date, ct);
             if (e.Amount.Amount > held)
             {
                 throw new PmFeesInsufficientException(e.Amount.Amount, held, e.BankAccountId);
             }
         }
 
+        // A payout lands in a trust bank. Naming the trust account outright, rather than resolving
+        // whichever bank account carries this id, makes a PM operating bank an unknown account here.
+        var trustBank = AccountCodes.TrustBank(e.BankAccountId);
+        Money? debitIfShortfall = shortfall ? e.Amount : null;
+        Money? debitIfSurplus = shortfall ? null : e.Amount;
         return await posting.PostAsync(new PostEntryRequest(
-            e.Date, "ProcessorFeeDifference", e.Direction.ToString(), e.Description, e.SourceRef,
-            [pmFees, cash], InternalNote: e.InternalNote), ct);
+            e.Date, "ProcessorFeeDifference", FeeDifferenceSubtype(e.Direction), e.Description, e.SourceRef,
+            [
+                new(AccountCodes.PmIncome, debitIfShortfall, debitIfSurplus, EntryBasis.Both, BankAccountId: e.BankAccountId),
+                new(trustBank, debitIfSurplus, debitIfShortfall, EntryBasis.Both, BankAccountId: e.BankAccountId),
+            ], InternalNote: e.InternalNote), ct);
     }
+
+    // Stored in the append-only journal, so spelled out here rather than taken from the enum's names.
+    private static string FeeDifferenceSubtype(FeeDifferenceDirection direction) => direction switch
+    {
+        FeeDifferenceDirection.Shortfall => "Shortfall",
+        FeeDifferenceDirection.Surplus => "Surplus",
+        _ => throw new ArgumentOutOfRangeException(nameof(direction), direction, null),
+    };
 
     private async Task<Guid> PostTrustTransferAsync(TrustTransfer e, CancellationToken ct)
     {

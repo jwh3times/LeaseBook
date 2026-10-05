@@ -91,6 +91,22 @@ internal sealed class BalanceReader(DbContext db)
     // balance from that day on, so a balance that has since recovered can still have been too low then.
     // The zero row at the date makes the balance carried into it part of the minimum.
 
+    /// <summary>The lowest PM fees held in one bank on or after <paramref name="from"/> (ADR-053 shortfall guard).</summary>
+    public Task<decimal> HeldFeesFloorAsync(Guid bankAccountId, DateOnly from, CancellationToken ct) =>
+        db.Database.SqlQuery<decimal>(
+            $"""
+            SELECT MIN(running) AS "Value" FROM (
+              SELECT d, SUM(delta) OVER (ORDER BY d) AS running FROM (
+                SELECT je.entry_date AS d, SUM(COALESCE(jl.credit, 0) - COALESCE(jl.debit, 0)) AS delta
+                FROM journal_lines jl JOIN journal_entries je ON je.id = jl.entry_id
+                WHERE jl.account_class = 'pm_income' AND jl.bank_account_id = {bankAccountId}
+                  AND jl.basis IN ('cash', 'both')
+                GROUP BY je.entry_date
+                UNION ALL SELECT {from}, 0
+              ) days
+            ) balances WHERE d >= {from}
+            """).SingleAsync(ct);
+
     /// <summary>The lowest prepayment held for a tenant in one trust bank on or after <paramref name="from"/>.</summary>
     public Task<decimal> PrepaymentsHeldFloorAsync(
         Guid tenantId, Guid bankAccountId, DateOnly from, CancellationToken ct) =>

@@ -365,7 +365,7 @@ processor's fee differed from the fee quoted to the tenant
 ([ADR-053](adr/ADR-053-processor-fees-and-batched-settlement.md)). Like the bank-only adjustments it
 moves only the PM's held fees in one bank and carries no owner, property or tenant dimension. A
 surplus raises the bank and held fees. A shortfall lowers both and is guarded: it is refused
-(`pm_fees_insufficient`) when it exceeds the fees held in that bank, where `BankFeeCharged` leaves the
+(`pm_fees_insufficient`) when it exceeds the lowest fees held in that bank on or after its date, where `BankFeeCharged` leaves the
 same rule to procedure. Nothing posts this event yet; it is the first piece of the settlement model.
 
 **Statement import.** A bank CSV can be imported (column-mapped, with saved per-bank mappings) and

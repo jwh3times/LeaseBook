@@ -79,7 +79,8 @@ posts both, so the journal names what happened. It is the one part of this model
 posts it yet.
 
 **Shortfall guard.** A shortfall posts only if the PM's held fees in that bank, after it, are at or
-above zero. Read under the posting lock. If not, the batch does not post
+above zero on the bank date and on every day since. The entry is dated on the bank date, so fees
+earned later cannot cover it. Read under the posting lock. If not, the batch does not post
 (`pm_fees_insufficient`). The existing bank-fee entry has no such guard; the evidence test
 `A_shortfall_beyond_held_fees_posts_today…` shows the result — held fees at −$7.50, the bank $7.50
 short of what the owner is owed, and every invariant green.

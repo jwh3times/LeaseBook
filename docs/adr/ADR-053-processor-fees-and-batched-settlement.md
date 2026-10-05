@@ -19,7 +19,7 @@ plus deposit liabilities plus held PM fees, and it has no term for money at a pr
 show that neither a gross nor a net receipt can represent a collection with a withheld fee: one
 overstates the bank and the other leaves the tenant owing.
 
-This ADR is a model for review. It changes no posting path, and nothing in it is implemented.
+This ADR is a model for review. Its fee-difference posting template is built and nothing posts it yet; no existing posting path changes, and the rest is not implemented.
 
 ## Decision
 
