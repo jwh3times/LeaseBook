@@ -12,11 +12,13 @@ namespace LeaseBook.Modules.Payments.Processing;
 
 public sealed class PaymentConflictException : Exception;
 public sealed class PaymentUnavailableException : Exception;
+/// <summary>The fee the tenant was shown is not the fee the organization's rule gives now.</summary>
+public sealed class PaymentFeeQuoteChangedException : Exception;
 public sealed record PaymentReturnDecision(PaymentOperation Operation, string? Refusal);
 
 /// <summary>All methods run on the caller's org transaction. No provider I/O occurs here.</summary>
 public sealed class PaymentEngine(DbContext db, IOrgContext org, TimeProvider clock,
-    IPaymentLedger ledger, IPaymentEligibility eligibility)
+    IPaymentLedger ledger, IPaymentEligibility eligibility, IPaymentFeeRules feeRules)
 {
     public static readonly int[] RetrySeconds = [1, 5, 30, 120, 600];
     public static readonly string[] EventKinds = ["Processing", "Succeeded", "Available", "PayoutPending",
@@ -39,19 +41,33 @@ public sealed class PaymentEngine(DbContext db, IOrgContext org, TimeProvider cl
         return db.Database.ExecuteSqlAsync($"SELECT pg_advisory_xact_lock(hashtextextended({org.OrgId + ":payment:" + key}, 0))", ct);
     }
 
+    /// <summary>The fee and total a tenant would be charged for a ledger amount, under the organization's rule today.</summary>
+    public async Task<FeeQuote> QuoteAsync(FixtureBinding binding, decimal amount, string method, CancellationToken ct)
+    {
+        await RequireFixtureAsync(binding, ct);
+        return (await feeRules.ReadAsync(ct)).TryGetValue(method, out var rule)
+            ? rule.Quote(amount) : throw new PaymentUnavailableException();
+    }
+
     public async Task<PaymentOperation> SubmitAsync(FixtureBinding binding, Guid tenantId, Guid userId,
-        Guid key, decimal amount, string currency, CancellationToken ct)
+        Guid key, decimal amount, string currency, string method, decimal quotedFee, CancellationToken ct)
     {
         await RequireFixtureAsync(binding, ct);
         await LockAsync("request:" + userId + ":" + key, ct);
+        // The fee in the fingerprint is the one the tenant confirmed, not one recomputed here: a replay
+        // of the same request must find itself even if the organization's rule has changed since.
         var fingerprint = Hash(string.Join('|', tenantId, amount.ToString("0.00", CultureInfo.InvariantCulture), currency,
-            binding.Generation, binding.BankId, binding.Account));
+            binding.Generation, binding.BankId, binding.Account, method,
+            quotedFee.ToString("0.00", CultureInfo.InvariantCulture)));
         var existing = await db.Set<PaymentOperation>().SingleOrDefaultAsync(x => x.UserId == userId && x.Key == key, ct);
         if (existing is not null)
         {
             if (existing.Fingerprint != fingerprint) { throw new PaymentConflictException(); }
             return existing;
         }
+        // The tenant is charged what they were shown or nothing at all. If the rule moved between the
+        // quote and the confirmation, they must see the new fee before anything is requested.
+        if ((await QuoteAsync(binding, amount, method, ct)).Fee != quotedFee) { throw new PaymentFeeQuoteChangedException(); }
         var request = new PaymentEligibilityRequest(tenantId, binding.BankId, DateOnly.FromDateTime(Now));
         if (!(await eligibility.ReadAsync([request], ct)).GetValueOrDefault(request))
         { throw new PaymentUnavailableException(); }
@@ -65,6 +81,8 @@ public sealed class PaymentEngine(DbContext db, IOrgContext org, TimeProvider cl
             BankId = binding.BankId,
             Account = binding.Account,
             Amount = amount,
+            QuotedFee = quotedFee,
+            Method = method,
             Currency = currency,
             Fingerprint = fingerprint,
             DueAt = Now,
@@ -155,7 +173,10 @@ public sealed class PaymentEngine(DbContext db, IOrgContext org, TimeProvider cl
         else if (facts.Any(x => x.Kind == "Failed") && (credits.Length > 0 || op.JournalId is not null)) { reason = "conflicting_evidence"; }
         else if (facts.Any(x => x.Kind == "PayoutFailed" && credits.Any(c => c.PayoutId == x.PayoutId)))
         { reason = "conflicting_evidence"; }
-        else if (credits.Any(x => x.Gross != op.Amount || x.Fee != 0 || x.Net != op.Amount
+        // A clean item only (ADR-053): the processor kept exactly the fee quoted, so the bank received
+        // the ledger amount. A fee difference in either direction is not posted from single-payment
+        // evidence; it needs the batch.
+        else if (credits.Any(x => x.Gross != op.ChargedAmount || x.Fee != op.QuotedFee || x.Net != op.Amount
             || x.Currency != op.Currency || x.BankId != op.BankId || x.Generation != op.Generation
             || string.IsNullOrWhiteSpace(x.EvidenceId) || string.IsNullOrWhiteSpace(x.PayoutId)
             || x.BankDate == default)) { reason = "unsupported_settlement"; }
@@ -188,12 +209,15 @@ public sealed class PaymentEngine(DbContext db, IOrgContext org, TimeProvider cl
             {
                 // Receipt, immutable effect, summary and consumed inbox count commit in this ONE transaction.
                 var journalId = await ledger.RecordSettledReceiptAsync(op.TenantId, op.BankId, op.Amount, credit.BankDate,
-                    $"sim-payment:{op.Id:N}:receipt", ct);
+                    op.Method, $"sim-payment:{op.Id:N}:receipt", ct);
                 db.Add(new PaymentEffect { Id = UuidV7.NewId(), OperationId = op.Id, ObservationId = credit.Id, JournalId = journalId });
                 op.JournalId = journalId; op.Status = "Settled"; op.Reason = null;
             }
         }
         else { op.Status = "Processing"; op.Reason = null; }
+        // The paid date is the processor's, and the earliest it reported: a redelivered success must not move it.
+        if (facts.Where(x => x.Kind == "Succeeded").Select(x => (DateTime?)x.ObservedAt).Min() is { } paidAt)
+        { op.PaidAt = paidAt; }
         op.ProcessedCount = facts.Count; op.LeaseUntil = null; op.LeaseClaimId = null;
         // Acceptance is durable. Future signed observations wake this operation; idle processing
         // needs no repeated provider call or audit write every polling interval.

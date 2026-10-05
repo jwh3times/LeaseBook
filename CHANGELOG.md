@@ -16,6 +16,14 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Added
 
+- **A simulated payment quotes its convenience fee before the tenant confirms.** In the development
+  payment fixture, the tenant chooses card or bank debit and sees the fee and the total charged before
+  submitting. The fee comes from the organization's rule for that method, which an administrator sets;
+  with no rule the fee is zero, as before. The tenant's ledger is credited the amount they chose to
+  pay and never the fee. If the rule changes between the quote and the confirmation, the request is
+  refused and the new fee is shown. A payment whose processor fee is not the quoted fee is held for
+  review.
+
 - **Staff can see the unmatched simulated payment notifications, not only count them.** In the
   development payment fixture, Operations lists each notification that no payment has answered for in
   more than ten minutes: when it arrived, its kind, amount, provider reference and age. The list is

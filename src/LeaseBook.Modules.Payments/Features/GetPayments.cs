@@ -7,11 +7,19 @@ namespace LeaseBook.Modules.Payments.Features;
 public sealed record PaymentView(Guid Id, decimal Amount, string Currency, string Status, bool ReceiptRecorded,
     string? Reason, DateTime CreatedAt, DateTime? LastAttemptAt, bool CanRetry, string? EvidenceReference,
     bool CanPostReturn = false, bool CanCloseReview = false, Guid? ReceiptEntryId = null, Guid? ReturnEntryId = null,
-    string? ReviewNote = null, DateTime? ReviewClosedAt = null)
+    string? ReviewNote = null, DateTime? ReviewClosedAt = null,
+    // Amount is the ledger amount: what the tenant is credited. The fee rides on top and is never posted.
+    string Method = PaymentMethods.Ach, decimal QuotedFee = 0m, decimal ChargedAmount = 0m, DateTime? PaidAt = null)
 {
     public static PaymentView From(PaymentOperation op, string? evidenceReference = null) => new(op.Id, op.Amount, op.Currency, op.Status,
         op.JournalId is not null, TenantReason(op.Reason), op.CreatedAt, op.LastAttemptAt,
-        op.Status == "NeedsReview" && op.Reason == "technical_failure" && op.JournalId is null, evidenceReference);
+        op.Status == "NeedsReview" && op.Reason == "technical_failure" && op.JournalId is null, evidenceReference)
+    {
+        Method = op.Method,
+        QuotedFee = op.QuotedFee,
+        ChargedAmount = op.ChargedAmount,
+        PaidAt = op.PaidAt,
+    };
 
     // Why a return could not be posted describes the owner's and the ledger's position, which is staff
     // knowledge. A tenant is told only that a return is under review.

@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using LeaseBook.Modules.Payments.Domain;
 using LeaseBook.Modules.Payments.Features;
 using LeaseBook.Modules.Payments.Processing;
 using LeaseBook.SharedKernel.Cqrs;
@@ -11,7 +12,8 @@ using Microsoft.AspNetCore.Http.HttpResults;
 namespace LeaseBook.Web.Payments;
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record SubmitPaymentBody(Guid Key, decimal Amount, string Currency);
+public sealed record SubmitPaymentBody(Guid Key, decimal Amount, string Currency,
+    string Method = PaymentMethods.Ach, decimal QuotedFee = 0m);
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record ClosePaymentReviewBody(string Note);
 public sealed record UnmatchedObservationsResponse(IReadOnlyList<UnmatchedObservationView> Items);
@@ -59,8 +61,19 @@ public sealed class PaymentEndpoints : IEndpointModule
             var binding = settings.ForOrg(org.OrgId);
             if (binding is null) { return TypedResults.NotFound(); }
             var result = await sender.Send(new SubmitPayment(binding, resident.Identity!.TenantId,
-                actor.UserId!.Value, body.Key, body.Amount, body.Currency), ct);
+                actor.UserId!.Value, body.Key, body.Amount, body.Currency, body.Method, body.QuotedFee), ct);
             return TypedResults.Accepted($"/api/portal/tenant/payments/{result.Id}", result);
+        }).RequireRateLimiting("payments");
+
+        // The fee is quoted by the server and confirmed by the tenant: submit refuses a fee that is no
+        // longer the organization's, so what is charged is always what was shown.
+        tenant.MapGet("/quote", async Task<Results<Ok<PaymentQuoteView>, NotFound>> (decimal amount, string method,
+            IOrgContext org, ISender sender, HttpContext http, CancellationToken ct) =>
+        {
+            http.Response.Headers.CacheControl = "no-store";
+            var binding = settings.ForOrg(org.OrgId);
+            return binding is null ? TypedResults.NotFound()
+                : TypedResults.Ok(await sender.Query(new GetPaymentQuote(binding, amount, method), ct));
         }).RequireRateLimiting("payments");
 
         staff.MapPost("/{id:guid}/retry", async Task<Results<NoContent, NotFound>> (Guid id,

@@ -26,6 +26,8 @@ test('simulation survives reload and posts only after separate bank evidence', a
   await signIn(page, { email: 'tenant-a1@payments.test', password: 'Payment-Fixture-2026!' });
   await expect(page.getByText('Simulation — no real money moves')).toBeVisible();
   await page.getByLabel('Amount (USD)').fill('125.50');
+  // The fee is quoted before the tenant can confirm. This fixture's rules charge nothing.
+  await expect(page.getByText('No convenience fee · Total charged: $125.50')).toBeVisible();
   const submitted = page.waitForResponse(
     (r) => r.url().endsWith('/api/portal/tenant/payments') && r.request().method() === 'POST',
   );

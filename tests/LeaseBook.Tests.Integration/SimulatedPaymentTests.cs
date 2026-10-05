@@ -578,6 +578,147 @@ public sealed class SimulatedPaymentTests(PostgresFixture fixture)
             .Select(x => x.RoutePattern.RawText).ShouldNotContain("/api/payments/unmatched");
     }
 
+    private static readonly object FeeRules = new
+    {
+        cardFeeRateBps = 290,
+        cardFeeFixed = 0.30m,
+        achFeeRateBps = 80,
+        achFeeFixed = 0m,
+        achFeeCap = 5m,
+    };
+
+    private static async Task<PaymentQuoteView> Quote(HttpClient tenant, decimal amount, string method, CancellationToken ct) =>
+        (await tenant.GetFromJsonAsync<PaymentQuoteView>(
+            $"{Path}/quote?amount={amount.ToString(System.Globalization.CultureInfo.InvariantCulture)}&method={method}", ct))!;
+
+    [Fact]
+    public async Task A_quoted_fee_rides_on_top_of_the_ledger_amount_and_only_the_ledger_amount_posts()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var h = await Setup(ct);
+        using var tenant = await h.Login(1, ct);
+        using var admin = await h.LoginAdmin(ct);
+        // With no rule set, a payment is charged exactly what goes to the ledger.
+        (await Quote(tenant, 500m, "card", ct)).ShouldBe(new PaymentQuoteView("card", 500m, 0m, 500m));
+        (await admin.PutAsJsonAsync("/api/settings/payment-fees", FeeRules, ct)).EnsureSuccessStatusCode();
+
+        (await Quote(tenant, 500m, "ach", ct)).ShouldBe(new PaymentQuoteView("ach", 500m, 4.03m, 504.03m));
+        var quote = await Quote(tenant, 500m, "card", ct);
+        quote.ShouldBe(new PaymentQuoteView("card", 500m, 15.24m, 515.24m));
+
+        var response = await tenant.PostAsJsonAsync(Path, new SubmitPaymentBody(UuidV7.NewId(), 500m, "USD", "card", quote.Fee), ct);
+        response.StatusCode.ShouldBe(HttpStatusCode.Accepted, await response.Content.ReadAsStringAsync(ct));
+        var op = (await response.Content.ReadFromJsonAsync<PaymentView>(ct))!;
+        (op.Amount, op.QuotedFee, op.ChargedAmount, op.Method, op.PaidAt).ShouldBe((500m, 15.24m, 515.24m, "card", null));
+
+        var succeeded = h.Observation(op, "Succeeded");
+        await h.Deliver(succeeded, ct);
+        await h.Tick(ct);
+        (await Read(tenant, op.Id, ct)).PaidAt!.Value.ShouldBe(succeeded.ObservedAt, TimeSpan.FromMilliseconds(1));
+        (await h.Balance(1, ct)).ShouldBe(1000m);
+
+        // The processor kept exactly the quoted fee, so the bank received the 500.00.
+        await h.Emit(op, "BankCredit", ct);
+        (await Read(tenant, op.Id, ct)).Status.ShouldBe("Settled");
+        (await h.Balance(1, ct)).ShouldBe(500m);
+        await h.InOrg(async sp =>
+        {
+            var db = sp.GetRequiredService<AppDbContext>();
+            var receipt = await db.Set<JournalEntry>().SingleAsync(x => x.SourceRef == $"sim-payment:{op.Id:N}:receipt", ct);
+            receipt.EventSubtype.ShouldBe("Card");
+            var lines = await db.Set<JournalLine>().Where(x => x.EntryId == receipt.Id).ToListAsync(ct);
+            // The fee is nowhere in the journal: the bank line is the ledger amount, and no line is the fee or the charge.
+            lines.Single(x => x.AccountClass == AccountClass.TrustBank).Debit!.Value.Amount.ShouldBe(500m);
+            lines.ShouldAllBe(x => (x.Debit ?? x.Credit)!.Value.Amount == 500m);
+            (await new InvariantChecks(db).CheckCoreAsync(ct)).ShouldBeEmpty();
+        }, ct);
+    }
+
+    [Theory]
+    [InlineData(22.74, 492.50)] // the processor kept more than was quoted
+    [InlineData(14.84, 500.40)] // and less
+    [InlineData(0, 500)]        // fee-free evidence for a fee-bearing payment
+    public async Task Bank_evidence_whose_fee_is_not_the_quoted_fee_posts_nothing(double fee, double net)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var h = await Setup(ct);
+        using var tenant = await h.Login(1, ct);
+        using var admin = await h.LoginAdmin(ct);
+        (await admin.PutAsJsonAsync("/api/settings/payment-fees", FeeRules, ct)).EnsureSuccessStatusCode();
+        var response = await tenant.PostAsJsonAsync(Path, new SubmitPaymentBody(UuidV7.NewId(), 500m, "USD", "card", 15.24m), ct);
+        var op = (await response.Content.ReadFromJsonAsync<PaymentView>(ct))!;
+
+        await h.Deliver(h.Observation(op, "BankCredit") with { Gross = (decimal)net + (decimal)fee, Fee = (decimal)fee, Net = (decimal)net }, ct);
+        await h.Tick(ct);
+
+        var view = await Read(tenant, op.Id, ct);
+        (view.Status, view.Reason, view.ReceiptRecorded).ShouldBe(("NeedsReview", "unsupported_settlement", false));
+        (await h.Balance(1, ct)).ShouldBe(1000m);
+    }
+
+    [Fact]
+    public async Task A_fee_that_changed_since_the_quote_is_refused_until_the_tenant_confirms_the_new_one()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var h = await Setup(ct);
+        using var tenant = await h.Login(1, ct);
+        using var admin = await h.LoginAdmin(ct);
+        (await admin.PutAsJsonAsync("/api/settings/payment-fees", FeeRules, ct)).EnsureSuccessStatusCode();
+        var shown = await Quote(tenant, 500m, "card", ct);
+
+        // The organization changes its card rule between the quote and the confirmation.
+        (await admin.PutAsJsonAsync("/api/settings/payment-fees", new
+        { cardFeeRateBps = 300, cardFeeFixed = 0.30m, achFeeRateBps = 80, achFeeFixed = 0m, achFeeCap = 5m }, ct))
+            .EnsureSuccessStatusCode();
+        var stale = new SubmitPaymentBody(UuidV7.NewId(), 500m, "USD", "card", shown.Fee);
+        await ShouldBeProblem(await tenant.PostAsJsonAsync(Path, stale, ct), "fee_quote_changed", ct);
+        // A request that names no fee is refused the same way; it cannot be charged one it never saw.
+        await ShouldBeProblem(await tenant.PostAsJsonAsync(Path, new SubmitPaymentBody(UuidV7.NewId(), 500m, "USD", "card"), ct),
+            "fee_quote_changed", ct);
+        (await tenant.GetFromJsonAsync<PaymentsResponse>(Path, ct))!.Items.ShouldBeEmpty();
+
+        var current = await Quote(tenant, 500m, "card", ct);
+        current.Fee.ShouldNotBe(shown.Fee);
+        var confirmed = new SubmitPaymentBody(UuidV7.NewId(), 500m, "USD", "card", current.Fee);
+        var accepted = await tenant.PostAsJsonAsync(Path, confirmed, ct);
+        accepted.StatusCode.ShouldBe(HttpStatusCode.Accepted, await accepted.Content.ReadAsStringAsync(ct));
+        var op = (await accepted.Content.ReadFromJsonAsync<PaymentView>(ct))!;
+
+        // Once accepted, the request stands at the fee the tenant confirmed, whatever the rule does next:
+        // a replay finds the same payment, and the payment keeps its fee.
+        (await admin.PutAsJsonAsync("/api/settings/payment-fees", FeeRules, ct)).EnsureSuccessStatusCode();
+        var replay = await tenant.PostAsJsonAsync(Path, confirmed, ct);
+        replay.StatusCode.ShouldBe(HttpStatusCode.Accepted);
+        var again = (await replay.Content.ReadFromJsonAsync<PaymentView>(ct))!;
+        (again.Id, again.QuotedFee).ShouldBe((op.Id, current.Fee));
+    }
+
+    [Fact]
+    public async Task A_quote_is_the_tenants_own_and_refuses_an_amount_or_method_it_cannot_price()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var h = await Setup(ct);
+        using var tenant = await h.Login(1, ct);
+        using var admin = await h.LoginAdmin(ct);
+
+        (await tenant.GetAsync($"{Path}/quote?amount=0&method=card", ct)).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await tenant.GetAsync($"{Path}/quote?amount=10000.01&method=card", ct)).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await tenant.GetAsync($"{Path}/quote?amount=10.005&method=card", ct)).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await tenant.GetAsync($"{Path}/quote?amount=10&method=wire", ct)).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await admin.GetAsync($"{Path}/quote?amount=10&method=card", ct)).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        var wire = await tenant.PostAsJsonAsync(Path, new SubmitPaymentBody(UuidV7.NewId(), 10m, "USD", "wire"), ct);
+        wire.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        fixture.Api.Services.GetRequiredService<EndpointDataSource>().Endpoints.OfType<RouteEndpoint>()
+            .Select(x => x.RoutePattern.RawText).ShouldNotContain(Path + "/quote");
+    }
+
+    private static async Task ShouldBeProblem(HttpResponseMessage response, string code, CancellationToken ct)
+    {
+        var body = await response.Content.ReadAsStringAsync(ct);
+        response.StatusCode.ShouldBe(HttpStatusCode.Conflict, body);
+        JsonDocument.Parse(body).RootElement.GetProperty("code").GetString().ShouldBe(code);
+    }
+
     private static async Task<IReadOnlyList<UnmatchedObservationView>> Unmatched(HttpClient staff, CancellationToken ct) =>
         (await staff.GetFromJsonAsync<UnmatchedObservationsResponse>("/api/payments/unmatched", ct))!.Items;
 
@@ -633,9 +774,9 @@ public sealed class SimulatedPaymentTests(PostgresFixture fixture)
     private sealed class AfterPostingFailure { public bool Fail { get; set; } = true; }
     private sealed class FailingLedger(ISender sender, AfterPostingFailure fault) : IPaymentLedger
     {
-        public async Task<Guid> RecordSettledReceiptAsync(Guid tenantId, Guid bankId, decimal amount, DateOnly date, string sourceRef, CancellationToken ct)
+        public async Task<Guid> RecordSettledReceiptAsync(Guid tenantId, Guid bankId, decimal amount, DateOnly date, string method, string sourceRef, CancellationToken ct)
         {
-            var result = await sender.Send(new Modules.Accounting.Features.LedgerPosting.RecordPayment(tenantId, amount, date, "ach", bankId, "Simulation", sourceRef), ct);
+            var result = await sender.Send(new Modules.Accounting.Features.LedgerPosting.RecordPayment(tenantId, amount, date, method, bankId, "Simulation", sourceRef), ct);
             if (fault.Fail) { fault.Fail = false; throw new IOException("Injected crash after ledger SaveChanges"); }
             return result.EntryId;
         }
@@ -679,9 +820,12 @@ public sealed class SimulatedPaymentTests(PostgresFixture fixture)
             }, ct);
             return balance;
         }
+        // As the fixture CLI emits it: bank credit is the clean item (the charge, the quoted fee, the
+        // ledger amount net); every other kind keeps the fee-free shape.
         public ProcessorObservation Observation(PaymentView op, string kind) => new($"{op.Id:N}:{kind}",
             $"sim_{binding.Generation:N}_{op.Id:N}", binding.Account, "Simulation", binding.Generation, kind,
-            op.Amount, 0m, op.Amount, "USD", binding.BankId, DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime),
+            kind == "BankCredit" ? op.ChargedAmount : op.Amount, kind == "BankCredit" ? op.QuotedFee : 0m, op.Amount,
+            "USD", binding.BankId, DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime),
             "evidence-" + op.Id.ToString("N"), "payout-" + op.Id.ToString("N"), true, clock.GetUtcNow().UtcDateTime);
         public async Task Deliver(ProcessorObservation value, CancellationToken ct)
         {
