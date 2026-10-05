@@ -3,7 +3,7 @@
 - **Audience:** Evaluators, contributors, operators, and maintainers
 - **Status:** Living index
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-02
+- **Last reviewed:** 2026-10-05
 
 Use this page to find the maintained source for a question. Documents intentionally have one owner;
 summaries elsewhere should link here rather than restating mutable detail.
@@ -27,6 +27,8 @@ summaries elsewhere should link here rather than restating mutable detail.
 - [Simulated payment specification](payments/simulated-payment-spec.md) defines the proposed
   non-live payment lifecycle; [Stripe evidence](research/stripe-connect-payment-lifecycle.md)
   separates provider behavior from the simulation conventions.
+- [Processor fee and batched settlement specification](payments/fee-and-settlement-spec.md) is the
+  proposed, unimplemented model for fees, batched payouts and funds in transit.
 - [Architecture blueprint](blueprint.md) records the pre-M0 technical baseline. Accepted ADRs and
   the implemented architecture supersede it where the system evolved.
 - [Architecture Decision Records](adr/README.md) preserve significant engineering decisions and
