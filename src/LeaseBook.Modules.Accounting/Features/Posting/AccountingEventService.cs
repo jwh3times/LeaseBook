@@ -11,7 +11,8 @@ namespace LeaseBook.Modules.Accounting.Features.Posting;
 /// The posting-template catalog (§C.3): translates each business event into a balanced, per-basis
 /// entry and posts it through the single write path. Guarded events (P31) take the per-org advisory
 /// lock and read a balance before posting — the <c>PaymentReceived</c> auto-split, the deposit/
-/// prepayment over-application checks, the PM-fee over-sweep check, and the disbursement reserve floor.
+/// prepayment over-application checks, the PM-fee over-sweep check, the disbursement reserve floor,
+/// and the processor fee shortfall check.
 /// Every entry balances per basis <i>by construction</i> (proven by the catalog property test).
 /// </summary>
 internal sealed class AccountingEventService(DbContext db, IPostingService posting, IPostingLock postingLock)
@@ -42,6 +43,7 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
             BankFeeCharged e => PostBankFeeChargedAsync(e, ct),
             InterestEarned e => PostInterestEarnedAsync(e, ct),
             TrustTransfer e => PostTrustTransferAsync(e, ct),
+            ProcessorFeeDifference e => PostProcessorFeeDifferenceAsync(e, ct),
             _ => throw new ArgumentOutOfRangeException(
                 nameof(businessEvent), businessEvent.GetType().Name, "No posting template for this event."),
         };
@@ -411,6 +413,49 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
                 new(AccountCodes.PmIncome, null, e.Amount, EntryBasis.Both, BankAccountId: e.BankAccountId),
             ], InternalNote: e.InternalNote), ct);
     }
+
+    // ----- Processor fee differences (ADR-053) ---------------------------------------------------
+
+    private async Task<Guid> PostProcessorFeeDifferenceAsync(ProcessorFeeDifference e, CancellationToken ct)
+    {
+        var shortfall = e.Direction == FeeDifferenceDirection.Shortfall;
+        if (shortfall)
+        {
+            // The PM covers the shortfall from its own held funds in that bank, and only from them. Past
+            // zero the entry would still balance and the trust equation would still hold, but the bank
+            // would hold less than owners and tenants are owed. The bank-fee template leaves that rule
+            // to procedure (ADR-014); this one enforces it.
+            //
+            // The entry is dated on the bank date, which may be in the past, so the read is the lowest
+            // balance on or after that date: fees earned since must not cover a day they were not there.
+            await postingLock.AcquireAsync(ct);
+            var held = await _balances.HeldFeesFloorAsync(e.BankAccountId, e.Date, ct);
+            if (e.Amount.Amount > held)
+            {
+                throw new PmFeesInsufficientException(e.Amount.Amount, held, e.BankAccountId);
+            }
+        }
+
+        // A payout lands in a trust bank. Naming the trust account outright, rather than resolving
+        // whichever bank account carries this id, makes a PM operating bank an unknown account here.
+        var trustBank = AccountCodes.TrustBank(e.BankAccountId);
+        Money? debitIfShortfall = shortfall ? e.Amount : null;
+        Money? debitIfSurplus = shortfall ? null : e.Amount;
+        return await posting.PostAsync(new PostEntryRequest(
+            e.Date, "ProcessorFeeDifference", FeeDifferenceSubtype(e.Direction), e.Description, e.SourceRef,
+            [
+                new(AccountCodes.PmIncome, debitIfShortfall, debitIfSurplus, EntryBasis.Both, BankAccountId: e.BankAccountId),
+                new(trustBank, debitIfSurplus, debitIfShortfall, EntryBasis.Both, BankAccountId: e.BankAccountId),
+            ], InternalNote: e.InternalNote), ct);
+    }
+
+    // Stored in the append-only journal, so spelled out here rather than taken from the enum's names.
+    private static string FeeDifferenceSubtype(FeeDifferenceDirection direction) => direction switch
+    {
+        FeeDifferenceDirection.Shortfall => "Shortfall",
+        FeeDifferenceDirection.Surplus => "Surplus",
+        _ => throw new ArgumentOutOfRangeException(nameof(direction), direction, null),
+    };
 
     private async Task<Guid> PostTrustTransferAsync(TrustTransfer e, CancellationToken ct)
     {

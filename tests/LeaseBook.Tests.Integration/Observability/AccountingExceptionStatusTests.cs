@@ -36,6 +36,7 @@ public sealed class AccountingExceptionStatusTests
         (new RefundBucketAmbiguousException(Guid.NewGuid()), StatusCodes.Status409Conflict),
         (new PrepaymentBankAmbiguousException(Guid.NewGuid()), StatusCodes.Status409Conflict),
         (new RefundCheckClearedException(Guid.NewGuid()), StatusCodes.Status409Conflict),
+        (new PmFeesInsufficientException(7.50m, 0m, Guid.NewGuid()), StatusCodes.Status409Conflict),
         (new PaymentReturnBlockedException(Guid.NewGuid(), PaymentReturnBlock.PrepaymentConsumed),
             StatusCodes.Status409Conflict),
         (new PaymentReturnBlockedException(Guid.NewGuid(), PaymentReturnBlock.OwnerFundsDisbursed),

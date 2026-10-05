@@ -1,7 +1,7 @@
 # Processor fee and batched settlement specification
 
 - **Audience:** Reviewers of issue #498 and implementers of the slice that follows it
-- **Status:** Proposed model; nothing here is implemented, and live payments remain unapproved
+- **Status:** Proposed model; only the fee-difference posting template is built, and live payments remain unapproved
 - **Owner:** Maintainers
 - **Last reviewed:** 2026-10-05
 
@@ -74,11 +74,13 @@ exactly `P`. A fee-difference entry carries no owner, property or tenant dimensi
 unreachable by an owner statement and changes no owner or tenant balance.
 
 The shortfall entry has the lines of the existing bank-fee entry. The surplus entry has the lines of
-the existing interest entry. Neither template is reused: an implementation adds one posting template
-for a processor fee difference, so the journal names what happened.
+the existing interest entry. Neither template is reused: the `ProcessorFeeDifference` posting template
+posts both, so the journal names what happened. It is the one part of this model that is built; nothing
+posts it yet.
 
 **Shortfall guard.** A shortfall posts only if the PM's held fees in that bank, after it, are at or
-above zero. Read under the posting lock. If not, the batch does not post
+above zero on the bank date and on every day since. The entry is dated on the bank date, so fees
+earned later cannot cover it. Read under the posting lock. If not, the batch does not post
 (`pm_fees_insufficient`). The existing bank-fee entry has no such guard; the evidence test
 `A_shortfall_beyond_held_fees_posts_today…` shows the result — held fees at −$7.50, the bank $7.50
 short of what the owner is owed, and every invariant green.
@@ -175,7 +177,7 @@ Closing a batch with a note posts nothing, as closing a payment review does toda
 
 ## What an implementation needs
 
-This list is the input to the implementation issue. None of it is built.
+This list is the input to the implementation issue. Only the Accounting posting template is built.
 
 - **Organization settings:** per payment method, a rate, a fixed amount and an optional cap, with
   validation and an audit trail.
@@ -183,8 +185,8 @@ This list is the input to the implementation issue. None of it is built.
   record holds one amount.
 - **Batch record:** a payout with its bank evidence, its items, its status and reason, and one effect
   per posted item. Today an effect belongs to a single payment.
-- **Accounting:** one posting template for a processor fee difference, in both directions, with the
-  shortfall guard; a narrow port for Payments to post a whole batch in one transaction.
+- **Accounting:** a narrow port for Payments to post a whole batch in one transaction. The posting
+  template for a processor fee difference, in both directions and with the shortfall guard, exists.
 - **Simulator:** bank evidence that names a payout with several items, each with gross, fee and net;
   the CLI and callback shapes to drive a shortfall, a surplus, a return inside a payout and an untied
   batch.
