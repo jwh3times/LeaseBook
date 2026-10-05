@@ -14,6 +14,7 @@ namespace LeaseBook.Web.Payments;
 public sealed record SubmitPaymentBody(Guid Key, decimal Amount, string Currency);
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record ClosePaymentReviewBody(string Note);
+public sealed record UnmatchedObservationsResponse(IReadOnlyList<UnmatchedObservationView> Items);
 public sealed record PaymentsResponse(bool Enabled, IReadOnlyList<PaymentView> Items, int UnmatchedObservations = 0);
 
 public sealed class PaymentEndpoints : IEndpointModule
@@ -69,6 +70,18 @@ public sealed class PaymentEndpoints : IEndpointModule
             return binding is not null && await engine.RetryAsync(binding, id, ct)
                 ? TypedResults.NoContent() : TypedResults.NotFound();
         }).RequireAuthorization(AuthPolicies.RequirePMAdmin).RequireRateLimiting("payments");
+
+        // Mapped only with the simulation: without it there is no inbox to read.
+        staff.MapGet("/unmatched", async Task<Results<Ok<UnmatchedObservationsResponse>, NotFound>> (
+            IOrgContext org, ISender sender, PaymentEngine engine, HttpContext http, CancellationToken ct) =>
+        {
+            http.Response.Headers.CacheControl = "no-store";
+            var binding = settings.ForOrg(org.OrgId);
+            if (binding is null) { return TypedResults.NotFound(); }
+            await engine.RequireFixtureAsync(binding, ct);
+            return TypedResults.Ok(new UnmatchedObservationsResponse(
+                await sender.Query(new GetUnmatchedPaymentObservationList(), ct)));
+        });
 
         // A refused return is answered as a 409 RESULT, not an exception: the request transaction then
         // commits, which is what keeps the reason the payment stays in review.

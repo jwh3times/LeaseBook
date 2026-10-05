@@ -16,6 +16,7 @@ import { ErrorAction } from '@/components/ErrorAction';
 import { QueryErrorState } from '@/components/QueryErrorState';
 import { Badge, Button, Card, Input, Money } from '@/design';
 import { useSession } from '@/features/auth/useSession';
+import { UnmatchedObservations } from './UnmatchedObservations';
 
 function description(payment: PaymentView) {
   switch (payment.status) {
@@ -156,12 +157,7 @@ export function PaymentPanel({ staff = false }: { staff?: boolean }) {
     <Card>
       <h3>Simulated payments</h3>
       <Badge dot>Simulation — no real money moves</Badge>
-      {staff && Number(list.data.unmatchedObservations ?? 0) > 0 && (
-        <p role="status">
-          {list.data.unmatchedObservations} unmatched notifications require fixture-operator review.
-          Their payment mapping has been missing for more than ten minutes.
-        </p>
-      )}
+      {staff && <UnmatchedObservations count={Number(list.data.unmatchedObservations ?? 0)} />}
       {!staff && (
         <form
           className="col gap12"

@@ -68,7 +68,9 @@ posts nothing, for a return staff have corrected by hand. Sign in as `admin-a@pa
 fixture password to try it. Technical retries use delays
 of 1, 5, 30, 120 and 600 seconds, then require PMAdmin retry of the same operation. Unsupported
 money cases offer no force-post action. Unmapped objects remain in the durable inbox; after ten
-minutes the staff read reports their count for fixture-operator review.
+minutes the staff read reports their count for fixture-operator review, and **Show unmatched
+notifications** on the Operations page lists each one's received time, kind, amount, provider
+reference and age. The list is read-only.
 
 The CLI constructs signed observations without publishing the signing key. Tests can send them to
 `POST /callbacks/payments/simulation`, with `X-Simulation-Signature` in `unixSeconds.hexHmac` format
