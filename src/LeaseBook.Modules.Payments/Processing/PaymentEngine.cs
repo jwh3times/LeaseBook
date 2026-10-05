@@ -166,7 +166,12 @@ public sealed class PaymentEngine(DbContext db, IOrgContext org, TimeProvider cl
         if (op.ProviderId is not null && op.ProviderId != provider.ProviderId) { throw new PaymentConflictException(); }
         op.ProviderId = provider.ProviderId;
         var facts = await db.Set<PaymentObservation>().AsNoTracking().Where(x => x.ProviderId == op.ProviderId).ToListAsync(ct);
-        var credits = facts.Where(x => x.Kind == "BankCredit").ToArray();
+        var effects = await db.Set<PaymentEffect>().AsNoTracking().Where(x => x.OperationId == op.Id).ToListAsync(ct);
+        // A payout batch may have receipted this payment with a fee difference, which is what a batch is
+        // for. Single-payment credit evidence for it is then the same money seen again, not a settlement
+        // to judge by the clean-item rule: it neither posts nor sends a correctly settled payment to review.
+        var credits = effects.Any(x => x.Kind == "Receipt" && x.SettlementId is not null)
+            ? [] : facts.Where(x => x.Kind == "BankCredit").ToArray();
         string? reason = null;
         if (facts.Any(x => x.Kind == "Conflict")) { reason = "conflicting_evidence"; }
         else if (facts.Any(x => x.Kind is "Return" or "Refund" or "Dispute")) { reason = "return_requires_review"; }
@@ -185,15 +190,22 @@ public sealed class PaymentEngine(DbContext db, IOrgContext org, TimeProvider cl
 
         // A posted return answers the evidence it was posted from, and nothing else: a refund, a dispute
         // or a return that disagrees with it arriving afterwards still needs a person.
-        if (reason == "return_requires_review" && await db.Set<PaymentEffect>().AsNoTracking()
-            .SingleOrDefaultAsync(x => x.OperationId == op.Id && x.Kind == "Return", ct) is { } posted)
+        var posted = effects.SingleOrDefault(x => x.Kind == "Return");
+        if (reason == "return_requires_review" && posted is not null)
         {
-            var answered = facts.Single(x => x.Id == posted.ObservationId);
-            if (facts.All(x => x.Kind is not ("Refund" or "Dispute")) && facts.Where(x => x.Kind == "Return")
-                .All(x => (x.EvidenceId, x.BankDate, x.Gross) == (answered.EvidenceId, answered.BankDate, answered.Gross)))
-            { op.Status = "Returned"; op.Reason = null; }
+            // The posted return answers the return evidence it was posted from. One posted from a payout
+            // batch answers return notices that agree with each other: the notice and the payout are
+            // the same event seen twice, in either order. A refund or a dispute is never answered by it.
+            var returns = facts.Where(x => x.Kind == "Return").Select(x => (x.EvidenceId, x.BankDate, x.Gross)).Distinct().ToArray();
+            var answered = facts.SingleOrDefault(x => x.Id == posted.ObservationId);
+            var consistent = facts.All(x => x.Kind is not ("Refund" or "Dispute")) && (posted.SettlementId is not null
+                ? returns.Length <= 1
+                : answered is not null && returns.All(x => x == (answered.EvidenceId, answered.BankDate, answered.Gross)));
+            if (consistent) { op.Status = "Returned"; op.Reason = null; }
             else { op.Status = "NeedsReview"; op.Reason = "evidence_after_return"; }
         }
+        // Returned by a payout batch and nothing here says otherwise: later progress must not read as settled.
+        else if (reason is null && posted is not null) { op.Status = "Returned"; op.Reason = null; }
         else if (reason is not null) { op.Status = "NeedsReview"; op.Reason = reason; }
         else if (op.JournalId is not null) { op.Status = "Settled"; op.Reason = null; }
         else if (facts.Any(x => x.Kind == "Failed")) { op.Status = "Failed"; op.Reason = "collection_failed"; }

@@ -374,7 +374,7 @@ earlier receipt, and a `ProcessorFeeDifference` for each fee difference. It post
 The items post as receipts, surpluses, returns, then shortfalls, so each guard sees what the earlier
 entries left. A refusal by any accounting rule undoes the batch to a savepoint and is returned as the
 rule's code and the item it refused on, leaving the caller's transaction usable. Every entry's source
-reference begins `payout:{payout reference}:`. Nothing calls it yet.
+reference begins `payout:{payout reference}:`. The Payments simulation calls it to post a payout batch.
 
 **Statement import.** A bank CSV can be imported (column-mapped, with saved per-bank mappings) and
 auto-matched against uncleared register lines: an exact amount on a nearby date is a confident match that

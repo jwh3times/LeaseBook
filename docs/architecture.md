@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living architecture guide
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-04
+- **Last reviewed:** 2026-10-05
 
 This is the canonical public map of the system **as implemented**. It explains how the pieces fit
 together and links the decisions that shaped them without reproducing every invariant. Accepted
@@ -57,7 +57,9 @@ Directory, and `IPaymentLedger` to dispatch Accounting's existing `RecordPayment
 payment effect and operation summary share one org transaction. The same port carries a returned
 payment to Accounting's guarded `ReturnTenantPayment`, which an administrator starts and which posts
 the receipt's linked reversal or refuses by name
-([ADR-052](adr/ADR-052-guarded-simulated-payment-return.md)). Its `IPaymentProcessor` transport seam
+([ADR-052](adr/ADR-052-guarded-simulated-payment-return.md)), and a whole processor payout to
+`PostPaymentSettlement`, which posts every line of it or none
+([ADR-053](adr/ADR-053-processor-fees-and-batched-settlement.md)). Its `IPaymentProcessor` transport seam
 is called outside that transaction; the host simulator persists provider acceptance independently.
 
 Refund checks use a separate `IRefundCheckLedger` port into Accounting. Accounting derives the refund's

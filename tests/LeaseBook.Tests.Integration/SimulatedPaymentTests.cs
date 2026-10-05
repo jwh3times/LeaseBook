@@ -31,7 +31,7 @@ using Shouldly;
 namespace LeaseBook.Tests.Integration;
 
 [Collection(nameof(DatabaseCollection))]
-public sealed class SimulatedPaymentTests(PostgresFixture fixture)
+public sealed partial class SimulatedPaymentTests(PostgresFixture fixture)
 {
     private const string Path = "/api/portal/tenant/payments";
 
@@ -783,6 +783,10 @@ public sealed class SimulatedPaymentTests(PostgresFixture fixture)
 
         public Task<PaymentReturnOutcome> ReturnSettledReceiptAsync(Guid receiptJournalId, DateOnly date, string sourceRef, string note, CancellationToken ct) =>
             throw new NotSupportedException("The failing ledger exercises receipts only.");
+
+        // An outage while a payout is being posted: not a refusal by an accounting rule, a failure.
+        public Task<SettlementOutcome> PostSettlementAsync(Guid bankId, DateOnly bankDate, string payoutReference, IReadOnlyList<SettlementLineRequest> lines, CancellationToken ct) =>
+            throw new IOException("Injected failure while posting a payout");
     }
     private sealed class Harness(ApiFactory factory, WebApplicationFactory<Program> app, FixtureBinding binding, string suffix, PaymentClock clock) : IAsyncDisposable
     {
@@ -827,6 +831,17 @@ public sealed class SimulatedPaymentTests(PostgresFixture fixture)
             kind == "BankCredit" ? op.ChargedAmount : op.Amount, kind == "BankCredit" ? op.QuotedFee : 0m, op.Amount,
             "USD", binding.BankId, DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime),
             "evidence-" + op.Id.ToString("N"), "payout-" + op.Id.ToString("N"), true, clock.GetUtcNow().UtcDateTime);
+        // Payout evidence as a processor would report it, dated today on this fixture's bank.
+        public ProcessorSettlement Payout(string payoutId, decimal bankAmount, params ProcessorSettlementItem[] items) => new(
+            payoutId, binding.Account, "Simulation", binding.Generation, "standard", bankAmount, "USD", binding.BankId,
+            DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime), "bank-" + payoutId, clock.GetUtcNow().UtcDateTime, items);
+        public ProcessorSettlementItem Line(string item, string kind, PaymentView op, decimal gross, decimal fee, decimal net) =>
+            new(item, kind, $"sim_{binding.Generation:N}_{op.Id:N}", gross, fee, net, "USD");
+        public async Task Settle(ProcessorSettlement evidence, CancellationToken ct)
+        {
+            clock.Advance();
+            await app.Services.GetRequiredService<PaymentRunner>().ReceiveSettlementAsync(evidence, ct);
+        }
         public async Task Deliver(ProcessorObservation value, CancellationToken ct)
         {
             var processor = app.Services.GetRequiredService<SimulatedProcessor>();

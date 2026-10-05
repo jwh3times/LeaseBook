@@ -58,6 +58,7 @@ if (builder.Configuration["Payments:ManifestPath"] is { Length: > 0 } paymentMan
 var simulation = SimulationSettings.Read(builder.Configuration, builder.Environment);
 builder.Services.AddSingleton(simulation);
 builder.Services.AddScoped<PaymentEngine>();
+builder.Services.AddScoped<SettlementEngine>();
 builder.Services.AddScoped<IPaymentLedger, PaymentLedgerAdapter>();
 builder.Services.AddScoped<IPaymentEligibility, PaymentEligibilityAdapter>();
 builder.Services.AddScoped<IPaymentFeeRules, PaymentFeeRulesAdapter>();
