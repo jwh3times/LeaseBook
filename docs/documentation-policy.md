@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living policy
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-08-28
+- **Last reviewed:** 2026-10-04
 
 This policy keeps LeaseBook documentation public-safe, navigable, and maintainable. It applies to
 Markdown, runbooks, diagrams, planning artifacts, and documentation embedded in source or automation.
@@ -110,7 +110,9 @@ npm run docs:check
 The command checks Prettier formatting, Markdown structure, spelling, lifecycle metadata, local and
 private-link boundaries, copied mutable commands, obsolete authority claims, and ADR index consistency.
 The ordinary CI web job runs the same command on every pull request. The separate Lychee workflow
-checks external links and anchors on documentation changes and on its weekly schedule.
+checks external links and anchors on documentation changes and on its weekly schedule. A few URLs are
+checked by the weekly run only: the current release's own links, which do not exist until the merge,
+and one external page that intermittently stalls on CI runners. The workflow file lists them and why.
 
 Project-specific spelling belongs in `cspell.json`; add stable domain terms, product names, or fixture
 names, not accidental misspellings or arbitrary code identifiers. Markdownlint is a structural check;
