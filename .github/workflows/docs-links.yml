@@ -29,7 +29,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Prepare current-release link exclusions
+      - name: Prepare event-scoped link exclusions
         id: release-links
         shell: bash
         run: |
@@ -42,10 +42,22 @@ jobs:
           # A major/minor PR cuts the changelog before the merge-only release workflow creates
           # its tag. Push workflows can race that tag too. Exclude only those two current-version
           # URLs there; the weekly sweep uses a never-matching regex and checks every release link.
+          #
+          # stalling: one cited page, the FSF font-exception FAQ, intermittently never answers a
+          # given runner. Each failure (main on 2026-10-03, PRs #489 and #493) spent the whole
+          # ~60 s of timeout-and-retries on it alone, in a branch that did not touch the citing
+          # file, and a re-run minutes later on another runner checked all 480-odd links in 4 s.
+          # The same page answers a laptop in 0.2 s. A stall that follows the runner is not cured
+          # by a longer timeout or by retries from that runner, so this URL is checked by the
+          # weekly sweep instead of on every PR and push. It is still checked, anchor included:
+          # if the page or its #FontException anchor rots, Monday's run fails. The pattern names
+          # the one URL, not the host, so a new gnu.org link is checked everywhere.
           if [[ "$GITHUB_EVENT_NAME" == "schedule" ]]; then
             echo 'compare=^$' >> "$GITHUB_OUTPUT"
             echo 'release=^$' >> "$GITHUB_OUTPUT"
+            echo 'stalling=^$' >> "$GITHUB_OUTPUT"
           else
+            echo 'stalling=^https://www\.gnu\.org/licenses/gpl-faq\.html' >> "$GITHUB_OUTPUT"
             echo "compare=^https://github\\.com/jwh3times/LeaseBook/compare/v${version}\\.\\.\\.HEAD$" >> "$GITHUB_OUTPUT"
             echo "release=^https://github\\.com/jwh3times/LeaseBook/releases/tag/v${version}$" >> "$GITHUB_OUTPUT"
           fi
@@ -72,7 +84,8 @@ jobs:
           # Deliberately NOT an --exclude: muting the URL would also stop reporting it when it
           # genuinely rots, and this repository does not add open-ended ignores without an un-mute
           # signal. If resets persist despite this, the next step is a scoped exclude PLUS a check
-          # that fails when the excluded link starts working again.
+          # that fails when the excluded link starts working again. (The three event-scoped
+          # excludes below are not open-ended: the weekly sweep checks every one of those URLs.)
           #
           # --remap github.com/<owner>/<repo>/blob/<ref>/<path> → raw.githubusercontent.com: GitHub's
           # rendered file page answers bots with a sustained 503 (every source-file citation failed on
@@ -90,6 +103,7 @@ jobs:
             --exclude '^https?://(localhost|127\.0\.0\.1)'
             --exclude '${{ steps.release-links.outputs.compare }}'
             --exclude '${{ steps.release-links.outputs.release }}'
+            --exclude '${{ steps.release-links.outputs.stalling }}'
             'README.md' 'CHANGELOG.md' 'CONTRIBUTING.md' 'SECURITY.md' 'SUPPORT.md'
             'CODE_OF_CONDUCT.md' 'AGENTS.md' 'CLAUDE.md'
             'docs/**/*.md' 'infra/**/*.md' '.github/**/*.md' '.claude/**/*.md'
