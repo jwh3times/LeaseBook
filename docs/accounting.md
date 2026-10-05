@@ -366,7 +366,15 @@ processor's fee differed from the fee quoted to the tenant
 moves only the PM's held fees in one bank and carries no owner, property or tenant dimension. A
 surplus raises the bank and held fees. A shortfall lowers both and is guarded: it is refused
 (`pm_fees_insufficient`) when it exceeds the lowest fees held in that bank on or after its date, where `BankFeeCharged` leaves the
-same rule to procedure. Nothing posts this event yet; it is the first piece of the settlement model.
+same rule to procedure.
+
+**Payout batches.** `PostPaymentSettlement` posts one processor payout as a batch, on the bank date and
+in the trust bank that received it: a `PaymentReceived` receipt per payment, the guarded return of an
+earlier receipt, and a `ProcessorFeeDifference` for each fee difference. It posts all of them or none.
+The items post as receipts, surpluses, returns, then shortfalls, so each guard sees what the earlier
+entries left. A refusal by any accounting rule undoes the batch to a savepoint and is returned as the
+rule's code and the item it refused on, leaving the caller's transaction usable. Every entry's source
+reference begins `payout:{payout reference}:`. Nothing calls it yet.
 
 **Statement import.** A bank CSV can be imported (column-mapped, with saved per-bank mappings) and
 auto-matched against uncleared register lines: an exact amount on a nearby date is a confident match that
