@@ -1,7 +1,7 @@
 # Processor fee and batched settlement specification
 
 - **Audience:** Reviewers of issue #498 and implementers of the slice that follows it
-- **Status:** Proposed model; only the fee-difference posting template is built, and live payments remain unapproved
+- **Status:** Proposed model; the fee-difference posting template, the fee rules and the quote are built, nothing uses them yet, and live payments remain unapproved
 - **Owner:** Maintainers
 - **Last reviewed:** 2026-10-05
 
@@ -44,7 +44,9 @@ half away from zero.
 The charged amount is the smallest amount whose net is the ledger amount:
 `charged − fee(charged) = ledger amount`. Such an amount always exists. Each extra cent charged raises
 the net by one cent or by nothing, so no ledger amount is skipped. The evidence tests check this for
-every amount to $200.00 and a sample to $3,000.00 under both rules below.
+every amount to $200.00 and a sample to $3,000.00 under both rules below. `ConvenienceFeeRule.Quote`
+in Payments is the built function; a property test checks, for generated rules and amounts, that its
+charge nets exactly the ledger amount and that one cent less would not.
 
 | Rule (illustrative)   | Ledger amount | Quoted fee | Charged amount |
 | --------------------- | ------------- | ---------- | -------------- |
@@ -177,10 +179,11 @@ Closing a batch with a note posts nothing, as closing a payment review does toda
 
 ## What an implementation needs
 
-This list is the input to the implementation issue. Only the Accounting posting template is built.
+This list is the input to the implementation issue. The Accounting posting template, the fee rules in organization settings and the quote function are built; nothing below them is.
 
-- **Organization settings:** per payment method, a rate, a fixed amount and an optional cap, with
-  validation and an audit trail.
+- **Organization settings (built):** per payment method, a rate in basis points, a fixed amount and an
+  optional cap, set as a whole by an administrator through `PUT /api/settings/payment-fees`, validated
+  and audited. The defaults charge nothing. There is no settings screen for them yet.
 - **Payment record:** the ledger amount, quoted fee, charged amount, method and paid date. Today the
   record holds one amount.
 - **Batch record:** a payout with its bank evidence, its items, its status and reason, and one effect

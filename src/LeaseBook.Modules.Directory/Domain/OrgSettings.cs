@@ -55,5 +55,28 @@ public sealed class OrgSettings : IOrgScoped
     /// <summary>Org-default late-fee rate in basis points (100 bps = 1 %). Used when <see cref="LateFeeKind"/> is <see cref="LateFeeKind.Percent"/>. Default 500 (5 %).</summary>
     public int LateFeeRateBps { get; set; } = 500;
 
+    // ── Convenience-fee rules for online payments (ADR-053) ──────────────────
+    // What the organization's processor charges, per payment method, as the organization records it:
+    // fee = min(cap, round(charged × rate + fixed)). A tenant is quoted this fee on top of the amount
+    // going to their ledger. The defaults charge nothing; the real figures are an operator input.
+
+    /// <summary>Card fee rate in basis points (100 bps = 1 %). Default 0.</summary>
+    public int CardFeeRateBps { get; set; }
+
+    /// <summary>Card fixed fee per payment (dollars). Default 0.</summary>
+    public decimal CardFeeFixed { get; set; }
+
+    /// <summary>Most a card payment's fee can be (dollars), or null for no cap.</summary>
+    public decimal? CardFeeCap { get; set; }
+
+    /// <summary>Bank-debit (ACH) fee rate in basis points. Default 0.</summary>
+    public int AchFeeRateBps { get; set; }
+
+    /// <summary>Bank-debit (ACH) fixed fee per payment (dollars). Default 0.</summary>
+    public decimal AchFeeFixed { get; set; }
+
+    /// <summary>Most a bank-debit payment's fee can be (dollars), or null for no cap.</summary>
+    public decimal? AchFeeCap { get; set; }
+
     public DateTime CreatedAt { get; set; }
 }
