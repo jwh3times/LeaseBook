@@ -11,7 +11,8 @@ namespace LeaseBook.Modules.Accounting.Features.Posting;
 /// The posting-template catalog (§C.3): translates each business event into a balanced, per-basis
 /// entry and posts it through the single write path. Guarded events (P31) take the per-org advisory
 /// lock and read a balance before posting — the <c>PaymentReceived</c> auto-split, the deposit/
-/// prepayment over-application checks, the PM-fee over-sweep check, and the disbursement reserve floor.
+/// prepayment over-application checks, the PM-fee over-sweep check, the disbursement reserve floor,
+/// and the processor fee shortfall check.
 /// Every entry balances per basis <i>by construction</i> (proven by the catalog property test).
 /// </summary>
 internal sealed class AccountingEventService(DbContext db, IPostingService posting, IPostingLock postingLock)
@@ -42,6 +43,7 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
             BankFeeCharged e => PostBankFeeChargedAsync(e, ct),
             InterestEarned e => PostInterestEarnedAsync(e, ct),
             TrustTransfer e => PostTrustTransferAsync(e, ct),
+            ProcessorFeeDifference e => PostProcessorFeeDifferenceAsync(e, ct),
             _ => throw new ArgumentOutOfRangeException(
                 nameof(businessEvent), businessEvent.GetType().Name, "No posting template for this event."),
         };
@@ -410,6 +412,39 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
                 new(bank, e.Amount, null, EntryBasis.Both, BankAccountId: e.BankAccountId),
                 new(AccountCodes.PmIncome, null, e.Amount, EntryBasis.Both, BankAccountId: e.BankAccountId),
             ], InternalNote: e.InternalNote), ct);
+    }
+
+    // ----- Processor fee differences (ADR-053) ---------------------------------------------------
+
+    private async Task<Guid> PostProcessorFeeDifferenceAsync(ProcessorFeeDifference e, CancellationToken ct)
+    {
+        var bank = await BankCodeAsync(e.BankAccountId, ct);
+        var pmFees = new PostLineRequest(AccountCodes.PmIncome,
+            e.Direction == FeeDifferenceDirection.Shortfall ? e.Amount : null,
+            e.Direction == FeeDifferenceDirection.Surplus ? e.Amount : null,
+            EntryBasis.Both, BankAccountId: e.BankAccountId);
+        var cash = new PostLineRequest(bank,
+            e.Direction == FeeDifferenceDirection.Surplus ? e.Amount : null,
+            e.Direction == FeeDifferenceDirection.Shortfall ? e.Amount : null,
+            EntryBasis.Both, BankAccountId: e.BankAccountId);
+
+        if (e.Direction == FeeDifferenceDirection.Shortfall)
+        {
+            // The PM covers the shortfall from its own held funds in that bank, and only from them. Past
+            // zero the entry would still balance and the trust equation would still hold, but the bank
+            // would hold less than owners and tenants are owed. The bank-fee template leaves that rule
+            // to procedure (ADR-014); this one enforces it.
+            await postingLock.AcquireAsync(ct);
+            var held = await _balances.HeldFeesAsync(e.BankAccountId, ct);
+            if (e.Amount.Amount > held)
+            {
+                throw new PmFeesInsufficientException(e.Amount.Amount, held, e.BankAccountId);
+            }
+        }
+
+        return await posting.PostAsync(new PostEntryRequest(
+            e.Date, "ProcessorFeeDifference", e.Direction.ToString(), e.Description, e.SourceRef,
+            [pmFees, cash], InternalNote: e.InternalNote), ct);
     }
 
     private async Task<Guid> PostTrustTransferAsync(TrustTransfer e, CancellationToken ct)

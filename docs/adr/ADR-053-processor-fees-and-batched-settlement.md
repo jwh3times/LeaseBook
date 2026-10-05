@@ -72,7 +72,7 @@ what make that tolerable.
 
 A shortfall the PM's held fees cannot cover does not post. The
 [settlement evidence tests](../../tests/LeaseBook.Tests.Accounting/PaymentSettlementEvidenceTests.cs)
-show why: today the bank-fee entry has no balance guard, and an uncovered shortfall posts with every
+show why: the bank-fee entry has no balance guard, a rule [ADR-014](ADR-014-reconciliation-engine-and-lock.md) deliberately left to procedure, and an uncovered shortfall posts with every
 invariant green while held fees go negative and the bank holds less than owners are owed.
 
 The following are assumptions, not findings. Each needs legal or processor confirmation before any

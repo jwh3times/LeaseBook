@@ -3,7 +3,7 @@
 - **Audience:** Contributors, operators, and reviewers
 - **Status:** Living accounting guide
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-01
+- **Last reviewed:** 2026-10-05
 
 This is the canonical public explanation of the shipped trust-accounting model, written so a
 property manager, bookkeeper, or attorney can evaluate it without reading C#. The Accounting module
@@ -359,6 +359,14 @@ not tenant/owner activity: `BankFeeCharged` (a service charge — a PM operating
 (interest credited to the trust), and `TrustTransfer` (moving funds between two of the org's own bank
 accounts). Each balances per basis and posts through the single journal write path; none implies an
 owner/vendor/fee-sweep workflow (those are M6).
+
+**Processor fee differences.** `ProcessorFeeDifference` records the amount by which a payment
+processor's fee differed from the fee quoted to the tenant
+([ADR-053](adr/ADR-053-processor-fees-and-batched-settlement.md)). Like the bank-only adjustments it
+moves only the PM's held fees in one bank and carries no owner, property or tenant dimension. A
+surplus raises the bank and held fees. A shortfall lowers both and is guarded: it is refused
+(`pm_fees_insufficient`) when it exceeds the fees held in that bank, where `BankFeeCharged` leaves the
+same rule to procedure. Nothing posts this event yet; it is the first piece of the settlement model.
 
 **Statement import.** A bank CSV can be imported (column-mapped, with saved per-bank mappings) and
 auto-matched against uncleared register lines: an exact amount on a nearby date is a confident match that

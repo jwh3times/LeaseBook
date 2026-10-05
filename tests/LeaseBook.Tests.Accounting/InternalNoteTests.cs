@@ -70,6 +70,8 @@ public sealed class InternalNoteTests(PostgresFixture fixture)
             new BankFeeCharged(new Money(2m), Feb(5), scope.TrustBankId, "Bank fee", InternalNote: "note:bank-fee"),
             new TrustTransfer(new Money(1m), Feb(5), scope.TrustBankId, scope.DepositBankId, "Transfer",
                 InternalNote: "note:transfer"),
+            new ProcessorFeeDifference(new Money(1m), FeeDifferenceDirection.Surplus, Feb(5), scope.TrustBankId,
+                "Fee surplus", InternalNote: "note:fee-difference"),
         };
 
         var ids = new List<(Guid Id, string Expected)>();

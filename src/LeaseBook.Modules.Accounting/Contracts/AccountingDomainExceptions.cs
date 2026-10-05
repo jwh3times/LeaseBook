@@ -315,6 +315,22 @@ public sealed class RefundCheckClearedException(Guid entryId)
     public Guid EntryId { get; } = entryId;
 }
 
+/// <summary>
+/// A processor fee shortfall is larger than the PM fees held in that bank (409, ADR-053). Posting it
+/// would leave the bank holding less than owners and tenants are owed, so nothing is posted.
+/// </summary>
+public sealed class PmFeesInsufficientException(decimal shortfall, decimal held, Guid bankAccountId)
+    : AccountingDomainException(
+        "pm_fees_insufficient",
+        "The management fees held in this account do not cover the processor fee shortfall.")
+{
+    public decimal Shortfall { get; } = shortfall;
+
+    public decimal Held { get; } = held;
+
+    public Guid BankAccountId { get; } = bankAccountId;
+}
+
 public enum PaymentReturnBlock
 {
     PrepaymentConsumed,

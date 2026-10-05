@@ -114,6 +114,13 @@ public sealed class CatalogBalancePropertyTests(PostgresFixture fixture)
         await AssertBalancesAsync(scope, new InterestEarned(amount, D(9), scope.TrustBankId, "interest"), ct);
         await AssertBalancesAsync(scope, new TrustTransfer(
             amount, D(10), scope.TrustBankId, scope.DepositBankId, "trust transfer"), ct);
+
+        // Processor fee differences (ADR-053). The surplus first: it is what gives the shortfall of
+        // the same amount held fees to draw on, whatever the generated amount.
+        await AssertBalancesAsync(scope, new ProcessorFeeDifference(
+            amount, FeeDifferenceDirection.Surplus, D(11), scope.DepositBankId, "fee surplus"), ct);
+        await AssertBalancesAsync(scope, new ProcessorFeeDifference(
+            amount, FeeDifferenceDirection.Shortfall, D(12), scope.DepositBankId, "fee shortfall"), ct);
     }
 
     private static async Task PostAsync(OrgScope scope, AccountingEvent businessEvent, CancellationToken ct) =>
