@@ -10,11 +10,18 @@ name: Changelog
 #
 # The job always runs so branch protection always gets a conclusion; mark
 # "CHANGELOG [Unreleased] updated" a required status check on main for this to enforce.
+#
+# The label is read from the pull request as it is NOW, not from the event that started the run, and
+# the workflow also runs when a label is added or removed. A label is attached a moment after a pull
+# request is opened, so the "opened" event's own payload often does not carry it yet: PR #505 failed
+# this gate with skip-changelog visibly on it, and re-running the job only replayed the same payload.
 on:
   pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
 
 permissions:
   contents: read
+  pull-requests: read # the current labels
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -37,9 +44,18 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
-          PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          EVENT_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -uo pipefail
+
+          # The labels on the pull request now. If the read fails, fall back to the event's own list:
+          # that can only miss a label, which fails the gate, never passes it wrongly.
+          if ! PR_LABELS="$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/labels" --paginate --jq '.[].name' | paste -sd, -)"; then
+            echo "::warning::Could not read the pull request's current labels; using the event payload."
+            PR_LABELS="$EVENT_LABELS"
+          fi
 
           # Dependabot bumps roll up into the next release cut — no [Unreleased] entry required.
           if [[ "$PR_AUTHOR" == "dependabot[bot]" ]]; then
