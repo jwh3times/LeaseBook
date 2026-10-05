@@ -155,23 +155,43 @@ public sealed class PaymentEndpoints : IEndpointModule
         // ignores all cookies and creates its own org scope only AFTER verified server-side routing.
         app.MapPost("/callbacks/payments/simulation", Receive).AllowAnonymous().RequireRateLimiting("payments")
             .WithTags("Simulated payment callbacks").Produces(204).ProducesProblem(400);
+        // Payout evidence (ADR-053): the bank amount for one payout and the processor's lines for it.
+        app.MapPost("/callbacks/payments/simulation/payout", ReceivePayout).AllowAnonymous().RequireRateLimiting("payments")
+            .WithTags("Simulated payment callbacks").Produces(204).ProducesProblem(400);
     }
 
     private static async Task<IResult> Receive(HttpContext http, IPaymentProcessor processor, PaymentRunner runner, CancellationToken ct)
     {
-        if (http.Request.ContentLength > 16384) { return Invalid(http); }
+        if (await ReadBodyAsync(http, ct) is not { } body) { return Invalid(http); }
+        var observation = processor.VerifyAndNormalize(body, http.Request.Headers["X-Simulation-Signature"].ToString());
+        if (observation is null) { return Invalid(http); }
+        await runner.ReceiveAsync(observation, ct);
+        return TypedResults.NoContent();
+    }
+
+    private static async Task<IResult> ReceivePayout(HttpContext http, IPaymentProcessor processor, PaymentRunner runner, CancellationToken ct)
+    {
+        if (await ReadBodyAsync(http, ct) is not { } body) { return Invalid(http); }
+        var evidence = processor.VerifyAndNormalizeSettlement(body, http.Request.Headers["X-Simulation-Signature"].ToString());
+        if (evidence is null) { return Invalid(http); }
+        // Evidence that cannot be kept as it arrived was not delivered, and the sender is told so. A
+        // payout that was kept is acknowledged whatever became of it: held payouts are staff's to resolve.
+        return (await runner.ReceiveSettlementAsync(evidence, ct)).Malformed ? Invalid(http) : TypedResults.NoContent();
+    }
+
+    // The whole body, or null when it is larger than a callback may be.
+    private static async Task<byte[]?> ReadBodyAsync(HttpContext http, CancellationToken ct)
+    {
+        if (http.Request.ContentLength > 16384) { return null; }
         using var buffer = new MemoryStream();
         var bytes = new byte[4096];
         int count;
         while ((count = await http.Request.Body.ReadAsync(bytes, ct)) > 0)
         {
-            if (buffer.Length + count > 16384) { return Invalid(http); }
+            if (buffer.Length + count > 16384) { return null; }
             buffer.Write(bytes, 0, count);
         }
-        var observation = processor.VerifyAndNormalize(buffer.ToArray(), http.Request.Headers["X-Simulation-Signature"].ToString());
-        if (observation is null) { return Invalid(http); }
-        await runner.ReceiveAsync(observation, ct);
-        return TypedResults.NoContent();
+        return buffer.ToArray();
     }
 
     private static IResult Invalid(HttpContext http) => ProblemResults.Problem(http, "invalid_payment_callback",

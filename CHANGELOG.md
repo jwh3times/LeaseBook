@@ -16,6 +16,14 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Added
 
+- **The payment simulation settles payouts, not only single payments.** In the development payment
+  fixture, one payout can cover several tenant payments, and the processor's fee can differ from the
+  fee quoted to the tenant. Each tenant is credited what they paid toward their ledger; a difference
+  in the fee comes out of, or goes into, the management fees held in the trust account, and never
+  touches an owner or a tenant. A payout posts completely or not at all, and one that cannot post says
+  why. A payout that contains a returned payment waits for an administrator. Payouts are driven and
+  resolved from the command line and the API for now; there is no screen for them yet.
+
 - **A simulated payment quotes its convenience fee before the tenant confirms.** In the development
   payment fixture, the tenant chooses card or bank debit and sees the fee and the total charged before
   submitting. The fee comes from the organization's rule for that method, which an administrator sets;

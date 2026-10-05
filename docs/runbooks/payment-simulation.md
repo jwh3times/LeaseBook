@@ -75,10 +75,40 @@ minutes the staff read reports their count for fixture-operator review, and **Sh
 notifications** on the Operations page lists each one's received time, kind, amount, provider
 reference and age. The list is read-only.
 
-The CLI constructs signed observations without publishing the signing key. Tests can send them to
-`POST /callbacks/payments/simulation`, with `X-Simulation-Signature` in `unixSeconds.hexHmac` format
+### Drive a payout
+
+A real processor pays out many payments in one bank deposit and keeps a fee from each. `payout`
+delivers that evidence for payments already submitted in the portal
+([ADR-053](../adr/ADR-053-processor-fees-and-batched-settlement.md)). It runs one worker pass first,
+so the payments need no separate `step`.
+
+```powershell
+$run = { dotnet run --project src/LeaseBook.Web --no-launch-profile -- payment-simulation payout $fixture.OrgId $date @args }
+& $run po_1 "pay:$first" "pay:$second"              # both clean: the processor kept the quoted fee
+& $run po_2 "pay:$third:9.28"                       # the processor kept 9.28, not the quoted fee
+& $run po_3 "return:$first" "fee:4.00"              # a return, and the processor's return fee
+& $run po_4 "pay:$fourth" --bank-amount=99.00       # the bank amount does not match the lines
+& $run po_5 "refund:$second"                        # a line LeaseBook does not post
+& $run po_6 "pay:$fourth" --type=instant            # a payout type LeaseBook does not post
+```
+
+Each `$first`…`$fourth` is a payment reference from the portal. A line is `pay:<payment>[:<fee kept>]`,
+`return:<payment>[:<fee given back>]`, `refund:<payment>` or `fee:<amount>`. With no fee named, the
+processor kept, or gave back, exactly the quoted fee. The bank amount is the sum of the lines unless
+`--bank-amount` overrides it. The command prints the payout's status and, if it is held, the reason.
+
+A payout posts completely or not at all. One whose fee differs from the quote posts the receipt for
+what the tenant paid toward their ledger and takes the difference from, or adds it to, the management
+fees held in the trust bank; a shortfall needs fees held there. A payout that contains a return waits
+for an administrator, who posts it with `POST /api/payments/settlements/{id}/post` while signed in as
+`admin-a@payments.test`. `GET /api/payments/settlements` lists payouts and why each one waits. There
+is no screen for payouts yet.
+
+The CLI constructs signed observations and payout evidence without publishing the signing key. Tests
+can send them to `POST /callbacks/payments/simulation` and `POST /callbacks/payments/simulation/payout`,
+with `X-Simulation-Signature` in `unixSeconds.hexHmac` format
 over the timestamp, a dot, and the exact body bytes. This synthetic signature is not Stripe's wire
-format. The endpoint is outside cookie-authenticated `/api`; it uses signature authentication,
+format. Each endpoint is outside cookie-authenticated `/api`; it uses signature authentication,
 bounded body size and rate limiting, then server-owned account routing. A caller's org metadata or
 cookie cannot select the callback's organization.
 

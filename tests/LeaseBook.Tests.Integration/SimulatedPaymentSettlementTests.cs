@@ -426,11 +426,11 @@ public sealed partial class SimulatedPaymentTests
         var line = h.Line("1", "Payment", op, 600m, 0m, 600m);
 
         // Two lines under one reference, an empty reference, and text that does not fit: not evidence
-        // LeaseBook can keep as given, so none of it is kept and nothing fails.
-        await h.Settle(h.Payout("po_dup", 1200m, line, line), ct);
-        await h.Settle(h.Payout("po_blank", 600m, line with { Item = " " }), ct);
-        await h.Settle(h.Payout("po_long", 600m, line with { Kind = new string('k', 21) }), ct);
-        await h.Settle(h.Payout(new string('p', 101), 600m, line), ct);
+        // LeaseBook can keep as given. None of it is kept, and the sender is told it was not delivered.
+        await h.Settle(h.Payout("po_dup", 1200m, line, line), ct, HttpStatusCode.BadRequest);
+        await h.Settle(h.Payout("po_blank", 600m, line with { Item = " " }), ct, HttpStatusCode.BadRequest);
+        await h.Settle(h.Payout("po_long", 600m, line with { Kind = new string('k', 21) }), ct, HttpStatusCode.BadRequest);
+        await h.Settle(h.Payout(new string('p', 101), 600m, line), ct, HttpStatusCode.BadRequest);
         (await List(admin, ct)).ShouldBeEmpty();
 
         // Another currency is stored as it arrived and held: what evidence says is judged, not refused.
@@ -570,6 +570,115 @@ public sealed partial class SimulatedPaymentTests
         var payout = (await List(admin, ct)).Single();
         (payout.Status, payout.Reason, payout.CanPost).ShouldBe(("NeedsReview", "conflicting_evidence", false));
         (await BankBook(h, ct), await h.Balance(1, ct)).ShouldBe(before);
+    }
+
+    [Fact]
+    public async Task The_payout_callback_accepts_only_signed_evidence_and_ignores_another_fixtures_account()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var h = await Setup(ct);
+        using var one = await h.Login(1, ct);
+        using var admin = await h.LoginAdmin(ct);
+        var op = await Pay(h, one, 600m, ct);
+        var evidence = h.Payout("po_1", 600m, h.Line("1", "Payment", op, 600m, 0m, 600m));
+        var body = JsonSerializer.SerializeToUtf8Bytes(evidence);
+        var signature = h.App.Services.GetRequiredService<SimulatedProcessor>().Sign(body);
+
+        // A changed body under a good signature, a made-up signature, and no signature at all.
+        var tampered = JsonSerializer.SerializeToUtf8Bytes(evidence with { BankAmount = 6000m });
+        (await h.PostPayout(tampered, signature, ct)).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await h.PostPayout(body, signature[..^4] + "0000", ct)).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await h.PostPayout(body, "", ct)).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        // Not evidence at all, and amounts in fractions of a cent, even when signed.
+        var junk = "not json"u8.ToArray();
+        (await h.PostPayout(junk, h.App.Services.GetRequiredService<SimulatedProcessor>().Sign(junk), ct))
+            .StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        await h.Settle(evidence with { BankAmount = 600.005m }, ct, HttpStatusCode.BadRequest);
+        (await List(admin, ct)).ShouldBeEmpty();
+        (await h.Balance(1, ct)).ShouldBe(1000m);
+
+        // Signed evidence for an account no fixture here is bound to is acknowledged and ignored.
+        await h.Settle(evidence with { Account = "sim_someone_else" }, ct);
+        (await List(admin, ct)).ShouldBeEmpty();
+
+        await h.Settle(evidence, ct);
+        (await List(admin, ct)).Single().Status.ShouldBe("Posted");
+        (await h.Balance(1, ct)).ShouldBe(400m);
+    }
+
+    [Fact]
+    public async Task The_fixture_cli_drives_a_clean_payout_a_fee_difference_a_return_and_the_held_cases()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var h = await Setup(ct);
+        using var one = await h.Login(1, ct);
+        using var two = await h.Login(2, ct);
+        using var admin = await h.LoginAdmin(ct);
+        (await admin.PutAsJsonAsync("/api/settings/payment-fees", FeeRules, ct)).EnsureSuccessStatusCode();
+        await HoldFees(h, 80m, ct);
+        var org = h.Binding.OrgId.ToString();
+        var today = DateOnly.FromDateTime(h.Clock.GetUtcNow().UtcDateTime).ToString("yyyy-MM-dd");
+        // Submitted and not yet dispatched: the command runs the worker itself before delivering.
+        var clean = await Submit(one, 500m, "card", ct);     // quoted 15.24
+        var shortfall = await Submit(two, 250m, "card", ct); // quoted 7.78
+
+        // No fee named: the processor kept exactly the quoted fee. A fee named: what it kept instead.
+        (await h.Cli(ct, "payout", org, today, "po_1", $"pay:{clean.Id}", $"pay:{shortfall.Id}:9.28")).ShouldBe(0);
+        var first = (await List(admin, ct)).Single();
+        (first.Status, first.BankAmount).ShouldBe(("Posted", 500m + 248.50m));
+        (await h.Balance(1, ct), await h.Balance(2, ct)).ShouldBe((500m, 750m));
+        (await HeldFees(h, ct)).ShouldBe(78.50m);
+
+        // A return with the processor keeping its fee, and a return fee beside it. It waits for a person.
+        (await h.Cli(ct, "payout", org, today, "po_2", $"return:{clean.Id}:0", "fee:4.00")).ShouldBe(0);
+        var second = (await List(admin, ct)).Single(x => x.PayoutReference == "po_2");
+        (second.Status, second.Reason, second.BankAmount).ShouldBe(("NeedsReview", "settlement_requires_confirmation", -519.24m));
+        (await admin.PostAsync($"{Settlements}/{second.Id}/post", null, ct)).StatusCode.ShouldBe(HttpStatusCode.OK);
+        (await h.Balance(1, ct)).ShouldBe(1000m);
+
+        // The held cases an operator needs to be able to produce: untied, unsupported kind, unsupported type.
+        var third = await Submit(two, 100m, "card", ct);
+        (await h.Cli(ct, "payout", org, today, "po_3", $"pay:{third.Id}", "--bank-amount=99.00")).ShouldBe(0);
+        (await h.Cli(ct, "payout", org, today, "po_4", $"refund:{shortfall.Id}")).ShouldBe(0);
+        (await h.Cli(ct, "payout", org, today, "po_5", $"pay:{third.Id}", "--type=instant")).ShouldBe(0);
+        (await List(admin, ct)).Where(x => x.Status == "NeedsReview").Select(x => (x.PayoutReference, x.Reason)).ShouldBe(
+            [("po_3", "settlement_untied"), ("po_4", "unsupported_settlement"), ("po_5", "unsupported_settlement")], ignoreOrder: true);
+
+        // A payment the fixture does not have is refused before anything is delivered.
+        (await h.Cli(ct, "payout", org, today, "po_6", $"pay:{UuidV7.NewId()}")).ShouldBe(1);
+        (await List(admin, ct)).ShouldNotContain(x => x.PayoutReference == "po_6");
+    }
+
+    public static TheoryData<string[]> BadPayoutArguments() => new()
+    {
+        new[] { "po_1" },                                  // no lines
+        new[] { "po_1", "pay:not-a-guid" },
+        new[] { "po_1", "pay:00000000-0000-0000-0000-000000000001:-1" },
+        new[] { "po_1", "pay:00000000-0000-0000-0000-000000000001:1.005" },
+        new[] { "po_1", "refund:00000000-0000-0000-0000-000000000001:5" },
+        new[] { "po_1", "fee:0" },
+        new[] { "po_1", "fee:abc" },
+        new[] { "po_1", "wire:00000000-0000-0000-0000-000000000001" },
+        new[] { "po_1", "fee:4.00", "--bank-amount=abc" },
+        new[] { "--type=instant", "fee:4.00" },            // an option where the payout id belongs
+    };
+
+    [Theory]
+    [MemberData(nameof(BadPayoutArguments))]
+    public void The_payout_command_refuses_arguments_it_cannot_read(string[] arguments)
+    {
+        PayoutRequest.TryParse(arguments[0], arguments[1..], out _).ShouldBeFalse();
+        new PaymentSimulationVerb().TryCreateInvocation(
+            ["payment-simulation", "payout", Guid.NewGuid().ToString(), "2026-10-05", .. arguments], out _, out var usage).ShouldBeFalse();
+        usage.ShouldContain("payout <org-id>");
+    }
+
+    private static async Task<PaymentView> Submit(HttpClient tenant, decimal amount, string method, CancellationToken ct)
+    {
+        var quote = await Quote(tenant, amount, method, ct);
+        var response = await tenant.PostAsJsonAsync(Path, new SubmitPaymentBody(UuidV7.NewId(), amount, "USD", method, quote.Fee), ct);
+        response.StatusCode.ShouldBe(HttpStatusCode.Accepted, await response.Content.ReadAsStringAsync(ct));
+        return (await response.Content.ReadFromJsonAsync<PaymentView>(ct))!;
     }
 
     // Submits a payment at the fee quoted for it, and runs the worker so that the provider reference exists.
