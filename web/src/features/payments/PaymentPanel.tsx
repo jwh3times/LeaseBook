@@ -3,18 +3,20 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   getApiPayments,
   getApiPortalTenantPayments,
+  getApiPortalTenantPaymentsQuote,
   postApiPaymentsByIdCloseReview,
   postApiPaymentsByIdRetry,
   postApiPaymentsByIdReturn,
   postApiPortalTenantPayments,
   unwrap,
+  type ApiError,
   type PaymentView,
   type SubmitPaymentBody,
 } from '@/api';
 import { ApiErrorNotice } from '@/components/ApiErrorNotice';
 import { ErrorAction } from '@/components/ErrorAction';
 import { QueryErrorState } from '@/components/QueryErrorState';
-import { Badge, Button, Card, Input, Money } from '@/design';
+import { Badge, Button, Card, Input, Money, Select } from '@/design';
 import { useSession } from '@/features/auth/useSession';
 import { UnmatchedObservations } from './UnmatchedObservations';
 
@@ -40,6 +42,12 @@ function description(payment: PaymentView) {
         : 'Simulated payment needs review — no receipt recorded';
   }
 }
+
+const METHODS = [
+  { value: 'ach', label: 'Bank debit (ACH)' },
+  { value: 'card', label: 'Card' },
+];
+const AMOUNT = /^(?:0|[1-9][0-9]{0,4})(?:\.[0-9]{1,2})?$/;
 
 const REASONS: Record<string, string> = {
   technical_failure:
@@ -78,10 +86,27 @@ const REASONS: Record<string, string> = {
     'The fixture binding is unavailable. Ask the fixture operator to check its configuration.',
 };
 
+// What the tenant confirms: the fee on top of the amount going to their ledger, and the total charged.
+function QuoteLine({ fee, charged }: { fee: number; charged: number }) {
+  return (
+    <p>
+      {fee > 0 ? (
+        <>
+          Convenience fee: <Money value={fee} />
+        </>
+      ) : (
+        'No convenience fee'
+      )}{' '}
+      · Total charged: <Money value={charged} />
+    </p>
+  );
+}
+
 export function PaymentPanel({ staff = false }: { staff?: boolean }) {
   const queries = useQueryClient();
   const session = useSession();
   const [amount, setAmount] = useState('');
+  const [method, setMethod] = useState('ach');
   const request = useRef<SubmitPaymentBody | null>(null);
   const [closing, setClosing] = useState<{ id: string; note: string } | null>(null);
   const list = useQuery({
@@ -103,7 +128,22 @@ export function PaymentPanel({ staff = false }: { staff?: boolean }) {
   useEffect(() => {
     if (recorded) void queries.invalidateQueries({ queryKey: ['resident-ledger'] });
   }, [recorded, queries]);
-  const submit = useMutation({
+  const priceable = AMOUNT.test(amount) && Number(amount) >= 0.01 && Number(amount) <= 10000;
+  // The fee is the server's: the tenant confirms the figure shown here, and the server refuses the
+  // request if its rule no longer gives that figure. A request already sent keeps the fee it carried.
+  const quote = useQuery({
+    queryKey: ['simulated-payment-quote', amount, method],
+    queryFn: () =>
+      unwrap(
+        getApiPortalTenantPaymentsQuote({ query: { amount, method } }),
+        'Unable to calculate the fee for this payment.',
+      ),
+    enabled: !staff && priceable && request.current === null && list.data?.enabled === true,
+    retry: false,
+    gcTime: 0,
+    staleTime: 0,
+  });
+  const submit = useMutation<PaymentView, ApiError, SubmitPaymentBody>({
     mutationFn: (body: SubmitPaymentBody) =>
       unwrap(
         postApiPortalTenantPayments({ body }),
@@ -114,7 +154,15 @@ export function PaymentPanel({ staff = false }: { staff?: boolean }) {
       setAmount('');
       void queries.invalidateQueries({ queryKey: ['simulated-payments'] });
     },
+    onError: (error) => {
+      // Refused outright, so nothing is uncertain: drop the request and show the fee as it is now.
+      if (error.code === 'fee_quote_changed') {
+        request.current = null;
+        void queries.invalidateQueries({ queryKey: ['simulated-payment-quote'] });
+      }
+    },
   });
+  const feeChanged = submit.isError && submit.error.code === 'fee_quote_changed';
   const retry = useMutation({
     mutationFn: (id: string) =>
       unwrap(postApiPaymentsByIdRetry({ path: { id } }), 'Unable to retry the simulated payment.'),
@@ -140,7 +188,16 @@ export function PaymentPanel({ staff = false }: { staff?: boolean }) {
   });
   const admin = session.data?.role === 'PMAdmin';
   function send() {
-    request.current ??= { key: crypto.randomUUID(), amount, currency: 'USD' };
+    if (request.current === null) {
+      if (!quote.isSuccess) return;
+      request.current = {
+        key: crypto.randomUUID(),
+        amount,
+        currency: 'USD',
+        method,
+        quotedFee: quote.data.fee,
+      };
+    }
     submit.mutate(request.current);
   }
   if (list.isError)
@@ -182,13 +239,49 @@ export function PaymentPanel({ staff = false }: { staff?: boolean }) {
             aria-describedby="simulation-limits"
           />
           <p id="simulation-limits">Enter $0.01 to $10,000.00.</p>
+          <label htmlFor="simulation-method">Pay with</label>
+          <Select
+            id="simulation-method"
+            value={method}
+            disabled={request.current !== null}
+            onChange={(event) => setMethod(event.target.value)}
+          >
+            {METHODS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </Select>
+          <div id="simulation-quote" aria-live="polite">
+            {request.current !== null ? (
+              <QuoteLine
+                fee={Number(request.current.quotedFee ?? 0)}
+                charged={Number(request.current.amount) + Number(request.current.quotedFee ?? 0)}
+              />
+            ) : !priceable ? null : quote.isError ? (
+              <>
+                <ApiErrorNotice
+                  error={quote.error}
+                  fallback="Unable to calculate the fee for this payment."
+                  kind="read"
+                />
+                <ErrorAction
+                  error={quote.error}
+                  onRetry={() => void quote.refetch()}
+                  retrying={quote.isFetching}
+                />
+              </>
+            ) : quote.isSuccess ? (
+              <QuoteLine fee={Number(quote.data.fee)} charged={Number(quote.data.charged)} />
+            ) : (
+              <p>Calculating the fee…</p>
+            )}
+          </div>
           <Button
             type="submit"
+            aria-describedby="simulation-quote"
             disabled={
-              submit.isPending ||
-              Number(amount) < 0.01 ||
-              Number(amount) > 10000 ||
-              !Number.isFinite(Number(amount))
+              submit.isPending || (request.current === null && !(priceable && quote.isSuccess))
             }
           >
             {submit.isPending
@@ -203,7 +296,11 @@ export function PaymentPanel({ staff = false }: { staff?: boolean }) {
                 error={submit.error}
                 fallback="Unable to confirm the simulated payment request."
               />
-              <p>The result is uncertain. Retrying uses the same request reference and amount.</p>
+              {feeChanged ? (
+                <p>Nothing was requested. Check the fee shown above, then submit again.</p>
+              ) : (
+                <p>The result is uncertain. Retrying uses the same request reference and amount.</p>
+              )}
               <ErrorAction error={submit.error} />
             </>
           )}
@@ -235,6 +332,12 @@ export function PaymentPanel({ staff = false }: { staff?: boolean }) {
             {list.data.items.map((payment) => (
               <li key={payment.id} className="col gap8">
                 <Money value={Number(payment.amount)} />
+                {Number(payment.quotedFee ?? 0) > 0 && (
+                  <span>
+                    Plus a <Money value={Number(payment.quotedFee)} /> convenience fee:{' '}
+                    <Money value={Number(payment.chargedAmount)} /> charged
+                  </span>
+                )}
                 <span>{description(payment)}</span>
                 <span>Payment reference: {payment.id}</span>
                 {staff && (

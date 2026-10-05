@@ -23,6 +23,8 @@ public sealed class PaymentOperationConfiguration : IEntityTypeConfiguration<Pay
         {
             t.HasCheckConstraint("ck_payment_operation_amount", "amount > 0 AND amount <= 10000");
             t.HasCheckConstraint("ck_payment_operation_currency", "currency = 'USD'");
+            t.HasCheckConstraint("ck_payment_operation_quoted_fee", "quoted_fee >= 0");
+            t.HasCheckConstraint("ck_payment_operation_method", "method IN ('card','ach')");
             t.HasCheckConstraint("ck_payment_operation_status", "status IN ('Requested','Processing','Failed','Settled','NeedsReview','Returned','ReviewClosed')");
         });
         b.HasKey(x => x.Id);
@@ -34,6 +36,8 @@ public sealed class PaymentOperationConfiguration : IEntityTypeConfiguration<Pay
         b.HasOne<PaymentFixture>().WithMany().HasForeignKey(x => new { x.OrgId, x.Generation })
             .HasPrincipalKey(x => new { x.OrgId, x.Id }).OnDelete(DeleteBehavior.Restrict);
         b.Property(x => x.Amount).HasPrecision(14, 2);
+        b.Property(x => x.QuotedFee).HasPrecision(14, 2).HasDefaultValue(0m);
+        b.Property(x => x.Method).HasMaxLength(10).HasDefaultValue(PaymentMethods.Ach);
         b.Property(x => x.Currency).HasMaxLength(3);
         b.Property(x => x.Account).HasMaxLength(100);
         b.Property(x => x.ProviderId).HasMaxLength(100);

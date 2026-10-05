@@ -60,6 +60,7 @@ builder.Services.AddSingleton(simulation);
 builder.Services.AddScoped<PaymentEngine>();
 builder.Services.AddScoped<IPaymentLedger, PaymentLedgerAdapter>();
 builder.Services.AddScoped<IPaymentEligibility, PaymentEligibilityAdapter>();
+builder.Services.AddScoped<IPaymentFeeRules, PaymentFeeRulesAdapter>();
 builder.Services.AddScoped<IRefundCheckLedger, RefundCheckLedgerAdapter>();
 builder.Services.AddSingleton<SimulatedProcessor>();
 builder.Services.AddSingleton<IPaymentProcessor>(sp => sp.GetRequiredService<SimulatedProcessor>());

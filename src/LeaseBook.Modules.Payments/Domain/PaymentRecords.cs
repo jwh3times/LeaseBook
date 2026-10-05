@@ -13,6 +13,14 @@ public sealed class PaymentFixture : IOrgScoped
     public DateTime CreatedAt { get; set; }
 }
 
+/// <summary>The online payment methods a fee rule exists for. The values are stored and sent on the wire.</summary>
+public static class PaymentMethods
+{
+    public const string Card = "card";
+    public const string Ach = "ach";
+    public static readonly string[] All = [Card, Ach];
+}
+
 public sealed class PaymentOperation : IOrgScoped
 {
     public Guid Id { get; set; }
@@ -23,10 +31,18 @@ public sealed class PaymentOperation : IOrgScoped
     public Guid Generation { get; set; }
     public Guid BankId { get; set; }
     public string Account { get; set; } = "";
+    // The ledger amount (ADR-053): what the tenant pays toward their ledger, and the only amount they
+    // are credited. The convenience fee quoted at confirmation rides on top of it and is never posted.
     public decimal Amount { get; set; }
+    public decimal QuotedFee { get; set; }
+    /// <summary>What the tenant's card or bank is charged. Derived, so it cannot drift from its parts.</summary>
+    public decimal ChargedAmount => Amount + QuotedFee;
+    public string Method { get; set; } = PaymentMethods.Ach;
     public string Currency { get; set; } = "USD";
     public string Fingerprint { get; set; } = "";
     public DateTime CreatedAt { get; set; }
+    /// <summary>When the processor reported the collection succeeded. The receipt is dated on the bank date instead.</summary>
+    public DateTime? PaidAt { get; set; }
     public string Status { get; set; } = "Requested";
     public string? Reason { get; set; }
     public string? ProviderId { get; set; }

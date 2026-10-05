@@ -3,7 +3,7 @@
 - **Audience:** Implementers and reviewers of issue #456
 - **Status:** Implemented simulation contract for #456; live payments remain unapproved
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-04
+- **Last reviewed:** 2026-10-05
 
 ## Evidence and boundary
 
@@ -38,7 +38,7 @@ continues under a durable system actor: session expiration must not discard fina
 Persist an immutable operation UUID, org/tenant/initiating actor IDs, amount/currency, fixture
 generation, provider-account/bank binding version, request fingerprint, idempotency key and creation
 instant. Scope uniqueness to `(org, initiating user, key)`; fingerprint the canonical tenant,
-amount in canonical two-decimal form, currency and binding version. Same key/same fingerprint returns the same
+amount in canonical two-decimal form, currency, payment method, confirmed fee and binding version. Same key/same fingerprint returns the same
 operation, including after completion; same key/different fingerprint returns conflict before any
 dispatch. Two different keys are two explicitly confirmed payments. A confirmed failed collection
 may be retried by a new operation/key; automatic transport recovery always retains the old key.
@@ -106,16 +106,33 @@ method `ach`, description `Simulated tenant payment`, and stable source referenc
 org-owned trust bank. The binding is immutable once used; changing the configured bank cannot
 retarget an in-flight operation. Capabilities may gate submission only and cannot change lines.
 
-| Evidence or action                                                                 | Journal effect and date                       | Outcome in #456                                     |
-| ---------------------------------------------------------------------------------- | --------------------------------------------- | --------------------------------------------------- |
-| Requested, processing, success, available, payout pending/in-transit/paid          | None                                          | Await bank evidence                                 |
-| Confirmed failed collection, with no credit evidence                               | None                                          | Failed                                              |
-| Gross bank credit, fee 0, net equals gross, exact currency/account/operation match | Receipt above, bank evidence date             | Settled atomically with journal link                |
-| Fee or gross/net mismatch; batch mixes payments, refunds or reserves               | None; no receipt for either gross or net      | Needs review: unsupported settlement                |
-| Pre-posting return contradicts credit evidence                                     | None                                          | Needs review; do not post and immediately reverse   |
-| Late full/partial return, refund or disputed payment                               | None automatically; preserve original receipt | Needs review; a PMAdmin posts or closes it (below)  |
-| Locked receipt period or missing attribution                                       | None; transaction rolled back                 | Needs review; retain original evidence date         |
-| Technical failure or serialization contention                                      | None if rolled back                           | Retry same effect/date; re-evaluate committed facts |
+| Evidence or action                                                                                                                                     | Journal effect and date                                 | Outcome in #456                                     |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------- | --------------------------------------------------- |
+| Requested, processing, success, available, payout pending/in-transit/paid                                                                              | None                                                    | Await bank evidence                                 |
+| Confirmed failed collection, with no credit evidence                                                                                                   | None                                                    | Failed                                              |
+| Bank credit whose gross is the charged amount, whose fee is the quoted fee, and whose net is the ledger amount; exact currency/account/operation match | Receipt above for the ledger amount, bank evidence date | Settled atomically with journal link                |
+| Fee or gross/net mismatch; batch mixes payments, refunds or reserves                                                                                   | None; no receipt for either gross or net                | Needs review: unsupported settlement                |
+| Pre-posting return contradicts credit evidence                                                                                                         | None                                                    | Needs review; do not post and immediately reverse   |
+| Late full/partial return, refund or disputed payment                                                                                                   | None automatically; preserve original receipt           | Needs review; a PMAdmin posts or closes it (below)  |
+| Locked receipt period or missing attribution                                                                                                           | None; transaction rolled back                           | Needs review; retain original evidence date         |
+| Technical failure or serialization contention                                                                                                          | None if rolled back                                     | Retry same effect/date; re-evaluate committed facts |
+
+### Convenience fee on a payment (ADR-053)
+
+A payment records the ledger amount (`amount`), the payment method (`card` or `ach`), the convenience
+fee the tenant confirmed (`quoted_fee`) and the date the processor reported success (`paid_at`). The
+charged amount is the ledger amount plus the fee and is derived, not stored. An organization with no
+fee rule charges nothing, and such a payment is the fee-free payment described above.
+
+`GET /api/portal/tenant/payments/quote?amount=&method=` returns the fee and the charged amount under
+the organization's rule. The tenant confirms that fee in the submit request. If the rule no longer gives
+that fee, the request is refused with 409 `fee_quote_changed` and nothing is created; an accepted
+request keeps its fee whatever the rule does afterwards.
+
+Only a clean item settles from single-payment evidence: the processor kept exactly the quoted fee, so
+the bank received the ledger amount. The receipt posts the ledger amount with the payment's method. A
+fee difference in either direction is `unsupported_settlement` until batched settlement is built, and
+so is the return of a fee-bearing payment whose evidence is not the fee-free shape.
 
 ### Posting a return (ADR-052)
 

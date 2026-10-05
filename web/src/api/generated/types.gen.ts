@@ -736,6 +736,13 @@ export type PagedResponseOfTenantListRow = {
     pageSize: number | string;
 };
 
+export type PaymentQuoteView = {
+    method: string;
+    ledgerAmount: number | string;
+    fee: number | string;
+    charged: number | string;
+};
+
 export type PaymentView = {
     id: string;
     amount: number | string;
@@ -753,6 +760,10 @@ export type PaymentView = {
     returnEntryId?: null | string;
     reviewNote?: null | string;
     reviewClosedAt?: null | string;
+    method?: string;
+    quotedFee?: number | string;
+    chargedAmount?: number | string;
+    paidAt?: null | string;
 };
 
 export type PaymentsResponse = {
@@ -1173,6 +1184,8 @@ export type SubmitPaymentBody = {
     key: string;
     amount: number | string;
     currency: string;
+    method?: string;
+    quotedFee?: number | string;
 };
 
 export type TenantContact = {
@@ -3139,6 +3152,32 @@ export type GetApiPortalTenantPaymentsByIdResponses = {
 };
 
 export type GetApiPortalTenantPaymentsByIdResponse = GetApiPortalTenantPaymentsByIdResponses[keyof GetApiPortalTenantPaymentsByIdResponses];
+
+export type GetApiPortalTenantPaymentsQuoteData = {
+    body?: never;
+    path?: never;
+    query: {
+        amount: number | string;
+        method: string;
+    };
+    url: '/api/portal/tenant/payments/quote';
+};
+
+export type GetApiPortalTenantPaymentsQuoteErrors = {
+    /**
+     * Not Found
+     */
+    404: unknown;
+};
+
+export type GetApiPortalTenantPaymentsQuoteResponses = {
+    /**
+     * OK
+     */
+    200: PaymentQuoteView;
+};
+
+export type GetApiPortalTenantPaymentsQuoteResponse = GetApiPortalTenantPaymentsQuoteResponses[keyof GetApiPortalTenantPaymentsQuoteResponses];
 
 export type GetApiPaymentsData = {
     body?: never;

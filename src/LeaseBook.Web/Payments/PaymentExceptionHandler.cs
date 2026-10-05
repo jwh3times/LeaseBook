@@ -25,6 +25,12 @@ public sealed class PaymentExceptionHandler(ILogger<PaymentExceptionHandler> log
             await ProblemResults.Problem(context, refund.Code, refund.Message, 409).ExecuteAsync(context);
             return true;
         }
+        if (exception is PaymentFeeQuoteChangedException)
+        {
+            await ProblemResults.Problem(context, "fee_quote_changed",
+                "The fee for this payment has changed. Review the new total before confirming.", 409).ExecuteAsync(context);
+            return true;
+        }
         if (exception is not (PaymentConflictException or PaymentUnavailableException)) { return false; }
         var conflict = exception is PaymentConflictException;
         await ProblemResults.Problem(context, conflict ? "payment_conflict" : "payment_unavailable",

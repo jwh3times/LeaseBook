@@ -50,8 +50,12 @@ internal sealed class PaymentSimulationVerb : ICliVerb
         var request = new ProcessorRequest(binding, operationId, op.Fingerprint);
         var provider = await processor.LookupAsync(request, ct);
         if (provider.Outcome == "Absent") { provider = await processor.SubmitAsync(request, ct); }
+        // Bank credit evidence is the clean item: the charge, the quoted fee, and the ledger amount net.
+        // Every other kind keeps the fee-free shape; returns of a fee-bearing payment come with batches.
+        var credit = kind == "BankCredit";
         var observation = new ProcessorObservation($"{operationId:N}:{kind}:{date:yyyyMMdd}", provider.ProviderId!, binding.Account,
-            "Simulation", binding.Generation, kind, op.Amount, 0, op.Amount, "USD", binding.BankId, date,
+            "Simulation", binding.Generation, kind, credit ? op.ChargedAmount : op.Amount, credit ? op.QuotedFee : 0,
+            op.Amount, "USD", binding.BankId, date,
             "bank-" + operationId.ToString("N"), "payout-" + operationId.ToString("N"), true,
             date.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
         var body = JsonSerializer.SerializeToUtf8Bytes(observation);

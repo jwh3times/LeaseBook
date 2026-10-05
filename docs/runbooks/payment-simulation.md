@@ -3,7 +3,7 @@
 - **Audience:** Developers and test operators
 - **Status:** Implemented, non-live only
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-04
+- **Last reviewed:** 2026-10-05
 
 The simulator exercises the real Payments and Accounting path. It has no provider network client
 and cannot move real money. Production and Staging reject Simulation; live/provider configuration
@@ -54,8 +54,11 @@ dotnet run --project src/LeaseBook.Web --no-launch-profile -- payment-simulation
 dotnet run --project src/LeaseBook.Web --no-launch-profile -- payment-simulation emit $fixture.OrgId $operation BankCredit $date
 ```
 
-`PayoutPaid` leaves the ledger unchanged. `BankCredit` provides separate complete gross, fee-free
-bank evidence and records one receipt. The portal polls and refreshes its ledger after the effect
+`PayoutPaid` leaves the ledger unchanged. `BankCredit` provides separate complete bank evidence for a
+clean payment — the charged amount, the quoted fee, and the ledger amount as the net — and records one
+receipt for the ledger amount. A fresh fixture has no fee rule, so the fee is zero and the charge is the
+ledger amount. To try a fee, sign in as `admin-a@payments.test` and set the rules with
+`PUT /api/settings/payment-fees`; the tenant form then quotes the fee before submitting. The portal polls and refreshes its ledger after the effect
 commits. Reloading the page resumes observation without submitting again. Repeating the same CLI
 event is idempotent. `payment-simulation step` runs one worker pass without starting a web server.
 

@@ -1,7 +1,7 @@
 # Processor fee and batched settlement specification
 
 - **Audience:** Reviewers of issue #498 and implementers of the slice that follows it
-- **Status:** Proposed model; the fee-difference posting template, the fee rules and the quote are built, nothing uses them yet, and live payments remain unapproved
+- **Status:** Proposed model; the fee rules, the quote and the fee on a payment are built in the simulation, batches are not, and live payments remain unapproved
 - **Owner:** Maintainers
 - **Last reviewed:** 2026-10-05
 
@@ -179,13 +179,14 @@ Closing a batch with a note posts nothing, as closing a payment review does toda
 
 ## What an implementation needs
 
-This list is the input to the implementation issue. The Accounting posting template, the fee rules in organization settings and the quote function are built; nothing below them is.
+This list is the input to the implementation issue. The Accounting posting template, the fee rules in organization settings, the quote and the payment record are built; nothing below them is.
 
 - **Organization settings (built):** per payment method, a rate in basis points, a fixed amount and an
   optional cap, set as a whole by an administrator through `PUT /api/settings/payment-fees`, validated
   and audited. The defaults charge nothing. There is no settings screen for them yet.
-- **Payment record:** the ledger amount, quoted fee, charged amount, method and paid date. Today the
-  record holds one amount.
+- **Payment record (built):** the ledger amount, quoted fee, method and paid date, with the charged
+  amount derived. The tenant is quoted the fee before confirming, and a clean item settles from
+  single-payment evidence.
 - **Batch record:** a payout with its bank evidence, its items, its status and reason, and one effect
   per posted item. Today an effect belongs to a single payment.
 - **Accounting:** a narrow port for Payments to post a whole batch in one transaction. The posting
