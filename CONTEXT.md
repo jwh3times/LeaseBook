@@ -145,6 +145,22 @@ of that receipt, only for the full amount, and only when an administrator confir
 on the bank's notice alone (ADR-052).
 _Avoid_: refund (a refund pays held money out), bounced payment, chargeback
 
+**Ledger amount**:
+The part of a tenant's online payment that goes toward their ledger. It is the only amount the tenant
+is credited, whatever the processor keeps (ADR-053, proposed).
+_Avoid_: net amount (what the processor pays out), gross amount
+
+**Convenience fee**:
+The disclosed fee a tenant pays on top of the ledger amount to cover the processor's fee. It never
+enters the trust account and is not in the trust journal (ADR-053, proposed).
+_Avoid_: processing fee (the processor's own charge), surcharge, late fee
+
+**Funds in transit**:
+Ledger amounts a processor has collected that the trust bank has not yet received. A figure read from
+payment records and shown beside a balance, never a journal balance and never part of the trust
+equation (ADR-053, proposed).
+_Avoid_: clearing balance, pending balance
+
 **Outstanding check**:
 An issued check whose bank line has not cleared. It is already out of the book balance and shows as an
 uncleared withdrawal in the register until the bank pays it.
