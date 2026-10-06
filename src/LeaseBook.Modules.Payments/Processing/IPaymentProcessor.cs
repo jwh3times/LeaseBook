@@ -12,4 +12,7 @@ public interface IPaymentProcessor
     Task<ProcessorResult> SubmitAsync(ProcessorRequest request, CancellationToken ct);
     Task<ProcessorResult> LookupAsync(ProcessorRequest request, CancellationToken ct);
     ProcessorObservation? VerifyAndNormalize(byte[] rawBody, string signature);
+
+    /// <summary>Verifies payout evidence and returns it, or null when it cannot be authenticated or read.</summary>
+    ProcessorSettlement? VerifyAndNormalizeSettlement(byte[] rawBody, string signature);
 }

@@ -2311,6 +2311,31 @@ export type PostCallbacksPaymentsSimulationResponses = {
 
 export type PostCallbacksPaymentsSimulationResponse = PostCallbacksPaymentsSimulationResponses[keyof PostCallbacksPaymentsSimulationResponses];
 
+export type PostCallbacksPaymentsSimulationPayoutData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/callbacks/payments/simulation/payout';
+};
+
+export type PostCallbacksPaymentsSimulationPayoutErrors = {
+    /**
+     * Bad Request
+     */
+    400: ProblemDetails;
+};
+
+export type PostCallbacksPaymentsSimulationPayoutError = PostCallbacksPaymentsSimulationPayoutErrors[keyof PostCallbacksPaymentsSimulationPayoutErrors];
+
+export type PostCallbacksPaymentsSimulationPayoutResponses = {
+    /**
+     * No Content
+     */
+    204: void;
+};
+
+export type PostCallbacksPaymentsSimulationPayoutResponse = PostCallbacksPaymentsSimulationPayoutResponses[keyof PostCallbacksPaymentsSimulationPayoutResponses];
+
 export type GetApiOnboardingStatusData = {
     body?: never;
     path?: never;

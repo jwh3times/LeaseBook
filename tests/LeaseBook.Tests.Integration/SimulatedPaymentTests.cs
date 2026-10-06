@@ -837,10 +837,26 @@ public sealed partial class SimulatedPaymentTests(PostgresFixture fixture)
             DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime), "bank-" + payoutId, clock.GetUtcNow().UtcDateTime, items);
         public ProcessorSettlementItem Line(string item, string kind, PaymentView op, decimal gross, decimal fee, decimal net) =>
             new(item, kind, $"sim_{binding.Generation:N}_{op.Id:N}", gross, fee, net, "USD");
-        public async Task Settle(ProcessorSettlement evidence, CancellationToken ct)
+        // Through the signed payout callback, as a processor would deliver it.
+        public async Task Settle(ProcessorSettlement evidence, CancellationToken ct, HttpStatusCode expected = HttpStatusCode.NoContent)
         {
             clock.Advance();
-            await app.Services.GetRequiredService<PaymentRunner>().ReceiveSettlementAsync(evidence, ct);
+            var processor = app.Services.GetRequiredService<SimulatedProcessor>();
+            var body = JsonSerializer.SerializeToUtf8Bytes(evidence);
+            (await PostPayout(body, processor.Sign(body), ct)).StatusCode.ShouldBe(expected);
+        }
+        public async Task<HttpResponseMessage> PostPayout(byte[] body, string signature, CancellationToken ct)
+        {
+            using var client = app.CreateClient();
+            using var request = new HttpRequestMessage(HttpMethod.Post, "/callbacks/payments/simulation/payout") { Content = new ByteArrayContent(body) };
+            request.Headers.Add("X-Simulation-Signature", signature);
+            return await client.SendAsync(request, ct);
+        }
+        public Task<int> Cli(CancellationToken ct, params string[] args)
+        {
+            var verb = new PaymentSimulationVerb();
+            verb.TryCreateInvocation(["payment-simulation", .. args], out var invocation, out var error).ShouldBeTrue(error);
+            return invocation.RunAsync(app.Services, ct);
         }
         public async Task Deliver(ProcessorObservation value, CancellationToken ct)
         {

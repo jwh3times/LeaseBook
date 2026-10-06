@@ -9,6 +9,12 @@ using Microsoft.EntityFrameworkCore;
 
 namespace LeaseBook.Web.Payments;
 
+/// <summary>
+/// What became of delivered payout evidence: stored under <see cref="Id"/>; not for any fixture here
+/// (no id); or <see cref="Malformed"/>, which the sender is told so that it does not count as delivered.
+/// </summary>
+public sealed record PayoutDelivery(Guid? Id, bool Malformed);
+
 /// <summary>Owns the transaction boundaries around the transport seam, including failure bookkeeping.</summary>
 public sealed class PaymentRunner(IServiceScopeFactory scopes, SimulationSettings settings,
     IPaymentProcessor processor, ILogger<PaymentRunner> log, TimeProvider clock)
@@ -89,18 +95,18 @@ public sealed class PaymentRunner(IServiceScopeFactory scopes, SimulationSetting
     /// Stores a payout's evidence, then checks and posts it. Two transactions on purpose: the evidence
     /// is durable even when the posting attempt fails, and a refusal is recorded on the stored payout.
     /// </summary>
-    public async Task<Guid?> ReceiveSettlementAsync(ProcessorSettlement evidence, CancellationToken ct)
+    public async Task<PayoutDelivery> ReceiveSettlementAsync(ProcessorSettlement evidence, CancellationToken ct)
     {
         var binding = settings.ForAccount(evidence.Account);
         if (binding is null || evidence.Mode != "Simulation" || evidence.Generation != binding.Generation)
         {
             log.LogInformation(new EventId(4602, "PaymentCallbackIgnored"), "Unmapped simulated payout evidence ignored");
-            return null;
+            return new(null, false);
         }
         if (await InOrg(binding, sp => sp.GetRequiredService<SettlementEngine>().ReceiveAsync(binding, evidence, ct), ct) is not { } id)
         {
-            log.LogInformation(new EventId(4602, "PaymentCallbackIgnored"), "Malformed simulated payout evidence ignored");
-            return null;
+            log.LogInformation(new EventId(4602, "PaymentCallbackIgnored"), "Malformed simulated payout evidence refused");
+            return new(null, true);
         }
         try
         {
@@ -125,7 +131,7 @@ public sealed class PaymentRunner(IServiceScopeFactory scopes, SimulationSetting
             log.LogWarning(new EventId(4605, "PaymentSettlementNeedsAttention"),
                 "Simulated payout {SettlementId} could not be checked ({ExceptionType})", id, ex.GetType().Name);
         }
-        return id;
+        return new(id, false);
     }
 
     private async Task<T> InOrg<T>(FixtureBinding binding, Func<IServiceProvider, Task<T>> work, CancellationToken ct)

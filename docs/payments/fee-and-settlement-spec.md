@@ -1,7 +1,7 @@
 # Processor fee and batched settlement specification
 
 - **Audience:** Reviewers of issue #498 and implementers of the slice that follows it
-- **Status:** Proposed model; fees and payout batches are built in the simulation but no evidence channel delivers a payout yet, and live payments remain unapproved
+- **Status:** Proposed model; fees and payout batches are built in the simulation, with no staff screen for payouts yet, and live payments remain unapproved
 - **Owner:** Maintainers
 - **Last reviewed:** 2026-10-05
 
@@ -242,14 +242,15 @@ This list is the input to the implementation issue. Items marked built exist in 
 - **Batch record (built):** a payout with its bank evidence, its lines, its status and reason, the
   entries each line posted, and one effect per payment. Staff list payouts at
   `GET /api/payments/settlements`; an administrator posts or closes one with
-  `POST /api/payments/settlements/{id}/post` and `.../close`. Nothing delivers payout evidence to the
-  simulation yet, so these are reachable only from tests.
+  `POST /api/payments/settlements/{id}/post` and `.../close`. There is no staff screen for them yet.
 - **Accounting (built):** the `ProcessorFeeDifference` posting template, in both directions and with
   the shortfall guard, and the `PostPaymentSettlement` command that posts a whole payout or nothing,
   reached from Payments through `IPaymentLedger.PostSettlementAsync`.
-- **Simulator:** bank evidence that names a payout with several items, each with gross, fee and net;
-  the CLI and callback shapes to drive a shortfall, a surplus, a return inside a payout and an untied
-  batch.
+- **Simulator (built):** signed payout evidence at `POST /callbacks/payments/simulation/payout`, naming
+  a payout with its lines, each with gross, fee and net; and the fixture command
+  `payment-simulation payout`, which produces a clean payout, a shortfall, a surplus, a return, a
+  standalone fee, an untied payout and an unsupported line or payout type. The
+  [runbook](../runbooks/payment-simulation.md) has the commands.
 - **Operations:** a consumer-owned port for tenants with funds in transit, and the preview flag.
 - **Banking:** group matching of one statement line against a payout's bank lines.
 - **Staff and tenant surfaces:** the fee quote before confirm, the receipt showing ledger amount and

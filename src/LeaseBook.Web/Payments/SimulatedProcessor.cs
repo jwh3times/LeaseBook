@@ -46,17 +46,41 @@ public sealed class SimulatedProcessor(IServiceScopeFactory scopes, SimulationSe
         }, ct);
     }
 
-    public ProcessorObservation? VerifyAndNormalize(byte[] rawBody, string signature)
+    // Authentic, recent, and small enough to have been read whole. Nothing is parsed before this passes.
+    private bool Verified(byte[] rawBody, string signature)
     {
-        if (!settings.Enabled || rawBody.Length > 16384) { return null; }
+        if (!settings.Enabled || rawBody.Length > 16384) { return false; }
         var parts = signature.Split('.');
         if (parts.Length != 2 || !long.TryParse(parts[0], CultureInfo.InvariantCulture, out var seconds)
             || seconds < 0 || seconds > 253402300799
             || Math.Abs((clock.GetUtcNow() - DateTimeOffset.FromUnixTimeSeconds(seconds)).TotalSeconds) > 300)
-        { return null; }
+        { return false; }
         byte[] supplied;
-        try { supplied = Convert.FromHexString(parts[1]); } catch (FormatException) { return null; }
-        if (!CryptographicOperations.FixedTimeEquals(supplied, Signature(rawBody, parts[0]))) { return null; }
+        try { supplied = Convert.FromHexString(parts[1]); } catch (FormatException) { return false; }
+        return CryptographicOperations.FixedTimeEquals(supplied, Signature(rawBody, parts[0]));
+    }
+
+    public ProcessorSettlement? VerifyAndNormalizeSettlement(byte[] rawBody, string signature)
+    {
+        if (!Verified(rawBody, signature)) { return null; }
+        try
+        {
+            // Only what must hold to route and to do arithmetic on the evidence. Whether it can be
+            // stored, and what it says, is the engine's to judge and to record.
+            var value = JsonSerializer.Deserialize<ProcessorSettlement>(rawBody);
+            if (value is null || value.Account is null || value.Mode is null || value.Items is null
+                || value.Items.Any(x => x is null) || value.ObservedAt.Kind != DateTimeKind.Utc
+                || value.Items.SelectMany(x => new[] { x.Gross, x.Fee, x.Net }).Append(value.BankAmount)
+                    .Any(x => Math.Abs(x) > 999999999999.99m || decimal.Round(x, 2) != x))
+            { return null; }
+            return value;
+        }
+        catch (JsonException) { return null; }
+    }
+
+    public ProcessorObservation? VerifyAndNormalize(byte[] rawBody, string signature)
+    {
+        if (!Verified(rawBody, signature)) { return null; }
         try
         {
             var value = JsonSerializer.Deserialize<ProcessorObservation>(rawBody);
