@@ -384,8 +384,8 @@ always run through the accounting engine — the importer never writes the journ
 
 A processor payout is one deposit at the bank and several lines in the register: a receipt for each
 payment, and a line for each fee difference or return. Those lines are one group. A statement line
-matches the group when the lines sum to it, and never one of them by itself. Clearing or unclearing any
-line of a payout, from the import or from the register, does the same to all of them.
+matches the group when the lines sum to it, and never one of them by itself. Clearing any line, or reversing its clearance,
+from the import or from the register, does the same to every line of the payout.
 
 ## Statements & reporting (M5)
 

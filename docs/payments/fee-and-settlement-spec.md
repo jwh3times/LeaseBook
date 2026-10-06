@@ -236,8 +236,8 @@ As built:
   nothing clears. A request that names one line of a group by itself is refused, whatever that line's
   date or clearance. The record of the
   match holds one row for each bank line the statement line answered for.
-- **Every clearance obeys the rule, not only the import.** Clearing or unclearing any line of a
-  payout, from the import or from the register's own tick, does the same to every line of it. This is
+- **Every clearance obeys the rule, not only the import.** Clearing any line of a payout, or reversing its
+  clearance, from the import or from the register tick, does the same to every line of it. This is
   how a group that sums to zero is cleared: by hand, as a whole.
 
 ## Review reasons
