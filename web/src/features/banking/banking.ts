@@ -208,6 +208,8 @@ export interface ConfirmDecision {
   statementLineId: string;
   journalLineId: string | null;
   kind: string;
+  /** Set instead of `journalLineId` when the line matched a whole payout; its bank lines clear together. */
+  groupRef?: string;
 }
 
 export async function confirmMatches(

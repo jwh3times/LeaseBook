@@ -192,7 +192,8 @@ public sealed class SettlementEngine(DbContext db, TimeProvider clock, PaymentEn
     // Evidence that fits the columns it is stored in and names each line once. Anything else is not
     // stored; what it SAYS (an unsupported currency, a kind nobody posts) is judged later, by Check.
     private static bool WellFormed(ProcessorSettlement e) =>
-        Text(e.PayoutId, 100) && Text(e.EvidenceId, 100) && Text(e.PayoutType, 20) && e.Currency is { Length: 3 }
+        Text(e.PayoutId, 100) && !e.PayoutId.Contains(':', StringComparison.Ordinal)
+        && Text(e.EvidenceId, 100) && Text(e.PayoutType, 20) && e.Currency is { Length: 3 }
         && e.Items is not null && e.Items.All(x => x is not null && Text(x.Item, 60) && Text(x.Kind, 20)
             && x.ProviderId is { Length: <= 100 } && x.Currency is { Length: 3 })
         && e.Items.Select(x => x.Item).Distinct(StringComparer.Ordinal).Count() == e.Items.Count;

@@ -301,6 +301,8 @@ function buildDecisions(preview: MatchPreviewResponse | null): ConfirmDecision[]
     statementLineId: row.statementLineId,
     journalLineId: row.journalLineId,
     kind: row.kind,
+    // A payout is confirmed as a whole: the server clears every one of its bank lines or none.
+    ...(row.groupRef ? { groupRef: row.groupRef } : {}),
   }));
 }
 
@@ -330,6 +332,27 @@ function ColumnSelect({
   );
 }
 
+/** One statement line answering for every bank line a processor payout posted (ADR-053). */
+function PayoutMatch({ row }: { row: MatchPreviewRow }) {
+  const lines = row.groupLines ?? [];
+  return (
+    <details>
+      <summary>
+        Payout {row.groupRef} — {lines.length} bank line{lines.length === 1 ? '' : 's'}, cleared
+        together
+      </summary>
+      <ul className="col gap4 fs12" aria-label={`Bank lines of payout ${row.groupRef}`}>
+        {lines.map((line) => (
+          <li key={line.journalLineId} className="row gap8">
+            <span>{line.description || 'Bank line'}</span>
+            <Money value={num(line.amount)} colorize />
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
 function MatchGroup({ kind, rows }: { kind: string; rows: MatchPreviewRow[] }) {
   const group = rows.filter((r) => r.kind === kind);
   if (group.length === 0) return null;
@@ -354,7 +377,11 @@ function MatchGroup({ kind, rows }: { kind: string; rows: MatchPreviewRow[] }) {
                 <Money value={num(row.amount)} colorize />
               </td>
               <td className="muted">
-                {kind === 'unmatched' ? 'No register match — create a transaction' : null}
+                {kind === 'unmatched' ? (
+                  'No register match — create a transaction'
+                ) : row.groupRef ? (
+                  <PayoutMatch row={row} />
+                ) : null}
               </td>
             </tr>
           ))}

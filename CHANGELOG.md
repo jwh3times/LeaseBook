@@ -16,6 +16,12 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Added
 
+- **A processor payout reconciles as one statement line.** A payout is one deposit at the bank and
+  several lines in the bank register. A statement import now matches the deposit to the whole payout
+  and clears all of its lines together; it never matches one of them by itself. Ticking or unticking
+  one line of a payout in the register does the same to the rest. Payouts exist only in the
+  development payment fixture.
+
 - **A late-fee run flags a tenant whose payment is on its way to the bank.** A tenant who has paid
   online still shows as owing until the bank receives the money. The late-fee preview now marks that
   tenant "Payment in transit", with what they paid and when, and "select all" skips them; staff can

@@ -220,6 +220,26 @@ payout reference when their signed sum equals the line's amount. The group clear
 all. A statement line never clears part of a group, and a bank line that belongs to a group is never
 offered as a one-to-one match.
 
+As built:
+
+- **A payout reference contains no colon.** The reference is read back out of the source reference,
+  so the separator cannot be part of it. Payout evidence whose reference contains one is malformed and
+  is not stored.
+- **The register names the payout.** Each bank line carries the reference of the payout that posted
+  it. Banking receives it through its own register port as a group reference and reads no journal
+  table.
+- **The match.** A statement line matches one unit: a lone bank line, or a whole group at its signed
+  sum. The date rule is the one for a lone line: within four days is a match, further is a
+  suggestion. A group that sums to zero never reaches the bank, so no statement line matches it.
+- **The confirmation checks again.** The preview is advice. On confirm, the group must still sum to
+  the statement line's amount in the register as it then is; if it does not, nothing is recorded and
+  nothing clears. A request that names one line of a group by itself is refused, whatever that line's
+  date or clearance. The record of the
+  match holds one row for each bank line the statement line answered for.
+- **Every clearance obeys the rule, not only the import.** Clearing or unclearing any line of a
+  payout, from the import or from the register's own tick, does the same to every line of it. This is
+  how a group that sums to zero is cleared: by hand, as a whole.
+
 ## Review reasons
 
 | Reason                             | Meaning                                                               | Way out                                    |
@@ -261,7 +281,8 @@ This list is the input to the implementation issue. Items marked built exist in 
   [runbook](../runbooks/payment-simulation.md) has the commands.
 - **Operations (built):** the consumer-owned `IFundsInTransit` port, and the caution on a late-fee
   preview row.
-- **Banking:** group matching of one statement line against a payout's bank lines.
+- **Banking (built):** group matching of one statement line against a payout's bank lines, and the
+  whole-payout rule on every clearance.
 - **Staff and tenant surfaces:** the fee quote before confirm, the receipt showing ledger amount and
   fee, funds in transit, and the batch review with its one posting action.
 

@@ -516,6 +516,14 @@ export type MatchDecision = {
     statementLineId: string;
     journalLineId: null | string;
     kind: string;
+    groupRef?: null | string;
+};
+
+export type MatchPreviewGroupLine = {
+    journalLineId: string;
+    date: string;
+    amount: number | string;
+    description: string;
 };
 
 export type MatchPreviewResponse = {
@@ -533,6 +541,8 @@ export type MatchPreviewRow = {
     candidateAmount: null | number | string;
     candidateDate: null | string;
     candidateDescription: null | string;
+    groupRef?: null | string;
+    groupLines?: null | Array<MatchPreviewGroupLine>;
 };
 
 export type MatchPreviewSummary = {
@@ -1023,6 +1033,7 @@ export type RegisterRow = {
     deposit: null | number | string;
     withdrawal: null | number | string;
     status: BankLineStatus;
+    payoutReference?: null | string;
 };
 
 export type RegisterTotals = {

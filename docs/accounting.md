@@ -382,6 +382,11 @@ clears the line on confirm; an exact amount on a far date is a suggestion; no am
 transaction. Re-importing the same statement is de-duplicated, never double-counted. Matching and clearing
 always run through the accounting engine — the importer never writes the journal directly.
 
+A processor payout is one deposit at the bank and several lines in the register: a receipt for each
+payment, and a line for each fee difference or return. Those lines are one group. A statement line
+matches the group when the lines sum to it, and never one of them by itself. Clearing or unclearing any
+line of a payout, from the import or from the register, does the same to all of them.
+
 ## Statements & reporting (M5)
 
 An **owner statement** is a period summary that shows a property manager's fiduciary story to an

@@ -19,7 +19,7 @@ plus deposit liabilities plus held PM fees, and it has no term for money at a pr
 show that neither a gross nor a net receipt can represent a collection with a withheld fee: one
 overstates the bank and the other leaves the tenant owing.
 
-This ADR is a model for review. In the isolated simulation, its fee rules, fee quote and the fee on a payment are built, and a payment whose processor fee equals the quoted fee settles. Payout batches are built too: stored, checked and posted completely or not at all, with an administrator posting any payout that contains a return. Evidence arrives through a signed callback or the fixture command. Funds in transit and the late-fee caution are built. Group reconciliation is not implemented.
+This ADR is a model for review. In the isolated simulation, its fee rules, fee quote and the fee on a payment are built, and a payment whose processor fee equals the quoted fee settles. Payout batches are built too: stored, checked and posted completely or not at all, with an administrator posting any payout that contains a return. Evidence arrives through a signed callback or the fixture command. Funds in transit and the late-fee caution are built. So is group reconciliation: a statement line matches a payout's bank lines as a whole, and no clearance takes part of a payout.
 
 ## Decision
 

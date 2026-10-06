@@ -285,4 +285,98 @@ public sealed class PostPaymentSettlementTests(PostgresFixture fixture)
             Task.FromResult(tenantId == test._tenantA || tenantId == test._tenantB || tenantId == test._tenantC
                 ? new TenantPostingDimensions(test._owner, test._property, null) : null);
     }
+
+    // ---- a payout's bank lines are one group in the register and clear as one (ADR-053) ----
+
+    [Fact]
+    public async Task The_register_names_each_lines_payout_and_a_clearance_takes_the_whole_payout_or_none_of_it()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var scope = await NewScope(ct);
+        await Charge(scope, _tenantA, 1000m, ct);
+        await Charge(scope, _tenantB, 500m, ct);
+        await Charge(scope, _tenantC, 250m, ct);
+        await Post(scope, new InterestEarned(new Money(80m), ChargeDate, scope.TrustBankId, "fees held before the batch"), ct);
+        (await Settle(scope, "po_1", BankDate,
+        [
+            Receipt("1", _tenantA, 1000m, "card"),
+            Receipt("2", _tenantB, 500m, "card", feeDifference: 7.50m),
+        ], ct)).Posted.ShouldBeTrue();
+        // A second payout whose reference only starts the same way, and a separator inside an item.
+        (await Settle(scope, "po_10", BankDate, [Receipt("a:b", _tenantC, 250m, "card", feeDifference: -0.40m)], ct))
+            .Posted.ShouldBeTrue();
+
+        // And one that po_1 would match if the underscore were read as a pattern's wildcard.
+        await Charge(scope, _tenantC, 40m, ct);
+        (await Settle(scope, "poX1", BankDate, [Receipt("1", _tenantC, 40m, "card")], ct)).Posted.ShouldBeTrue();
+
+        var rows = await Register(scope, ct);
+        rows.Count.ShouldBe(7);
+        rows.Where(r => r.PayoutReference == "po_1").Sum(Signed).ShouldBe(1492.50m);
+        rows.Where(r => r.PayoutReference == "po_10").Sum(Signed).ShouldBe(250.40m);
+        rows.Single(r => r.PayoutReference is null).Deposit.ShouldBe(80m);
+        await scope.RunAsync(async () =>
+        {
+            var references = await new GetPayoutReferencesHandler(scope.Db)
+                .Handle(new GetPayoutReferences([.. rows.Select(r => r.JournalLineId)]), ct);
+            references.ShouldBe(rows.Where(r => r.PayoutReference is not null)
+                .ToDictionary(r => r.JournalLineId, r => r.PayoutReference!), ignoreOrder: true);
+        }, ct);
+
+        // Naming one line of po_1 clears all three of its lines and nothing else.
+        var one = rows.First(r => r.PayoutReference == "po_1").JournalLineId;
+        (await Clear(scope, [one], true, ct)).ShouldBe(3);
+        rows = await Register(scope, ct);
+        rows.Where(r => r.PayoutReference == "po_1").ShouldAllBe(r => r.Status == BankLineStatus.Cleared);
+        rows.Where(r => r.PayoutReference != "po_1").ShouldAllBe(r => r.Status == BankLineStatus.Uncleared);
+
+        // Unclearing a different line of it unclears all three.
+        var other = rows.Last(r => r.PayoutReference == "po_1").JournalLineId;
+        other.ShouldNotBe(one);
+        (await Clear(scope, [other], false, ct)).ShouldBe(3);
+        (await Register(scope, ct)).ShouldAllBe(r => r.Status == BankLineStatus.Uncleared);
+
+        // A line no payout posted clears by itself, as it always has.
+        (await Clear(scope, [rows.Single(r => r.PayoutReference is null).JournalLineId], true, ct)).ShouldBe(1);
+        (await Register(scope, ct)).Count(r => r.Status == BankLineStatus.Cleared).ShouldBe(1);
+    }
+
+    [Theory]
+    [InlineData("payout:po_1:1", "po_1")]
+    [InlineData("payout:po_1:1:fee", "po_1")]
+    [InlineData("payout:po_1:a:b", "po_1")]
+    [InlineData("payout:po_1", null)]
+    [InlineData("payout::1", null)]
+    [InlineData("payment:po_1:1", null)]
+    [InlineData(null, null)]
+    public void A_payout_reference_reads_back_out_of_a_source_reference_exactly(string? sourceRef, string? reference) =>
+        PayoutSourceRef.ReferenceOf(sourceRef).ShouldBe(reference);
+
+    [Fact]
+    public void A_payout_reference_with_the_separator_in_it_is_refused_before_anything_posts()
+    {
+        var command = new PostPaymentSettlement(UuidV7.NewId(), BankDate, "po:1", [Receipt("1", _tenantA, 10m, "card")]);
+
+        new PostPaymentSettlementValidator().Validate(command).Errors
+            .ShouldContain(e => e.ErrorMessage == "A payout reference cannot contain a colon.");
+        new PostPaymentSettlementValidator().Validate(command with { PayoutReference = "po_1" }).IsValid.ShouldBeTrue();
+    }
+
+    private static decimal Signed(RegisterRow row) => (row.Deposit ?? 0m) - (row.Withdrawal ?? 0m);
+
+    private static async Task<IReadOnlyList<RegisterRow>> Register(OrgScope scope, CancellationToken ct)
+    {
+        IReadOnlyList<RegisterRow> rows = [];
+        await scope.RunAsync(async () => rows =
+            (await new GetBankRegisterHandler(scope.Db).Handle(new GetBankRegister(scope.TrustBankId), ct)).Rows, ct);
+        return rows;
+    }
+
+    private static async Task<int> Clear(OrgScope scope, Guid[] ids, bool cleared, CancellationToken ct)
+    {
+        var affected = 0;
+        await scope.RunAsync(async () => affected =
+            (await new ApplyClearancesHandler(scope.Db, scope.Tenant).Handle(new ApplyClearances(ids, cleared), ct)).Affected, ct);
+        return affected;
+    }
 }

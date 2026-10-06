@@ -1,5 +1,6 @@
 using FluentValidation;
 using LeaseBook.Modules.Accounting.Domain;
+using LeaseBook.Modules.Accounting.Features.LedgerPosting;
 using LeaseBook.SharedKernel.Cqrs;
 using LeaseBook.SharedKernel.Tenancy;
 using Microsoft.EntityFrameworkCore;
@@ -11,6 +12,11 @@ namespace LeaseBook.Modules.Accounting.Features.Banking;
 /// UI and the Banking import/match adapter (ADR-007). Idempotent — already-cleared lines are a no-op, and
 /// <c>reconciled</c> lines are never downgraded. Status lives in <c>bank_line_status</c>, not the journal,
 /// so this touches no posted row.
+/// <para>
+/// The bank lines of one processor payout are one statement line at the bank, so they clear together or
+/// not at all (ADR-053): naming any of them clears, or unclears, every one of them. This is the one
+/// clearance writer short of reconcile finalize, so no caller can clear part of a payout.
+/// </para>
 /// </summary>
 public sealed record ApplyClearances(IReadOnlyCollection<Guid> JournalLineIds, bool Cleared = true)
     : ICommand<ClearancesResult>;
@@ -41,6 +47,8 @@ internal sealed class ApplyClearancesHandler(DbContext db, IOrgContext tenant)
             throw new ValidationException("Every id to clear must be a bank-account journal line in this org.");
         }
 
+        ids = await WithWholePayoutsAsync(ids, ct);
+
         int affected;
         if (command.Cleared)
         {
@@ -70,5 +78,42 @@ internal sealed class ApplyClearancesHandler(DbContext db, IOrgContext tenant)
         }
 
         return new ClearancesResult(affected);
+    }
+
+    private static readonly AccountClass[] BankClasses = [AccountClass.TrustBank, AccountClass.PmOperatingBank];
+
+    // Widens the ids to every bank line of each payout they touch. Payouts are few per request, so one
+    // prefix read per payout is cheaper than a pattern join across the journal.
+    private async Task<Guid[]> WithWholePayoutsAsync(Guid[] ids, CancellationToken ct)
+    {
+        var touched = await (
+            from line in db.Set<JournalLine>()
+            join entry in db.Set<JournalEntry>() on line.EntryId equals entry.Id
+            where ids.Contains(line.Id) && entry.SourceRef != null && entry.SourceRef.StartsWith(PayoutSourceRef.Prefix)
+            select new { line.BankAccountId, entry.SourceRef }).ToListAsync(ct);
+
+        var payouts = touched
+            .Select(t => (t.BankAccountId, Reference: PayoutSourceRef.ReferenceOf(t.SourceRef)))
+            .Where(t => t.Reference is not null)
+            .Distinct()
+            .ToList();
+        if (payouts.Count == 0)
+        {
+            return ids;
+        }
+
+        var all = ids.ToHashSet();
+        foreach (var (bankAccountId, reference) in payouts)
+        {
+            var prefix = PayoutSourceRef.GroupPrefix(reference!);
+            all.UnionWith(await (
+                from line in db.Set<JournalLine>()
+                join entry in db.Set<JournalEntry>() on line.EntryId equals entry.Id
+                where entry.SourceRef != null && entry.SourceRef.StartsWith(prefix)
+                    && line.BankAccountId == bankAccountId && BankClasses.Contains(line.AccountClass)
+                select line.Id).ToListAsync(ct));
+        }
+
+        return [.. all];
     }
 }

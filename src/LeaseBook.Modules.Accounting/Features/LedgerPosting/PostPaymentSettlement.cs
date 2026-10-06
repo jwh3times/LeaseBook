@@ -68,7 +68,9 @@ public sealed class PostPaymentSettlementValidator : AbstractValidator<PostPayme
     {
         RuleFor(x => x.BankAccountId).NotEmpty();
         RuleFor(x => x.BankDate).NotEmpty();
-        RuleFor(x => x.PayoutReference).NotEmpty().MaximumLength(100);
+        RuleFor(x => x.PayoutReference).NotEmpty().MaximumLength(100)
+            .Must(PayoutSourceRef.IsValidReference)
+            .WithMessage("A payout reference cannot contain a colon.");
         RuleFor(x => x.Lines).NotEmpty()
             .Must(lines => lines.Select(l => l.Item).Distinct(StringComparer.Ordinal).Count() == lines.Count)
             .WithMessage("Each item of a payout needs its own reference.");
@@ -168,11 +170,11 @@ internal sealed class PostPaymentSettlementHandler(
             shortfall ? FeeDifferenceDirection.Shortfall : FeeDifferenceDirection.Surplus,
             command.BankDate, command.BankAccountId,
             shortfall ? "Processor fee shortfall" : "Processor fee surplus",
-            SourceRef(command, line.Item) + ":fee",
+            PayoutSourceRef.ForFee(command.PayoutReference, line.Item),
             $"Payout {command.PayoutReference}, item {line.Item}."), ct);
         return new(line.Item, "FeeDifference", entryId);
     }
 
     private static string SourceRef(PostPaymentSettlement command, string item) =>
-        $"payout:{command.PayoutReference}:{item}";
+        PayoutSourceRef.For(command.PayoutReference, item);
 }
