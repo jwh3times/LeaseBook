@@ -16,6 +16,12 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Added
 
+- **A late-fee run flags a tenant whose payment is on its way to the bank.** A tenant who has paid
+  online still shows as owing until the bank receives the money. The late-fee preview now marks that
+  tenant "Payment in transit", with what they paid and when, and "select all" skips them; staff can
+  still tick the row, and the fee is the same either way. In the development payment fixture, the
+  tenant also sees their total in transit beside their balance, and staff see the organization's.
+
 - **The payment simulation settles payouts, not only single payments.** In the development payment
   fixture, one payout can cover several tenant payments, and the processor's fee can differ from the
   fee quoted to the tenant. Each tenant is credited what they paid toward their ledger; a difference

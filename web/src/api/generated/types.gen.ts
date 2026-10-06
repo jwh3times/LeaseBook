@@ -770,6 +770,7 @@ export type PaymentsResponse = {
     enabled: boolean;
     items: Array<PaymentView>;
     unmatchedObservations?: number | string;
+    fundsInTransit?: number | string;
 };
 
 export type PmBrandingRow = {
@@ -834,6 +835,7 @@ export type PreviewRowSpa = {
     detail: {
         [key: string]: string;
     };
+    caution?: null | string;
 };
 
 export type PreviewSpaResponse = {

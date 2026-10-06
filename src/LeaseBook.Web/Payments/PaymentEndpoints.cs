@@ -18,7 +18,12 @@ public sealed record SubmitPaymentBody(Guid Key, decimal Amount, string Currency
 public sealed record ClosePaymentReviewBody(string Note);
 public sealed record UnmatchedObservationsResponse(IReadOnlyList<UnmatchedObservationView> Items);
 public sealed record SettlementsResponse(IReadOnlyList<SettlementView> Items);
-public sealed record PaymentsResponse(bool Enabled, IReadOnlyList<PaymentView> Items, int UnmatchedObservations = 0);
+/// <param name="FundsInTransit">
+/// Ledger amounts collected by the processor and not yet at the bank (ADR-053): the caller's own for a
+/// tenant, the organization's for staff. A figure beside the balance, never part of it.
+/// </param>
+public sealed record PaymentsResponse(bool Enabled, IReadOnlyList<PaymentView> Items, int UnmatchedObservations = 0,
+    decimal FundsInTransit = 0m);
 
 public sealed class PaymentEndpoints : IEndpointModule
 {
@@ -32,7 +37,9 @@ public sealed class PaymentEndpoints : IEndpointModule
             var binding = settings.ForOrg(org.OrgId);
             if (binding is null) { return TypedResults.Ok(new PaymentsResponse(false, [])); }
             await engine.RequireFixtureAsync(binding, ct);
-            return TypedResults.Ok(new PaymentsResponse(true, await sender.Query(new GetPayments(resident.Identity!.TenantId), ct)));
+            var tenantId = resident.Identity!.TenantId;
+            return TypedResults.Ok(new PaymentsResponse(true, await sender.Query(new GetPayments(tenantId), ct),
+                FundsInTransit: (await sender.Query(new GetFundsInTransit([tenantId]), ct)).Sum(x => x.Amount)));
         });
         tenant.MapGet("/{id:guid}", async Task<Results<Ok<PaymentView>, NotFound>> (Guid id,
             CurrentResident resident, IOrgContext org, PaymentEngine engine, ISender sender, CancellationToken ct) =>
@@ -52,7 +59,8 @@ public sealed class PaymentEndpoints : IEndpointModule
             if (binding is null) { return TypedResults.Ok(new PaymentsResponse(false, [])); }
             await engine.RequireFixtureAsync(binding, ct);
             return TypedResults.Ok(new PaymentsResponse(true, await sender.Query(new GetPayments(null), ct),
-                await sender.Query(new GetUnmatchedPaymentObservations(), ct)));
+                await sender.Query(new GetUnmatchedPaymentObservations(), ct),
+                (await sender.Query(new GetFundsInTransit(), ct)).Sum(x => x.Amount)));
         });
         // OpenAPI generation maps the contract without activating any simulator infrastructure.
         if (!settings.Enabled && Environment.GetEnvironmentVariable("LEASEBOOK_OPENAPI_BUILD") != "1") { return; }

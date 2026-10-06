@@ -80,6 +80,7 @@ public sealed class LateFeeRunStrategyTests
                 [leaseId] = new(15, 5, LateFeeKind.Flat, 50m, 0),
             }),
             new StubPostedSourceRefs(),
+            new StubFundsInTransit(),
             new FixedTimeProvider(assessmentDate));
 
         var preview = await strategy.PreviewAsync(Period, ct);
@@ -214,14 +215,48 @@ public sealed class LateFeeRunStrategyTests
         exclusion.Detail["reason"].ShouldBe("no_policy");
     }
 
+    [Fact]
+    public async Task A_tenant_with_a_payment_in_transit_is_cautioned_and_charged_exactly_the_same_fee_if_selected()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var paying = DelinquentLease(Guid.NewGuid());
+        var other = DelinquentLease(Guid.NewGuid()) with { TenantName = "Ben Tenant" };
+        var policies = new[] { paying, other }.Select(x => (x.LeaseId, new LateFeePolicy(1, 5, LateFeeKind.Flat, 50m, 0))).ToList();
+        var transit = new Dictionary<Guid, TenantFundsInTransit>
+        {
+            [paying.TenantId] = new(650m, new DateOnly(2026, 3, 2)),
+            [Guid.NewGuid()] = new(99m, new DateOnly(2026, 3, 1)), // somebody who is not delinquent
+        };
+
+        var preview = await BuildStrategy([paying, other], policies, fundsInTransit: transit).PreviewAsync(Period, ct);
+        var without = await BuildStrategy([paying, other], policies).PreviewAsync(Period, ct);
+
+        var cautioned = preview.Rows.Single(x => x.TargetId == paying.LeaseId);
+        (cautioned.Caution, cautioned.ExcludedReason, cautioned.AlreadyDone).ShouldBe((LateFeeRunStrategy.PaymentInTransit, null, false));
+        (cautioned.Detail["inTransit"], cautioned.Detail["paidOn"]).ShouldBe(("650.00", "2026-03-02"));
+        var plain = preview.Rows.Single(x => x.TargetId == other.LeaseId);
+        plain.Caution.ShouldBeNull();
+        plain.Detail.ShouldNotContainKey("inTransit");
+        // The caution changes what the operator is told, never an amount.
+        preview.Rows.Select(x => (x.TargetId, x.Amount)).ShouldBe(without.Rows.Select(x => (x.TargetId, x.Amount)));
+
+        // Selected anyway, the tenant is charged exactly what they would have been.
+        var plan = await BuildStrategy([paying, other], policies, fundsInTransit: transit).PlanAsync(Period, [paying.LeaseId], ct);
+        var planWithout = await BuildStrategy([paying, other], policies).PlanAsync(Period, [paying.LeaseId], ct);
+        plan.ShouldHaveSingleItem().ShouldBeOfType<PlannedPosting>().ShouldBeEquivalentTo(
+            planWithout.ShouldHaveSingleItem().ShouldBeOfType<PlannedPosting>());
+    }
+
     private static LateFeeRunStrategy BuildStrategy(
         IReadOnlyList<DelinquentLedgerRow> rows,
         IReadOnlyList<(Guid LeaseId, LateFeePolicy Policy)> policies,
-        DateOnly? assessmentDate = null) =>
+        DateOnly? assessmentDate = null,
+        IReadOnlyDictionary<Guid, TenantFundsInTransit>? fundsInTransit = null) =>
         new(
             new StubDelinquencyData(rows),
             new StubLateFeePolicyData(policies.ToDictionary(x => x.LeaseId, x => x.Policy)),
             new StubPostedSourceRefs(),
+            new StubFundsInTransit(fundsInTransit),
             new FixedTimeProvider(assessmentDate ?? new DateOnly(2026, 3, 7)));
 
     private static DelinquentLedgerRow DelinquentLease(Guid leaseId) =>

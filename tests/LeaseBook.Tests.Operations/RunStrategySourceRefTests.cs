@@ -31,6 +31,7 @@ public sealed class RunStrategySourceRefTests
                     [lateFeeRow.LeaseId] = new(1, 5, LateFeeKind.Flat, 25m, 0),
                 }),
                 new StubPostedSourceRefs(),
+                new StubFundsInTransit(),
                 TimeProvider.System)
             .PlanAsync(period, [lateFeeRow.LeaseId], ct);
 
