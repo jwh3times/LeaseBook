@@ -1,4 +1,5 @@
 using LeaseBook.Modules.Accounting.Domain;
+using LeaseBook.Modules.Accounting.Features.Banking;
 using LeaseBook.Modules.Accounting.Features.Ledgers;
 using LeaseBook.Modules.Banking.Contracts;
 using LeaseBook.SharedKernel.Cqrs;
@@ -35,7 +36,7 @@ internal sealed class BankRegisterAdapter(ISender sender) : IBankRegister
 
                 var amount = row.Deposit ?? (row.Withdrawal is { } withdrawal ? -withdrawal : 0m);
                 candidates.Add(new RegisterCandidate(
-                    row.JournalLineId, row.Date, amount, row.Description ?? string.Empty));
+                    row.JournalLineId, row.Date, amount, row.Description ?? string.Empty, row.PayoutReference));
             }
 
             if (page * PageSize >= response.Total)
@@ -48,4 +49,8 @@ internal sealed class BankRegisterAdapter(ISender sender) : IBankRegister
 
         return candidates;
     }
+
+    public Task<IReadOnlyDictionary<Guid, string>> GetGroupRefsAsync(
+        IReadOnlyCollection<Guid> journalLineIds, CancellationToken ct) =>
+        sender.Query(new GetPayoutReferences(journalLineIds), ct);
 }

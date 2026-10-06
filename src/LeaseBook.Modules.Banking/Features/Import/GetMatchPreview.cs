@@ -18,10 +18,17 @@ public sealed record GetMatchPreview(Guid ImportId) : IQuery<MatchPreviewRespons
 
 public sealed record MatchPreviewResponse(IReadOnlyList<MatchPreviewRow> Rows, MatchPreviewSummary Summary);
 
+/// <param name="GroupRef">
+/// Set instead of <paramref name="JournalLineId"/> when the line matched a whole group of register lines:
+/// a processor payout (ADR-053). <paramref name="GroupLines"/> lists them; they clear together.
+/// </param>
 public sealed record MatchPreviewRow(
     Guid StatementLineId, DateOnly Date, string Description, decimal Amount,
     string Kind, Guid? JournalLineId,
-    decimal? CandidateAmount, DateOnly? CandidateDate, string? CandidateDescription);
+    decimal? CandidateAmount, DateOnly? CandidateDate, string? CandidateDescription,
+    string? GroupRef = null, IReadOnlyList<MatchPreviewGroupLine>? GroupLines = null);
+
+public sealed record MatchPreviewGroupLine(Guid JournalLineId, DateOnly Date, decimal Amount, string Description);
 
 public sealed record MatchPreviewSummary(int Matched, int Suggested, int Unmatched);
 
@@ -33,10 +40,6 @@ public sealed class GetMatchPreviewValidator : AbstractValidator<GetMatchPreview
 internal sealed class GetMatchPreviewHandler(DbContext db, IBankRegister register)
     : IQueryHandler<GetMatchPreview, MatchPreviewResponse?>
 {
-    // The register read spans the statement dates plus a generous margin, so an exact-amount candidate that
-    // falls outside the ±N match window is still read and surfaced as a "suggested" match (P67).
-    private const int ReadMarginDays = 45;
-
     public async Task<MatchPreviewResponse?> Handle(GetMatchPreview query, CancellationToken ct)
     {
         var import = await db.Set<StatementImport>().FirstOrDefaultAsync(i => i.Id == query.ImportId, ct);
@@ -55,19 +58,29 @@ internal sealed class GetMatchPreviewHandler(DbContext db, IBankRegister registe
             return new MatchPreviewResponse([], new MatchPreviewSummary(0, 0, 0));
         }
 
-        var from = lines.Min(l => l.StatementDate).AddDays(-ReadMarginDays);
-        var to = lines.Max(l => l.StatementDate).AddDays(ReadMarginDays);
-        var candidates = await register.GetUnclearedAsync(import.BankAccountId, from, to, ct);
+        var candidates = await MatchCandidates.ReadAsync(register, import.BankAccountId, lines, ct);
 
         var inputs = lines.Select(l => new MatchInput(l.Id, l.StatementDate, l.Amount.Amount)).ToList();
         var results = AutoMatcher.Match(inputs, candidates);
 
         var candidateById = candidates.ToDictionary(c => c.JournalLineId);
+        var groups = AutoMatcher.Groups(candidates);
         var lineById = lines.ToDictionary(l => l.Id);
 
         var rows = results.Select(r =>
         {
             var line = lineById[r.StatementLineId];
+            if (r.GroupRef is { } groupRef)
+            {
+                var group = groups[groupRef];
+                return new MatchPreviewRow(
+                    r.StatementLineId, line.StatementDate, line.Description, line.Amount.Amount,
+                    r.Kind.ToDb(), null,
+                    group.Sum(c => c.Amount), AutoMatcher.GroupDate(group), $"Payout {groupRef}",
+                    groupRef,
+                    [.. group.Select(c => new MatchPreviewGroupLine(c.JournalLineId, c.Date, c.Amount, c.Description))]);
+            }
+
             RegisterCandidate? candidate =
                 r.JournalLineId is { } jid && candidateById.TryGetValue(jid, out var c) ? c : null;
             return new MatchPreviewRow(
@@ -83,4 +96,23 @@ internal sealed class GetMatchPreviewHandler(DbContext db, IBankRegister registe
 
         return new MatchPreviewResponse(rows, summary);
     }
+}
+
+/// <summary>
+/// The register read behind both the preview and the confirmation, so a confirmation judges a group
+/// against exactly the candidates the preview offered it from.
+/// </summary>
+internal static class MatchCandidates
+{
+    // The read spans the statement dates plus a generous margin, so an exact-amount candidate that falls
+    // outside the ±N match window is still read and surfaced as a "suggested" match (P67).
+    private const int ReadMarginDays = 45;
+
+    public static Task<IReadOnlyList<RegisterCandidate>> ReadAsync(
+        IBankRegister register, Guid bankAccountId, IReadOnlyCollection<StatementLine> lines, CancellationToken ct) =>
+        register.GetUnclearedAsync(
+            bankAccountId,
+            lines.Min(l => l.StatementDate).AddDays(-ReadMarginDays),
+            lines.Max(l => l.StatementDate).AddDays(ReadMarginDays),
+            ct);
 }

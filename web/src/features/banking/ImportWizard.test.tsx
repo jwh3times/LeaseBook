@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -158,5 +158,71 @@ describe('ImportWizard', () => {
     // `internal_error` has its own copy in ApiErrorNotice; the reference is what read paths lacked.
     expect(alert).toHaveTextContent(/Nothing was saved/i);
     expect(alert).toHaveTextContent('Reference: op-4821');
+  });
+
+  // One payout is one deposit at the bank and several bank lines in the register (ADR-053).
+  it('shows a payout match as one group and confirms it as a group, never line by line', async () => {
+    let confirmBody: { decisions?: unknown[] } | undefined;
+    server.use(
+      http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 })),
+      http.get('/api/banking/banks/:id/mappings', () => HttpResponse.json({ mappings: [] })),
+      http.post('/api/banking/banks/:id/imports', () =>
+        HttpResponse.json({ importId: 'imp1', imported: 2, skippedDuplicates: 0, errors: [] }),
+      ),
+      http.get('/api/banking/imports/:importId/matches', () =>
+        HttpResponse.json({
+          rows: [
+            {
+              statementLineId: 's1',
+              date: '2026-02-06',
+              description: 'PROCESSOR PAYOUT',
+              amount: 1492.5,
+              kind: 'matched',
+              journalLineId: null,
+              candidateAmount: 1492.5,
+              candidateDate: '2026-02-06',
+              candidateDescription: 'Payout po_1',
+              groupRef: 'po_1',
+              groupLines: [
+                { journalLineId: 'jl1', date: '2026-02-06', amount: 1000, description: 'Card' },
+                { journalLineId: 'jl2', date: '2026-02-06', amount: 500, description: 'Card' },
+                { journalLineId: 'jl3', date: '2026-02-06', amount: -7.5, description: 'Fee' },
+              ],
+            },
+            ...PREVIEW.rows,
+          ],
+          summary: { matched: 2, suggested: 0, unmatched: 0 },
+        }),
+      ),
+      http.post('/api/banking/imports/:importId/confirm', async ({ request }) => {
+        confirmBody = (await request.json()) as { decisions?: unknown[] };
+        return HttpResponse.json({ cleared: 4, recorded: 2, unmatchedLineIds: [] });
+      }),
+    );
+    const { onConfirmed } = renderWizard();
+    await userEvent.upload(
+      screen.getByLabelText('Statement CSV'),
+      new File([CSV], 'statement.csv', { type: 'text/csv' }),
+    );
+    await userEvent.selectOptions(await screen.findByLabelText('Date column'), 'Date');
+    await userEvent.selectOptions(screen.getByLabelText('Description column'), 'Description');
+    await userEvent.selectOptions(screen.getByLabelText('Amount column'), 'Amount');
+    await userEvent.click(screen.getByRole('button', { name: 'Preview matches' }));
+
+    expect(
+      await screen.findByText('Payout po_1 — 3 bank lines, cleared together'),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('list', { name: 'Bank lines of payout po_1' })).getAllByRole(
+        'listitem',
+      ),
+    ).toHaveLength(3);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm & clear' }));
+    await vi.waitFor(() => expect(onConfirmed).toHaveBeenCalled());
+    expect(confirmBody?.decisions).toEqual([
+      { statementLineId: 's1', journalLineId: null, kind: 'matched', groupRef: 'po_1' },
+      { statementLineId: 's1', journalLineId: 'jl1', kind: 'matched' },
+    ]);
   });
 });

@@ -431,6 +431,8 @@ public sealed partial class SimulatedPaymentTests
         await h.Settle(h.Payout("po_blank", 600m, line with { Item = " " }), ct, HttpStatusCode.BadRequest);
         await h.Settle(h.Payout("po_long", 600m, line with { Kind = new string('k', 21) }), ct, HttpStatusCode.BadRequest);
         await h.Settle(h.Payout(new string('p', 101), 600m, line), ct, HttpStatusCode.BadRequest);
+        // The reference keys the payout's entries, so it cannot contain the separator of that key.
+        await h.Settle(h.Payout("po:1", 600m, line), ct, HttpStatusCode.BadRequest);
         (await List(admin, ct)).ShouldBeEmpty();
 
         // Another currency is stored as it arrived and held: what evidence says is judged, not refused.

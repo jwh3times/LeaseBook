@@ -1,5 +1,6 @@
 using FluentValidation;
 using LeaseBook.Modules.Accounting.Domain;
+using LeaseBook.Modules.Accounting.Features.LedgerPosting;
 using LeaseBook.Modules.Accounting.Persistence;
 using LeaseBook.SharedKernel.Cqrs;
 using Microsoft.EntityFrameworkCore;
@@ -46,9 +47,13 @@ public sealed record RegisterResponse(IReadOnlyList<RegisterRow> Rows, int Total
 /// The entry's staff-only note (#468). The register, the trust-ledger report and the compliance pack are
 /// staff and audit surfaces, so they carry it beside the description; the search reads both.
 /// </param>
+/// <param name="PayoutReference">
+/// The processor payout that posted this line, or null (ADR-053). The bank lines of one payout are one
+/// statement line at the bank, so they clear together or not at all.
+/// </param>
 public sealed record RegisterRow(
     Guid JournalLineId, DateOnly Date, string? Description, string? InternalNote, Guid? PropertyId,
-    decimal? Deposit, decimal? Withdrawal, BankLineStatus Status);
+    decimal? Deposit, decimal? Withdrawal, BankLineStatus Status, string? PayoutReference = null);
 
 public sealed record RegisterTotals(
     decimal Book, decimal Cleared, decimal Uncleared, int UnclearedCount,
@@ -72,6 +77,7 @@ internal sealed class GetBankRegisterHandler(DbContext db) : IQueryHandler<GetBa
                        e.entry_date AS date,
                        e.description,
                        e.internal_note,
+                       e.source_ref,
                        jl.property_id,
                        jl.debit AS deposit,
                        jl.credit AS withdrawal,
@@ -100,6 +106,7 @@ internal sealed class GetBankRegisterHandler(DbContext db) : IQueryHandler<GetBa
                    date,
                    description,
                    internal_note,
+                   source_ref,
                    property_id,
                    deposit,
                    withdrawal,
@@ -134,7 +141,8 @@ internal sealed class GetBankRegisterHandler(DbContext db) : IQueryHandler<GetBa
         var mapped = rows
             .Select(r => new RegisterRow(
                 r.JournalLineId, r.Date, r.Description, r.InternalNote, r.PropertyId,
-                r.Deposit, r.Withdrawal, BankLineStatusConverter.FromDb(r.Status)))
+                r.Deposit, r.Withdrawal, BankLineStatusConverter.FromDb(r.Status),
+                PayoutSourceRef.ReferenceOf(r.SourceRef)))
             .ToList();
 
         return new RegisterResponse(
@@ -146,8 +154,8 @@ internal sealed class GetBankRegisterHandler(DbContext db) : IQueryHandler<GetBa
     }
 
     private sealed record RegisterSqlRow(
-        Guid JournalLineId, DateOnly Date, string? Description, string? InternalNote, Guid? PropertyId,
-        decimal? Deposit, decimal? Withdrawal, string Status, int Total,
+        Guid JournalLineId, DateOnly Date, string? Description, string? InternalNote, string? SourceRef,
+        Guid? PropertyId, decimal? Deposit, decimal? Withdrawal, string Status, int Total,
         decimal DepositsInView, decimal WithdrawalsInView);
 
     private sealed record RegisterTotalsSqlRow(decimal Book, decimal Cleared, int UnclearedCount);
