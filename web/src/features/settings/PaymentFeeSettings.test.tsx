@@ -32,24 +32,27 @@ function show(role: string, enabled = true) {
 }
 
 describe('online payment fee settings', () => {
-  it('is absent where there are no online payments', async () => {
-    let asked = false;
+  it('is absent where there are no online payments, and present where there are', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    let enabled = false;
     server.use(
       http.get('/api/auth/me', () => HttpResponse.json({ email: 'a@b.test', role: 'PMAdmin' })),
-      http.get('/api/payments', () => {
-        asked = true;
-        return HttpResponse.json({ enabled: false, items: [] });
-      }),
+      http.get('/api/payments', () => HttpResponse.json({ enabled, items: [] })),
     );
     render(
-      <QueryClientProvider
-        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
-      >
+      <QueryClientProvider client={client}>
         <PaymentFeeSettings initial={settings} />
       </QueryClientProvider>,
     );
-    await waitFor(() => expect(asked).toBe(true));
+    // Judged only once the answer is in: while the read is pending the card is absent either way.
+    await waitFor(() =>
+      expect(client.getQueryState(['simulated-payments', 'availability'])?.status).toBe('success'),
+    );
     expect(screen.queryByText('Online payment fees')).not.toBeInTheDocument();
+
+    enabled = true;
+    await client.invalidateQueries({ queryKey: ['simulated-payments', 'availability'] });
+    expect(await screen.findByText('Online payment fees')).toBeVisible();
   });
 
   it('shows each rule as a percentage, a fixed amount and a cap, and saves both together', async () => {
@@ -64,6 +67,9 @@ describe('online payment fee settings', () => {
     const card = await screen.findByRole('group', { name: 'Card' });
     expect(card).toBeEnabled();
     const rate = screen.getAllByLabelText('Rate (%)');
+    // The server's bounds, so the browser refuses what the server would.
+    expect(rate[0]).toHaveAttribute('max', '20');
+    expect(screen.getAllByLabelText('Cap ($)')[0]).toHaveAttribute('min', '0.01');
     expect(rate.map((input) => (input as HTMLInputElement).value)).toEqual(['2.9', '0.8']);
     expect(
       screen.getAllByLabelText('Fixed amount ($)').map((i) => (i as HTMLInputElement).value),

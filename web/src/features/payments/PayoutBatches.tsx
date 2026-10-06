@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   getApiPaymentsSettlements,
@@ -84,12 +84,19 @@ export function PayoutBatches({ admin }: { admin: boolean }) {
   const refresh = () => {
     void queries.invalidateQueries({ queryKey: ['simulated-payments'] });
   };
+  // The button an action was started from is gone once the action succeeds, so focus moves to the
+  // payout's name: a keyboard user stays on the payout they acted on and hears its new status.
+  const names = useRef(new Map<string, HTMLElement>());
+  const focusName = (id: string) => window.setTimeout(() => names.current.get(id)?.focus(), 0);
   // A refused post is a 409 that still changed the payout: its reason now names what stopped it.
   const post = useMutation({
     mutationFn: (id: string) =>
       unwrap(postApiPaymentsSettlementsByIdPost({ path: { id } }), 'Unable to post the payout.'),
     onSettled: refresh,
-    onSuccess: () => void queries.invalidateQueries({ queryKey: ['tenant-ledger'] }),
+    onSuccess: (_, id) => {
+      void queries.invalidateQueries({ queryKey: ['tenant-ledger'] });
+      focusName(id);
+    },
   });
   const close = useMutation({
     mutationFn: (body: { id: string; note: string }) =>
@@ -97,27 +104,17 @@ export function PayoutBatches({ admin }: { admin: boolean }) {
         postApiPaymentsSettlementsByIdClose({ path: { id: body.id }, body: { note: body.note } }),
         'Unable to close the payout review.',
       ),
-    onSuccess: () => {
+    // A refused close may still mean the payout moved, so the list is read again either way.
+    onSettled: refresh,
+    onSuccess: (_, body) => {
       setClosing(null);
-      refresh();
+      focusName(body.id);
     },
   });
 
   return (
-    <section className="col gap8" aria-labelledby="payout-batches-title">
+    <section className="col gap8" aria-labelledby="payout-batches-title" aria-live="polite">
       <h4 id="payout-batches-title">Payouts</h4>
-      {post.isError && (
-        <>
-          <ApiErrorNotice error={post.error} fallback="Unable to post the payout." />
-          <ErrorAction error={post.error} />
-        </>
-      )}
-      {close.isError && (
-        <>
-          <ApiErrorNotice error={close.error} fallback="Unable to close the payout review." />
-          <ErrorAction error={close.error} />
-        </>
-      )}
       {list.isError ? (
         <QueryErrorState
           query={list}
@@ -129,7 +126,7 @@ export function PayoutBatches({ admin }: { admin: boolean }) {
       ) : list.data.items.length === 0 ? (
         <p>No payouts yet. A payout appears here when the bank reports it.</p>
       ) : (
-        <ul className="col gap12" aria-live="polite">
+        <ul className="col gap12">
           {list.data.items.map((payout) => (
             <Payout
               key={payout.id}
@@ -137,8 +134,35 @@ export function PayoutBatches({ admin }: { admin: boolean }) {
               admin={admin}
               busy={post.isPending || close.isPending}
               closing={closing?.id === payout.id ? closing.note : null}
-              onPost={() => post.mutate(payout.id)}
-              onStartClose={() => setClosing({ id: payout.id, note: '' })}
+              nameRef={(element) => {
+                if (element) names.current.set(payout.id, element);
+                else names.current.delete(payout.id);
+              }}
+              // A refusal is shown on the payout it is about, and only until the next action.
+              failure={
+                post.isError && post.variables === payout.id ? (
+                  <>
+                    <ApiErrorNotice error={post.error} fallback="Unable to post the payout." />
+                    <ErrorAction error={post.error} />
+                  </>
+                ) : close.isError && close.variables.id === payout.id ? (
+                  <>
+                    <ApiErrorNotice
+                      error={close.error}
+                      fallback="Unable to close the payout review."
+                    />
+                    <ErrorAction error={close.error} />
+                  </>
+                ) : null
+              }
+              onPost={() => {
+                close.reset();
+                post.mutate(payout.id);
+              }}
+              onStartClose={() => {
+                post.reset();
+                setClosing({ id: payout.id, note: '' });
+              }}
               onNote={(note) => setClosing({ id: payout.id, note })}
               onCancelClose={() => setClosing(null)}
               onClose={() => closing && close.mutate(closing)}
@@ -155,6 +179,8 @@ function Payout({
   admin,
   busy,
   closing,
+  nameRef,
+  failure,
   onPost,
   onStartClose,
   onNote,
@@ -165,6 +191,8 @@ function Payout({
   admin: boolean;
   busy: boolean;
   closing: string | null;
+  nameRef: (element: HTMLElement | null) => void;
+  failure: React.ReactNode;
   onPost: () => void;
   onStartClose: () => void;
   onNote: (note: string) => void;
@@ -176,7 +204,9 @@ function Payout({
   return (
     <li className="col gap8" aria-label={name}>
       <div className="row gap8 wrap">
-        <strong>{name}</strong>
+        <strong ref={nameRef} tabIndex={-1}>
+          {name}
+        </strong>
         <Badge tone={status.tone} dot>
           {status.label}
         </Badge>
@@ -184,7 +214,9 @@ function Payout({
       <span>
         <Money value={Number(payout.bankAmount)} /> at the bank on {payout.bankDate}
       </span>
-      {payout.reason && payout.status !== 'Posted' && (
+      {failure}
+      {/* Why it waits, and what to do about it: only while it still waits. */}
+      {payout.reason && (payout.status === 'NeedsReview' || payout.status === 'Received') && (
         <p>
           {payoutReason(payout.reason)}
           {payout.reasonItem ? ` Line: ${payout.reasonItem}.` : ''}

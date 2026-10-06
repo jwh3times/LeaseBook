@@ -98,13 +98,17 @@ export function PaymentFeeSettings({ initial }: { initial: OrgSettings }) {
                 id={`fee-${key}-rate`}
                 type="number"
                 min={0}
-                max={100}
+                max={20}
                 step={0.01}
                 required
+                aria-describedby={`fee-${key}-rate-hint`}
                 className="pf-num"
                 value={rules[key].rate}
                 onChange={(e) => set(key, 'rate', e.target.value)}
               />
+              <span id={`fee-${key}-rate-hint`} className="t3 fs12">
+                0 to 20.
+              </span>
             </div>
             <div className="pf-formrow" style={{ width: 150 }}>
               <label htmlFor={`fee-${key}-fixed`}>Fixed amount ($)</label>
@@ -124,7 +128,7 @@ export function PaymentFeeSettings({ initial }: { initial: OrgSettings }) {
               <Input
                 id={`fee-${key}-cap`}
                 type="number"
-                min={0}
+                min={0.01}
                 step={0.01}
                 className="pf-num"
                 value={rules[key].cap}

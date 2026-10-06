@@ -148,8 +148,9 @@ worked figures, the review reasons and how a payout reconciles. In short:
 - Staff see payouts in the **Payouts** list on the Operations page; an administrator posts a waiting
   one or closes it with a note.
 
-Single-payment evidence, as this document describes it, remains valid for the clean case. Everything
-below that says a fee, a net amount or a batch is unsupported speaks of that evidence, not of a payout.
+Single-payment evidence, as this document describes it, remains valid for the clean case. Wherever
+this document says a fee, a net amount or a batch is unsupported, above this section or below it, it
+speaks of that evidence, not of a payout.
 
 ### Posting a return (ADR-052)
 

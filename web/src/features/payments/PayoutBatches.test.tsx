@@ -102,27 +102,19 @@ describe('payout batches', () => {
     expect(within(item).queryByRole('button')).not.toBeInTheDocument();
   });
 
-  it('lets an administrator post a waiting payout from the keyboard, and shows a refusal with its new reason', async () => {
+  it('lets an administrator post a waiting payout from the keyboard and leaves focus on that payout', async () => {
     let current = waiting;
-    let posts = 0;
     server.use(
       http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 })),
       http.get('/api/payments/settlements', () => HttpResponse.json({ items: [current] })),
       http.post('/api/payments/settlements/settlement-1/post', () => {
-        posts++;
-        if (posts === 1) {
-          current = payout({
-            ...waiting,
-            reason: 'return_owner_funds_disbursed',
-            reasonItem: '1',
-            canPost: false,
-          });
-          return HttpResponse.json(
-            { title: 'return_owner_funds_disbursed', detail: 'The return was refused.' },
-            { status: 409 },
-          );
-        }
-        current = payout({ bankAmount: -200, items: waiting.items });
+        current = payout({
+          bankAmount: -200,
+          items: [
+            line('1', 'Return', 600, 0, -600, { entryId: 'e1' }),
+            line('2', 'Payment', 400, 0, 400, { entryId: 'e2' }),
+          ],
+        });
         return HttpResponse.json(current);
       }),
     );
@@ -135,15 +127,94 @@ describe('payout batches', () => {
     within(item).getByRole('button', { name: 'Post payout po_1' }).focus();
     await userEvent.keyboard('{Enter}');
 
-    expect(await screen.findByText('The return was refused.')).toBeVisible();
     await waitFor(() =>
-      expect(screen.getByRole('listitem', { name: 'Payout po_1' })).toHaveTextContent(
+      expect(
+        within(screen.getByRole('listitem', { name: 'Payout po_1' })).getByText('Posted'),
+      ).toBeVisible(),
+    );
+    const after = screen.getByRole('listitem', { name: 'Payout po_1' });
+    expect(after).not.toHaveTextContent('This payout contains a returned payment');
+    expect(within(after).queryByRole('button')).not.toBeInTheDocument();
+    await waitFor(() => expect(within(after).getByText('Payout po_1')).toHaveFocus());
+  });
+
+  it('shows a refusal on the payout it is about, with the new reason, and clears it on the next action', async () => {
+    let current = waiting;
+    const other = payout({ ...waiting, id: 'settlement-2', payoutReference: 'po_2' });
+    server.use(
+      http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 })),
+      http.get('/api/payments/settlements', () => HttpResponse.json({ items: [current, other] })),
+      http.post('/api/payments/settlements/settlement-1/post', () => {
+        current = payout({
+          ...waiting,
+          reason: 'return_owner_funds_disbursed',
+          reasonItem: '1',
+          canPost: false,
+        });
+        return HttpResponse.json(
+          { title: 'return_owner_funds_disbursed', detail: 'The return was refused.' },
+          { status: 409 },
+        );
+      }),
+    );
+    show();
+    await userEvent.click(await screen.findByRole('button', { name: 'Post payout po_1' }));
+
+    const refused = screen.getByRole('listitem', { name: 'Payout po_1' });
+    expect(await within(refused).findByText('The return was refused.')).toBeVisible();
+    expect(
+      within(screen.getByRole('listitem', { name: 'Payout po_2' })).queryByText(
+        'The return was refused.',
+      ),
+    ).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(refused).toHaveTextContent(
         'A return in this payout cannot be posted. The return was not posted: funds from this payment have since left the owner’s balance.',
       ),
     );
-    expect(screen.getByRole('listitem', { name: 'Payout po_1' })).toHaveTextContent('Line: 1.');
+    expect(refused).toHaveTextContent('Line: 1.');
     expect(screen.queryByRole('button', { name: 'Post payout po_1' })).not.toBeInTheDocument();
-    expect(posts).toBe(1);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Close review of payout po_1' }));
+    expect(screen.queryByText('The return was refused.')).not.toBeInTheDocument();
+  });
+
+  it('describes a processor fee line, a payout still being checked, and a reason it does not know', async () => {
+    server.use(
+      http.get('/api/payments/settlements', () =>
+        HttpResponse.json({
+          items: [
+            payout({
+              status: 'Received',
+              reason: null,
+              postedAt: null,
+              items: [line('1', 'Fee', 0, 4, -4, { paymentId: null, feeEntryId: 'f1' })],
+            }),
+            payout({
+              id: 'settlement-2',
+              payoutReference: 'po_2',
+              status: 'NeedsReview',
+              reason: 'something_new',
+              postedAt: null,
+              canClose: true,
+            }),
+          ],
+        }),
+      ),
+    );
+    show();
+    const checking = await screen.findByRole('listitem', { name: 'Payout po_1' });
+    expect(within(checking).getByText('Waiting to be checked')).toBeVisible();
+    expect(
+      within(within(checking).getAllByRole('row')[1]!)
+        .getAllByRole('cell')
+        .map((cell) => cell.textContent),
+    ).toEqual(['1', 'Processor fee', '—', '$4.00', '−$4.00', 'Fee difference on the ledger']);
+    const unknown = screen.getByRole('listitem', { name: 'Payout po_2' });
+    expect(unknown).toHaveTextContent('Accounting refused this payout, so nothing was posted.');
+    expect(unknown).toHaveTextContent('Reason: something_new');
+    expect(within(unknown).queryByRole('button', { name: /Post payout/ })).not.toBeInTheDocument();
+    expect(within(unknown).getByRole('button', { name: /Close review/ })).toBeEnabled();
   });
 
   it('closes a payout review with a required note and never without one', async () => {
@@ -178,6 +249,11 @@ describe('payout batches', () => {
     expect(sent).toEqual({ note: 'Corrected by hand.' });
     expect(screen.getByText('Review closed by staff: Corrected by hand.')).toBeVisible();
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    // A closed payout says why it waited, by code, but no longer tells anyone to post it.
+    const closed = screen.getByRole('listitem', { name: 'Payout po_1' });
+    expect(closed).toHaveTextContent('Reason: settlement_requires_confirmation');
+    expect(closed).not.toHaveTextContent('it waits for an administrator');
+    await waitFor(() => expect(within(closed).getByText('Payout po_1')).toHaveFocus());
   });
 
   it('shows staff who are not administrators the payout and its reason, without the actions', async () => {

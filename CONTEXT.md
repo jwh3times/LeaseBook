@@ -165,8 +165,9 @@ _Avoid_: clearing balance, pending balance
 One deposit a payment processor makes to the trust bank for the payments it has collected, less what
 it keeps and less any payment the bank took back. It posts completely or not at all, and its bank
 lines clear together as the one statement line the bank shows (ADR-053).
-_Avoid_: settlement (the word names the processor's whole process), batch (see Run plan), disbursement
-(a disbursement pays an owner), deposit (a security deposit)
+A payout's lines are its _batch_: the word names what posts together, never a bulk run.
+_Avoid_: settlement (the word names the processor's whole process), disbursement (a disbursement pays
+an owner), deposit (a security deposit)
 
 **Fee difference**:
 What a processor kept from a payment, less the convenience fee the tenant paid. A shortfall is taken

@@ -1,6 +1,6 @@
 # Processor fee and batched settlement specification
 
-- **Audience:** Reviewers of issue #498 and implementers of the slice that follows it
+- **Audience:** Implementers and reviewers of processor fees and payouts (issues #498 and #500)
 - **Status:** Accepted for the simulation and built there; its provisional assumptions are unverified and live payments remain unapproved
 - **Owner:** Maintainers
 - **Last reviewed:** 2026-10-06
@@ -244,10 +244,10 @@ As built:
 
 | Reason                             | Meaning                                                               | Way out                                    |
 | ---------------------------------- | --------------------------------------------------------------------- | ------------------------------------------ |
-| `settlement_incomplete`            | An item maps to no payment, or to more than one.                      | More evidence, or close with a note        |
+| `settlement_incomplete`            | An item maps to no payment, or a return names one never receipted.    | More evidence, or close with a note        |
 | `settlement_untied`                | Items do not sum to the bank amount, or a charged amount differs.     | Corrected evidence, or close with a note   |
 | `unsupported_settlement`           | A reserve, hold, instant or manual payout, partial refund, non-USD.   | Close with a note after correcting by hand |
-| `settlement_requires_confirmation` | The batch contains a return, refund or dispute.                       | An administrator posts the batch           |
+| `settlement_requires_confirmation` | The batch contains a return and has passed every other check.         | An administrator posts the batch           |
 | `pm_fees_insufficient`             | A shortfall would take held PM fees below zero.                       | Fund held fees, then post; or close        |
 | `return_*`                         | A return in the batch failed an ADR-052 guard.                        | As ADR-052                                 |
 | `conflicting_evidence`             | The payout contradicts itself, an earlier copy, or a payment's state. | Close with a note                          |
