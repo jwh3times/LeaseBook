@@ -16,6 +16,12 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Added
 
+- **Staff can review processor payouts, and an administrator can set online payment fees.** In the
+  development payment fixture, Operations lists each payout with its status, the reason it waits and
+  its lines; an administrator posts a waiting payout with one action or closes it with a note.
+  Settings gains the convenience-fee rule for card and bank-debit payments. Neither appears for an
+  organization with no online payments.
+
 - **A processor payout reconciles as one statement line.** A payout is one deposit at the bank and
   several lines in the bank register. A statement import now matches the deposit to the whole payout
   and clears all of its lines together; it never matches one of them by itself. Ticking or unticking

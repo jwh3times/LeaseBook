@@ -18,6 +18,8 @@ import { ErrorAction } from '@/components/ErrorAction';
 import { QueryErrorState } from '@/components/QueryErrorState';
 import { Badge, Button, Card, Input, Money, Select } from '@/design';
 import { useSession } from '@/features/auth/useSession';
+import { PayoutBatches } from './PayoutBatches';
+import { REASONS } from './reasons';
 import { UnmatchedObservations } from './UnmatchedObservations';
 
 function description(payment: PaymentView) {
@@ -50,43 +52,6 @@ const METHODS = [
   { value: 'card', label: 'Card' },
 ];
 const AMOUNT = /^(?:0|[1-9][0-9]{0,4})(?:\.[0-9]{1,2})?$/;
-
-const REASONS: Record<string, string> = {
-  technical_failure:
-    'Delivery or posting could not finish. An administrator can retry the same operation.',
-  accounting_period_locked:
-    'The evidence date is in a locked period. Accounting review is required; retry cannot change the date.',
-  attribution_unavailable:
-    'The trust bank or lease attribution is unavailable for the evidence date. Review the bank and lease records.',
-  return_requires_review:
-    'A return, refund or dispute arrived after the receipt posted. No automatic reversal was made. An administrator can post a full return, or close the review after correcting the ledger.',
-  return_prepayment_consumed:
-    'The return was not posted: part of this payment became prepaid credit that has since been used. Correct the ledger, then close the review.',
-  return_owner_funds_disbursed:
-    'The return was not posted: funds from this payment have since left the owner’s balance. Correct the ledger, then close the review.',
-  return_precedes_receipt:
-    'The return was not posted: it is dated before the payment it returns. Review the evidence, then close the review.',
-  evidence_after_return:
-    'More return, refund or dispute evidence arrived after the return was posted. Review the evidence and the ledger, then close the review.',
-  return_period_locked:
-    'The return was not posted: it is dated in a locked period, and the date cannot be changed. Correct the ledger, then close the review.',
-  return_partial_unsupported:
-    'The return was not posted: only a full return can be posted. Correct the ledger, then close the review.',
-  return_kind_unsupported:
-    'The return was not posted: a refund or dispute cannot be posted as a return. Correct the ledger, then close the review.',
-  return_conflicting_evidence:
-    'The return was not posted: the return evidence conflicts. Review the evidence, then close the review.',
-  return_rejected:
-    'The return was not posted: accounting refused it. Review the ledger, then close the review.',
-  unsupported_settlement:
-    'Settlement includes an unsupported amount, fee or destination. Review the evidence; no force-post action is available.',
-  conflicting_evidence:
-    'The evidence conflicts. Review the operation before taking further action.',
-  collection_failed: 'Collection failed. The tenant may submit a new simulated payment.',
-  accounting_rejected: 'Accounting rejected the receipt. Review the operation and ledger.',
-  fixture_unavailable:
-    'The fixture binding is unavailable. Ask the fixture operator to check its configuration.',
-};
 
 // What the tenant confirms: the fee on top of the amount going to their ledger, and the total charged.
 function QuoteLine({ fee, charged }: { fee: number; charged: number }) {
@@ -225,6 +190,7 @@ export function PaymentPanel({ staff = false }: { staff?: boolean }) {
         </p>
       )}
       {staff && <UnmatchedObservations count={Number(list.data.unmatchedObservations ?? 0)} />}
+      {staff && <PayoutBatches admin={admin} />}
       {!staff && (
         <form
           className="col gap12"

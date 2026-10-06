@@ -1,9 +1,9 @@
 # Processor fee and batched settlement specification
 
 - **Audience:** Reviewers of issue #498 and implementers of the slice that follows it
-- **Status:** Proposed model; fees and payout batches are built in the simulation, with no staff screen for payouts yet, and live payments remain unapproved
+- **Status:** Accepted for the simulation and built there; its provisional assumptions are unverified and live payments remain unapproved
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-05
+- **Last reviewed:** 2026-10-06
 
 ## Evidence and boundary
 
@@ -263,14 +263,18 @@ This list is the input to the implementation issue. Items marked built exist in 
 
 - **Organization settings (built):** per payment method, a rate in basis points, a fixed amount and an
   optional cap, set as a whole by an administrator through `PUT /api/settings/payment-fees`, validated
-  and audited. The defaults charge nothing. There is no settings screen for them yet.
+  and audited. The defaults charge nothing. An administrator sets them under **Online payment fees**
+  on the Settings page, as a percentage, a fixed amount and an optional cap for each method. The card
+  is shown only where online payments exist, which today is the payment fixture.
 - **Payment record (built):** the ledger amount, quoted fee, method and paid date, with the charged
   amount derived. The tenant is quoted the fee before confirming, and a clean item settles from
   single-payment evidence.
 - **Batch record (built):** a payout with its bank evidence, its lines, its status and reason, the
   entries each line posted, and one effect per payment. Staff list payouts at
   `GET /api/payments/settlements`; an administrator posts or closes one with
-  `POST /api/payments/settlements/{id}/post` and `.../close`. There is no staff screen for them yet.
+  `POST /api/payments/settlements/{id}/post` and `.../close`. The **Payouts** list on the Operations
+  page shows each payout, its status in words, why it waits and each of its lines. An administrator
+  posts a waiting payout with one action or closes it with a note; other staff read the same list.
 - **Accounting (built):** the `ProcessorFeeDifference` posting template, in both directions and with
   the shortfall guard, and the `PostPaymentSettlement` command that posts a whole payout or nothing,
   reached from Payments through `IPaymentLedger.PostSettlementAsync`.
@@ -283,8 +287,22 @@ This list is the input to the implementation issue. Items marked built exist in 
   preview row.
 - **Banking (built):** group matching of one statement line against a payout's bank lines, and the
   whole-payout rule on every clearance.
-- **Staff and tenant surfaces:** the fee quote before confirm, the receipt showing ledger amount and
-  fee, funds in transit, and the batch review with its one posting action.
+- **Staff and tenant surfaces (built):** the fee quote before confirm, the payment showing ledger
+  amount and fee, funds in transit, the fee rules on Settings and the payout review on Operations
+  with its one posting action.
+
+## Single-payment evidence
+
+The simulation that came before this model settled one payment from one piece of bank evidence
+([ADR-046](../adr/ADR-046-simulated-payment-recognition.md)). That evidence remains valid. It is the
+clean case and nothing more: the processor kept exactly the quoted fee, so the bank received the
+ledger amount, and one receipt posts. It cannot carry a fee difference or a second payment; either
+is `unsupported_settlement` there, and a payout is the evidence for both.
+
+The two do not overlap. A payment that single-payment evidence has receipted is `conflicting_evidence`
+in a payout that names it as a payment, and a payment a payout has settled or returned is not demoted
+by its own single-payment notices. Whether a real processor adapter delivers anything but payouts is a
+question for that adapter, not for this model.
 
 ## Provisional assumptions
 

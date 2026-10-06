@@ -5,6 +5,7 @@ import { asApiError, type ApiError } from '@/api';
 import { ApiErrorNotice } from '@/components/ApiErrorNotice';
 import { Modal } from '@/components/Modal';
 import { QueryErrorState } from '@/components/QueryErrorState';
+import { PaymentFeeSettings } from './PaymentFeeSettings';
 import { PortalAccessSettings } from '@/features/portal/PortalAccessSettings';
 import {
   useBankAccounts,
@@ -73,6 +74,7 @@ export function SettingsPage() {
         <div className="col gap16">
           <OrgProfileForm initial={settings.data} />
           <LateFeeForm initial={settings.data} />
+          <PaymentFeeSettings initial={settings.data} />
           <PortalAccessSettings initial={settings.data} />
           <BankAccountsSection />
           <Card pad>

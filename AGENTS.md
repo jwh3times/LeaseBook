@@ -70,7 +70,8 @@ this one, for current progress.
   Key Vault wrap engages.
 - Phase 2 includes the tenant own-ledger portal and the read-only owner portal (ADR-003, with
   database persona enforcement from ADR-048), isolated development-only simulated payments
-  (ADR-046), and staff refund checks for held deposits and prepaid credit, printed on pre-printed
+  (ADR-046) with guarded returns (ADR-052) and processor fees, payout batches and their
+  reconciliation (ADR-053), and staff refund checks for held deposits and prepaid credit, printed on pre-printed
   stock (ADR-050) or on blank stock with a MICR line LeaseBook draws itself (ADR-051; bank test-check
   approval is an operator gate, `docs/runbooks/blank-stock-checks.md`). Before running or resetting payment fixtures, read
   `docs/runbooks/payment-simulation.md`; the dedicated database and generation binding protect

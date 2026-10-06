@@ -1,6 +1,6 @@
 # ADR-053: Processor fees stay out of the trust journal; a payout posts as one tied batch
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-05
 - **Deciders:** Jerry Holland
 
@@ -19,7 +19,7 @@ plus deposit liabilities plus held PM fees, and it has no term for money at a pr
 show that neither a gross nor a net receipt can represent a collection with a withheld fee: one
 overstates the bank and the other leaves the tenant owing.
 
-This ADR is a model for review. In the isolated simulation, its fee rules, fee quote and the fee on a payment are built, and a payment whose processor fee equals the quoted fee settles. Payout batches are built too: stored, checked and posted completely or not at all, with an administrator posting any payout that contains a return. Evidence arrives through a signed callback or the fixture command. Funds in transit and the late-fee caution are built. So is group reconciliation: a statement line matches a payout's bank lines as a whole, and no clearance takes part of a payout.
+This ADR is accepted for the isolated simulation, as ADR-046 was, and its provisional assumptions stay open: none is verified, and none is approval to move real money. In the simulation, its fee rules, fee quote and the fee on a payment are built, and a payment whose processor fee equals the quoted fee settles. Payout batches are built too: stored, checked and posted completely or not at all, with an administrator posting any payout that contains a return. Evidence arrives through a signed callback or the fixture command. Funds in transit and the late-fee caution are built. So is group reconciliation: a statement line matches a payout's bank lines as a whole, and no clearance takes part of a payout. Staff review payouts on the Operations page and an administrator sets the fee rules on the Settings page. The single-payment evidence of ADR-046 remains valid for a clean payment; the specification says how the two relate.
 
 ## Decision
 
