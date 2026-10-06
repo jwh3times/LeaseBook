@@ -147,19 +147,33 @@ _Avoid_: refund (a refund pays held money out), bounced payment, chargeback
 
 **Ledger amount**:
 The part of a tenant's online payment that goes toward their ledger. It is the only amount the tenant
-is credited, whatever the processor keeps (ADR-053, proposed).
+is credited, whatever the processor keeps (ADR-053).
 _Avoid_: net amount (what the processor pays out), gross amount
 
 **Convenience fee**:
 The disclosed fee a tenant pays on top of the ledger amount to cover the processor's fee. It never
-enters the trust account and is not in the trust journal (ADR-053, proposed).
+enters the trust account and is not in the trust journal (ADR-053).
 _Avoid_: processing fee (the processor's own charge), surcharge, late fee
 
 **Funds in transit**:
 Ledger amounts a processor has collected that the trust bank has not yet received. A figure read from
 payment records and shown beside a balance, never a journal balance and never part of the trust
-equation (ADR-053, proposed).
+equation (ADR-053).
 _Avoid_: clearing balance, pending balance
+
+**Payout**:
+One deposit a payment processor makes to the trust bank for the payments it has collected, less what
+it keeps and less any payment the bank took back. It posts completely or not at all, and its bank
+lines clear together as the one statement line the bank shows (ADR-053).
+A payout's lines are its _batch_: the word names what posts together, never a bulk run.
+_Avoid_: settlement (the word names the processor's whole process), disbursement (a disbursement pays
+an owner), deposit (a security deposit)
+
+**Fee difference**:
+What a processor kept from a payment, less the convenience fee the tenant paid. A shortfall is taken
+from the PM fees held in the trust bank and a surplus is added to them; neither touches a tenant or
+an owner (ADR-053).
+_Avoid_: processing fee, bank fee (a charge the bank makes), fee adjustment
 
 **Outstanding check**:
 An issued check whose bank line has not cleared. It is already out of the book balance and shows as an

@@ -3,7 +3,7 @@
 - **Audience:** Developers and test operators
 - **Status:** Implemented, non-live only
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-05
+- **Last reviewed:** 2026-10-06
 
 The simulator exercises the real Payments and Accounting path. It has no provider network client
 and cannot move real money. Production and Staging reject Simulation; live/provider configuration
@@ -57,8 +57,8 @@ dotnet run --project src/LeaseBook.Web --no-launch-profile -- payment-simulation
 `PayoutPaid` leaves the ledger unchanged. `BankCredit` provides separate complete bank evidence for a
 clean payment — the charged amount, the quoted fee, and the ledger amount as the net — and records one
 receipt for the ledger amount. A fresh fixture has no fee rule, so the fee is zero and the charge is the
-ledger amount. To try a fee, sign in as `admin-a@payments.test` and set the rules with
-`PUT /api/settings/payment-fees`; the tenant form then quotes the fee before submitting. The portal polls and refreshes its ledger after the effect
+ledger amount. To try a fee, sign in as `admin-a@payments.test`, open **Settings** and set a rate
+or a fixed amount under **Online payment fees**; the tenant form then quotes the fee before submitting. The portal polls and refreshes its ledger after the effect
 commits. Reloading the page resumes observation without submitting again. Repeating the same CLI
 event is idempotent. `payment-simulation step` runs one worker pass without starting a web server.
 
@@ -100,9 +100,14 @@ processor kept, or gave back, exactly the quoted fee. The bank amount is the sum
 A payout posts completely or not at all. One whose fee differs from the quote posts the receipt for
 what the tenant paid toward their ledger and takes the difference from, or adds it to, the management
 fees held in the trust bank; a shortfall needs fees held there. A payout that contains a return waits
-for an administrator, who posts it with `POST /api/payments/settlements/{id}/post` while signed in as
-`admin-a@payments.test`. `GET /api/payments/settlements` lists payouts and why each one waits. There
-is no screen for payouts yet.
+for an administrator. Sign in as `admin-a@payments.test` and open **Operations**: the **Payouts**
+list shows each payout, its status, why it waits and its lines. **Post payout** posts a waiting payout
+whole, or reports the reason it cannot; **Close review…** records a note and posts nothing. Other
+staff see the same list without the actions.
+
+To see a payout reconcile, open **Banking**, import a statement whose one line is the payout's bank
+amount on its bank date, and confirm: the line matches the payout as a group and clears every bank
+line the payout posted.
 
 The CLI constructs signed observations and payout evidence without publishing the signing key. Tests
 can send them to `POST /callbacks/payments/simulation` and `POST /callbacks/payments/simulation/payout`,
@@ -143,5 +148,7 @@ npx playwright test simulated-payment.spec.ts
 
 CI initializes a separate payment database and runs this test after the ordinary fixture suite.
 It covers keyboard submission, reload, separate payout/bank evidence, real ledger refresh, late
-return wording and WCAG 2 AA checks. Backend integration tests additionally inject failures around
+return wording and WCAG 2 AA checks. A second test sets a fee rule on the Settings page, pays twice
+with a quoted fee, delivers a payout whose surplus covers its shortfall, and has an administrator
+post a payout that contains a return from the keyboard. Backend integration tests additionally inject failures around
 provider acceptance and ledger commit, validate routing/isolation and exercise locked periods.

@@ -16,6 +16,12 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Added
 
+- **Staff can review processor payouts, and an administrator can set online payment fees.** In the
+  development payment fixture, Operations lists each payout with its status, the reason it waits and
+  its lines; an administrator posts a waiting payout with one action or closes it with a note.
+  Settings gains the convenience-fee rule for card and bank-debit payments. Neither appears for an
+  organization with no online payments.
+
 - **A processor payout reconciles as one statement line.** A payout is one deposit at the bank and
   several lines in the bank register. A statement import now matches the deposit to the whole payout
   and clears all of its lines together; it never matches one of them by itself. Ticking or unticking
@@ -33,8 +39,8 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   fee quoted to the tenant. Each tenant is credited what they paid toward their ledger; a difference
   in the fee comes out of, or goes into, the management fees held in the trust account, and never
   touches an owner or a tenant. A payout posts completely or not at all, and one that cannot post says
-  why. A payout that contains a returned payment waits for an administrator. Payouts are driven and
-  resolved from the command line and the API for now; there is no screen for them yet.
+  why. A payout that contains a returned payment waits for an administrator. Payouts are driven from
+  the command line or a signed callback.
 
 - **A simulated payment quotes its convenience fee before the tenant confirms.** In the development
   payment fixture, the tenant chooses card or bank debit and sees the fee and the total charged before

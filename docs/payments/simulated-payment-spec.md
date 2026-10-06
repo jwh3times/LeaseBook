@@ -3,7 +3,7 @@
 - **Audience:** Implementers and reviewers of issue #456
 - **Status:** Implemented simulation contract for #456; live payments remain unapproved
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-05
+- **Last reviewed:** 2026-10-06
 
 ## Evidence and boundary
 
@@ -131,8 +131,26 @@ request keeps its fee whatever the rule does afterwards.
 
 Only a clean item settles from single-payment evidence: the processor kept exactly the quoted fee, so
 the bank received the ledger amount. The receipt posts the ledger amount with the payment's method. A
-fee difference in either direction is `unsupported_settlement` until batched settlement is built, and
-so is the return of a fee-bearing payment whose evidence is not the fee-free shape.
+fee difference in either direction is `unsupported_settlement` in single-payment evidence, and so is
+the return of a fee-bearing payment whose evidence is not the fee-free shape.
+
+### Payouts (ADR-053)
+
+A processor pays out many payments in one bank deposit, keeps a fee from each and takes returns out of
+a later deposit. That evidence is a payout, and the
+[fee and settlement specification](fee-and-settlement-spec.md) owns it: the lines, the checks, the
+worked figures, the review reasons and how a payout reconciles. In short:
+
+- A payout arrives through `POST /callbacks/payments/simulation/payout` or the fixture command, is
+  stored once, and posts completely or not at all.
+- A fee difference is the property manager's. It moves held PM fees, never a tenant or an owner.
+- A payout that contains a return waits for an administrator.
+- Staff see payouts in the **Payouts** list on the Operations page; an administrator posts a waiting
+  one or closes it with a note.
+
+Single-payment evidence, as this document describes it, remains valid for the clean case. Wherever
+this document says a fee, a net amount or a batch is unsupported, above this section or below it, it
+speaks of that evidence, not of a payout.
 
 ### Posting a return (ADR-052)
 

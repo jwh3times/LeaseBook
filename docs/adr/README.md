@@ -77,7 +77,7 @@ form, write it, and add a row to the index below. When a decision is replaced, m
 | [050](ADR-050-refund-checks.md)                                      | Refund checks post at issue and derive their status from the bank register      | Accepted                               | 2026-10-01 |
 | [051](ADR-051-blank-stock-micr-details.md)                           | Blank-stock checks draw their own E-13B glyphs, and bank numbers are write-only | Accepted                               | 2026-10-02 |
 | [052](ADR-052-guarded-simulated-payment-return.md)                   | A returned simulated payment posts only as a guarded full reversal              | Accepted                               | 2026-10-04 |
-| [053](ADR-053-processor-fees-and-batched-settlement.md)              | Processor fees stay out of the trust journal; a payout posts as one tied batch  | Proposed                               | 2026-10-05 |
+| [053](ADR-053-processor-fees-and-batched-settlement.md)              | Processor fees stay out of the trust journal; a payout posts as one tied batch  | Accepted                               | 2026-10-05 |
 
 ## Status legend
 
