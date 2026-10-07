@@ -3,7 +3,7 @@
 - **Audience:** Implementers and reviewers of issue #456
 - **Status:** Implemented simulation contract for #456; live payments remain unapproved
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-06
+- **Last reviewed:** 2026-10-07
 
 ## Evidence and boundary
 
@@ -236,13 +236,28 @@ or ResidentAccess entity types. The return command lives in Accounting, guards i
 preconditions under the posting lock, and is reached through `IPaymentLedger.ReturnSettledReceiptAsync`,
 which answers a guard refusal as a result so the caller can record it on the same transaction.
 
-One Payments-owned `IPaymentProcessor` hides provider mechanics with three operations:
-`SubmitAsync(immutable request, stable provider key)`, `LookupAsync(stable operation identity)`,
-and `VerifyAndNormalize(raw body, signature headers)`. Results distinguish accepted, definitively
-failed and unknown outcome. Verified observations carry account/mode/object identity and evidence,
-not journal lines. The simulator implements this interface first; transport verification remains
-outside the org transaction. No processor DTO leaks into Accounting. A future Stripe adapter must
-resolve uncertain results after provider key expiry; it cannot promise permanent provider dedupe.
+One Payments-owned `IPaymentProcessor` hides provider mechanics. `SubmitAsync` and `LookupAsync` take
+one immutable request: the stable operation identity and fingerprint, what is to be collected, which
+is the charged amount, its currency and the payment method, and when the operation was created, so
+that a collection can be found again after the processor has forgotten the request. The request
+carries nothing that identifies the tenant. Results distinguish accepted, definitively failed and
+unknown outcome.
+
+A callback is handled in two steps, both outside the org transaction. `Authenticate(raw body,
+signature)` proves the body came from the processor; it does no I/O, and nothing in the body is
+trusted before it passes. Only that step can produce the notice the next one reads, which an
+architecture test enforces. `ReadObservationAsync` and `ReadSettlementAsync` then turn an
+authenticated notice into an observation of one payment or the evidence for one payout, fetching from
+the processor whatever the notice does not carry. Each answers one of three ways: the content; not
+this host's to act on, which is acknowledged with HTTP 204 and dropped; or unreadable, which is
+refused with HTTP 400 so the sender does not count it as delivered. The content carries
+account/mode/object identity and evidence, not journal lines. The generation and bank on it are the
+adapter's to supply: the simulator's notices carry them, and an adapter whose notices do not takes
+them from its own binding for the account, never from the notice.
+
+The simulator implements this interface first. No processor DTO leaks into Accounting. A future
+Stripe adapter must resolve uncertain results after provider key expiry; it cannot promise permanent
+provider dedupe.
 
 ## Transaction and recovery protocol
 
