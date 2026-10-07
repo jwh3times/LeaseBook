@@ -3,7 +3,7 @@
 - **Audience:** Operators and maintainers
 - **Status:** Living runbook; canonical error-diagnosis reference
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-09-29
+- **Last reviewed:** 2026-10-07
 
 How to turn the reference an operator sees on screen into the full server-side detail in
 Application Insights. See [ADR-025](../adr/ADR-025-error-contract-and-observability.md) for the
@@ -604,8 +604,9 @@ requirement, not a per-incident step — verify it once per environment, not per
 
 The development-only payment worker logs stable events with the operation UUID: `4600`
 (`PaymentProcessed`) records processing latency and `4601` (`PaymentNeedsAttention`) records a
-sanitized failure reason. `4602` (`PaymentCallbackIgnored`) records an unmapped verified observation
-without its payload; `4603` (`PaymentWorkerUnavailable`) records the exception type when a worker
+sanitized failure reason. `4602` (`PaymentCallbackIgnored`) records a verified notice that was not
+acted on, without its payload: one for no fixture on this host, or payout evidence too malformed to
+keep; `4603` (`PaymentWorkerUnavailable`) records the exception type when a worker
 pass cannot complete. No callback body, signing key or bank credentials belong in these logs.
 
 Staff Operations shows durable payment status, reason, last attempt and evidence reference within

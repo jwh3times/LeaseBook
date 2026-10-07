@@ -171,8 +171,10 @@ public sealed class PaymentEndpoints : IEndpointModule
     private static async Task<IResult> Receive(HttpContext http, IPaymentProcessor processor, PaymentRunner runner, CancellationToken ct)
     {
         if (await ReadBodyAsync(http, ct) is not { } body) { return Invalid(http); }
-        var observation = processor.VerifyAndNormalize(body, http.Request.Headers["X-Simulation-Signature"].ToString());
-        if (observation is null) { return Invalid(http); }
+        if (processor.Authenticate(body, http.Request.Headers["X-Simulation-Signature"].ToString()) is not { } notice) { return Invalid(http); }
+        var read = await processor.ReadObservationAsync(notice, ct);
+        if (read.Ignored) { runner.Ignore(); return TypedResults.NoContent(); }
+        if (read.Value is not { } observation) { return Invalid(http); }
         await runner.ReceiveAsync(observation, ct);
         return TypedResults.NoContent();
     }
@@ -180,8 +182,10 @@ public sealed class PaymentEndpoints : IEndpointModule
     private static async Task<IResult> ReceivePayout(HttpContext http, IPaymentProcessor processor, PaymentRunner runner, CancellationToken ct)
     {
         if (await ReadBodyAsync(http, ct) is not { } body) { return Invalid(http); }
-        var evidence = processor.VerifyAndNormalizeSettlement(body, http.Request.Headers["X-Simulation-Signature"].ToString());
-        if (evidence is null) { return Invalid(http); }
+        if (processor.Authenticate(body, http.Request.Headers["X-Simulation-Signature"].ToString()) is not { } notice) { return Invalid(http); }
+        var read = await processor.ReadSettlementAsync(notice, ct);
+        if (read.Ignored) { runner.Ignore(); return TypedResults.NoContent(); }
+        if (read.Value is not { } evidence) { return Invalid(http); }
         // Evidence that cannot be kept as it arrived was not delivered, and the sender is told so. A
         // payout that was kept is acknowledged whatever became of it: held payouts are staff's to resolve.
         return (await runner.ReceiveSettlementAsync(evidence, ct)).Malformed ? Invalid(http) : TypedResults.NoContent();

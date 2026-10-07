@@ -41,7 +41,7 @@ public sealed class PaymentRunner(IServiceScopeFactory scopes, SimulationSetting
         var started = Stopwatch.GetTimestamp();
         try
         {
-            var request = new ProcessorRequest(binding, operation.Id, operation.Fingerprint);
+            var request = ProcessorRequest.For(binding, operation);
             var result = await processor.LookupAsync(request, ct);
             if (result.Outcome == "Absent") { result = await processor.SubmitAsync(request, ct); }
             await InOrg(binding, async sp =>
@@ -74,6 +74,10 @@ public sealed class PaymentRunner(IServiceScopeFactory scopes, SimulationSetting
                 "Simulated payment {OperationId} attempt ended with {Reason}", id, reason);
         }
     }
+
+    /// <summary>An authentic notice the processor adapter says is not this host's to act on.</summary>
+    public void Ignore() =>
+        log.LogInformation(new EventId(4602, "PaymentCallbackIgnored"), "Payment notice for no fixture here ignored");
 
     public async Task ReceiveAsync(ProcessorObservation observation, CancellationToken ct)
     {

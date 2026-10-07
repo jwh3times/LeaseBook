@@ -1,8 +1,48 @@
+using LeaseBook.Modules.Payments.Domain;
+
 namespace LeaseBook.Modules.Payments.Processing;
 
 public sealed record FixtureBinding(Guid OrgId, Guid Generation, Guid BankId, string Account);
-public sealed record ProcessorRequest(FixtureBinding Binding, Guid OperationId, string Fingerprint);
+
+/// <summary>
+/// What a processor needs to collect one payment, and to find it again. <see cref="Amount"/> is the
+/// charge: the ledger amount plus the fee the tenant was quoted. <see cref="CreatedAt"/> bounds a
+/// search for the collection when the processor no longer remembers the request. Nothing here
+/// identifies the tenant.
+/// </summary>
+public sealed record ProcessorRequest(FixtureBinding Binding, Guid OperationId, string Fingerprint,
+    decimal Amount, string Currency, string Method, DateTime CreatedAt)
+{
+    public static ProcessorRequest For(FixtureBinding binding, PaymentOperation operation) => new(
+        binding, operation.Id, operation.Fingerprint, operation.ChargedAmount, operation.Currency, operation.Method,
+        operation.CreatedAt);
+}
+
 public sealed record ProcessorResult(string Outcome, string? ProviderId);
+
+/// <summary>
+/// A callback body that proved authentic. Nothing in it has been read yet. Only an adapter's
+/// <see cref="IPaymentProcessor.Authenticate"/> creates one, which an architecture test enforces; it
+/// is a class and not a record so that no copy can be made with another body.
+/// </summary>
+public sealed class ProcessorNotice(byte[] body)
+{
+    public byte[] Body { get; } = body;
+}
+
+/// <summary>
+/// What reading a notice came to. A <see cref="Value"/>; or <see cref="Ignored"/>, for a notice that is
+/// authentic but not this host's to act on, which is acknowledged and dropped; or neither, for one
+/// that cannot be read, which is refused so that the sender does not count it as delivered.
+/// </summary>
+public readonly record struct ProcessorRead<T>(T? Value, bool Ignored) where T : class
+{
+    public static ProcessorRead<T> NotOurs => new(null, true);
+
+    /// <summary>The content read, or unreadable when there is none.</summary>
+    public static ProcessorRead<T> Of(T? value) => new(value, false);
+}
+
 public sealed record ProcessorObservation(string EventId, string ProviderId, string Account, string Mode,
     Guid Generation, string Kind, decimal Gross, decimal Fee, decimal Net, string Currency, Guid BankId,
     DateOnly BankDate, string EvidenceId, string PayoutId, bool Complete, DateTime ObservedAt);
@@ -11,8 +51,23 @@ public interface IPaymentProcessor
 {
     Task<ProcessorResult> SubmitAsync(ProcessorRequest request, CancellationToken ct);
     Task<ProcessorResult> LookupAsync(ProcessorRequest request, CancellationToken ct);
-    ProcessorObservation? VerifyAndNormalize(byte[] rawBody, string signature);
 
-    /// <summary>Verifies payout evidence and returns it, or null when it cannot be authenticated or read.</summary>
-    ProcessorSettlement? VerifyAndNormalizeSettlement(byte[] rawBody, string signature);
+    /// <summary>
+    /// Proves a callback body came from the processor, or returns null. Does no I/O and runs outside
+    /// any organization transaction. Nothing in the body is trusted before this passes.
+    /// </summary>
+    ProcessorNotice? Authenticate(byte[] rawBody, string signature);
+
+    /// <summary>
+    /// Reads an authenticated notice about one payment, fetching from the processor whatever the notice
+    /// does not carry. It may therefore do I/O, and like <see cref="Authenticate"/> it is called outside
+    /// any organization transaction. The generation and bank on the result are the adapter's to supply:
+    /// an adapter whose notices do not carry them takes them from its own binding for the notice's
+    /// account, never from the notice, and answers <see cref="ProcessorRead{T}.NotOurs"/> when it has
+    /// no binding for that account or the notice is of another kind.
+    /// </summary>
+    Task<ProcessorRead<ProcessorObservation>> ReadObservationAsync(ProcessorNotice notice, CancellationToken ct);
+
+    /// <summary>Reads an authenticated notice as payout evidence, on the same terms.</summary>
+    Task<ProcessorRead<ProcessorSettlement>> ReadSettlementAsync(ProcessorNotice notice, CancellationToken ct);
 }

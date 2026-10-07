@@ -60,9 +60,19 @@ public sealed class SimulatedProcessor(IServiceScopeFactory scopes, SimulationSe
         return CryptographicOperations.FixedTimeEquals(supplied, Signature(rawBody, parts[0]));
     }
 
-    public ProcessorSettlement? VerifyAndNormalizeSettlement(byte[] rawBody, string signature)
+    public ProcessorNotice? Authenticate(byte[] rawBody, string signature) =>
+        Verified(rawBody, signature) ? new ProcessorNotice(rawBody) : null;
+
+    // The simulator's notices carry everything, so reading one fetches nothing. Whether a notice is
+    // for a fixture here is the runner's to decide, from the account, mode and generation it names.
+    public Task<ProcessorRead<ProcessorSettlement>> ReadSettlementAsync(ProcessorNotice notice, CancellationToken ct) =>
+        Task.FromResult(ProcessorRead<ProcessorSettlement>.Of(Settlement(notice.Body)));
+
+    public Task<ProcessorRead<ProcessorObservation>> ReadObservationAsync(ProcessorNotice notice, CancellationToken ct) =>
+        Task.FromResult(ProcessorRead<ProcessorObservation>.Of(Observation(notice.Body)));
+
+    private static ProcessorSettlement? Settlement(byte[] rawBody)
     {
-        if (!Verified(rawBody, signature)) { return null; }
         try
         {
             // Only what must hold to route and to do arithmetic on the evidence. Whether it can be
@@ -78,9 +88,8 @@ public sealed class SimulatedProcessor(IServiceScopeFactory scopes, SimulationSe
         catch (JsonException) { return null; }
     }
 
-    public ProcessorObservation? VerifyAndNormalize(byte[] rawBody, string signature)
+    private static ProcessorObservation? Observation(byte[] rawBody)
     {
-        if (!Verified(rawBody, signature)) { return null; }
         try
         {
             var value = JsonSerializer.Deserialize<ProcessorObservation>(rawBody);

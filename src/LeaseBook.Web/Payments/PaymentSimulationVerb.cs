@@ -68,15 +68,16 @@ internal sealed class PaymentSimulationVerb : ICliVerb
         var providerIds = new Dictionary<Guid, string>();
         foreach (var operation in operations.Values)
         {
-            var submitted = new ProcessorRequest(binding, operation.Id, operation.Fingerprint);
+            var submitted = ProcessorRequest.For(binding, operation);
             var provider = await processor.LookupAsync(submitted, ct);
             if (provider.Outcome == "Absent") { provider = await processor.SubmitAsync(submitted, ct); }
             providerIds[operation.Id] = provider.ProviderId!;
         }
         var evidence = request.ToEvidence(binding, bankDate, operations, providerIds);
         var body = JsonSerializer.SerializeToUtf8Bytes(evidence);
-        var verified = processor.VerifyAndNormalizeSettlement(body, processor.Sign(body))
-            ?? throw new InvalidOperationException("Fixture signature failed.");
+        var verified = processor.Authenticate(body, processor.Sign(body)) is { } notice
+            ? (await processor.ReadSettlementAsync(notice, ct)).Value : null;
+        if (verified is null) { throw new InvalidOperationException("Fixture signature failed."); }
         // The worker first, so that every payment named has been dispatched and carries its reference.
         var runner = services.GetRequiredService<PaymentRunner>();
         await runner.RunOnceAsync(ct);
@@ -105,7 +106,7 @@ internal sealed class PaymentSimulationVerb : ICliVerb
             return await sp.GetRequiredService<AppDbContext>().Set<PaymentOperation>().AsNoTracking().SingleAsync(x => x.Id == operationId, ct);
         }, ct);
         var processor = services.GetRequiredService<SimulatedProcessor>();
-        var request = new ProcessorRequest(binding, operationId, op.Fingerprint);
+        var request = ProcessorRequest.For(binding, op);
         var provider = await processor.LookupAsync(request, ct);
         if (provider.Outcome == "Absent") { provider = await processor.SubmitAsync(request, ct); }
         // Bank credit evidence is the clean item: the charge, the quoted fee, and the ledger amount net.
@@ -117,7 +118,8 @@ internal sealed class PaymentSimulationVerb : ICliVerb
             "bank-" + operationId.ToString("N"), "payout-" + operationId.ToString("N"), true,
             date.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
         var body = JsonSerializer.SerializeToUtf8Bytes(observation);
-        var verified = processor.VerifyAndNormalize(body, processor.Sign(body)) ?? throw new InvalidOperationException("Fixture signature failed.");
+        var verified = (processor.Authenticate(body, processor.Sign(body)) is { } notice
+            ? (await processor.ReadObservationAsync(notice, ct)).Value : null) ?? throw new InvalidOperationException("Fixture signature failed.");
         await services.GetRequiredService<PaymentRunner>().ReceiveAsync(verified, ct);
         await services.GetRequiredService<PaymentRunner>().RunOnceAsync(ct);
         return 0;

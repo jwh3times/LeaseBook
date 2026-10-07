@@ -216,10 +216,9 @@ public sealed partial class SimulatedPaymentTests(PostgresFixture fixture)
         await using var h = await Setup(ct);
         using var client = await h.Login(1, ct);
         var op = await Submit(client, 100m, ct);
-        string fingerprint = "";
-        await h.InOrg(async sp => fingerprint = await sp.GetRequiredService<AppDbContext>()
-            .Set<PaymentOperation>().Where(x => x.Id == op.Id).Select(x => x.Fingerprint).SingleAsync(ct), ct);
-        var request = new ProcessorRequest(h.Binding, op.Id, fingerprint);
+        ProcessorRequest request = null!;
+        await h.InOrg(async sp => request = ProcessorRequest.For(h.Binding, await sp.GetRequiredService<AppDbContext>()
+            .Set<PaymentOperation>().AsNoTracking().SingleAsync(x => x.Id == op.Id, ct)), ct);
         await h.InOrg(async sp =>
             (await sp.GetRequiredService<PaymentEngine>().ClaimAsync(h.Binding, op.Id, ct)).ShouldNotBeNull(), ct);
         await h.App.Services.GetRequiredService<IPaymentProcessor>().SubmitAsync(request, ct);
@@ -294,7 +293,7 @@ public sealed partial class SimulatedPaymentTests(PostgresFixture fixture)
         var body = JsonSerializer.SerializeToUtf8Bytes(h.Observation(op, "BankCredit"));
         var signature = processor.Sign(body);
         for (var i = 0; i < 151; i++) { h.Clock.Advance(); }
-        processor.VerifyAndNormalize(body, signature).ShouldBeNull();
+        processor.Authenticate(body, signature).ShouldBeNull();
         await h.Deliver(h.Observation(op, "BankCredit") with { Complete = false }, ct);
         await h.Tick(ct);
         (await Read(client, op.Id, ct)).Status.ShouldBe("Processing");
@@ -592,6 +591,53 @@ public sealed partial class SimulatedPaymentTests(PostgresFixture fixture)
             $"{Path}/quote?amount={amount.ToString(System.Globalization.CultureInfo.InvariantCulture)}&method={method}", ct))!;
 
     [Fact]
+    public async Task The_processor_is_asked_to_collect_the_charge_in_the_method_the_tenant_chose()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var sent = new List<(string Call, ProcessorRequest Request)>();
+        await using var h = await Setup(ct, processor: inner => new RecordingProcessor(inner, sent));
+        using var tenant = await h.Login(1, ct);
+        using var admin = await h.LoginAdmin(ct);
+        (await admin.PutAsJsonAsync("/api/settings/payment-fees", FeeRules, ct)).EnsureSuccessStatusCode();
+        var quote = await Quote(tenant, 500m, "card", ct);
+        var response = await tenant.PostAsJsonAsync(Path, new SubmitPaymentBody(UuidV7.NewId(), 500m, "USD", "card", quote.Fee), ct);
+        response.StatusCode.ShouldBe(HttpStatusCode.Accepted, await response.Content.ReadAsStringAsync(ct));
+        var op = (await response.Content.ReadFromJsonAsync<PaymentView>(ct))!;
+
+        await h.Tick(ct);
+
+        // Asked whether it already holds the collection, then asked to make it. Both times the amount
+        // is the ledger amount plus the quoted fee: the ledger amount alone would leave the bank short.
+        sent.Select(x => x.Call).ShouldBe(["Lookup", "Submit"]);
+        sent.ShouldAllBe(x => x.Request.OperationId == op.Id && x.Request.Amount == 515.24m && x.Request.Currency == "USD"
+            && x.Request.Method == "card" && x.Request.CreatedAt != default);
+    }
+
+    [Fact]
+    public async Task An_authentic_notice_the_processor_says_is_not_ours_is_acknowledged_and_dropped()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var h = await Setup(ct, processor: inner => new ElsewhereProcessor(inner));
+        using var tenant = await h.Login(1, ct);
+        var op = await Submit(tenant, 100m, ct);
+        await h.Tick(ct);
+
+        // Acknowledged, so the sender stops redelivering; a refusal would have it retry for days.
+        await h.Deliver(h.Observation(op, "BankCredit"), ct);
+        await h.Settle(h.Payout("po_1", 100m, h.Line("1", "Payment", op, 100m, 0m, 100m)), ct);
+        await h.Tick(ct);
+
+        (await Read(tenant, op.Id, ct)).Status.ShouldBe("Processing");
+        (await h.Balance(1, ct)).ShouldBe(1000m);
+        await h.InOrg(async sp =>
+        {
+            var db = sp.GetRequiredService<AppDbContext>();
+            (await db.Set<PaymentObservation>().CountAsync(ct)).ShouldBe(0);
+            (await db.Set<PaymentSettlement>().CountAsync(ct)).ShouldBe(0);
+        }, ct);
+    }
+
+    [Fact]
     public async Task A_quoted_fee_rides_on_top_of_the_ledger_amount_and_only_the_ledger_amount_posts()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -734,7 +780,8 @@ public sealed partial class SimulatedPaymentTests(PostgresFixture fixture)
     private static async Task<PaymentView> Read(HttpClient client, Guid id, CancellationToken ct) =>
         (await client.GetFromJsonAsync<PaymentView>(Path + "/" + id, ct))!;
 
-    private async Task<Harness> Setup(CancellationToken ct, AfterPostingFailure? fault = null)
+    private async Task<Harness> Setup(CancellationToken ct, AfterPostingFailure? fault = null,
+        Func<IPaymentProcessor, IPaymentProcessor>? processor = null)
     {
         var binding = new FixtureBinding(UuidV7.NewId(), UuidV7.NewId(), UuidV7.NewId(), "sim_" + UuidV7.NewId().ToString("N"));
         var suffix = UuidV7.NewId().ToString("N");
@@ -760,6 +807,11 @@ public sealed partial class SimulatedPaymentTests(PostgresFixture fixture)
                 services.RemoveAll<IPaymentLedger>();
                 services.AddScoped<IPaymentLedger>(sp => new FailingLedger(sp.GetRequiredService<ISender>(), fault));
             }
+            if (processor is not null)
+            {
+                services.RemoveAll<IPaymentProcessor>();
+                services.AddSingleton(sp => processor(sp.GetRequiredService<SimulatedProcessor>()));
+            }
         }));
         return new Harness(factory, app, binding, suffix, clock);
     }
@@ -772,6 +824,26 @@ public sealed partial class SimulatedPaymentTests(PostgresFixture fixture)
         public void Advance(TimeSpan by) => _now = _now.Add(by);
     }
     private sealed class AfterPostingFailure { public bool Fail { get; set; } = true; }
+    // The simulator, with what the worker asked of it kept for the test to read.
+    private sealed class RecordingProcessor(IPaymentProcessor inner, List<(string Call, ProcessorRequest Request)> sent) : IPaymentProcessor
+    {
+        public Task<ProcessorResult> SubmitAsync(ProcessorRequest request, CancellationToken ct) { sent.Add(("Submit", request)); return inner.SubmitAsync(request, ct); }
+        public Task<ProcessorResult> LookupAsync(ProcessorRequest request, CancellationToken ct) { sent.Add(("Lookup", request)); return inner.LookupAsync(request, ct); }
+        public ProcessorNotice? Authenticate(byte[] rawBody, string signature) => inner.Authenticate(rawBody, signature);
+        public Task<ProcessorRead<ProcessorObservation>> ReadObservationAsync(ProcessorNotice notice, CancellationToken ct) => inner.ReadObservationAsync(notice, ct);
+        public Task<ProcessorRead<ProcessorSettlement>> ReadSettlementAsync(ProcessorNotice notice, CancellationToken ct) => inner.ReadSettlementAsync(notice, ct);
+    }
+    // A processor whose every authentic notice is for an account this host holds no binding for.
+    private sealed class ElsewhereProcessor(IPaymentProcessor inner) : IPaymentProcessor
+    {
+        public Task<ProcessorResult> SubmitAsync(ProcessorRequest request, CancellationToken ct) => inner.SubmitAsync(request, ct);
+        public Task<ProcessorResult> LookupAsync(ProcessorRequest request, CancellationToken ct) => inner.LookupAsync(request, ct);
+        public ProcessorNotice? Authenticate(byte[] rawBody, string signature) => inner.Authenticate(rawBody, signature);
+        public Task<ProcessorRead<ProcessorObservation>> ReadObservationAsync(ProcessorNotice notice, CancellationToken ct) =>
+            Task.FromResult(ProcessorRead<ProcessorObservation>.NotOurs);
+        public Task<ProcessorRead<ProcessorSettlement>> ReadSettlementAsync(ProcessorNotice notice, CancellationToken ct) =>
+            Task.FromResult(ProcessorRead<ProcessorSettlement>.NotOurs);
+    }
     private sealed class FailingLedger(ISender sender, AfterPostingFailure fault) : IPaymentLedger
     {
         public async Task<Guid> RecordSettledReceiptAsync(Guid tenantId, Guid bankId, decimal amount, DateOnly date, string method, string sourceRef, CancellationToken ct)
