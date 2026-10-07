@@ -63,6 +63,16 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   notice that is authentic but meant for another account is acknowledged and dropped instead of
   being refused, so a real processor would not keep resending it.
 
+- **A Stripe sandbox payment mode is recognised, and cannot run yet.** `Payments:Mode` accepts
+  `StripeSandbox` beside `Disabled` and `Simulation`. It is admitted only in Development, with a
+  Stripe test-mode key and each payment fixture bound to its own connected account; a live key is
+  refused by its prefix. A host configured for it refuses to start until its processor exists, so
+  nothing changes for any running host.
+
+- **Payment settings nobody defined are refused at any depth.** A setting under `Payments` is now
+  known by its whole path, and the refusal names the path. A fixture manifest that holds provider
+  credentials is refused. An existing fixture manifest is unaffected.
+
 ## [0.25.0] - 2026-10-04
 
 ### Added

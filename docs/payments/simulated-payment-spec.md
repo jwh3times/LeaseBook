@@ -340,11 +340,12 @@ In #456, implement these checks in executable startup, submission, callback and 
   every one of these holds, and each is otherwise a startup error: the environment is Development;
   `Payments:Stripe:SecretKey` is a Stripe test-mode key (`sk_test_` or `rk_test_`), so a live key is
   refused by its prefix; the fixture signing key is present; every fixture is bound to its own
-  connected account (`acct_`); and no setting is present under `Payments` that this document does not
-  define, at any depth. `Payments:Stripe` and a top-level `Stripe` section are refused in every other
-  mode, Disabled included. A simulator account in a sandbox host, or a connected account in a
-  simulation host, is refused. The Stripe key lives in local secrets: a fixture manifest that holds
-  provider credentials is refused.
+  connected account (`acct_`). `Payments:Stripe` is refused in every other mode, Disabled included,
+  and a top-level `Stripe` section is refused in every mode, this one included. In every mode a
+  setting under `Payments` that the host does not recognise is a startup error at any depth, and the
+  refusal names the setting's path, never its value. A simulator account in a sandbox host, or a
+  connected account in a simulation host, is refused. The Stripe key lives in local secrets: a
+  fixture manifest that holds provider credentials is refused.
 - A binding carries the mode of the host that holds it. Evidence is kept only when it names the same
   mode as the binding it is for, and the simulator authenticates its own notices only in a simulation
   host, so a simulator notice cannot be stored in a sandbox fixture.
