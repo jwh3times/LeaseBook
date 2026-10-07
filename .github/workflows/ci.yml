@@ -111,6 +111,12 @@ jobs:
       - name: Verify committed harness mirrors are up to date
         working-directory: ${{ github.workspace }}
         run: node scripts/sync-agents.mjs --check
+      # The Stripe sandbox probe never runs here: it needs a maintainer's sandbox key. Its tests do,
+      # and one of them is the guard on what is committed: no recorded Stripe payload under
+      # `tests/fixtures/stripe/` may hold a real identifier, an address or a URL.
+      - name: Test the Stripe sandbox probe and its fixture guard
+        working-directory: ${{ github.workspace }}
+        run: node --test scripts/stripe-probe.test.mjs
       # Public docs are formatted, structurally linted, spell-checked, and validated against the
       # repository's metadata, ADR-index, canonical-ownership, and private-link policies.
       - run: npm run docs:check

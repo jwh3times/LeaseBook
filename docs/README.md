@@ -3,7 +3,7 @@
 - **Audience:** Evaluators, contributors, operators, and maintainers
 - **Status:** Living index
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-05
+- **Last reviewed:** 2026-10-07
 
 Use this page to find the maintained source for a question. Documents intentionally have one owner;
 summaries elsewhere should link here rather than restating mutable detail.
@@ -45,6 +45,7 @@ summaries elsewhere should link here rather than restating mutable detail.
 
 - [Local development](runbooks/local-dev.md)
 - [Isolated payment simulation](runbooks/payment-simulation.md)
+- [Stripe sandbox probe](runbooks/stripe-sandbox-probe.md)
 - [Blank-stock refund checks](runbooks/blank-stock-checks.md)
 - [Point-in-time restore](runbooks/restore.md)
 - [Error diagnostics](runbooks/diagnostics.md)
