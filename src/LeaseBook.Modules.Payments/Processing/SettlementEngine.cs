@@ -34,7 +34,7 @@ public sealed class SettlementEngine(DbContext db, TimeProvider clock, PaymentEn
     public async Task<Guid?> ReceiveAsync(FixtureBinding binding, ProcessorSettlement evidence, CancellationToken ct)
     {
         await payments.RequireFixtureAsync(binding, ct);
-        if (evidence.Generation != binding.Generation || evidence.Account != binding.Account || evidence.Mode != "Simulation")
+        if (evidence.Generation != binding.Generation || evidence.Account != binding.Account || evidence.Mode != binding.Mode)
         { throw new PaymentUnavailableException(); }
         if (!WellFormed(evidence)) { return null; }
         await payments.LockAsync("settlement:" + evidence.PayoutId, ct);
