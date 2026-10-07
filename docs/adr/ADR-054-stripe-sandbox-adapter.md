@@ -76,8 +76,10 @@ mandate belongs with a payment form.
 **Recorded payloads are committed scrubbed.** A probe
 ([runbook](../runbooks/stripe-sandbox-probe.md)) records what the sandbox sends. Before a payload is
 committed, every identifier is replaced with a synthetic one and anything that identifies a person,
-a bank account or a device is removed. A test fails on any committed payload that still holds a real
-identifier, an address or a URL.
+a bank account or a device is removed. An account is reduced to the few fields the adapter reads. The
+copy is then searched for every identifier and account name the run recorded, and nothing is written
+if one is found. A test fails on any committed payload that still holds a real identifier, an address
+or a URL.
 
 ## Consequences
 
