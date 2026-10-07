@@ -96,11 +96,11 @@ public sealed class PaymentEngine(DbContext db, IOrgContext org, TimeProvider cl
     {
         await RequireFixtureAsync(binding, ct);
         if (observation.Generation != binding.Generation || observation.Account != binding.Account
-            || observation.Mode != "Simulation") { throw new PaymentUnavailableException(); }
+            || observation.Mode != binding.Mode) { throw new PaymentUnavailableException(); }
         await LockAsync("event:" + observation.EventId, ct);
         var fingerprint = Hash(JsonSerializer.Serialize(observation));
         var existing = await db.Set<PaymentObservation>().AsNoTracking()
-            .SingleOrDefaultAsync(x => x.Account == binding.Account && x.Mode == "Simulation" && x.EventId == observation.EventId, ct);
+            .SingleOrDefaultAsync(x => x.Account == binding.Account && x.Mode == binding.Mode && x.EventId == observation.EventId, ct);
         if (existing?.Fingerprint == fingerprint) { return; }
         // Preserve the original event. Authenticated reuse with altered content is separate evidence.
         var eventId = existing is null ? observation.EventId : "conflict:" + fingerprint;

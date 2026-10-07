@@ -614,6 +614,68 @@ public sealed partial class SimulatedPaymentTests(PostgresFixture fixture)
     }
 
     [Fact]
+    public async Task A_host_configured_for_the_stripe_sandbox_refuses_to_start()
+    {
+        // The whole host, not the registration method alone: a second place that registered a processor
+        // would let a sandbox host start and serve with the simulator behind it.
+        await using var factory = new ApiFactory(fixture.AppConnectionString, new Dictionary<string, string?>
+        {
+            ["Logging:LogLevel:Default"] = "Warning",
+            ["Payments:Mode"] = PaymentModes.StripeSandbox,
+            ["Payments:SigningKey"] = new string('x', 64),
+            ["Payments:Stripe:SecretKey"] = "sk_test_abc",
+            ["Payments:Fixtures:0:OrgId"] = UuidV7.NewId().ToString(),
+            ["Payments:Fixtures:0:Generation"] = UuidV7.NewId().ToString(),
+            ["Payments:Fixtures:0:BankId"] = UuidV7.NewId().ToString(),
+            ["Payments:Fixtures:0:Account"] = "acct_fixture",
+        });
+        var refusal = Should.Throw<InvalidOperationException>(() => factory.Services);
+        refusal.Message.ShouldContain("no processor adapter");
+    }
+
+    [Fact]
+    public async Task Evidence_is_kept_only_when_it_says_the_mode_of_the_binding_it_is_for()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        // A fixture bound in another mode than the simulator's. No host can run in it yet, so this
+        // drives the engines directly, as the worker would.
+        var binding = new FixtureBinding(UuidV7.NewId(), UuidV7.NewId(), UuidV7.NewId(), "acct_" + UuidV7.NewId().ToString("N"))
+        { Mode = PaymentModes.StripeSandbox };
+        await PaymentFixtureBootstrap.SeedAsync(fixture.Api.Services, binding, UuidV7.NewId().ToString("N"), ct);
+        var now = DateTime.UtcNow;
+        ProcessorObservation Observation(string mode) => new("evt_" + mode, "pi_1", binding.Account, mode, binding.Generation,
+            "Succeeded", 100m, 0m, 100m, "USD", binding.BankId, DateOnly.FromDateTime(now), "evidence", "po_1", true, now);
+        ProcessorSettlement Payout(string mode) => new("po_" + mode, binding.Account, mode, binding.Generation, "standard", 0m,
+            "USD", binding.BankId, DateOnly.FromDateTime(now), "bank", now, []);
+        async Task InOrg(Func<IServiceProvider, Task> work)
+        {
+            await using var scope = fixture.Api.Services.CreateAsyncScope();
+            await scope.ServiceProvider.GetRequiredService<OrgScopedExecutor>()
+                .RunAsSystemAsync(binding.OrgId, "test:payments", () => work(scope.ServiceProvider), ct);
+        }
+
+        await Should.ThrowAsync<PaymentUnavailableException>(() => InOrg(sp =>
+            sp.GetRequiredService<PaymentEngine>().ReceiveAsync(binding, Observation(PaymentModes.Simulation), ct)));
+        await Should.ThrowAsync<PaymentUnavailableException>(() => InOrg(sp =>
+            sp.GetRequiredService<SettlementEngine>().ReceiveAsync(binding, Payout(PaymentModes.Simulation), ct)));
+        await InOrg(sp => sp.GetRequiredService<PaymentEngine>().ReceiveAsync(binding, Observation(PaymentModes.StripeSandbox), ct));
+        // Delivered twice: found again under its own mode, not stored a second time.
+        await InOrg(sp => sp.GetRequiredService<PaymentEngine>().ReceiveAsync(binding, Observation(PaymentModes.StripeSandbox), ct));
+        // The same event with different content is found under its own mode too, and kept as a conflict.
+        await InOrg(sp => sp.GetRequiredService<PaymentEngine>().ReceiveAsync(binding,
+            Observation(PaymentModes.StripeSandbox) with { Gross = 200m, Net = 200m }, ct));
+        await InOrg(sp => sp.GetRequiredService<SettlementEngine>().ReceiveAsync(binding, Payout(PaymentModes.StripeSandbox), ct));
+
+        await InOrg(async sp =>
+        {
+            var db = sp.GetRequiredService<AppDbContext>();
+            (await db.Set<PaymentObservation>().OrderBy(x => x.Kind).Select(x => x.Kind + ":" + x.Mode).ToListAsync(ct))
+                .ShouldBe(["Conflict:StripeSandbox", "Succeeded:StripeSandbox"]);
+            (await db.Set<PaymentSettlement>().Select(x => x.PayoutId).ToListAsync(ct)).ShouldBe(["po_StripeSandbox"]);
+        });
+    }
+
+    [Fact]
     public async Task An_authentic_notice_the_processor_says_is_not_ours_is_acknowledged_and_dropped()
     {
         var ct = TestContext.Current.CancellationToken;

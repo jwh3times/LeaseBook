@@ -332,9 +332,23 @@ In #456, implement these checks in executable startup, submission, callback and 
 
 - Default mode Disabled. Simulation is allowed only in Development or the integration-test host.
   Production and other environments reject Simulation at startup; Disabled exposes no payment
-  mutation routes or worker. Any configured Live/Stripe mode or real provider credentials is a
+  mutation routes or worker. Any configured Live mode or real provider credentials is a
   startup error in this release. There is no live implementation registered and no network client
   capable of charging a provider.
+- A third mode, `StripeSandbox`, is recognised and guarded but cannot run yet: a host configured for
+  it refuses to start until its processor adapter exists. Its configuration is admitted only when
+  every one of these holds, and each is otherwise a startup error: the environment is Development;
+  `Payments:Stripe:SecretKey` is a Stripe test-mode key (`sk_test_` or `rk_test_`), so a live key is
+  refused by its prefix; the fixture signing key is present; every fixture is bound to its own
+  connected account (`acct_`). `Payments:Stripe` is refused in every other mode, Disabled included,
+  and a top-level `Stripe` section is refused in every mode, this one included. In every mode a
+  setting under `Payments` that the host does not recognise is a startup error at any depth, and the
+  refusal names the setting's path, never its value. A simulator account in a sandbox host, or a
+  connected account in a simulation host, is refused. The Stripe key lives in local secrets: a
+  fixture manifest that holds provider credentials is refused.
+- A binding carries the mode of the host that holds it. Evidence is kept only when it names the same
+  mode as the binding it is for, and the simulator authenticates its own notices only in a simulation
+  host, so a simulator notice cannot be stored in a sandbox fixture.
 - A dedicated payment-fixture bootstrap creates new UUID organizations, tenants, users and trust
   banks and writes an immutable simulation marker/generation. Do not reuse demo/load/scenario or
   ordinary customer organizations, and do not change their golden figures. Explicitly register

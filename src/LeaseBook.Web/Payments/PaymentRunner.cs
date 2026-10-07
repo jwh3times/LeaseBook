@@ -82,7 +82,7 @@ public sealed class PaymentRunner(IServiceScopeFactory scopes, SimulationSetting
     public async Task ReceiveAsync(ProcessorObservation observation, CancellationToken ct)
     {
         var binding = settings.ForAccount(observation.Account);
-        if (binding is null || observation.Mode != "Simulation" || observation.Generation != binding.Generation
+        if (binding is null || observation.Mode != binding.Mode || observation.Generation != binding.Generation
             || !PaymentEngine.EventKinds.Contains(observation.Kind))
         {
             log.LogInformation(new EventId(4602, "PaymentCallbackIgnored"), "Unmapped simulated payment observation ignored");
@@ -102,7 +102,7 @@ public sealed class PaymentRunner(IServiceScopeFactory scopes, SimulationSetting
     public async Task<PayoutDelivery> ReceiveSettlementAsync(ProcessorSettlement evidence, CancellationToken ct)
     {
         var binding = settings.ForAccount(evidence.Account);
-        if (binding is null || evidence.Mode != "Simulation" || evidence.Generation != binding.Generation)
+        if (binding is null || evidence.Mode != binding.Mode || evidence.Generation != binding.Generation)
         {
             log.LogInformation(new EventId(4602, "PaymentCallbackIgnored"), "Unmapped simulated payout evidence ignored");
             return new(null, false);

@@ -49,7 +49,7 @@ public sealed class SimulatedProcessor(IServiceScopeFactory scopes, SimulationSe
     // Authentic, recent, and small enough to have been read whole. Nothing is parsed before this passes.
     private bool Verified(byte[] rawBody, string signature)
     {
-        if (!settings.Enabled || rawBody.Length > 16384) { return false; }
+        if (!settings.Simulated || rawBody.Length > 16384) { return false; }
         var parts = signature.Split('.');
         if (parts.Length != 2 || !long.TryParse(parts[0], CultureInfo.InvariantCulture, out var seconds)
             || seconds < 0 || seconds > 253402300799

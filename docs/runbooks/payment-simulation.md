@@ -3,11 +3,12 @@
 - **Audience:** Developers and test operators
 - **Status:** Implemented, non-live only
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-06
+- **Last reviewed:** 2026-10-07
 
 The simulator exercises the real Payments and Accounting path. It has no provider network client
 and cannot move real money. Production and Staging reject Simulation; live/provider configuration
-is refused. The [specification](../payments/simulated-payment-spec.md) owns the financial contract.
+is refused. A `StripeSandbox` mode is recognised for a later release and a host configured for it
+refuses to start. The [specification](../payments/simulated-payment-spec.md) owns the financial contract.
 
 ## Create the fixture
 
