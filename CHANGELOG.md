@@ -55,6 +55,14 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   more than ten minutes: when it arrived, its kind, amount, provider reference and age. The list is
   read-only and shows nothing that identifies the bank or the account.
 
+### Changed
+
+- **The payment processor seam is ready for a second processor.** Nothing changes in the development
+  payment fixture. Internally, a request to a processor now names the amount to charge, its currency
+  and the payment method, and a processor's notice is first proved authentic and only then read. A
+  notice that is authentic but meant for another account is acknowledged and dropped instead of
+  being refused, so a real processor would not keep resending it.
+
 ## [0.25.0] - 2026-10-04
 
 ### Added
