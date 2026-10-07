@@ -11,7 +11,7 @@ the simulator as its only implementation.
 [ADR-046](ADR-046-simulated-payment-recognition.md) recognizes a payment only from bank evidence,
 [ADR-052](ADR-052-guarded-simulated-payment-return.md) posts a return only when an administrator
 asks, and [ADR-053](ADR-053-processor-fees-and-batched-settlement.md) posts a payout as one tied
-batch. Each names a real processor adapter as a trigger to revisit.
+batch. ADR-046 names a Stripe adapter as a trigger to revisit; the other two name a live processor.
 
 A second implementation is the test of whether that seam and those rules hold against a processor
 nobody here wrote. The [provider research](../research/stripe-connect-payment-lifecycle.md) says

@@ -47,8 +47,9 @@ dispute to appear, up to ten minutes each, so allow up to forty minutes.
 | `--port=4242`       | The local port the Stripe CLI forwards deliveries to           |
 
 Each line it prints is one answer. A step that fails is printed as an answer too, and the run goes
-on to the next. A dropped connection is retried. When the run ends, or you interrupt it, it names a
-`findings.md`.
+on to the next. A dropped connection is retried. The first line printed names the run's directory.
+When the run ends it names the `findings.md` it wrote there. If you interrupt it, it still writes
+`findings.md` there with the answers so far, but does not name it again.
 
 ## What it writes
 
@@ -74,7 +75,8 @@ add payout evidence to the same run:
 node scripts/stripe-probe.mjs payouts stripe-probe.local/<run>
 ```
 
-It lists the payouts and, for each automatic one, the lines Stripe says it covers. It makes no
+It records the balance and the twenty most recent payouts and, for the three most recent automatic
+ones, the lines Stripe says each covers. It needs the same two environment variables. It makes no
 charge. It never creates a payout: which charges a payout covers has to come from Stripe.
 
 ## Commit the recorded payloads
