@@ -1,8 +1,25 @@
+using System.Text.Json.Serialization;
 using LeaseBook.Modules.Payments.Domain;
 
 namespace LeaseBook.Modules.Payments.Processing;
 
-public sealed record FixtureBinding(Guid OrgId, Guid Generation, Guid BankId, string Account);
+/// <summary>The payment modes a host can run in. The value is stored on every notice kept.</summary>
+public static class PaymentModes
+{
+    public const string Disabled = "Disabled";
+    public const string Simulation = "Simulation";
+    public const string StripeSandbox = "StripeSandbox";
+}
+
+public sealed record FixtureBinding(Guid OrgId, Guid Generation, Guid BankId, string Account)
+{
+    /// <summary>
+    /// The mode of the host that holds this binding. A notice is for this binding only when it says the
+    /// same mode. The host sets it from its own settings; it is not part of a fixture manifest.
+    /// </summary>
+    [JsonIgnore]
+    public string Mode { get; init; } = PaymentModes.Simulation;
+}
 
 /// <summary>
 /// What a processor needs to collect one payment, and to find it again. <see cref="Amount"/> is the

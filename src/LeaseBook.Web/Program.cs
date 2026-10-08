@@ -53,7 +53,7 @@ var lifecycle = process.Lifecycle!;
 var builder = WebApplication.CreateBuilder(args);
 if (builder.Configuration["Payments:ManifestPath"] is { Length: > 0 } paymentManifest)
 {
-    builder.Configuration.AddJsonFile(Path.GetFullPath(paymentManifest), optional: false, reloadOnChange: false);
+    SimulationSettings.AddManifest(builder.Configuration, paymentManifest);
 }
 var simulation = SimulationSettings.Read(builder.Configuration, builder.Environment);
 builder.Services.AddSingleton(simulation);
@@ -63,8 +63,7 @@ builder.Services.AddScoped<IPaymentLedger, PaymentLedgerAdapter>();
 builder.Services.AddScoped<IPaymentEligibility, PaymentEligibilityAdapter>();
 builder.Services.AddScoped<IPaymentFeeRules, PaymentFeeRulesAdapter>();
 builder.Services.AddScoped<IRefundCheckLedger, RefundCheckLedgerAdapter>();
-builder.Services.AddSingleton<SimulatedProcessor>();
-builder.Services.AddSingleton<IPaymentProcessor>(sp => sp.GetRequiredService<SimulatedProcessor>());
+simulation.AddProcessor(builder.Services);
 builder.Services.AddSingleton<PaymentRunner>();
 
 // No `Server: Kestrel` banner: it names the stack to every anonymous caller and nothing reads it.
