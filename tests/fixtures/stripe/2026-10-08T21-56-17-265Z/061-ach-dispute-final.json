@@ -1,0 +1,76 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/v1/disputes",
+    "params": {
+      "payment_intent": "pi_synthetic000006",
+      "limit": 10
+    },
+    "platform": false,
+    "idempotencyKey": null
+  },
+  "status": 200,
+  "requestId": "req_synthetic000021",
+  "stripeVersion": "2026-09-30.endive",
+  "elapsedMs": 244,
+  "body": {
+    "object": "list",
+    "count": 1,
+    "data": [
+      {
+        "id": "du_synthetic000001",
+        "object": "dispute",
+        "amount": 20000,
+        "balance_transaction": "txn_synthetic000007",
+        "balance_transactions": [
+          {
+            "id": "txn_synthetic000007",
+            "object": "balance_transaction",
+            "amount": -20000,
+            "available_on": 1791497242,
+            "balance_type": "payments",
+            "created": 1791497242,
+            "currency": "usd",
+            "description": "[scrubbed]",
+            "exchange_rate": null,
+            "fee": 1500,
+            "fee_details": [
+              {
+                "amount": 1500,
+                "application": null,
+                "currency": "usd",
+                "description": "[scrubbed]",
+                "type": "stripe_fee"
+              }
+            ],
+            "net": -21500,
+            "reporting_category": "dispute",
+            "source": "du_synthetic000001",
+            "status": "available",
+            "type": "adjustment"
+          }
+        ],
+        "charge": "py_synthetic000003",
+        "created": 1791496695,
+        "currency": "usd",
+        "enhanced_eligibility_types": [],
+        "evidence": "[scrubbed]",
+        "evidence_details": {
+          "due_by": 0,
+          "enhanced_eligibility": {},
+          "has_evidence": false,
+          "past_due": false,
+          "submission_count": 0
+        },
+        "is_charge_refundable": false,
+        "livemode": false,
+        "metadata": {},
+        "payment_intent": "pi_synthetic000006",
+        "reason": "debit_not_authorized",
+        "status": "lost"
+      }
+    ],
+    "has_more": false,
+    "url": "[scrubbed]"
+  }
+}

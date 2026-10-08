@@ -1,9 +1,9 @@
 # Stripe sandbox probe
 
 - **Audience:** Maintainers who hold a Stripe sandbox
-- **Status:** Implemented tooling; no run has been recorded yet
+- **Status:** Implemented tooling; first run recorded 2026-10-08, payouts still to record
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-07
+- **Last reviewed:** 2026-10-08
 
 The probe asks a Stripe sandbox the questions the payment adapter depends on and records what Stripe
 sends. [ADR-054](../adr/ADR-054-stripe-sandbox-adapter.md) lists the questions. The probe is a
@@ -19,12 +19,16 @@ object Stripe marks as live.
   - pays its own Stripe fees;
   - has the card and ACH direct debit capabilities active;
   - has a test bank account to pay out to, on an automatic daily payout schedule.
-- The Stripe CLI, signed in to that same sandbox. The probe uses it only to receive webhook
+  - has ACH direct debit turned on in its payment method settings. An active capability is not
+    enough: without the setting a payment offers only card.
+- The Stripe CLI, version 1.53 or later, signed in to that same sandbox. The probe uses it only to receive webhook
   deliveries. Without it the probe still runs and says that deliveries were not captured. Signed in
   to a different account, it delivers nothing, and the probe says so.
 - Node 26.
 - Two environment variables. Keep both out of the repository, issues and chat:
-  - `STRIPE_SANDBOX_SECRET_KEY`: the sandbox's secret key (`sk_test_` or `rk_test_`);
+  - `STRIPE_SANDBOX_SECRET_KEY`: the sandbox's secret key (`sk_test_` or `rk_test_`). It must be
+    the platform's key. A connected account with its own dashboard has keys too, and the probe
+    stops when it is given one;
   - `STRIPE_SANDBOX_CONNECTED_ACCOUNT`: the connected account id (`acct_`).
 
 ## Run it
@@ -37,7 +41,8 @@ node scripts/stripe-probe.mjs run
 
 The run makes six test charges on the connected account: three by card and three by ACH, including
 a decline, a failed debit and a disputed debit. It waits for each ACH payment to finish and for the
-dispute to appear, up to ten minutes each, so allow up to forty minutes.
+dispute to appear, up to ten minutes each. The first recorded run took about ten minutes; allow up
+to forty.
 
 | Option              | Effect                                                         |
 | ------------------- | -------------------------------------------------------------- |
@@ -118,6 +123,11 @@ Running again makes new charges, so name the ones you need with `--only`.
 - **Webhook deliveries were not captured.** Check that `stripe listen --print-secret` prints a
   secret and that the CLI is signed in to the sandbox the key belongs to. If the port is in use,
   choose another with `--port`.
+- **`stripe listen` stopped as soon as it started.** Run
+  `stripe listen --latest --all-snapshot --forward-to localhost:4242/account` by hand; it says why.
+  A CLI older than 1.53 does not know `--all-snapshot`.
+- **The key belongs to the connected account.** In the dashboard, switch to the sandbox itself
+  before copying the key.
 - **A live-mode object was returned.** The probe stops and does not record it. The key or the
   connected account is not the sandbox's; check both before running again.
 - **`scrub` refuses.** It names the file and how the value begins. Nothing was written. Report it

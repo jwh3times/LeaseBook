@@ -1,0 +1,116 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/v1/charges/py_synthetic000002",
+    "params": {
+      "expand": [
+        "balance_transaction"
+      ]
+    },
+    "platform": false,
+    "idempotencyKey": null
+  },
+  "status": 200,
+  "requestId": "req_synthetic000013",
+  "stripeVersion": "2026-09-30.endive",
+  "elapsedMs": 182,
+  "body": {
+    "id": "py_synthetic000002",
+    "object": "charge",
+    "amount": 20000,
+    "amount_captured": 20000,
+    "amount_refunded": 0,
+    "application": "ca_synthetic000001",
+    "application_fee": null,
+    "application_fee_amount": null,
+    "balance_transaction": {
+      "id": "txn_synthetic000004",
+      "object": "balance_transaction",
+      "amount": 20000,
+      "available_on": 1791496642,
+      "balance_type": "payments",
+      "created": 1791496640,
+      "currency": "usd",
+      "description": null,
+      "exchange_rate": null,
+      "fee": 160,
+      "fee_details": [
+        {
+          "amount": 160,
+          "application": null,
+          "currency": "usd",
+          "description": "[scrubbed]",
+          "type": "stripe_fee"
+        }
+      ],
+      "net": 19840,
+      "reporting_category": "charge",
+      "source": "py_synthetic000002",
+      "status": "available",
+      "type": "payment"
+    },
+    "billing_details": "[scrubbed]",
+    "calculated_statement_descriptor": null,
+    "captured": true,
+    "created": 1791496628,
+    "currency": "usd",
+    "customer": null,
+    "description": null,
+    "destination": null,
+    "dispute": null,
+    "disputed": false,
+    "failure_balance_transaction": "txn_synthetic000005",
+    "failure_code": "insufficient_funds",
+    "failure_message": "The customer's account has insufficient funds to cover this payment.",
+    "fraud_details": {},
+    "livemode": false,
+    "metadata": {
+      "leasebook_generation": "68834ff9-f964-4044-9d3c-01c201889847",
+      "leasebook_operation": "1be3c023-376f-4277-a61a-6e0864730978"
+    },
+    "on_behalf_of": null,
+    "order": null,
+    "outcome": {
+      "advice_code": null,
+      "network_advice_code": null,
+      "network_decline_code": "R01",
+      "network_status": "declined_by_network",
+      "reason": "generic_decline",
+      "risk_level": "normal",
+      "risk_score": 54,
+      "seller_message": "The bank did not return any further details with this decline.",
+      "type": "issuer_declined"
+    },
+    "paid": false,
+    "payment_intent": "pi_synthetic000005",
+    "payment_method": "pm_synthetic000005",
+    "payment_method_details": {
+      "type": "us_bank_account",
+      "us_bank_account": {
+        "account_holder_type": "individual",
+        "account_type": "checking",
+        "bank_name": "[scrubbed]",
+        "expected_debit_date": "2026-10-08",
+        "fingerprint": "[scrubbed]",
+        "last4": "[scrubbed]",
+        "mandate": "mandate_synthetic000003",
+        "payment_reference": null,
+        "routing_number": "[scrubbed]"
+      }
+    },
+    "radar_options": {},
+    "receipt_email": null,
+    "receipt_number": null,
+    "receipt_url": null,
+    "refunded": false,
+    "review": null,
+    "shipping": null,
+    "source": null,
+    "source_transfer": null,
+    "statement_descriptor": null,
+    "statement_descriptor_suffix": null,
+    "status": "failed",
+    "transfer_data": null,
+    "transfer_group": null
+  }
+}

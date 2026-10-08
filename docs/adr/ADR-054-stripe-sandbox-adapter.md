@@ -95,22 +95,49 @@ The adapter can be exercised only by someone holding a sandbox. Replayed payload
 hermetic, and they go stale silently if Stripe changes a shape. The probe can be rerun to refresh
 them.
 
-These provider facts are not settled by Stripe's documentation. The probe answers them, and the
-decisions above are provisional on its findings:
+These provider facts were not settled by Stripe's documentation. The probe ran against a sandbox on
+2026-10-08, at API version `2026-09-30.endive`, and answered all but the first. None of its answers
+contradicts a decision above. The recorded payloads are under `tests/fixtures/stripe/`.
 
-- whether a sandbox produces automatic payouts, on what timing, and whether it reports their
-  reconciliation as complete;
-- whether the documented test payment methods can be used directly on a connected account;
-- whether the ACH test payment methods need a small test deposit verified first, and how long a test ACH
-  payment stays in processing;
-- which dispute reason the ACH dispute test method produces, how long after success it arrives, and
-  which dispute event is delivered;
-- whether the fees a sandbox reports are realistic;
-- whether Connect events forwarded by the Stripe CLI are signed with the same secret as account
-  events.
+- **Does a sandbox produce automatic payouts, on what timing, and does it report their
+  reconciliation as complete?** Not answered yet. No payout existed on the day of the run; the
+  probe's `payouts` step is run on a later day. Until then the payout mapping rests on the
+  documented shapes and is unproven.
+- **Can the documented test payment methods be used directly on a connected account?** Yes, for card
+  and for ACH, as direct charges with no customer object.
+- **Do the ACH test payment methods need a small test deposit verified first, and how long does a
+  test ACH payment stay in processing?** No verification was asked for. A payment left `processing`
+  after about half a minute.
+- **Which dispute does the ACH dispute test method produce, and when?** `debit_not_authorized`, with
+  the dispute already `lost`. It arrived between three and ten minutes after the payment succeeded,
+  as `charge.dispute.created`, then `charge.dispute.funds_withdrawn`, then `charge.dispute.closed`.
+- **Are the fees a sandbox reports realistic?** Yes. Card is 2.9% plus $0.30 and ACH is 0.8%,
+  reported as one `stripe_fee` line and taken from the connected account.
+- **Are Connect events forwarded by the Stripe CLI signed with the same secret as account events?**
+  Every Connect delivery verified with the secret `stripe listen` prints. No account event was
+  delivered, because all activity was on the connected account, so the account half is not shown.
 
-If a sandbox produces no automatic payout at all, the payout mapping is built from the documented
-shapes and recorded here as unproven.
+The run also found things nobody had asked about. The adapter in step 4 has to allow for each:
+
+- **A card charge succeeds before its fee exists.** The balance transaction is attached a few
+  seconds later, with a `charge.updated` event. The adapter must not read a fee when a payment
+  succeeds. A failed ACH debit also carries a fee.
+- **Stripe refuses `payment_method_types` at this API version.** What a connected account accepts is
+  decided by its payment method settings. A charge is confirmed with automatic payment methods and
+  redirects ruled out. ACH debit has to be turned on in those settings; an active capability is not
+  enough.
+- **Stripe refuses to create a connected account through the first-generation Accounts API for a new
+  platform.** The account is created through Accounts v2, where "the connected account pays Stripe's
+  fees" is written as Stripe collecting its fees from the account. Read through the first-generation
+  API with the platform's key, such an account reports the fee payer as `account`, which is what the
+  adapter checks.
+- **A connected account with its own dashboard has its own keys.** One of them can read that account
+  and still is not the platform's key. The barrier must refuse a key whose own account is the
+  connected account.
+- **Recovery works as decided.** Repeating a request with its idempotency key returns the first
+  payment; the same key with another amount is refused. Listing the creation window finds a payment
+  by its operation id. Stripe's search also found it at once, and the adapter still does not use it.
+- **Every event names the connected account and the API version**, delivered or fetched.
 
 The provisional assumptions of ADR-053 stay open. This ADR verifies none of them, and nothing here
 is approval to move real money.
