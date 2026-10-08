@@ -1,10 +1,11 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getApiPayments, putApiSettingsPaymentFees, unwrap } from '@/api';
 import { ApiErrorNotice } from '@/components/ApiErrorNotice';
 import { Badge, Button, Card, CardHeader, Input } from '@/design';
 import { useSession } from '@/features/auth/useSession';
 import { orgSettingsKey, type OrgSettings } from '@/lib/settings';
+import { useDraft } from '@/lib/useDraft';
 
 type Method = 'card' | 'ach';
 interface Rule {
@@ -46,9 +47,8 @@ export function PaymentFeeSettings({ initial }: { initial: OrgSettings }) {
     retry: false,
     staleTime: 60_000,
   });
-  const [rules, setRules] = useState(() => read(initial));
+  const { value: rules, edit, discard } = useDraft(read(initial));
   const [saved, setSaved] = useState(false);
-  useEffect(() => setRules(read(initial)), [initial]);
   const update = useMutation({
     mutationFn: () =>
       unwrap(
@@ -66,6 +66,7 @@ export function PaymentFeeSettings({ initial }: { initial: OrgSettings }) {
       ),
     onSuccess: (data) => {
       queries.setQueryData(orgSettingsKey, data);
+      discard();
       setSaved(true);
     },
   });
@@ -74,7 +75,7 @@ export function PaymentFeeSettings({ initial }: { initial: OrgSettings }) {
   const admin = session.data?.role === 'PMAdmin';
 
   function set(method: Method, field: keyof Rule, value: string) {
-    setRules((current) => ({ ...current, [method]: { ...current[method], [field]: value } }));
+    edit((current) => ({ ...current, [method]: { ...current[method], [field]: value } }));
     setSaved(false);
   }
   function save(event: FormEvent) {
