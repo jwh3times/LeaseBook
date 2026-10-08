@@ -11,10 +11,16 @@ useDefault = true
 # rule mistakes them for API keys. Allowlist the specific known IDs rather than the whole file so
 # a genuinely leaked credential in infra/ still trips the scan.
 # Reference: https://learn.microsoft.com/azure/role-based-access-control/built-in-roles
+#
+# An idempotency key is a random UUID the caller makes up to name one request. It grants nothing.
+# The generic rule reads the word "key" beside a high-entropy value as an API key, which flags every
+# recorded Stripe payload under tests/fixtures/stripe/. Only that exact shape is allowed: the field
+# name and a version 4 UUID. A real Stripe key has a prefix and is caught by its own rule.
 [allowlist]
-description = "Azure built-in role definition GUIDs (public constants, not secrets)"
+description = "Public constants and request identifiers that are not secrets"
 regexTarget = "line"
 regexes = [
   '''7f951dda-4ed3-4680-a7ca-43fe172d538d''', # AcrPull
   '''4633458b-17de-408a-b874-0445c86b69e6''', # Key Vault Secrets User
+  '''"idempotency_?[kK]ey": "[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}"''', # request idempotency key (UUID v4)
 ]
