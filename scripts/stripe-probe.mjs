@@ -547,6 +547,15 @@ async function preflight(context) {
         `account; say so on the issue.`,
     );
   }
+  // A connected account with its own dashboard has its own keys, and one of them can read that
+  // account too. It is not the platform's key: it cannot say who pays the fees, and charges made
+  // with it are not direct charges through a platform.
+  if (platform.body?.id === account) {
+    throw new Stop(
+      "The key belongs to the connected account, not to the platform. Use the secret key of the " +
+        "sandbox that the connected account was created in.",
+    );
+  }
   const connected = await call("GET", `/v1/accounts/${account}`, {
     platform: true,
     label: "connected-account",
@@ -616,7 +625,10 @@ async function charge(context, scenario) {
     amount: scenario.amount,
     currency: "usd",
     payment_method: scenario.paymentMethod,
-    payment_method_types: [scenario.type],
+    // Stripe refuses `payment_method_types` at this API version: the connected account's
+    // payment method settings decide what it accepts. Confirming without a return URL is
+    // allowed only with redirects ruled out.
+    automatic_payment_methods: { enabled: true, allow_redirects: "never" },
     confirm: true,
     metadata: {
       leasebook_operation: operation,
