@@ -80,6 +80,14 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   known by its whole path, and the refusal names the path. A fixture manifest that holds provider
   credentials is refused. An existing fixture manifest is unaffected.
 
+### Fixed
+
+- **Saving one Settings card no longer discards unsaved edits in the others.** Each card on the
+  Settings page reset itself whenever the organization's settings changed, and saving any card
+  changes them. An edit typed into one card and not yet saved was lost when another card was saved,
+  with no notice. A card now keeps what was typed into it until that card is saved, and a card with
+  nothing typed still follows the stored values.
+
 ## [0.25.0] - 2026-10-04
 
 ### Added
