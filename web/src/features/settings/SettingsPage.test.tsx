@@ -391,6 +391,59 @@ describe('SettingsPage', () => {
     expect(saved).toMatchObject({ legalName: 'Tarheel Property Group', city: 'Asheville' });
   });
 
+  it('keeps unsaved edits in the other cards when one card is saved', async () => {
+    const stored = { ...ORG, cardFeeRateBps: 290, cardFeeFixed: 0.3, achFeeRateBps: 80 };
+    server.use(
+      http.get('/api/settings/org', () => HttpResponse.json(stored)),
+      http.get('/api/settings/banks', () => HttpResponse.json([])),
+      http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 })),
+      http.get('/api/auth/me', () => HttpResponse.json({ email: 'a@b.test', role: 'PMAdmin' })),
+      http.get('/api/payments', () => HttpResponse.json({ enabled: true, items: [] })),
+      http.put('/api/settings/org', async ({ request }) =>
+        HttpResponse.json({ ...stored, ...((await request.json()) as object) }),
+      ),
+    );
+    renderSettings();
+
+    const grace = await screen.findByLabelText('Grace days');
+    await userEvent.clear(grace);
+    await userEvent.type(grace, '9');
+    const cardRate = (await screen.findAllByLabelText('Rate (%)'))[0]!;
+    await userEvent.clear(cardRate);
+    await userEvent.type(cardRate, '3.1');
+
+    await userEvent.clear(screen.getByLabelText('Legal name'));
+    await userEvent.type(screen.getByLabelText('Legal name'), 'Blue Ridge PM');
+    await userEvent.click(screen.getByRole('button', { name: /save changes/i }));
+    expect(await screen.findByText('Saved')).toBeInTheDocument();
+
+    // Saving the profile replaces the settings every card was given; the other cards' edits were
+    // unsaved, so they stay (#511).
+    expect(screen.getByLabelText('Grace days')).toHaveValue(9);
+    expect(screen.getAllByLabelText('Rate (%)')[0]).toHaveValue(3.1);
+  });
+
+  it('shows the stored values in a card after its own save', async () => {
+    server.use(
+      http.get('/api/settings/org', () => HttpResponse.json(ORG)),
+      http.get('/api/settings/banks', () => HttpResponse.json([])),
+      http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 })),
+      // The server answers with what it stored, which is not always what was typed.
+      http.put('/api/settings/org', async ({ request }) =>
+        HttpResponse.json({ ...ORG, ...((await request.json()) as object), legalName: 'Stored' }),
+      ),
+    );
+    renderSettings();
+
+    const legalName = await screen.findByLabelText('Legal name');
+    await userEvent.clear(legalName);
+    await userEvent.type(legalName, 'Typed');
+    await userEvent.click(screen.getByRole('button', { name: /save changes/i }));
+
+    expect(await screen.findByText('Saved')).toBeInTheDocument();
+    expect(screen.getByLabelText('Legal name')).toHaveValue('Stored');
+  });
+
   beforeEach(() => {
     document.body.innerHTML = '';
   });

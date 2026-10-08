@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { asApiError, putApiSettingsPortalAccess, unwrap, type ApiError } from '@/api';
 import { ApiErrorNotice } from '@/components/ApiErrorNotice';
@@ -6,6 +6,7 @@ import { QueryErrorState } from '@/components/QueryErrorState';
 import { Button, Card } from '@/design';
 import { useSession } from '@/features/auth/useSession';
 import { orgSettingsKey, type OrgSettings } from '@/lib/settings';
+import { useDraft } from '@/lib/useDraft';
 
 export function PortalAccessSettings({ initial }: { initial: OrgSettings }) {
   const session = useSession();
@@ -18,13 +19,9 @@ export function PortalAccessSettings({ initial }: { initial: OrgSettings }) {
       ),
     onSuccess: (data) => queries.setQueryData(orgSettingsKey, data),
   });
-  const [allowed, setAllowed] = useState(initial.staffCanManagePortalAccess ?? true);
+  const { value: allowed, edit, discard } = useDraft(initial.staffCanManagePortalAccess ?? true);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
-  useEffect(
-    () => setAllowed(initial.staffCanManagePortalAccess ?? true),
-    [initial.staffCanManagePortalAccess],
-  );
   const admin = session.data?.role === 'PMAdmin';
   async function save(event: FormEvent) {
     event.preventDefault();
@@ -32,6 +29,7 @@ export function PortalAccessSettings({ initial }: { initial: OrgSettings }) {
     setError(null);
     try {
       await update.mutateAsync(allowed);
+      discard();
       await queries.invalidateQueries({ queryKey: ['portal-access'] });
       setSaved(true);
     } catch (e) {
@@ -57,7 +55,7 @@ export function PortalAccessSettings({ initial }: { initial: OrgSettings }) {
               checked={allowed}
               disabled={!admin || update.isPending}
               onChange={(e) => {
-                setAllowed(e.target.checked);
+                edit(() => e.target.checked);
                 setSaved(false);
               }}
             />
