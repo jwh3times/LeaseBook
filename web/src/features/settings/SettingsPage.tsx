@@ -1,5 +1,5 @@
 import { Link } from 'react-router';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Badge, Button, Card, CardHeader, Input, Select, Table, type TableColumn } from '@/design';
 import { asApiError, type ApiError } from '@/api';
 import { ApiErrorNotice } from '@/components/ApiErrorNotice';
@@ -17,6 +17,7 @@ import {
   type BankAccount,
   type OrgSettings,
 } from '@/lib/settings';
+import { useDraft } from '@/lib/useDraft';
 
 const BANK_PURPOSES = [
   {
@@ -93,13 +94,11 @@ export function SettingsPage() {
 
 function OrgProfileForm({ initial }: { initial: OrgSettings }) {
   const update = useUpdateOrgSettings();
-  const [form, setForm] = useState(initial);
+  const { value: form, edit, discard } = useDraft(initial);
   const [saved, setSaved] = useState(false);
 
-  useEffect(() => setForm(initial), [initial]);
-
   function set<K extends keyof OrgSettings>(key: K, value: OrgSettings[K]) {
-    setForm((current) => ({ ...current, [key]: value }));
+    edit((current) => ({ ...current, [key]: value }));
     setSaved(false);
   }
 
@@ -117,6 +116,7 @@ function OrgProfileForm({ initial }: { initial: OrgSettings }) {
         phone: form.phone ?? null,
         logoBlobRef: form.logoBlobRef ?? null,
       });
+      discard();
       setSaved(true);
     } catch {
       // The rejection is rendered from `update.error`; catching it here keeps the promise handled,
@@ -237,13 +237,11 @@ function OrgProfileForm({ initial }: { initial: OrgSettings }) {
  */
 function LateFeeForm({ initial }: { initial: OrgSettings }) {
   const update = useUpdateOrgSettings();
-  const [form, setForm] = useState(initial);
+  const { value: form, edit, discard } = useDraft(initial);
   const [saved, setSaved] = useState(false);
 
-  useEffect(() => setForm(initial), [initial]);
-
   function set<K extends keyof OrgSettings>(key: K, value: OrgSettings[K]) {
-    setForm((current) => ({ ...current, [key]: value }));
+    edit((current) => ({ ...current, [key]: value }));
     setSaved(false);
   }
 
@@ -270,6 +268,7 @@ function LateFeeForm({ initial }: { initial: OrgSettings }) {
         lateFeeAmount: Number(form.lateFeeAmount),
         lateFeeRateBps: Number(form.lateFeeRateBps),
       });
+      discard();
       setSaved(true);
     } catch {
       // The rejection is rendered from `update.error`; catching it here keeps the promise handled,

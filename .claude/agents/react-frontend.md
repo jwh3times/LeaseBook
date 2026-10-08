@@ -146,6 +146,14 @@ Rules:
   query client, after the save. Call the write function directly with local pending/error state, clear
   the inputs on success, and cache only the server's masked response — as `BankMicrSection` does
   (#474, ADR-051). Its test asserts neither cache holds the digits
+- **A form editing part of a record that other forms also edit holds a draft, not a copy.** Use
+  `useDraft(stored)` from `@/lib/useDraft`: it returns `{ value, edit, discard }` and keeps only the
+  unsaved edit, so `value` is the stored record until the user types. Call `discard()` after the
+  form's own save succeeds. Copying the record into `useState` and resetting it in a `useEffect`
+  wipes every sibling form's unsaved edits whenever one of them saves and replaces the cached record
+  — the four Settings cards did exactly that (#511). The draft is a whole-record snapshot taken at
+  the first edit, so when a save has to send fields the form does not own, read them from the stored
+  record, not from `value`, as `LateFeeForm` does
 - Handle domain error codes (e.g., `'account_period_locked'`, `'duplicate_source_ref'`, `'insufficient_receivable'`) in `onError`, not via generic toast
 
 ---
@@ -432,6 +440,7 @@ test("records a payment", async () => {
 | `?? fallback` on an unresolved query value   | Block the control until the read succeeds                    |
 | Terse `unwrap` fallbacks (`'owners'`)        | A sentence — the fallback is user-visible error copy         |
 | `isPending` alone on a disabled query        | Check `fetchStatus` too, or it loads forever                 |
+| `useState(record)` reset in a `useEffect`    | `useDraft(stored)` from `@/lib/useDraft`                     |
 | `EmptyState` for a query error               | `<ApiErrorNotice error={…}>` + retry (keeps the support ref) |
 | A hand-rolled `Retry` button beside an error | `<ErrorAction error={…} onRetry={…} retrying={…} />`         |
 | `EmptyState` for a failed content region     | `<QueryErrorState query={…} title fallback />`               |
