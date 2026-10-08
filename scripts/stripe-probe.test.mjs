@@ -438,6 +438,7 @@ function fakeStripe({
   verifyFirst = false,
   dropFirst = 0,
   ownKey = false,
+  feeLate = 0,
 } = {}) {
   const intents = new Map();
   let dropped = 0;
@@ -544,6 +545,11 @@ function fakeStripe({
       return json(200, intent);
     }
     if (pathname.startsWith("/v1/charges/")) {
+      // A card charge succeeds before Stripe has attached its balance transaction.
+      if (feeLate > 0) {
+        feeLate -= 1;
+        return json(200, { status: "succeeded", balance_transaction: null });
+      }
       return json(200, {
         status: "succeeded",
         receipt_url: `https://pay.stripe.com/receipts/${real("ch")}`,
@@ -781,6 +787,21 @@ test("the first live-mode object stops the run and is not recorded", async () =>
     assert.ok(!everything(run.root).includes('"livemode": true'));
     // What was learned before it is still written.
     includesAll(run.findings, ["fee payer=account"]);
+  } finally {
+    rmSync(run.root, { recursive: true, force: true });
+  }
+});
+
+test("a fee that is not there yet is asked for again, and only the last answer is kept", async () => {
+  const run = await probe(fakeStripe({ feeLate: 2 }), "--only=card");
+  try {
+    includesAll(run.findings, ["fee=1524", "asked 3 times"]);
+    assert.ok(!run.findings.includes("No balance transaction"));
+    assert.equal(
+      readdirSync(run.directory).filter((name) => name.includes("card-charge"))
+        .length,
+      1,
+    );
   } finally {
     rmSync(run.root, { recursive: true, force: true });
   }
