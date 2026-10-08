@@ -3,7 +3,7 @@
 - **Audience:** Maintainers
 - **Status:** Research for issue #455; provider evidence, not live-integration approval
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-09-26
+- **Last reviewed:** 2026-10-08
 
 ## Scope and conclusion
 
@@ -11,6 +11,13 @@ This note separates Stripe's provider states from LeaseBook's proposed accountin
 All linked primary sources were checked on 2026-09-26. No Stripe account was provisioned and no
 payment was attempted. These sources establish API behavior; they do not establish that any
 funds flow satisfies trust-account requirements or when LeaseBook must recognize a receipt.
+
+**Later evidence, 2026-10-08.** A probe has since run against a Stripe sandbox. What it observed —
+account creation, payment method settings, ACH timing and the dispute it produces, fees, and when a
+fee becomes readable — is recorded in
+[ADR-054](../adr/ADR-054-stripe-sandbox-adapter.md), not here. Payout behavior was not observed.
+The rest of this note is unchanged: it is still drawn from documentation alone, and its sources were
+not checked again.
 
 **A Stripe payout marked `paid` is not proof of irrevocable bank settlement.** Stripe explicitly
 allows a payout to change from `paid` to `failed`. `arrival_date` is an expected arrival date;

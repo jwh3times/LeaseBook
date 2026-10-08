@@ -16,14 +16,17 @@ object Stripe marks as live.
 ## What you need
 
 - A Stripe sandbox with Connect turned on, and one connected account in it that:
-  - pays its own Stripe fees;
+  - pays its own Stripe fees. A new platform has to create the account through Accounts v2, with
+    Stripe collecting its fees from the account; Stripe refuses the first-generation Accounts API
+    for this. The probe reads the account back and prints a warning if the fee payer is not the
+    account;
   - has the card and ACH direct debit capabilities active;
-  - has a test bank account to pay out to, on an automatic daily payout schedule.
+  - has a test bank account to pay out to, on an automatic daily payout schedule;
   - has ACH direct debit turned on in its payment method settings. An active capability is not
     enough: without the setting a payment offers only card.
-- The Stripe CLI, version 1.53 or later, signed in to that same sandbox. The probe uses it only to receive webhook
-  deliveries. Without it the probe still runs and says that deliveries were not captured. Signed in
-  to a different account, it delivers nothing, and the probe says so.
+- The Stripe CLI, version 1.53 or later, signed in to that same sandbox. The probe uses it only to
+  receive webhook deliveries. Without it the probe still runs and says that deliveries were not
+  captured. Signed in to a different account, it delivers nothing, and the probe says so.
 - Node 26.
 - Two environment variables. Keep both out of the repository, issues and chat:
   - `STRIPE_SANDBOX_SECRET_KEY`: the sandbox's secret key (`sk_test_` or `rk_test_`). It must be
@@ -125,7 +128,7 @@ Running again makes new charges, so name the ones you need with `--only`.
   choose another with `--port`.
 - **`stripe listen` stopped as soon as it started.** Run
   `stripe listen --latest --all-snapshot --forward-to localhost:4242/account` by hand; it says why.
-  A CLI older than 1.53 does not know `--all-snapshot`.
+  The probe was run with CLI 1.53; an older one may not accept `--all-snapshot`.
 - **The key belongs to the connected account.** In the dashboard, switch to the sandbox itself
   before copying the key.
 - **A live-mode object was returned.** The probe stops and does not record it. The key or the

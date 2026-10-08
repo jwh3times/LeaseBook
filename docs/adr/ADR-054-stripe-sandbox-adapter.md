@@ -96,7 +96,7 @@ hermetic, and they go stale silently if Stripe changes a shape. The probe can be
 them.
 
 These provider facts were not settled by Stripe's documentation. The probe ran against a sandbox on
-2026-10-08, at API version `2026-09-30.endive`, and answered all but the first. None of its answers
+2026-10-08, at API version `2026-09-30.endive`, and answered all but the first and half of the last. None of its answers
 contradicts a decision above. The recorded payloads are under `tests/fixtures/stripe/`.
 
 - **Does a sandbox produce automatic payouts, on what timing, and does it report their
