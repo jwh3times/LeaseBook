@@ -333,8 +333,10 @@ In #456, implement these checks in executable startup, submission, callback and 
 - Default mode Disabled. Simulation is allowed only in Development or the integration-test host.
   Production and other environments reject Simulation at startup; Disabled exposes no payment
   mutation routes or worker. Any configured Live mode or real provider credentials is a
-  startup error in this release. There is no live implementation registered and no network client
-  capable of charging a provider.
+  startup error in this release. There is no live implementation registered and the application has
+  no network client capable of charging a provider. The
+  [Stripe sandbox probe](../runbooks/stripe-sandbox-probe.md) is a standalone maintainer script, not
+  part of the application; it accepts only a test-mode key and stops at the first live-mode object.
 - A third mode, `StripeSandbox`, is recognised and guarded but cannot run yet: a host configured for
   it refuses to start until its processor adapter exists. Its configuration is admitted only when
   every one of these holds, and each is otherwise a startup error: the environment is Development;

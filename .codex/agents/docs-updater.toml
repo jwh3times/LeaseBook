@@ -56,6 +56,7 @@ docs/adr/ADR-*.md             — the records themselves; historical, not rewrit
 ```
 docs/runbooks/local-dev.md    — dev commands, seed workflow, common ops; cites the README port map
 docs/runbooks/payment-simulation.md — dedicated payment fixture, signed driver, restart and reset
+docs/runbooks/stripe-sandbox-probe.md — maintainer probe of a Stripe sandbox: run, findings, payouts, scrubbed fixtures
 docs/runbooks/blank-stock-checks.md — blank-stock refund checks: bank spec sheet, MICR setup, specimen, bank approval
 docs/runbooks/restore.md      — disaster recovery / PITR
 docs/runbooks/diagnostics.md  — error contract, event-id catalog, triage. DENSEST bulk-run prose

@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living decision index
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-05
+- **Last reviewed:** 2026-10-07
 
 An **Architecture Decision Record** captures a single significant or non-obvious engineering
 decision — the context that forced it, the choice made, and the consequences accepted — so it can be
@@ -78,6 +78,7 @@ form, write it, and add a row to the index below. When a decision is replaced, m
 | [051](ADR-051-blank-stock-micr-details.md)                           | Blank-stock checks draw their own E-13B glyphs, and bank numbers are write-only | Accepted                               | 2026-10-02 |
 | [052](ADR-052-guarded-simulated-payment-return.md)                   | A returned simulated payment posts only as a guarded full reversal              | Accepted                               | 2026-10-04 |
 | [053](ADR-053-processor-fees-and-batched-settlement.md)              | Processor fees stay out of the trust journal; a payout posts as one tied batch  | Accepted                               | 2026-10-05 |
+| [054](ADR-054-stripe-sandbox-adapter.md)                             | A Stripe sandbox adapter proves the seam; a payout waits for bank evidence      | Proposed                               | 2026-10-07 |
 
 ## Status legend
 

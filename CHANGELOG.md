@@ -55,6 +55,13 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   more than ten minutes: when it arrived, its kind, amount, provider reference and age. The list is
   read-only and shows nothing that identifies the bank or the account.
 
+- **Maintainers can probe a Stripe sandbox for the facts the payment adapter depends on.** A
+  standalone script makes test charges on a sandbox connected account, records what Stripe sends
+  outside the repository and writes its findings. It accepts only a test-mode key and stops at the
+  first live-mode object. A scrub step prepares recorded payloads for the repository with every
+  identifier replaced, and a test fails on a committed payload that still holds a real one. The
+  application itself still has no Stripe client. ADR-054 proposes the adapter this informs.
+
 ### Changed
 
 - **The payment processor seam is ready for a second processor.** Nothing changes in the development
