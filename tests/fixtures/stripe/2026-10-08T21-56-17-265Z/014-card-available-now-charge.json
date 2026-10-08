@@ -1,0 +1,146 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/v1/charges/ch_synthetic000002",
+    "params": {
+      "expand": [
+        "balance_transaction"
+      ]
+    },
+    "platform": false,
+    "idempotencyKey": null
+  },
+  "status": 200,
+  "requestId": "req_synthetic000006",
+  "stripeVersion": "2026-09-30.endive",
+  "elapsedMs": 211,
+  "body": {
+    "id": "ch_synthetic000002",
+    "object": "charge",
+    "amount": 20000,
+    "amount_captured": 20000,
+    "amount_refunded": 0,
+    "application": "ca_synthetic000001",
+    "application_fee": null,
+    "application_fee_amount": null,
+    "balance_transaction": {
+      "id": "txn_synthetic000002",
+      "object": "balance_transaction",
+      "amount": 20000,
+      "available_on": 1791496588,
+      "balance_type": "payments",
+      "created": 1791496588,
+      "currency": "usd",
+      "description": null,
+      "exchange_rate": null,
+      "fee": 610,
+      "fee_details": [
+        {
+          "amount": 610,
+          "application": null,
+          "currency": "usd",
+          "description": "[scrubbed]",
+          "type": "stripe_fee"
+        }
+      ],
+      "net": 19390,
+      "reporting_category": "charge",
+      "source": "ch_synthetic000002",
+      "status": "available",
+      "type": "charge"
+    },
+    "billing_details": "[scrubbed]",
+    "calculated_statement_descriptor": "[scrubbed]",
+    "captured": true,
+    "created": 1791496588,
+    "currency": "usd",
+    "customer": null,
+    "description": null,
+    "destination": null,
+    "dispute": null,
+    "disputed": false,
+    "failure_balance_transaction": null,
+    "failure_code": null,
+    "failure_message": null,
+    "fraud_details": {},
+    "livemode": false,
+    "metadata": {
+      "leasebook_generation": "68834ff9-f964-4044-9d3c-01c201889847",
+      "leasebook_operation": "68bb7ebb-75b2-480b-9ae0-86693be62ccc"
+    },
+    "on_behalf_of": null,
+    "order": null,
+    "outcome": {
+      "advice_code": null,
+      "network_advice_code": null,
+      "network_decline_code": null,
+      "network_status": "approved_by_network",
+      "reason": null,
+      "risk_level": "normal",
+      "risk_score": 23,
+      "seller_message": "Payment complete.",
+      "type": "authorized"
+    },
+    "paid": true,
+    "payment_intent": "pi_synthetic000002",
+    "payment_method": "pm_synthetic000002",
+    "payment_method_details": {
+      "card": {
+        "amount_authorized": 20000,
+        "authorization_code": "[scrubbed]",
+        "brand": "visa",
+        "checks": {
+          "address_line1_check": null,
+          "address_postal_code_check": null,
+          "cvc_check": "pass"
+        },
+        "country": "US",
+        "electronic_commerce_indicator": "07",
+        "exp_month": 10,
+        "exp_year": 2027,
+        "extended_authorization": {
+          "status": "disabled"
+        },
+        "fingerprint": "[scrubbed]",
+        "funding": "credit",
+        "incremental_authorization": {
+          "status": "unavailable"
+        },
+        "installments": null,
+        "last4": "[scrubbed]",
+        "mandate": null,
+        "multicapture": {
+          "status": "unavailable"
+        },
+        "network": "visa",
+        "network_token": {
+          "used": false
+        },
+        "network_transaction_id": "[scrubbed]",
+        "overcapture": {
+          "maximum_amount_capturable": 20000,
+          "status": "unavailable"
+        },
+        "regulated_status": "unregulated",
+        "three_d_secure": null,
+        "transaction_link_id": null,
+        "wallet": null
+      },
+      "type": "card"
+    },
+    "radar_options": {},
+    "receipt_email": null,
+    "receipt_number": null,
+    "receipt_url": "[scrubbed]",
+    "refunded": false,
+    "review": null,
+    "shipping": null,
+    "source": null,
+    "source_transfer": null,
+    "statement_descriptor": null,
+    "statement_descriptor_suffix": null,
+    "status": "succeeded",
+    "transfer_data": null,
+    "transfer_group": null
+  }
+}

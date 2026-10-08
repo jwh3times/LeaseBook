@@ -1,0 +1,96 @@
+{
+  "route": "/connect",
+  "signed": true,
+  "verified": true,
+  "event": {
+    "id": "evt_synthetic000036",
+    "object": "event",
+    "account": "acct_synthetic000002",
+    "api_version": "2026-09-30.endive",
+    "context": "acct_synthetic000002",
+    "created": 1791496681,
+    "data": {
+      "object": {
+        "id": "py_synthetic000003",
+        "object": "charge",
+        "amount": 20000,
+        "amount_captured": 20000,
+        "amount_refunded": 0,
+        "application": "ca_synthetic000001",
+        "application_fee": null,
+        "application_fee_amount": null,
+        "balance_transaction": "txn_synthetic000006",
+        "billing_details": "[scrubbed]",
+        "calculated_statement_descriptor": null,
+        "captured": true,
+        "created": 1791496659,
+        "currency": "usd",
+        "customer": null,
+        "description": null,
+        "destination": null,
+        "dispute": null,
+        "disputed": false,
+        "failure_balance_transaction": null,
+        "failure_code": null,
+        "failure_message": null,
+        "fraud_details": {},
+        "livemode": false,
+        "metadata": {
+          "leasebook_operation": "c49eb771-b8fe-4794-881e-3d85d4832e5f",
+          "leasebook_generation": "68834ff9-f964-4044-9d3c-01c201889847"
+        },
+        "on_behalf_of": null,
+        "order": null,
+        "outcome": {
+          "advice_code": null,
+          "network_advice_code": null,
+          "network_decline_code": null,
+          "network_status": "approved_by_network",
+          "reason": null,
+          "risk_level": "normal",
+          "risk_score": 22,
+          "seller_message": "Payment complete.",
+          "type": "authorized"
+        },
+        "paid": true,
+        "payment_intent": "pi_synthetic000006",
+        "payment_method": "pm_synthetic000006",
+        "payment_method_details": {
+          "type": "us_bank_account",
+          "us_bank_account": {
+            "account_holder_type": "individual",
+            "account_type": "checking",
+            "bank_name": "[scrubbed]",
+            "expected_debit_date": "2026-10-08",
+            "fingerprint": "[scrubbed]",
+            "last4": "[scrubbed]",
+            "mandate": "mandate_synthetic000005",
+            "payment_reference": "[scrubbed]",
+            "routing_number": "[scrubbed]"
+          }
+        },
+        "radar_options": {},
+        "receipt_email": null,
+        "receipt_number": null,
+        "receipt_url": "[scrubbed]",
+        "refunded": false,
+        "review": null,
+        "shipping": null,
+        "source": null,
+        "source_transfer": null,
+        "statement_descriptor": null,
+        "statement_descriptor_suffix": null,
+        "status": "succeeded",
+        "transfer_data": null,
+        "transfer_group": null
+      }
+    },
+    "livemode": false,
+    "pending_webhooks": 2,
+    "request": {
+      "id": null,
+      "idempotency_key": null
+    },
+    "type": "charge.succeeded"
+  }
+}

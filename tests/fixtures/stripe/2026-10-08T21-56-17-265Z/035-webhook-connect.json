@@ -1,0 +1,46 @@
+{
+  "route": "/connect",
+  "signed": true,
+  "verified": true,
+  "event": {
+    "id": "evt_synthetic000024",
+    "object": "event",
+    "account": "acct_synthetic000002",
+    "api_version": "2026-09-30.endive",
+    "context": "acct_synthetic000002",
+    "created": 1791496648,
+    "data": {
+      "object": {
+        "id": "mandate_synthetic000003",
+        "object": "mandate",
+        "customer_acceptance": {
+          "accepted_at": 1791496627,
+          "offline": {},
+          "type": "offline"
+        },
+        "livemode": false,
+        "payment_method": "pm_synthetic000005",
+        "payment_method_details": {
+          "type": "us_bank_account",
+          "us_bank_account": {}
+        },
+        "single_use": {
+          "amount": 20000,
+          "currency": "usd"
+        },
+        "status": "inactive",
+        "type": "single_use"
+      },
+      "previous_attributes": {
+        "status": "active"
+      }
+    },
+    "livemode": false,
+    "pending_webhooks": 2,
+    "request": {
+      "id": null,
+      "idempotency_key": null
+    },
+    "type": "mandate.updated"
+  }
+}

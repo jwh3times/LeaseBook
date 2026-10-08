@@ -433,7 +433,13 @@ test("the guard on committed fixtures fails on one that holds something real", (
 });
 
 // A stand-in for Stripe, so that the whole run is exercised before anyone spends a sandbox on it.
-function fakeStripe({ live = false, verifyFirst = false, dropFirst = 0 } = {}) {
+function fakeStripe({
+  live = false,
+  verifyFirst = false,
+  dropFirst = 0,
+  ownKey = false,
+  feeLate = 0,
+} = {}) {
   const intents = new Map();
   let dropped = 0;
   const calls = [];
@@ -449,8 +455,13 @@ function fakeStripe({ live = false, verifyFirst = false, dropFirst = 0 } = {}) {
       });
     }
     calls.push(`${method} ${pathname}`);
+    // A connected account with its own dashboard has its own keys. Asked who it is, such a key
+    // names the connected account itself.
     if (pathname === "/v1/account")
-      return json(200, { ...accountBody(), id: real("acct", "P") });
+      return json(
+        200,
+        ownKey ? accountBody() : { ...accountBody(), id: real("acct", "P") },
+      );
     if (pathname.startsWith("/v1/accounts/")) return json(200, accountBody());
     if (pathname === "/v1/payment_intents" && method === "POST") {
       if (form.get("payment_method") === "pm_card_visa_chargeDeclined") {
@@ -471,7 +482,23 @@ function fakeStripe({ live = false, verifyFirst = false, dropFirst = 0 } = {}) {
               error: { type: "idempotency_error", message: "Keys differ." },
             });
       }
-      const ach = form.get("payment_method_types[]") === "us_bank_account";
+      // What the sandbox answered on the first real run, 2026-10-08.
+      if (form.has("payment_method_types[]")) {
+        return json(400, {
+          error: {
+            type: "invalid_request_error",
+            message:
+              "The `payment_method_types` parameter is no longer supported.",
+          },
+        });
+      }
+      // Confirming without a return URL is allowed only when redirects are ruled out.
+      assert.equal(form.get("automatic_payment_methods[enabled]"), "true");
+      assert.equal(
+        form.get("automatic_payment_methods[allow_redirects]"),
+        "never",
+      );
+      const ach = form.get("payment_method").startsWith("pm_usBankAccount_");
       const intent = {
         id: real("pi", String(intents.size)),
         livemode: live,
@@ -518,6 +545,11 @@ function fakeStripe({ live = false, verifyFirst = false, dropFirst = 0 } = {}) {
       return json(200, intent);
     }
     if (pathname.startsWith("/v1/charges/")) {
+      // A card charge succeeds before Stripe has attached its balance transaction.
+      if (feeLate > 0) {
+        feeLate -= 1;
+        return json(200, { status: "succeeded", balance_transaction: null });
+      }
       return json(200, {
         status: "succeeded",
         receipt_url: `https://pay.stripe.com/receipts/${real("ch")}`,
@@ -755,6 +787,35 @@ test("the first live-mode object stops the run and is not recorded", async () =>
     assert.ok(!everything(run.root).includes('"livemode": true'));
     // What was learned before it is still written.
     includesAll(run.findings, ["fee payer=account"]);
+  } finally {
+    rmSync(run.root, { recursive: true, force: true });
+  }
+});
+
+test("a fee that is not there yet is asked for again, and only the last answer is kept", async () => {
+  const run = await probe(fakeStripe({ feeLate: 2 }), "--only=card");
+  try {
+    includesAll(run.findings, ["fee=1524", "asked 3 times"]);
+    assert.ok(!run.findings.includes("No balance transaction"));
+    assert.equal(
+      readdirSync(run.directory).filter((name) => name.includes("card-charge"))
+        .length,
+      1,
+    );
+  } finally {
+    rmSync(run.root, { recursive: true, force: true });
+  }
+});
+
+test("a key that belongs to the connected account stops the run before any charge", async () => {
+  const stripe = fakeStripe({ ownKey: true });
+  const run = await probe(stripe);
+  try {
+    assert.match(
+      run.error?.message ?? "",
+      /key belongs to the connected account/,
+    );
+    assert.ok(!stripe.calls.includes("POST /v1/payment_intents"));
   } finally {
     rmSync(run.root, { recursive: true, force: true });
   }

@@ -1,0 +1,58 @@
+{
+  "route": "/connect",
+  "signed": true,
+  "verified": true,
+  "event": {
+    "id": "evt_synthetic000028",
+    "object": "event",
+    "account": "acct_synthetic000002",
+    "api_version": "2026-09-30.endive",
+    "context": "acct_synthetic000002",
+    "created": 1791496652,
+    "data": {
+      "object": {
+        "object": "balance",
+        "available": [
+          {
+            "amount": 136320,
+            "currency": "usd",
+            "source_types": {
+              "card": 136320
+            }
+          }
+        ],
+        "livemode": false,
+        "pending": [
+          {
+            "amount": 100000,
+            "currency": "usd",
+            "source_types": {
+              "card": 100000
+            }
+          }
+        ],
+        "refund_and_dispute_prefunding": {
+          "available": [
+            {
+              "amount": 0,
+              "currency": "usd"
+            }
+          ],
+          "pending": [
+            {
+              "amount": 0,
+              "currency": "usd"
+            }
+          ]
+        }
+      }
+    },
+    "livemode": false,
+    "pending_webhooks": 2,
+    "request": {
+      "id": null,
+      "idempotency_key": null
+    },
+    "type": "balance.available"
+  }
+}

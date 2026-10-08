@@ -1,0 +1,21 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/v1/payouts",
+    "params": {
+      "limit": 20
+    },
+    "platform": false,
+    "idempotencyKey": null
+  },
+  "status": 200,
+  "requestId": "req_synthetic000023",
+  "stripeVersion": "2026-09-30.endive",
+  "elapsedMs": 90,
+  "body": {
+    "object": "list",
+    "data": [],
+    "has_more": false,
+    "url": "[scrubbed]"
+  }
+}

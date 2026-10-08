@@ -82,6 +82,14 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Fixed
 
+- **The Stripe sandbox probe works against a real sandbox.** Its first run made no charge: Stripe now
+  refuses the parameter the probe used to name a payment method, and the Stripe CLI now refuses to
+  forward webhooks unless told which. The probe confirms a charge the way Stripe accepts, waits a few
+  seconds for a card payment's fee, which does not exist when the payment succeeds, and says so when
+  the webhook forwarder stops. It also stops when given a key that belongs to the connected account
+  and not to the platform. The first recorded payloads are committed, scrubbed, and ADR-054 records
+  what the sandbox answered; the payout facts are still open.
+
 - **Saving one Settings card no longer discards unsaved edits in the others.** Each card on the
   Settings page reset itself whenever the organization's settings changed, and saving any card
   changes them. An edit typed into one card and not yet saved was lost when another card was saved,

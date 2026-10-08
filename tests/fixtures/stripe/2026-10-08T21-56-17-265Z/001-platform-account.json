@@ -1,0 +1,31 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/v1/account",
+    "params": null,
+    "platform": true,
+    "idempotencyKey": null
+  },
+  "status": 200,
+  "requestId": "req_synthetic000001",
+  "stripeVersion": "2026-09-30.endive",
+  "elapsedMs": 267,
+  "body": {
+    "object": "account",
+    "id": "acct_synthetic000001",
+    "charges_enabled": false,
+    "payouts_enabled": false,
+    "capabilities": {},
+    "controller": {
+      "fees": null
+    },
+    "settings": {
+      "payouts": {
+        "schedule": {
+          "delay_days": 2,
+          "interval": "daily"
+        }
+      }
+    }
+  }
+}

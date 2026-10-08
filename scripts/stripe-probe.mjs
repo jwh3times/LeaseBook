@@ -547,6 +547,15 @@ async function preflight(context) {
         `account; say so on the issue.`,
     );
   }
+  // A connected account with its own dashboard has its own keys, and one of them can read that
+  // account too. It is not the platform's key: it cannot say who pays the fees, and charges made
+  // with it are not direct charges through a platform.
+  if (platform.body?.id === account) {
+    throw new Stop(
+      "The key belongs to the connected account, not to the platform. Use the secret key of the " +
+        "sandbox that the connected account was created in.",
+    );
+  }
   const connected = await call("GET", `/v1/accounts/${account}`, {
     platform: true,
     label: "connected-account",
@@ -616,7 +625,10 @@ async function charge(context, scenario) {
     amount: scenario.amount,
     currency: "usd",
     payment_method: scenario.paymentMethod,
-    payment_method_types: [scenario.type],
+    // Stripe refuses `payment_method_types` at this API version: the connected account's
+    // payment method settings decide what it accepts. Confirming without a return URL is
+    // allowed only with redirects ruled out.
+    automatic_payment_methods: { enabled: true, allow_redirects: "never" },
     confirm: true,
     metadata: {
       leasebook_operation: operation,
@@ -696,17 +708,33 @@ async function charge(context, scenario) {
       typeof intent.latest_charge === "string"
         ? intent.latest_charge
         : intent.latest_charge.id;
-    const charged = await call("GET", `/v1/charges/${id}`, {
-      params: { expand: ["balance_transaction"] },
-      label: `${scenario.name}-charge`,
-    });
+    // A card charge succeeds before Stripe has attached its balance transaction, so the fee is
+    // asked for again for up to a minute. Only the last answer is kept.
+    let charged = null;
+    let asked = 0;
+    const feeStarted = Date.now();
+    const feeDeadline = feeStarted + 60_000;
+    for (;;) {
+      charged = await call("GET", `/v1/charges/${id}`, {
+        params: { expand: ["balance_transaction"] },
+        record: false,
+      });
+      asked += 1;
+      const found = typeof charged.body?.balance_transaction === "object";
+      if (!charged.ok || (found && charged.body.balance_transaction)) break;
+      if (Date.now() >= feeDeadline) break;
+      await timing.sleep(3000);
+    }
+    const file = run.record(`${scenario.name}-charge`, charged.result);
     const transaction = charged.body?.balance_transaction;
+    const waited = Math.round((Date.now() - feeStarted) / 1000);
     run.find(
       `${scenario.name}: what fee did Stripe take?`,
       charged.ok && transaction && typeof transaction === "object"
         ? `amount=${transaction.amount}, fee=${transaction.fee}, net=${transaction.net}, ` +
-            `status=${transaction.status}, fee_details=${JSON.stringify(transaction.fee_details)} (${charged.file})`
-        : `No balance transaction yet (charge status ${charged.body?.status}) (${charged.file})`,
+            `status=${transaction.status}, fee_details=${JSON.stringify(transaction.fee_details)}; ` +
+            `asked ${asked} time${asked === 1 ? "" : "s"} over ${waited}s (${file})`
+        : `No balance transaction after ${waited}s (charge status ${charged.body?.status}) (${file})`,
     );
   }
   return { operation, params, intent };
@@ -975,6 +1003,9 @@ async function startListener(context, port) {
     [
       "listen",
       "--latest",
+      // Since CLI 1.53 `listen` refuses to start without naming which events to forward.
+      "--all-snapshot",
+      "--skip-update",
       "--forward-to",
       `localhost:${port}/account`,
       "--forward-connect-to",
@@ -984,6 +1015,15 @@ async function startListener(context, port) {
   );
   child.on("error", () => {});
   await timing.sleep(5000);
+  // Its output is not read, so a forwarder that stopped at once would otherwise look like a
+  // sandbox that delivered nothing.
+  if (child.exitCode !== null) {
+    await new Promise((closed) => server.close(closed));
+    return missed(
+      `\`stripe listen\` stopped as soon as it started (exit ${child.exitCode}). ` +
+        "Run it by hand with the same options to see why.",
+    );
+  }
   return {
     child,
     async stop() {

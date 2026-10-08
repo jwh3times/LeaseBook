@@ -1,0 +1,74 @@
+{
+  "route": "/connect",
+  "signed": true,
+  "verified": true,
+  "event": {
+    "id": "evt_synthetic000039",
+    "object": "event",
+    "account": "acct_synthetic000002",
+    "api_version": "2026-09-30.endive",
+    "context": "acct_synthetic000002",
+    "created": 1791497249,
+    "data": {
+      "object": {
+        "id": "du_synthetic000001",
+        "object": "dispute",
+        "amount": 20000,
+        "balance_transaction": "txn_synthetic000007",
+        "balance_transactions": [
+          {
+            "id": "txn_synthetic000007",
+            "object": "balance_transaction",
+            "amount": -20000,
+            "available_on": 1791497242,
+            "balance_type": "payments",
+            "created": 1791497242,
+            "currency": "usd",
+            "description": "[scrubbed]",
+            "exchange_rate": null,
+            "fee": 1500,
+            "fee_details": [
+              {
+                "amount": 1500,
+                "application": null,
+                "currency": "usd",
+                "description": "[scrubbed]",
+                "type": "stripe_fee"
+              }
+            ],
+            "net": -21500,
+            "reporting_category": "dispute",
+            "source": "du_synthetic000001",
+            "status": "available",
+            "type": "adjustment"
+          }
+        ],
+        "charge": "py_synthetic000003",
+        "created": 1791496695,
+        "currency": "usd",
+        "enhanced_eligibility_types": [],
+        "evidence": "[scrubbed]",
+        "evidence_details": {
+          "due_by": 0,
+          "enhanced_eligibility": {},
+          "has_evidence": false,
+          "past_due": false,
+          "submission_count": 0
+        },
+        "is_charge_refundable": false,
+        "livemode": false,
+        "metadata": {},
+        "payment_intent": "pi_synthetic000006",
+        "reason": "debit_not_authorized",
+        "status": "lost"
+      }
+    },
+    "livemode": false,
+    "pending_webhooks": 2,
+    "request": {
+      "id": null,
+      "idempotency_key": null
+    },
+    "type": "charge.dispute.funds_withdrawn"
+  }
+}
