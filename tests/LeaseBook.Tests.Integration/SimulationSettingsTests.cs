@@ -29,6 +29,7 @@ public sealed class SimulationSettingsTests
     [InlineData("Stripe:SecretKey")]
     [InlineData("Stripe")]
     [InlineData("Payments:Stripe:SecretKey")]
+    [InlineData("Payments:Stripe:WebhookSecret")]
     [InlineData("Payments:Stripe")]
     public void Provider_credentials_are_refused_even_when_payments_are_disabled(string name)
     {
@@ -90,6 +91,45 @@ public sealed class SimulationSettingsTests
         Should.Throw<InvalidOperationException>(() => Read(Sandbox(("Payments:Stripe:SecretKey", key))));
     }
 
+    [Fact]
+    public void A_sandbox_host_holds_the_secret_its_callbacks_are_signed_with()
+    {
+        Read(Sandbox()).Stripe!.WebhookSecret.ShouldBe("whsec_abc");
+        Read(Sandbox(("Payments:Stripe:WebhookSecret", "whsec_x"))).Stripe!.WebhookSecret.ShouldBe("whsec_x");
+    }
+
+    // Required, and only in the shape Stripe issues one: a host that could not tell an authentic
+    // callback from any other must not start. Refused by its path, never by what was given.
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("whsec_")]
+    [InlineData("WHSEC_abc")]
+    [InlineData("sk_test_abc")]
+    [InlineData("not-a-signing-secret-at-all")]
+    [InlineData(" whsec_abc")]
+    public void Stripe_sandbox_is_refused_without_a_webhook_signing_secret(string? secret)
+    {
+        var refusal = Should.Throw<InvalidOperationException>(() => Read(Sandbox(("Payments:Stripe:WebhookSecret", secret))));
+
+        refusal.Message.ShouldContain("Payments:Stripe:WebhookSecret");
+        refusal.Message.ShouldContain("whsec_");
+        if (secret is { Length: > 6 }) { refusal.Message.ShouldNotContain(secret.Trim()); }
+        // With one it starts, so the refusal is the secret's doing.
+        Read(Sandbox()).Enabled.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void A_simulation_or_disabled_host_refuses_a_webhook_secret_by_its_path()
+    {
+        foreach (var values in new[] { Simulation(("Payments:Stripe:WebhookSecret", "whsec_abcdefgh")), new() { ["Payments:Stripe:WebhookSecret"] = "whsec_abcdefgh" } })
+        {
+            var refusal = Should.Throw<InvalidOperationException>(() => Read(values));
+            refusal.Message.ShouldContain("Unknown setting: Payments:Stripe:WebhookSecret.");
+            refusal.Message.ShouldNotContain("whsec_abcdefgh");
+        }
+    }
+
     [Theory]
     [InlineData("sim_fixture")]
     [InlineData("acct_")]
@@ -132,6 +172,9 @@ public sealed class SimulationSettingsTests
     [InlineData("Payments:Fixtures:0:Stripe:SecretKey", "sk_live_abc")]
     [InlineData("Payments:SigningKey:Extra", "x")]
     [InlineData("Payments:Stripe:SecretKey:Extra", "x")]
+    [InlineData("Payments:Stripe:WebhookSecret:Extra", "x")]
+    [InlineData("Payments:Stripe:WebhookSecret\n", "whsec_other")]
+    [InlineData("Payments:Fixtures:0:WebhookSecret", "whsec_other")]
     [InlineData("Payments:Stripe", "sk_live_abc")]
     // Known by the whole of its name: one with a line break after it is another setting.
     [InlineData("Payments:ManifestPath\n", "x")]
@@ -152,6 +195,10 @@ public sealed class SimulationSettingsTests
         try
         {
             File.WriteAllText(path, """{ "Payments": { "Mode": "StripeSandbox", "Stripe": { "SecretKey": "sk_test_abc" } } }""");
+            Should.Throw<InvalidOperationException>(() => SimulationSettings.AddManifest(new ConfigurationBuilder(), path));
+
+            // The signing secret is a credential like the key: a manifest is a file beside the fixture.
+            File.WriteAllText(path, """{ "Payments": { "Mode": "StripeSandbox", "Stripe": { "WebhookSecret": "whsec_abc" } } }""");
             Should.Throw<InvalidOperationException>(() => SimulationSettings.AddManifest(new ConfigurationBuilder(), path));
 
             File.WriteAllText(path, """{ "Payments": { "Mode": "Disabled" } }""");
@@ -185,10 +232,11 @@ public sealed class SimulationSettingsTests
                 Mode = PaymentModes.Simulation,
                 SigningKey = new string('x', 64),
                 Fixtures = [new FixtureBinding(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "sim_fixture")],
-                Stripe = new StripeSandboxSettings { SecretKey = "sk_test_abc" },
+                Stripe = new StripeSandboxSettings { SecretKey = "sk_test_abc", WebhookSecret = "whsec_abc" },
             },
         });
         written.ShouldNotContain("sk_test_abc");
+        written.ShouldNotContain("whsec_abc");
         var config = new ConfigurationBuilder().AddJsonStream(new MemoryStream(Encoding.UTF8.GetBytes(written))).Build();
         SimulationSettings.Read(config, new EnvironmentStub("Development")).ForAccount("sim_fixture").ShouldNotBeNull();
     }
@@ -220,11 +268,15 @@ public sealed class SimulationSettingsTests
         simulation.Fixtures.ShouldAllBe(x => x.Account.StartsWith("sim_"));
 
         // With accounts it names the sandbox and nothing of Stripe's but them, so it starts no host by
-        // itself: the key comes from local secrets, and a manifest that held one would be refused.
+        // itself: the key and the signing secret come from local secrets, and a manifest that held
+        // either would be refused.
         Should.Throw<InvalidOperationException>(() => SimulationSettings.Read(Written("acct_1Abc", "acct_2Def").Build(), new EnvironmentStub("Development")))
             .Message.ShouldContain("test-mode secret key");
+        Should.Throw<InvalidOperationException>(() => SimulationSettings.Read(Written("acct_1Abc", "acct_2Def")
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["Payments:Stripe:SecretKey"] = "sk_test_abc" }).Build(), new EnvironmentStub("Development")))
+            .Message.ShouldContain("webhook signing secret");
         var sandbox = SimulationSettings.Read(Written("acct_1Abc", "acct_2Def")
-            .AddInMemoryCollection(new Dictionary<string, string?> { ["Payments:Stripe:SecretKey"] = "sk_test_abc" }).Build(), new EnvironmentStub("Development"));
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["Payments:Stripe:SecretKey"] = "sk_test_abc", ["Payments:Stripe:WebhookSecret"] = "whsec_abc" }).Build(), new EnvironmentStub("Development"));
         sandbox.Mode.ShouldBe(PaymentModes.StripeSandbox);
         sandbox.Fixtures.Select(x => x.Account).ShouldBe(["acct_1Abc", "acct_2Def"]);
         sandbox.Fixtures.Select(x => x.OrgId).Distinct().Count().ShouldBe(2);
@@ -381,6 +433,7 @@ public sealed class SimulationSettingsTests
         ["Payments:Mode"] = "StripeSandbox",
         ["Payments:SigningKey"] = new string('x', 64),
         ["Payments:Stripe:SecretKey"] = "sk_test_abc",
+        ["Payments:Stripe:WebhookSecret"] = "whsec_abc",
         ["Payments:Fixtures:0:OrgId"] = Guid.NewGuid().ToString(),
         ["Payments:Fixtures:0:Generation"] = Guid.NewGuid().ToString(),
         ["Payments:Fixtures:0:BankId"] = Guid.NewGuid().ToString(),

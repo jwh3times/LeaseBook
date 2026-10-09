@@ -28,7 +28,7 @@ function Sql([string]$databaseName, [string]$query) {
 }
 Push-Location $fixtureRoot
 $saved = @{}
-foreach ($key in @('ASPNETCORE_ENVIRONMENT', 'ConnectionStrings__Default', 'ConnectionStrings__Migrations', 'Payments__ManifestPath', 'Payments__Mode', 'Payments__Stripe__SecretKey')) {
+foreach ($key in @('ASPNETCORE_ENVIRONMENT', 'ConnectionStrings__Default', 'ConnectionStrings__Migrations', 'Payments__ManifestPath', 'Payments__Mode', 'Payments__Stripe__SecretKey', 'Payments__Stripe__WebhookSecret')) {
     $saved[$key] = [Environment]::GetEnvironmentVariable($key)
 }
 try {
@@ -65,9 +65,11 @@ try {
     $env:ConnectionStrings__Migrations = "Host=localhost;Port=$Port;Database=$database;Username=leasebook_migrator;Password=dev_migrator_pw"
     $env:Payments__ManifestPath = $null
     $env:Payments__Mode = 'Disabled'
-    # A maintainer's exported sandbox key is refused by a host with payments disabled, which is what
-    # runs below. Cleared for those processes and put back in finally; the bootstrap needs no key.
+    # A maintainer's exported sandbox key or webhook signing secret is refused by a host with payments
+    # disabled, which is what runs below. Cleared for those processes and put back in finally; the
+    # bootstrap needs neither.
     $env:Payments__Stripe__SecretKey = $null
+    $env:Payments__Stripe__WebhookSecret = $null
     dotnet ef database update --project src/LeaseBook.Web --context AppDbContext
     if ($LASTEXITCODE -ne 0) { throw 'Fixture migration failed.' }
     $accounts = @($StripeAccount | ForEach-Object { "--stripe-account=$_" })

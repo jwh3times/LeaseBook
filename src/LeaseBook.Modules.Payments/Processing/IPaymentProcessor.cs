@@ -34,15 +34,17 @@ public sealed record FixtureBinding(Guid OrgId, Guid Generation, Guid BankId, st
 /// <summary>
 /// What a processor needs to collect one payment, and to find it again. <see cref="Amount"/> is the
 /// charge: the ledger amount plus the fee the tenant was quoted. <see cref="CreatedAt"/> bounds a
-/// search for the collection when the processor no longer remembers the request. Nothing here
-/// identifies the tenant.
+/// search for the collection when the processor no longer remembers the request.
+/// <see cref="ProviderId"/> is the processor's own reference, once LeaseBook has stored one: a lookup
+/// then asks for that payment and searches for nothing. An adapter that finds its collections by the
+/// operation alone may ignore it. Nothing here identifies the tenant.
 /// </summary>
 public sealed record ProcessorRequest(FixtureBinding Binding, Guid OperationId, string Fingerprint,
-    decimal Amount, string Currency, string Method, DateTime CreatedAt)
+    decimal Amount, string Currency, string Method, DateTime CreatedAt, string? ProviderId = null)
 {
     public static ProcessorRequest For(FixtureBinding binding, PaymentOperation operation) => new(
         binding, operation.Id, operation.Fingerprint, operation.ChargedAmount, operation.Currency, operation.Method,
-        operation.CreatedAt);
+        operation.CreatedAt, operation.ProviderId);
 }
 
 public sealed record ProcessorResult(string Outcome, string? ProviderId);

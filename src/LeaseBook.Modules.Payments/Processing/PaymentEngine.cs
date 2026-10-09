@@ -102,6 +102,12 @@ public sealed class PaymentEngine(DbContext db, IOrgContext org, TimeProvider cl
         var existing = await db.Set<PaymentObservation>().AsNoTracking()
             .SingleOrDefaultAsync(x => x.Account == binding.Account && x.Mode == binding.Mode && x.EventId == observation.EventId, ct);
         if (existing?.Fingerprint == fingerprint) { return; }
+        // Shared with CompleteAsync, which is where an operation first takes this reference. Without
+        // it the two can pass each other: this finds no operation to wake while that finds no fact to
+        // judge, and the fact waits with nothing left to wake the operation. Whichever takes the lock
+        // second reads after the first has committed. Order: event, reference, then operation.
+        var providerId = existing?.ProviderId ?? observation.ProviderId;
+        await LockAsync("reference:" + providerId, ct);
         // Preserve the original event. Authenticated reuse with altered content is separate evidence.
         var eventId = existing is null ? observation.EventId : "conflict:" + fingerprint;
         if (await db.Set<PaymentObservation>().AnyAsync(x => x.EventId == eventId && x.Account == binding.Account, ct)) { return; }
@@ -109,7 +115,7 @@ public sealed class PaymentEngine(DbContext db, IOrgContext org, TimeProvider cl
         {
             Id = UuidV7.NewId(),
             EventId = eventId,
-            ProviderId = existing?.ProviderId ?? observation.ProviderId,
+            ProviderId = providerId,
             Generation = observation.Generation,
             Account = observation.Account,
             Mode = observation.Mode,
@@ -127,7 +133,6 @@ public sealed class PaymentEngine(DbContext db, IOrgContext org, TimeProvider cl
             Fingerprint = fingerprint,
         });
         await db.SaveChangesAsync(ct);
-        var providerId = existing?.ProviderId ?? observation.ProviderId;
         var operationId = await db.Set<PaymentOperation>().Where(x => x.ProviderId == providerId)
             .Select(x => (Guid?)x.Id).SingleOrDefaultAsync(ct);
         if (operationId is { } id)
@@ -157,6 +162,10 @@ public sealed class PaymentEngine(DbContext db, IOrgContext org, TimeProvider cl
     public async Task CompleteAsync(FixtureBinding binding, Guid id, Guid leaseClaimId, ProcessorResult provider, CancellationToken ct)
     {
         await RequireFixtureAsync(binding, ct);
+        // Shared with ReceiveAsync, and taken before the operation's own lock as it is there. A fact
+        // for this reference is then either committed before the facts are read below, or stored
+        // after this commits, when its receipt finds the operation by the reference and wakes it.
+        if (!string.IsNullOrWhiteSpace(provider.ProviderId)) { await LockAsync("reference:" + provider.ProviderId, ct); }
         await LockAsync(id.ToString(), ct);
         var op = await db.Set<PaymentOperation>().SingleAsync(x => x.Id == id, ct);
         MatchBinding(op, binding);
