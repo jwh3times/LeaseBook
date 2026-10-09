@@ -764,7 +764,10 @@ public sealed class StripeSandboxHostTests(PostgresFixture fixture)
         var before = stripe.Requests.Count;
 
         // The worker did not reach it for a day: a host that was down, or a queue that was stuck.
-        h.Clock.Advance(TimeSpan.FromHours(23) + TimeSpan.FromSeconds(1));
+        // A whole day, not a second past the limit: the operation's creation time is stamped from the
+        // machine's clock while this host reads a stopped one, so the time the test has already
+        // taken comes off the margin. On a slow run a one-second margin was gone and the charge was made.
+        h.Clock.Advance(TimeSpan.FromHours(24));
         await h.App.Services.GetRequiredService<PaymentRunner>().RunOnceAsync(ct);
 
         // Looked for, and not made. A person reads it; nothing was charged and nothing posted.
