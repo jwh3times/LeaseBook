@@ -874,6 +874,14 @@ public sealed partial class StripeSandboxHostTests(PostgresFixture fixture)
             response.StatusCode.ShouldBe(HttpStatusCode.Accepted, await response.Content.ReadAsStringAsync(ct));
             return (await response.Content.ReadFromJsonAsync<PaymentView>(ct))!;
         }
+        public async Task<HttpClient> Tenant(CancellationToken ct)
+        {
+            var tenant = app.CreateClient();
+            await tenant.PrimeCsrfAsync(ct);
+            (await tenant.PostAsJsonAsync("/api/auth/login", new { email = $"tenant-{suffix}1@payments.test", password = PaymentFixtureBootstrap.Password }, ct)).EnsureSuccessStatusCode();
+            await tenant.PrimeCsrfAsync(ct);
+            return tenant;
+        }
         public Task Run(CancellationToken ct) => app.Services.GetRequiredService<PaymentRunner>().RunOnceAsync(ct);
         /// <summary>
         /// Posts an event to the callback route as Stripe would, signed at the host's own time unless a

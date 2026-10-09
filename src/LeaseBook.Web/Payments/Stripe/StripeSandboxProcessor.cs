@@ -248,7 +248,8 @@ public sealed class StripeSandboxProcessor : IPaymentProcessor
                 || !root.TryGetProperty("created", out var created) || created.ValueKind != JsonValueKind.Number
                 || !created.TryGetInt64(out var seconds) || seconds is <= 0 or > MaxUnixSeconds)
             { return unreadable; }
-            // Exactly false. A live event is refused, not acknowledged, and so is one that does not say.
+            // The event's own flag is the one that counts, and it must be there and exactly false: a
+            // live event is refused, not acknowledged, and so is an event that does not say.
             if (!root.TryGetProperty("livemode", out var live) || live.ValueKind != JsonValueKind.False) { return unreadable; }
             // The platform's own events name no account. Routing reads the host's bindings and nothing
             // else: no organization is entered and none is read to decide that an event is not ours.
@@ -261,6 +262,8 @@ public sealed class StripeSandboxProcessor : IPaymentProcessor
                 _ => null,
             };
             if (kind is null) { return notOurs; }
+            // The payment inside carries the flag too. It may be absent, the event having answered; when
+            // it is there it must also be exactly false.
             if (!root.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Object
                 || !data.TryGetProperty("object", out var payment) || payment.ValueKind != JsonValueKind.Object
                 || Text(payment, "object") != "payment_intent" || Id(payment, "id") is not { } providerId

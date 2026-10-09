@@ -28,6 +28,9 @@ public sealed record PaymentsResponse(bool Enabled, IReadOnlyList<PaymentView> I
 
 public sealed class PaymentEndpoints : IEndpointModule
 {
+    /// <summary>The rate limit policy of a processor's own callback route, apart from the one tenants and staff share.</summary>
+    public const string CallbackRateLimit = "payment-callbacks";
+
     public void MapEndpoints(IEndpointRouteBuilder app)
     {
         var settings = app.ServiceProvider.GetRequiredService<SimulationSettings>();
@@ -176,7 +179,7 @@ public sealed class PaymentEndpoints : IEndpointModule
         // Stripe's events (ADR-054). Not part of the documented contract: nothing of LeaseBook's calls it.
         if (settings.Mode == PaymentModes.StripeSandbox)
         {
-            app.MapPost("/callbacks/payments/stripe", ReceiveStripe).AllowAnonymous().RequireRateLimiting("payments")
+            app.MapPost("/callbacks/payments/stripe", ReceiveStripe).AllowAnonymous().RequireRateLimiting(CallbackRateLimit)
                 .WithTags("Stripe sandbox payment callbacks").Produces(204).ProducesProblem(400);
         }
     }

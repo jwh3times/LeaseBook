@@ -116,8 +116,12 @@ public sealed partial class SimulationSettings
     private static bool TestKey(string? key) => key is not null
         && new[] { "sk_test_", "rk_test_" }.Any(prefix => key.StartsWith(prefix, StringComparison.Ordinal) && key.Length > prefix.Length);
 
-    private static bool SigningSecret(string? secret) => secret is not null
-        && secret.StartsWith("whsec_", StringComparison.Ordinal) && secret.Length > "whsec_".Length;
+    // The whole value, with nothing before or after it: a secret pasted with a line break or a space
+    // would start the host and then match no delivery at all.
+    [GeneratedRegex(@"\Awhsec_[\x21-\x7E]+\z", RegexOptions.CultureInvariant)]
+    private static partial Regex SigningSecretShape();
+
+    private static bool SigningSecret(string? secret) => secret is not null && SigningSecretShape().IsMatch(secret);
 
     /// <summary>Registers the one processor this host's mode uses.</summary>
     public void AddProcessor(IServiceCollection services)

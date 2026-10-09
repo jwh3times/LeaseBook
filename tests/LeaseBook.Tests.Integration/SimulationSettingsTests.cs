@@ -108,6 +108,13 @@ public sealed class SimulationSettingsTests
     [InlineData("sk_test_abc")]
     [InlineData("not-a-signing-secret-at-all")]
     [InlineData(" whsec_abc")]
+    // Pasted with what came along: the host would start and then match no delivery at all.
+    [InlineData("whsec_abc\n")]
+    [InlineData("whsec_abc\r\n")]
+    [InlineData("whsec_abc ")]
+    [InlineData("whsec_abc def")]
+    [InlineData("whsec_abc\tdef")]
+    [InlineData("whsec_abc\u0000")]
     public void Stripe_sandbox_is_refused_without_a_webhook_signing_secret(string? secret)
     {
         var refusal = Should.Throw<InvalidOperationException>(() => Read(Sandbox(("Payments:Stripe:WebhookSecret", secret))));

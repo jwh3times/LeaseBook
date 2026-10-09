@@ -89,6 +89,8 @@ public sealed partial class StripeSandboxProcessorTests
     [InlineData("a signature over the body without its timestamp")]
     [InlineData("the simulator's format")]
     [InlineData("a part with no value")]
+    [InlineData("a timestamp past the end of time")]
+    [InlineData("a header longer than Stripe sends")]
     public void Anything_but_stripes_signature_over_this_body_is_refused(string difference)
     {
         var h = new Adapter();
@@ -115,6 +117,10 @@ public sealed partial class StripeSandboxProcessorTests
             // What the simulator's callback routes take: "<seconds>.<hex>", here with the right secret.
             "the simulator's format" => $"{t}.{mac}",
             "a part with no value" => $"t={t},v1={mac},v1",
+            // Correctly signed for the time it names, which no clock can be near. Refused, not thrown on.
+            "a timestamp past the end of time" => $"t=99999999999999999,v1={StripeSigning.Mac(body, 99999999999999999)}",
+            // Stripe's own header and then a scheme that is passed over, a thousand characters of it.
+            "a header longer than Stripe sends" => $"t={t},v1={mac},v0={new string('a', 1024)}",
             _ => throw new ArgumentOutOfRangeException(nameof(difference)),
         };
         if (difference == "a body changed after signing") { presented = [.. body, (byte)' ']; }
@@ -123,6 +129,22 @@ public sealed partial class StripeSandboxProcessorTests
 
         // The same body under Stripe's own header is authentic, so each refusal is its difference's doing.
         h.Processor.Authenticate(body, $"t={t},v1={mac}").ShouldNotBeNull();
+    }
+
+    // The scheme itself, against an answer worked out apart from any code here, so that the check is
+    // not only compared with a copy of itself. The key is the whole secret as text, prefix and all:
+    //   printf '%s' '1791496587.{"id":"evt_vector","object":"event"}' | openssl dgst -sha256 -hmac 'whsec_test_vector_secret'
+    [Fact]
+    public void A_signature_worked_out_by_hand_is_the_one_accepted()
+    {
+        const string known = "62f168c739e46de5dd2a13a63690c3cac6c7df363866987235316438907f4b66";
+        var h = new Adapter(("Payments:Stripe:WebhookSecret", "whsec_test_vector_secret"));
+        h.Clock.Advance(DateTimeOffset.FromUnixTimeSeconds(1791496587) - h.Clock.GetUtcNow());
+        var body = Encoding.ASCII.GetBytes("""{"id":"evt_vector","object":"event"}""");
+
+        h.Processor.Authenticate(body, "t=1791496587,v1=" + known).ShouldNotBeNull();
+        h.Processor.Authenticate(body, "t=1791496587,v1=" + known[..^1] + "7").ShouldBeNull();
+        h.Processor.Authenticate(body, "t=1791496588,v1=" + known).ShouldBeNull();
     }
 
     // Stripe sends one signature for each secret in force while a secret is being rolled.
@@ -636,6 +658,7 @@ public sealed partial class StripeSandboxHostTests
     [InlineData("signed with another secret")]
     [InlineData("signed five minutes and a second ago")]
     [InlineData("signed as the simulator signs")]
+    [InlineData("signed for a time no clock can hold")]
     [InlineData("a body changed after signing")]
     [InlineData("marked live")]
     [InlineData("not json")]
@@ -658,6 +681,8 @@ public sealed partial class StripeSandboxHostTests
             case "signed five minutes and a second ago": signature = StripeSigning.Header(body, h.Clock.GetUtcNow().AddSeconds(-301)); break;
             case "signed as the simulator signs":
                 signature = $"{h.Clock.GetUtcNow().ToUnixTimeSeconds()}.{StripeSigning.Mac(body, h.Clock.GetUtcNow().ToUnixTimeSeconds())}"; break;
+            // A refusal like any other, and not a fault: nothing about the header may bring the route down.
+            case "signed for a time no clock can hold": signature = $"t=99999999999999999,v1={StripeSigning.Mac(body, 99999999999999999)}"; break;
             case "a body changed after signing":
                 signature = StripeSigning.Header(body, h.Clock.GetUtcNow());
                 sent = succeeded.DeepClone(); sent["data"]!["object"]!["amount"] = 1; break;
@@ -898,6 +923,8 @@ public sealed partial class StripeSandboxHostTests
     // An event and the worker's completion share one lock on the provider's reference, so that they
     // cannot pass each other. Each is shown to wait on it: the lock is held from another organization
     // transaction, opened the way the product opens one, and taken by the engine's own LockAsync.
+    // Nothing here sleeps to let something happen: what a backend holds and waits for is read from
+    // pg_locks, and a test goes on when the database says so.
     [Fact]
     public async Task A_completion_waits_for_whoever_holds_the_reference()
     {
@@ -905,12 +932,14 @@ public sealed partial class StripeSandboxHostTests
         var sandbox = new Sandbox();
         await using var h = await Setup(sandbox.Replay, ct);
         var payment = await h.Submit(504.03m, ct);
-        var held = await Hold(h, sp => sp.GetRequiredService<PaymentEngine>().LockAsync("reference:" + Sandbox.IdFor(payment.Id), ct), ct);
+        var reference = "reference:" + Sandbox.IdFor(payment.Id);
+        var held = await Hold(h, sp => sp.GetRequiredService<PaymentEngine>().LockAsync(reference, ct), ct);
         Task run;
         try
         {
             run = h.Run(ct);
-            (await Task.WhenAny(run, Task.Delay(TimeSpan.FromSeconds(1.5), ct))).ShouldNotBe(run);
+            await Until(async () => run.IsCompleted || (await Advisory(h, reference, ct)).Waiting.Length == 1, "the completion to reach the reference lock", ct);
+            run.IsCompleted.ShouldBeFalse();
             // Charged, and its result not yet kept: the completion is what waits.
             sandbox.Replay.Requests.Count(x => x.Method == "POST").ShouldBe(1);
             (await h.Operation(payment.Id, ct)).ProviderId.ShouldBeNull();
@@ -928,15 +957,17 @@ public sealed partial class StripeSandboxHostTests
         var sandbox = new Sandbox();
         await using var h = await Setup(sandbox.Replay, ct);
         var payment = await h.Submit(504.03m, ct);
+        var reference = "reference:" + Sandbox.IdFor(payment.Id);
         // What the argument for the lock rests on: a statement after it sees what committed before it.
         await h.InOrg(async sp => (await sp.GetRequiredService<AppDbContext>().Database
             .SqlQuery<string>($"SELECT current_setting('transaction_isolation') AS \"Value\"").SingleAsync(ct)).ShouldBe("read committed"), ct);
-        var held = await Hold(h, sp => sp.GetRequiredService<PaymentEngine>().LockAsync("reference:" + Sandbox.IdFor(payment.Id), ct), ct);
+        var held = await Hold(h, sp => sp.GetRequiredService<PaymentEngine>().LockAsync(reference, ct), ct);
         Task<(HttpStatusCode Status, int Commands, string Body)> delivery;
         try
         {
             delivery = h.Deliver(Event(Succeeded, h, payment), ct);
-            (await Task.WhenAny(delivery, Task.Delay(TimeSpan.FromSeconds(1.5), ct))).ShouldNotBe(delivery);
+            await Until(async () => delivery.IsCompleted || (await Advisory(h, reference, ct)).Waiting.Length == 1, "the delivery to reach the reference lock", ct);
+            delivery.IsCompleted.ShouldBeFalse();
             // Not stored before the lock is had: the fact and the search for its operation are one step behind it.
             (await h.Facts(ct)).ShouldBeEmpty();
         }
@@ -952,8 +983,43 @@ public sealed partial class StripeSandboxHostTests
         (await h.Operation(payment.Id, ct)).PaidAt.ShouldBe(SucceededAt);
     }
 
+    // The order the completion takes its two locks in: the reference, then the operation. A delivery
+    // takes them in that order too, so the other way round the two could each hold what the other
+    // wants. Stopped at the operation's lock, the completion must already hold the reference.
+    [Fact]
+    public async Task A_completion_holds_the_reference_before_it_asks_for_the_operation()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var charged = new ManualResetEventSlim();
+        var arrived = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var sandbox = new Sandbox { OnCharge = () => { arrived.TrySetResult(); charged.Wait(TimeSpan.FromSeconds(15)).ShouldBeTrue(); } };
+        await using var h = await Setup(sandbox.Replay, ct);
+        var payment = await h.Submit(504.03m, ct);
+        var reference = "reference:" + Sandbox.IdFor(payment.Id);
+
+        // The worker has claimed the operation, which took and gave back its lock, and is at Stripe.
+        var run = h.Run(ct);
+        await arrived.Task.WaitAsync(TimeSpan.FromSeconds(15), ct);
+        var held = await Hold(h, sp => sp.GetRequiredService<PaymentEngine>().LockAsync(payment.Id.ToString(), ct), ct);
+        try
+        {
+            charged.Set();
+            await Until(async () => run.IsCompleted || (await Advisory(h, payment.Id.ToString(), ct)).Waiting.Length == 1, "the completion to reach the operation lock", ct);
+            run.IsCompleted.ShouldBeFalse();
+            var completion = (await Advisory(h, payment.Id.ToString(), ct)).Waiting.ShouldHaveSingleItem();
+            var onReference = await Advisory(h, reference, ct);
+            onReference.Holding.ShouldBe([completion]);
+            onReference.Waiting.ShouldBeEmpty();
+        }
+        finally { await held.Release(); }
+        await run;
+
+        (await h.Operation(payment.Id, ct)).ProviderId.ShouldBe(Sandbox.IdFor(payment.Id));
+    }
+
     // A declined card's failure is delivered as the refusal comes back, so the two meet as a matter
-    // of course. Both wait behind a held reference; whichever is let through first, the failure is judged.
+    // of course. Both wait behind a held reference, the second started only once the first is seen
+    // waiting, and waiters are let through in the order they arrived. Either way the failure is judged.
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
@@ -965,30 +1031,34 @@ public sealed partial class StripeSandboxHostTests
         for (var round = 0; round < 3; round++)
         {
             var payment = await h.Submit(200m + round, ct, PaymentMethods.Card);
+            var reference = "reference:" + Sandbox.IdFor(payment.Id);
             // Its own event: the recorded id again would be the first round's event saying something else.
             var failed = Event(Failed, h, payment);
             failed["id"] = "evt_round" + round;
-            var held = await Hold(h, sp => sp.GetRequiredService<PaymentEngine>().LockAsync("reference:" + Sandbox.IdFor(payment.Id), ct), ct);
+            var held = await Hold(h, sp => sp.GetRequiredService<PaymentEngine>().LockAsync(reference, ct), ct);
             Task run, delivery;
             try
             {
-                // Waiters on the lock are let through in the order they arrived.
-                if (deliveryFirst)
-                {
-                    delivery = h.Deliver(failed, ct); await Task.Delay(400, ct);
-                    run = h.Run(ct); await Task.Delay(400, ct);
-                }
-                else
-                {
-                    run = h.Run(ct); await Task.Delay(400, ct);
-                    delivery = h.Deliver(failed, ct); await Task.Delay(400, ct);
-                }
-                (run.IsCompleted, delivery.IsCompleted).ShouldBe((false, false), $"round {round}");
+                Task Start(bool theDelivery) => theDelivery ? h.Deliver(failed, ct) : h.Run(ct);
+                var first = Start(deliveryFirst);
+                await Until(async () => first.IsCompleted || (await Advisory(h, reference, ct)).Waiting.Length == 1, "the first to reach the reference lock", ct);
+                var second = Start(!deliveryFirst);
+                await Until(async () => first.IsCompleted || second.IsCompleted || (await Advisory(h, reference, ct)).Waiting.Length == 2, "the second to reach the reference lock", ct);
+                (first.IsCompleted, second.IsCompleted).ShouldBe((false, false), $"round {round}");
+                (delivery, run) = deliveryFirst ? (first, second) : (second, first);
             }
             finally { await held.Release(); }
             await Task.WhenAll(run, delivery);
 
-            // One more pass at most: the operation must be due if the completion did not see the fact.
+            // Which went first shows in what the completion found. After the delivery, the fact: judged
+            // there and then. Before it, nothing: parked, and then woken by the delivery, so due.
+            var between = await h.Operation(payment.Id, ct);
+            if (deliveryFirst) { (between.Status, between.ProcessedCount).ShouldBe(("Failed", 1), $"round {round}"); }
+            else
+            {
+                (between.Status, between.ProcessedCount).ShouldBe(("Processing", 0), $"round {round}");
+                between.DueAt.ShouldBeLessThanOrEqualTo(h.Clock.GetUtcNow().UtcDateTime);
+            }
             await h.Run(ct);
             var operation = await h.Operation(payment.Id, ct);
             (operation.Status, operation.Reason, operation.ProcessedCount).ShouldBe(("Failed", "collection_failed", 1), $"round {round}");
@@ -1008,6 +1078,7 @@ public sealed partial class StripeSandboxHostTests
         var sandbox = new Sandbox { Declined = true, OnCharge = () => { arrived.TrySetResult(); charged.Wait(TimeSpan.FromSeconds(15)).ShouldBeTrue(); } };
         await using var h = await Setup(sandbox.Replay, ct);
         var payment = await h.Submit(200m, ct, PaymentMethods.Card);
+        var reference = "reference:" + Sandbox.IdFor(payment.Id);
 
         // The worker has claimed the operation and is at Stripe. Its row is locked before the answer returns.
         var run = h.Run(ct);
@@ -1019,13 +1090,15 @@ public sealed partial class StripeSandboxHostTests
         try
         {
             charged.Set();
-            // Long enough for the completion to read the facts and stop at its write.
-            await Task.Delay(TimeSpan.FromSeconds(1), ct);
+            // Until the completion is stopped at its write: the backend that holds the operation's
+            // lock is waiting for the transaction that holds the row. Its reads are behind it by then.
+            await Until(async () => run.IsCompleted || (await Advisory(h, payment.Id.ToString(), ct)).Holding.Intersect(await WaitingOnARow(ct)).Any(),
+                "the completion to stop at its write", ct);
             run.IsCompleted.ShouldBeFalse();
             delivery = h.Deliver(Event(Failed, h, payment), ct);
-            await Task.Delay(TimeSpan.FromSeconds(1), ct);
-            // The delivery waits for the completion. Without the shared lock it would be done by now,
+            // The delivery waits for the completion. Without the shared lock it finishes instead,
             // having found no operation to wake. Asserted last, so that what is lost without it shows first.
+            await Until(async () => delivery.IsCompleted || (await Advisory(h, reference, ct)).Waiting.Length == 1, "the delivery to finish or to wait", ct);
             deliveryWaited = !delivery.IsCompleted;
         }
         finally { await row.Release(); }
@@ -1040,6 +1113,81 @@ public sealed partial class StripeSandboxHostTests
         var operation = await h.Operation(payment.Id, ct);
         (operation.Status, operation.Reason, operation.ProcessedCount).ShouldBe(("Failed", "collection_failed", 1));
         deliveryWaited.ShouldBeTrue();
+    }
+
+    // Stripe sends every kind of event it has, in bursts and from one address, and a delivery turned
+    // away may never be sent again. Its route has a limit of its own, far above the one tenants and
+    // staff share, and neither uses up the other's.
+    [Fact]
+    public async Task Stripes_deliveries_are_not_counted_against_the_limit_tenants_and_staff_share()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var sandbox = new Sandbox();
+        await using var h = await Setup(sandbox.Replay, ct);
+        // More than twice the shared limit of 60 a minute, so that whenever a window turns over during
+        // the test, more than 60 of each fall inside one.
+        const int many = 130;
+        var ignorable = StripeReplay.Delivered("004-webhook-connect.json");
+
+        var deliveries = new List<HttpStatusCode>();
+        for (var i = 0; i < many; i++) { deliveries.Add((await h.Deliver(ignorable, ct)).Status); }
+        deliveries.ShouldAllBe(x => x == HttpStatusCode.NoContent);
+
+        // The shared limit is still there for its own routes, and those deliveries used none of it:
+        // the first 60 quotes are answered, and it is quotes that run out.
+        using var tenant = await h.Tenant(ct);
+        var quotes = new List<HttpStatusCode>();
+        for (var i = 0; i < many; i++)
+        {
+            using var response = await tenant.GetAsync("/api/portal/tenant/payments/quote?amount=10&method=ach", ct);
+            quotes.Add(response.StatusCode);
+        }
+        quotes.Take(50).ShouldAllBe(x => x == HttpStatusCode.OK);
+        quotes.ShouldContain(HttpStatusCode.TooManyRequests);
+
+        // And with that one spent, Stripe is still heard.
+        (await h.Deliver(ignorable, ct)).Status.ShouldBe(HttpStatusCode.NoContent);
+    }
+
+    // What holds and what waits for the advisory lock PaymentEngine.LockAsync takes for a key in this
+    // fixture's organization, by backend. The key is hashed here as it is there.
+    private async Task<(int[] Holding, int[] Waiting)> Advisory(Harness h, string key, CancellationToken ct)
+    {
+        await using var connection = await fixture.OpenAppConnectionAsync(ct);
+        await using var command = new Npgsql.NpgsqlCommand("""
+            SELECT pid, granted FROM pg_locks
+            WHERE locktype = 'advisory' AND objsubid = 1
+              AND ((classid::bigint << 32) | objid::bigint) = hashtextextended(@name, 0)
+            ORDER BY pid
+            """, connection);
+        command.Parameters.AddWithValue("name", h.Binding.OrgId + ":payment:" + key);
+        var rows = new List<(int Pid, bool Granted)>();
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct)) { rows.Add((reader.GetInt32(0), reader.GetBoolean(1))); }
+        return ([.. rows.Where(x => x.Granted).Select(x => x.Pid)], [.. rows.Where(x => !x.Granted).Select(x => x.Pid)]);
+    }
+
+    // The backends waiting for another transaction to end, which is how a wait for a locked row shows.
+    private async Task<int[]> WaitingOnARow(CancellationToken ct)
+    {
+        await using var connection = await fixture.OpenAppConnectionAsync(ct);
+        await using var command = new Npgsql.NpgsqlCommand("SELECT pid FROM pg_locks WHERE locktype = 'transactionid' AND NOT granted", connection);
+        var pids = new List<int>();
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct)) { pids.Add(reader.GetInt32(0)); }
+        return [.. pids];
+    }
+
+    // Goes on when the condition holds, and fails when it has not in half a minute. Never a wait
+    // whose running out is taken to mean that something happened.
+    private static async Task Until(Func<Task<bool>> condition, string what, CancellationToken ct)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(30);
+        while (!await condition())
+        {
+            if (DateTime.UtcNow > deadline) { throw new TimeoutException("Waited half a minute for " + what + "."); }
+            await Task.Delay(20, ct);
+        }
     }
 
     // Holds a lock in an organization transaction of its own until released.
