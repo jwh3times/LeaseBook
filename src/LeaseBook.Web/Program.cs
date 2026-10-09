@@ -144,6 +144,13 @@ builder.Services.AddRateLimiter(options =>
     options.AddPolicy("payments", http => RateLimitPartition.GetFixedWindowLimiter(
         http.Connection.RemoteIpAddress?.ToString() ?? "unknown", _ => new FixedWindowRateLimiterOptions
         { PermitLimit = 60, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+    // A processor's callbacks have a limit of their own. A processor sends every event it has, in
+    // bursts, from one address; a delivery turned away may not be sent again; and one that is lost can
+    // leave a payment waiting on a failure nobody was told of. Sharing the tenants' and staff's 60 a
+    // minute would also let either crowd out the other. Still bounded: this runs before the signature is checked.
+    options.AddPolicy(PaymentEndpoints.CallbackRateLimit, http => RateLimitPartition.GetFixedWindowLimiter(
+        http.Connection.RemoteIpAddress?.ToString() ?? "unknown", _ => new FixedWindowRateLimiterOptions
+        { PermitLimit = 1200, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
     options.AddPolicy("auth", httpContext =>
     {
         var rateLimiting = httpContext.RequestServices.GetRequiredService<IOptions<RateLimitingOptions>>().Value;

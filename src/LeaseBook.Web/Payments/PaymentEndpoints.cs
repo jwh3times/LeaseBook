@@ -6,6 +6,7 @@ using LeaseBook.SharedKernel.Cqrs;
 using LeaseBook.SharedKernel.Endpoints;
 using LeaseBook.SharedKernel.Tenancy;
 using LeaseBook.Web.Auth;
+using LeaseBook.Web.Payments.Stripe;
 using LeaseBook.Web.Portal;
 using Microsoft.AspNetCore.Http.HttpResults;
 
@@ -27,6 +28,9 @@ public sealed record PaymentsResponse(bool Enabled, IReadOnlyList<PaymentView> I
 
 public sealed class PaymentEndpoints : IEndpointModule
 {
+    /// <summary>The rate limit policy of a processor's own callback route, apart from the one tenants and staff share.</summary>
+    public const string CallbackRateLimit = "payment-callbacks";
+
     public void MapEndpoints(IEndpointRouteBuilder app)
     {
         var settings = app.ServiceProvider.GetRequiredService<SimulationSettings>();
@@ -159,19 +163,43 @@ public sealed class PaymentEndpoints : IEndpointModule
                 ? TypedResults.Ok(result.Payment) : TypedResults.NotFound();
         }).RequireAuthorization(AuthPolicies.RequirePMAdmin).RequireRateLimiting("payments");
 
-        // Outside cookie-authenticated /api: signature authentication replaces CSRF. This handler
-        // ignores all cookies and creates its own org scope only AFTER verified server-side routing.
-        app.MapPost("/callbacks/payments/simulation", Receive).AllowAnonymous().RequireRateLimiting("payments")
-            .WithTags("Simulated payment callbacks").Produces(204).ProducesProblem(400);
-        // Payout evidence (ADR-053): the bank amount for one payout and the processor's lines for it.
-        app.MapPost("/callbacks/payments/simulation/payout", ReceivePayout).AllowAnonymous().RequireRateLimiting("payments")
-            .WithTags("Simulated payment callbacks").Produces(204).ProducesProblem(400);
+        // Outside cookie-authenticated /api: signature authentication replaces CSRF. These handlers
+        // ignore all cookies and create their own org scope only AFTER verified server-side routing.
+        // A host has one processor, and only that processor's routes: a callback route whose
+        // processor is not registered could do nothing but refuse, so it does not exist. The
+        // simulator's two are also what the documented contract holds, built with payments disabled.
+        if (settings.Simulated || !settings.Enabled)
+        {
+            app.MapPost("/callbacks/payments/simulation", Receive).AllowAnonymous().RequireRateLimiting("payments")
+                .WithTags("Simulated payment callbacks").Produces(204).ProducesProblem(400);
+            // Payout evidence (ADR-053): the bank amount for one payout and the processor's lines for it.
+            app.MapPost("/callbacks/payments/simulation/payout", ReceivePayout).AllowAnonymous().RequireRateLimiting("payments")
+                .WithTags("Simulated payment callbacks").Produces(204).ProducesProblem(400);
+        }
+        // Stripe's events (ADR-054). Not part of the documented contract: nothing of LeaseBook's calls it.
+        if (settings.Mode == PaymentModes.StripeSandbox)
+        {
+            app.MapPost("/callbacks/payments/stripe", ReceiveStripe).AllowAnonymous().RequireRateLimiting(CallbackRateLimit)
+                .WithTags("Stripe sandbox payment callbacks").Produces(204).ProducesProblem(400);
+        }
     }
 
-    private static async Task<IResult> Receive(HttpContext http, IPaymentProcessor processor, PaymentRunner runner, CancellationToken ct)
+    private static Task<IResult> Receive(HttpContext http, IPaymentProcessor processor, PaymentRunner runner, CancellationToken ct) =>
+        ReceiveAsync(http, processor, runner, "X-Simulation-Signature", SimulationBodyLimit, ct);
+
+    // Two limits on purpose. This one stops a larger body being read into memory at all; the adapter's
+    // own, in Authenticate, refuses one however it arrived. Each alone gives the same answer, so only
+    // the adapter's has a test that fails without it.
+    private static Task<IResult> ReceiveStripe(HttpContext http, IPaymentProcessor processor, PaymentRunner runner, CancellationToken ct) =>
+        ReceiveAsync(http, processor, runner, "Stripe-Signature", StripeSandboxProcessor.MaxNoticeBytes, ct);
+
+    // One flow for every processor: the body whole and within its limit, proved authentic, read, and
+    // only then routed to an organization. What differs is the header the proof arrives in and the limit.
+    private static async Task<IResult> ReceiveAsync(HttpContext http, IPaymentProcessor processor, PaymentRunner runner,
+        string signatureHeader, int limit, CancellationToken ct)
     {
-        if (await ReadBodyAsync(http, ct) is not { } body) { return Invalid(http); }
-        if (processor.Authenticate(body, http.Request.Headers["X-Simulation-Signature"].ToString()) is not { } notice) { return Invalid(http); }
+        if (await ReadBodyAsync(http, limit, ct) is not { } body) { return Invalid(http); }
+        if (processor.Authenticate(body, http.Request.Headers[signatureHeader].ToString()) is not { } notice) { return Invalid(http); }
         var read = await processor.ReadObservationAsync(notice, ct);
         if (read.Ignored) { runner.Ignore(); return TypedResults.NoContent(); }
         if (read.Value is not { } observation) { return Invalid(http); }
@@ -181,7 +209,7 @@ public sealed class PaymentEndpoints : IEndpointModule
 
     private static async Task<IResult> ReceivePayout(HttpContext http, IPaymentProcessor processor, PaymentRunner runner, CancellationToken ct)
     {
-        if (await ReadBodyAsync(http, ct) is not { } body) { return Invalid(http); }
+        if (await ReadBodyAsync(http, SimulationBodyLimit, ct) is not { } body) { return Invalid(http); }
         if (processor.Authenticate(body, http.Request.Headers["X-Simulation-Signature"].ToString()) is not { } notice) { return Invalid(http); }
         var read = await processor.ReadSettlementAsync(notice, ct);
         if (read.Ignored) { runner.Ignore(); return TypedResults.NoContent(); }
@@ -191,16 +219,18 @@ public sealed class PaymentEndpoints : IEndpointModule
         return (await runner.ReceiveSettlementAsync(evidence, ct)).Malformed ? Invalid(http) : TypedResults.NoContent();
     }
 
-    // The whole body, or null when it is larger than a callback may be.
-    private static async Task<byte[]?> ReadBodyAsync(HttpContext http, CancellationToken ct)
+    private const int SimulationBodyLimit = 16384;
+
+    // The whole body, or null when it is larger than this route's callbacks may be.
+    private static async Task<byte[]?> ReadBodyAsync(HttpContext http, int limit, CancellationToken ct)
     {
-        if (http.Request.ContentLength > 16384) { return null; }
+        if (http.Request.ContentLength > limit) { return null; }
         using var buffer = new MemoryStream();
         var bytes = new byte[4096];
         int count;
         while ((count = await http.Request.Body.ReadAsync(bytes, ct)) > 0)
         {
-            if (buffer.Length + count > 16384) { return null; }
+            if (buffer.Length + count > limit) { return null; }
             buffer.Write(bytes, 0, count);
         }
         return buffer.ToArray();

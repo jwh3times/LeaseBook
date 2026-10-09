@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living architecture guide
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-08
+- **Last reviewed:** 2026-10-09
 
 This is the canonical public map of the system **as implemented**. It explains how the pieces fit
 together and links the decisions that shaped them without reproducing every invariant. Accepted
@@ -62,8 +62,13 @@ the receipt's linked reversal or refuses by name
 ([ADR-053](adr/ADR-053-processor-fees-and-batched-settlement.md)). Its `IPaymentProcessor` transport seam
 is called outside that transaction; the host simulator persists provider acceptance independently.
 A host registers one implementation of that seam, chosen by its payment mode: the simulator, or a
-Stripe sandbox adapter that so far only submits a charge and finds it again
-([ADR-054](adr/ADR-054-stripe-sandbox-adapter.md), proposed). The Stripe library is referenced from
+Stripe sandbox adapter ([ADR-054](adr/ADR-054-stripe-sandbox-adapter.md), proposed). The adapter so
+far submits a charge, finds it again, and reads Stripe's signed events for a payment that is
+processing, has succeeded or has failed; it reads no return, dispute or payout, and nothing it
+collects posts. A host also maps only its own processor's anonymous callback routes, outside `/api`:
+the simulator's two under `/callbacks/payments/simulation` in a Simulation host, and
+`POST /callbacks/payments/stripe` in a StripeSandbox host, which has its own rate limit and is not
+part of the published API contract. The Stripe library is referenced from
 the host alone and used only under `src/LeaseBook.Web/Payments/Stripe/`; an architecture test fails
 the build on a Stripe type in any module or elsewhere in the host.
 

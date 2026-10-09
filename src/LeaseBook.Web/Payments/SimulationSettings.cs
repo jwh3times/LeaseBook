@@ -9,6 +9,8 @@ namespace LeaseBook.Web.Payments;
 public sealed class StripeSandboxSettings
 {
     public string SecretKey { get; set; } = "";
+    /// <summary>The secret Stripe signs this host's callbacks with (whsec_…). Nothing delivered is read without it.</summary>
+    public string WebhookSecret { get; set; } = "";
 }
 
 public sealed partial class SimulationSettings
@@ -19,7 +21,7 @@ public sealed partial class SimulationSettings
     private static partial Regex KnownSetting();
 
     // What a sandbox host may be given besides, and no other mode may.
-    [GeneratedRegex(@"^(Stripe:SecretKey|Fixtures:\d+:(CardPaymentMethod|AchPaymentMethod))\z", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"^(Stripe:(SecretKey|WebhookSecret)|Fixtures:\d+:(CardPaymentMethod|AchPaymentMethod))\z", RegexOptions.CultureInvariant)]
     private static partial Regex SandboxSetting();
 
     // Stripe's documented test payment methods, by their shape. A payer's saved method is pm_ and an
@@ -92,6 +94,10 @@ public sealed partial class SimulationSettings
         // Only a test-mode key. A live key is refused by its prefix, before any client could be built from it.
         if (sandbox && !TestKey(settings.Stripe?.SecretKey))
         { throw new InvalidOperationException("StripeSandbox requires a Stripe test-mode secret key."); }
+        // And the secret its callbacks are signed with: a host that could not tell Stripe's events from
+        // anyone's must not serve the route. Named by its path and its prefix, never by what was given.
+        if (sandbox && !SigningSecret(settings.Stripe?.WebhookSecret))
+        { throw new InvalidOperationException("StripeSandbox requires a Stripe webhook signing secret (whsec_…) in Payments:Stripe:WebhookSecret."); }
         for (var i = 0; sandbox && i < settings.Fixtures.Length; i++)
         {
             var wrong = !TestCard().IsMatch(settings.Fixtures[i].CardPaymentMethod ?? "") ? "CardPaymentMethod"
@@ -109,6 +115,13 @@ public sealed partial class SimulationSettings
 
     private static bool TestKey(string? key) => key is not null
         && new[] { "sk_test_", "rk_test_" }.Any(prefix => key.StartsWith(prefix, StringComparison.Ordinal) && key.Length > prefix.Length);
+
+    // The whole value, with nothing before or after it: a secret pasted with a line break or a space
+    // would start the host and then match no delivery at all.
+    [GeneratedRegex(@"\Awhsec_[\x21-\x7E]+\z", RegexOptions.CultureInvariant)]
+    private static partial Regex SigningSecretShape();
+
+    private static bool SigningSecret(string? secret) => secret is not null && SigningSecretShape().IsMatch(secret);
 
     /// <summary>Registers the one processor this host's mode uses.</summary>
     public void AddProcessor(IServiceCollection services)

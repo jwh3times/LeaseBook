@@ -29,7 +29,7 @@ namespace LeaseBook.Tests.Integration;
 /// The Stripe sandbox adapter against what a sandbox really sent (ADR-054). Nothing here reaches the
 /// network: every answer is a payload the probe recorded, or one built from it by changing one thing.
 /// </summary>
-public sealed class StripeSandboxProcessorTests
+public sealed partial class StripeSandboxProcessorTests
 {
     // The ids the probe's recorded requests carried, so that what is sent can be compared with them whole.
     private static readonly Guid RecordedGeneration = Guid.Parse("68834ff9-f964-4044-9d3c-01c201889847");
@@ -425,18 +425,6 @@ public sealed class StripeSandboxProcessorTests
     }
 
     [Fact]
-    public async Task Callbacks_are_not_read_yet()
-    {
-        var h = new Adapter();
-        var body = Encoding.UTF8.GetBytes("{}");
-
-        h.Processor.Authenticate(body, "t=1,v1=00").ShouldBeNull();
-        (await h.Processor.ReadObservationAsync(new ProcessorNotice(body), Ct)).ShouldBe(ProcessorRead<ProcessorObservation>.NotOurs);
-        (await h.Processor.ReadSettlementAsync(new ProcessorNotice(body), Ct)).ShouldBe(ProcessorRead<ProcessorSettlement>.NotOurs);
-        h.Stripe.Requests.ShouldBeEmpty();
-    }
-
-    [Fact]
     public void The_adapter_exists_only_in_a_sandbox_host()
     {
         var simulation = SimulationSettings.Read(new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
@@ -507,9 +495,10 @@ public sealed class StripeSandboxProcessorTests
         var refusal = await Should.ThrowAsync<InvalidOperationException>(() => h.Processor.RequirePlatformKeyAsync(Ct));
 
         // Never the key, in whole or as Stripe abbreviates it; a fixture is named by its organization.
+        // The key, and its prefix. Not its three-letter tail: a refusal names the fixture's
+        // organization, and a random id contains any three hex letters often enough to fail a run.
         refusal.Message.ShouldNotContain(key);
         refusal.Message.ShouldNotContain("sk_test");
-        refusal.Message.ShouldNotContain("abc");
         refusal.InnerException.ShouldBeNull();
         if (difference != "own key" && !difference.StartsWith("platform"))
         { refusal.Message.ShouldContain(h.Binding.OrgId.ToString()); }
@@ -562,7 +551,7 @@ public sealed class StripeSandboxProcessorTests
     }
 
     // The adapter alone: a sandbox host's settings, a clock the test moves, and the replaying transport.
-    private sealed class Adapter
+    internal sealed class Adapter
     {
         private readonly DateTime _created;
 
@@ -573,17 +562,20 @@ public sealed class StripeSandboxProcessorTests
                 ["Payments:Mode"] = "StripeSandbox",
                 ["Payments:SigningKey"] = new string('x', 64),
                 ["Payments:Stripe:SecretKey"] = "sk_test_abc",
+                ["Payments:Stripe:WebhookSecret"] = StripeSigning.Secret,
                 ["Payments:Fixtures:0:OrgId"] = Guid.NewGuid().ToString(),
                 ["Payments:Fixtures:0:Generation"] = RecordedGeneration.ToString(),
                 ["Payments:Fixtures:0:BankId"] = Guid.NewGuid().ToString(),
                 ["Payments:Fixtures:0:Account"] = "acct_synthetic000002",
             };
             foreach (var (key, value) in changes) { values[key] = value; }
-            var settings = SimulationSettings.Read(new ConfigurationBuilder().AddInMemoryCollection(values).Build(), new DevelopmentEnvironment());
-            Binding = settings.Fixtures.Single();
+            Settings = SimulationSettings.Read(new ConfigurationBuilder().AddInMemoryCollection(values).Build(), new DevelopmentEnvironment());
+            Binding = Settings.Fixtures.Single();
             _created = Clock.GetUtcNow().UtcDateTime;
-            Processor = new StripeSandboxProcessor(settings, Clock, new StripeTransport(Stripe));
+            Processor = new StripeSandboxProcessor(Settings, Clock, new StripeTransport(Stripe));
         }
+
+        public SimulationSettings Settings { get; }
 
         public StripeReplay Stripe { get; } = new();
         public Clock Clock { get; } = new();
@@ -648,6 +640,14 @@ internal sealed class StripeReplay : HttpMessageHandler
 
     public static JsonObject RecordedBody(string name) => File_(name)["body"]!.AsObject();
 
+    /// <summary>One recorded delivery's event, as Stripe sent it. A copy, for a test to change.</summary>
+    public static JsonObject Delivered(string name) => File_(name)["event"]!.AsObject();
+
+    /// <summary>Every delivery the probe recorded, in the order it kept them.</summary>
+    public static IReadOnlyList<(string Name, JsonObject Event)> Deliveries() =>
+        [.. System.IO.Directory.GetFiles(Directory.Value, "*-webhook-connect.json").Select(Path.GetFileName).Order(StringComparer.Ordinal)
+            .Select(name => (name!, Delivered(name!)))];
+
     /// <summary>What a recorded request sent, flattened the way a form names nested fields.</summary>
     public static Dictionary<string, string> RecordedForm(string name)
     {
@@ -678,7 +678,7 @@ internal sealed class StripeReplay : HttpMessageHandler
 
 /// <summary>A whole host in StripeSandbox mode, with the recorded sandbox behind it.</summary>
 [Collection(nameof(DatabaseCollection))]
-public sealed class StripeSandboxHostTests(PostgresFixture fixture)
+public sealed partial class StripeSandboxHostTests(PostgresFixture fixture)
 {
     private const string Account = "acct_synthetic000002";
 
@@ -819,18 +819,22 @@ public sealed class StripeSandboxHostTests(PostgresFixture fixture)
         return invocation.RunAsync(services, ct);
     }
 
-    private async Task<Harness> Setup(StripeReplay stripe, CancellationToken ct)
+    // The fixture is seeded as the host is told it is, unless a test says the host is told otherwise.
+    private async Task<Harness> Setup(StripeReplay stripe, CancellationToken ct, Func<FixtureBinding, FixtureBinding>? configured = null)
     {
         var binding = new FixtureBinding(UuidV7.NewId(), UuidV7.NewId(), UuidV7.NewId(), Account) { Mode = PaymentModes.StripeSandbox };
         var suffix = UuidV7.NewId().ToString("N");
         await PaymentFixtureBootstrap.SeedAsync(fixture.Api.Services, binding, suffix, ct);
+        binding = configured?.Invoke(binding) ?? binding;
         var clock = new StripeSandboxProcessorTests.Clock(DateTimeOffset.UtcNow);
+        var commands = new CallbackCommands();
         var factory = new ApiFactory(fixture.AppConnectionString, new Dictionary<string, string?>
         {
             ["Logging:LogLevel:Default"] = "Warning",
             ["Payments:Mode"] = PaymentModes.StripeSandbox,
             ["Payments:SigningKey"] = new string('x', 64),
             ["Payments:Stripe:SecretKey"] = "sk_test_abc",
+            ["Payments:Stripe:WebhookSecret"] = StripeSigning.Secret,
             ["Payments:Fixtures:0:OrgId"] = binding.OrgId.ToString(),
             ["Payments:Fixtures:0:Generation"] = binding.Generation.ToString(),
             ["Payments:Fixtures:0:BankId"] = binding.BankId.ToString(),
@@ -842,25 +846,65 @@ public sealed class StripeSandboxHostTests(PostgresFixture fixture)
                 && x.ImplementationType?.Name == "PaymentWorker").ToArray()) { services.Remove(service); }
             services.RemoveAll<StripeTransport>(); services.AddSingleton(new StripeTransport(stripe));
             services.RemoveAll<TimeProvider>(); services.AddSingleton<TimeProvider>(clock);
+            services.ConfigureDbContext<AppDbContext>(options => options.AddInterceptors(commands));
         }));
-        try { _ = app.Services; }
+        try
+        {
+            _ = app.Services;
+            // So that what a callback asks of the database can be told from what the host's own workers ask.
+            app.Server.PreserveExecutionContext = true;
+        }
         catch { await app.DisposeAsync(); await factory.DisposeAsync(); throw; }
-        return new Harness(factory, app, binding, suffix, clock);
+        return new Harness(factory, app, binding, suffix, clock, commands);
     }
 
-    private sealed class Harness(ApiFactory factory, Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactory<Program> app, FixtureBinding binding, string suffix, StripeSandboxProcessorTests.Clock clock) : IAsyncDisposable
+    private sealed class Harness(ApiFactory factory, Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactory<Program> app, FixtureBinding binding, string suffix, StripeSandboxProcessorTests.Clock clock, CallbackCommands commands) : IAsyncDisposable
     {
         public StripeSandboxProcessorTests.Clock Clock => clock;
-        // As a tenant of the fixture would: signed in, through the portal's own route.
-        public async Task<PaymentView> Submit(decimal amount, CancellationToken ct)
+        // As a tenant of the fixture would: signed in, through the portal's own route, at the fee quoted.
+        public async Task<PaymentView> Submit(decimal amount, CancellationToken ct, string method = PaymentMethods.Ach)
         {
             using var tenant = app.CreateClient();
             await tenant.PrimeCsrfAsync(ct);
             (await tenant.PostAsJsonAsync("/api/auth/login", new { email = $"tenant-{suffix}1@payments.test", password = PaymentFixtureBootstrap.Password }, ct)).EnsureSuccessStatusCode();
             await tenant.PrimeCsrfAsync(ct);
-            var response = await tenant.PostAsJsonAsync("/api/portal/tenant/payments", new SubmitPaymentBody(UuidV7.NewId(), amount, "USD"), ct);
+            var quote = (await tenant.GetFromJsonAsync<PaymentQuoteView>(
+                $"/api/portal/tenant/payments/quote?amount={amount.ToString(System.Globalization.CultureInfo.InvariantCulture)}&method={method}", ct))!;
+            var response = await tenant.PostAsJsonAsync("/api/portal/tenant/payments", new SubmitPaymentBody(UuidV7.NewId(), amount, "USD", method, quote.Fee), ct);
             response.StatusCode.ShouldBe(HttpStatusCode.Accepted, await response.Content.ReadAsStringAsync(ct));
             return (await response.Content.ReadFromJsonAsync<PaymentView>(ct))!;
+        }
+        public async Task<HttpClient> Tenant(CancellationToken ct)
+        {
+            var tenant = app.CreateClient();
+            await tenant.PrimeCsrfAsync(ct);
+            (await tenant.PostAsJsonAsync("/api/auth/login", new { email = $"tenant-{suffix}1@payments.test", password = PaymentFixtureBootstrap.Password }, ct)).EnsureSuccessStatusCode();
+            await tenant.PrimeCsrfAsync(ct);
+            return tenant;
+        }
+        public Task Run(CancellationToken ct) => app.Services.GetRequiredService<PaymentRunner>().RunOnceAsync(ct);
+        /// <summary>
+        /// Posts an event to the callback route as Stripe would, signed at the host's own time unless a
+        /// test supplies the header, or none. Returns the status and how many database commands the
+        /// request ran: none means no organization was entered and nothing was read.
+        /// </summary>
+        public async Task<(HttpStatusCode Status, int Commands, string Body)> Deliver(JsonNode? @event, CancellationToken ct, string? signature = null,
+            string route = "/callbacks/payments/stripe", string header = "Stripe-Signature")
+        {
+            var body = Encoding.UTF8.GetBytes(@event?.ToJsonString() ?? "null");
+            using var client = app.CreateClient();
+            using var request = new HttpRequestMessage(HttpMethod.Post, route) { Content = new ByteArrayContent(body) };
+            signature ??= StripeSigning.Header(body, clock.GetUtcNow());
+            if (signature.Length > 0) { request.Headers.TryAddWithoutValidation(header, signature).ShouldBeTrue(); }
+            using var counted = commands.Count();
+            using var response = await client.SendAsync(request, ct);
+            return (response.StatusCode, counted.Seen, await response.Content.ReadAsStringAsync(ct));
+        }
+        public async Task<IReadOnlyList<PaymentObservation>> Facts(CancellationToken ct)
+        {
+            IReadOnlyList<PaymentObservation> facts = [];
+            await InOrg(async sp => facts = await sp.GetRequiredService<AppDbContext>().Set<PaymentObservation>().AsNoTracking().OrderBy(x => x.Id).ToListAsync(ct), ct);
+            return facts;
         }
         public async Task<PaymentOperation> Operation(Guid id, CancellationToken ct)
         {
@@ -884,4 +928,57 @@ public sealed class StripeSandboxHostTests(PostgresFixture fixture)
         }
         public async ValueTask DisposeAsync() { await app.DisposeAsync(); await factory.DisposeAsync(); }
     }
+}
+
+/// <summary>
+/// Counts the database commands run on behalf of one request. A test host passes the caller's
+/// execution context to the request, so a count opened around a call sees that request's commands and
+/// none of the host's background workers'.
+/// </summary>
+internal sealed class CallbackCommands : Microsoft.EntityFrameworkCore.Diagnostics.DbCommandInterceptor
+{
+    private static readonly AsyncLocal<Counter?> Current = new();
+
+    public sealed class Counter : IDisposable
+    {
+        private int _seen;
+        public int Seen => Volatile.Read(ref _seen);
+        public void Add() => Interlocked.Increment(ref _seen);
+        public void Dispose() => Current.Value = null;
+    }
+
+    public Counter Count() => Current.Value = new Counter();
+
+    public override ValueTask<Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<System.Data.Common.DbDataReader>> ReaderExecutingAsync(System.Data.Common.DbCommand command,
+        Microsoft.EntityFrameworkCore.Diagnostics.CommandEventData eventData, Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<System.Data.Common.DbDataReader> result, CancellationToken cancellationToken = default)
+    {
+        Current.Value?.Add();
+        return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
+    }
+
+    public override ValueTask<Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int>> NonQueryExecutingAsync(System.Data.Common.DbCommand command,
+        Microsoft.EntityFrameworkCore.Diagnostics.CommandEventData eventData, Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int> result, CancellationToken cancellationToken = default)
+    {
+        Current.Value?.Add();
+        return base.NonQueryExecutingAsync(command, eventData, result, cancellationToken);
+    }
+
+    public override ValueTask<Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<object>> ScalarExecutingAsync(System.Data.Common.DbCommand command,
+        Microsoft.EntityFrameworkCore.Diagnostics.CommandEventData eventData, Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<object> result, CancellationToken cancellationToken = default)
+    {
+        Current.Value?.Add();
+        return base.ScalarExecutingAsync(command, eventData, result, cancellationToken);
+    }
+}
+
+/// <summary>Signs a callback body the way Stripe does, with a secret no sandbox ever issued.</summary>
+internal static class StripeSigning
+{
+    public const string Secret = "whsec_abc";
+
+    public static string Mac(byte[] body, long timestamp, string secret = Secret) => Convert.ToHexStringLower(
+        System.Security.Cryptography.HMACSHA256.HashData(Encoding.UTF8.GetBytes(secret), (byte[])[.. Encoding.UTF8.GetBytes(timestamp + "."), .. body]));
+
+    public static string Header(byte[] body, DateTimeOffset at, string secret = Secret) =>
+        $"t={at.ToUnixTimeSeconds()},v1={Mac(body, at.ToUnixTimeSeconds(), secret)}";
 }

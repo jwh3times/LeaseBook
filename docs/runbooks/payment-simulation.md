@@ -3,7 +3,7 @@
 - **Audience:** Developers and test operators
 - **Status:** Implemented, non-live only
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-08
+- **Last reviewed:** 2026-10-09
 
 The simulator exercises the real Payments and Accounting path. It has no provider network client
 and cannot move real money. Production and Staging reject Simulation; live/provider configuration
@@ -121,7 +121,8 @@ with `X-Simulation-Signature` in `unixSeconds.hexHmac` format
 over the timestamp, a dot, and the exact body bytes. This synthetic signature is not Stripe's wire
 format. Each endpoint is outside cookie-authenticated `/api`; it uses signature authentication,
 bounded body size and rate limiting, then server-owned account routing. A caller's org metadata or
-cookie cannot select the callback's organization.
+cookie cannot select the callback's organization. Both routes exist only in a Simulation host; a
+Stripe sandbox host has its own callback route instead, described below.
 
 ## Restart, reset and failure recovery
 
@@ -155,14 +156,17 @@ This mode proves the processor seam against Stripe
 sandbox. It runs only in Development, only with a test-mode key, and only with Stripe's documented
 test payment methods, so it cannot move real money. Continuous integration never calls Stripe.
 
-Today the adapter submits a charge and finds it again. It does not read Stripe's events or payouts
-yet, so nothing a payment does after Stripe accepts it is seen, and nothing posts to the ledger.
+Today the adapter submits a charge, finds it again, and reads three of Stripe's events about it:
+processing, succeeded and failed. It does not read returns, disputes or payouts yet, so a payment can
+be seen to succeed or fail, and nothing posts to the ledger.
 
 ### What you need
 
 - A provisioned sandbox, as the [Stripe sandbox probe runbook](stripe-sandbox-probe.md) describes: the
   sandbox's own test-mode secret key (`sk_test_` or `rk_test_`), and a connected account that pays
   its own Stripe fees and has ACH debit turned on in its payment method settings.
+- The Stripe CLI, version 1.53 or later, signed in to that same sandbox. It forwards Stripe's events
+  to the local host and prints the secret they are signed with.
 - The development Postgres container running (`./scripts/dev.ps1 up`).
 
 ### Create the fixture
@@ -177,25 +181,66 @@ fixture organization; name up to 26, separated by commas, each once. The first o
 sign-ins are `tenant-a1@payments.test`, `tenant-a2@payments.test` and `admin-a@payments.test`, the
 second's use `b`, and so on, with the password given above.
 
-The manifest holds the account ids and never the key. `init` needs no key and makes no call to
-Stripe; the script clears `Payments__Stripe__SecretKey` for the processes it starts.
+The manifest holds the account ids and never the key or the webhook signing secret. `init` needs
+neither and makes no call to Stripe; the script clears `Payments__Stripe__SecretKey` and
+`Payments__Stripe__WebhookSecret` for the processes it starts and puts them back afterwards.
 
 ### Start the host
 
-Use a terminal kept for this host. The key is refused as an unknown setting by a host in any other
-mode, payments disabled included, so do not put it in a profile or in a terminal you use for anything
-else.
+The host needs two secrets: the sandbox key, and the secret Stripe signs its events with. Print the
+second with the Stripe CLI, in any terminal:
+
+```powershell
+stripe listen --print-secret
+```
+
+It prints one value beginning `whsec_`. Treat it like the key: keep it out of the repository, issues
+and chat.
+
+Use a terminal kept for this host. The key and the signing secret are each refused as an unknown
+setting by a host in any other mode, payments disabled included, so do not put either in a profile or
+in a terminal you use for anything else. Setting them as below supplies them to that terminal's
+processes only.
 
 ```powershell
 $env:ASPNETCORE_ENVIRONMENT = 'Development'
 $env:ConnectionStrings__Default = 'Host=localhost;Port=5632;Database=leasebook_payment_fixture_stripe;Username=leasebook_app;Password=dev_app_pw'
 $env:Payments__ManifestPath = (Resolve-Path ./payment-fixture-stripe.local).Path
 $env:Payments__Stripe__SecretKey = Read-Host -MaskInput 'Sandbox secret key'
+$env:Payments__Stripe__WebhookSecret = Read-Host -MaskInput 'Webhook signing secret'
 dotnet run --project src/LeaseBook.Web --no-launch-profile --urls http://localhost:5080
 ```
 
+Both are required. A host that ran in this mode before the signing secret existed does not start
+until it is supplied. The secret must be the whole value and nothing else: a space or a line break
+pasted with it is refused at startup.
+
 At startup the host asks Stripe whose key it holds and reads each fixture's account. It then starts
 the same worker the simulator uses. Start `npm run dev` from `web/` and sign in as a fixture tenant.
+
+### Forward Stripe's events
+
+In another terminal, once the host is up, forward the sandbox's events to it and leave this running:
+
+```powershell
+stripe listen --latest --all-snapshot --forward-to localhost:5080/callbacks/payments/stripe --forward-connect-to localhost:5080/callbacks/payments/stripe
+```
+
+`--forward-connect-to` is the one that matters: every event about a fixture's payment is an event on
+its connected account. The CLI prints each delivery and the host's answer.
+
+- `204` means the event was authentic. It was either stored or was not this host's to act on. Most
+  are the second kind: `--all-snapshot` forwards every event type and the host reads three.
+- `400` on every delivery means the signature did not verify. Check that the secret is the one this
+  CLI sign-in prints, and that this machine's clock is right: a signature more than 300 seconds from
+  the host's clock, either way, is refused.
+- `429` means the callback route's rate limit, 1200 deliveries a minute from one address, was passed.
+
+The route is `POST /callbacks/payments/stripe`. It exists only in a host in this mode, is outside
+cookie-authenticated `/api`, and is not part of the published API contract. It reads at most 64 KiB.
+The host checks the `Stripe-Signature` header before it reads anything in the body. It refuses an
+event not marked as test mode. It routes an event by the connected account it names, to the fixture
+bound to that account, and takes nothing else in the event as saying which organization it is for.
 
 ### What to expect
 
@@ -203,18 +248,38 @@ the same worker the simulator uses. Start `npm run dev` from `web/` and sign in 
   plus any quoted fee. Stripe receives the amount in cents, `usd`, a test payment method, and the
   operation id and fixture generation as metadata. Nothing identifying a tenant is sent and no
   customer is created.
-- The payment shows as **Processing** and stays there. No receipt is recorded and no journal entry is
-  written until later work reads Stripe's events and payouts. A declined test payment method also
-  stays **Processing** for now, because the decline arrives as an event.
+- With events forwarded, the host reads `payment_intent.processing`, `payment_intent.succeeded` and
+  `payment_intent.payment_failed` as the **Processing**, **Succeeded** and **Failed** facts the
+  simulator also uses. Every other event type is acknowledged and dropped.
+- A payment that succeeds gets its paid date and stays **Processing**. No receipt is recorded and no
+  journal entry is written: a Stripe event is never bank evidence, and payouts are not read yet.
+- A payment that fails ends as **Failed**, with the reason `collection_failed`. This covers a
+  declined card and an ACH debit that fails.
+- A payment counts only when it carries this fixture's generation. The same connected account may
+  hold payments made by the probe or by an earlier fixture, before a reset; their events are
+  acknowledged and dropped.
+- Without events forwarded, a payment stays **Processing** and nothing more is seen of it. See
+  [Known limitation](#known-limitation-a-lost-event) below.
 - A payment Stripe leaves waiting on a payer, a confirmation or a capture, or reports cancelled, goes
   to review on Operations. So does one Stripe will not take however often it is sent.
 - A failed connection, a rate limit, a fault at Stripe, or a key or permission Stripe refuses is a
   technical failure: it is retried on the delays above, and after those a PMAdmin can retry it.
 - A payment is looked up before it is ever submitted, by listing the account's payments since the
-  operation was created. Restarting the host or retrying never charges twice. An operation more than
-  23 hours old is not submitted at all; it goes to review.
-- `payment-simulation step` works with the same four variables and repeats the key check. `emit` and
-  `payout` are refused. The simulator's callback routes exist and reject everything sent to them.
+  operation was created. Once LeaseBook has stored Stripe's reference for a payment, it retrieves
+  that one payment instead. If Stripe then has no payment under a stored reference, the payment goes
+  to review. Restarting the host or retrying never charges twice. An operation more than 23 hours old
+  is not submitted at all; it goes to review.
+- `payment-simulation step` works with the same five variables and repeats the key check. `emit` and
+  `payout` are refused. The simulator's callback routes do not exist in this host.
+
+### Known limitation: a lost event
+
+After Stripe accepts a payment, the worker waits for an event and does not ask Stripe again. If the
+event that ends a payment never arrives, the payment stays **Processing**, and staff have no control
+to retry or close it. Stripe redelivers to a registered endpoint for days, but the Stripe CLI's
+forwarding does not send a delivery again, whether the host was down, refused it or rate-limited it.
+So keep `stripe listen` running, and the host up, from before a payment is submitted until its
+outcome shows. How such a payment should be recovered is an open decision, not yet made.
 
 ### Optional payment methods
 
@@ -236,16 +301,22 @@ and an ACH method `pm_usBankAccount_`, each followed by letters, digits or under
 Stripe's documented test payment methods. A saved payment method's id does not have that shape and is
 refused. Both settings are refused outside this mode.
 
+To see a payment fail, stop the host, name one of Stripe's failing test payment methods here, such as
+`pm_card_visa_chargeDeclined` for a card or `pm_usBankAccount_insufficientFunds` for ACH, and start
+the host again. With events forwarded, a payment made with it ends as **Failed**.
+
 ### Startup refusals
 
-Each names a setting by its path or a fixture by its organization id, never a key.
+Each names a setting by its path or a fixture by its organization id, never a key or a secret.
 
 | The host says                                                                     | What it means                                                                                                                                                            |
 | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `Unknown setting: Payments:Stripe:SecretKey`                                      | The key is set for a host that is not in this mode. Remove the variable, or point `Payments__ManifestPath` at the sandbox manifest.                                      |
-| `A payment fixture manifest must not hold provider credentials`                   | The key was written into the manifest. Take it out and rotate it.                                                                                                        |
+| `Unknown setting: Payments:Stripe:WebhookSecret`                                  | The same, for the webhook signing secret.                                                                                                                                |
+| `A payment fixture manifest must not hold provider credentials`                   | The key or the signing secret was written into the manifest. Take it out, and rotate a key that was there.                                                               |
 | `require Development, a fixture signing key and unique explicit fixture bindings` | The environment is not Development, or the manifest is not this mode's: every account must be `acct_…`, each once.                                                       |
 | `StripeSandbox requires a Stripe test-mode secret key`                            | The key is missing, or does not begin `sk_test_` or `rk_test_`. A live key is refused here, before any call is made.                                                     |
+| `StripeSandbox requires a Stripe webhook signing secret (whsec_…)`                | `Payments:Stripe:WebhookSecret` is missing, does not begin `whsec_`, or has a space or line break in it. Supply the value `stripe listen --print-secret` prints.         |
 | `collects only with Stripe's documented test payment methods`                     | An optional payment method does not have the test shape. The message names the setting.                                                                                  |
 | `could not read the account of its Stripe key`                                    | Stripe could not be reached, or it refused the key: revoked, mistyped, or a restricted key that may not read accounts.                                                   |
 | `requires the platform's test-mode key, not a connected account's own`            | The key belongs to a fixture's connected account. An account with its own dashboard has its own keys; copy the key from the sandbox itself.                              |
