@@ -1,9 +1,13 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { http, HttpResponse } from 'msw';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { sessionQueryKey } from '@/features/auth/useSession';
 import { server } from '@/test/mocks/server';
+import { bankMicrKey, checkPrintSettingsKey } from './refundChecks';
+import { BankMicrSection } from './BankMicrSection';
 import { CheckPrintSettingsDialog } from './CheckPrintSettingsDialog';
 
 function renderDialog() {
@@ -84,6 +88,45 @@ describe('CheckPrintSettingsDialog', () => {
     expect(screen.getByLabelText('Horizontal offset (points)')).toHaveAccessibleDescription(
       'Positive moves right, negative moves left.',
     );
+  });
+
+  // The first render with the settings already loaded, with no effect run: what a reader of the
+  // page can catch between the settings arriving and anything that follows them (#532).
+  it('never shows an offset field disabled once its settings are loaded', () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    queryClient.setQueryData(checkPrintSettingsKey('dep1'), {
+      bankAccountId: 'dep1',
+      offsetXPoints: 4.5,
+      offsetYPoints: -2,
+    });
+    // Only an administrator is shown the MICR fields.
+    queryClient.setQueryData(sessionQueryKey, ADMIN_SESSION);
+    queryClient.setQueryData(bankMicrKey('dep1'), {
+      bankAccountId: 'dep1',
+      stockKind: 'blank',
+      routingNumberLast4: null,
+      onUsAccountNumberLast4: null,
+      micrOffsetXPoints: 3,
+      micrOffsetYPoints: 0,
+    });
+
+    for (const element of [
+      <CheckPrintSettingsDialog
+        key="dialog"
+        bankAccountId="dep1"
+        bankName="Security Deposit Trust"
+        onClose={vi.fn()}
+      />,
+      <BankMicrSection key="micr" bankAccountId="dep1" />,
+    ]) {
+      const first = document.createElement('div');
+      first.innerHTML = renderToStaticMarkup(
+        <QueryClientProvider client={queryClient}>{element}</QueryClientProvider>,
+      );
+      const fields = [...first.querySelectorAll('input[inputmode="decimal"]')];
+      expect(fields.length).toBeGreaterThanOrEqual(2);
+      for (const field of fields) expect(field).toBeEnabled();
+    }
   });
 
   it('refuses an offset beyond one inch either way without saving', async () => {

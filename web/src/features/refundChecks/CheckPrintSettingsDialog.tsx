@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useId, useState, type KeyboardEvent } from 'react';
+import { useId, useState, type KeyboardEvent } from 'react';
 import type { ApiError } from '@/api';
 import { Button, Input } from '@/design';
 import { ApiErrorNotice } from '@/components/ApiErrorNotice';
@@ -40,19 +40,18 @@ export function CheckPrintSettingsDialog({
   const fieldId = useId();
   const queryClient = useQueryClient();
   const settings = useCheckPrintSettings(bankAccountId);
-  const [x, setX] = useState<string | null>(null);
-  const [y, setY] = useState<string | null>(null);
+  const [typedX, setX] = useState<string | null>(null);
+  const [typedY, setY] = useState<string | null>(null);
   const [error, setError] = useState<(ApiError & { field?: Axis }) | null>(null);
   const [saved, setSaved] = useState(false);
   const [printing, setPrinting] = useState(false);
   const [printError, setPrintError] = useState<ApiError | null>(null);
 
-  // Seed the fields from the saved settings once; a refetch never overwrites what is being typed.
-  useEffect(() => {
-    if (!settings.isSuccess) return;
-    setX((current) => current ?? String(num(settings.data.offsetXPoints)));
-    setY((current) => current ?? String(num(settings.data.offsetYPoints)));
-  }, [settings.isSuccess, settings.data]);
+  // A field shows what was typed into it, and until then the saved setting: a refetch never
+  // overwrites what is being typed. Derived, not copied into state by an effect, so there is no
+  // render in which the settings have loaded and the fields are still empty and disabled (#532).
+  const x = typedX ?? (settings.isSuccess ? String(num(settings.data.offsetXPoints)) : null);
+  const y = typedY ?? (settings.isSuccess ? String(num(settings.data.offsetYPoints)) : null);
 
   const readUnavailable = settings.isPending || settings.isError || x === null || y === null;
   const dirty =
