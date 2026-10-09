@@ -613,7 +613,9 @@ pass cannot complete. `4606` (`PaymentRecoverySwept`) records a completed catch-
 fixture, with how many events the processor listed, how many were handed on and how many could not be
 read; `4607` (`PaymentRecoveryFailed`) records a sweep that could not finish, which is tried again
 after five minutes. A payment sent to review for having no outcome after seven days is logged as
-`4601` with the reason `outcome_overdue`. No callback body, signing key or bank credentials belong in
+`4601` with the reason `outcome_overdue`; a `4601` saying a payment could not be sent to review as
+overdue names the exception type, and that payment is offered again at the next sweep. A sweep that
+finds no payment waiting asks the processor nothing and logs nothing. No callback body, signing key or bank credentials belong in
 these logs.
 
 Staff Operations shows durable payment status, reason, last attempt and evidence reference within

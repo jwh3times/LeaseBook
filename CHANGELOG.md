@@ -69,8 +69,17 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   before anything in it is read; one that is unsigned, stale, altered or marked as live is refused; one
   for a connected account or a fixture that is not this host's is acknowledged and dropped without
   opening any organization. A sandbox host now needs the webhook signing secret that `stripe listen`
-  prints, and does not start without it. A payment whose final event never arrives stays in
-  Processing; how to recover one is not decided yet.
+  prints, and does not start without it.
+
+- **A sandbox payment whose Stripe event never arrived is recovered.** The Stripe CLI's forwarding
+  does not send a missed event again, and a payment used to wait in Processing for ever. While a
+  payment waits for its outcome, the payment worker now asks Stripe every five minutes for the
+  account's events since the oldest such payment was created, and reads them as if they had been
+  delivered; a restarted host asks at once. A payment still without an outcome seven days after it
+  was created goes to review as `outcome_overdue`, where an administrator can close it. It does not
+  return to Processing: a late failure ends it as failed, and a late success sets its paid date and
+  leaves it in review. The seven-day rule applies to the payment simulation too, so a simulated
+  payment left that long without a success goes to review. Nothing reaches a ledger from any of this.
 
 - **A fixture payment can be collected through a Stripe sandbox.** A Development host configured for
   `StripeSandbox` now starts, and a fixture tenant's card or bank-debit payment is charged on the
@@ -101,6 +110,13 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   credentials is refused. An existing fixture manifest is unaffected.
 
 ### Fixed
+
+- **A payment in review stays in review when a retry fails.** When a late notice arrived for a payment
+  that was in review, or whose review had been closed, and the attempt to read it failed for a
+  passing technical reason, the payment lost its review reason and returned to Processing. In the
+  payment simulation, bank evidence arriving then could record a receipt for a payment a person had
+  not released. Such a payment now keeps its status and reason whatever fails, and the attempt is
+  repeated on the usual schedule.
 
 - **A payment fact delivered as its charge completes is no longer left unread.** A notice about a
   payment and the worker's own completion of that payment could pass each other: the notice was

@@ -65,7 +65,10 @@ A host registers one implementation of that seam, chosen by its payment mode: th
 Stripe sandbox adapter ([ADR-054](adr/ADR-054-stripe-sandbox-adapter.md), proposed). The adapter so
 far submits a charge, finds it again, and reads Stripe's signed events for a payment that is
 processing, has succeeded or has failed; it reads no return, dispute or payout, and nothing it
-collects posts. A host also maps only its own processor's anonymous callback routes, outside `/api`:
+collects posts. The seam also answers what a processor still holds for a payment waiting on its
+outcome: the payment worker asks at most every five minutes for each fixture, so an event that was
+never delivered is read from Stripe's event list as a delivered one is, and a payment still without
+an outcome after seven days goes to review under either processor. A host also maps only its own processor's anonymous callback routes, outside `/api`:
 the simulator's two under `/callbacks/payments/simulation` in a Simulation host, and
 `POST /callbacks/payments/stripe` in a StripeSandbox host, which has its own rate limit and is not
 part of the published API contract. The Stripe library is referenced from

@@ -81,7 +81,9 @@ this one, for current progress.
 - `Accounting`, `Directory`, `Banking`, `Reporting`, `Operations`, `Capabilities`, `Payments`, and
   `Migrator` carry implemented behavior; Payments has no live provider adapter. A Stripe sandbox
   adapter (ADR-054, Proposed) runs in the development fixture only and so far only submits a charge,
-  finds it again and reads Stripe's payment events; nothing it collects posts.
+  finds it again and reads Stripe's payment events, asking Stripe again for one that was never
+  delivered; nothing it collects posts. In either payment mode, a payment with no outcome after seven
+  days goes to staff review.
 
 The `private/` directory is gitignored by the public repository and is a separately versioned
 confidential checkout for authorized maintainers. Its repository locator and bootstrap details live
