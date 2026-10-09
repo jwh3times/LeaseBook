@@ -1211,7 +1211,12 @@ public sealed partial class StripeSandboxHostTests
     // own id, type, account, version, livemode and created are as Stripe sent them.
     private static JsonObject Event(string recorded, Harness h, PaymentView payment)
     {
-        var @event = StripeReplay.Delivered(recorded);
+        return Pointed(StripeReplay.Delivered(recorded), h, payment);
+    }
+
+    // The same three substitutions on any recorded event, delivered or listed.
+    private static JsonObject Pointed(JsonObject @event, Harness h, PaymentView payment)
+    {
         ((string)@event["account"]!).ShouldBe(Account);
         var intent = @event["data"]!["object"]!.AsObject();
         intent["id"] = Sandbox.IdFor(payment.Id);
@@ -1244,12 +1249,20 @@ public sealed partial class StripeSandboxHostTests
         public Action? OnCharge { get; init; }
         /// <summary>When set, what every request about a payment is answered with.</summary>
         public (int Status, string Body)? Refused { get; set; }
+        /// <summary>What a list of the account's events is answered with. Unset, asking for one is unexpected and throws.</summary>
+        public Func<StripeReplay.Sent, (int Status, string Body)>? Events { get; set; }
+        /// <summary>The lists of events asked for so far.</summary>
+        public IReadOnlyList<StripeReplay.Sent> Sweeps => [.. Replay.Requests.Where(x => x.Path == "/v1/events")];
 
         public static string IdFor(Guid operation) => "pi_host" + operation.ToString("N");
 
         private (int Status, string Body) Answer(StripeReplay.Sent sent)
         {
+            // Any other connected account is a second fixture's, and is answered as the first is.
+            if (sent.Path.StartsWith("/v1/accounts/", StringComparison.Ordinal) && sent.Path != "/v1/accounts/" + Account)
+            { return StripeSandboxProcessorTests.Accounts(account: sent.Path["/v1/accounts/".Length..])(sent); }
             if (sent.Path.StartsWith("/v1/account", StringComparison.Ordinal)) { return _accounts(sent); }
+            if (sent.Path == "/v1/events" && Events is { } events) { return events(sent); }
             if (Refused is { } refused) { return refused; }
             const string payments = "/v1/payment_intents";
             if (sent.Method == "POST" && sent.Path == payments)

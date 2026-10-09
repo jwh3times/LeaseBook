@@ -56,15 +56,15 @@ Maintain independent collection, payout and accounting facts; derive the public 
 An event's timestamp is not a version number. Append a late observation, then reduce the complete
 validated fact set. Contradictory facts require review, except the explicitly allowed late return.
 
-| Derived status | Meaning and next allowed outcome                                                                                                                    | Tenant wording                                                              | PM wording/action                                                       |
-| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| Requested      | Intent/outbox committed; provider acceptance unknown. Dispatch to Processing or confirmed Failed.                                                   | Simulation requested                                                        | Awaiting dispatch; inspect stalled retries                              |
-| Processing     | Accepted or provider progress seen; no journal receipt. May become Settled, Failed, or Needs review.                                                | Simulated payment processing — not yet on your ledger                       | Awaiting bank evidence or retrying technical delivery                   |
-| Failed         | Authenticated definitive collection failure before any bank credit. Terminal for this attempt; a new request can retry.                             | Simulated payment failed — no payment recorded                              | Collection failed; no ledger effect                                     |
-| Settled        | Complete gross bank-credit evidence and receipt journal link committed together. A late return can lead to Needs review.                            | Simulated payment recorded                                                  | Bank evidence matched; receipt posted                                   |
-| Needs review   | Conflicting/unsupported evidence, posting rejection or return requiring an accounting decision. Technical recoverable failures remain Processing.   | Simulated payment needs review; show whether a receipt was already recorded | Stable reason code, evidence reference, last attempt and allowed action |
-| Returned       | Return evidence plus a linked reversal committed by a PMAdmin through the guarded return (ADR-052). Never derived from a return notification alone. | Simulated payment returned by the bank — the receipt was reversed           | Receipt and linked reversal references                                  |
-| Review closed  | A PMAdmin closed a review with a note and no posting (ADR-052). A later observation reopens it as Needs review.                                     | Simulated payment review closed; show whether a receipt remains recorded    | The note, the reason and the evidence reference                         |
+| Derived status | Meaning and next allowed outcome                                                                                                                                                                             | Tenant wording                                                              | PM wording/action                                                       |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| Requested      | Intent/outbox committed; provider acceptance unknown. Dispatch to Processing or confirmed Failed.                                                                                                            | Simulation requested                                                        | Awaiting dispatch; inspect stalled retries                              |
+| Processing     | Accepted or provider progress seen; no journal receipt. May become Settled, Failed, or Needs review.                                                                                                         | Simulated payment processing — not yet on your ledger                       | Awaiting bank evidence or retrying technical delivery                   |
+| Failed         | Authenticated definitive collection failure before any bank credit. Terminal for this attempt; a new request can retry.                                                                                      | Simulated payment failed — no payment recorded                              | Collection failed; no ledger effect                                     |
+| Settled        | Complete gross bank-credit evidence and receipt journal link committed together. A late return can lead to Needs review.                                                                                     | Simulated payment recorded                                                  | Bank evidence matched; receipt posted                                   |
+| Needs review   | Conflicting/unsupported evidence, posting rejection, return requiring an accounting decision, or no outcome seven days after creation (`outcome_overdue`). Technical recoverable failures remain Processing. | Simulated payment needs review; show whether a receipt was already recorded | Stable reason code, evidence reference, last attempt and allowed action |
+| Returned       | Return evidence plus a linked reversal committed by a PMAdmin through the guarded return (ADR-052). Never derived from a return notification alone.                                                          | Simulated payment returned by the bank — the receipt was reversed           | Receipt and linked reversal references                                  |
+| Review closed  | A PMAdmin closed a review with a note and no posting (ADR-052). A later observation reopens it as Needs review.                                                                                              | Simulated payment review closed; show whether a receipt remains recorded    | The note, the reason and the evidence reference                         |
 
 Failed is terminal for ordinary notifications, not permission to discard a contradictory bank
 credit. Such a credit changes the exception summary to Needs review and produces no posting. Settled
@@ -280,6 +280,15 @@ that reads returns, disputes and payouts. An observation read this way carries t
 fee, no bank evidence identifier and no payout, and is never complete. It can therefore set a paid
 date or end a payment as failed, and it can never be the bank evidence a receipt posts from.
 
+`RecoverObservationsAsync` answers what the processor still holds about one fixture's payments since
+a given time, as the same observations a delivery would have produced. The Stripe adapter lists the
+connected account's events from Stripe's Events API, filtered to the event types it reads, and reads
+each with the reader a delivery goes through, so a swept event and its delivered twin are the same
+observation. These events carry no signature. The trust is that the list was asked of Stripe with the
+platform's key, over TLS, for one named account; an event that names any other account is not taken.
+Anything in the list marked live refuses the whole sweep, as does a list that cannot be read to its
+end. An event that cannot be read is counted and skipped. Stripe keeps events for 30 days.
+
 ## Transaction and recovery protocol
 
 1. **Submit transaction:** under request org RLS, validate resident/binding and insert operation
@@ -320,11 +329,38 @@ the fact is stored and never acted on. Whichever takes the lock second reads aft
 committed. The order is fixed: receipt locks the event, then the reference, then the operation;
 persisting a result locks the reference, then the operation. This applies to every processor.
 
-After acceptance the worker makes no further provider call for an idle payment; a stored observation
-wakes it. A payment whose ending observation is never delivered therefore stays in Processing, and
-no staff control retries or closes it. The simulator's driver always delivers. The Stripe sandbox
-adapter depends on the Stripe CLI's forwarding, which does not send a delivery again. Recovering such
-a payment is an open decision and is not designed here.
+After acceptance the worker makes no further provider call about one idle payment; a stored
+observation wakes it. An observation that is never delivered is recovered in two ways, both run by
+the worker and neither able to post.
+
+**Catch-up sweep.** A payment is _waiting_ when it is Processing, holds the processor's reference and
+has no paid date. For each fixture, at most once every five minutes, the worker reads the waiting
+payments in that organization's transaction. If there are none it asks the processor nothing.
+Otherwise it calls `RecoverObservationsAsync` outside any transaction, for everything since the
+oldest waiting payment was created and never further back than 29 days. Each observation that comes
+back goes through callback receipt (step 3), one organization transaction each, so one already stored
+is dropped by its event id. No position is stored: a restarted host sweeps at once. A sweep that
+fails stores nothing it could not read in full, is logged, and is tried again at the next interval;
+it never stops due work.
+
+**Aging.** A payment still waiting seven days after it was created goes to Needs review with reason
+`outcome_overdue`. This happens only directly after a sweep of that fixture that succeeded, so a
+payment is never sent to a person while the observations that could end it have not been asked for.
+It applies to every processor. A payment that is leased, due, between technical retries or holds an
+observation not yet judged is left alone. Marking takes the provider-reference lock and then the
+operation lock, the order given above. A PMAdmin can close the review with a note. An observation
+that arrives afterwards is still recorded: a failure ends the payment as Failed; anything else leaves
+it in Needs review, reopening a closed one, with the paid date set if it was a success. It does not
+return to Processing, so no receipt can post for a payment a person may already have corrected by
+hand. Once a payment has left the waiting state the sweep no longer asks about it; a later
+observation reaches it only by delivery.
+
+A review reason is kept through a failed attempt. When the attempt that judges a late observation
+fails for a technical reason, a payment in Needs review or Review closed under any other reason keeps
+its status and that reason, and the attempt is repeated on the retry schedule below. When those
+attempts run out it rests in review with the observation not judged, until another one arrives.
+
+The simulator's driver always delivers, so its sweep returns nothing; aging still applies to it.
 
 For the simulator, schedule technical retries at 1, 5, 30, 120 and 600 seconds after successive
 failures, then Needs review. Time comes from an injected clock so tests advance it deterministically.

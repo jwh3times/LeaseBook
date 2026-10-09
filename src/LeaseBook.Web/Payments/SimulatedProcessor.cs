@@ -71,6 +71,10 @@ public sealed class SimulatedProcessor(IServiceScopeFactory scopes, SimulationSe
     public Task<ProcessorRead<ProcessorObservation>> ReadObservationAsync(ProcessorNotice notice, CancellationToken ct) =>
         Task.FromResult(ProcessorRead<ProcessorObservation>.Of(Observation(notice.Body)));
 
+    // The simulator's driver always delivers, so there is nothing to ask it for again.
+    public Task<ProcessorRecovery> RecoverObservationsAsync(FixtureBinding binding, DateTime since, CancellationToken ct) =>
+        Task.FromResult(ProcessorRecovery.Nothing);
+
     private static ProcessorSettlement? Settlement(byte[] rawBody)
     {
         try

@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Linq.Expressions;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -15,6 +16,7 @@ public sealed class PaymentUnavailableException : Exception;
 /// <summary>The fee the tenant was shown is not the fee the organization's rule gives now.</summary>
 public sealed class PaymentFeeQuoteChangedException : Exception;
 public sealed record PaymentReturnDecision(PaymentOperation Operation, string? Refusal);
+public sealed record WaitingPayment(Guid Id, DateTime CreatedAt);
 
 /// <summary>All methods run on the caller's org transaction. No provider I/O occurs here.</summary>
 public sealed class PaymentEngine(DbContext db, IOrgContext org, TimeProvider clock,
@@ -23,6 +25,10 @@ public sealed class PaymentEngine(DbContext db, IOrgContext org, TimeProvider cl
     public static readonly int[] RetrySeconds = [1, 5, 30, 120, 600];
     public static readonly string[] EventKinds = ["Processing", "Succeeded", "Available", "PayoutPending",
         "PayoutPaid", "PayoutFailed", "Failed", "BankCredit", "Return", "Refund", "Dispute"];
+    /// <summary>How long a payment may wait for its outcome before a person is asked to look.</summary>
+    public static readonly TimeSpan OutcomeOverdueAfter = TimeSpan.FromDays(7);
+    private static readonly Expression<Func<PaymentOperation, bool>> Waiting =
+        x => x.Status == "Processing" && x.ProviderId != null && x.PaidAt == null;
     private DateTime Now => clock.GetUtcNow().UtcDateTime;
 
     public async Task RequireFixtureAsync(FixtureBinding binding, CancellationToken ct)
@@ -253,11 +259,19 @@ public sealed class PaymentEngine(DbContext db, IOrgContext org, TimeProvider cl
         await LockAsync(id.ToString(), ct);
         var op = await db.Set<PaymentOperation>().SingleAsync(x => x.Id == id, ct);
         if (op.LeaseClaimId != token || op.JournalId is not null) { return; }
+        // A payment a person holds, or has closed, under a reason of its own stays exactly there
+        // whatever fails while a late fact is judged. Made "Processing" with a technical failure it
+        // would lose that reason, and the retry would judge it as a payment nobody had looked at: a
+        // complete bank credit would then post. It is still tried again on the same schedule, so
+        // that the fact is judged, and CompleteAsync keeps it with a person.
+        var held = op.Status is "NeedsReview" or "ReviewClosed" && op.Reason is not (null or "technical_failure");
         op.LeaseUntil = null; op.LeaseClaimId = null; op.Attempts++;
-        op.Reason = reason;
-        if (reason == "technical_failure" && op.Attempts <= RetrySeconds.Length)
-        { op.Status = "Processing"; op.DueAt = Now.AddSeconds(RetrySeconds[op.Attempts - 1]); }
-        else { op.Status = "NeedsReview"; op.DueAt = DateTime.SpecifyKind(DateTime.MaxValue, DateTimeKind.Utc); }
+        var again = reason == "technical_failure" && op.Attempts <= RetrySeconds.Length;
+        op.DueAt = again ? Now.AddSeconds(RetrySeconds[op.Attempts - 1]) : DateTime.SpecifyKind(DateTime.MaxValue, DateTimeKind.Utc);
+        if (!held) { op.Reason = reason; op.Status = again ? "Processing" : "NeedsReview"; }
+        // Out of tries, a held payment rests with the fact unjudged. Nobody can retry it, because its
+        // reason is not a technical one, so the count starts again for the next fact that wakes it.
+        else if (!again) { op.Attempts = 0; }
         await db.SaveChangesAsync(ct);
     }
 
@@ -341,6 +355,52 @@ public sealed class PaymentEngine(DbContext db, IOrgContext org, TimeProvider cl
         op.Status = "ReviewClosed"; op.ReviewNote = note; op.ReviewClosedAt = Now; op.ReviewClosedBy = userId;
         await db.SaveChangesAsync(ct);
         return op;
+    }
+
+    /// <summary>
+    /// The payments still waiting for the processor to say how they went, oldest first: accepted,
+    /// in processing, and not reported paid. These are what a lost notice leaves with no way on.
+    /// </summary>
+    public async Task<IReadOnlyList<WaitingPayment>> WaitingAsync(FixtureBinding binding, CancellationToken ct)
+    {
+        await RequireFixtureAsync(binding, ct);
+        // Only what this binding answers for: a row of another generation, bank or account would set
+        // how far back the processor is asked and then be refused when it came to be aged.
+        return await db.Set<PaymentOperation>().AsNoTracking().Where(Waiting)
+            .Where(x => x.Generation == binding.Generation && x.BankId == binding.BankId && x.Account == binding.Account)
+            .OrderBy(x => x.CreatedAt).Select(x => new WaitingPayment(x.Id, x.CreatedAt)).ToListAsync(ct);
+    }
+
+    /// <summary>
+    /// Sends a payment to a person when the processor has reported no outcome for
+    /// <see cref="OutcomeOverdueAfter"/>, and says whether it did. Only one that is still waiting and
+    /// at rest, with every fact it holds already judged: one the worker has or is about to take, or
+    /// one with a fact unjudged, may be about to end by itself. Nothing is posted and nothing is asked
+    /// of the processor. The caller must first have asked the processor for whatever it did not
+    /// deliver; that cannot be checked from here. A fact that arrives afterwards is still judged:
+    /// a failure ends the payment, and anything else is recorded and leaves it with a person.
+    /// </summary>
+    public async Task<bool> MarkOverdueAsync(FixtureBinding binding, Guid id, CancellationToken ct)
+    {
+        await RequireFixtureAsync(binding, ct);
+        // Read first only to name the lock: the reference, then the operation, as ReceiveAsync and
+        // CompleteAsync take them. An operation keeps the reference it has, and is read again below.
+        var reference = await db.Set<PaymentOperation>().AsNoTracking().Where(x => x.Id == id)
+            .Select(x => x.ProviderId).SingleOrDefaultAsync(ct);
+        if (reference is null) { return false; }
+        await LockAsync("reference:" + reference, ct);
+        await LockAsync(id.ToString(), ct);
+        var op = await db.Set<PaymentOperation>().Where(Waiting).SingleOrDefaultAsync(x => x.Id == id && x.ProviderId == reference, ct);
+        if (op is null) { return false; }
+        MatchBinding(op, binding);
+        // At rest: not held, not due, and not between attempts. A retry that is scheduled has its own
+        // way to a person, and one marked here would stay due with nobody to claim it.
+        if (op.LeaseUntil > Now || op.DueAt <= Now || op.Reason is not null) { return false; }
+        if (op.CreatedAt > Now - OutcomeOverdueAfter) { return false; }
+        if (await db.Set<PaymentObservation>().CountAsync(x => x.ProviderId == reference, ct) != op.ProcessedCount) { return false; }
+        op.Status = "NeedsReview"; op.Reason = "outcome_overdue";
+        await db.SaveChangesAsync(ct);
+        return true;
     }
 
     private static void MatchBinding(PaymentOperation op, FixtureBinding binding)

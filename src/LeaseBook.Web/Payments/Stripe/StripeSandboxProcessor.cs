@@ -235,6 +235,82 @@ public sealed class StripeSandboxProcessor : IPaymentProcessor
         Task.FromResult(ProcessorRead<ProcessorSettlement>.NotOurs);
 
     /// <summary>
+    /// Lists the events Stripe holds for one fixture's account since a time, for one that was never
+    /// delivered, and reads each as a delivery is read. Nothing listed proves itself with a signature.
+    /// The trust is of another kind: the list was asked of Stripe, with the platform's key, over TLS,
+    /// for one named account. So no notice is made of it, and an event counts only for the account
+    /// that was asked about. The list is taken as text and read member by member, for the reason the
+    /// reader gives; the library's own list would put every event through its types first.
+    /// </summary>
+    public async Task<ProcessorRecovery> RecoverObservationsAsync(FixtureBinding binding, DateTime since, CancellationToken ct)
+    {
+        if (_settings.ForOrg(binding.OrgId) != binding) { throw new PaymentUnavailableException(); }
+        var from = new DateTimeOffset(DateTime.SpecifyKind(since, DateTimeKind.Utc) - ClockSkew).ToUnixTimeSeconds();
+        // Only the types the reader maps: an account's other events are several times as many.
+        var query = string.Create(CultureInfo.InvariantCulture, $"/v1/events?created[gte]={from}&limit={PageSize}")
+            + string.Concat(Progress.Select((x, i) => string.Create(CultureInfo.InvariantCulture, $"&types[{i}]={x.Type}")));
+        var account = new RawRequestOptions { StripeAccount = binding.Account };
+        var found = new List<ProcessorObservation>();
+        var (listed, unreadable) = (0, 0);
+        string? after = null;
+        for (var page = 0; ; page++)
+        {
+            // Not an answer: stopping here would say that every event since then had been asked for.
+            if (page == MaxPages) { throw new IOException("The Stripe sandbox listed more events than a sweep reads."); }
+            // A read says nothing about any payment: whatever Stripe answers but a list is left as
+            // thrown, and the sweep is made again later.
+            var response = await _client.RawRequestAsync(HttpMethod.Get,
+                after is null ? query : query + "&starting_after=" + Uri.EscapeDataString(after), null, account, ct);
+            JsonDocument document;
+            try { document = JsonDocument.Parse(response.Content); }
+            catch (JsonException) { throw NotAList(); }
+            using (document)
+            {
+                var root = document.RootElement;
+                if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Array
+                    || !root.TryGetProperty("has_more", out var more) || more.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+                { throw NotAList(); }
+                // Anywhere in the list and whatever it is about, as for a lookup: the key is reading
+                // a live account, and nothing it lists is kept, the pages before this one included.
+                if (data.EnumerateArray().Any(MarkedLive)) { throw new PaymentUnavailableException(); }
+                foreach (var item in data.EnumerateArray())
+                {
+                    listed++;
+                    var read = Observation(Encoding.UTF8.GetBytes(item.GetRawText()));
+                    // One that cannot be read is counted and passed over: it must not hide the rest.
+                    if (read.Value is null) { unreadable += read.Ignored ? 0 : 1; continue; }
+                    // The reader routes by any binding of this host. Here only one account was asked.
+                    if (read.Value.Account == binding.Account) { found.Add(read.Value); }
+                }
+                if (more.ValueKind == JsonValueKind.False) { break; }
+                // More to come and nothing to say where from: not the end, so not an answer.
+                if (data.GetArrayLength() == 0) { throw NotAList(); }
+                after = Id(data[data.GetArrayLength() - 1], "id") ?? throw NotAList();
+            }
+        }
+        return new ProcessorRecovery(found, listed, unreadable);
+    }
+
+    private static IOException NotAList() => new("The Stripe sandbox did not answer with a list of events.");
+
+    // Marked live on the event or on the payment inside it. Only what says so: an event that does
+    // not say is the reader's to refuse, by itself.
+    private static bool MarkedLive(JsonElement listed) => listed.ValueKind == JsonValueKind.Object
+        && ((listed.TryGetProperty("livemode", out var live) && live.ValueKind == JsonValueKind.True)
+            || (listed.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Object
+                && data.TryGetProperty("object", out var inner) && inner.ValueKind == JsonValueKind.Object
+                && inner.TryGetProperty("livemode", out var innerLive) && innerLive.ValueKind == JsonValueKind.True));
+
+    // The events read, and what each says of a payment. The reader and the sweep's filter both take
+    // them from here, so that a sweep asks for exactly what a delivery would be read as.
+    private static readonly (string Type, string Kind)[] Progress =
+    [
+        ("payment_intent.processing", "Processing"),
+        ("payment_intent.succeeded", "Succeeded"),
+        ("payment_intent.payment_failed", "Failed"),
+    ];
+
+    /// <summary>
     /// What an authentic event says of one payment. Read member by member and not into the library's
     /// types, which throw on a shape or an API version they do not expect. In this order: an event
     /// that is not one, or is marked live, is unreadable whoever it is for; one for an account no
@@ -263,13 +339,7 @@ public sealed class StripeSandboxProcessor : IPaymentProcessor
             // The platform's own events name no account. Routing reads the host's bindings and nothing
             // else: no organization is entered and none is read to decide that an event is not ours.
             if (Text(root, "account") is not { } account || _settings.ForAccount(account) is not { } binding) { return notOurs; }
-            var kind = type switch
-            {
-                "payment_intent.processing" => "Processing",
-                "payment_intent.succeeded" => "Succeeded",
-                "payment_intent.payment_failed" => "Failed",
-                _ => null,
-            };
+            var kind = Progress.Where(x => x.Type == type).Select(x => x.Kind).FirstOrDefault();
             if (kind is null) { return notOurs; }
             // The payment inside carries the flag too. It may be absent, the event having answered; when
             // it is there it must also be exactly false.

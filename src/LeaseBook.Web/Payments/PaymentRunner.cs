@@ -1,4 +1,6 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Runtime.ExceptionServices;
 using FluentValidation;
 using LeaseBook.Modules.Accounting.Contracts;
 using LeaseBook.Modules.Payments.Domain;
@@ -19,19 +21,35 @@ public sealed record PayoutDelivery(Guid? Id, bool Malformed);
 public sealed class PaymentRunner(IServiceScopeFactory scopes, SimulationSettings settings,
     IPaymentProcessor processor, ILogger<PaymentRunner> log, TimeProvider clock)
 {
+    private static readonly TimeSpan SweepInterval = TimeSpan.FromMinutes(5);
+    // Stripe keeps an event for thirty days. A day inside that, so that the oldest asked for is still there.
+    private static readonly TimeSpan EventsKept = TimeSpan.FromDays(29);
+    // When each fixture was last swept, by organization. In memory on purpose: a host that restarts
+    // sweeps at once, which is when a notice is most likely to have been missed.
+    private readonly ConcurrentDictionary<Guid, DateTime> _sweptAt = new();
+
     public async Task RunOnceAsync(CancellationToken ct)
     {
+        // One fixture's failure is kept until every fixture has had its turn, and thrown then: the
+        // caller still hears of it, and the fixtures bound after it are not held up by it.
+        ExceptionDispatchInfo? failure = null;
         foreach (var binding in settings.Fixtures.Where(_ => settings.Enabled))
         {
-            var ids = await InOrg(binding, async sp =>
+            try
             {
-                await sp.GetRequiredService<PaymentEngine>().RequireFixtureAsync(binding, ct);
-                return await sp.GetRequiredService<AppDbContext>().Set<PaymentOperation>().AsNoTracking()
-                    .Where(x => x.DueAt <= clock.GetUtcNow().UtcDateTime)
-                    .OrderBy(x => x.DueAt).Select(x => x.Id).Take(100).ToListAsync(ct);
-            }, ct);
-            foreach (var id in ids) { await ProcessAsync(binding, id, ct); }
+                var ids = await InOrg(binding, async sp =>
+                {
+                    await sp.GetRequiredService<PaymentEngine>().RequireFixtureAsync(binding, ct);
+                    return await sp.GetRequiredService<AppDbContext>().Set<PaymentOperation>().AsNoTracking()
+                        .Where(x => x.DueAt <= clock.GetUtcNow().UtcDateTime)
+                        .OrderBy(x => x.DueAt).Select(x => x.Id).Take(100).ToListAsync(ct);
+                }, ct);
+                foreach (var id in ids) { await ProcessAsync(binding, id, ct); }
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+            catch (Exception ex) { failure ??= ExceptionDispatchInfo.Capture(ex); }
         }
+        failure?.Throw();
     }
 
     public async Task ProcessAsync(FixtureBinding binding, Guid id, CancellationToken ct)
@@ -72,6 +90,66 @@ public sealed class PaymentRunner(IServiceScopeFactory scopes, SimulationSetting
             }, ct);
             log.LogWarning(new EventId(4601, "PaymentNeedsAttention"),
                 "Simulated payment {OperationId} attempt ended with {Reason}", id, reason);
+        }
+    }
+
+    /// <summary>
+    /// Recovers what a lost notice would otherwise leave waiting for ever. For each fixture, at most
+    /// once in <see cref="SweepInterval"/>: asks the processor for everything it has said since the
+    /// oldest payment still waiting was made, keeps it as a callback's notice is kept, and only then
+    /// sends to a person the payments that have waited too long. Nothing here throws but a
+    /// cancellation, so a sweep that fails never costs the worker a pass.
+    /// </summary>
+    public async Task RecoverOnceAsync(CancellationToken ct)
+    {
+        foreach (var binding in settings.Fixtures.Where(_ => settings.Enabled))
+        {
+            var now = clock.GetUtcNow().UtcDateTime;
+            if (_sweptAt.TryGetValue(binding.OrgId, out var last) && now - last < SweepInterval) { continue; }
+            // Set before the attempt, so that one that fails is made again at the interval and not on every pass.
+            _sweptAt[binding.OrgId] = now;
+            try { await RecoverAsync(binding, now, ct); }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+            catch (Exception ex)
+            {
+                log.LogWarning(new EventId(4607, "PaymentRecoveryFailed"),
+                    "Payment recovery sweep failed ({ExceptionType}); it will be made again, and no payment was aged", ex.GetType().Name);
+            }
+        }
+    }
+
+    private async Task RecoverAsync(FixtureBinding binding, DateTime now, CancellationToken ct)
+    {
+        var waiting = await InOrg(binding, sp => sp.GetRequiredService<PaymentEngine>().WaitingAsync(binding, ct), ct);
+        // Nothing waits, so nothing can have been missed: the processor is asked nothing.
+        if (waiting.Count == 0) { return; }
+        // Everything since the oldest payment still waiting, each time. That is what a stored cursor
+        // would be for, without one to keep or to lose.
+        var oldest = waiting[0].CreatedAt;
+        var recovery = await processor.RecoverObservationsAsync(binding, oldest > now - EventsKept ? oldest : now - EventsKept, ct);
+        // One organization transaction each, as for a callback. One already held is dropped there.
+        foreach (var observation in recovery.Observations) { await ReceiveAsync(observation, ct); }
+        log.LogInformation(new EventId(4606, "PaymentRecoverySwept"),
+            "Payment recovery sweep listed {Listed} events: {Kept} stored or already held, {Unreadable} unreadable",
+            recovery.Listed, recovery.Observations.Count, recovery.Unreadable);
+        // Only here, after a sweep that was answered in full: a payment must never go to a person
+        // while the events that could end it have not been asked for. One the sweep has just found
+        // an event for is due, and the engine leaves it to the worker.
+        foreach (var payment in waiting.Where(x => x.CreatedAt <= now - PaymentEngine.OutcomeOverdueAfter))
+        {
+            try
+            {
+                if (!await InOrg(binding, sp => sp.GetRequiredService<PaymentEngine>().MarkOverdueAsync(binding, payment.Id, ct), ct)) { continue; }
+                log.LogWarning(new EventId(4601, "PaymentNeedsAttention"),
+                    "Simulated payment {OperationId} sent to review with {Reason}", payment.Id, "outcome_overdue");
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+            catch (Exception ex)
+            {
+                // Its own transaction, rolled back. The others are aged all the same, and this one is offered again at the next sweep.
+                log.LogWarning(new EventId(4601, "PaymentNeedsAttention"),
+                    "Simulated payment {OperationId} could not be sent to review as overdue ({ExceptionType})", payment.Id, ex.GetType().Name);
+            }
         }
     }
 
@@ -153,12 +231,16 @@ internal sealed class PaymentWorker(PaymentRunner runner, ILogger<PaymentWorker>
     {
         while (!stoppingToken.IsCancellationRequested)
         {
-            try { await runner.RunOnceAsync(stoppingToken); }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
-            catch (Exception ex)
+            // Each on its own: what is due first, then the sweep, and neither kept from running by the other's failure.
+            foreach (var step in new Func<CancellationToken, Task>[] { runner.RunOnceAsync, runner.RecoverOnceAsync })
             {
-                logger.LogError(new EventId(4603, "PaymentWorkerUnavailable"),
-                    "Payment worker unavailable ({ExceptionType}); durable work will be retried", ex.GetType().Name);
+                try { await step(stoppingToken); }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { return; }
+                catch (Exception ex)
+                {
+                    logger.LogError(new EventId(4603, "PaymentWorkerUnavailable"),
+                        "Payment worker unavailable ({ExceptionType}); durable work will be retried", ex.GetType().Name);
+                }
             }
             await Task.Delay(TimeSpan.FromSeconds(1), clock, stoppingToken);
         }

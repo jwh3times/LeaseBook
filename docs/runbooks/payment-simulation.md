@@ -130,6 +130,11 @@ An ordinary restart uses the same database and manifest. Provider acceptance, op
 effect links and retry leases survive; leases expire after 30 seconds. Changing manifest bindings
 cannot redirect existing operations. An unknown provider result keeps its original identity.
 
+A fixture left idle ages. A payment accepted and still without a **Succeeded** or **Failed** fact
+seven days after it was created goes to review with the reason `outcome_overdue` the next time a host
+runs. It does not return to **Processing**: a bank credit emitted for it afterwards posts nothing, and
+a payout that names it is held. Close the review, or reset the fixture.
+
 To discard all payment-fixture data, stop the API and any fixture CLI processes, then run:
 
 ```powershell
@@ -258,8 +263,8 @@ bound to that account, and takes nothing else in the event as saying which organ
 - A payment counts only when it carries this fixture's generation. The same connected account may
   hold payments made by the probe or by an earlier fixture, before a reset; their events are
   acknowledged and dropped.
-- Without events forwarded, a payment stays **Processing** and nothing more is seen of it. See
-  [Known limitation](#known-limitation-a-lost-event) below.
+- Without events forwarded, a payment's outcome shows within about five minutes instead of at once.
+  See [A lost event](#a-lost-event) below.
 - A payment Stripe leaves waiting on a payer, a confirmation or a capture, or reports cancelled, goes
   to review on Operations. So does one Stripe will not take however often it is sent.
 - A failed connection, a rate limit, a fault at Stripe, or a key or permission Stripe refuses is a
@@ -272,14 +277,23 @@ bound to that account, and takes nothing else in the event as saying which organ
 - `payment-simulation step` works with the same five variables and repeats the key check. `emit` and
   `payout` are refused. The simulator's callback routes do not exist in this host.
 
-### Known limitation: a lost event
+### A lost event
 
-After Stripe accepts a payment, the worker waits for an event and does not ask Stripe again. If the
-event that ends a payment never arrives, the payment stays **Processing**, and staff have no control
-to retry or close it. Stripe redelivers to a registered endpoint for days, but the Stripe CLI's
-forwarding does not send a delivery again, whether the host was down, refused it or rate-limited it.
-So keep `stripe listen` running, and the host up, from before a payment is submitted until its
-outcome shows. How such a payment should be recovered is an open decision, not yet made.
+The Stripe CLI's forwarding does not send a delivery again, whether the host was down, refused it or
+rate-limited it. The worker recovers such an event itself. While a payment is **Processing** with no
+paid date, the worker asks Stripe every five minutes for the account's events since the oldest such
+payment was created, and reads them as if they had been delivered. A restarted host asks at once. So a
+payment whose outcome was missed shows it within about five minutes, with or without `stripe listen`.
+The log shows each sweep as event `4606`, and a sweep that failed as `4607`.
+
+A payment still without an outcome seven days after it was created goes to review on Operations with
+the reason `outcome_overdue`. Check it at Stripe, then close the review with a note. If its outcome
+arrives later, a failure ends it as **Failed** and a success sets its paid date and leaves it in
+review; it does not go back to **Processing**.
+
+Two things the sweep does not do. It asks only about payments still waiting, so an event for a
+payment already paid, failed or in review arrives only by delivery. And `payment-simulation step`
+neither sweeps nor ages; only a running host does.
 
 ### Optional payment methods
 

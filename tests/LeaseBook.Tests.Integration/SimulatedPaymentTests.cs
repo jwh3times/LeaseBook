@@ -874,6 +874,7 @@ public sealed partial class SimulatedPaymentTests(PostgresFixture fixture)
         public ProcessorNotice? Authenticate(byte[] rawBody, string signature) => inner.Authenticate(rawBody, signature);
         public Task<ProcessorRead<ProcessorObservation>> ReadObservationAsync(ProcessorNotice notice, CancellationToken ct) => inner.ReadObservationAsync(notice, ct);
         public Task<ProcessorRead<ProcessorSettlement>> ReadSettlementAsync(ProcessorNotice notice, CancellationToken ct) => inner.ReadSettlementAsync(notice, ct);
+        public Task<ProcessorRecovery> RecoverObservationsAsync(FixtureBinding binding, DateTime since, CancellationToken ct) => inner.RecoverObservationsAsync(binding, since, ct);
     }
     // A processor whose every authentic notice is for an account this host holds no binding for.
     private sealed class ElsewhereProcessor(IPaymentProcessor inner) : IPaymentProcessor
@@ -885,6 +886,7 @@ public sealed partial class SimulatedPaymentTests(PostgresFixture fixture)
             Task.FromResult(ProcessorRead<ProcessorObservation>.NotOurs);
         public Task<ProcessorRead<ProcessorSettlement>> ReadSettlementAsync(ProcessorNotice notice, CancellationToken ct) =>
             Task.FromResult(ProcessorRead<ProcessorSettlement>.NotOurs);
+        public Task<ProcessorRecovery> RecoverObservationsAsync(FixtureBinding binding, DateTime since, CancellationToken ct) => inner.RecoverObservationsAsync(binding, since, ct);
     }
     private sealed class FailingLedger(ISender sender, AfterPostingFailure fault) : IPaymentLedger
     {
