@@ -614,26 +614,6 @@ public sealed partial class SimulatedPaymentTests(PostgresFixture fixture)
     }
 
     [Fact]
-    public async Task A_host_configured_for_the_stripe_sandbox_refuses_to_start()
-    {
-        // The whole host, not the registration method alone: a second place that registered a processor
-        // would let a sandbox host start and serve with the simulator behind it.
-        await using var factory = new ApiFactory(fixture.AppConnectionString, new Dictionary<string, string?>
-        {
-            ["Logging:LogLevel:Default"] = "Warning",
-            ["Payments:Mode"] = PaymentModes.StripeSandbox,
-            ["Payments:SigningKey"] = new string('x', 64),
-            ["Payments:Stripe:SecretKey"] = "sk_test_abc",
-            ["Payments:Fixtures:0:OrgId"] = UuidV7.NewId().ToString(),
-            ["Payments:Fixtures:0:Generation"] = UuidV7.NewId().ToString(),
-            ["Payments:Fixtures:0:BankId"] = UuidV7.NewId().ToString(),
-            ["Payments:Fixtures:0:Account"] = "acct_fixture",
-        });
-        var refusal = Should.Throw<InvalidOperationException>(() => factory.Services);
-        refusal.Message.ShouldContain("no processor adapter");
-    }
-
-    [Fact]
     public async Task Evidence_is_kept_only_when_it_says_the_mode_of_the_binding_it_is_for()
     {
         var ct = TestContext.Current.CancellationToken;

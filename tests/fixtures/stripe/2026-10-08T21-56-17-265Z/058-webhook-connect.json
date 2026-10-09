@@ -47,7 +47,7 @@
         "created": 1791496695,
         "currency": "usd",
         "enhanced_eligibility_types": [],
-        "evidence": "[scrubbed]",
+        "evidence": {},
         "evidence_details": {
           "due_by": 0,
           "enhanced_eligibility": {},

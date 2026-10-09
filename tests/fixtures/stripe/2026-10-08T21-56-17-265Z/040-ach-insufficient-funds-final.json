@@ -48,7 +48,7 @@
         "id": "pm_synthetic000005",
         "object": "payment_method",
         "allow_redisplay": "unspecified",
-        "billing_details": "[scrubbed]",
+        "billing_details": {},
         "created": 1791496627,
         "customer": null,
         "customer_account": null,

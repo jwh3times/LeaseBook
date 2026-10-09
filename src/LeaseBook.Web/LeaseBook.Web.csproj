@@ -57,6 +57,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Stripe sandbox adapter (ADR-054). Host-only, and used from Payments/Stripe alone: an
+         architecture test fails the build on a Stripe type in a module or elsewhere in the host. -->
+    <PackageReference Include="Stripe.net" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Telemetry baseline (WP-05) — the ActivitySource lives in SharedKernel; the host exports it. -->
     <PackageReference Include="OpenTelemetry.Extensions.Hosting" />
     <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" />

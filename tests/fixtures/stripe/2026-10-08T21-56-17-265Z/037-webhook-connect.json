@@ -48,7 +48,7 @@
             "allow_redisplay": "unspecified",
             "created": 1791496627,
             "shared_payment_granted_token": null,
-            "billing_details": "[scrubbed]",
+            "billing_details": {},
             "customer": null,
             "object": "payment_method",
             "customer_account": null,

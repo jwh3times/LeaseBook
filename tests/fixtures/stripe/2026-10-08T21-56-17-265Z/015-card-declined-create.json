@@ -71,7 +71,7 @@
             "id": "pm_synthetic000003",
             "object": "payment_method",
             "allow_redisplay": "unspecified",
-            "billing_details": "[scrubbed]",
+            "billing_details": {},
             "card": {
               "brand": "visa",
               "checks": {
@@ -171,7 +171,7 @@
         "id": "pm_synthetic000003",
         "object": "payment_method",
         "allow_redisplay": "unspecified",
-        "billing_details": "[scrubbed]",
+        "billing_details": {},
         "card": {
           "brand": "visa",
           "checks": {

@@ -15,18 +15,33 @@ internal sealed class PaymentSimulationVerb : ICliVerb
     public bool TryCreateInvocation(string[] args, out CliInvocation invocation, out string error)
     {
         invocation = null!;
-        error = "payment-simulation: init <manifest.local> | step | emit <org-id> <operation-id> <kind> <bank-date yyyy-MM-dd>"
+        error = "payment-simulation: init <manifest.local> [--stripe-account=<acct_...>]... | step"
+            + " | emit <org-id> <operation-id> <kind> <bank-date yyyy-MM-dd>"
             + " | payout <org-id> <bank-date yyyy-MM-dd> <payout-id> <line>... [--bank-amount=<amount>] [--type=<type>]"
             + " where <line> is pay:<operation-id>[:<processor-fee>], return:<operation-id>[:<fee-given-back>],"
-            + " refund:<operation-id> or fee:<amount>";
-        if (args.Length == 3 && args[1] == "init" && args[2].EndsWith(".local", StringComparison.OrdinalIgnoreCase))
+            + " refund:<operation-id> or fee:<amount>. emit and payout drive the simulator and are refused outside Simulation.";
+        if (args.Length >= 3 && args[1] == "init" && args[2].EndsWith(".local", StringComparison.OrdinalIgnoreCase))
         {
+            if (!TryStripeAccounts(args[3..], out var accounts))
+            {
+                error = "payment-simulation: init takes --stripe-account=<acct_...> only, one Stripe connected account id"
+                    + " (letters and digits) per fixture organization, each given once and at most 26.";
+                return false;
+            }
             invocation = new(Name, async (sp, ct) =>
-            { await PaymentFixtureBootstrap.CreateManifestAsync(sp, args[2], ct); return 0; });
+            { await PaymentFixtureBootstrap.CreateManifestAsync(sp, args[2], accounts, ct); return 0; });
         }
         else if (args.Length == 2 && args[1] == "step")
         {
-            invocation = new(Name, async (sp, ct) => { await sp.GetRequiredService<PaymentRunner>().RunOnceAsync(ct); return 0; });
+            invocation = new(Name, async (sp, ct) =>
+            {
+                // A foreground step is not a host start, and it is about to collect: a sandbox key is
+                // proved the platform's here too. The simulator has nothing to ask and is not asked.
+                if (sp.GetRequiredService<SimulationSettings>().Mode == PaymentModes.StripeSandbox)
+                { await SimulationSettings.ValidateFixturesAsync(sp, ct); }
+                await sp.GetRequiredService<PaymentRunner>().RunOnceAsync(ct);
+                return 0;
+            });
         }
         else if (args.Length == 6 && args[1] == "emit" && Guid.TryParse(args[2], out var orgId)
             && Guid.TryParse(args[3], out var operationId) && PaymentEngine.EventKinds.Contains(args[4])
@@ -44,9 +59,32 @@ internal sealed class PaymentSimulationVerb : ICliVerb
         error = ""; return true;
     }
 
+    // One connected account per fixture organization, by its id alone: it is written to a manifest
+    // and to the fixture marker, so nothing but the documented shape of an account id is taken.
+    private static bool TryStripeAccounts(string[] args, out string[] accounts)
+    {
+        const string option = "--stripe-account=";
+        accounts = [.. args.Where(x => x.StartsWith(option, StringComparison.Ordinal)).Select(x => x[option.Length..])];
+        return accounts.Length == args.Length && accounts.Length <= 26 && accounts.Distinct(StringComparer.Ordinal).Count() == accounts.Length
+            && accounts.All(x => x.StartsWith("acct_", StringComparison.Ordinal) && x.Length is > 5 and <= 100
+                && x.AsSpan(5).IndexOfAnyExcept(AccountCharacters) < 0);
+    }
+
+    private static readonly System.Buffers.SearchValues<char> AccountCharacters =
+        System.Buffers.SearchValues.Create("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789");
+
+    // The simulator signs what these two deliver, and a host in any other mode has no simulator.
+    private static bool Simulated(IServiceProvider services, string verb)
+    {
+        if (services.GetRequiredService<SimulationSettings>().Simulated) { return true; }
+        Console.Error.WriteLine($"payment-simulation: {verb} drives the simulator and is refused outside Simulation.");
+        return false;
+    }
+
     // Delivers payout evidence the way a processor would: signed, verified, then stored and checked.
     private static async Task<int> Payout(IServiceProvider services, Guid orgId, DateOnly bankDate, PayoutRequest request, CancellationToken ct)
     {
+        if (!Simulated(services, "payout")) { return 1; }
         var settings = services.GetRequiredService<SimulationSettings>();
         var binding = settings.ForOrg(orgId) ?? throw new PaymentUnavailableException();
         await using var scope = services.CreateAsyncScope();
@@ -96,6 +134,7 @@ internal sealed class PaymentSimulationVerb : ICliVerb
 
     private static async Task<int> Emit(IServiceProvider services, Guid orgId, Guid operationId, string kind, DateOnly date, CancellationToken ct)
     {
+        if (!Simulated(services, "emit")) { return 1; }
         var settings = services.GetRequiredService<SimulationSettings>();
         var binding = settings.ForOrg(orgId) ?? throw new PaymentUnavailableException();
         await using var scope = services.CreateAsyncScope();

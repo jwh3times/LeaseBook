@@ -139,6 +139,24 @@ The run also found things nobody had asked about. The adapter in step 4 has to a
   by its operation id. Stripe's search also found it at once, and the adapter still does not use it.
 - **Every event names the connected account and the API version**, delivered or fetched.
 
+**Implementation note, 2026-10-08 (submit and lookup).** The adapter now submits a charge and finds
+it again; it reads no event and no payout yet, so nothing it collects posts. Three points the
+decisions above leave open were settled in code. None changes a decision, and each is open to
+revision until this ADR is accepted:
+
+- **Which Stripe states count as accepted.** Only `succeeded`, `processing` and
+  `requires_payment_method`: collected, on its way, or refused, the last of which arrives as an
+  event. A payment waiting on a payer, a confirmation or a capture, cancelled, or in a state nobody
+  has named would wait for ever, so it goes to review.
+- **A key or permission Stripe refuses is a technical failure, not a review.** It charged nothing,
+  and mending the key makes the same request valid, so it is retried like a failed connection. A
+  request Stripe will not take however often it is sent still goes to a person. An operation more
+  than 23 hours old is never submitted, an hour inside the day Stripe keeps an idempotency key.
+- **The barrier asks Stripe whose key it holds.** At startup, and before a foreground worker step, a
+  key whose own account is a fixture's connected account is refused, and so is a fixture whose
+  account does not pay its own Stripe fees. The optional test payment methods a fixture may name are
+  admitted only in the shape of Stripe's documented test tokens.
+
 The provisional assumptions of ADR-053 stay open. This ADR verifies none of them, and nothing here
 is approval to move real money.
 

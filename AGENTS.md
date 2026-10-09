@@ -79,7 +79,9 @@ this one, for current progress.
   actions, durable artifact storage and live payments remain future work; M8 operator work stays
   deferred.
 - `Accounting`, `Directory`, `Banking`, `Reporting`, `Operations`, `Capabilities`, `Payments`, and
-  `Migrator` carry implemented behavior; Payments has no live provider adapter.
+  `Migrator` carry implemented behavior; Payments has no live provider adapter. A Stripe sandbox
+  adapter (ADR-054, Proposed) runs in the development fixture only and so far only submits a charge
+  and finds it again; nothing it collects posts.
 
 The `private/` directory is gitignored by the public repository and is a separately versioned
 confidential checkout for authorized maintainers. Its repository locator and bootstrap details live

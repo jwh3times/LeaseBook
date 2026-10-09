@@ -210,12 +210,12 @@ test("what identifies a person, a business, a bank account or a device is remove
   });
   assert.deepEqual(scrubbed, {
     email: "[scrubbed]",
-    billing_details: "[scrubbed]",
+    billing_details: {},
     last4: "[scrubbed]",
     routing_number: "[scrubbed]",
     client_secret: "[scrubbed]",
     receipt_url: "[scrubbed]",
-    evidence: "[scrubbed]",
+    evidence: {},
     name: null,
     message:
       "See [scrubbed] or write to [scrubbed] from [scrubbed] about req_synthetic000001.",
