@@ -111,6 +111,13 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Fixed
 
+- **Check alignment and MICR fields are ready as soon as their saved values load.** The offset fields
+  in the check print settings and in a bank account's MICR details appeared empty and disabled for a
+  moment after their values had loaded, and only then filled in. They now show the saved values at
+  once, and a field nothing has been typed into follows the saved value. What is typed is still never
+  overwritten. This also ends an intermittent failure of the web tests, which could reach a field in
+  that moment.
+
 - **A payment in review stays in review when a retry fails.** When a late notice arrived for a payment
   that was in review, or whose review had been closed, and the attempt to read it failed for a
   passing technical reason, the payment lost its review reason and returned to Processing. In the

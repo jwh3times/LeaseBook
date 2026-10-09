@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useId, useState } from 'react';
+import { useId, useState } from 'react';
 import type { ApiError } from '@/api';
 import { Button, Input } from '@/design';
 import { ApiErrorNotice } from '@/components/ApiErrorNotice';
@@ -45,22 +45,21 @@ export function BankMicrSection({ bankAccountId }: BankMicrSectionProps) {
   const details = useBankMicrDetails(bankAccountId);
   const isAdmin = session.isSuccess && session.data?.role === 'PMAdmin';
 
-  const [stockKind, setStockKind] = useState<StockKind | null>(null);
+  const [chosenKind, setStockKind] = useState<StockKind | null>(null);
   const [routing, setRouting] = useState('');
   const [onUs, setOnUs] = useState('');
-  const [x, setX] = useState<string | null>(null);
-  const [y, setY] = useState<string | null>(null);
+  const [typedX, setX] = useState<string | null>(null);
+  const [typedY, setY] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
 
-  // Seed the editable values from the saved details once; a refetch never overwrites what is being typed.
-  useEffect(() => {
-    if (!details.isSuccess) return;
-    setStockKind((current) => current ?? stockKindOf(details.data));
-    setX((current) => current ?? String(num(details.data.micrOffsetXPoints)));
-    setY((current) => current ?? String(num(details.data.micrOffsetYPoints)));
-  }, [details.isSuccess, details.data]);
+  // Each value is what was chosen or typed, and until then the saved detail: a refetch never
+  // overwrites what is being typed. Derived, not copied into state by an effect, so there is no
+  // render in which the details have loaded and the fields are still empty and disabled (#532).
+  const stockKind = chosenKind ?? (details.isSuccess ? stockKindOf(details.data) : null);
+  const x = typedX ?? (details.isSuccess ? String(num(details.data.micrOffsetXPoints)) : null);
+  const y = typedY ?? (details.isSuccess ? String(num(details.data.micrOffsetYPoints)) : null);
 
   const onSave = async () => {
     if (!details.isSuccess || stockKind === null || saving) return;
