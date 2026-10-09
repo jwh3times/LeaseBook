@@ -49,7 +49,7 @@
       "status": "available",
       "type": "payment"
     },
-    "billing_details": "[scrubbed]",
+    "billing_details": {},
     "calculated_statement_descriptor": null,
     "captured": true,
     "created": 1791496593,

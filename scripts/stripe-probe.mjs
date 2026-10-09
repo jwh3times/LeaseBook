@@ -263,7 +263,13 @@ export function createScrubber() {
   }
 
   function scrub(value, key = "") {
-    if (REDACTED_KEYS.has(key)) return value === null ? null : "[scrubbed]";
+    // The value goes; its kind stays. A client that reads these payloads expects an object where
+    // Stripe sends one, and refuses a string in its place.
+    if (REDACTED_KEYS.has(key)) {
+      if (value === null) return null;
+      if (Array.isArray(value)) return [];
+      return typeof value === "object" ? {} : "[scrubbed]";
+    }
     if (typeof value === "string") return text(value);
     if (Array.isArray(value)) return value.map((item) => scrub(item));
     if (value && typeof value === "object") {

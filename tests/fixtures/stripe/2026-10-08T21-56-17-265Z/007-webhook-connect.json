@@ -20,7 +20,7 @@
         "application_fee": null,
         "application_fee_amount": null,
         "balance_transaction": "txn_synthetic000001",
-        "billing_details": "[scrubbed]",
+        "billing_details": {},
         "calculated_statement_descriptor": "[scrubbed]",
         "captured": true,
         "created": 1791496584,

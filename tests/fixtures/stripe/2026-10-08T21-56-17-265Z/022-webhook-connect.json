@@ -20,7 +20,7 @@
         "application_fee": null,
         "application_fee_amount": null,
         "balance_transaction": null,
-        "billing_details": "[scrubbed]",
+        "billing_details": {},
         "calculated_statement_descriptor": null,
         "captured": true,
         "created": 1791496593,
