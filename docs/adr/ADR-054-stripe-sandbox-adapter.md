@@ -96,13 +96,18 @@ hermetic, and they go stale silently if Stripe changes a shape. The probe can be
 them.
 
 These provider facts were not settled by Stripe's documentation. The probe ran against a sandbox on
-2026-10-08, at API version `2026-09-30.endive`, and answered all but the first and half of the last. None of its answers
-contradicts a decision above. The recorded payloads are under `tests/fixtures/stripe/`.
+2026-10-08, at API version `2026-09-30.endive`, and answered all but the first and half of the last.
+A run on 2026-10-09 answered the first. None of its answers contradicts a decision above. The recorded
+payloads are under `tests/fixtures/stripe/`.
 
 - **Does a sandbox produce automatic payouts, on what timing, and does it report their
-  reconciliation as complete?** Not answered yet. No payout existed on the day of the run; the
-  probe's `payouts` step is run on a later day. Until then the payout mapping rests on the
-  documented shapes and is unproven.
+  reconciliation as complete?** Yes. One automatic payout existed by 2026-10-09: created at 00:42
+  UTC that day, under three hours after the first charges, with that day as its arrival date, although
+  the account's schedule says a two-day delay. It was `paid`, with `reconciliation_status` of
+  `completed`. Stripe listed 14 balance lines for it, and their net came to the payout's amount
+  exactly. The lines were of four types beside the payout's own: `charge` for a card payment,
+  `payment` for an ACH payment, `payment_failure_refund` for an ACH debit that failed, and
+  `adjustment` for a dispute. A failed ACH debit and a dispute each carry a fee of their own.
 - **Can the documented test payment methods be used directly on a connected account?** Yes, for card
   and for ACH, as direct charges with no customer object.
 - **Do the ACH test payment methods need a small test deposit verified first, and how long does a
@@ -138,6 +143,26 @@ The run also found things nobody had asked about. The adapter in step 4 has to a
   payment; the same key with another amount is refused. Listing the creation window finds a payment
   by its operation id. Stripe's search also found it at once, and the adapter still does not use it.
 - **Every event names the connected account and the API version**, delivered or fetched.
+
+A second run on 2026-10-09 recorded what a card dispute and a refund look like, which the first run
+had not made. The probe refunds only to record the events; the adapter never does.
+
+- **A dispute event does not carry the payment's metadata.** It names the payment by Stripe's id and
+  nothing of LeaseBook's, for card and for ACH. Whose payment a dispute is about cannot be read from
+  the event; the payment has to be asked for.
+- **A card dispute says it is one; an ACH dispute does not say.** A card dispute carries
+  `payment_method_details` of type `card`. On the ACH dispute that member is null.
+- **A card dispute arrives open.** `pm_card_createDispute` produced `fraudulent` with status
+  `needs_response`, as `charge.dispute.created` and `charge.dispute.funds_withdrawn` in the same
+  second as the payment succeeded. No `charge.dispute.closed` followed. The ACH dispute arrived
+  already `lost`, with all three events.
+- **Either dispute takes the amount back and a $15.00 fee with it**, as one `adjustment` line.
+- **A refund is four events.** `refund.created` and `charge.refunded`, then `refund.updated` and
+  `charge.refund.updated`. Only `charge.refunded` carries the payment's metadata, on the charge. Its
+  `amount_refunded` is the total refunded so far, and `refunded` is true only for a refund in full.
+- **Stripe answered one charge with HTTP 500.** The first `pm_card_createDispute` charge was refused
+  with `api_error`; the same request made again succeeded. The adapter already treats a fault at
+  Stripe as a technical failure and repeats it under the same idempotency key.
 
 **Implementation note, 2026-10-08 (submit and lookup).** The adapter now submits a charge and finds
 it again; at that date it read no event and no payout, so nothing it collected posted. Three points the

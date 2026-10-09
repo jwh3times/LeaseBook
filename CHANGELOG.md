@@ -94,6 +94,13 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Changed
 
+- **The Stripe sandbox probe records a card dispute and refunds.** It now makes a disputed card
+  payment and two card payments that it then refunds, one in full and one in part, so that the events
+  Stripe sends for each are recorded. The application itself still never refunds. A run on 2026-10-09
+  recorded those payloads and the sandbox's first automatic payout, and ADR-054 now answers the
+  payout questions it had left open: the sandbox pays out by itself, reports the payout's
+  reconciliation as complete, and lists what the payout covers to the cent.
+
 - **The payment processor seam is ready for a second processor.** Nothing changes in the development
   payment fixture. Internally, a request to a processor now names the amount to charge, its currency
   and the payment method, and a processor's notice is first proved authentic and only then read. A

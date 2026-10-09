@@ -1,0 +1,49 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/v1/balance",
+    "params": null,
+    "platform": false,
+    "idempotencyKey": null
+  },
+  "status": 200,
+  "requestId": "req_synthetic000006",
+  "stripeVersion": "2026-09-30.endive",
+  "elapsedMs": 151,
+  "body": {
+    "object": "balance",
+    "available": [
+      {
+        "amount": -7814,
+        "currency": "usd",
+        "source_types": {
+          "card": -7814
+        }
+      }
+    ],
+    "livemode": false,
+    "pending": [
+      {
+        "amount": 186133,
+        "currency": "usd",
+        "source_types": {
+          "card": 186133
+        }
+      }
+    ],
+    "refund_and_dispute_prefunding": {
+      "available": [
+        {
+          "amount": 0,
+          "currency": "usd"
+        }
+      ],
+      "pending": [
+        {
+          "amount": 0,
+          "currency": "usd"
+        }
+      ]
+    }
+  }
+}

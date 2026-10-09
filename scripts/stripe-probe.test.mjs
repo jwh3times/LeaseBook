@@ -552,6 +552,8 @@ function fakeStripe({
       }
       return json(200, {
         status: "succeeded",
+        refunded: false,
+        amount_refunded: 5000,
         receipt_url: `https://pay.stripe.com/receipts/${real("ch")}`,
         balance_transaction: {
           amount: 51524,
@@ -572,6 +574,15 @@ function fakeStripe({
             amount: 20000,
           },
         ],
+      });
+    }
+    if (pathname === "/v1/refunds") {
+      assert.ok(headers["Idempotency-Key"]);
+      assert.ok(intents.has(form.get("payment_intent")));
+      return json(200, {
+        id: real("re", String(calls.length)),
+        status: "succeeded",
+        amount: Number(form.get("amount") ?? 20000),
       });
     }
     if (pathname === "/v1/balance")
@@ -682,9 +693,16 @@ test("a whole run answers every question, holds nothing real where it is read, a
       "processing -> requires_payment_method",
       "Yes, the same payment intent",
       "HTTP 400, idempotency_error",
-      "1 match(es) among 5 listed",
+      "1 match(es) among 8 listed",
       "Does the Search API work on a connected account?",
+      "How does an ACH return after success appear?",
+      "How does a card dispute appear?",
       "A dispute after 0s: reason=bank_cannot_process",
+      "card-refund: how does a full refund appear?",
+      "A refund with status=succeeded, amount=20000",
+      "card-refund-partial: how does a partial refund appear?",
+      "A refund with status=succeeded, amount=5000",
+      "the charge then has refunded=false, amount_refunded=5000",
       "1 automatic of 1 payout(s)",
       "their net sums to 50000 against a payout of 50000",
       "payment_intent.succeeded",
