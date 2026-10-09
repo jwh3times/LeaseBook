@@ -3,7 +3,7 @@
 - **Audience:** Implementers and reviewers of issue #456
 - **Status:** Implemented simulation contract for #456; live payments remain unapproved
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-07
+- **Last reviewed:** 2026-10-08
 
 ## Evidence and boundary
 
@@ -255,9 +255,18 @@ account/mode/object identity and evidence, not journal lines. The generation and
 adapter's to supply: the simulator's notices carry them, and an adapter whose notices do not takes
 them from its own binding for the account, never from the notice.
 
-The simulator implements this interface first. No processor DTO leaks into Accounting. A future
-Stripe adapter must resolve uncertain results after provider key expiry; it cannot promise permanent
-provider dedupe.
+The simulator implements this interface first. No processor DTO leaks into Accounting. A second
+implementation, the Stripe sandbox adapter of
+[ADR-054](../adr/ADR-054-stripe-sandbox-adapter.md), implements submit and lookup; its callback
+steps authenticate nothing yet, so in a sandbox host no notice is read. It cannot promise permanent
+provider dedupe, because Stripe may forget an idempotency key after a day. It therefore looks a
+payment up before every submit, by listing the connected account's payments from the operation's
+creation time and matching the operation id it stored, and it never submits an operation more than
+23 hours old; that one goes to review. It reports a payment as accepted only when Stripe's state for
+it is `succeeded`, `processing` or `requires_payment_method`, each of which ends without anyone
+acting. Any other state goes to review, as does a payment found twice or found with another amount,
+currency or generation. A failed connection, a rate limit, a fault at Stripe and a key or permission
+Stripe refuses are technical failures and stay retryable.
 
 ## Transaction and recovery protocol
 
@@ -324,7 +333,9 @@ caller metadata. Wrong destination, currency or amount is retained for review wi
 
 Simulated verification uses the same raw-body/authenticated-observation seam but does not claim
 Stripe signature compatibility. The later Stripe adapter must use the provider SDK's verification
-and account/mode semantics established by the research note. It requires separate sandbox work.
+and account/mode semantics established by the research note. It requires separate sandbox work. Until
+that work lands, the simulator's two callback routes are still mapped in a sandbox host and refuse
+every request.
 
 ## Executable non-live barrier and fixture lifecycle
 
@@ -333,12 +344,14 @@ In #456, implement these checks in executable startup, submission, callback and 
 - Default mode Disabled. Simulation is allowed only in Development or the integration-test host.
   Production and other environments reject Simulation at startup; Disabled exposes no payment
   mutation routes or worker. Any configured Live mode or real provider credentials is a
-  startup error in this release. There is no live implementation registered and the application has
-  no network client capable of charging a provider. The
-  [Stripe sandbox probe](../runbooks/stripe-sandbox-probe.md) is a standalone maintainer script, not
+  startup error in this release. There is no live implementation registered. The application's only
+  network client that can ask a provider to charge is the Stripe sandbox adapter below, which exists
+  only in a `StripeSandbox` host; the Stripe library is referenced from the host alone, and an
+  architecture test fails the build on a Stripe type in any module or outside the adapter's folder.
+  The [Stripe sandbox probe](../runbooks/stripe-sandbox-probe.md) is a standalone maintainer script, not
   part of the application; it accepts only a test-mode key and stops at the first live-mode object.
-- A third mode, `StripeSandbox`, is recognised and guarded but cannot run yet: a host configured for
-  it refuses to start until its processor adapter exists. Its configuration is admitted only when
+- A third mode, `StripeSandbox`, registers the Stripe sandbox adapter in place of the simulator; a
+  host has one processor, never both. Its configuration is admitted only when
   every one of these holds, and each is otherwise a startup error: the environment is Development;
   `Payments:Stripe:SecretKey` is a Stripe test-mode key (`sk_test_` or `rk_test_`), so a live key is
   refused by its prefix; the fixture signing key is present; every fixture is bound to its own
@@ -348,6 +361,18 @@ In #456, implement these checks in executable startup, submission, callback and 
   refusal names the setting's path, never its value. A simulator account in a sandbox host, or a
   connected account in a simulation host, is refused. The Stripe key lives in local secrets: a
   fixture manifest that holds provider credentials is refused.
+- A sandbox host makes three further checks before it serves or collects, and the foreground worker
+  step makes them too. A fixture's optional `CardPaymentMethod` and `AchPaymentMethod` must
+  have the shape of Stripe's documented test payment methods, `pm_card_…` and `pm_usBankAccount_…`,
+  which a payer's saved method never has; both settings are refused in any other mode. Stripe is
+  asked whose key the host holds, and a key whose own account is a fixture's connected account is
+  refused: a connected account with its own dashboard has test keys of its own, which pass the prefix
+  check. Each fixture's account is then read with the key and must be a connected account that pays
+  its own Stripe fees. A key Stripe will not answer for is refused the same way, and no refusal
+  repeats Stripe's own message, which can quote part of a key.
+- The sandbox adapter refuses any object Stripe marks as live, and sends a charge only the amount in
+  cents, `usd`, the fixture's test payment method, automatic payment methods with redirects ruled
+  out, an offline mandate for ACH, and the operation id and fixture generation as metadata.
 - A binding carries the mode of the host that holds it. Evidence is kept only when it names the same
   mode as the binding it is for, and the simulator authenticates its own notices only in a simulation
   host, so a simulator notice cannot be stored in a sandbox fixture.

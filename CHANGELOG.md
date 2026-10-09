@@ -62,6 +62,17 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   identifier replaced, and a test fails on a committed payload that still holds a real one. The
   application itself still has no Stripe client. ADR-054 proposes the adapter this informs.
 
+- **A fixture payment can be collected through a Stripe sandbox.** A Development host configured for
+  `StripeSandbox` now starts, and a fixture tenant's card or bank-debit payment is charged on the
+  fixture's connected account in the sandbox, as a test payment with no real money. Stripe is sent the
+  amount, a test payment method and two identifiers of LeaseBook's own, and nothing that identifies a
+  tenant. The payment is accepted and then waits: Stripe's events and payouts are not read yet, so
+  nothing reaches a ledger. A payment whose result is unknown is found again by listing the account's
+  payments and is never charged twice; one too old to repeat safely goes to review. Startup refuses a
+  key that is not the platform's test key, a connected account that does not pay its own fees, and a
+  payment method that is not one of Stripe's test methods. `scripts/payment-fixture.ps1` creates the
+  sandbox fixture in its own database beside the simulation fixture.
+
 ### Changed
 
 - **The payment processor seam is ready for a second processor.** Nothing changes in the development
@@ -70,11 +81,10 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   notice that is authentic but meant for another account is acknowledged and dropped instead of
   being refused, so a real processor would not keep resending it.
 
-- **A Stripe sandbox payment mode is recognised, and cannot run yet.** `Payments:Mode` accepts
-  `StripeSandbox` beside `Disabled` and `Simulation`. It is admitted only in Development, with a
-  Stripe test-mode key and each payment fixture bound to its own connected account; a live key is
-  refused by its prefix. A host configured for it refuses to start until its processor exists, so
-  nothing changes for any running host.
+- **A Stripe sandbox payment mode is recognised and guarded.** `Payments:Mode` accepts `StripeSandbox`
+  beside `Disabled` and `Simulation`. It is admitted only in Development, with a Stripe test-mode key
+  and each payment fixture bound to its own connected account; a live key is refused by its prefix.
+  Nothing changes for a host in another mode.
 
 - **Payment settings nobody defined are refused at any depth.** A setting under `Payments` is now
   known by its whole path, and the refusal names the path. A fixture manifest that holds provider

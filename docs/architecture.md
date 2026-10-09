@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living architecture guide
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-05
+- **Last reviewed:** 2026-10-08
 
 This is the canonical public map of the system **as implemented**. It explains how the pieces fit
 together and links the decisions that shaped them without reproducing every invariant. Accepted
@@ -61,6 +61,11 @@ the receipt's linked reversal or refuses by name
 `PostPaymentSettlement`, which posts every line of it or none
 ([ADR-053](adr/ADR-053-processor-fees-and-batched-settlement.md)). Its `IPaymentProcessor` transport seam
 is called outside that transaction; the host simulator persists provider acceptance independently.
+A host registers one implementation of that seam, chosen by its payment mode: the simulator, or a
+Stripe sandbox adapter that so far only submits a charge and finds it again
+([ADR-054](adr/ADR-054-stripe-sandbox-adapter.md), proposed). The Stripe library is referenced from
+the host alone and used only under `src/LeaseBook.Web/Payments/Stripe/`; an architecture test fails
+the build on a Stripe type in any module or elsewhere in the host.
 
 Refund checks use a separate `IRefundCheckLedger` port into Accounting. Accounting derives the refund's
 bank from the held deposit or prepayment bucket, writes the posted text, guards the void and reports
@@ -379,8 +384,8 @@ transactionally before touching data and throw if it is missing. See
 [ADR-001](adr/ADR-001-background-job-scheduler.md) and [ADR-002](adr/ADR-002-defer-redis.md).
 
 The isolated Development payment fixture uses a host `BackgroundService` to poll Payments-owned
-durable dispatch rows once per second. It starts only in Simulation web mode; the CLI can run the same
-worker pass explicitly. Each claim, callback receipt, effect and failure-bookkeeping transaction
+durable dispatch rows once per second. It starts only in a web host whose payment mode is Simulation
+or StripeSandbox; the CLI can run the same worker pass explicitly. Each claim, callback receipt, effect and failure-bookkeeping transaction
 establishes a separate org scope. Thirty-second leases and durable provider lookup recover interrupted
 work. This simulator-only scheduler choice is recorded in
 [ADR-046](adr/ADR-046-simulated-payment-recognition.md); it does not select a live payment scheduler.

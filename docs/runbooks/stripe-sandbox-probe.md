@@ -7,8 +7,10 @@
 
 The probe asks a Stripe sandbox the questions the payment adapter depends on and records what Stripe
 sends. [ADR-054](../adr/ADR-054-stripe-sandbox-adapter.md) lists the questions. The probe is a
-standalone script: the application has no Stripe client, and a host configured for the Stripe
-sandbox mode still refuses to start.
+standalone script and shares no code with the application. The application's own sandbox adapter
+replays the payloads the probe records in its tests; the
+[payment simulation runbook](payment-simulation.md#run-the-stripe-sandbox-fixture) covers running a
+host against the same sandbox.
 
 It cannot move real money. It refuses a key that is not a test-mode key, and it stops at the first
 object Stripe marks as live.
@@ -99,7 +101,8 @@ This copies the numbered files to `tests/fixtures/stripe/<run>/`, changed in fou
 - an account is reduced to the few fields the adapter reads, so no business name, descriptor, time
   zone or contact detail is copied;
 - fields that identify a person, a bank account or a device are removed, with URLs, email addresses
-  and anything shaped like a key;
+  and anything shaped like a key. A removed member keeps its kind: an object becomes `{}` and a list
+  `[]`, so a client that expects an object where Stripe sends one can still read the payload;
 - metadata is kept only where LeaseBook wrote it.
 
 Two checks then run on the result, and if either finds something the command writes nothing:
