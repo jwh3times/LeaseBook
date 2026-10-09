@@ -76,6 +76,15 @@ public sealed record ProcessorObservation(string EventId, string ProviderId, str
     Guid Generation, string Kind, decimal Gross, decimal Fee, decimal Net, string Currency, Guid BankId,
     DateOnly BankDate, string EvidenceId, string PayoutId, bool Complete, DateTime ObservedAt);
 
+/// <summary>
+/// What asking a processor again came to: the observations to keep, how many events it listed, and
+/// how many of those could not be read.
+/// </summary>
+public sealed record ProcessorRecovery(IReadOnlyList<ProcessorObservation> Observations, int Listed, int Unreadable)
+{
+    public static ProcessorRecovery Nothing { get; } = new([], 0, 0);
+}
+
 public interface IPaymentProcessor
 {
     Task<ProcessorResult> SubmitAsync(ProcessorRequest request, CancellationToken ct);
@@ -99,4 +108,14 @@ public interface IPaymentProcessor
 
     /// <summary>Reads an authenticated notice as payout evidence, on the same terms.</summary>
     Task<ProcessorRead<ProcessorSettlement>> ReadSettlementAsync(ProcessorNotice notice, CancellationToken ct);
+
+    /// <summary>
+    /// Asks the processor what it has said about one binding's payments since a time, for a notice
+    /// that was never delivered. It does I/O and is called outside any organization transaction. What
+    /// it returns is read as a delivered notice is read and is kept the same way, so one the host
+    /// already holds is dropped there. Whatever cannot be answered in full is thrown, never cut
+    /// short: a caller takes a result to mean that everything since that time was asked for. An
+    /// adapter whose notices are always delivered returns <see cref="ProcessorRecovery.Nothing"/>.
+    /// </summary>
+    Task<ProcessorRecovery> RecoverObservationsAsync(FixtureBinding binding, DateTime since, CancellationToken ct);
 }

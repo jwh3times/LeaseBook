@@ -187,10 +187,48 @@ stands. These points were settled in code, on the same terms as the note above:
   lookup retrieves that payment and holds it to the checks a listed payment is held to. A reference
   Stripe has no payment for goes to review.
 
-One question is open and not decided. After Stripe accepts a payment the worker waits for an event.
-If the event that ends a payment is lost, the payment stays in Processing and staff have no control
-to retry or close it. Stripe redelivers to a registered endpoint for days; the Stripe CLI's
-forwarding does not. How such a payment is recovered is to be decided before this ADR is accepted.
+One question was left open by that note: after Stripe accepts a payment the worker waits for an
+event, and if the event that ends a payment is lost, the payment stays in Processing with no staff
+control to retry or close it. Stripe redelivers to a registered endpoint for days; the Stripe CLI's
+forwarding does not. It was decided on 2026-10-09, below.
+
+**Implementation note, 2026-10-09 (lost-event recovery).** A lost event is recovered by a catch-up
+sweep and, behind it, an aging rule. Four alternatives were weighed: taking the status seen at charge
+or lookup as a fact; re-checking each Processing payment on a timer; listing the account's recent
+events; and sending a silent payment to review after some days. The last two were chosen together.
+Listing events needs no change to how a fact is received, reuses the reader, the deduplication by
+event id and the reference lock, and will cover disputes, refunds and payouts when they are read.
+The first two would each read a payment's state, which is a second source for the same fact and
+covers only payments.
+
+- **The sweep runs from the payment worker, behind the processor seam.** At most every five minutes
+  for each fixture, and only when a payment is waiting for an outcome. It lists the connected
+  account's events since the oldest waiting payment was created, never further back than 29 days,
+  one day inside the 30 Stripe keeps them. No position is stored and there is no migration. The
+  simulator's sweep returns nothing.
+- **A swept event is read as a delivered one is.** The same reader, so the same checks, and the same
+  observation: an event seen both ways is stored once and is never a conflict. It carries no
+  signature. It is trusted because the list was asked of Stripe with the platform's key for one
+  named account, and an event naming another account is not taken.
+- **Seven days without an outcome sends a payment to review**, as `outcome_overdue`, only directly
+  after a sweep that succeeded. An administrator can close it. This rule is in the shared engine, so
+  a simulated payment left seven days without a success is sent to review too.
+- **An overdue payment does not return to Processing.** A late failure ends it as failed. A late
+  success sets the paid date and leaves it with a person, so that nothing can post for a payment
+  someone may already have corrected by hand.
+- **A review reason survives a failed attempt.** Before this, a technical failure on the attempt that
+  judged a late fact replaced the reason and returned the payment to Processing, from where bank
+  evidence could post a receipt. That was true of every review reason, and is corrected for all.
+
+It was run against a sandbox on 2026-10-09 with no event forwarding at all. A declined-card payment
+was accepted, waited in Processing, and was ended as failed by the next sweep, which listed one
+event. The host's first sweep listed fifteen events for payments of earlier runs, all of them already
+held or stored once, and none became a conflict. Stripe accepted the filter on event types. Nothing
+posted.
+
+Two limits are accepted. A payment that has left the waiting state is no longer swept for, so a later
+event reaches it only by delivery. And when disputes and payouts are read, the sweep will need a
+window that does not depend on a payment waiting, because those arrive for payments that are not.
 
 The provisional assumptions of ADR-053 stay open. This ADR verifies none of them, and nothing here
 is approval to move real money.

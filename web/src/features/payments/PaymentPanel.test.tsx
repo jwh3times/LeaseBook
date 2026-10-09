@@ -236,6 +236,40 @@ describe('simulated payments', () => {
       screen.queryByRole('button', { name: 'Submit simulated payment' }),
     ).not.toBeInTheDocument();
   });
+  it('says why a payment with no outcome after seven days waits for a person', async () => {
+    server.use(
+      http.get('/api/payments', () =>
+        HttpResponse.json({
+          enabled: true,
+          items: [
+            {
+              id: 'operation',
+              amount: 1200,
+              currency: 'USD',
+              status: 'NeedsReview',
+              receiptRecorded: false,
+              reason: 'outcome_overdue',
+              createdAt: '2026-09-27T00:00:00Z',
+              lastAttemptAt: null,
+              canRetry: false,
+            },
+          ],
+        }),
+      ),
+    );
+    show(true);
+    expect(
+      await screen.findByText('Simulated payment needs review — no receipt recorded'),
+    ).toBeVisible();
+    expect(
+      screen.getByText(
+        'The processor reported no outcome for this payment within seven days. Nothing was posted. Check the payment with the processor, then close the review.',
+      ),
+    ).toBeVisible();
+    // Not the fallback for a reason the page does not know, and nothing to send again.
+    expect(screen.queryByText(/Contact the fixture operator/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Retry operation' })).not.toBeInTheDocument();
+  });
   it('describes a late return without claiming a reversal or offering a force-post action', async () => {
     server.use(
       http.get('/api/payments', () =>

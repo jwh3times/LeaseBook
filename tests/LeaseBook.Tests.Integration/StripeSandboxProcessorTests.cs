@@ -545,9 +545,10 @@ public sealed partial class StripeSandboxProcessorTests
 
     internal sealed class Clock(DateTimeOffset? start = null) : TimeProvider
     {
-        private DateTimeOffset _now = start ?? new(2026, 10, 8, 12, 0, 0, TimeSpan.Zero);
-        public override DateTimeOffset GetUtcNow() => _now;
-        public void Advance(TimeSpan by) => _now = _now.Add(by);
+        // Read by a host's worker while a test moves it, so kept as one number that is read and added to whole.
+        private long _ticks = (start ?? new(2026, 10, 8, 12, 0, 0, TimeSpan.Zero)).UtcTicks;
+        public override DateTimeOffset GetUtcNow() => new(Interlocked.Read(ref _ticks), TimeSpan.Zero);
+        public void Advance(TimeSpan by) => Interlocked.Add(ref _ticks, by.Ticks);
     }
 
     // The adapter alone: a sandbox host's settings, a clock the test moves, and the replaying transport.
@@ -570,7 +571,8 @@ public sealed partial class StripeSandboxProcessorTests
             };
             foreach (var (key, value) in changes) { values[key] = value; }
             Settings = SimulationSettings.Read(new ConfigurationBuilder().AddInMemoryCollection(values).Build(), new DevelopmentEnvironment());
-            Binding = Settings.Fixtures.Single();
+            // The first: a test of what one account may be given of another's binds a second.
+            Binding = Settings.Fixtures[0];
             _created = Clock.GetUtcNow().UtcDateTime;
             Processor = new StripeSandboxProcessor(Settings, Clock, new StripeTransport(Stripe));
         }
@@ -820,7 +822,10 @@ public sealed partial class StripeSandboxHostTests(PostgresFixture fixture)
     }
 
     // The fixture is seeded as the host is told it is, unless a test says the host is told otherwise.
-    private async Task<Harness> Setup(StripeReplay stripe, CancellationToken ct, Func<FixtureBinding, FixtureBinding>? configured = null)
+    // The worker is taken out, so that a test says when a pass runs, unless a test is about the worker's own loop.
+    // A second account, when a test names one, is a second fixture organization on the same host, bound after the first.
+    private async Task<Harness> Setup(StripeReplay stripe, CancellationToken ct, Func<FixtureBinding, FixtureBinding>? configured = null,
+        bool worker = false, string? secondAccount = null)
     {
         var binding = new FixtureBinding(UuidV7.NewId(), UuidV7.NewId(), UuidV7.NewId(), Account) { Mode = PaymentModes.StripeSandbox };
         var suffix = UuidV7.NewId().ToString("N");
@@ -828,7 +833,11 @@ public sealed partial class StripeSandboxHostTests(PostgresFixture fixture)
         binding = configured?.Invoke(binding) ?? binding;
         var clock = new StripeSandboxProcessorTests.Clock(DateTimeOffset.UtcNow);
         var commands = new CallbackCommands();
-        var factory = new ApiFactory(fixture.AppConnectionString, new Dictionary<string, string?>
+        var second = secondAccount is null ? null
+            : new FixtureBinding(UuidV7.NewId(), UuidV7.NewId(), UuidV7.NewId(), secondAccount) { Mode = PaymentModes.StripeSandbox };
+        var secondSuffix = UuidV7.NewId().ToString("N");
+        if (second is not null) { await PaymentFixtureBootstrap.SeedAsync(fixture.Api.Services, second, secondSuffix, ct); }
+        var settings = new Dictionary<string, string?>
         {
             ["Logging:LogLevel:Default"] = "Warning",
             ["Payments:Mode"] = PaymentModes.StripeSandbox,
@@ -839,10 +848,18 @@ public sealed partial class StripeSandboxHostTests(PostgresFixture fixture)
             ["Payments:Fixtures:0:Generation"] = binding.Generation.ToString(),
             ["Payments:Fixtures:0:BankId"] = binding.BankId.ToString(),
             ["Payments:Fixtures:0:Account"] = binding.Account,
-        });
+        };
+        if (second is not null)
+        {
+            settings["Payments:Fixtures:1:OrgId"] = second.OrgId.ToString();
+            settings["Payments:Fixtures:1:Generation"] = second.Generation.ToString();
+            settings["Payments:Fixtures:1:BankId"] = second.BankId.ToString();
+            settings["Payments:Fixtures:1:Account"] = second.Account;
+        }
+        var factory = new ApiFactory(fixture.AppConnectionString, settings);
         var app = factory.WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
         {
-            foreach (var service in services.Where(x => x.ServiceType == typeof(IHostedService)
+            foreach (var service in services.Where(x => !worker && x.ServiceType == typeof(IHostedService)
                 && x.ImplementationType?.Name == "PaymentWorker").ToArray()) { services.Remove(service); }
             services.RemoveAll<StripeTransport>(); services.AddSingleton(new StripeTransport(stripe));
             services.RemoveAll<TimeProvider>(); services.AddSingleton<TimeProvider>(clock);
@@ -855,12 +872,18 @@ public sealed partial class StripeSandboxHostTests(PostgresFixture fixture)
             app.Server.PreserveExecutionContext = true;
         }
         catch { await app.DisposeAsync(); await factory.DisposeAsync(); throw; }
-        return new Harness(factory, app, binding, suffix, clock, commands);
+        return new Harness(factory, app, binding, suffix, clock, commands)
+        {
+            // The same host seen from its other organization. The first owns the host and disposes it.
+            Second = second is null ? null : new Harness(factory, app, second, secondSuffix, clock, commands),
+        };
     }
 
     private sealed class Harness(ApiFactory factory, Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactory<Program> app, FixtureBinding binding, string suffix, StripeSandboxProcessorTests.Clock clock, CallbackCommands commands) : IAsyncDisposable
     {
         public StripeSandboxProcessorTests.Clock Clock => clock;
+        public Harness? Second { get; init; }
+        public CallbackCommands Commands => commands;
         // As a tenant of the fixture would: signed in, through the portal's own route, at the fee quoted.
         public async Task<PaymentView> Submit(decimal amount, CancellationToken ct, string method = PaymentMethods.Ach)
         {
@@ -949,10 +972,27 @@ internal sealed class CallbackCommands : Microsoft.EntityFrameworkCore.Diagnosti
 
     public Counter Count() => Current.Value = new Counter();
 
+    /// <summary>
+    /// The engine's locks that fail when asked for, by the end of their name: an operation's id, or
+    /// "event:" and an event's id. How a test makes one step of the worker fail and no other.
+    /// </summary>
+    public System.Collections.Concurrent.ConcurrentDictionary<string, byte> FailingLocks { get; } = new();
+
+    private void Fault(System.Data.Common.DbCommand command)
+    {
+        if (FailingLocks.IsEmpty || !command.CommandText.Contains("pg_advisory_xact_lock", StringComparison.Ordinal)) { return; }
+        foreach (System.Data.Common.DbParameter parameter in command.Parameters)
+        {
+            if (parameter.Value is string name && FailingLocks.Keys.Any(key => name.EndsWith(":payment:" + key, StringComparison.Ordinal)))
+            { throw new IOException("Injected failure taking a payment lock"); }
+        }
+    }
+
     public override ValueTask<Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<System.Data.Common.DbDataReader>> ReaderExecutingAsync(System.Data.Common.DbCommand command,
         Microsoft.EntityFrameworkCore.Diagnostics.CommandEventData eventData, Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<System.Data.Common.DbDataReader> result, CancellationToken cancellationToken = default)
     {
         Current.Value?.Add();
+        Fault(command);
         return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
     }
 
@@ -960,6 +1000,7 @@ internal sealed class CallbackCommands : Microsoft.EntityFrameworkCore.Diagnosti
         Microsoft.EntityFrameworkCore.Diagnostics.CommandEventData eventData, Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int> result, CancellationToken cancellationToken = default)
     {
         Current.Value?.Add();
+        Fault(command);
         return base.NonQueryExecutingAsync(command, eventData, result, cancellationToken);
     }
 
@@ -967,6 +1008,7 @@ internal sealed class CallbackCommands : Microsoft.EntityFrameworkCore.Diagnosti
         Microsoft.EntityFrameworkCore.Diagnostics.CommandEventData eventData, Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<object> result, CancellationToken cancellationToken = default)
     {
         Current.Value?.Add();
+        Fault(command);
         return base.ScalarExecutingAsync(command, eventData, result, cancellationToken);
     }
 }

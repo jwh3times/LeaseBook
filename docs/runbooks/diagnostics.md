@@ -609,7 +609,12 @@ acted on, without its payload: one for no fixture on this host, or payout eviden
 keep. In a Stripe sandbox host it also records each authentic event the adapter does not read: an
 event type other than the three payment events, or a payment of another fixture generation. Stripe's
 CLI forwards every event type, so `4602` is routine there and is not a fault. `4603` (`PaymentWorkerUnavailable`) records the exception type when a worker
-pass cannot complete. No callback body, signing key or bank credentials belong in these logs.
+pass cannot complete. `4606` (`PaymentRecoverySwept`) records a completed catch-up sweep of one
+fixture, with how many events the processor listed, how many were handed on and how many could not be
+read; `4607` (`PaymentRecoveryFailed`) records a sweep that could not finish, which is tried again
+after five minutes. A payment sent to review for having no outcome after seven days is logged as
+`4601` with the reason `outcome_overdue`. No callback body, signing key or bank credentials belong in
+these logs.
 
 Staff Operations shows durable payment status, reason, last attempt and evidence reference within
 the current organization. Unassociated observations older than ten minutes appear as a review
