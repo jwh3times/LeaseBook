@@ -191,17 +191,21 @@ public sealed partial class StripeSandboxProcessorTests
     }
 
     [Fact]
-    public async Task Of_the_recorded_deliveries_the_nine_about_a_payments_progress_are_read_and_the_rest_are_not_this_steps()
+    public async Task Of_the_recorded_deliveries_the_nine_about_a_payments_progress_and_the_three_of_its_dispute_are_read_and_the_rest_are_not_ours()
     {
         var h = new Adapter();
+        h.Stripe.Answer = AchDispute();
         var deliveries = StripeReplay.Deliveries();
         deliveries.Count.ShouldBe(40);
         Progress.Select(x => x.File).ShouldBeSubsetOf(deliveries.Select(x => x.Name));
+        var disputes = AchDisputeEvents.Split(',');
 
-        var read = 0;
+        var (read, disputed) = (0, 0);
         foreach (var (name, recorded) in deliveries)
         {
             var result = await Read(h, recorded);
+            // The dispute's three events, read in full by the test of the return they make.
+            if (disputes.Contains(name)) { result.Value.ShouldNotBeNull(name).Kind.ShouldBe("Return"); disputed++; continue; }
             if (Progress.SingleOrDefault(x => x.File == name) is not { File: not null } expected)
             {
                 result.ShouldBe(ProcessorRead<ProcessorObservation>.NotOurs, name + " " + recorded["type"]);
@@ -218,11 +222,13 @@ public sealed partial class StripeSandboxProcessorTests
             result.Value!.ObservedAt.Kind.ShouldBe(DateTimeKind.Utc);
             ((string)recorded["type"]!).ShouldBe("payment_intent." + expected.Kind switch { "Failed" => "payment_failed", var kind => kind.ToLowerInvariant() });
         }
-        read.ShouldBe(9);
+        (read, disputed).ShouldBe((9, 3));
         // The first of them in full, against literals: 21:56:24 UTC on the day of the run.
         (await Read(h, StripeReplay.Delivered("005-webhook-connect.json"))).Value!.ObservedAt.ShouldBe(new DateTime(2026, 10, 8, 21, 56, 24, DateTimeKind.Utc));
-        // A snapshot event carries the payment: reading one asks Stripe nothing.
-        h.Stripe.Requests.ShouldBeEmpty();
+        // An event that carries the payment it is about is read without asking. Only the dispute's
+        // three asked Stripe anything: whose payment, and what kind of charge.
+        h.Stripe.Requests.Select(x => x.Path).Distinct().ShouldBe([DisputedPayment, DisputedCharge]);
+        h.Stripe.Requests.Count.ShouldBe(6);
     }
 
     // The same connected account holds the probe's payments and those of older fixture generations.
@@ -233,11 +239,14 @@ public sealed partial class StripeSandboxProcessorTests
     public async Task For_another_generation_or_an_account_nobody_bound_no_recorded_delivery_is_this_hosts(string setting, string value)
     {
         var h = new Adapter((setting, value));
+        h.Stripe.Answer = AchDispute();
 
         foreach (var (name, recorded) in StripeReplay.Deliveries())
         { (await Read(h, recorded)).ShouldBe(ProcessorRead<ProcessorObservation>.NotOurs, name); }
 
-        h.Stripe.Requests.ShouldBeEmpty();
+        // For an account nobody bound, nothing is asked. For a bound one, a dispute cannot say whose
+        // payment it is about: the payment is asked for, found to be another generation's, and no more is.
+        h.Stripe.Requests.Select(x => x.Path).ShouldBe(setting.EndsWith("Account", StringComparison.Ordinal) ? [] : Enumerable.Repeat(DisputedPayment, 3));
     }
 
     // Each differs from a delivery that is read, 005, by one thing.
@@ -254,7 +263,6 @@ public sealed partial class StripeSandboxProcessorTests
     [InlineData("id not text")]
     [InlineData("id longer than is kept")]
     [InlineData("no type")]
-    [InlineData("euros")]
     [InlineData("no currency")]
     [InlineData("fractional amount")]
     [InlineData("zero amount")]
@@ -284,7 +292,6 @@ public sealed partial class StripeSandboxProcessorTests
             case "id not text": changed["id"] = 7; break;
             case "id longer than is kept": changed["id"] = "evt_" + new string('a', 97); break;
             case "no type": changed.Remove("type"); break;
-            case "euros": payment["currency"] = "eur"; break;
             case "no currency": payment.Remove("currency"); break;
             case "fractional amount": payment["amount"] = 51524.5m; break;
             case "zero amount": payment["amount"] = 0; break;
@@ -1237,6 +1244,7 @@ public sealed partial class StripeSandboxHostTests
     {
         private readonly Func<StripeReplay.Sent, (int Status, string Body)> _accounts = StripeSandboxProcessorTests.Accounts();
         private readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _payments = new();
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _charges = new();
 
         public Sandbox() => Replay = new StripeReplay { Answer = Answer };
 
@@ -1251,10 +1259,22 @@ public sealed partial class StripeSandboxHostTests
         public (int Status, string Body)? Refused { get; set; }
         /// <summary>What a list of the account's events is answered with. Unset, asking for one is unexpected and throws.</summary>
         public Func<StripeReplay.Sent, (int Status, string Body)>? Events { get; set; }
+        /// <summary>When set, what every request for a charge is answered with. Payments are answered as usual.</summary>
+        public (int Status, string Body)? ChargeRefused { get; set; }
         /// <summary>The lists of events asked for so far.</summary>
         public IReadOnlyList<StripeReplay.Sent> Sweeps => [.. Replay.Requests.Where(x => x.Path == "/v1/events")];
 
         public static string IdFor(Guid operation) => "pi_host" + operation.ToString("N");
+        public static string ChargeFor(Guid operation) => "ch_host" + operation.ToString("N");
+
+        /// <summary>A payment the account holds that this host did not make, or one it made, replaced.</summary>
+        public void Holds(JsonObject intent) => _payments[(string)intent["id"]!] = intent.ToJsonString();
+
+        /// <summary>A charge the account holds, returned when it is asked for by its id.</summary>
+        public void HoldsCharge(JsonObject charge) => _charges[(string)charge["id"]!] = charge.ToJsonString();
+
+        /// <summary>The payment this host made for an operation, as the sandbox now holds it. A copy.</summary>
+        public JsonObject Held(Guid operation) => JsonNode.Parse(_payments[IdFor(operation)])!.AsObject();
 
         private (int Status, string Body) Answer(StripeReplay.Sent sent)
         {
@@ -1283,6 +1303,13 @@ public sealed partial class StripeSandboxHostTests
             {
                 return _payments.TryGetValue(sent.Path[(payments.Length + 1)..], out var found) ? (200, found)
                     : (404, """{"error":{"type":"invalid_request_error","code":"resource_missing","message":"No such payment_intent."}}""");
+            }
+            const string charges = "/v1/charges/";
+            if (sent.Method == "GET" && sent.Path.StartsWith(charges, StringComparison.Ordinal))
+            {
+                if (ChargeRefused is { } chargeRefused) { return chargeRefused; }
+                return _charges.TryGetValue(sent.Path[charges.Length..], out var found) ? (200, found)
+                    : (404, """{"error":{"type":"invalid_request_error","code":"resource_missing","message":"No such charge."}}""");
             }
             throw new InvalidOperationException($"Unexpected request {sent.Method} {sent.Path}");
         }

@@ -25,6 +25,13 @@ public sealed class PaymentEngine(DbContext db, IOrgContext org, TimeProvider cl
     public static readonly int[] RetrySeconds = [1, 5, 30, 120, 600];
     public static readonly string[] EventKinds = ["Processing", "Succeeded", "Available", "PayoutPending",
         "PayoutPaid", "PayoutFailed", "Failed", "BankCredit", "Return", "Refund", "Dispute"];
+    /// <summary>
+    /// The kind of a fact that disagrees with what LeaseBook holds. The engine gives it to a notice
+    /// whose event id it already holds with other content. The Stripe sandbox adapter may also report
+    /// it, for an event about its own payment that names other money than was charged. Not among
+    /// <see cref="EventKinds"/>: it says nothing of how a payment went, and no driver emits it.
+    /// </summary>
+    public const string ConflictKind = "Conflict";
     /// <summary>How long a payment may wait for its outcome before a person is asked to look.</summary>
     public static readonly TimeSpan OutcomeOverdueAfter = TimeSpan.FromDays(7);
     private static readonly Expression<Func<PaymentOperation, bool>> Waiting =
@@ -125,7 +132,7 @@ public sealed class PaymentEngine(DbContext db, IOrgContext org, TimeProvider cl
             Generation = observation.Generation,
             Account = observation.Account,
             Mode = observation.Mode,
-            Kind = existing is null ? observation.Kind : "Conflict",
+            Kind = existing is null ? observation.Kind : ConflictKind,
             Gross = observation.Gross,
             Fee = observation.Fee,
             Net = observation.Net,
@@ -188,9 +195,12 @@ public sealed class PaymentEngine(DbContext db, IOrgContext org, TimeProvider cl
         var credits = effects.Any(x => x.Kind == "Receipt" && x.SettlementId is not null)
             ? [] : facts.Where(x => x.Kind == "BankCredit").ToArray();
         string? reason = null;
-        if (facts.Any(x => x.Kind == "Conflict")) { reason = "conflicting_evidence"; }
+        if (facts.Any(x => x.Kind == ConflictKind)) { reason = "conflicting_evidence"; }
         else if (facts.Any(x => x.Kind is "Return" or "Refund" or "Dispute")) { reason = "return_requires_review"; }
-        else if (facts.Any(x => x.Kind == "Failed") && (credits.Length > 0 || op.JournalId is not null)) { reason = "conflicting_evidence"; }
+        // A collection that failed cannot also have succeeded, been credited or been receipted. In
+        // whichever order the two were reported, neither is believed over the other.
+        else if (facts.Any(x => x.Kind == "Failed")
+            && (credits.Length > 0 || op.JournalId is not null || facts.Any(x => x.Kind == "Succeeded"))) { reason = "conflicting_evidence"; }
         else if (facts.Any(x => x.Kind == "PayoutFailed" && credits.Any(c => c.PayoutId == x.PayoutId)))
         { reason = "conflicting_evidence"; }
         // A clean item only (ADR-053): the processor kept exactly the fee quoted, so the bank received
@@ -309,7 +319,7 @@ public sealed class PaymentEngine(DbContext db, IOrgContext org, TimeProvider cl
         var facts = await db.Set<PaymentObservation>().AsNoTracking().Where(x => x.ProviderId == op.ProviderId).ToListAsync(ct);
         var returns = facts.Where(x => x.Kind == "Return").ToArray();
         string? refusal = null;
-        if (facts.Any(x => x.Kind == "Conflict")
+        if (facts.Any(x => x.Kind == ConflictKind)
             || returns.Select(x => (x.EvidenceId, x.BankDate, x.Gross)).Distinct().Count() > 1)
         { refusal = "return_conflicting_evidence"; }
         else if (returns.Length == 0 || facts.Any(x => x.Kind is "Refund" or "Dispute"))

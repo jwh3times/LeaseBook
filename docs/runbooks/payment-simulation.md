@@ -161,9 +161,9 @@ This mode proves the processor seam against Stripe
 sandbox. It runs only in Development, only with a test-mode key, and only with Stripe's documented
 test payment methods, so it cannot move real money. Continuous integration never calls Stripe.
 
-Today the adapter submits a charge, finds it again, and reads three of Stripe's events about it:
-processing, succeeded and failed. It does not read returns, disputes or payouts yet, so a payment can
-be seen to succeed or fail, and nothing posts to the ledger.
+Today the adapter submits a charge, finds it again, and reads Stripe's events about how it went:
+processing, succeeded and failed, and afterwards a dispute or a refund. It does not read payouts yet,
+so a payment can be seen to succeed, fail or go to review, and nothing posts to the ledger.
 
 ### What you need
 
@@ -235,7 +235,7 @@ stripe listen --latest --all-snapshot --forward-to localhost:5080/callbacks/paym
 its connected account. The CLI prints each delivery and the host's answer.
 
 - `204` means the event was authentic. It was either stored or was not this host's to act on. Most
-  are the second kind: `--all-snapshot` forwards every event type and the host reads three.
+  are the second kind: `--all-snapshot` forwards every event type and the host reads seven.
 - `400` on every delivery means the signature did not verify. Check that the secret is the one this
   CLI sign-in prints, and that this machine's clock is right: a signature more than 300 seconds from
   the host's clock, either way, is refused.
@@ -255,7 +255,16 @@ bound to that account, and takes nothing else in the event as saying which organ
   customer is created.
 - With events forwarded, the host reads `payment_intent.processing`, `payment_intent.succeeded` and
   `payment_intent.payment_failed` as the **Processing**, **Succeeded** and **Failed** facts the
-  simulator also uses. Every other event type is acknowledged and dropped.
+  simulator also uses.
+- A dispute (`charge.dispute.created`, `charge.dispute.funds_withdrawn`, `charge.dispute.closed`)
+  sends the payment to review with the reason `return_requires_review`: as a **Return** when the
+  payment was an ACH debit, as a **Dispute** when it was a card. So does a refund
+  (`charge.refunded`), as a **Refund**. To learn whose payment a dispute is about, the host asks
+  Stripe for the payment and its charge. A PMAdmin can close the review. **Post return** is not
+  offered: nothing has a receipt before payouts are read, and Stripe's word about a dispute is not
+  bank evidence. Every other event type is acknowledged and dropped.
+- A `500` on a dispute's delivery means Stripe could not be asked about it just then. The sweep reads
+  the event again within about five minutes.
 - A payment that succeeds gets its paid date and stays **Processing**. No receipt is recorded and no
   journal entry is written: a Stripe event is never bank evidence, and payouts are not read yet.
 - A payment that fails ends as **Failed**, with the reason `collection_failed`. This covers a
@@ -280,20 +289,19 @@ bound to that account, and takes nothing else in the event as saying which organ
 ### A lost event
 
 The Stripe CLI's forwarding does not send a delivery again, whether the host was down, refused it or
-rate-limited it. The worker recovers such an event itself. While a payment is **Processing** with no
-paid date, the worker asks Stripe every five minutes for the account's events since the oldest such
-payment was created, and reads them as if they had been delivered. A restarted host asks at once. So a
-payment whose outcome was missed shows it within about five minutes, with or without `stripe listen`.
-The log shows each sweep as event `4606`, and a sweep that failed as `4607`.
+rate-limited it. The worker recovers such an event itself. Every five minutes it asks Stripe for the
+account's events since its last complete sweep, less ten minutes, and reads them as if they had been
+delivered. A restarted host asks at once, for the last 29 days, so its first sweep can take a while on
+an account with a long history. So a payment whose outcome, dispute or refund was missed shows it
+within about five minutes, with or without `stripe listen`. The log shows each sweep as event `4606`,
+and a sweep that failed as `4607`.
 
 A payment still without an outcome seven days after it was created goes to review on Operations with
 the reason `outcome_overdue`. Check it at Stripe, then close the review with a note. If its outcome
 arrives later, a failure ends it as **Failed** and a success sets its paid date and leaves it in
 review; it does not go back to **Processing**.
 
-Two things the sweep does not do. It asks only about payments still waiting, so an event for a
-payment already paid, failed or in review arrives only by delivery. And `payment-simulation step`
-neither sweeps nor ages; only a running host does.
+`payment-simulation step` neither sweeps nor ages; only a running host does.
 
 ### Optional payment methods
 

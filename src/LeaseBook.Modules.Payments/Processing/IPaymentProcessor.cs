@@ -77,10 +77,12 @@ public sealed record ProcessorObservation(string EventId, string ProviderId, str
     DateOnly BankDate, string EvidenceId, string PayoutId, bool Complete, DateTime ObservedAt);
 
 /// <summary>
-/// What asking a processor again came to: the observations to keep, how many events it listed, and
-/// how many of those could not be read.
+/// What asking a processor again came to: the observations to keep, how many events it listed, how
+/// many of those could not be read, and how many could not be read yet (<see cref="Unasked"/>)
+/// because the processor would not answer a question reading them needs. With any of those the
+/// answer is not everything since that time, and the caller asks for the same time again.
 /// </summary>
-public sealed record ProcessorRecovery(IReadOnlyList<ProcessorObservation> Observations, int Listed, int Unreadable)
+public sealed record ProcessorRecovery(IReadOnlyList<ProcessorObservation> Observations, int Listed, int Unreadable, int Unasked = 0)
 {
     public static ProcessorRecovery Nothing { get; } = new([], 0, 0);
 }
@@ -113,9 +115,10 @@ public interface IPaymentProcessor
     /// Asks the processor what it has said about one binding's payments since a time, for a notice
     /// that was never delivered. It does I/O and is called outside any organization transaction. What
     /// it returns is read as a delivered notice is read and is kept the same way, so one the host
-    /// already holds is dropped there. Whatever cannot be answered in full is thrown, never cut
-    /// short: a caller takes a result to mean that everything since that time was asked for. An
-    /// adapter whose notices are always delivered returns <see cref="ProcessorRecovery.Nothing"/>.
+    /// already holds is dropped there. A list that cannot be answered in full is thrown, never cut
+    /// short: a caller takes a result to mean that everything since that time was listed, and reads
+    /// <see cref="ProcessorRecovery.Unasked"/> for what in it is still to be read. An adapter whose
+    /// notices are always delivered returns <see cref="ProcessorRecovery.Nothing"/>.
     /// </summary>
     Task<ProcessorRecovery> RecoverObservationsAsync(FixtureBinding binding, DateTime since, CancellationToken ct);
 }

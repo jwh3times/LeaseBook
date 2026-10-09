@@ -607,15 +607,24 @@ The development-only payment worker logs stable events with the operation UUID: 
 sanitized failure reason. `4602` (`PaymentCallbackIgnored`) records a verified notice that was not
 acted on, without its payload: one for no fixture on this host, or payout evidence too malformed to
 keep. In a Stripe sandbox host it also records each authentic event the adapter does not read: an
-event type other than the three payment events, or a payment of another fixture generation. Stripe's
+event type other than the seven it reads (three payment events, three dispute events and
+`charge.refunded`), or a payment, dispute or refund of another fixture generation. Stripe's
 CLI forwards every event type, so `4602` is routine there and is not a fault. `4603` (`PaymentWorkerUnavailable`) records the exception type when a worker
-pass cannot complete. `4606` (`PaymentRecoverySwept`) records a completed catch-up sweep of one
-fixture, with how many events the processor listed, how many were handed on and how many could not be
-read; `4607` (`PaymentRecoveryFailed`) records a sweep that could not finish, which is tried again
-after five minutes. A payment sent to review for having no outcome after seven days is logged as
-`4601` with the reason `outcome_overdue`; a `4601` saying a payment could not be sent to review as
-overdue names the exception type, and that payment is offered again at the next sweep. A sweep that
-finds no payment waiting asks the processor nothing and logs nothing. No callback body, signing key or bank credentials belong in
+pass cannot complete. `4606` (`PaymentRecoverySwept`) records a catch-up sweep of one fixture whose
+list was read to its end, with how many events the processor listed, how many were handed on, how
+many could not be read, and how many are to be asked about again. That last count is of dispute
+events whose payment or charge Stripe could not be asked for: a sweep with any is not complete, and
+the next one asks for the same window. `4607` (`PaymentRecoveryFailed`) records a sweep that could
+not finish, which is tried again after five minutes. A payment sent to review for having no outcome
+after seven days is logged as `4601` with the reason `outcome_overdue`; a `4601` saying a payment
+could not be sent to review as overdue names the exception type, and that payment is offered again at
+the next sweep. A sweep runs for each fixture every five minutes whether or not a payment is waiting,
+so `4606` is logged at that interval in either payment mode; the simulator's lists nothing.
+
+In a Stripe sandbox host, a dispute event delivered while Stripe cannot be asked about it is answered
+with HTTP 500 and logged as `1000` (`UnhandledException`), so that Stripe does not count it as
+delivered. It is not a fault in LeaseBook: the next sweep reads the event. Repeated ones point at the
+connection to Stripe or at the sandbox key. No callback body, signing key or bank credentials belong in
 these logs.
 
 Staff Operations shows durable payment status, reason, last attempt and evidence reference within
