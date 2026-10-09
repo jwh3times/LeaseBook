@@ -15,8 +15,19 @@ public sealed partial class SimulationSettings
 {
     // Every setting a manifest or an operator may supply, by its full path under Payments. Anything
     // else is refused wherever it sits, so nothing can ride in beside a fixture or under a known key.
-    [GeneratedRegex(@"^(Mode|SigningKey|ManifestPath|Fixtures:\d+:(OrgId|Generation|BankId|Account))$", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"^(Mode|SigningKey|ManifestPath|Fixtures:\d+:(OrgId|Generation|BankId|Account))\z", RegexOptions.CultureInvariant)]
     private static partial Regex KnownSetting();
+
+    // What a sandbox host may be given besides, and no other mode may.
+    [GeneratedRegex(@"^(Stripe:SecretKey|Fixtures:\d+:(CardPaymentMethod|AchPaymentMethod))\z", RegexOptions.CultureInvariant)]
+    private static partial Regex SandboxSetting();
+
+    // Stripe's documented test payment methods, by their shape. A payer's saved method is pm_ and an
+    // opaque id with no such prefix, so nothing admitted here can be a real one.
+    [GeneratedRegex(@"^pm_card_[A-Za-z0-9_]{1,60}\z", RegexOptions.CultureInvariant)]
+    private static partial Regex TestCard();
+    [GeneratedRegex(@"^pm_usBankAccount_[A-Za-z0-9_]{1,60}\z", RegexOptions.CultureInvariant)]
+    private static partial Regex TestBankAccount();
 
     public string Mode { get; set; } = PaymentModes.Disabled;
     public string SigningKey { get; set; } = "";
@@ -60,7 +71,7 @@ public sealed partial class SimulationSettings
         var unknown = supplied
             .Where(x => x.Value != "" || !supplied.Any(other => other.Key.StartsWith(x.Key + ":", StringComparison.Ordinal)))
             .Select(x => x.Key)
-            .FirstOrDefault(key => !KnownSetting().IsMatch(key) && !(sandbox && key == "Stripe:SecretKey"));
+            .FirstOrDefault(key => !KnownSetting().IsMatch(key) && !(sandbox && SandboxSetting().IsMatch(key)));
         if (settings.Mode is not (PaymentModes.Disabled or PaymentModes.Simulation or PaymentModes.StripeSandbox)
             || configuration.GetSection("Stripe").Exists() || unknown is not null)
         {
@@ -81,6 +92,16 @@ public sealed partial class SimulationSettings
         // Only a test-mode key. A live key is refused by its prefix, before any client could be built from it.
         if (sandbox && !TestKey(settings.Stripe?.SecretKey))
         { throw new InvalidOperationException("StripeSandbox requires a Stripe test-mode secret key."); }
+        for (var i = 0; sandbox && i < settings.Fixtures.Length; i++)
+        {
+            var wrong = !TestCard().IsMatch(settings.Fixtures[i].CardPaymentMethod ?? "") ? "CardPaymentMethod"
+                : !TestBankAccount().IsMatch(settings.Fixtures[i].AchPaymentMethod ?? "") ? "AchPaymentMethod" : null;
+            if (wrong is not null)
+            {
+                throw new InvalidOperationException("StripeSandbox collects only with Stripe's documented test payment methods"
+                    + $" (pm_card_… for a card, pm_usBankAccount_… for ACH). Not one: Payments:Fixtures:{i}:{wrong}.");
+            }
+        }
         // The mode is the host's, so a binding takes it from here and never from its own manifest entry.
         settings.Fixtures = [.. settings.Fixtures.Select(x => x with { Mode = settings.Mode })];
         return settings;
@@ -92,9 +113,8 @@ public sealed partial class SimulationSettings
     /// <summary>Registers the one processor this host's mode uses.</summary>
     public void AddProcessor(IServiceCollection services)
     {
-        // The mode is recognised and guarded, and nothing can run in it until its adapter exists.
-        if (Mode == PaymentModes.StripeSandbox)
-        { throw new InvalidOperationException("StripeSandbox payments have no processor adapter in this release."); }
+        // One or the other, never both: a sandbox host has no simulator to fall back on or to sign for.
+        if (Mode == PaymentModes.StripeSandbox) { LeaseBook.Web.Payments.Stripe.StripeSandboxProcessor.Register(services); return; }
         services.AddSingleton<SimulatedProcessor>();
         services.AddSingleton<IPaymentProcessor>(sp => sp.GetRequiredService<SimulatedProcessor>());
     }
@@ -116,5 +136,9 @@ public sealed partial class SimulationSettings
                     { throw new PaymentUnavailableException(); }
                 }, ct);
         }
+        // Whose key this is cannot be read from its text, so Stripe is asked, once, after everything
+        // that can be checked locally. Only a host about to serve or to collect gets here.
+        if (settings.Mode == PaymentModes.StripeSandbox)
+        { await services.GetRequiredService<LeaseBook.Web.Payments.Stripe.StripeSandboxProcessor>().RequirePlatformKeyAsync(ct); }
     }
 }

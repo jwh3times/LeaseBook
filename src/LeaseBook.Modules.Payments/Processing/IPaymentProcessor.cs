@@ -19,6 +19,16 @@ public sealed record FixtureBinding(Guid OrgId, Guid Generation, Guid BankId, st
     /// </summary>
     [JsonIgnore]
     public string Mode { get; init; } = PaymentModes.Simulation;
+
+    /// <summary>
+    /// The processor's test payment method a card payment is collected with, and the one for ACH. Only
+    /// a sandbox host reads or admits them, and only in the shape of a documented test token, which a
+    /// payer's saved method can never have. Not written to a manifest: the defaults are the ones that succeed.
+    /// </summary>
+    [JsonIgnore]
+    public string CardPaymentMethod { get; init; } = "pm_card_visa";
+    [JsonIgnore]
+    public string AchPaymentMethod { get; init; } = "pm_usBankAccount_success";
 }
 
 /// <summary>

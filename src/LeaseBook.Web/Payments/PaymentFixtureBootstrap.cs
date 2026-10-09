@@ -19,7 +19,12 @@ public static class PaymentFixtureBootstrap
 {
     public const string Password = "Payment-Fixture-2026!";
 
-    public static async Task CreateManifestAsync(IServiceProvider services, string path, CancellationToken ct)
+    /// <summary>
+    /// Writes a manifest and seeds its fixtures. With no connected account, two simulator fixtures.
+    /// With some, a Stripe sandbox manifest: one fixture organization per account. The Stripe key is
+    /// never written; it stays in local secrets.
+    /// </summary>
+    public static async Task CreateManifestAsync(IServiceProvider services, string path, IReadOnlyList<string> stripeAccounts, CancellationToken ct)
     {
         RequireDevelopment(services);
         await using var scope = services.CreateAsyncScope();
@@ -27,25 +32,24 @@ public static class PaymentFixtureBootstrap
         if (!db.Database.GetDbConnection().Database.StartsWith("leasebook_payment_fixture", StringComparison.Ordinal)
             || await db.Orgs.AnyAsync(ct))
         { throw new InvalidOperationException("Initialize only an empty, migrated leasebook_payment_fixture database."); }
-        var bindings = Enumerable.Range(0, 2).Select(_ => new FixtureBinding(UuidV7.NewId(), UuidV7.NewId(),
-            UuidV7.NewId(), "sim_" + UuidV7.NewId().ToString("N"))).ToArray();
+        var manifest = Manifest(stripeAccounts);
+        var bindings = manifest.Fixtures;
         // CreateNew refuses overwriting a key/identity manifest. A failed bootstrap is discarded by
         // recreating this dedicated disposable database, never by deleting journal rows.
         await using (var file = new FileStream(path, FileMode.CreateNew, FileAccess.Write))
-        {
-            await JsonSerializer.SerializeAsync(file, new
-            {
-                Payments = new SimulationSettings
-                {
-                    Mode = "Simulation",
-                    Fixtures = bindings,
-                    SigningKey = Convert.ToHexString(RandomNumberGenerator.GetBytes(32))
-                },
-            }, new JsonSerializerOptions { WriteIndented = true }, ct);
-        }
+        { await JsonSerializer.SerializeAsync(file, new { Payments = manifest }, new JsonSerializerOptions { WriteIndented = true }, ct); }
         for (var i = 0; i < bindings.Length; i++)
-        { await SeedAsync(services, bindings[i], i == 0 ? "a" : "b", ct); }
+        { await SeedAsync(services, bindings[i], ((char)('a' + i)).ToString(), ct); }
     }
+
+    // What a manifest holds: new identities, a new signing key, and the mode its accounts belong to.
+    internal static SimulationSettings Manifest(IReadOnlyList<string> stripeAccounts) => new()
+    {
+        Mode = stripeAccounts.Count > 0 ? PaymentModes.StripeSandbox : PaymentModes.Simulation,
+        Fixtures = [.. (stripeAccounts.Count > 0 ? stripeAccounts : [.. Enumerable.Range(0, 2).Select(_ => "sim_" + UuidV7.NewId().ToString("N"))])
+            .Select(account => new FixtureBinding(UuidV7.NewId(), UuidV7.NewId(), UuidV7.NewId(), account))],
+        SigningKey = Convert.ToHexString(RandomNumberGenerator.GetBytes(32)),
+    };
 
     // Shared by the CLI and integration harness. Every call creates fresh identities and refuses an
     // existing organization; a marker cannot turn a customer org into a simulation fixture.

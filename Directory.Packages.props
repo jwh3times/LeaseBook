@@ -81,6 +81,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Stripe sandbox adapter (ADR-054). 53.0.0 pins API version 2026-09-30.endive, the version the
+         probe recorded its payloads at; raise it only together with a fresh probe run. Host-only. -->
+    <PackageVersion Include="Stripe.net" Version="53.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Test stack (P7 / ADR-032): executable projects explicitly target Microsoft Testing
          Platform v2; global.json selects the .NET 10 MTP implementation of dotnet test. -->
     <PackageVersion Include="xunit.v3.mtp-v2" Version="4.0.1" />
