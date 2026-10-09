@@ -210,12 +210,21 @@ public sealed class StripeSandboxProcessor : IPaymentProcessor
             || !long.TryParse(timestamp, NumberStyles.None, CultureInfo.InvariantCulture, out var seconds) || seconds > MaxUnixSeconds
             || Math.Abs((_clock.GetUtcNow() - DateTimeOffset.FromUnixTimeSeconds(seconds)).TotalSeconds) > SignatureToleranceSeconds)
         { return false; }
-        var expected = HMACSHA256.HashData(Encoding.UTF8.GetBytes(secret), (byte[])[.. Encoding.UTF8.GetBytes(timestamp + "."), .. rawBody]);
-        // Every one is compared, in constant time each, so that how long this takes says nothing of which matched.
-        var matched = false;
-        foreach (var candidate in presented) { matched |= CryptographicOperations.FixedTimeEquals(candidate, expected); }
-        return matched;
+        // The checks above bound what is handed on and keep the clock this host's own. Whether a
+        // signature matches is Stripe's library's to say (the specification requires its
+        // verification), on the same clock and tolerance. It reads text, so the body must be exactly
+        // the UTF-8 it claims to be: bytes that are not would be signed as something else.
+        string text;
+        try { text = StrictUtf8.GetString(rawBody); } catch (DecoderFallbackException) { return false; }
+        try
+        {
+            EventUtility.ValidateSignature(text, signature, secret, SignatureToleranceSeconds, _clock.GetUtcNow().ToUnixTimeSeconds());
+            return true;
+        }
+        catch (StripeException) { return false; }
     }
+
+    private static readonly UTF8Encoding StrictUtf8 = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
 
     // A snapshot event carries the payment it is about, so reading one asks Stripe nothing.
     public Task<ProcessorRead<ProcessorObservation>> ReadObservationAsync(ProcessorNotice notice, CancellationToken ct) =>

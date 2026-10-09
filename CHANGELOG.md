@@ -62,6 +62,16 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   identifier replaced, and a test fails on a committed payload that still holds a real one. The
   application itself still has no Stripe client. ADR-054 proposes the adapter this informs.
 
+- **A sandbox payment follows Stripe's own events.** A host in the `StripeSandbox` mode accepts
+  Stripe's signed deliveries. A payment Stripe reports as succeeded shows its paid date and goes on
+  waiting for the bank; one Stripe reports as failed, such as a declined card, ends as failed instead
+  of waiting. Nothing reaches a ledger from an event. A delivery is checked against Stripe's signature
+  before anything in it is read; one that is unsigned, stale, altered or marked as live is refused; one
+  for a connected account or a fixture that is not this host's is acknowledged and dropped without
+  opening any organization. A sandbox host now needs the webhook signing secret that `stripe listen`
+  prints, and does not start without it. A payment whose final event never arrives stays in
+  Processing; how to recover one is not decided yet.
+
 - **A fixture payment can be collected through a Stripe sandbox.** A Development host configured for
   `StripeSandbox` now starts, and a fixture tenant's card or bank-debit payment is charged on the
   fixture's connected account in the sandbox, as a test payment with no real money. Stripe is sent the
@@ -91,6 +101,11 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   credentials is refused. An existing fixture manifest is unaffected.
 
 ### Fixed
+
+- **A payment fact delivered as its charge completes is no longer left unread.** A notice about a
+  payment and the worker's own completion of that payment could pass each other: the notice was
+  stored, and nothing was left to act on it. Both now wait their turn on the payment's processor
+  reference. This applies to the payment simulation as well, where the overlap was unlikely.
 
 - **The Stripe sandbox probe works against a real sandbox.** Its first run made no charge: Stripe now
   refuses the parameter the probe used to name a payment method, and the Stripe CLI now refuses to

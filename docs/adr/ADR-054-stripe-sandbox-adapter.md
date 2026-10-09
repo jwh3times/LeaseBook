@@ -140,7 +140,7 @@ The run also found things nobody had asked about. The adapter in step 4 has to a
 - **Every event names the connected account and the API version**, delivered or fetched.
 
 **Implementation note, 2026-10-08 (submit and lookup).** The adapter now submits a charge and finds
-it again; it reads no event and no payout yet, so nothing it collects posts. Three points the
+it again; at that date it read no event and no payout, so nothing it collected posted. Three points the
 decisions above leave open were settled in code. None changes a decision, and each is open to
 revision until this ADR is accepted:
 
@@ -156,6 +156,41 @@ revision until this ADR is accepted:
   key whose own account is a fixture's connected account is refused, and so is a fixture whose
   account does not pay its own Stripe fees. The optional test payment methods a fixture may name are
   admitted only in the shape of Stripe's documented test tokens.
+
+**Implementation note, 2026-10-09 (webhooks).** A sandbox host now accepts Stripe's signed
+deliveries at its own callback route and reads `payment_intent.processing`, `payment_intent.succeeded`
+and `payment_intent.payment_failed` as the existing Processing, Succeeded and Failed facts. A success
+sets the paid date and the payment stays in Processing; a failure ends it. None of these facts is
+bank evidence, and it still reads no payout, so nothing it collects posts. It was run against a
+sandbox on 2026-10-09 through the Stripe CLI's forwarding: card and ACH payments succeeded, declined
+cards and an ACH debit with insufficient funds ended as failed, and earlier probe payments on the
+same account produced no facts. The probe's finding that no account event was delivered still
+stands. These points were settled in code, on the same terms as the note above:
+
+- **Only this fixture's generation counts.** A connected account also holds payments of the probe and
+  of earlier fixture generations. An event counts only when its payment's metadata carries the
+  generation of the fixture bound to that account; any other is acknowledged and dropped.
+- **Reading an event needs no fetch.** A snapshot event carries the payment it is about, so the
+  adapter asks Stripe nothing to read one. An event not marked as test mode is refused.
+- **Events not yet handled are acknowledged and dropped.** Stripe is not asked to redeliver them, and
+  they are not stored. Returns, disputes and payouts wait for later steps.
+- **The signature is verified by the Stripe library, on the injected clock.** The adapter first
+  bounds the body and the header and refuses a header that is not Stripe's shape; the library then
+  judges the signature with its default tolerance of 300 seconds. The event itself is read member by
+  member and not through the library's event types, which reject a shape or version they do not
+  expect.
+- **A delivery and the worker share a lock on the payment's reference.** An operation first takes its
+  reference when the worker stores the result of a charge, and Stripe can deliver an event for that
+  reference at the same moment. Without the lock each could miss the other, leaving a fact stored and
+  never judged. The lock is in the shared engine, so the simulator takes it too.
+- **A stored reference is retrieved, not searched for.** Once an operation holds Stripe's reference,
+  lookup retrieves that payment and holds it to the checks a listed payment is held to. A reference
+  Stripe has no payment for goes to review.
+
+One question is open and not decided. After Stripe accepts a payment the worker waits for an event.
+If the event that ends a payment is lost, the payment stays in Processing and staff have no control
+to retry or close it. Stripe redelivers to a registered endpoint for days; the Stripe CLI's
+forwarding does not. How such a payment is recovered is to be decided before this ADR is accepted.
 
 The provisional assumptions of ADR-053 stay open. This ADR verifies none of them, and nothing here
 is approval to move real money.

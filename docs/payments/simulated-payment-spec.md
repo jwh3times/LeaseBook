@@ -3,7 +3,7 @@
 - **Audience:** Implementers and reviewers of issue #456
 - **Status:** Implemented simulation contract for #456; live payments remain unapproved
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-08
+- **Last reviewed:** 2026-10-09
 
 ## Evidence and boundary
 
@@ -239,8 +239,9 @@ which answers a guard refusal as a result so the caller can record it on the sam
 One Payments-owned `IPaymentProcessor` hides provider mechanics. `SubmitAsync` and `LookupAsync` take
 one immutable request: the stable operation identity and fingerprint, what is to be collected, which
 is the charged amount, its currency and the payment method, and when the operation was created, so
-that a collection can be found again after the processor has forgotten the request. The request
-carries nothing that identifies the tenant. Results distinguish accepted, definitively failed and
+that a collection can be found again after the processor has forgotten the request. It also carries
+the processor's own reference once LeaseBook has stored one, so that a lookup can ask for that
+payment by name. The request carries nothing that identifies the tenant. Results distinguish accepted, definitively failed and
 unknown outcome.
 
 A callback is handled in two steps, both outside the org transaction. `Authenticate(raw body,
@@ -257,16 +258,27 @@ them from its own binding for the account, never from the notice.
 
 The simulator implements this interface first. No processor DTO leaks into Accounting. A second
 implementation, the Stripe sandbox adapter of
-[ADR-054](../adr/ADR-054-stripe-sandbox-adapter.md), implements submit and lookup; its callback
-steps authenticate nothing yet, so in a sandbox host no notice is read. It cannot promise permanent
+[ADR-054](../adr/ADR-054-stripe-sandbox-adapter.md), implements submit, lookup, authentication and
+the reading of a payment's events. It reads no payout: every notice is, as payout evidence, not this
+host's. It cannot promise permanent
 provider dedupe, because Stripe may forget an idempotency key after a day. It therefore looks a
 payment up before every submit, by listing the connected account's payments from the operation's
 creation time and matching the operation id it stored, and it never submits an operation more than
-23 hours old; that one goes to review. It reports a payment as accepted only when Stripe's state for
+23 hours old; that one goes to review. Once the operation holds Stripe's reference, lookup retrieves
+that one payment instead of listing, and holds it to the same checks; a stored reference Stripe has
+no payment for goes to review. It reports a payment as accepted only when Stripe's state for
 it is `succeeded`, `processing` or `requires_payment_method`, each of which ends without anyone
-acting. Any other state goes to review, as does a payment found twice or found with another amount,
-currency or generation. A failed connection, a rate limit, a fault at Stripe and a key or permission
-Stripe refuses are technical failures and stay retryable.
+acting. Any other state goes to review, as does a payment found twice or found with another
+operation, amount, currency or generation. A failed connection, a rate limit, a fault at Stripe and a
+key or permission Stripe refuses are technical failures and stay retryable.
+
+The adapter reads an event without asking Stripe anything, because a snapshot event carries the
+payment it is about. It reads `payment_intent.processing`, `payment_intent.succeeded` and
+`payment_intent.payment_failed` as the `Processing`, `Succeeded` and `Failed` observations the
+simulator also produces. Every other event type is not this host's and is dropped, until the work
+that reads returns, disputes and payouts. An observation read this way carries the charged amount, no
+fee, no bank evidence identifier and no payout, and is never complete. It can therefore set a paid
+date or end a payment as failed, and it can never be the bank evidence a receipt posts from.
 
 ## Transaction and recovery protocol
 
@@ -300,6 +312,20 @@ worker to recover dispatch; effect uniqueness and operation locking remain neces
 leases. A worker restart discovers pending work in every configured fixture org, with one separate
 RLS transaction per org; no request-time platform scope or all-org SQL bypass.
 
+Callback receipt and the worker's persisting of a provider result also share an advisory transaction
+lock keyed by the provider reference. An operation first takes its reference when the result is
+persisted, and a callback for that reference can arrive at the same moment. Without the lock each
+could miss the other: the receipt finds no operation to wake, the worker finds no fact to judge, and
+the fact is stored and never acted on. Whichever takes the lock second reads after the first has
+committed. The order is fixed: receipt locks the event, then the reference, then the operation;
+persisting a result locks the reference, then the operation. This applies to every processor.
+
+After acceptance the worker makes no further provider call for an idle payment; a stored observation
+wakes it. A payment whose ending observation is never delivered therefore stays in Processing, and
+no staff control retries or closes it. The simulator's driver always delivers. The Stripe sandbox
+adapter depends on the Stripe CLI's forwarding, which does not send a delivery again. Recovering such
+a payment is an open decision and is not designed here.
+
 For the simulator, schedule technical retries at 1, 5, 30, 120 and 600 seconds after successive
 failures, then Needs review. Time comes from an injected clock so tests advance it deterministically.
 PMAdmin may retry technical failures through an authorized, audited command retaining the same
@@ -332,10 +358,47 @@ They remain durable and can associate after dispatch recovery, after which they 
 caller metadata. Wrong destination, currency or amount is retained for review without posting.
 
 Simulated verification uses the same raw-body/authenticated-observation seam but does not claim
-Stripe signature compatibility. The later Stripe adapter must use the provider SDK's verification
-and account/mode semantics established by the research note. It requires separate sandbox work. Until
-that work lands, the simulator's two callback routes are still mapped in a sandbox host and refuse
-every request.
+Stripe signature compatibility.
+
+A host maps only the callback routes of its own processor. The simulator's two routes exist in a
+Simulation host, and in the build of the published API contract, and nowhere else. A `StripeSandbox`
+host has one route, `POST /callbacks/payments/stripe`, which is not part of the published contract.
+All three are anonymous and outside cookie-authenticated `/api`. The simulator's routes read at most
+16,384 bytes and share the rate limit of the tenant and staff payment routes. The Stripe route reads
+at most 64 KiB and has a rate limit of its own, 1200 requests a minute for each remote address: a
+processor sends its events in bursts from one address, and the Stripe CLI does not send again a
+delivery that was refused.
+
+The Stripe route verifies Stripe's own scheme. The `Stripe-Signature` header carries
+`t=<unix seconds>` and one or more `v1=<hex>` values. Each `v1` is an `HMAC-SHA256` of the timestamp, a
+dot and the exact body bytes, keyed with the signing secret in `Payments:Stripe:WebhookSecret`. The
+comparison is constant-time, and the timestamp must be within 300 seconds of the host's injected
+clock, either way. This is checked before anything in the body is parsed and before any database or
+organization work.
+
+The Stripe adapter must use the provider SDK's verification, and does: the Stripe library judges
+whether a signature matches, on the host's injected clock and the same tolerance. Before handing a
+delivery to it the adapter bounds the body and the header and refuses a header that is not Stripe's
+shape. A test checks a signature worked out independently of both. The adapter reads an event member
+by member, not through the Stripe library's event types, which reject a shape or API version they do
+not expect.
+
+After verification the adapter applies these rules, in this order:
+
+- An event whose own `livemode` is not exactly `false`, or that lacks an id, a type or a creation
+  time, is refused with HTTP 400.
+- An event that names no account, or an account no fixture on this host is bound to, is acknowledged
+  with HTTP 204 and dropped. No organization scope is opened and no database command runs.
+- An event of a type the adapter does not read is acknowledged and dropped the same way.
+- A payment counts only when its metadata carries this fixture's generation and an operation id. A
+  connected account can also hold payments of the probe or of an earlier fixture generation; their
+  events are authentic, not this host's, and dropped.
+- The observation's generation and bank come from the host's binding, never from the event.
+
+One stated gap remains against the rule above that a wrong currency or amount is retained for review.
+An authentic event for this fixture's payment whose currency is not `usd`, or whose amount is missing
+or out of range, is refused with HTTP 400 and not retained. Retaining it for review belongs to the
+work that reads review-only facts; the rule above stands.
 
 ## Executable non-live barrier and fixture lifecycle
 
@@ -354,13 +417,14 @@ In #456, implement these checks in executable startup, submission, callback and 
   host has one processor, never both. Its configuration is admitted only when
   every one of these holds, and each is otherwise a startup error: the environment is Development;
   `Payments:Stripe:SecretKey` is a Stripe test-mode key (`sk_test_` or `rk_test_`), so a live key is
-  refused by its prefix; the fixture signing key is present; every fixture is bound to its own
-  connected account (`acct_`). `Payments:Stripe` is refused in every other mode, Disabled included,
+  refused by its prefix; `Payments:Stripe:WebhookSecret` is a webhook signing secret, `whsec_`
+  followed by printable characters with no whitespace; the fixture signing key is present; every
+  fixture is bound to its own connected account (`acct_`). `Payments:Stripe` is refused in every other mode, Disabled included,
   and a top-level `Stripe` section is refused in every mode, this one included. In every mode a
   setting under `Payments` that the host does not recognise is a startup error at any depth, and the
   refusal names the setting's path, never its value. A simulator account in a sandbox host, or a
-  connected account in a simulation host, is refused. The Stripe key lives in local secrets: a
-  fixture manifest that holds provider credentials is refused.
+  connected account in a simulation host, is refused. The Stripe key and the signing secret live in
+  local secrets: a fixture manifest that holds provider credentials is refused.
 - A sandbox host makes three further checks before it serves or collects, and the foreground worker
   step makes them too. A fixture's optional `CardPaymentMethod` and `AchPaymentMethod` must
   have the shape of Stripe's documented test payment methods, `pm_card_…` and `pm_usBankAccount_…`,
