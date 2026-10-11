@@ -26,6 +26,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Shouldly;
 
 namespace LeaseBook.Tests.Integration;
@@ -431,6 +432,8 @@ public sealed partial class SimulatedPaymentTests(PostgresFixture fixture)
         // The refusal is durable, the payment is still in review, and it can still be closed.
         var view = await Staff(admin, op.Id, ct);
         (view.Status, view.Reason, view.CanCloseReview, view.ReturnEntryId).ShouldBe(("NeedsReview", code, true, null));
+        // Still offered: it is the ledger that refused, and a ledger can be corrected. The evidence would post.
+        view.CanPostReturn.ShouldBeTrue();
         // Why it was refused describes the owner's and the ledger's position; the tenant is not told.
         (await Read(tenant, op.Id, ct)).Reason.ShouldBe("return_requires_review");
         (await h.Balance(1, ct)).ShouldBe(before);
@@ -456,6 +459,8 @@ public sealed partial class SimulatedPaymentTests(PostgresFixture fixture)
         await h.Emit(op, "BankCredit", ct);
         await h.Deliver(h.Observation(op, kind) with { Gross = gross, Net = gross }, ct);
         await h.Tick(ct);
+        // Not offered, since the evidence itself is what the engine refuses; asked all the same, it refuses.
+        (await Staff(admin, op.Id, ct)).CanPostReturn.ShouldBeFalse();
 
         var refused = await admin.PostAsync($"/api/payments/{op.Id}/return", null, ct);
         var body = await refused.Content.ReadAsStringAsync(ct);
@@ -823,7 +828,7 @@ public sealed partial class SimulatedPaymentTests(PostgresFixture fixture)
         (await client.GetFromJsonAsync<PaymentView>(Path + "/" + id, ct))!;
 
     private async Task<Harness> Setup(CancellationToken ct, AfterPostingFailure? fault = null,
-        Func<IPaymentProcessor, IPaymentProcessor>? processor = null)
+        Func<IPaymentProcessor, IPaymentProcessor>? processor = null, Observability.CapturingLoggerProvider? logs = null)
     {
         var binding = new FixtureBinding(UuidV7.NewId(), UuidV7.NewId(), UuidV7.NewId(), "sim_" + UuidV7.NewId().ToString("N"));
         var suffix = UuidV7.NewId().ToString("N");
@@ -854,6 +859,8 @@ public sealed partial class SimulatedPaymentTests(PostgresFixture fixture)
                 services.RemoveAll<IPaymentProcessor>();
                 services.AddSingleton(sp => processor(sp.GetRequiredService<SimulatedProcessor>()));
             }
+            // Every level for the capture alone, whatever the host's own providers are told to keep.
+            if (logs is not null) { services.AddLogging(logging => logging.AddProvider(logs).AddFilter<Observability.CapturingLoggerProvider>(null, LogLevel.Trace)); }
         }));
         return new Harness(factory, app, binding, suffix, clock);
     }
@@ -892,7 +899,7 @@ public sealed partial class SimulatedPaymentTests(PostgresFixture fixture)
     }
     private sealed class FailingLedger(ISender sender, AfterPostingFailure fault) : IPaymentLedger
     {
-        public async Task<Guid> RecordSettledReceiptAsync(Guid tenantId, Guid bankId, decimal amount, DateOnly date, string method, string sourceRef, CancellationToken ct)
+        public async Task<Guid> RecordSettledReceiptAsync(Guid tenantId, Guid bankId, decimal amount, DateOnly date, string method, string memo, string sourceRef, CancellationToken ct)
         {
             var result = await sender.Send(new Modules.Accounting.Features.LedgerPosting.RecordPayment(tenantId, amount, date, method, bankId, "Simulation", sourceRef), ct);
             if (fault.Fail) { fault.Fail = false; throw new IOException("Injected crash after ledger SaveChanges"); }
@@ -903,7 +910,7 @@ public sealed partial class SimulatedPaymentTests(PostgresFixture fixture)
             throw new NotSupportedException("The failing ledger exercises receipts only.");
 
         // An outage while a payout is being posted: not a refusal by an accounting rule, a failure.
-        public Task<SettlementOutcome> PostSettlementAsync(Guid bankId, DateOnly bankDate, string payoutReference, IReadOnlyList<SettlementLineRequest> lines, CancellationToken ct) =>
+        public Task<SettlementOutcome> PostSettlementAsync(Guid bankId, DateOnly bankDate, string payoutReference, string receiptMemo, IReadOnlyList<SettlementLineRequest> lines, CancellationToken ct) =>
             throw new IOException("Injected failure while posting a payout");
     }
     private sealed class Harness(ApiFactory factory, WebApplicationFactory<Program> app, FixtureBinding binding, string suffix, PaymentClock clock) : IAsyncDisposable

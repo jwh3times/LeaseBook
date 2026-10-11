@@ -1,4 +1,12 @@
-/** Why a simulated payment waits for a person, in staff words. Keyed by the server's stable reason code. */
+import type { PaymentView } from '@/api';
+import type { Wording } from './wording';
+
+/**
+ * Why a payment waits for a person, in staff words. Keyed by the server's stable reason code. Two
+ * reasons are not here because their text is not fixed: `collection_failed` names the payment mode,
+ * and `return_requires_review` follows what the payment's view says of its receipt. Read a payment's
+ * reason through {@link paymentReason}.
+ */
 export const REASONS: Record<string, string> = {
   technical_failure:
     'Delivery or posting could not finish. An administrator can retry the same operation.',
@@ -30,7 +38,6 @@ export const REASONS: Record<string, string> = {
     'Settlement includes an unsupported amount, fee or destination. Review the evidence; no force-post action is available.',
   conflicting_evidence:
     'The evidence conflicts. Review the operation before taking further action.',
-  collection_failed: 'Collection failed. The tenant may submit a new simulated payment.',
   outcome_overdue:
     'The processor reported no outcome for this payment within seven days. Nothing was posted. Check the payment with the processor, then close the review.',
   accounting_rejected: 'Accounting rejected the receipt. Review the operation and ledger.',
@@ -39,8 +46,41 @@ export const REASONS: Record<string, string> = {
 };
 
 /**
- * Why a payout waits for a person (ADR-053). A payout posts completely or not at all, so every reason
- * here means nothing of it was posted.
+ * Why a payment waits, for the staff list. A return in review says only what the view carries: whether
+ * a receipt is on the ledger, and whether the evidence held can be posted as a return. Null when the
+ * payment has no reason.
+ */
+export function paymentReason(
+  payment: Pick<PaymentView, 'reason' | 'receiptRecorded' | 'canPostReturn'>,
+  words: Wording,
+): string | null {
+  const reason = payment.reason;
+  if (!reason) return null;
+  if (reason === 'collection_failed') return words.collectionFailed;
+  if (reason === 'return_requires_review') {
+    if (!payment.receiptRecorded)
+      return 'A return, refund or dispute was reported for this payment. No receipt has posted for it, so there is nothing to reverse and nothing was posted. Review the evidence, then close the review.';
+    if (!payment.canPostReturn)
+      return 'A return, refund or dispute was reported for this payment, and its receipt is on the ledger. No automatic reversal was made. The evidence held so far cannot be posted as a return. Review the evidence and the ledger, then close the review.';
+  }
+  return REASONS[reason] ?? 'Review required. Contact the fixture operator.';
+}
+
+/**
+ * What a tenant is told about a payment of theirs that waits for a person. The reason code and the
+ * staff text describe the ledger's and the owner's position, which is not the tenant's to read, so
+ * a tenant gets this whatever the reason is.
+ */
+export function tenantReviewNote(payment: Pick<PaymentView, 'receiptRecorded'>): string {
+  return payment.receiptRecorded
+    ? 'This payment is waiting for your property manager to check it.'
+    : 'This payment is waiting for your property manager to check it. Nothing has been recorded on your ledger.';
+}
+
+/**
+ * Why a payout waits for a person (ADR-053). A payout posts completely or not at all. Every reason
+ * here but `payout_failed` means nothing of it was posted; a payout can fail after it posted, so
+ * that one is worded by {@link payoutReason} from whether it did.
  */
 const PAYOUT_REASONS: Record<string, string> = {
   settlement_incomplete:
@@ -61,9 +101,18 @@ const PAYOUT_REASONS: Record<string, string> = {
     'Checking this payout could not finish. Post it to try again, or close the review.',
   conflicting_evidence:
     'The evidence for this payout conflicts with what is already recorded, so nothing was posted. Review it, then close the review.',
+  bank_amount_mismatch:
+    'The bank received a different amount from the one the processor says it paid, so nothing was posted. Review it, then close the review.',
+  bank_evidence_missing:
+    'No bank has confirmed this payout, so an administrator cannot post it and nothing was posted. It can be posted once the bank’s evidence arrives.',
 };
 
-export function payoutReason(reason: string): string {
+/** @param posted Whether the payout ever posted: its `postedAt` is set. */
+export function payoutReason(reason: string, posted = false): string {
+  if (reason === 'payout_failed')
+    return posted
+      ? 'The processor reported that this payout failed after it was posted. Nothing was reversed automatically, so the ledger still shows it. Correct the ledger, then close the review.'
+      : 'The processor reported that this payout failed. The payout was not posted, and nothing was reversed. Review it, then close the review.';
   if (PAYOUT_REASONS[reason]) return PAYOUT_REASONS[reason];
   if (reason.startsWith('return_') && REASONS[reason])
     return `A return in this payout cannot be posted. ${REASONS[reason]}`;

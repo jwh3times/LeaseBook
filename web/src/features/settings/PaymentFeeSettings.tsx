@@ -35,7 +35,8 @@ function read(initial: OrgSettings): Record<Method, Rule> {
 /**
  * The convenience-fee rule for each online payment method (ADR-053): a rate, a fixed amount and an
  * optional cap. The tenant pays the fee on top of the amount that goes to their ledger; the fee is
- * never in the ledger. Shown only where online payments exist, which today is the payment simulation.
+ * never in the ledger. Shown only where online payments exist, which today is the development
+ * payment fixture in either of its modes.
  * Both rules are saved together, by an administrator.
  */
 export function PaymentFeeSettings({ initial }: { initial: OrgSettings }) {

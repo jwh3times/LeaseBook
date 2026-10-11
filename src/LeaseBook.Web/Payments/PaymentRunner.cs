@@ -74,7 +74,7 @@ public sealed class PaymentRunner(IServiceScopeFactory scopes, SimulationSetting
                 return true;
             }, ct);
             log.LogInformation(new EventId(4600, "PaymentProcessed"),
-                "Simulated payment {OperationId} processed in {ElapsedMs} ms", id, Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+                "Online payment {OperationId} processed in {ElapsedMs} ms", id, Stopwatch.GetElapsedTime(started).TotalMilliseconds);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (Exception ex)
@@ -95,7 +95,7 @@ public sealed class PaymentRunner(IServiceScopeFactory scopes, SimulationSetting
                 return true;
             }, ct);
             log.LogWarning(new EventId(4601, "PaymentNeedsAttention"),
-                "Simulated payment {OperationId} attempt ended with {Reason}", id, reason);
+                "Online payment {OperationId} attempt ended with {Reason}", id, reason);
         }
     }
 
@@ -159,21 +159,37 @@ public sealed class PaymentRunner(IServiceScopeFactory scopes, SimulationSetting
             {
                 if (!await InOrg(binding, sp => sp.GetRequiredService<PaymentEngine>().MarkOverdueAsync(binding, payment.Id, ct), ct)) { continue; }
                 log.LogWarning(new EventId(4601, "PaymentNeedsAttention"),
-                    "Simulated payment {OperationId} sent to review with {Reason}", payment.Id, "outcome_overdue");
+                    "Online payment {OperationId} sent to review with {Reason}", payment.Id, "outcome_overdue");
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
             catch (Exception ex)
             {
                 // Its own transaction, rolled back. The others are aged all the same, and this one is offered again at the next sweep.
                 log.LogWarning(new EventId(4601, "PaymentNeedsAttention"),
-                    "Simulated payment {OperationId} could not be sent to review as overdue ({ExceptionType})", payment.Id, ex.GetType().Name);
+                    "Online payment {OperationId} could not be sent to review as overdue ({ExceptionType})", payment.Id, ex.GetType().Name);
             }
         }
     }
 
-    /// <summary>An authentic notice the processor adapter says is not this host's to act on.</summary>
+    /// <summary>
+    /// An authentic notice the processor adapter says is not this host's to act on. Stripe sends
+    /// every kind of event an account has, so in a sandbox host this is most of what arrives and is
+    /// said at Debug. The simulator's driver sends only what a fixture asked for, so there one is
+    /// worth a line.
+    /// </summary>
     public void Ignore() =>
-        log.LogInformation(new EventId(4602, "PaymentCallbackIgnored"), "Payment notice for no fixture here ignored");
+        log.Log(settings.Mode == PaymentModes.StripeSandbox ? LogLevel.Debug : LogLevel.Information,
+            new EventId(4602, "PaymentCallbackIgnored"), "Payment notice for no fixture here ignored");
+
+    /// <summary>
+    /// An authentic notice that could not be read because the processor would not answer what reading
+    /// it needs. Nothing was kept and the sender was told to send it again. The exception is named by
+    /// its type only: a processor's own text can repeat part of a key.
+    /// </summary>
+    public void Defer(Exception ex) =>
+        log.LogWarning(new EventId(4608, "PaymentCallbackDeferred"),
+            "Payment notice not read because the processor could not be asked about it ({ExceptionType}); refused so that it is sent again",
+            ex.GetType().Name);
 
     public async Task ReceiveAsync(ProcessorObservation observation, CancellationToken ct)
     {
@@ -183,7 +199,7 @@ public sealed class PaymentRunner(IServiceScopeFactory scopes, SimulationSetting
             || !(PaymentEngine.EventKinds.Contains(observation.Kind)
                 || (observation.Kind == PaymentEngine.ConflictKind && binding.Mode == PaymentModes.StripeSandbox)))
         {
-            log.LogInformation(new EventId(4602, "PaymentCallbackIgnored"), "Unmapped simulated payment observation ignored");
+            log.LogInformation(new EventId(4602, "PaymentCallbackIgnored"), "Unmapped payment observation ignored");
             return;
         }
         await InOrg(binding, async sp =>
@@ -202,12 +218,12 @@ public sealed class PaymentRunner(IServiceScopeFactory scopes, SimulationSetting
         var binding = settings.ForAccount(evidence.Account);
         if (binding is null || evidence.Mode != binding.Mode || evidence.Generation != binding.Generation)
         {
-            log.LogInformation(new EventId(4602, "PaymentCallbackIgnored"), "Unmapped simulated payout evidence ignored");
+            log.LogInformation(new EventId(4602, "PaymentCallbackIgnored"), "Unmapped payout evidence ignored");
             return new(null, false);
         }
         if (await InOrg(binding, sp => sp.GetRequiredService<SettlementEngine>().ReceiveAsync(binding, evidence, ct), ct) is not { } id)
         {
-            log.LogInformation(new EventId(4602, "PaymentCallbackIgnored"), "Malformed simulated payout evidence refused");
+            log.LogInformation(new EventId(4602, "PaymentCallbackIgnored"), "Malformed payout evidence refused");
             return new(null, true);
         }
         await EvaluateAsync(binding, id, ct);
@@ -271,7 +287,7 @@ public sealed class PaymentRunner(IServiceScopeFactory scopes, SimulationSetting
         {
             var settlement = await InOrg(binding, sp => sp.GetRequiredService<SettlementEngine>().EvaluateAsync(binding, id, null, ct), ct);
             log.LogInformation(new EventId(4604, "PaymentSettlementEvaluated"),
-                "Simulated payout {SettlementId} is {Status} ({Reason})", id, settlement?.Status, settlement?.Reason ?? "none");
+                "Payout {SettlementId} is {Status} ({Reason})", id, settlement?.Status, settlement?.Reason ?? "none");
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (PaymentConflictException)
@@ -288,7 +304,7 @@ public sealed class PaymentRunner(IServiceScopeFactory scopes, SimulationSetting
                 return true;
             }, ct);
             log.LogWarning(new EventId(4605, "PaymentSettlementNeedsAttention"),
-                "Simulated payout {SettlementId} could not be checked ({ExceptionType})", id, ex.GetType().Name);
+                "Payout {SettlementId} could not be checked ({ExceptionType})", id, ex.GetType().Name);
         }
     }
 

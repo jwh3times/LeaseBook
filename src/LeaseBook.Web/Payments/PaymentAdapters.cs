@@ -11,9 +11,8 @@ namespace LeaseBook.Web.Payments;
 internal sealed partial class PaymentLedgerAdapter(ISender sender) : IPaymentLedger
 {
     public async Task<Guid> RecordSettledReceiptAsync(Guid tenantId, Guid bankId, decimal amount,
-        DateOnly date, string method, string sourceRef, CancellationToken ct) =>
-        (await sender.Send(new RecordPayment(tenantId, amount, date, method, bankId,
-            "Simulated tenant payment", sourceRef), ct)).EntryId;
+        DateOnly date, string method, string memo, string sourceRef, CancellationToken ct) =>
+        (await sender.Send(new RecordPayment(tenantId, amount, date, method, bankId, memo, sourceRef), ct)).EntryId;
 
     public async Task<PaymentReturnOutcome> ReturnSettledReceiptAsync(Guid receiptJournalId, DateOnly date,
         string sourceRef, string note, CancellationToken ct)
@@ -37,13 +36,13 @@ internal sealed partial class PaymentLedgerAdapter(ISender sender) : IPaymentLed
 internal sealed partial class PaymentLedgerAdapter
 {
     public async Task<SettlementOutcome> PostSettlementAsync(Guid bankId, DateOnly bankDate, string payoutReference,
-        IReadOnlyList<SettlementLineRequest> lines, CancellationToken ct)
+        string receiptMemo, IReadOnlyList<SettlementLineRequest> lines, CancellationToken ct)
     {
         var result = await sender.Send(new PostPaymentSettlement(bankId, bankDate, payoutReference, lines.Select(
             SettlementLine (line) => line.Kind switch
             {
                 SettlementItemKinds.Payment => new SettlementReceipt(line.Item, line.TenantId!.Value, line.Amount,
-                    line.Method, "Simulated tenant payment", line.FeeDifference),
+                    line.Method, receiptMemo, line.FeeDifference),
                 SettlementItemKinds.Return => new SettlementReturn(line.Item, line.ReceiptJournalId!.Value, line.FeeDifference),
                 _ => new SettlementFee(line.Item, line.FeeDifference),
             }).ToArray()), ct);

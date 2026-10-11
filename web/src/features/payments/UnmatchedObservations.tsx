@@ -32,7 +32,7 @@ const COLUMNS: TableColumn<UnmatchedObservationView>[] = [
 ];
 
 /**
- * The simulated bank and processor notifications that no payment answers for (#491). Read-only: staff
+ * The bank and processor notifications that no payment answers for (#491), in either payment mode. Read-only: staff
  * can see what arrived, not attach it to a payment. The list is read only once it is opened.
  */
 export function UnmatchedObservations({ count }: { count: number }) {

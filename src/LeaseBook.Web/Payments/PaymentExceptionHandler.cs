@@ -34,7 +34,7 @@ public sealed class PaymentExceptionHandler(ILogger<PaymentExceptionHandler> log
         if (exception is not (PaymentConflictException or PaymentUnavailableException)) { return false; }
         var conflict = exception is PaymentConflictException;
         await ProblemResults.Problem(context, conflict ? "payment_conflict" : "payment_unavailable",
-            conflict ? "This payment request conflicts with an existing operation." : "Simulated payments are unavailable for this account.",
+            conflict ? "This payment request conflicts with an existing operation." : "Online payments are unavailable for this account.",
             conflict ? 409 : 422).ExecuteAsync(context);
         return true;
     }

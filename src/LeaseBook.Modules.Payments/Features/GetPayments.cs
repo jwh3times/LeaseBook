@@ -1,4 +1,5 @@
 using LeaseBook.Modules.Payments.Domain;
+using LeaseBook.Modules.Payments.Processing;
 using LeaseBook.SharedKernel.Cqrs;
 using Microsoft.EntityFrameworkCore;
 
@@ -30,12 +31,16 @@ public sealed record PaymentView(Guid Id, decimal Amount, string Currency, strin
     /// <summary>
     /// The staff view: adds the review actions, the journal references and the closing note. A tenant
     /// gets <see cref="From"/>, which carries none of them — the note is written for staff.
+    /// <paramref name="facts"/> is everything held under the payment's reference, needed only for a
+    /// payment whose return awaits a decision. The action is offered by the engine's own rule: not
+    /// for evidence it would refuse however often it was asked, such as a refund, a dispute, or a
+    /// return a processor reported that no bank has completed.
     /// </summary>
-    public static PaymentView ForStaff(PaymentOperation op, string? evidenceReference, Guid? returnEntryId) =>
+    public static PaymentView ForStaff(PaymentOperation op, string? evidenceReference, Guid? returnEntryId,
+        IReadOnlyCollection<PaymentObservation> facts) =>
         From(op, evidenceReference) with
         {
-            CanPostReturn = op.Status == "NeedsReview" && op.JournalId is not null
-                && op.Reason?.StartsWith("return_", StringComparison.Ordinal) == true,
+            CanPostReturn = PaymentEngine.ReturnAwaitsDecision(op) && PaymentEngine.ReturnEvidenceRefusal(op, facts) is null,
             CanCloseReview = op.Status == "NeedsReview" && op.Reason != "technical_failure",
             Reason = op.Reason,
             ReceiptEntryId = op.JournalId,
@@ -66,8 +71,15 @@ internal sealed class GetPaymentsHandler(DbContext db) : IQueryHandler<GetPaymen
         var returned = await db.Set<PaymentEffect>().AsNoTracking()
             .Where(x => ids.Contains(x.OperationId) && x.Kind == "Return")
             .ToDictionaryAsync(x => x.OperationId, x => x.JournalId, ct);
+        // What is held for each payment whose return awaits a decision, and for no other: the same
+        // facts the engine reads when it is asked to post one.
+        var awaiting = rows.Where(PaymentEngine.ReturnAwaitsDecision).Select(x => x.ProviderId!).ToArray();
+        List<PaymentObservation> held = awaiting.Length == 0 ? [] : await db.Set<PaymentObservation>().AsNoTracking()
+            .Where(x => awaiting.Contains(x.ProviderId)).ToListAsync(ct);
+        var facts = held.ToLookup(x => x.ProviderId);
         return rows.Select(x => PaymentView.ForStaff(x, Evidence(x),
-            returned.TryGetValue(x.Id, out var entryId) ? entryId : null)).ToArray();
+            returned.TryGetValue(x.Id, out var entryId) ? entryId : null,
+            x.ProviderId is null ? [] : [.. facts[x.ProviderId]])).ToArray();
     }
 }
 

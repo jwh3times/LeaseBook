@@ -14,13 +14,22 @@ public sealed record SettlementItemView(string Item, string Kind, Guid? PaymentI
 /// A payout batch as staff see it (ADR-053): the bank amount and date, why it is waiting if it is, and
 /// its lines. Staff-only; no tenant surface reads a payout.
 /// </summary>
+/// <param name="BankDate">The day the bank says it received the payout. Null until a bank has spoken.</param>
+/// <param name="BankAmount">
+/// What the bank says it received. Null until a bank has spoken: the zero such a payout is stored
+/// with is no evidence of anything, and is never shown as one.
+/// </param>
+/// <param name="PostedAt">
+/// When the payout posted, if it ever did, whatever its status is now. A payout the processor later
+/// said failed goes to review and keeps this, since nothing it posted is reversed; a payout in
+/// review or closed with no time here posted nothing.
+/// </param>
 /// <param name="ProcessorAmount">
 /// What the processor says the payout comes to, for a payout it reported apart from any bank
-/// (ADR-054). While such a payout waits for the bank, <paramref name="BankAmount"/> is zero and
-/// <paramref name="BankDate"/> is no date: this is the only figure there is.
+/// (ADR-054). While such a payout waits for the bank this is the only figure there is.
 /// </param>
 /// <param name="FailedAt">When the processor said the payout failed, if it did. Nothing is reversed for it.</param>
-public sealed record SettlementView(Guid Id, string PayoutReference, DateOnly BankDate, decimal BankAmount,
+public sealed record SettlementView(Guid Id, string PayoutReference, DateOnly? BankDate, decimal? BankAmount,
     string Status, string? Reason, string? ReasonItem, DateTime CreatedAt, DateTime? PostedAt, string? ReviewNote,
     DateTime? ReviewClosedAt, bool CanPost, bool CanClose, IReadOnlyList<SettlementItemView> Items,
     decimal? ProcessorAmount = null, DateTime? FailedAt = null);
@@ -41,7 +50,7 @@ internal sealed class GetSettlementsHandler(DbContext db) : IQueryHandler<GetSet
         var payments = await db.Set<PaymentOperation>().AsNoTracking()
             .Where(x => x.ProviderId != null && providerIds.Contains(x.ProviderId))
             .ToDictionaryAsync(x => x.ProviderId!, x => x.Id, ct);
-        return rows.Select(x => new SettlementView(x.Id, x.PayoutId, x.BankDate, x.BankAmount, x.Status, x.Reason,
+        return rows.Select(x => new SettlementView(x.Id, x.PayoutId, x.Banked ? x.BankDate : null, x.Banked ? x.BankAmount : null, x.Status, x.Reason,
             x.ReasonItem, x.CreatedAt, x.PostedAt, x.ReviewNote, x.ReviewClosedAt,
             // Conflicting evidence cannot be posted whatever a person decides; it can only be closed.
             // Nor can a payout the processor says failed, one the bank received another amount for,

@@ -11,6 +11,23 @@ public static class PaymentModes
     public const string StripeSandbox = "StripeSandbox";
 }
 
+/// <summary>
+/// What a posting says of the payment it is for, by the mode of the evidence it is posted from: the
+/// mode stored on the bank evidence or on the payout, never the host's and never a capability. The
+/// words are all that differ between modes. What is posted, to which accounts, on what date and
+/// under what reference is the same.
+/// </summary>
+public static class PaymentMemos
+{
+    /// <summary>The description of a tenant's receipt.</summary>
+    public static string Receipt(string mode) =>
+        mode == PaymentModes.StripeSandbox ? "Stripe sandbox tenant payment" : "Simulated tenant payment";
+
+    /// <summary>The staff note on the reversal that posts a bank's return of a receipt.</summary>
+    public static string Returned(string mode) => mode == PaymentModes.StripeSandbox
+        ? "Bank returned this Stripe sandbox tenant payment." : "Bank returned this simulated tenant payment.";
+}
+
 public sealed record FixtureBinding(Guid OrgId, Guid Generation, Guid BankId, string Account)
 {
     /// <summary>

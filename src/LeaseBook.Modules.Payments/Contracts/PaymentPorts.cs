@@ -2,8 +2,9 @@ namespace LeaseBook.Modules.Payments.Contracts;
 
 public interface IPaymentLedger
 {
+    /// <summary>Posts a tenant's receipt. <paramref name="memo"/> is its description, which names the mode that collected it.</summary>
     Task<Guid> RecordSettledReceiptAsync(Guid tenantId, Guid bankId, decimal amount, DateOnly date,
-        string method, string sourceRef, CancellationToken ct);
+        string method, string memo, string sourceRef, CancellationToken ct);
 
     /// <summary>
     /// Posts the bank's return of a settled receipt as its linked reversal, dated <paramref name="date"/>.
@@ -16,9 +17,10 @@ public interface IPaymentLedger
     /// <summary>
     /// Posts one payout as a batch on the bank date, completely or not at all. A refusal by an
     /// accounting rule is a result and leaves this transaction usable, so the caller can record it.
+    /// <paramref name="receiptMemo"/> is the description of every receipt in it.
     /// </summary>
     Task<SettlementOutcome> PostSettlementAsync(Guid bankId, DateOnly bankDate, string payoutReference,
-        IReadOnlyList<SettlementLineRequest> lines, CancellationToken ct);
+        string receiptMemo, IReadOnlyList<SettlementLineRequest> lines, CancellationToken ct);
 }
 
 /// <summary>

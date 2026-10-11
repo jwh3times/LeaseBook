@@ -265,4 +265,177 @@ describe('payout batches', () => {
     expect(item).toHaveTextContent('An administrator can act on this payout.');
     expect(within(item).queryByRole('button')).not.toBeInTheDocument();
   });
+
+  // A sandbox payout as the processor first reports it: no bank has said anything (ADR-054).
+  const held = payout({
+    status: 'AwaitingBank',
+    bankAmount: null,
+    bankDate: null,
+    postedAt: null,
+    processorAmount: 992.5,
+    failedAt: null,
+    canPost: false,
+    canClose: true,
+    items: [line('1', 'Payment', 515.24, 22.74, 492.5), line('2', 'Payment', 500, 0, 500)],
+  });
+  const shows = async (...items: object[]) => {
+    server.use(http.get('/api/payments/settlements', () => HttpResponse.json({ items })));
+    show();
+    return screen.findByRole('listitem', { name: 'Payout po_1' });
+  };
+
+  it('shows a held payout as waiting for the bank, with the processor’s amount and no bank amount or date', async () => {
+    const item = await shows(held);
+    expect(within(item).getByText('Waiting for the bank')).toBeVisible();
+    expect(item).toHaveTextContent(
+      'No bank evidence has arrived for this payout. Nothing posts until the bank says what it received.',
+    );
+    expect(item).toHaveTextContent('Processor’s payout amount: $992.50');
+    expect(item).not.toHaveTextContent(/at the bank on/);
+    expect(item).not.toHaveTextContent('$0.00');
+    expect(item).not.toHaveTextContent(/null|NaN|Invalid/);
+    // It cannot be posted, and can still be closed: the evidence may never come.
+    expect(within(item).queryByRole('button', { name: /Post payout/ })).not.toBeInTheDocument();
+    expect(within(item).getByRole('button', { name: 'Close review of payout po_1' })).toBeEnabled();
+  });
+
+  it('never shows a bank amount or date for a payout with none, whatever its status', async () => {
+    const item = await shows(
+      payout({
+        ...held,
+        status: 'NeedsReview',
+        reason: 'payout_failed',
+        failedAt: '2026-02-07T09:30:00Z',
+      }),
+    );
+    expect(item).toHaveTextContent('No bank evidence has arrived for this payout.');
+    expect(item).not.toHaveTextContent(/Nothing posts until/);
+    expect(item).not.toHaveTextContent(/at the bank on/);
+    expect(item).not.toHaveTextContent('$0.00');
+  });
+
+  it('says a payout that failed before posting was not posted, and when the processor reported it', async () => {
+    const item = await shows(
+      payout({
+        ...held,
+        status: 'NeedsReview',
+        reason: 'payout_failed',
+        failedAt: '2026-02-07T09:30:00Z',
+      }),
+    );
+    expect(within(item).getByText('Needs review — nothing posted')).toBeVisible();
+    expect(item).toHaveTextContent(
+      'The processor reported that this payout failed. The payout was not posted, and nothing was reversed. Review it, then close the review.',
+    );
+    const failed = within(item).getByText(new Date('2026-02-07T09:30:00Z').toLocaleString());
+    expect(failed).toHaveAttribute('datetime', '2026-02-07T09:30:00Z');
+    expect(failed.parentElement).toHaveTextContent(
+      /^The processor reported that this payout failed on .+\.$/,
+    );
+    expect(within(item).queryByRole('button', { name: /Post payout/ })).not.toBeInTheDocument();
+  });
+
+  it('says a payout that failed after posting posted and was not reversed, never that nothing posted', async () => {
+    const item = await shows(
+      payout({
+        status: 'NeedsReview',
+        reason: 'payout_failed',
+        processorAmount: 992.5,
+        failedAt: '2026-02-09T09:30:00Z',
+        canClose: true,
+      }),
+    );
+    expect(within(item).getByText('Needs review — posted, nothing reversed')).toBeVisible();
+    expect(item).not.toHaveTextContent(/nothing posted/);
+    expect(item).toHaveTextContent(
+      'The processor reported that this payout failed after it was posted. Nothing was reversed automatically, so the ledger still shows it. Correct the ledger, then close the review.',
+    );
+    expect(item).toHaveTextContent('$992.50 at the bank on 2026-02-06');
+  });
+
+  it('keeps saying a closed payout posted when it did', async () => {
+    const item = await shows(
+      payout({ status: 'Closed', reason: 'payout_failed', failedAt: '2026-02-09T09:30:00Z' }),
+    );
+    expect(within(item).getByText('Closed — posted, nothing reversed')).toBeVisible();
+    expect(item).not.toHaveTextContent(/nothing posted/);
+    // Closed: the code stays, the instruction does not.
+    expect(item).toHaveTextContent('Reason: payout_failed');
+    expect(item).not.toHaveTextContent(/Correct the ledger/);
+  });
+
+  it('says the bank and the processor disagree on the amount, and shows both', async () => {
+    const item = await shows(
+      payout({
+        status: 'NeedsReview',
+        reason: 'bank_amount_mismatch',
+        postedAt: null,
+        bankAmount: 990,
+        processorAmount: 992.5,
+        canClose: true,
+      }),
+    );
+    expect(within(item).getByText('Needs review — nothing posted')).toBeVisible();
+    expect(item).toHaveTextContent(
+      'The bank received a different amount from the one the processor says it paid, so nothing was posted. Review it, then close the review.',
+    );
+    expect(item).toHaveTextContent('$990.00 at the bank on 2026-02-06');
+    expect(item).toHaveTextContent('Processor’s payout amount: $992.50');
+  });
+
+  it('shows no processor amount for a payout the processor did not report apart from the bank', async () => {
+    const item = await shows(payout());
+    expect(item).not.toHaveTextContent(/Processor’s payout amount/);
+    expect(item).not.toHaveTextContent(/No bank evidence/);
+  });
+
+  it('names every line kind in words, and an unknown or empty one as unrecognised', async () => {
+    const item = await shows(
+      payout({
+        items: ['Dispute', 'Refund', 'FailedDebit', 'Unknown', 'Reserve', ''].map((kind, index) =>
+          line(String(index + 1), kind, 10, 0, -10),
+        ),
+      }),
+    );
+    expect(
+      within(item)
+        .getAllByRole('row')
+        .slice(1)
+        .map((row) => within(row).getAllByRole('cell')[1]!.textContent),
+    ).toEqual([
+      'Card dispute',
+      'Refund',
+      'Failed bank debit',
+      'Unrecognised line',
+      'Unrecognised line (Reserve)',
+      'Unrecognised line',
+    ]);
+  });
+
+  it('tells an administrator in words that a payout no bank has confirmed cannot be posted', async () => {
+    // The action is not offered for a held payout; this is the list being a moment out of date.
+    const stale = payout({ ...held, status: 'Received', canPost: true });
+    server.use(
+      http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 })),
+      http.post('/api/payments/settlements/settlement-1/post', () =>
+        HttpResponse.json(
+          {
+            code: 'bank_evidence_missing',
+            title: 'bank_evidence_missing',
+            detail: 'The bank has not yet confirmed this payout, so nothing was posted.',
+            correlationId: '1234567890abcdef1234567890abcdef',
+          },
+          { status: 409 },
+        ),
+      ),
+    );
+    const item = await shows(stale);
+    await userEvent.click(within(item).getByRole('button', { name: 'Post payout po_1' }));
+    const alert = await within(item).findByRole('alert');
+    expect(alert).toHaveTextContent(
+      'The bank has not yet confirmed this payout, so nothing was posted.',
+    );
+    expect(alert).toHaveTextContent('Reference: 1234567890abcdef1234567890abcdef');
+    expect(alert).not.toHaveTextContent('bank_evidence_missing');
+  });
 });

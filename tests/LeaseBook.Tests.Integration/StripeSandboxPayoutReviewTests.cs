@@ -357,7 +357,8 @@ public sealed partial class StripeSandboxHostTests
 
         var delivered = await h.Deliver(paid, ct);
 
-        delivered.Status.ShouldBe(HttpStatusCode.InternalServerError, delivered.Body);
+        delivered.Status.ShouldBe(HttpStatusCode.ServiceUnavailable, delivered.Body);
+        ((string?)JsonNode.Parse(delivered.Body)!["code"]).ShouldBe("payment_callback_deferred");
         delivered.Commands.ShouldBe(0);
         sandbox.LineRequests.ShouldBeEmpty();
         (await Payouts(h, ct)).ShouldBeEmpty();
