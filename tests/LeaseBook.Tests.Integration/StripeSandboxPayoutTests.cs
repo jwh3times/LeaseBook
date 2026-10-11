@@ -498,7 +498,7 @@ public sealed partial class StripeSandboxHostTests
 
         // An administrator cannot post it either. Only a bank's evidence releases it, and no route supplies that.
         var view = await View(h, payout.Id, ct);
-        (view.Status, view.CanPost, view.CanClose, view.BankAmount).ShouldBe(("AwaitingBank", false, true, 0m));
+        (view.Status, view.CanPost, view.CanClose, view.BankAmount, view.ProcessorAmount, view.FailedAt).ShouldBe(("AwaitingBank", false, true, 0m, 198.40m, null));
         (await Post(h, payout.Id, ct)).Refusal.ShouldBe("bank_evidence_missing");
         (await Stored(h, Payout, ct)).Payout.Status.ShouldBe("AwaitingBank");
         (await h.JournalEntries(ct)).ShouldBe(entries);
@@ -935,7 +935,7 @@ public sealed partial class StripeSandboxHostTests
         (await h.JournalEntries(ct)).ShouldBe(entries);
         (await h.Operation(payment.Id, ct)).Status.ShouldBe(status);
         var view = await View(h, payout.Id, ct);
-        (view.CanPost, view.CanClose).ShouldBe((false, true));
+        (view.CanPost, view.CanClose, view.FailedAt, view.ProcessorAmount).ShouldBe((false, true, payout.FailedAt, 198.40m));
 
         // Nothing that comes afterwards posts: the paid event again or for the first time, a bank's
         // evidence, an administrator. The failure again does not reopen what a person closes.

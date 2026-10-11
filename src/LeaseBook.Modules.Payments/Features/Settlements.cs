@@ -14,9 +14,16 @@ public sealed record SettlementItemView(string Item, string Kind, Guid? PaymentI
 /// A payout batch as staff see it (ADR-053): the bank amount and date, why it is waiting if it is, and
 /// its lines. Staff-only; no tenant surface reads a payout.
 /// </summary>
+/// <param name="ProcessorAmount">
+/// What the processor says the payout comes to, for a payout it reported apart from any bank
+/// (ADR-054). While such a payout waits for the bank, <paramref name="BankAmount"/> is zero and
+/// <paramref name="BankDate"/> is no date: this is the only figure there is.
+/// </param>
+/// <param name="FailedAt">When the processor said the payout failed, if it did. Nothing is reversed for it.</param>
 public sealed record SettlementView(Guid Id, string PayoutReference, DateOnly BankDate, decimal BankAmount,
     string Status, string? Reason, string? ReasonItem, DateTime CreatedAt, DateTime? PostedAt, string? ReviewNote,
-    DateTime? ReviewClosedAt, bool CanPost, bool CanClose, IReadOnlyList<SettlementItemView> Items);
+    DateTime? ReviewClosedAt, bool CanPost, bool CanClose, IReadOnlyList<SettlementItemView> Items,
+    decimal? ProcessorAmount = null, DateTime? FailedAt = null);
 
 /// <summary>The newest payouts, at most 100, or the one named.</summary>
 public sealed record GetSettlements(Guid? Id = null) : IQuery<IReadOnlyList<SettlementView>>;
@@ -47,7 +54,8 @@ internal sealed class GetSettlementsHandler(DbContext db) : IQueryHandler<GetSet
             items.Where(i => i.SettlementId == x.Id).OrderBy(i => i.Item, StringComparer.Ordinal)
                 .Select(i => new SettlementItemView(i.Item, i.Kind,
                     payments.TryGetValue(i.ProviderId, out var paymentId) ? paymentId : null,
-                    i.Gross, i.Fee, i.Net, i.EntryId, i.FeeEntryId)).ToArray())).ToArray();
+                    i.Gross, i.Fee, i.Net, i.EntryId, i.FeeEntryId)).ToArray(),
+            x.ProcessorAmount, x.FailedAt)).ToArray();
     }
 }
 

@@ -1164,6 +1164,8 @@ export type SettlementView = {
     canPost: boolean;
     canClose: boolean;
     items: Array<SettlementItemView>;
+    processorAmount?: null | number | string;
+    failedAt?: null | string;
 };
 
 export type SettlementsResponse = {

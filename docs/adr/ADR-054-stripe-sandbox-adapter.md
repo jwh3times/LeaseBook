@@ -301,6 +301,82 @@ in the worker, with up to two requests for each disputed payment in them; a host
 than fifteen minutes ahead of Stripe's can miss an event between sweeps until it restarts; and a card
 dispute's closing event can arrive weeks later and reopens a closed review without saying what is new.
 
+**Implementation note, 2026-10-11 (payouts).** The adapter now reads payouts. A payout Stripe marks
+paid is stored with Stripe's own list of its balance lines and held, with no journal effect. Bank
+evidence from a fixture-only command releases it: an amount equal to Stripe's net posts every line
+or none through the existing settlement path, and any other amount sends the payout to review. No
+posting template, money path or capability was added. This step was built on recorded payloads and
+has not yet been run against a sandbox. These points were settled in code, on the same terms as the
+notes above:
+
+- **The seam has a third read.** A payout with its bank evidence, which is what the simulator
+  delivers, and a processor's own account of a payout are different things, so the second has its own
+  read and its own type, which carries no bank amount, date or evidence. Stripe's adapter answers
+  "not ours" to the first for every event; the simulator answers it to the second. The recovery
+  result carries payouts beside observations, and the Stripe callback route offers an event to the
+  payout reader when the payment reader passes it over.
+- **Two events are read.** `payout.paid` and `payout.failed`. The other four payout events are
+  acknowledged and dropped. Both are in the sweep's filter, which now names nine types.
+- **A payout belongs to the fixture bound to its account.** It carries no generation, so every
+  payout on a bound account is stored, older generations' and the probe's included. Whose payments it
+  holds is found line by line.
+- **Reading a paid payout asks for its lines.** Its balance transactions with their sources, every
+  page, by the payout's id; and, for each dispute among them, the disputed charge, as a dispute event
+  asks. A list that cannot be had whole is thrown: a delivery then answers 500, and a sweep passes
+  the event over and asks for the same window again. Nothing is stored of half a payout.
+- **How a line is stored.** The payout's own line is Stripe's net and not an item. A `charge` or
+  `payment` line whose charge names a payment is a Payment. An `adjustment` for a dispute is a Return
+  for the whole charge with nothing given back, and a Fee beside it under the line's reference with
+  `.fee` added, only when the charge confirms an ACH debit and the line is in USD, takes money back
+  and nets to its amount less its fee. Any other dispute line is a Dispute; `refund` and
+  `payment_refund` are a Refund; `payment_failure_refund` is a FailedDebit; anything else is Unknown.
+  Those four kinds are stored with Stripe's own signed figures and are kinds nothing posts. No line
+  is skipped, and a line for a payment LeaseBook does not know keeps the reference Stripe gave it.
+- **A manual payout is not asked about.** It is stored without lines under the type `manual`. An
+  automatic payout keeps Stripe's method as its type, so an instant one is unsupported as before.
+  A payout's unsupported type is now judged before whether it has any lines. This is in the shared
+  check: a simulated payout with no lines and a type other than `standard` now reads
+  `unsupported_settlement` where it read `settlement_incomplete`.
+- **A held payout is a status, not a table.** `AwaitingBank`, with three columns on the payout: its
+  mode, the processor's figure, and when the processor said it failed. The bank amount is zero and
+  the bank date and evidence reference are empty until a bank has spoken.
+- **A payout is checked when it arrives, without the bank.** Its lines are tied to Stripe's figure
+  and judged as the specification says. One that could not post goes to review at once under that
+  reason; any other waits. Nothing posts for a payout no bank has spoken for, whoever asks: an
+  administrator who tries is told `bank_evidence_missing`.
+- **Bank evidence.** `payment-simulation bank <org-id> <stripe-payout-id> <bank-amount> <bank-date>`.
+  The body is signed with the fixture key under a purpose of its own, so a simulator notice cannot be
+  presented as bank evidence, and is verified only in a sandbox host and within 300 seconds. Evidence
+  is stored for any payout the processor reported by itself, whatever its status. For one that was
+  only waiting it is followed by the check and the posting. For one already in review it is kept and
+  nothing is rechecked until an administrator posts. The same amount and date again change nothing;
+  different ones are not stored and mark the payout `conflicting_evidence`, a later correct amount
+  included.
+- **A bank amount that is not Stripe's net is `bank_amount_mismatch`.** It is judged before anything
+  the lines say. Such a payout cannot be posted and can only be closed.
+- **A failed payout is `payout_failed`.** The time is stored once. It sends the payout to review
+  from any state, a posted or closed one included, and such a payout can only be closed. What it
+  posted stays posted and its payments stay as they were; the time it posted is kept. A failure that
+  arrives before the paid event stores the payout without lines, and a paid event after a failure
+  changes nothing.
+- **Carried from the earlier steps, in the shared engine.** A payout's return line is taken only for
+  a payment that is settled or whose review holds a return, and never when a refund, a dispute or a
+  conflict has been stored for it. A payment line is refused while a failure, return, refund, dispute
+  or conflict is stored for the payment, judged or not; the check now takes the lock a fact is stored
+  under, for every payment the payout names. A failed attempt on a receipted payment gives up its
+  lease and is retried on the usual schedule, then rests until the next fact. A payout is found by
+  account, mode and reference. A dispute fact is still never complete: a return posts only inside a
+  payout an administrator posts.
+
+Two payloads this step needed have not been recorded and were built from recorded ones: a
+`payout.failed` event, which is the recorded payout with status `failed`, and a refund line in a
+payout, which is a recorded charge line under Stripe's type name.
+
+Accepted, to revisit before the ADR is accepted: each sweep reads again the lines of every payout
+paid inside its overlap, and a host's first sweep those of every payout in 29 days; a receipted
+payment whose late fact cannot be judged after five tries rests until the next fact arrives; and
+the staff surface shows a held payout by its raw status with a bank amount of zero.
+
 The provisional assumptions of ADR-053 stay open. This ADR verifies none of them, and nothing here
 is approval to move real money.
 
