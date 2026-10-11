@@ -305,9 +305,8 @@ dispute's closing event can arrive weeks later and reopens a closed review witho
 paid is stored with Stripe's own list of its balance lines and held, with no journal effect. Bank
 evidence from a fixture-only command releases it: an amount equal to Stripe's net posts every line
 or none through the existing settlement path, and any other amount sends the payout to review. No
-posting template, money path or capability was added. This step was built on recorded payloads and
-has not yet been run against a sandbox. These points were settled in code, on the same terms as the
-notes above:
+posting template, money path or capability was added. These points were settled in code, on the same
+terms as the notes above:
 
 - **The seam has a third read.** A payout with its bank evidence, which is what the simulator
   delivers, and a processor's own account of a payout are different things, so the second has its own
@@ -383,6 +382,16 @@ notes above:
 Two payloads this step needed have not been recorded and were built from recorded ones: a
 `payout.failed` event, which is the recorded payout with status `failed`, and a refund line in a
 payout, which is a recorded charge line under Stripe's type name.
+
+It was run against a sandbox on 2026-10-11, on a copy of the fixture database. The host's first
+sweep read the one payout the sandbox has made, asked Stripe for its lines, and stored it with a
+processor amount of $1,470.60 and fifteen lines that sum to it: nine payments, two returned ACH
+debits each with its $15.00 fee beside it, and two failed debits. It went to review as unsupported,
+for the failed debits. Bank evidence dated after today was refused. Bank evidence of $1,470.60 was
+recorded and left the payout in review; the same again changed nothing; $1,470.59 was refused as
+conflicting evidence. No journal entry and no payment effect was written at any point. A payout that
+posts has not been shown in a sandbox: the sandbox has made no payout holding only this fixture's
+good payments. That check is still to do.
 
 Accepted, to revisit before the ADR is accepted: each sweep reads again the lines of every payout
 paid inside its overlap, and a host's first sweep those of every payout in 29 days; a receipted
