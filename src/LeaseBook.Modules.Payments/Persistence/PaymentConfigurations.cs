@@ -92,8 +92,13 @@ public sealed class PaymentSettlementConfiguration : IEntityTypeConfiguration<Pa
     {
         // No currency constraint, on purpose: evidence in another currency is stored as it arrived and
         // held as unsupported. A constraint would refuse to store it, and the provider would redeliver forever.
-        b.ToTable("payment_settlements", t => t.HasCheckConstraint(
-            "ck_payment_settlement_status", "status IN ('Received','AwaitingBank','NeedsReview','Posted','Closed')"));
+        b.ToTable("payment_settlements", t =>
+        {
+            t.HasCheckConstraint("ck_payment_settlement_status", "status IN ('Received','AwaitingBank','NeedsReview','Posted','Closed')");
+            // Nothing posts without a bank's word, whatever the code above this table does: a payout
+            // marked posted holds the reference of the bank evidence it posted from.
+            t.HasCheckConstraint("ck_payment_settlement_posted_banked", "status <> 'Posted' OR evidence_id <> ''");
+        });
         b.HasKey(x => x.Id);
         b.HasAlternateKey(x => new { x.OrgId, x.Id }).HasName("ak_payment_settlements_org_id_id");
         b.HasIndex(x => new { x.OrgId, x.Account, x.Mode, x.PayoutId }).IsUnique();

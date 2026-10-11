@@ -12,9 +12,11 @@ namespace LeaseBook.Web.Migrations
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             // A payout a processor reports apart from any bank (ADR-054) is stored and held. No table is
-            // added and no row is rewritten: three columns, one more status, and the payout's mode in
-            // the key it is found by. Every payout stored before this was the simulator's, which the
-            // column default says; the default is DDL, so no row-level-security bracket is needed.
+            // added and no row is rewritten: three columns, one more status, the payout's mode in the
+            // key it is found by, and a constraint that a posted payout holds bank evidence. Every
+            // payout stored before this was the simulator's, which the column default says, and none
+            // of those was stored without an evidence reference. The default is DDL, so no
+            // row-level-security bracket is needed.
             migrationBuilder.DropIndex(
                 name: "ix_payment_settlements_org_id_account_payout_id",
                 table: "payment_settlements");
@@ -52,6 +54,11 @@ namespace LeaseBook.Web.Migrations
                 unique: true);
 
             migrationBuilder.AddCheckConstraint(
+                name: "ck_payment_settlement_posted_banked",
+                table: "payment_settlements",
+                sql: "status <> 'Posted' OR evidence_id <> ''");
+
+            migrationBuilder.AddCheckConstraint(
                 name: "ck_payment_settlement_status",
                 table: "payment_settlements",
                 sql: "status IN ('Received','AwaitingBank','NeedsReview','Posted','Closed')");
@@ -62,6 +69,10 @@ namespace LeaseBook.Web.Migrations
         {
             migrationBuilder.DropIndex(
                 name: "ix_payment_settlements_org_id_account_mode_payout_id",
+                table: "payment_settlements");
+
+            migrationBuilder.DropCheckConstraint(
+                name: "ck_payment_settlement_posted_banked",
                 table: "payment_settlements");
 
             migrationBuilder.DropCheckConstraint(

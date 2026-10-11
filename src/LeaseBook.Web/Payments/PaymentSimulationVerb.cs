@@ -103,6 +103,12 @@ internal sealed class PaymentSimulationVerb : ICliVerb
             return 1;
         }
         var binding = settings.ForOrg(orgId) ?? throw new PaymentUnavailableException();
+        // Said here so that the operator is told why. The engine refuses it too, whoever calls.
+        if (date > DateOnly.FromDateTime(services.GetRequiredService<TimeProvider>().GetUtcNow().UtcDateTime))
+        {
+            Console.Error.WriteLine($"payment-simulation: the bank date {date:yyyy-MM-dd} is after today (UTC); a bank has not received anything yet on that day.");
+            return 1;
+        }
         var body = JsonSerializer.SerializeToUtf8Bytes(new BankEvidenceNotice(binding.Account, payoutId, amount, date));
         var delivery = await services.GetRequiredService<PaymentRunner>()
             .ReceiveBankEvidenceAsync(body, services.GetRequiredService<BankEvidenceSigner>().Sign(body), ct);

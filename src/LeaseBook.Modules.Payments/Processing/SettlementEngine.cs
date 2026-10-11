@@ -182,8 +182,10 @@ public sealed class SettlementEngine(DbContext db, TimeProvider clock, PaymentEn
         await payments.RequireFixtureAsync(binding, ct);
         if (evidence.Generation != binding.Generation || evidence.Account != binding.Account || evidence.Mode != binding.Mode)
         { throw new PaymentUnavailableException(); }
+        // A bank has not received tomorrow what it has yet to receive, and a receipt dated ahead would
+        // post into a day nobody has reached. Today is the host's, in UTC.
         if (!Text(evidence.PayoutId, 100) || !Text(evidence.EvidenceId, 100) || evidence.BankDate == default
-            || !Storable(evidence.BankAmount))
+            || evidence.BankDate > DateOnly.FromDateTime(Now) || !Storable(evidence.BankAmount))
         { return new(BankEvidenceOutcomes.Malformed); }
         await payments.LockAsync("settlement:" + evidence.PayoutId, ct);
         // Only a payout the processor reported by itself can be waiting for a bank. One that arrived
@@ -237,6 +239,9 @@ public sealed class SettlementEngine(DbContext db, TimeProvider clock, PaymentEn
     /// <summary>
     /// Checks a stored payout and posts it if it can be posted. <paramref name="confirmedBy"/> is the
     /// administrator posting a payout that contains a return; without one, such a payout waits.
+    /// Without one, too, a payout that is already with a person is returned as it stands: the check
+    /// that runs by itself judges a payout once, when it arrives or when its bank evidence does, and
+    /// after that only an administrator's post checks it again.
     /// A payout no bank has spoken for is checked and never posted, whoever asks: it goes to a person
     /// if its lines could not post, and otherwise stays waiting for the bank.
     /// Returns null when the payout is unknown here.
@@ -255,6 +260,11 @@ public sealed class SettlementEngine(DbContext db, TimeProvider clock, PaymentEn
         if (settlement.Status == SettlementStatuses.Closed || settlement.FailedAt is not null
             || settlement.Reason is "conflicting_evidence" or SettlementReasons.PayoutFailed)
         { throw new PaymentConflictException(); }
+
+        // In review, and nobody asked. The same notice arrives again, redelivered or found by a sweep
+        // every few minutes; were each arrival to check the payout again, one whose cause had gone
+        // (fees since funded, a period since reopened, a fault since mended) would post unattended.
+        if (confirmedBy is null && settlement.Status == SettlementStatuses.NeedsReview) { return settlement; }
 
         var items = await db.Set<PaymentSettlementItem>().Where(x => x.SettlementId == id).OrderBy(x => x.Item).ToListAsync(ct);
         var providerIds = items.Where(x => x.Kind != SettlementItemKinds.Fee && x.ProviderId != "").Select(x => x.ProviderId)
@@ -480,7 +490,8 @@ public sealed class SettlementEngine(DbContext db, TimeProvider clock, PaymentEn
                 // A review that a refund or a dispute raised carries the same reason and is not one:
                 // only a bank's return of the debit is posted as a return, so the review must hold a
                 // return and nothing that says otherwise, judged or not.
-                if (returned.Contains(operation.Id) || facts.Any(x => x is "Refund" or "Dispute" or PaymentEngine.ConflictKind)
+                // Nor one of which a failure is stored: a collection that failed has nothing to return.
+                if (returned.Contains(operation.Id) || facts.Any(x => x is "Failed" or "Refund" or "Dispute" or PaymentEngine.ConflictKind)
                     || !(operation.Status == "Settled" || (operation.Status == "NeedsReview"
                         && operation.Reason?.StartsWith("return_", StringComparison.Ordinal) == true && facts.Contains("Return"))))
                 { return "conflicting_evidence"; }

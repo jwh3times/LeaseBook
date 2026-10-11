@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace LeaseBook.Web.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20261011141405_Phase2_PayoutsHeldForBank")]
+    [Migration("20261011150605_Phase2_PayoutsHeldForBank")]
     partial class Phase2_PayoutsHeldForBank
     {
         /// <inheritdoc />
@@ -2105,6 +2105,8 @@ namespace LeaseBook.Web.Migrations
 
                     b.ToTable("payment_settlements", null, t =>
                         {
+                            t.HasCheckConstraint("ck_payment_settlement_posted_banked", "status <> 'Posted' OR evidence_id <> ''");
+
                             t.HasCheckConstraint("ck_payment_settlement_status", "status IN ('Received','AwaitingBank','NeedsReview','Posted','Closed')");
                         });
                 });

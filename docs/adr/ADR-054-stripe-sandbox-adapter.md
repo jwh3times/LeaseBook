@@ -324,6 +324,12 @@ notes above:
   page, by the payout's id; and, for each dispute among them, the disputed charge, as a dispute event
   asks. A list that cannot be had whole is thrown: a delivery then answers 500, and a sweep passes
   the event over and asks for the same window again. Nothing is stored of half a payout.
+- **The lines are read only once Stripe has reconciled the payout.** Stripe documents a
+  `reconciliation_status` of `completed` as the point at which the lines can be listed in full. When
+  the event does not say so, Stripe is asked for the payout as it is now, by its id, because an event
+  never changes. If that does not say so either, the payout is not read yet, on the terms of a list
+  that cannot be had. Reading does not start from `payout.reconciliation_completed`: in the recording
+  that event came while the payout was still in transit, before it was paid.
 - **How a line is stored.** The payout's own line is Stripe's net and not an item. A `charge` or
   `payment` line whose charge names a payment is a Payment. An `adjustment` for a dispute is a Return
   for the whole charge with nothing given back, and a Fee beside it under the line's reference with
@@ -339,11 +345,17 @@ notes above:
   `unsupported_settlement` where it read `settlement_incomplete`.
 - **A held payout is a status, not a table.** `AwaitingBank`, with three columns on the payout: its
   mode, the processor's figure, and when the processor said it failed. The bank amount is zero and
-  the bank date and evidence reference are empty until a bank has spoken.
+  the bank date and evidence reference are empty until a bank has spoken. A check constraint refuses
+  any payout marked posted that holds no evidence reference.
 - **A payout is checked when it arrives, without the bank.** Its lines are tied to Stripe's figure
   and judged as the specification says. One that could not post goes to review at once under that
   reason; any other waits. Nothing posts for a payout no bank has spoken for, whoever asks: an
   administrator who tries is told `bank_evidence_missing`.
+- **The check that runs by itself judges a payout once.** When it arrives, and when bank evidence
+  releases it. A payout in review is checked again only when an administrator posts it. The paid
+  event arriving again, by redelivery or in a sweep, changes nothing, however often it comes and
+  whether or not the cause has gone. This is in the shared engine, so a redelivered simulated payout
+  in review is no longer checked again either.
 - **Bank evidence.** `payment-simulation bank <org-id> <stripe-payout-id> <bank-amount> <bank-date>`.
   The body is signed with the fixture key under a purpose of its own, so a simulator notice cannot be
   presented as bank evidence, and is verified only in a sandbox host and within 300 seconds. Evidence
@@ -351,7 +363,7 @@ notes above:
   only waiting it is followed by the check and the posting. For one already in review it is kept and
   nothing is rechecked until an administrator posts. The same amount and date again change nothing;
   different ones are not stored and mark the payout `conflicting_evidence`, a later correct amount
-  included.
+  included. A bank date after today, in UTC, is refused by the command and by the engine.
 - **A bank amount that is not Stripe's net is `bank_amount_mismatch`.** It is judged before anything
   the lines say. Such a payout cannot be posted and can only be closed.
 - **A failed payout is `payout_failed`.** The time is stored once. It sends the payout to review
@@ -360,8 +372,8 @@ notes above:
   arrives before the paid event stores the payout without lines, and a paid event after a failure
   changes nothing.
 - **Carried from the earlier steps, in the shared engine.** A payout's return line is taken only for
-  a payment that is settled or whose review holds a return, and never when a refund, a dispute or a
-  conflict has been stored for it. A payment line is refused while a failure, return, refund, dispute
+  a payment that is settled or whose review holds a return, and never when a failure, a refund, a
+  dispute or a conflict has been stored for it. A payment line is refused while a failure, return, refund, dispute
   or conflict is stored for the payment, judged or not; the check now takes the lock a fact is stored
   under, for every payment the payout names. A failed attempt on a receipted payment gives up its
   lease and is retried on the usual schedule, then rests until the next fact. A payout is found by
@@ -375,7 +387,8 @@ payout, which is a recorded charge line under Stripe's type name.
 Accepted, to revisit before the ADR is accepted: each sweep reads again the lines of every payout
 paid inside its overlap, and a host's first sweep those of every payout in 29 days; a receipted
 payment whose late fact cannot be judged after five tries rests until the next fact arrives; and
-the staff surface shows a held payout by its raw status with a bank amount of zero.
+the staff surface shows a held payout by its raw status with a bank amount of zero. The staff API
+returns the processor's figure and the time of a failure, and no screen reads either yet.
 
 The provisional assumptions of ADR-053 stay open. This ADR verifies none of them, and nothing here
 is approval to move real money.

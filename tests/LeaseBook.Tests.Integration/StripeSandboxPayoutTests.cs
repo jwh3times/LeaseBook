@@ -443,6 +443,13 @@ public sealed partial class StripeSandboxProcessorTests
             sent.Form.ShouldBeEmpty(sent.Path);
             sent.Headers["Stripe-Account"].ShouldBe(account);
             sent.Headers.ShouldNotContainKey("Idempotency-Key");
+            // The payout itself, by its id, when its event did not say its lines were ready.
+            if (sent.Path.StartsWith("/v1/payouts/", StringComparison.Ordinal))
+            {
+                payouts.ShouldContain(sent.Path["/v1/payouts/".Length..]);
+                sent.Query.ShouldBeEmpty(sent.Path);
+                continue;
+            }
             if (sent.Path != Lines) { ShouldCarryOnlyIds([sent], account); continue; }
             sent.Query.Keys.ShouldBeSubsetOf(["payout", "limit", "expand[]", "starting_after"]);
             payouts.ShouldContain(sent.Query["payout"]);

@@ -519,10 +519,37 @@ public sealed class StripeSandboxProcessor : IPaymentProcessor
             var payoutType = automatic.ValueKind == JsonValueKind.True ? method : SettlementPayoutTypes.Manual;
             IReadOnlyList<ProcessorSettlementItem> items = [];
             if (read.State == ProcessorPayoutStates.Paid && automatic.ValueKind == JsonValueKind.True)
-            { items = await LinesAsync(payoutId, binding, asked, ct); }
+            {
+                // Only once Stripe has finished reconciling the payout can its lines be listed in
+                // full. Listed sooner they may be short, and a payout stored short is one the whole
+                // list would later contradict. An event is what the payout was when it was sent, and
+                // never changes, so when it does not say the lines are ready Stripe is asked what the
+                // payout is now. Not ready is not an answer about the payout: it is thrown, like a
+                // list that cannot be had, so that a delivery is sent again and a sweep asks again.
+                if (Text(about, "reconciliation_status") != ReconciliationCompleted && !await ReconciledAsync(payoutId, binding, asked, ct))
+                { throw new IOException("The Stripe sandbox has not finished reconciling the payout; its lines are not read yet."); }
+                items = await LinesAsync(payoutId, binding, asked, ct);
+            }
             return ProcessorRead<ProcessorPayout>.Of(new ProcessorPayout(payoutId, binding.Account, binding.Mode, binding.Generation,
                 payoutType, read.State, amount / 100m, currency, binding.BankId, DateTimeOffset.FromUnixTimeSeconds(seconds).UtcDateTime, items));
         }
+    }
+
+    private const string ReconciliationCompleted = "completed";
+
+    // Whether Stripe now says a payout's lines can be listed in full, by the payout it holds under
+    // that id on the fixture's account. Held to what the event is held to: this payout, in test mode.
+    // One Stripe does not hold, or that is not what was asked for, is no answer to list lines on.
+    private async Task<bool> ReconciledAsync(string payoutId, FixtureBinding binding, Dictionary<string, string?> asked, CancellationToken ct)
+    {
+        if (await AskAsync("/v1/payouts/" + payoutId, binding, asked, ct) is not { } answer)
+        { throw new IOException("The Stripe sandbox does not hold the payout its event is about."); }
+        using var document = Answer(answer);
+        var held = document.RootElement;
+        if (!held.TryGetProperty("livemode", out var live) || live.ValueKind != JsonValueKind.False
+            || Text(held, "object") != "payout" || Text(held, "id") != payoutId)
+        { throw NotAnObject(); }
+        return Text(held, "reconciliation_status") == ReconciliationCompleted;
     }
 
     // Stripe's own list of what a payout contains: its balance transactions, every page, each with

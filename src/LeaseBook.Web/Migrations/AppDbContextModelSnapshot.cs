@@ -2102,6 +2102,8 @@ namespace LeaseBook.Web.Migrations
 
                     b.ToTable("payment_settlements", null, t =>
                         {
+                            t.HasCheckConstraint("ck_payment_settlement_posted_banked", "status <> 'Posted' OR evidence_id <> ''");
+
                             t.HasCheckConstraint("ck_payment_settlement_status", "status IN ('Received','AwaitingBank','NeedsReview','Posted','Closed')");
                         });
                 });
