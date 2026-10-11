@@ -115,6 +115,10 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   payout questions it had left open: the sandbox pays out by itself, reports the payout's
   reconciliation as complete, and lists what the payout covers to the cent.
 
+- **The Stripe sandbox probe records the events Stripe sends about a payout.** Its `payouts` step now
+  also asks for them. The four events of the sandbox's first payout are recorded, for the work that
+  reads payouts to replay.
+
 - **The payment processor seam is ready for a second processor.** Nothing changes in the development
   payment fixture. Internally, a request to a processor now names the amount to charge, its currency
   and the payment method, and a processor's notice is first proved authentic and only then read. A
