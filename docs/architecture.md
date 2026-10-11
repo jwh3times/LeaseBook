@@ -62,15 +62,20 @@ the receipt's linked reversal or refuses by name
 ([ADR-053](adr/ADR-053-processor-fees-and-batched-settlement.md)). Its `IPaymentProcessor` transport seam
 is called outside that transaction; the host simulator persists provider acceptance independently.
 A host registers one implementation of that seam, chosen by its payment mode: the simulator, or a
-Stripe sandbox adapter ([ADR-054](adr/ADR-054-stripe-sandbox-adapter.md), proposed). The adapter so
-far submits a charge, finds it again, and reads Stripe's signed events for a payment that is
+Stripe sandbox adapter ([ADR-054](adr/ADR-054-stripe-sandbox-adapter.md), proposed). The adapter
+submits a charge, finds it again, and reads Stripe's signed events for a payment that is
 processing, has succeeded or has failed, and for one that was later disputed or refunded. A dispute
 is a return when the payment was an ACH debit; to learn that, and whose payment it is, the adapter
 asks Stripe for the payment and its charge. A return, a dispute and a refund each send the payment to
-review. The adapter reads no payout, and nothing it collects or reads posts. The seam also answers
-what a processor still holds about a fixture's payments since a given time: the payment worker asks
-at most every five minutes for each fixture, whether or not a payment is waiting on its outcome, so
-an event that was never delivered is read from Stripe's event list as a delivered one is. A payment
+review. The adapter also reads that a payout was paid or failed, through a seam read of its own: a
+processor's account of a payout, with Stripe's list of the payout's balance lines and no word from a
+bank. Payments stores such a payout and holds it with no journal effect. Bank evidence, which in the
+sandbox only a signed fixture command supplies and no route or staff control does, releases it: an
+amount equal to the processor's posts every line through `PostPaymentSettlement` or none, and any
+other amount sends the payout to review. No Stripe event posts by itself. The seam also answers
+what a processor still holds about a fixture's payments and payouts since a given time: the payment
+worker asks at most every five minutes for each fixture, whether or not a payment is waiting on its
+outcome, so an event that was never delivered is read from Stripe's event list as a delivered one is. A payment
 still without an outcome after seven days goes to review under either processor, as does one
 reported both failed and succeeded. A host also maps only its own processor's anonymous callback routes, outside `/api`:
 the simulator's two under `/callbacks/payments/simulation` in a Simulation host, and

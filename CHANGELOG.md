@@ -81,6 +81,17 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   leaves it in review. The seven-day rule applies to the payment simulation too, so a simulated
   payment left that long without a success goes to review. Nothing reaches a ledger from any of this.
 
+- **A sandbox payout waits for the bank, then posts whole or not at all.** A sandbox host now reads
+  Stripe's payout events. A payout Stripe marks paid is stored with Stripe's own list of what it
+  covers and held; it posts nothing. A new fixture-only command, `payment-simulation bank`, supplies
+  the bank's amount and date. An amount equal to Stripe's net posts every payment in the payout, or
+  none; any other amount sends the payout to review. A payout holding a returned ACH debit waits for
+  an administrator, and the dispute's own fee comes from held PM fees. A payout holding a card
+  dispute, a refund, a failed debit, a line Stripe names in a way LeaseBook does not know, or a charge
+  that is not this fixture's goes to review and never posts. A payout Stripe later reports as failed
+  goes to review, and nothing is reversed by itself. No screen changes yet: staff see a held payout
+  by its raw status.
+
 - **A sandbox payment that is disputed or refunded goes to review.** A sandbox host now reads Stripe's
   dispute events and its refund event. A disputed ACH debit becomes a returned payment, a disputed
   card payment a dispute, and a refund a refund; each sends the payment to review on Operations, where
@@ -102,6 +113,12 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   sandbox fixture in its own database beside the simulation fixture.
 
 ### Changed
+
+- **A payout in review is checked again only when an administrator posts it.** Before, the same
+  payout evidence arriving a second time checked the payout again and could post it once the cause
+  had cleared, with nobody acting. This applies to the payment simulation too. A payout also no
+  longer settles a payment that holds a failure, return, refund, dispute or conflict not yet judged,
+  and a return in a payout posts only for a payment whose review a returned ACH debit raised.
 
 - **Contradictory payment facts go to review.** A payment a processor reports as both failed and
   succeeded now goes to review as conflicting evidence, in the payment simulation as well; before, it
