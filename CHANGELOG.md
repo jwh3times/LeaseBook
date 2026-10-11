@@ -81,6 +81,15 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   leaves it in review. The seven-day rule applies to the payment simulation too, so a simulated
   payment left that long without a success goes to review. Nothing reaches a ledger from any of this.
 
+- **A sandbox payment that is disputed or refunded goes to review.** A sandbox host now reads Stripe's
+  dispute events and its refund event. A disputed ACH debit becomes a returned payment, a disputed
+  card payment a dispute, and a refund a refund; each sends the payment to review on Operations, where
+  an administrator can close it. None can be posted, and nothing reaches a ledger: Stripe's word
+  about a dispute is not bank evidence. To learn whose payment a dispute is about, the host asks
+  Stripe for that payment and its charge, sending identifiers only. The catch-up sweep now runs every
+  five minutes whether or not a payment is waiting, so a dispute or refund that was never delivered
+  is found too; a restarted host reads back 29 days.
+
 - **A fixture payment can be collected through a Stripe sandbox.** A Development host configured for
   `StripeSandbox` now starts, and a fixture tenant's card or bank-debit payment is charged on the
   fixture's connected account in the sandbox, as a test payment with no real money. Stripe is sent the
@@ -93,6 +102,18 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   sandbox fixture in its own database beside the simulation fixture.
 
 ### Changed
+
+- **Contradictory payment facts go to review.** A payment a processor reports as both failed and
+  succeeded now goes to review as conflicting evidence, in the payment simulation as well; before, it
+  stayed failed with a paid date. In a sandbox host, an event for one of its payments in a currency
+  other than US dollars is kept and sends the payment to review, where it used to be refused.
+
+- **The Stripe sandbox probe records a card dispute and refunds.** It now makes a disputed card
+  payment and two card payments that it then refunds, one in full and one in part, so that the events
+  Stripe sends for each are recorded. The application itself still never refunds. A run on 2026-10-09
+  recorded those payloads and the sandbox's first automatic payout, and ADR-054 now answers the
+  payout questions it had left open: the sandbox pays out by itself, reports the payout's
+  reconciliation as complete, and lists what the payout covers to the cent.
 
 - **The payment processor seam is ready for a second processor.** Nothing changes in the development
   payment fixture. Internally, a request to a processor now names the amount to charge, its currency

@@ -64,11 +64,15 @@ is called outside that transaction; the host simulator persists provider accepta
 A host registers one implementation of that seam, chosen by its payment mode: the simulator, or a
 Stripe sandbox adapter ([ADR-054](adr/ADR-054-stripe-sandbox-adapter.md), proposed). The adapter so
 far submits a charge, finds it again, and reads Stripe's signed events for a payment that is
-processing, has succeeded or has failed; it reads no return, dispute or payout, and nothing it
-collects posts. The seam also answers what a processor still holds for a payment waiting on its
-outcome: the payment worker asks at most every five minutes for each fixture, so an event that was
-never delivered is read from Stripe's event list as a delivered one is, and a payment still without
-an outcome after seven days goes to review under either processor. A host also maps only its own processor's anonymous callback routes, outside `/api`:
+processing, has succeeded or has failed, and for one that was later disputed or refunded. A dispute
+is a return when the payment was an ACH debit; to learn that, and whose payment it is, the adapter
+asks Stripe for the payment and its charge. A return, a dispute and a refund each send the payment to
+review. The adapter reads no payout, and nothing it collects or reads posts. The seam also answers
+what a processor still holds about a fixture's payments since a given time: the payment worker asks
+at most every five minutes for each fixture, whether or not a payment is waiting on its outcome, so
+an event that was never delivered is read from Stripe's event list as a delivered one is. A payment
+still without an outcome after seven days goes to review under either processor, as does one
+reported both failed and succeeded. A host also maps only its own processor's anonymous callback routes, outside `/api`:
 the simulator's two under `/callbacks/payments/simulation` in a Simulation host, and
 `POST /callbacks/payments/stripe` in a StripeSandbox host, which has its own rate limit and is not
 part of the published API contract. The Stripe library is referenced from

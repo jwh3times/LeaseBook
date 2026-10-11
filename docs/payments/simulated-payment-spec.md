@@ -272,13 +272,35 @@ acting. Any other state goes to review, as does a payment found twice or found w
 operation, amount, currency or generation. A failed connection, a rate limit, a fault at Stripe and a
 key or permission Stripe refuses are technical failures and stay retryable.
 
-The adapter reads an event without asking Stripe anything, because a snapshot event carries the
-payment it is about. It reads `payment_intent.processing`, `payment_intent.succeeded` and
-`payment_intent.payment_failed` as the `Processing`, `Succeeded` and `Failed` observations the
-simulator also produces. Every other event type is not this host's and is dropped, until the work
-that reads returns, disputes and payouts. An observation read this way carries the charged amount, no
-fee, no bank evidence identifier and no payout, and is never complete. It can therefore set a paid
-date or end a payment as failed, and it can never be the bank evidence a receipt posts from.
+The adapter reads seven event types and drops every other as not this host's, until the work that
+reads payouts. Nothing it reads is ever complete, so none can be the bank evidence a receipt or a
+return posts from.
+
+- `payment_intent.processing`, `payment_intent.succeeded` and `payment_intent.payment_failed` are the
+  `Processing`, `Succeeded` and `Failed` observations the simulator also produces. A snapshot event
+  carries the payment it is about, so reading one asks Stripe nothing. The observation carries the
+  charged amount, no fee, no bank evidence identifier and no payout. It can set a paid date or end a
+  payment as failed.
+- `charge.refunded` is a `Refund`. The charge in the event carries the payment's metadata, so this
+  too asks nothing. The amount is the total refunded so far and the evidence identifier is the
+  charge's. Stripe's other three refund events say the same without the metadata and are dropped. The
+  adapter never issues a refund.
+- `charge.dispute.created`, `charge.dispute.funds_withdrawn` and `charge.dispute.closed` are a
+  `Return` when the disputed payment was an ACH debit and a `Dispute` otherwise. A dispute event
+  carries nothing of LeaseBook's, so the adapter asks Stripe for the payment the dispute names and
+  holds it to the test a payment event gets: this fixture's generation, an operation id, test mode.
+  It then asks for that payment's charge, whose payment method type decides the kind; a charge that
+  cannot confirm an ACH debit leaves it a `Dispute`. The evidence identifier is the dispute's and the
+  bank date is the day the dispute was opened, not the day of the event, so the events of one dispute
+  agree with each other and raise one review. Both requests carry an identifier in the path and
+  nothing else. A dispute about a payment that is not this fixture's, or that Stripe has no payment
+  for, is dropped. When Stripe cannot be asked, a delivery is answered with an error so that it is
+  not counted as delivered, and the sweep reads the event later.
+
+A `Return`, a `Dispute` and a `Refund` each send the payment to Needs review with reason
+`return_requires_review`, and a PMAdmin can close the review. None can be posted: a return posts only
+from complete evidence, and Stripe's word about a dispute is not that. Posting a return waits for the
+work that reads payouts, where the payout carries the debit.
 
 `RecoverObservationsAsync` answers what the processor still holds about one fixture's payments since
 a given time, as the same observations a delivery would have produced. The Stripe adapter lists the
@@ -287,7 +309,9 @@ each with the reader a delivery goes through, so a swept event and its delivered
 observation. These events carry no signature. The trust is that the list was asked of Stripe with the
 platform's key, over TLS, for one named account; an event that names any other account is not taken.
 Anything in the list marked live refuses the whole sweep, as does a list that cannot be read to its
-end. An event that cannot be read is counted and skipped. Stripe keeps events for 30 days.
+end, and a payment or charge asked for about a dispute that Stripe marks live. An event that cannot be read is counted and skipped. So is a dispute whose payment or charge
+Stripe could not be asked for; the rest of the list is still read, and the sweep is not counted as
+complete. Stripe keeps events for 30 days.
 
 ## Transaction and recovery protocol
 
@@ -334,26 +358,34 @@ observation wakes it. An observation that is never delivered is recovered in two
 the worker and neither able to post.
 
 **Catch-up sweep.** A payment is _waiting_ when it is Processing, holds the processor's reference and
-has no paid date. For each fixture, at most once every five minutes, the worker reads the waiting
-payments in that organization's transaction. If there are none it asks the processor nothing.
-Otherwise it calls `RecoverObservationsAsync` outside any transaction, for everything since the
-oldest waiting payment was created and never further back than 29 days. Each observation that comes
-back goes through callback receipt (step 3), one organization transaction each, so one already stored
-is dropped by its event id. No position is stored: a restarted host sweeps at once. A sweep that
-fails stores nothing it could not read in full, is logged, and is tried again at the next interval;
-it never stops due work.
+has no paid date. For each fixture, once every five minutes, the worker reads the waiting payments in
+that organization's transaction and then calls `RecoverObservationsAsync` outside any transaction,
+whether or not a payment is waiting: a return, a dispute or a refund arrives for a payment that is
+not. It asks for everything since the last sweep that completed, less ten minutes, or since the
+oldest waiting payment was created if that is earlier. The first sweep in a process asks for 29
+days, and none asks further back than that. Each observation that comes back goes through callback
+receipt (step 3), one organization transaction each, so one already stored is dropped by its event
+id. The time of the last complete sweep is held in memory and nowhere else: a restarted host sweeps
+at once, over the whole 29 days. A sweep is complete only when the list was read to its end, every
+event in it that needed Stripe to be asked was answered, and everything found was stored. One that is
+not complete is logged and its window is asked for again at the next interval; it never stops due
+work.
 
 **Aging.** A payment still waiting seven days after it was created goes to Needs review with reason
-`outcome_overdue`. This happens only directly after a sweep of that fixture that succeeded, so a
-payment is never sent to a person while the observations that could end it have not been asked for.
+`outcome_overdue`. This happens only directly after a sweep of that fixture whose list was read to
+its end and whose findings were stored, so a payment is never sent to a person while the observations
+that could end it have not been asked for. A dispute that could not be asked about does not hold
+aging back: a dispute follows a success, and a payment that is aged has none.
 It applies to every processor. A payment that is leased, due, between technical retries or holds an
 observation not yet judged is left alone. Marking takes the provider-reference lock and then the
 operation lock, the order given above. A PMAdmin can close the review with a note. An observation
 that arrives afterwards is still recorded: a failure ends the payment as Failed; anything else leaves
 it in Needs review, reopening a closed one, with the paid date set if it was a success. It does not
 return to Processing, so no receipt can post for a payment a person may already have corrected by
-hand. Once a payment has left the waiting state the sweep no longer asks about it; a later
-observation reaches it only by delivery.
+hand.
+
+A payment that holds both a failure and a success goes to Needs review with reason
+`conflicting_evidence`, whichever arrived first. Neither is believed over the other.
 
 A review reason is kept through a failed attempt. When the attempt that judges a late observation
 fails for a technical reason, a payment in Needs review or Review closed under any other reason keeps
@@ -431,10 +463,15 @@ After verification the adapter applies these rules, in this order:
   events are authentic, not this host's, and dropped.
 - The observation's generation and bank come from the host's binding, never from the event.
 
-One stated gap remains against the rule above that a wrong currency or amount is retained for review.
-An authentic event for this fixture's payment whose currency is not `usd`, or whose amount is missing
-or out of range, is refused with HTTP 400 and not retained. Retaining it for review belongs to the
-work that reads review-only facts; the rule above stands.
+An authentic event for this fixture's payment in a three-letter currency other than `usd`, with an
+amount that can be stored, is retained as a `Conflict` observation with that currency and amount, and
+the payment goes to Needs review with reason `conflicting_evidence`. Only a Stripe sandbox host
+admits that kind from its adapter. The amount is Stripe's integer divided by one hundred, which is
+not the true amount in a currency without two decimal places; it is evidence for a person and never
+posts. An event with no usable amount, or a currency that is not three letters, is still refused
+with HTTP 400: there is nothing truthful to retain. A payment whose amount at Stripe differs from the
+operation's is caught elsewhere: every attempt the worker makes retrieves Stripe's own payment and
+holds it to the operation's amount, currency and generation.
 
 ## Executable non-live barrier and fixture lifecycle
 

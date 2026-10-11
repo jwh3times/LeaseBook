@@ -1,0 +1,86 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/v1/disputes",
+    "params": {
+      "payment_intent": "pi_synthetic000001",
+      "limit": 10
+    },
+    "platform": false,
+    "idempotencyKey": null
+  },
+  "status": 200,
+  "requestId": "req_synthetic000005",
+  "stripeVersion": "2026-09-30.endive",
+  "elapsedMs": 172,
+  "body": {
+    "object": "list",
+    "count": 1,
+    "data": [
+      {
+        "id": "du_synthetic000001",
+        "object": "dispute",
+        "amount": 20000,
+        "balance_transaction": "txn_synthetic000001",
+        "balance_transactions": [
+          {
+            "id": "txn_synthetic000001",
+            "object": "balance_transaction",
+            "amount": -20000,
+            "available_on": 1791571526,
+            "balance_type": "payments",
+            "created": 1791571526,
+            "currency": "usd",
+            "description": "[scrubbed]",
+            "exchange_rate": null,
+            "fee": 1500,
+            "fee_details": [
+              {
+                "amount": 1500,
+                "application": null,
+                "currency": "usd",
+                "description": "[scrubbed]",
+                "type": "stripe_fee"
+              }
+            ],
+            "net": -21500,
+            "reporting_category": "dispute",
+            "source": "du_synthetic000001",
+            "status": "available",
+            "type": "adjustment"
+          }
+        ],
+        "charge": "ch_synthetic000001",
+        "created": 1791571526,
+        "currency": "usd",
+        "enhanced_eligibility_types": [],
+        "evidence": {},
+        "evidence_details": {
+          "due_by": 1792281599,
+          "enhanced_eligibility": {},
+          "has_evidence": false,
+          "past_due": false,
+          "submission_count": 0
+        },
+        "intended_submission_method": "prefer_manual",
+        "is_charge_refundable": false,
+        "livemode": false,
+        "metadata": {},
+        "payment_intent": "pi_synthetic000001",
+        "payment_method_details": {
+          "card": {
+            "brand": "visa",
+            "case_type": "chargeback",
+            "network": "visa",
+            "network_reason_code": "10.4"
+          },
+          "type": "card"
+        },
+        "reason": "fraudulent",
+        "status": "needs_response"
+      }
+    ],
+    "has_more": false,
+    "url": "[scrubbed]"
+  }
+}

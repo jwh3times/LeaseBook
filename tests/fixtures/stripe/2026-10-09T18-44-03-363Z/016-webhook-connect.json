@@ -1,0 +1,50 @@
+{
+  "route": "/connect",
+  "signed": true,
+  "verified": true,
+  "event": {
+    "id": "evt_synthetic000007",
+    "object": "event",
+    "account": "acct_synthetic000002",
+    "api_version": "2026-09-30.endive",
+    "context": "acct_synthetic000002",
+    "created": 1791571488,
+    "data": {
+      "object": {
+        "id": "re_synthetic000001",
+        "object": "refund",
+        "amount": 20000,
+        "balance_transaction": "txn_synthetic000003",
+        "charge": "ch_synthetic000001",
+        "created": 1791571487,
+        "currency": "usd",
+        "customer": null,
+        "customer_account": null,
+        "destination_details": {
+          "card": {
+            "reference_status": "pending",
+            "reference_type": "acquirer_reference_number",
+            "type": "refund"
+          },
+          "type": "card"
+        },
+        "metadata": {},
+        "payment_intent": "pi_synthetic000002",
+        "payment_method": "pm_synthetic000001",
+        "reason": null,
+        "receipt_number": null,
+        "source_transfer_reversal": null,
+        "status": "succeeded",
+        "transfer_reversal": null
+      },
+      "previous_attributes": {}
+    },
+    "livemode": false,
+    "pending_webhooks": 2,
+    "request": {
+      "id": "req_synthetic000008",
+      "idempotency_key": "fcb4b1b8-c4f8-4d7c-ba3e-51e1722edb51"
+    },
+    "type": "refund.created"
+  }
+}

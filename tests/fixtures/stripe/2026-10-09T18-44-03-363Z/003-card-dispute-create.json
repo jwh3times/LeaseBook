@@ -1,0 +1,33 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/v1/payment_intents",
+    "params": {
+      "amount": 20000,
+      "currency": "usd",
+      "payment_method": "pm_card_createDispute",
+      "automatic_payment_methods": {
+        "enabled": true,
+        "allow_redirects": "never"
+      },
+      "confirm": true,
+      "metadata": {
+        "leasebook_operation": "8c66a060-956b-4c10-b6bf-f4ed7625666b",
+        "leasebook_generation": "baf0f6bb-248a-4306-9a16-c61587ac53a1"
+      }
+    },
+    "platform": false,
+    "idempotencyKey": "8c66a060-956b-4c10-b6bf-f4ed7625666b"
+  },
+  "status": 500,
+  "requestId": "req_synthetic000003",
+  "stripeVersion": "2026-09-30.endive",
+  "elapsedMs": 12913,
+  "body": {
+    "error": {
+      "message": "An unknown error occurred",
+      "request_log_url": "[scrubbed]",
+      "type": "api_error"
+    }
+  }
+}

@@ -96,13 +96,18 @@ hermetic, and they go stale silently if Stripe changes a shape. The probe can be
 them.
 
 These provider facts were not settled by Stripe's documentation. The probe ran against a sandbox on
-2026-10-08, at API version `2026-09-30.endive`, and answered all but the first and half of the last. None of its answers
-contradicts a decision above. The recorded payloads are under `tests/fixtures/stripe/`.
+2026-10-08, at API version `2026-09-30.endive`, and answered all but the first and half of the last.
+A run on 2026-10-09 answered the first. None of its answers contradicts a decision above. The recorded
+payloads are under `tests/fixtures/stripe/`.
 
 - **Does a sandbox produce automatic payouts, on what timing, and does it report their
-  reconciliation as complete?** Not answered yet. No payout existed on the day of the run; the
-  probe's `payouts` step is run on a later day. Until then the payout mapping rests on the
-  documented shapes and is unproven.
+  reconciliation as complete?** Yes. One automatic payout existed by 2026-10-09: created at 00:42
+  UTC that day, under three hours after the first charges, with that day as its arrival date, although
+  the account's schedule says a two-day delay. It was `paid`, with `reconciliation_status` of
+  `completed`. Stripe listed 14 balance lines for it, and their net came to the payout's amount
+  exactly. The lines were of four types beside the payout's own: `charge` for a card payment,
+  `payment` for an ACH payment, `payment_failure_refund` for an ACH debit that failed, and
+  `adjustment` for a dispute. A failed ACH debit and a dispute each carry a fee of their own.
 - **Can the documented test payment methods be used directly on a connected account?** Yes, for card
   and for ACH, as direct charges with no customer object.
 - **Do the ACH test payment methods need a small test deposit verified first, and how long does a
@@ -138,6 +143,26 @@ The run also found things nobody had asked about. The adapter in step 4 has to a
   payment; the same key with another amount is refused. Listing the creation window finds a payment
   by its operation id. Stripe's search also found it at once, and the adapter still does not use it.
 - **Every event names the connected account and the API version**, delivered or fetched.
+
+A second run on 2026-10-09 recorded what a card dispute and a refund look like, which the first run
+had not made. The probe refunds only to record the events; the adapter never does.
+
+- **A dispute event does not carry the payment's metadata.** It names the payment by Stripe's id and
+  nothing of LeaseBook's, for card and for ACH. Whose payment a dispute is about cannot be read from
+  the event; the payment has to be asked for.
+- **A card dispute says it is one; an ACH dispute does not say.** A card dispute carries
+  `payment_method_details` of type `card`. On the ACH dispute that member is null.
+- **A card dispute arrives open.** `pm_card_createDispute` produced `fraudulent` with status
+  `needs_response`, as `charge.dispute.created` and `charge.dispute.funds_withdrawn` in the same
+  second as the payment succeeded. No `charge.dispute.closed` followed. The ACH dispute arrived
+  already `lost`, with all three events.
+- **Either dispute takes the amount back and a $15.00 fee with it**, as one `adjustment` line.
+- **A refund is four events.** `refund.created` and `charge.refunded`, then `refund.updated` and
+  `charge.refund.updated`. Only `charge.refunded` carries the payment's metadata, on the charge. Its
+  `amount_refunded` is the total refunded so far, and `refunded` is true only for a refund in full.
+- **Stripe answered one charge with HTTP 500.** The first `pm_card_createDispute` charge was refused
+  with `api_error`; the same request made again succeeded. The adapter already treats a fault at
+  Stripe as a technical failure and repeats it under the same idempotency key.
 
 **Implementation note, 2026-10-08 (submit and lookup).** The adapter now submits a charge and finds
 it again; at that date it read no event and no payout, so nothing it collected posted. Three points the
@@ -226,9 +251,50 @@ event. The host's first sweep listed fifteen events for payments of earlier runs
 held or stored once, and none became a conflict. Stripe accepted the filter on event types. Nothing
 posted.
 
-Two limits are accepted. A payment that has left the waiting state is no longer swept for, so a later
-event reaches it only by delivery. And when disputes and payouts are read, the sweep will need a
-window that does not depend on a payment waiting, because those arrive for payments that are not.
+Two limits were accepted at that date, and the next note removes both. A payment that had left the
+waiting state was no longer swept for, and the window depended on a payment waiting.
+
+**Implementation note, 2026-10-09 (returns and review-only facts).** The adapter now reads disputes
+and refunds. Each sends its payment to review and none can post.
+
+- **A dispute is asked about.** The event carries nothing of LeaseBook's, so the adapter asks Stripe
+  for the payment it names and holds that payment to this fixture's generation. This qualifies the
+  webhooks note above: reading a payment event still needs no fetch; reading a dispute needs two. The
+  second is for the payment's charge, whose payment method type makes the fact a returned ACH debit
+  or a card dispute. A charge that cannot confirm an ACH debit leaves it a card dispute, so that a
+  person still sees it. If Stripe then answers differently on a later reading of the same event, the
+  second reading is kept as conflicting evidence.
+- **The events of one dispute raise one review.** They carry the dispute's id and the day it was
+  opened, not their own, so they agree with each other.
+- **A refund is read from `charge.refunded` alone**, the one refund event that carries the payment's
+  metadata, with the total refunded so far.
+- **A return cannot be posted from Stripe's word.** No fact read here is complete, and a return posts
+  only from complete evidence. An administrator can review and close one. Posting waits for payouts,
+  where the payout carries the debit. A test shows the guarded return refusing one for a
+  receipted payment and exactly the ledger amount, where everything else would let the reversal post,
+  so that one flag is what holds it.
+- **The sweep no longer waits for a waiting payment.** It runs every five minutes and asks from the
+  last sweep that completed, less ten minutes, and 29 days on the first sweep after a start. A
+  dispute Stripe could not be asked about is passed over, the rest is kept, and the same window is
+  asked for again. No position is stored.
+- **A payment reported both failed and succeeded goes to review**, in the shared engine.
+- **An event for our payment in another currency is kept as conflicting evidence**, not refused.
+- **A progress fact's amount is not compared in the engine.** The simulator's progress facts carry
+  the ledger amount and Stripe's carry the charged amount, so one rule would be wrong for one of
+  them. Every attempt already retrieves Stripe's own payment and holds it to the operation's amount.
+
+It was run against a sandbox on 2026-10-09. A card payment made with `pm_card_createDispute` went to
+review within seconds, from the two dispute events as delivered. With forwarding then stopped, an ACH
+payment made with `pm_usBankAccount_dispute` succeeded and was disputed about four minutes later; the
+next sweep stored its three events as one return and sent it to review. A refund made at Stripe for
+an older fixture payment was found by the same sweep. An administrator closed the return's review, and
+the attempt to post it was refused. The host's first sweep listed fifty events over 29 days, among
+them the probe's own disputes and refunds, and kept none that was not this fixture's. Nothing posted.
+
+Accepted, to revisit before the ADR is accepted: a host's first sweep reads 29 days of events inline
+in the worker, with up to two requests for each disputed payment in them; a host whose clock is more
+than fifteen minutes ahead of Stripe's can miss an event between sweeps until it restarts; and a card
+dispute's closing event can arrive weeks later and reopens a closed review without saying what is new.
 
 The provisional assumptions of ADR-053 stay open. This ADR verifies none of them, and nothing here
 is approval to move real money.
