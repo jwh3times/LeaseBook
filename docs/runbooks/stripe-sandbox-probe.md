@@ -1,9 +1,9 @@
 # Stripe sandbox probe
 
 - **Audience:** Maintainers who hold a Stripe sandbox
-- **Status:** Implemented tooling; first run recorded 2026-10-08, payouts still to record
+- **Status:** Implemented tooling; first run recorded 2026-10-08, first payout recorded 2026-10-09
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-08
+- **Last reviewed:** 2026-10-11
 
 The probe asks a Stripe sandbox the questions the payment adapter depends on and records what Stripe
 sends. [ADR-054](../adr/ADR-054-stripe-sandbox-adapter.md) lists the questions. The probe is a
