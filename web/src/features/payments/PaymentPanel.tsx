@@ -313,7 +313,7 @@ export function PaymentPanel({ staff = false }: { staff?: boolean }) {
                 )}
                 <span>{description(payment, words)}</span>
                 {/* A tenant is never shown a reason code or the staff text for one. The simulation
-                    keeps its screens as they were, so only the sandbox adds this sentence. */}
+                    keeps its tenant screen as it was, so only the sandbox adds this sentence. */}
                 {!staff && sandbox && payment.status === 'NeedsReview' && (
                   <span>{tenantReviewNote(payment)}</span>
                 )}

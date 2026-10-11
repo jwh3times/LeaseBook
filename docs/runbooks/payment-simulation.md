@@ -74,7 +74,9 @@ Other event kinds are `Processing`, `Succeeded`, `Available`, `PayoutPending`, `
 the operation to review; it never invokes an unrestricted reversal. A PMAdmin then resolves it on the
 Operations page (ADR-052): **Post return** posts a full return as the receipt's linked reversal, dated
 on the return evidence date, or reports the reason it cannot; **Close review…** records a note and
-posts nothing, for a return staff have corrected by hand. Sign in as `admin-a@payments.test` with the
+posts nothing, for a return staff have corrected by hand. **Post return** is offered only when the
+evidence held could be posted as a return: not for a refund, a dispute, a partial return or
+conflicting evidence, which can only be closed. Sign in as `admin-a@payments.test` with the
 fixture password to try it. Technical retries use delays
 of 1, 5, 30, 120 and 600 seconds, then require PMAdmin retry of the same operation. Unsupported
 money cases offer no force-post action. Unmapped objects remain in the durable inbox; after ten
@@ -266,13 +268,16 @@ bound to that account, and takes nothing else in the event as saying which organ
   (`charge.refunded`), as a **Refund**. To learn whose payment a dispute is about, the host asks
   Stripe for the payment and its charge. A PMAdmin can close the review. A dispute event never
   posts a return, on a payment with a receipt included: Stripe's word about a dispute is not bank
-  evidence, and **Post return** on such a payment is refused. A return posts only inside a payout
+  evidence, so **Post return** is not offered on such a payment and the route behind it refuses.
+  A return posts only inside a payout
   that an administrator posts.
 - `payout.paid` and `payout.failed` are read as [A payout](#a-payout) describes. Every other event
   type is acknowledged and dropped, Stripe's other four payout events included.
-- A `500` on a dispute's delivery means Stripe could not be asked about it just then. So does one on
-  a `payout.paid` delivery: its lines could not be listed in full, or Stripe has not finished
-  reconciling the payout. The sweep reads the event again within about five minutes.
+- A `503` on a dispute's delivery means Stripe could not be asked about it just then. So does one on
+  a `payout.paid` delivery: the payout or its lines could not be read in full, or Stripe has not
+  finished reconciling the payout. The host logs event `4608`, and the sweep reads the event again
+  within about five minutes. A `500` is a fault in the host: see the
+  [diagnostics runbook](diagnostics.md#simulated-payment-processing).
 - A payment that succeeds gets its paid date and stays **Processing**. No receipt is recorded and no
   journal entry is written: a Stripe event is never bank evidence. It is receipted, and becomes
   **Settled**, only when a payout that holds it posts.
@@ -307,8 +312,9 @@ For a paid payout the host asks Stripe for the payout's balance lines, every pag
 behind each dispute among them. If the event does not say the payout's reconciliation is `completed`,
 it first asks Stripe for the payout as it is now, and reads no lines until Stripe says so. Each
 request carries an identifier and nothing else. The payout is stored with every line Stripe listed
-and held. It shows in the **Payouts** list on Operations under its raw status, `AwaitingBank`, with a
-bank amount of zero; the list has no wording for a held payout yet. No journal entry is written.
+and held. It shows in the **Payouts** list on Operations as **Waiting for the bank**, with the
+processor's payout amount and the words "No bank evidence has arrived for this payout"; no bank
+amount or date is shown until there is bank evidence. No journal entry is written.
 
 A payout belongs to the fixture bound to its account, whichever generation's payments it holds, so a
 payout of the probe's charges or of an earlier fixture is stored too.
@@ -360,14 +366,15 @@ Give the evidence once and get it right: there is no command that corrects it.
 **In review.** An administrator can close a payout in review or one still waiting for its bank, with
 a note. Posting one that no bank has spoken for is answered with HTTP 409 and `bank_evidence_missing`.
 A payout in review is checked again only when an administrator posts it: the paid event arriving
-again, by redelivery or in a sweep, changes nothing. The **Payouts** list has no wording of its own
-yet for `bank_amount_mismatch` or `payout_failed`, and shows a line kind it does not know by its raw
-name. The staff API carries Stripe's figure as `processorAmount` and a failure's time as `failedAt`;
-no screen reads either yet.
+again, by redelivery or in a sweep, changes nothing. The **Payouts** list says in words why a payout
+waits, `bank_amount_mismatch` and `payout_failed` included, and names each line's kind: **Card
+dispute**, **Refund**, **Failed bank debit**, or **Unrecognised line**. It shows Stripe's figure as
+the processor's payout amount and, for a failed payout, when Stripe said it failed.
 
 **A payout that fails.** `payout.failed` sends the payout to review as `payout_failed`, whatever
 state it was in, one already posted included. Nothing is reversed: what it posted stays posted, its
-payments stay as they were, and it can only be closed. Correct the ledger by hand if the fixture
+payments stay as they were, and it can only be closed. For one that had posted, the list then reads
+**Needs review — posted, nothing reversed**. Correct the ledger by hand if the fixture
 needs it.
 
 **Keep the account quiet while a payout forms.** Stripe decides what a payout covers, and other

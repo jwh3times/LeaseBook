@@ -610,15 +610,18 @@ keep. In a Stripe sandbox host it also records each authentic event the adapter 
 event type other than the nine it reads (three payment events, three dispute events,
 `charge.refunded`, `payout.paid` and `payout.failed`), or a payment, dispute or refund of another
 fixture generation. Stripe's
-CLI forwards every event type, so `4602` is routine there and is not a fault. There it also records a
-payout notice too malformed to keep, and bank evidence from `payment-simulation bank` that did not
-verify. `4603` (`PaymentWorkerUnavailable`) records the exception type when a worker
+CLI forwards every event type, so that is most of what arrives there and is not a fault: in a Stripe
+sandbox host such a dropped delivery is logged at Debug, which the default log level does not write,
+and at Information in a simulation host. Every other `4602` is Information in either mode. A sandbox
+host also records under it a payout notice too malformed to keep, and bank evidence from
+`payment-simulation bank` that did not verify. `4603` (`PaymentWorkerUnavailable`) records the exception type when a worker
 pass cannot complete. `4604` (`PaymentSettlementEvaluated`) records a payout's id, status and reason
 each time the check that runs by itself judges it: when it arrives and, for a payout held for its
 bank, when bank evidence releases it. `4605` (`PaymentSettlementNeedsAttention`) records the
 exception type when that check could not finish; a payout that had its bank evidence is then marked
-`technical_failure`. Both
-messages say "Simulated payout" in either payment mode. `4606` (`PaymentRecoverySwept`) records a catch-up sweep of one fixture whose
+`technical_failure`. The
+messages of `4600` to `4605` name no payment mode: they read "Online payment {OperationId} …" and
+"Payout {SettlementId} …" in both. `4606` (`PaymentRecoverySwept`) records a catch-up sweep of one fixture whose
 list was read to its end, with how many events the processor listed, how many were handed on, how
 many could not be read, and how many are to be asked about again. That last count is of dispute
 events whose payment or charge Stripe could not be asked for, and of paid-payout events whose lines
@@ -631,11 +634,18 @@ the next sweep. A sweep runs for each fixture every five minutes whether or not 
 so `4606` is logged at that interval in either payment mode; the simulator's lists nothing.
 
 In a Stripe sandbox host, a dispute event delivered while Stripe cannot be asked about it is answered
-with HTTP 500 and logged as `1000` (`UnhandledException`), so that Stripe does not count it as
-delivered. So is a `payout.paid` event whose balance lines cannot be listed in full, including one
-for a payout Stripe has not finished reconciling. Neither is a fault in LeaseBook: the next sweep
-reads the event, and counts one it still cannot ask about among those to be asked about again.
-Repeated ones point at the connection to Stripe or at the sandbox key. No callback body, signing key or bank credentials belong in
+with HTTP 503 and the problem code `payment_callback_deferred`, so that Stripe does not count it as
+delivered and sends it again. So is a `payout.paid` event whose payout or balance lines cannot be
+read in full, including one for a payout Stripe has not finished reconciling. Each is logged as
+`4608` (`PaymentCallbackDeferred`) at Warning, and nothing is kept of the event. The entry names the
+exception type and, where the adapter itself judged the answer, its own sentence as `Condition`: a
+payout still reconciling will read on a later delivery, while one Stripe does not hold, or one with
+more balance lines than a payout is read with, never will. A failure of the connection or of
+Stripe's library is named by type only and `Condition` is `none`. Only a failure to ask Stripe is
+deferred; any other fault in reading an event is HTTP 500 and `1000`. Neither is a fault in LeaseBook and neither appears as `1000` (`UnhandledException`):
+the next sweep reads the event, and counts one it still cannot ask about among those to be asked
+about again. Repeated ones point at the connection to Stripe or at the sandbox key. A delivery that
+was read and then could not be stored is still an unhandled error: HTTP 500 and `1000`. No callback body, signing key or bank credentials belong in
 these logs.
 
 Staff Operations shows durable payment status, reason, last attempt and evidence reference within

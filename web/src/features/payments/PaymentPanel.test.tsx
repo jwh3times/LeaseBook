@@ -701,7 +701,7 @@ describe('payments by mode', () => {
     show(true);
     expect(
       await screen.findByText(
-        'A return, refund or dispute was reported for this payment, and its receipt is on the ledger. No automatic reversal was made. The evidence held so far cannot be posted as a return. Review the evidence and the ledger, then close the review.',
+        'A return, refund or dispute was reported for this payment, and its receipt is on the ledger. No automatic reversal was made. The evidence held so far cannot be posted as a return. If the bank returned an ACH payment, leave this review open: the return posts with the payout that carries it, and closing the review first stops that payout from posting. For a refund or a card dispute, correct the ledger, then close the review.',
       ),
     ).toBeVisible();
     expect(await screen.findByRole('button', { name: 'Close review…' })).toBeVisible();

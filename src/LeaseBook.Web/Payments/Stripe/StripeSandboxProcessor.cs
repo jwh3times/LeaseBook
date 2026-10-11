@@ -238,6 +238,9 @@ public sealed class StripeSandboxProcessor : IPaymentProcessor
         try { return await ObservationAsync(notice.Body, only: null, [], ct); }
         // A test event about a payment or a charge Stripe marks live: refused, as an event marked live is.
         catch (PaymentUnavailableException) { return ProcessorRead<ProcessorObservation>.Of(null); }
+        // Stripe refused or failed the question. Handed on as the seam's own exception, since nothing
+        // outside this folder may name the library's; the library's text stays inside it as the cause.
+        catch (StripeException ex) { throw new ProcessorUnansweredException(ex); }
     }
 
     // Stripe never speaks for a bank: a payout it marks paid is not proof the bank received it. So
@@ -252,6 +255,7 @@ public sealed class StripeSandboxProcessor : IPaymentProcessor
         try { return await PayoutAsync(notice.Body, only: null, [], ct); }
         // A test event about a payout whose lines Stripe marks live: refused, as an event marked live is.
         catch (PaymentUnavailableException) { return ProcessorRead<ProcessorPayout>.Of(null); }
+        catch (StripeException ex) { throw new ProcessorUnansweredException(ex); }
     }
 
     /// <summary>
@@ -527,7 +531,7 @@ public sealed class StripeSandboxProcessor : IPaymentProcessor
                 // payout is now. Not ready is not an answer about the payout: it is thrown, like a
                 // list that cannot be had, so that a delivery is sent again and a sweep asks again.
                 if (Text(about, "reconciliation_status") != ReconciliationCompleted && !await ReconciledAsync(payoutId, binding, asked, ct))
-                { throw new IOException("The Stripe sandbox has not finished reconciling the payout; its lines are not read yet."); }
+                { throw new ProcessorUnansweredException("The Stripe sandbox has not finished reconciling the payout; its lines are not read yet."); }
                 items = await LinesAsync(payoutId, binding, asked, ct);
             }
             return ProcessorRead<ProcessorPayout>.Of(new ProcessorPayout(payoutId, binding.Account, binding.Mode, binding.Generation,
@@ -543,7 +547,7 @@ public sealed class StripeSandboxProcessor : IPaymentProcessor
     private async Task<bool> ReconciledAsync(string payoutId, FixtureBinding binding, Dictionary<string, string?> asked, CancellationToken ct)
     {
         if (await AskAsync("/v1/payouts/" + payoutId, binding, asked, ct) is not { } answer)
-        { throw new IOException("The Stripe sandbox does not hold the payout its event is about."); }
+        { throw new ProcessorUnansweredException("The Stripe sandbox does not hold the payout its event is about."); }
         using var document = Answer(answer);
         var held = document.RootElement;
         if (!held.TryGetProperty("livemode", out var live) || live.ValueKind != JsonValueKind.False
@@ -564,7 +568,7 @@ public sealed class StripeSandboxProcessor : IPaymentProcessor
         string? after = null;
         for (var page = 0; ; page++)
         {
-            if (page == MaxPages) { throw new IOException("The Stripe sandbox listed more balance lines than a payout is read with."); }
+            if (page == MaxPages) { throw new ProcessorUnansweredException("The Stripe sandbox listed more balance lines than a payout is read with."); }
             var response = await _client.RawRequestAsync(HttpMethod.Get,
                 after is null ? query : query + "&starting_after=" + Uri.EscapeDataString(after), null, account, ct);
             JsonDocument document;
@@ -585,7 +589,7 @@ public sealed class StripeSandboxProcessor : IPaymentProcessor
         return items;
     }
 
-    private static IOException NotLines() => new("The Stripe sandbox did not answer with a payout's balance lines.");
+    private static ProcessorUnansweredException NotLines() => new("The Stripe sandbox did not answer with a payout's balance lines.");
 
     // The longest line reference kept, less the room the reference of a dispute's own fee takes.
     private const int MaxLineId = 56;
@@ -724,7 +728,7 @@ public sealed class StripeSandboxProcessor : IPaymentProcessor
         return document;
     }
 
-    private static IOException NotAnObject() => new("The Stripe sandbox did not answer with the object asked for.");
+    private static ProcessorUnansweredException NotAnObject() => new("The Stripe sandbox did not answer with the object asked for.");
 
     private static string? Text(JsonElement owner, string name) =>
         owner.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;

@@ -122,6 +122,33 @@ public static class ProcessorPayoutStates
 public sealed record ProcessorPayout(string PayoutId, string Account, string Mode, Guid Generation, string PayoutType,
     string State, decimal Amount, string Currency, Guid BankId, DateTime ObservedAt, IReadOnlyList<ProcessorSettlementItem> Items);
 
+/// <summary>
+/// A processor adapter could not get, from the processor, what reading a notice needs: the processor
+/// refused or failed the question, or answered with something that is not what was asked for. It says
+/// nothing about the payment or the payout, and it is not a fault of this host. Thrown by an adapter's
+/// reads of a notice, beside <see cref="PaymentConflictException"/> and
+/// <see cref="PaymentUnavailableException"/>, so that a caller can tell it from a fault without
+/// naming a processor library's types. An <see cref="IOException"/>, as an adapter's own conditions
+/// have always been.
+/// </summary>
+public sealed class ProcessorUnansweredException : IOException
+{
+    /// <summary>
+    /// A condition the adapter found and worded itself. The sentence is LeaseBook's own and constant:
+    /// it carries no id, no key and nothing the processor said, so it may be logged.
+    /// </summary>
+    public ProcessorUnansweredException(string condition) : base(condition) => Condition = condition;
+
+    /// <summary>
+    /// A failure of the processor's own library. Its text is the library's and may repeat part of a
+    /// request, so it is kept as the cause and never as this exception's own message.
+    /// </summary>
+    public ProcessorUnansweredException(Exception cause) : base("The processor could not be asked.", cause) { }
+
+    /// <summary>The adapter's own sentence for what it found, or null when the failure was the library's.</summary>
+    public string? Condition { get; }
+}
+
 public interface IPaymentProcessor
 {
     Task<ProcessorResult> SubmitAsync(ProcessorRequest request, CancellationToken ct);
@@ -139,7 +166,10 @@ public interface IPaymentProcessor
     /// any organization transaction. The generation and bank on the result are the adapter's to supply:
     /// an adapter whose notices do not carry them takes them from its own binding for the notice's
     /// account, never from the notice, and answers <see cref="ProcessorRead{T}.NotOurs"/> when it has
-    /// no binding for that account or the notice is of another kind.
+    /// no binding for that account or the notice is of another kind. What the processor would not or
+    /// could not answer is thrown as <see cref="ProcessorUnansweredException"/>, or as the transport's
+    /// own failure (<see cref="HttpRequestException"/>, <see cref="IOException"/>, a timeout); any
+    /// other exception is a fault.
     /// </summary>
     Task<ProcessorRead<ProcessorObservation>> ReadObservationAsync(ProcessorNotice notice, CancellationToken ct);
 

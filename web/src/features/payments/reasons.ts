@@ -60,8 +60,7 @@ export function paymentReason(
   if (reason === 'return_requires_review') {
     if (!payment.receiptRecorded)
       return 'A return, refund or dispute was reported for this payment. No receipt has posted for it, so there is nothing to reverse and nothing was posted. Review the evidence, then close the review.';
-    if (!payment.canPostReturn)
-      return 'A return, refund or dispute was reported for this payment, and its receipt is on the ledger. No automatic reversal was made. The evidence held so far cannot be posted as a return. Review the evidence and the ledger, then close the review.';
+    if (!payment.canPostReturn) return words.returnNotPostable;
   }
   return REASONS[reason] ?? 'Review required. Contact the fixture operator.';
 }

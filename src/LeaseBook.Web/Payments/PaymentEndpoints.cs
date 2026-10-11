@@ -204,6 +204,10 @@ public sealed class PaymentEndpoints : IEndpointModule
     // host and is not answered as one: the delivery is refused with a 503 so that Stripe sends it
     // again, and the sweep reads the event whether or not it does. Only the two reads are covered.
     // A failure to store what was read is still the fault it always was.
+    //
+    // And only a failure to ask is covered: what the adapter says the processor would not answer, a
+    // connection or a stream that failed, and a call that ran out of time. Anything else thrown by a
+    // read is a fault in the reading, and goes where faults go.
     private static async Task<IResult> ReceiveStripe(HttpContext http, IPaymentProcessor processor, PaymentRunner runner, CancellationToken ct)
     {
         if (await ReadBodyAsync(http, StripeSandboxProcessor.MaxNoticeBytes, ct) is not { } body) { return Invalid(http); }
@@ -215,7 +219,7 @@ public sealed class PaymentEndpoints : IEndpointModule
             read = await processor.ReadObservationAsync(notice, ct);
             if (read.Ignored) { payout = await processor.ReadPayoutAsync(notice, ct); }
         }
-        catch (Exception ex) when (!ct.IsCancellationRequested)
+        catch (Exception ex) when (!ct.IsCancellationRequested && CouldNotBeAsked(ex))
         {
             runner.Defer(ex);
             return ProblemResults.Problem(http, "payment_callback_deferred",
@@ -231,6 +235,11 @@ public sealed class PaymentEndpoints : IEndpointModule
         if (payout.Value is not { } paid) { return Invalid(http); }
         return (await runner.ReceivePayoutAsync(paid, ct)).Malformed ? Invalid(http) : TypedResults.NoContent();
     }
+
+    // The seam's own exception is an IOException, and is named for what this is about. A cancellation
+    // here is never the request's own, which the caller has already ruled out: it is a call that timed out.
+    private static bool CouldNotBeAsked(Exception ex) =>
+        ex is ProcessorUnansweredException or HttpRequestException or IOException or OperationCanceledException or TimeoutException;
 
     // One flow for every processor: the body whole and within its limit, proved authentic, read, and
     // only then routed to an organization. What differs is the header the proof arrives in and the limit.

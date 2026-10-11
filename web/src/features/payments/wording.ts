@@ -22,6 +22,12 @@ export interface Wording {
   collectionFailed: string;
   /** A list of payouts with nothing in it: says who a payout is first heard of from. */
   noPayouts: string;
+  /**
+   * Staff text for a receipted payment whose return, refund or dispute cannot be posted as a return.
+   * In the sandbox a bank's return posts with the payout that carries it, and a payout refuses a
+   * payment whose review was closed, so that mode says to wait.
+   */
+  returnNotPostable: string;
   /** One line per payment status. */
   status: {
     requested: string;
@@ -47,6 +53,8 @@ const SIMULATION: Wording = {
   empty: 'No simulated payments yet.',
   collectionFailed: 'Collection failed. The tenant may submit a new simulated payment.',
   noPayouts: 'No payouts yet. A payout appears here when the bank reports it.',
+  returnNotPostable:
+    'A return, refund or dispute was reported for this payment, and its receipt is on the ledger. No automatic reversal was made. The evidence held so far cannot be posted as a return. Review the evidence and the ledger, then close the review.',
   status: {
     requested: 'Simulation requested',
     processing: 'Simulated payment processing — not yet on your ledger',
@@ -72,6 +80,8 @@ const STRIPE_SANDBOX: Wording = {
   collectionFailed: 'Collection failed. The tenant may submit a new test payment.',
   // The processor reports a sandbox payout before any bank does; it then waits for the bank.
   noPayouts: 'No payouts yet. A payout appears here when the processor reports it.',
+  returnNotPostable:
+    'A return, refund or dispute was reported for this payment, and its receipt is on the ledger. No automatic reversal was made. The evidence held so far cannot be posted as a return. If the bank returned an ACH payment, leave this review open: the return posts with the payout that carries it, and closing the review first stops that payout from posting. For a refund or a card dispute, correct the ledger, then close the review.',
   status: {
     requested: 'Test payment requested',
     processing: 'Test payment processing — not yet on your ledger',

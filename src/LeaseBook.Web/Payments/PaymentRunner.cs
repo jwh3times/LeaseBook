@@ -183,13 +183,19 @@ public sealed class PaymentRunner(IServiceScopeFactory scopes, SimulationSetting
 
     /// <summary>
     /// An authentic notice that could not be read because the processor would not answer what reading
-    /// it needs. Nothing was kept and the sender was told to send it again. The exception is named by
-    /// its type only: a processor's own text can repeat part of a key.
+    /// it needs. Nothing was kept and the sender was told to send it again. A library's or a
+    /// transport's exception is named by its type only: a processor's own text can repeat part of a
+    /// key. A condition the adapter worded itself is given as it stands, since that is what tells a
+    /// notice that is early from one that will never be readable. Where the adapter handed on its
+    /// library's failure, the type named is that failure's.
     /// </summary>
-    public void Defer(Exception ex) =>
+    public void Defer(Exception ex)
+    {
+        var unanswered = ex as ProcessorUnansweredException;
         log.LogWarning(new EventId(4608, "PaymentCallbackDeferred"),
-            "Payment notice not read because the processor could not be asked about it ({ExceptionType}); refused so that it is sent again",
-            ex.GetType().Name);
+            "Payment notice not read because the processor could not be asked about it ({ExceptionType}; adapter condition: {Condition}); refused so that it is sent again",
+            (unanswered?.InnerException ?? ex).GetType().Name, unanswered?.Condition ?? "none");
+    }
 
     public async Task ReceiveAsync(ProcessorObservation observation, CancellationToken ct)
     {

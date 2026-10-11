@@ -397,7 +397,67 @@ Accepted, to revisit before the ADR is accepted: each sweep reads again the line
 paid inside its overlap, and a host's first sweep those of every payout in 29 days; a receipted
 payment whose late fact cannot be judged after five tries rests until the next fact arrives; and
 the staff surface shows a held payout by its raw status with a bank amount of zero. The staff API
-returns the processor's figure and the time of a failure, and no screen reads either yet.
+returns the processor's figure and the time of a failure, and no screen reads either yet. The next
+note removes that last limit, and changes the 500 a delivery answers when a list cannot be had to a 503.
+
+**Implementation note, 2026-10-11 (surfaces).** The screens, the journal description and the logs
+now say what a sandbox payment and a held payout are. No posting template, money path or capability
+was added, and the lines and amounts of every posting are the same in both modes. The maintainer
+decided these points on 2026-10-11:
+
+- **The last step lands in two parts, and this ADR stays Proposed.** The surfaces come first and the
+  documents second: the sandbox runbook, the specifications and architecture brought into line, the
+  glossary, and the known limits recorded here. The ADR is not accepted until a payout has been shown
+  to post against a real sandbox.
+- **The API reports the mode, and the simulation's screens stay word for word.** The staff and tenant
+  payment lists carry `mode`, `Simulation` or `StripeSandbox`, and null where payments are not
+  enabled for the organization. A sandbox host says "Test payment" where a simulation host says
+  "Simulated payment", under the badge "Test payment — no real money moves". An absent or unknown
+  mode reads as the simulation.
+- **The description of a posting is mode-specific, and is the only thing in a posting that is.** A
+  sandbox receipt is described `Stripe sandbox tenant payment` and its return is noted as the bank
+  returning a Stripe sandbox tenant payment, so its reversal reads
+  `Void — Stripe sandbox tenant payment`. The words follow the mode stored on the bank evidence or
+  the payout, never the host's mode and never a capability. The simulation's descriptions are
+  unchanged.
+- **A held payout is shown as held.** It reads "Waiting for the bank", with the processor's amount
+  and a sentence saying no bank evidence has arrived. The staff API returns no bank amount and no
+  bank date until bank evidence exists; the stored zero is never shown as an amount. A payout that
+  posted and that Stripe later said failed reads "Needs review — posted, nothing reversed". The
+  reasons `bank_amount_mismatch` and `payout_failed` and the four line kinds nothing posts have words
+  of their own.
+- **Operational items no person can see will be recorded as known limits, not fixed.** They are
+  written down in the documents part. A failed ACH debit still sends its whole payout to review.
+
+Three things were found while building and settled in code:
+
+- **"Post return" is offered only when the engine would accept the evidence.** The staff view and
+  the command read one rule, so the two cannot come apart, and no second flag was added. It is not
+  offered for a refund, a card dispute, a partial return or conflicting evidence, nor for a sandbox
+  ACH dispute before its payout. The ledger may still refuse what the rule allows.
+- **A delivery that cannot be read yet answers 503, for payouts as well as disputes.** When Stripe
+  cannot be asked whose payment a dispute is about, or a paid payout or its lines cannot be read in
+  full or are not yet reconciled, the delivery is refused with the problem code
+  `payment_callback_deferred` and logged as event `4608` at Warning, so that Stripe sends it again.
+  It is no longer answered as an unhandled error. A failure to store what was read still is one. Only
+  a failure to ask Stripe is deferred: a connection or library failure, a timeout, or an answer the
+  adapter itself refuses, whose own sentence is logged. Any other fault in reading is an unhandled
+  error, as the independent review asked.
+- **A tenant's payment in review says the property manager is checking it, in the sandbox only.** A
+  tenant never sees a reason code or the staff text for one. The simulation's tenant screen is as it
+  was.
+
+The log messages of the payment events no longer name a mode, with their ids and names unchanged. In
+a sandbox host a delivery dropped as not this host's is logged at Debug, because Stripe sends every
+kind of event an account has.
+
+Checked against a real sandbox on 2026-10-11, on a copy of the fixture database. The staff and tenant
+lists reported the mode as `StripeSandbox`, and the tenant list carried nothing else new. The one
+payout the sandbox has made was read by staff with the processor's amount, $1,470.60, no bank amount
+and no bank date. Neither payment in review for a dispute was offered a return to post. The host's
+log named no mode, and no journal entry was written. The check read the API, not the screens in a
+browser, and the sandbox description of a journal entry has not been seen there, because no sandbox
+payout has posted.
 
 The provisional assumptions of ADR-053 stay open. This ADR verifies none of them, and nothing here
 is approval to move real money.

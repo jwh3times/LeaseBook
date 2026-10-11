@@ -42,6 +42,11 @@ describe('payment reasons', () => {
     const unpostable = paymentReason(view('return_requires_review', true, false), words);
     expect(unpostable).toMatch(/its receipt is on the ledger\. No automatic reversal was made\./);
     expect(unpostable).not.toMatch(/can post a full return/);
+    expect(unpostable).not.toMatch(/leave this review open/);
+    // In the sandbox a bank's return posts with its payout, and a closed review blocks that payout.
+    expect(
+      paymentReason(view('return_requires_review', true, false), wording('StripeSandbox')),
+    ).toMatch(/leave this review open: the return posts with the payout that carries it/);
     const unreceipted = paymentReason(view('return_requires_review', false, false), words);
     expect(unreceipted).toMatch(/No receipt has posted for it/);
     expect(unreceipted).not.toMatch(/after the receipt posted|can post a full return/);
