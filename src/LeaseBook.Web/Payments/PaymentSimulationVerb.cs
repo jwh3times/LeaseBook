@@ -19,7 +19,9 @@ internal sealed class PaymentSimulationVerb : ICliVerb
             + " | emit <org-id> <operation-id> <kind> <bank-date yyyy-MM-dd>"
             + " | payout <org-id> <bank-date yyyy-MM-dd> <payout-id> <line>... [--bank-amount=<amount>] [--type=<type>]"
             + " where <line> is pay:<operation-id>[:<processor-fee>], return:<operation-id>[:<fee-given-back>],"
-            + " refund:<operation-id> or fee:<amount>. emit and payout drive the simulator and are refused outside Simulation.";
+            + " refund:<operation-id> or fee:<amount>. emit and payout drive the simulator and are refused outside Simulation."
+            + " | bank <org-id> <stripe-payout-id> <bank-amount> <bank-date yyyy-MM-dd>"
+            + " says what the bank received for a Stripe sandbox payout and is refused outside StripeSandbox.";
         if (args.Length >= 3 && args[1] == "init" && args[2].EndsWith(".local", StringComparison.OrdinalIgnoreCase))
         {
             if (!TryStripeAccounts(args[3..], out var accounts))
@@ -55,6 +57,14 @@ internal sealed class PaymentSimulationVerb : ICliVerb
         {
             invocation = new(Name, (sp, ct) => Payout(sp, payoutOrgId, bankDate, payout, ct));
         }
+        else if (args.Length == 6 && args[1] == "bank" && Guid.TryParse(args[2], out var bankOrgId)
+            && args[3].Length is > 0 and <= 100 && args[3].All(x => char.IsAsciiLetterOrDigit(x) || x == '_')
+            && decimal.TryParse(args[4], NumberStyles.AllowDecimalPoint | NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var bankAmount)
+            && decimal.Round(bankAmount, 2) == bankAmount && Math.Abs(bankAmount) <= 999999999999.99m
+            && DateOnly.TryParseExact(args[5], "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var received))
+        {
+            invocation = new(Name, (sp, ct) => Bank(sp, bankOrgId, args[3], bankAmount, received, ct));
+        }
         else { return false; }
         error = ""; return true;
     }
@@ -79,6 +89,43 @@ internal sealed class PaymentSimulationVerb : ICliVerb
         if (services.GetRequiredService<SimulationSettings>().Simulated) { return true; }
         Console.Error.WriteLine($"payment-simulation: {verb} drives the simulator and is refused outside Simulation.");
         return false;
+    }
+
+    // Says what the bank received for one Stripe payout: signed with the fixture key, verified, then
+    // stored and, when the payout was waiting only for this, checked and posted. Stripe never says
+    // it, and no route or staff control can: this command is the one source of bank evidence there is.
+    private static async Task<int> Bank(IServiceProvider services, Guid orgId, string payoutId, decimal amount, DateOnly date, CancellationToken ct)
+    {
+        var settings = services.GetRequiredService<SimulationSettings>();
+        if (settings.Mode != PaymentModes.StripeSandbox)
+        {
+            Console.Error.WriteLine("payment-simulation: bank supplies bank evidence for a Stripe sandbox payout and is refused outside StripeSandbox.");
+            return 1;
+        }
+        var binding = settings.ForOrg(orgId) ?? throw new PaymentUnavailableException();
+        var body = JsonSerializer.SerializeToUtf8Bytes(new BankEvidenceNotice(binding.Account, payoutId, amount, date));
+        var delivery = await services.GetRequiredService<PaymentRunner>()
+            .ReceiveBankEvidenceAsync(body, services.GetRequiredService<BankEvidenceSigner>().Sign(body), ct);
+        var given = $"bank amount {amount.ToString("0.00", CultureInfo.InvariantCulture)} on {date:yyyy-MM-dd}";
+        var now = delivery.Status is null ? "" : $" The payout is {delivery.Status}{(delivery.Reason is null ? "" : $" ({delivery.Reason})")}.";
+        switch (delivery.Outcome)
+        {
+            case BankEvidenceOutcomes.Stored:
+                Console.WriteLine($"Payout {payoutId}: {given} recorded.{now}");
+                return 0;
+            case BankEvidenceOutcomes.Same:
+                Console.WriteLine($"Payout {payoutId}: {given} was already recorded.{now}");
+                return 0;
+            case BankEvidenceOutcomes.Conflicting:
+                Console.Error.WriteLine($"payment-simulation: payout {payoutId} already has other bank evidence; this was not recorded.{now}");
+                return 1;
+            case BankEvidenceOutcomes.Unknown:
+                Console.Error.WriteLine($"payment-simulation: no Stripe payout {payoutId} is held in this fixture.");
+                return 1;
+            default:
+                Console.Error.WriteLine("payment-simulation: the bank evidence was not kept.");
+                return 1;
+        }
     }
 
     // Delivers payout evidence the way a processor would: signed, verified, then stored and checked.

@@ -64,6 +64,7 @@ builder.Services.AddScoped<IPaymentEligibility, PaymentEligibilityAdapter>();
 builder.Services.AddScoped<IPaymentFeeRules, PaymentFeeRulesAdapter>();
 builder.Services.AddScoped<IRefundCheckLedger, RefundCheckLedgerAdapter>();
 simulation.AddProcessor(builder.Services);
+builder.Services.AddSingleton<BankEvidenceSigner>();
 builder.Services.AddSingleton<PaymentRunner>();
 
 // No `Server: Kestrel` banner: it names the stack to every anonymous caller and nothing reads it.

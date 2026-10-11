@@ -17,9 +17,35 @@ public sealed record ProcessorSettlement(
     IReadOnlyList<ProcessorSettlementItem> Items);
 
 /// <summary>
+/// A bank's word for one payout that a processor reported apart from it (ADR-054): what the bank
+/// received and on what day. <see cref="EvidenceId"/> is the evidence's own reference.
+/// </summary>
+public sealed record BankEvidence(string PayoutId, string Account, string Mode, Guid Generation,
+    decimal BankAmount, DateOnly BankDate, string EvidenceId);
+
+/// <summary>What became of bank evidence. Only <see cref="Stored"/> changes anything.</summary>
+public static class BankEvidenceOutcomes
+{
+    /// <summary>Kept. The payout can now be checked against it.</summary>
+    public const string Stored = "Stored";
+    /// <summary>The payout already holds exactly this evidence.</summary>
+    public const string Same = "Same";
+    /// <summary>The payout already holds other evidence. This was not kept.</summary>
+    public const string Conflicting = "Conflicting";
+    /// <summary>No payout here is waiting for a bank under that reference.</summary>
+    public const string Unknown = "Unknown";
+    /// <summary>Not evidence that could be stored as it was given.</summary>
+    public const string Malformed = "Malformed";
+}
+
+/// <param name="Evaluate">The payout was waiting for exactly this, and is to be checked and posted now.</param>
+public sealed record BankEvidenceResult(string Outcome, Guid? Id = null, bool Evaluate = false);
+
+/// <summary>
 /// Stores, checks and posts payout batches (ADR-053). A payout posts completely or not at all, and a
-/// payout that cannot post says why in a stable reason. All methods run on the caller's organization
-/// transaction; no provider I/O occurs here.
+/// payout that cannot post says why in a stable reason. A payout a processor reports apart from any
+/// bank (ADR-054) is stored and held, and posts nothing until a bank's evidence for it arrives. All
+/// methods run on the caller's organization transaction; no provider I/O occurs here.
 /// </summary>
 public sealed class SettlementEngine(DbContext db, TimeProvider clock, PaymentEngine payments, IPaymentLedger ledger)
 {
@@ -39,8 +65,7 @@ public sealed class SettlementEngine(DbContext db, TimeProvider clock, PaymentEn
         if (!WellFormed(evidence)) { return null; }
         await payments.LockAsync("settlement:" + evidence.PayoutId, ct);
         var fingerprint = Fingerprint(evidence);
-        var existing = await db.Set<PaymentSettlement>().AsNoTracking()
-            .SingleOrDefaultAsync(x => x.Account == binding.Account && x.PayoutId == evidence.PayoutId, ct);
+        var existing = await FindAsync(binding, evidence.PayoutId, ct);
         if (existing is not null)
         {
             if (existing.Fingerprint == fingerprint) { return existing.Id; }
@@ -62,6 +87,7 @@ public sealed class SettlementEngine(DbContext db, TimeProvider clock, PaymentEn
             Id = UuidV7.NewId(),
             Generation = evidence.Generation,
             Account = evidence.Account,
+            Mode = evidence.Mode,
             PayoutId = evidence.PayoutId,
             PayoutType = evidence.PayoutType,
             BankId = evidence.BankId,
@@ -71,8 +97,129 @@ public sealed class SettlementEngine(DbContext db, TimeProvider clock, PaymentEn
             EvidenceId = evidence.EvidenceId,
             Fingerprint = fingerprint,
         };
+        await AddAsync(settlement, evidence.Items, ct);
+        return settlement.Id;
+    }
+
+    /// <summary>
+    /// Stores a processor's own account of a payout, once, and returns the payout's id; null for one
+    /// that is not well formed. Nothing posts from it. A payout the processor says it paid is stored
+    /// with its lines and held until a bank's evidence arrives. One it says failed is stored, or
+    /// marked if it is already here, and sent to a person whatever state it was in: held, in review,
+    /// closed or posted. Nothing is reversed for it. The same account again is a no-op, and so is
+    /// anything said of a payout already known to have failed; a different account of a payout still
+    /// awaiting a decision marks it as conflicting.
+    /// </summary>
+    public async Task<Guid?> ReceivePayoutAsync(FixtureBinding binding, ProcessorPayout payout, CancellationToken ct)
+    {
+        await payments.RequireFixtureAsync(binding, ct);
+        if (payout.Generation != binding.Generation || payout.Account != binding.Account || payout.Mode != binding.Mode
+            || payout.BankId != binding.BankId)
+        { throw new PaymentUnavailableException(); }
+        if (!WellFormed(payout)) { return null; }
+        await payments.LockAsync("settlement:" + payout.PayoutId, ct);
+        var failed = payout.State == ProcessorPayoutStates.Failed;
+        var fingerprint = Fingerprint(payout);
+        var existing = await FindAsync(binding, payout.PayoutId, ct);
+        if (existing is null)
+        {
+            var settlement = new PaymentSettlement
+            {
+                Id = UuidV7.NewId(),
+                Generation = payout.Generation,
+                Account = payout.Account,
+                Mode = payout.Mode,
+                PayoutId = payout.PayoutId,
+                PayoutType = payout.PayoutType,
+                BankId = payout.BankId,
+                ProcessorAmount = payout.Amount,
+                Currency = payout.Currency,
+                Fingerprint = fingerprint,
+                Status = failed ? SettlementStatuses.NeedsReview : SettlementStatuses.AwaitingBank,
+                Reason = failed ? SettlementReasons.PayoutFailed : null,
+                FailedAt = failed ? payout.ObservedAt : null,
+            };
+            await AddAsync(settlement, payout.Items, ct);
+            return settlement.Id;
+        }
+
+        // Decided under the lock a posting takes, on the row as it is now.
+        await payments.LockAsync("settlement-id:" + existing.Id, ct);
+        var current = await db.Set<PaymentSettlement>().SingleAsync(x => x.Id == existing.Id, ct);
+        if (failed)
+        {
+            // Once. A second notice of the same failure must not reopen a review a person has closed.
+            if (current.FailedAt is null)
+            {
+                current.FailedAt = payout.ObservedAt;
+                current.Status = SettlementStatuses.NeedsReview;
+                current.Reason = SettlementReasons.PayoutFailed; current.ReasonItem = null;
+                await db.SaveChangesAsync(ct);
+            }
+            return current.Id;
+        }
+        // A payout known to have failed keeps that outcome: a notice that it was paid, arriving late
+        // or out of order, changes nothing and is no conflict.
+        if (current.FailedAt is not null || current.Fingerprint == fingerprint) { return current.Id; }
+        if (current.Status is SettlementStatuses.Received or SettlementStatuses.AwaitingBank or SettlementStatuses.NeedsReview)
+        {
+            current.Status = SettlementStatuses.NeedsReview;
+            current.Reason = "conflicting_evidence"; current.ReasonItem = null;
+            await db.SaveChangesAsync(ct);
+        }
+        return current.Id;
+    }
+
+    /// <summary>
+    /// Takes a bank's evidence for a payout that a processor reported apart from it. Given once: the
+    /// same again is a no-op, and different evidence is kept out and marks a payout still awaiting a
+    /// decision as conflicting. Nothing posts here. A payout that was waiting only for the bank
+    /// becomes ready to be checked, which <see cref="BankEvidenceResult.Evaluate"/> says; one a
+    /// person already holds keeps its status and reason, with the evidence beside it.
+    /// </summary>
+    public async Task<BankEvidenceResult> ReceiveBankEvidenceAsync(FixtureBinding binding, BankEvidence evidence, CancellationToken ct)
+    {
+        await payments.RequireFixtureAsync(binding, ct);
+        if (evidence.Generation != binding.Generation || evidence.Account != binding.Account || evidence.Mode != binding.Mode)
+        { throw new PaymentUnavailableException(); }
+        if (!Text(evidence.PayoutId, 100) || !Text(evidence.EvidenceId, 100) || evidence.BankDate == default
+            || !Storable(evidence.BankAmount))
+        { return new(BankEvidenceOutcomes.Malformed); }
+        await payments.LockAsync("settlement:" + evidence.PayoutId, ct);
+        // Only a payout the processor reported by itself can be waiting for a bank. One that arrived
+        // with its bank evidence is not known here as something a bank has still to speak for.
+        var existing = await FindAsync(binding, evidence.PayoutId, ct);
+        if (existing?.ProcessorAmount is null) { return new(BankEvidenceOutcomes.Unknown); }
+        await payments.LockAsync("settlement-id:" + existing.Id, ct);
+        var current = await db.Set<PaymentSettlement>().SingleAsync(x => x.Id == existing.Id, ct);
+        if (current.Banked)
+        {
+            if (current.BankAmount == evidence.BankAmount && current.BankDate == evidence.BankDate && current.EvidenceId == evidence.EvidenceId)
+            { return new(BankEvidenceOutcomes.Same, current.Id); }
+            // A payout that posted, was closed or is known to have failed keeps that outcome.
+            if (current.FailedAt is null && current.Status is SettlementStatuses.Received or SettlementStatuses.NeedsReview)
+            {
+                current.Status = SettlementStatuses.NeedsReview;
+                current.Reason = "conflicting_evidence"; current.ReasonItem = null;
+                await db.SaveChangesAsync(ct);
+            }
+            return new(BankEvidenceOutcomes.Conflicting, current.Id);
+        }
+        current.BankAmount = evidence.BankAmount; current.BankDate = evidence.BankDate; current.EvidenceId = evidence.EvidenceId;
+        var waiting = current.Status == SettlementStatuses.AwaitingBank;
+        if (waiting) { current.Status = SettlementStatuses.Received; }
+        await db.SaveChangesAsync(ct);
+        return new(BankEvidenceOutcomes.Stored, current.Id, waiting);
+    }
+
+    private Task<PaymentSettlement?> FindAsync(FixtureBinding binding, string payoutId, CancellationToken ct) =>
+        db.Set<PaymentSettlement>().AsNoTracking()
+            .SingleOrDefaultAsync(x => x.Account == binding.Account && x.Mode == binding.Mode && x.PayoutId == payoutId, ct);
+
+    private async Task AddAsync(PaymentSettlement settlement, IReadOnlyList<ProcessorSettlementItem> items, CancellationToken ct)
+    {
         db.Add(settlement);
-        db.AddRange(evidence.Items.Select(x => new PaymentSettlementItem
+        db.AddRange(items.Select(x => new PaymentSettlementItem
         {
             Id = UuidV7.NewId(),
             SettlementId = settlement.Id,
@@ -85,12 +232,13 @@ public sealed class SettlementEngine(DbContext db, TimeProvider clock, PaymentEn
             Currency = x.Currency,
         }));
         await db.SaveChangesAsync(ct);
-        return settlement.Id;
     }
 
     /// <summary>
     /// Checks a stored payout and posts it if it can be posted. <paramref name="confirmedBy"/> is the
     /// administrator posting a payout that contains a return; without one, such a payout waits.
+    /// A payout no bank has spoken for is checked and never posted, whoever asks: it goes to a person
+    /// if its lines could not post, and otherwise stays waiting for the bank.
     /// Returns null when the payout is unknown here.
     /// </summary>
     public async Task<PaymentSettlement?> EvaluateAsync(FixtureBinding binding, Guid id, Guid? confirmedBy, CancellationToken ct)
@@ -99,14 +247,25 @@ public sealed class SettlementEngine(DbContext db, TimeProvider clock, PaymentEn
         await payments.LockAsync("settlement-id:" + id, ct);
         var settlement = await db.Set<PaymentSettlement>().SingleOrDefaultAsync(x => x.Id == id, ct);
         if (settlement is null) { return null; }
-        if (settlement.Generation != binding.Generation || settlement.Account != binding.Account)
+        if (settlement.Generation != binding.Generation || settlement.Account != binding.Account || settlement.Mode != binding.Mode)
         { throw new PaymentUnavailableException(); }
         if (settlement.Status == SettlementStatuses.Posted) { return settlement; }
-        if (settlement.Status == SettlementStatuses.Closed || settlement.Reason == "conflicting_evidence")
+        // Neither can be posted whatever a person decides. A payout that failed may hold postings
+        // already, from before it failed; checking it again must never post them a second time.
+        if (settlement.Status == SettlementStatuses.Closed || settlement.FailedAt is not null
+            || settlement.Reason is "conflicting_evidence" or SettlementReasons.PayoutFailed)
         { throw new PaymentConflictException(); }
 
         var items = await db.Set<PaymentSettlementItem>().Where(x => x.SettlementId == id).OrderBy(x => x.Item).ToListAsync(ct);
-        var providerIds = items.Where(x => x.Kind != SettlementItemKinds.Fee).Select(x => x.ProviderId).Distinct().ToArray();
+        var providerIds = items.Where(x => x.Kind != SettlementItemKinds.Fee && x.ProviderId != "").Select(x => x.ProviderId)
+            .Distinct().Order(StringComparer.Ordinal).ToArray();
+        // The lock a fact is stored under, for every payment a line names, before the payments are
+        // read: a fact about one of them is then either committed and seen below, or stored after
+        // this commits, when the worker judges it against the receipt. Without it a failure or a
+        // dispute stored a moment ago and not yet judged would leave the payment looking as if it
+        // were still waiting, and the payout would receipt it. References first, then operations, the
+        // order a notice and the worker take them in.
+        foreach (var reference in providerIds) { await payments.LockAsync("reference:" + reference, ct); }
         var operations = await db.Set<PaymentOperation>()
             .Where(x => x.Account == settlement.Account && x.ProviderId != null && providerIds.Contains(x.ProviderId))
             .ToDictionaryAsync(x => x.ProviderId!, ct);
@@ -118,8 +277,20 @@ public sealed class SettlementEngine(DbContext db, TimeProvider clock, PaymentEn
         var returned = (await db.Set<PaymentEffect>().AsNoTracking()
             .Where(x => x.Kind == "Return" && operationIds.Contains(x.OperationId))
             .Select(x => x.OperationId).ToListAsync(ct)).ToHashSet();
+        // What has been said of each payment, judged or not. The status alone is what was last judged.
+        var said = (await db.Set<PaymentObservation>().AsNoTracking()
+            .Where(x => x.Account == settlement.Account && providerIds.Contains(x.ProviderId))
+            .Select(x => new { x.ProviderId, x.Kind }).ToListAsync(ct)).ToLookup(x => x.ProviderId, x => x.Kind);
 
-        var reason = Check(binding, settlement, items, operations, returned, out var lines);
+        var reason = Check(binding, settlement, items, operations, returned, said, out var lines);
+        if (!settlement.Banked)
+        {
+            // No bank has spoken, so nothing posts. What could never post goes to a person now.
+            if (reason is not null) { return await HoldAsync(settlement, reason, null, ct); }
+            settlement.Status = SettlementStatuses.AwaitingBank; settlement.Reason = null; settlement.ReasonItem = null;
+            await db.SaveChangesAsync(ct);
+            return settlement;
+        }
         if (reason is null && items.Any(x => x.Kind == SettlementItemKinds.Return) && confirmedBy is null)
         { reason = "settlement_requires_confirmation"; }
         if (reason is not null) { return await HoldAsync(settlement, reason, null, ct); }
@@ -172,7 +343,7 @@ public sealed class SettlementEngine(DbContext db, TimeProvider clock, PaymentEn
         await payments.LockAsync("settlement-id:" + id, ct);
         var settlement = await db.Set<PaymentSettlement>().SingleOrDefaultAsync(x => x.Id == id, ct);
         if (settlement is null) { return null; }
-        if (settlement.Generation != binding.Generation || settlement.Account != binding.Account)
+        if (settlement.Generation != binding.Generation || settlement.Account != binding.Account || settlement.Mode != binding.Mode)
         { throw new PaymentUnavailableException(); }
         if (settlement.Status == SettlementStatuses.Closed) { return settlement; }
         if (settlement.Status == SettlementStatuses.Posted) { throw new PaymentConflictException(); }
@@ -198,7 +369,19 @@ public sealed class SettlementEngine(DbContext db, TimeProvider clock, PaymentEn
             && x.ProviderId is { Length: <= 100 } && x.Currency is { Length: 3 })
         && e.Items.Select(x => x.Item).Distinct(StringComparer.Ordinal).Count() == e.Items.Count;
 
+    private static bool WellFormed(ProcessorPayout p) =>
+        Text(p.PayoutId, 100) && !p.PayoutId.Contains(':', StringComparison.Ordinal)
+        && Text(p.PayoutType, 20) && p.Currency is { Length: 3 } && Storable(p.Amount) && p.ObservedAt.Kind == DateTimeKind.Utc
+        && p.State is ProcessorPayoutStates.Paid or ProcessorPayoutStates.Failed
+        && p.Items is not null && p.Items.All(x => x is not null && Text(x.Item, 60) && Text(x.Kind, 20)
+            && x.ProviderId is { Length: <= 100 } && x.Currency is { Length: 3 }
+            && Storable(x.Gross) && Storable(x.Fee) && Storable(x.Net))
+        && p.Items.Select(x => x.Item).Distinct(StringComparer.Ordinal).Count() == p.Items.Count;
+
     private static bool Text(string? value, int max) => !string.IsNullOrWhiteSpace(value) && value.Length <= max;
+
+    // An amount as NUMERIC(14,2) holds one: whole cents, and within twelve digits before the point.
+    private static bool Storable(decimal amount) => Math.Abs(amount) <= 999999999999.99m && decimal.Round(amount, 2) == amount;
 
     // What the payout says, not how or when it was delivered: the observation time and the order of
     // the lines are left out, so a redelivery that differs only in those is the same evidence.
@@ -217,22 +400,46 @@ public sealed class SettlementEngine(DbContext db, TimeProvider clock, PaymentEn
         Items = e.Items.OrderBy(x => x.Item, StringComparer.Ordinal).ToArray(),
     }));
 
+    // What the processor says the payout is, not what became of it or when it said so: a second
+    // notice that it was paid, under another event, is the same account of it.
+    private static string Fingerprint(ProcessorPayout p) => PaymentEngine.Hash(JsonSerializer.Serialize(new
+    {
+        p.PayoutId,
+        p.Account,
+        p.Mode,
+        p.Generation,
+        p.PayoutType,
+        p.Amount,
+        p.Currency,
+        p.BankId,
+        Items = p.Items.OrderBy(x => x.Item, StringComparer.Ordinal).ToArray(),
+    }));
+
     // The specification's checks, in its order: unsupported content, identify, tie. Builds the lines to
     // post as it goes; they are meaningful only when the result is null.
     //
     // Every line's net must follow from its own gross and fee, and every fee is bounded by what the
     // payment says. Otherwise a line could tie the payout to the bank while naming an arbitrary net,
     // and the difference would post as the PM's fee surplus.
+    //
+    // A payout the processor reported by itself has two figures to tie: its lines to what the
+    // processor says it paid, and that to what the bank says it received. Before a bank has spoken
+    // only the first can be checked, and a null result then means "could post", never "post".
     private static string? Check(FixtureBinding binding, PaymentSettlement settlement, List<PaymentSettlementItem> items,
-        Dictionary<string, PaymentOperation> operations, HashSet<Guid> returned, out List<SettlementLineRequest> lines)
+        Dictionary<string, PaymentOperation> operations, HashSet<Guid> returned, ILookup<string, string> said,
+        out List<SettlementLineRequest> lines)
     {
         lines = [];
-        if (items.Count == 0) { return "settlement_incomplete"; }
+        // The bank's word against the processor's, before anything the lines say: when they differ
+        // nothing in the payout can be trusted to be what reached the bank.
+        if (settlement.Banked && settlement.ProcessorAmount is { } paid && paid != settlement.BankAmount)
+        { return SettlementReasons.BankAmountMismatch; }
         if (settlement.PayoutType != SettlementPayoutTypes.Standard || settlement.Currency != "USD"
-            || settlement.BankId != binding.BankId || settlement.BankDate == default
+            || settlement.BankId != binding.BankId || (settlement.Banked && settlement.BankDate == default)
             || items.Any(x => x.Currency != "USD" || x.Kind is not (SettlementItemKinds.Payment
                 or SettlementItemKinds.Return or SettlementItemKinds.Fee)))
         { return "unsupported_settlement"; }
+        if (items.Count == 0) { return "settlement_incomplete"; }
         // One line per payment and kind: a payout that names a payment twice contradicts itself.
         if (items.Where(x => x.Kind != SettlementItemKinds.Fee).GroupBy(x => (x.ProviderId, x.Kind)).Any(g => g.Count() > 1))
         { return "conflicting_evidence"; }
@@ -249,12 +456,17 @@ public sealed class SettlementEngine(DbContext db, TimeProvider clock, PaymentEn
             if (!operations.TryGetValue(item.ProviderId, out var operation)
                 || operation.BankId != settlement.BankId || operation.Generation != settlement.Generation)
             { return "settlement_incomplete"; }
+            var facts = said[item.ProviderId];
 
             if (item.Kind == SettlementItemKinds.Payment)
             {
                 // Only a payment still waiting for its bank evidence. One that failed, or that staff
                 // are reviewing or have closed, is not settled by a payout behind their backs.
                 if (operation.JournalId is not null || operation.Status != "Processing") { return "conflicting_evidence"; }
+                // Nor one of which a failure, a return, a refund, a dispute or a conflict has been
+                // stored and not yet judged: its status still says it is waiting, and it is not.
+                if (facts.Any(x => x is "Failed" or "Return" or "Refund" or "Dispute" or PaymentEngine.ConflictKind))
+                { return "conflicting_evidence"; }
                 if (item.Gross != operation.ChargedAmount || item.Fee < 0m || item.Net <= 0m || item.Gross - item.Fee != item.Net)
                 { return "settlement_untied"; }
                 lines.Add(new(item.Item, item.Kind, operation.TenantId, operation.Amount, operation.Method, null,
@@ -265,8 +477,12 @@ public sealed class SettlementEngine(DbContext db, TimeProvider clock, PaymentEn
                 // A return of something never receipted has nothing to reverse yet.
                 if (operation.JournalId is null) { return "settlement_incomplete"; }
                 // Only a payment that is settled, or whose return is already waiting for a decision.
-                if (returned.Contains(operation.Id) || !(operation.Status == "Settled" || (operation.Status == "NeedsReview"
-                    && operation.Reason?.StartsWith("return_", StringComparison.Ordinal) == true)))
+                // A review that a refund or a dispute raised carries the same reason and is not one:
+                // only a bank's return of the debit is posted as a return, so the review must hold a
+                // return and nothing that says otherwise, judged or not.
+                if (returned.Contains(operation.Id) || facts.Any(x => x is "Refund" or "Dispute" or PaymentEngine.ConflictKind)
+                    || !(operation.Status == "Settled" || (operation.Status == "NeedsReview"
+                        && operation.Reason?.StartsWith("return_", StringComparison.Ordinal) == true && facts.Contains("Return"))))
                 { return "conflicting_evidence"; }
                 // Only the whole charge going back is a return this model posts.
                 if (item.Gross != operation.ChargedAmount) { return "unsupported_settlement"; }
@@ -277,6 +493,7 @@ public sealed class SettlementEngine(DbContext db, TimeProvider clock, PaymentEn
                 lines.Add(new(item.Item, item.Kind, null, 0m, "", operation.JournalId, operation.QuotedFee - item.Fee));
             }
         }
-        return items.Sum(x => x.Net) == settlement.BankAmount ? null : "settlement_untied";
+        // To the bank's figure when there is one; it equals the processor's, or the check ended above.
+        return items.Sum(x => x.Net) == (settlement.Banked ? settlement.BankAmount : settlement.ProcessorAmount) ? null : "settlement_untied";
     }
 }

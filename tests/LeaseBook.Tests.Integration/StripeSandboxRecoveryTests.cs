@@ -43,7 +43,7 @@ public sealed partial class StripeSandboxProcessorTests
         // Exactly the types the reader maps, each once. Stripe takes at most twenty in one filter.
         sent.Query.Where(x => x.Key.StartsWith("types[", StringComparison.Ordinal)).Select(x => x.Value).ShouldBe(TypesRead, ignoreOrder: true);
         sent.Query.Count.ShouldBe(2 + TypesRead.Length);
-        TypesRead.Length.ShouldBe(7);
+        TypesRead.Length.ShouldBe(9);
         sent.Query.Keys.Where(x => x.StartsWith("types[", StringComparison.Ordinal)).Order(StringComparer.Ordinal)
             .ShouldBe(Enumerable.Range(0, TypesRead.Length).Select(i => $"types[{i}]"));
 

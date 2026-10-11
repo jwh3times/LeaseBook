@@ -137,6 +137,7 @@ public sealed partial class SimulatedPaymentTests
         public ProcessorNotice? Authenticate(byte[] rawBody, string signature) => inner.Authenticate(rawBody, signature);
         public Task<ProcessorRead<ProcessorObservation>> ReadObservationAsync(ProcessorNotice notice, CancellationToken ct) => inner.ReadObservationAsync(notice, ct);
         public Task<ProcessorRead<ProcessorSettlement>> ReadSettlementAsync(ProcessorNotice notice, CancellationToken ct) => inner.ReadSettlementAsync(notice, ct);
+        public Task<ProcessorRead<ProcessorPayout>> ReadPayoutAsync(ProcessorNotice notice, CancellationToken ct) => inner.ReadPayoutAsync(notice, ct);
         public Task<ProcessorRecovery> RecoverObservationsAsync(FixtureBinding binding, DateTime since, CancellationToken ct) => inner.RecoverObservationsAsync(binding, since, ct);
     }
 }

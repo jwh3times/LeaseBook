@@ -190,8 +190,26 @@ public sealed class PaymentEndpoints : IEndpointModule
     // Two limits on purpose. This one stops a larger body being read into memory at all; the adapter's
     // own, in Authenticate, refuses one however it arrived. Each alone gives the same answer, so only
     // the adapter's has a test that fails without it.
-    private static Task<IResult> ReceiveStripe(HttpContext http, IPaymentProcessor processor, PaymentRunner runner, CancellationToken ct) =>
-        ReceiveAsync(http, processor, runner, "Stripe-Signature", StripeSandboxProcessor.MaxNoticeBytes, ct);
+    //
+    // Stripe has one route for everything it sends. An event that says nothing of a payment may be
+    // about a payout, so it is offered to that reader next, and only then acknowledged as not ours.
+    // What is read of a payout is stored and held: it is Stripe's word, and nothing here is a bank's.
+    private static async Task<IResult> ReceiveStripe(HttpContext http, IPaymentProcessor processor, PaymentRunner runner, CancellationToken ct)
+    {
+        if (await ReadBodyAsync(http, StripeSandboxProcessor.MaxNoticeBytes, ct) is not { } body) { return Invalid(http); }
+        if (processor.Authenticate(body, http.Request.Headers["Stripe-Signature"].ToString()) is not { } notice) { return Invalid(http); }
+        var read = await processor.ReadObservationAsync(notice, ct);
+        if (!read.Ignored)
+        {
+            if (read.Value is not { } observation) { return Invalid(http); }
+            await runner.ReceiveAsync(observation, ct);
+            return TypedResults.NoContent();
+        }
+        var payout = await processor.ReadPayoutAsync(notice, ct);
+        if (payout.Ignored) { runner.Ignore(); return TypedResults.NoContent(); }
+        if (payout.Value is not { } paid) { return Invalid(http); }
+        return (await runner.ReceivePayoutAsync(paid, ct)).Malformed ? Invalid(http) : TypedResults.NoContent();
+    }
 
     // One flow for every processor: the body whole and within its limit, proved authentic, read, and
     // only then routed to an organization. What differs is the header the proof arrives in and the limit.

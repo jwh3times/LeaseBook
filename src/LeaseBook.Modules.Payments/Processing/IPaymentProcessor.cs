@@ -85,7 +85,25 @@ public sealed record ProcessorObservation(string EventId, string ProviderId, str
 public sealed record ProcessorRecovery(IReadOnlyList<ProcessorObservation> Observations, int Listed, int Unreadable, int Unasked = 0)
 {
     public static ProcessorRecovery Nothing { get; } = new([], 0, 0);
+
+    /// <summary>The payouts among what was listed, each read as a delivered notice of it is read.</summary>
+    public IReadOnlyList<ProcessorPayout> Payouts { get; init; } = [];
 }
+
+/// <summary>What a processor says became of a payout. Neither is a bank's word.</summary>
+public static class ProcessorPayoutStates
+{
+    public const string Paid = "Paid";
+    public const string Failed = "Failed";
+}
+
+/// <summary>
+/// A processor's own account of one payout, with no word from a bank: what it says the payout comes
+/// to and, for one it says it paid, its list of what the payout contains. It is never grounds to
+/// post. <see cref="Amount"/> is signed as a bank amount is. A payout reported failed carries no lines.
+/// </summary>
+public sealed record ProcessorPayout(string PayoutId, string Account, string Mode, Guid Generation, string PayoutType,
+    string State, decimal Amount, string Currency, Guid BankId, DateTime ObservedAt, IReadOnlyList<ProcessorSettlementItem> Items);
 
 public interface IPaymentProcessor
 {
@@ -108,11 +126,23 @@ public interface IPaymentProcessor
     /// </summary>
     Task<ProcessorRead<ProcessorObservation>> ReadObservationAsync(ProcessorNotice notice, CancellationToken ct);
 
-    /// <summary>Reads an authenticated notice as payout evidence, on the same terms.</summary>
+    /// <summary>
+    /// Reads an authenticated notice as payout evidence, on the same terms: the bank amount for one
+    /// payout together with the processor's lines for it. An adapter whose processor never speaks for
+    /// a bank answers <see cref="ProcessorRead{T}.NotOurs"/> to every notice.
+    /// </summary>
     Task<ProcessorRead<ProcessorSettlement>> ReadSettlementAsync(ProcessorNotice notice, CancellationToken ct);
 
     /// <summary>
-    /// Asks the processor what it has said about one binding's payments since a time, for a notice
+    /// Reads an authenticated notice as the processor's own account of a payout, on the same terms,
+    /// fetching the payout's lines when the notice does not carry them. What it returns is held until
+    /// a bank says what it received. An adapter whose payout notices carry their bank evidence answers
+    /// <see cref="ProcessorRead{T}.NotOurs"/> to every notice.
+    /// </summary>
+    Task<ProcessorRead<ProcessorPayout>> ReadPayoutAsync(ProcessorNotice notice, CancellationToken ct);
+
+    /// <summary>
+    /// Asks the processor what it has said about one binding's payments and payouts since a time, for a notice
     /// that was never delivered. It does I/O and is called outside any organization transaction. What
     /// it returns is read as a delivered notice is read and is kept the same way, so one the host
     /// already holds is dropped there. A list that cannot be answered in full is thrown, never cut

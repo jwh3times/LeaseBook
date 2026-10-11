@@ -93,14 +93,18 @@ public sealed class PaymentSettlementConfiguration : IEntityTypeConfiguration<Pa
         // No currency constraint, on purpose: evidence in another currency is stored as it arrived and
         // held as unsupported. A constraint would refuse to store it, and the provider would redeliver forever.
         b.ToTable("payment_settlements", t => t.HasCheckConstraint(
-            "ck_payment_settlement_status", "status IN ('Received','NeedsReview','Posted','Closed')"));
+            "ck_payment_settlement_status", "status IN ('Received','AwaitingBank','NeedsReview','Posted','Closed')"));
         b.HasKey(x => x.Id);
         b.HasAlternateKey(x => new { x.OrgId, x.Id }).HasName("ak_payment_settlements_org_id_id");
-        b.HasIndex(x => new { x.OrgId, x.Account, x.PayoutId }).IsUnique();
+        b.HasIndex(x => new { x.OrgId, x.Account, x.Mode, x.PayoutId }).IsUnique();
         b.HasIndex(x => new { x.OrgId, x.CreatedAt });
         b.HasOne<PaymentFixture>().WithMany().HasForeignKey(x => new { x.OrgId, x.Generation })
             .HasPrincipalKey(x => new { x.OrgId, x.Id }).OnDelete(DeleteBehavior.Restrict);
         b.Property(x => x.BankAmount).HasPrecision(14, 2);
+        b.Property(x => x.ProcessorAmount).HasPrecision(14, 2);
+        // Every payout stored before the column existed was the simulator's.
+        b.Property(x => x.Mode).HasMaxLength(20).HasDefaultValue("Simulation");
+        b.Ignore(x => x.Banked);
         foreach (var name in new[] { "Account", "PayoutId", "EvidenceId" }) { b.Property<string>(name).HasMaxLength(100); }
         b.Property(x => x.PayoutType).HasMaxLength(20);
         b.Property(x => x.Currency).HasMaxLength(3);
