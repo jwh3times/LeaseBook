@@ -24,9 +24,15 @@ public sealed class PaymentRunner(IServiceScopeFactory scopes, SimulationSetting
     private static readonly TimeSpan SweepInterval = TimeSpan.FromMinutes(5);
     // Stripe keeps an event for thirty days. A day inside that, so that the oldest asked for is still there.
     private static readonly TimeSpan EventsKept = TimeSpan.FromDays(29);
+    // How far before its last good sweep a sweep asks again: what the processor listed late, or dated
+    // a little before it listed it, is then still asked for. What is read twice is kept once.
+    private static readonly TimeSpan SweepOverlap = TimeSpan.FromMinutes(10);
     // When each fixture was last swept, by organization. In memory on purpose: a host that restarts
     // sweeps at once, which is when a notice is most likely to have been missed.
     private readonly ConcurrentDictionary<Guid, DateTime> _sweptAt = new();
+    // When the last sweep that was kept whole began, by organization. In memory too: a host that
+    // restarts has none, and asks for everything the processor still keeps.
+    private readonly ConcurrentDictionary<Guid, DateTime> _keptFrom = new();
 
     public async Task RunOnceAsync(CancellationToken ct)
     {
@@ -94,11 +100,13 @@ public sealed class PaymentRunner(IServiceScopeFactory scopes, SimulationSetting
     }
 
     /// <summary>
-    /// Recovers what a lost notice would otherwise leave waiting for ever. For each fixture, at most
-    /// once in <see cref="SweepInterval"/>: asks the processor for everything it has said since the
-    /// oldest payment still waiting was made, keeps it as a callback's notice is kept, and only then
-    /// sends to a person the payments that have waited too long. Nothing here throws but a
-    /// cancellation, so a sweep that fails never costs the worker a pass.
+    /// Recovers what a lost notice would otherwise leave unknown for ever. For each fixture, at most
+    /// once in <see cref="SweepInterval"/>, whether or not a payment is waiting: a dispute or a
+    /// refund comes for a payment that stopped waiting long before. It asks the processor for
+    /// everything it has said since a little before the last sweep that was kept whole, or since the
+    /// oldest payment still waiting was made if that is earlier, keeps it as a callback's notice is
+    /// kept, and only then sends to a person the payments that have waited too long. Nothing here
+    /// throws but a cancellation, so a sweep that fails never costs the worker a pass.
     /// </summary>
     public async Task RecoverOnceAsync(CancellationToken ct)
     {
@@ -121,20 +129,28 @@ public sealed class PaymentRunner(IServiceScopeFactory scopes, SimulationSetting
     private async Task RecoverAsync(FixtureBinding binding, DateTime now, CancellationToken ct)
     {
         var waiting = await InOrg(binding, sp => sp.GetRequiredService<PaymentEngine>().WaitingAsync(binding, ct), ct);
-        // Nothing waits, so nothing can have been missed: the processor is asked nothing.
-        if (waiting.Count == 0) { return; }
-        // Everything since the oldest payment still waiting, each time. That is what a stored cursor
-        // would be for, without one to keep or to lose.
-        var oldest = waiting[0].CreatedAt;
-        var recovery = await processor.RecoverObservationsAsync(binding, oldest > now - EventsKept ? oldest : now - EventsKept, ct);
+        // From the last sweep that was kept whole, less the overlap; with none in this process, from
+        // as far back as the processor keeps anything. A payment still waiting from before that may
+        // have an outcome from before it, so the oldest of those reaches further back. Never past
+        // what is kept.
+        var kept = now - EventsKept;
+        var since = _keptFrom.TryGetValue(binding.OrgId, out var last) ? last - SweepOverlap : kept;
+        if (waiting.Count > 0 && waiting[0].CreatedAt < since) { since = waiting[0].CreatedAt; }
+        var recovery = await processor.RecoverObservationsAsync(binding, since > kept ? since : kept, ct);
         // One organization transaction each, as for a callback. One already held is dropped there.
         foreach (var observation in recovery.Observations) { await ReceiveAsync(observation, ct); }
+        // Only now, with everything found handed on and none of it refused: a sweep that failed
+        // anywhere above leaves the time where it was, and the next one asks for the same again. So
+        // does one that left an event unread because the processor would not answer about it.
+        if (recovery.Unasked == 0) { _keptFrom[binding.OrgId] = now; }
         log.LogInformation(new EventId(4606, "PaymentRecoverySwept"),
-            "Payment recovery sweep listed {Listed} events: {Kept} stored or already held, {Unreadable} unreadable",
-            recovery.Listed, recovery.Observations.Count, recovery.Unreadable);
-        // Only here, after a sweep that was answered in full: a payment must never go to a person
-        // while the events that could end it have not been asked for. One the sweep has just found
-        // an event for is due, and the engine leaves it to the worker.
+            "Payment recovery sweep listed {Listed} events: {Kept} stored or already held, {Unreadable} unreadable, {Unasked} to be asked about again",
+            recovery.Listed, recovery.Observations.Count, recovery.Unreadable, recovery.Unasked);
+        // Only here, after a list that was answered in full: a payment must never go to a person
+        // while the events that could end it have not been asked for. An event left to be asked
+        // about again does not stand in the way. Only a dispute needs asking about, and a dispute
+        // follows a success; aging is of payments with no outcome, whose own events need no asking.
+        // One the sweep has just found an event for is due, and the engine leaves it to the worker.
         foreach (var payment in waiting.Where(x => x.CreatedAt <= now - PaymentEngine.OutcomeOverdueAfter))
         {
             try
@@ -161,7 +177,9 @@ public sealed class PaymentRunner(IServiceScopeFactory scopes, SimulationSetting
     {
         var binding = settings.ForAccount(observation.Account);
         if (binding is null || observation.Mode != binding.Mode || observation.Generation != binding.Generation
-            || !PaymentEngine.EventKinds.Contains(observation.Kind))
+            // A conflict is the sandbox adapter's to report. From any other processor it is no kind at all.
+            || !(PaymentEngine.EventKinds.Contains(observation.Kind)
+                || (observation.Kind == PaymentEngine.ConflictKind && binding.Mode == PaymentModes.StripeSandbox)))
         {
             log.LogInformation(new EventId(4602, "PaymentCallbackIgnored"), "Unmapped simulated payment observation ignored");
             return;

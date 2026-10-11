@@ -595,13 +595,18 @@ public sealed partial class StripeSandboxProcessorTests
 /// </summary>
 internal sealed class StripeReplay : HttpMessageHandler
 {
-    private const string Run = "2026-10-08T21-56-17-265Z";
+    /// <summary>The probe's first run: card and ACH payments, a failed ACH debit and an ACH dispute.</summary>
+    public const string Run = "2026-10-08T21-56-17-265Z";
+    /// <summary>The run that refunded two card payments, one in full and one in part.</summary>
+    public const string RefundRun = "2026-10-09T18-44-03-363Z";
+    /// <summary>The run that recorded a card dispute. Ids are synthetic for each run apart: the same id in two runs is two things.</summary>
+    public const string CardDisputeRun = "2026-10-09T18-45-07-940Z";
     private static readonly Lazy<string> Directory = new(() =>
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
         while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "LeaseBook.slnx"))) { directory = directory.Parent; }
         return Path.Combine(directory?.FullName ?? throw new InvalidOperationException("LeaseBook.slnx not found above the test base directory."),
-            "tests", "fixtures", "stripe", Run);
+            "tests", "fixtures", "stripe");
     });
     private readonly Lock _gate = new();
     private readonly List<Sent> _requests = [];
@@ -630,25 +635,25 @@ internal sealed class StripeReplay : HttpMessageHandler
     private static Dictionary<string, string> Pairs(string encoded) =>
         QueryHelpers.ParseQuery(encoded).ToDictionary(x => x.Key, x => x.Value.ToString(), StringComparer.Ordinal);
 
-    private static JsonObject File_(string name) =>
-        JsonNode.Parse(File.ReadAllText(Path.Combine(Directory.Value, name)))!.AsObject();
+    private static JsonObject File_(string name, string run = Run) =>
+        JsonNode.Parse(File.ReadAllText(Path.Combine(Directory.Value, run, name)))!.AsObject();
 
     /// <summary>A recorded exchange's answer: its status and its body, as the sandbox sent them.</summary>
-    public static (int Status, string Body) Recorded(string name)
+    public static (int Status, string Body) Recorded(string name, string run = Run)
     {
-        var file = File_(name);
+        var file = File_(name, run);
         return (file["status"]!.GetValue<int>(), file["body"]!.ToJsonString());
     }
 
-    public static JsonObject RecordedBody(string name) => File_(name)["body"]!.AsObject();
+    public static JsonObject RecordedBody(string name, string run = Run) => File_(name, run)["body"]!.AsObject();
 
     /// <summary>One recorded delivery's event, as Stripe sent it. A copy, for a test to change.</summary>
-    public static JsonObject Delivered(string name) => File_(name)["event"]!.AsObject();
+    public static JsonObject Delivered(string name, string run = Run) => File_(name, run)["event"]!.AsObject();
 
-    /// <summary>Every delivery the probe recorded, in the order it kept them.</summary>
-    public static IReadOnlyList<(string Name, JsonObject Event)> Deliveries() =>
-        [.. System.IO.Directory.GetFiles(Directory.Value, "*-webhook-connect.json").Select(Path.GetFileName).Order(StringComparer.Ordinal)
-            .Select(name => (name!, Delivered(name!)))];
+    /// <summary>Every delivery the probe recorded in one run, in the order it kept them.</summary>
+    public static IReadOnlyList<(string Name, JsonObject Event)> Deliveries(string run = Run) =>
+        [.. System.IO.Directory.GetFiles(Path.Combine(Directory.Value, run), "*-webhook-connect.json").Select(Path.GetFileName).Order(StringComparer.Ordinal)
+            .Select(name => (name!, Delivered(name!, run)))];
 
     /// <summary>What a recorded request sent, flattened the way a form names nested fields.</summary>
     public static Dictionary<string, string> RecordedForm(string name)

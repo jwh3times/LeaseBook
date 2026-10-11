@@ -20,18 +20,18 @@ namespace LeaseBook.Tests.Integration;
 public sealed partial class StripeSandboxProcessorTests
 {
     private const string RecordedEvents = "064-events-api.json";
-    private static readonly string[] TypesRead = ["payment_intent.processing", "payment_intent.succeeded", "payment_intent.payment_failed"];
     private static readonly DateTime Since = new(2026, 10, 8, 11, 0, 0, DateTimeKind.Utc);
 
     [Fact]
     public async Task A_sweep_lists_the_accounts_events_since_a_time_and_only_of_the_types_it_reads()
     {
         var h = new Adapter();
-        h.Stripe.Answer = _ => StripeReplay.Recorded(RecordedEvents);
+        h.Stripe.Answer = RecordedList;
 
         await h.Processor.RecoverObservationsAsync(h.Binding, Since, Ct);
 
-        var sent = h.Stripe.Requests.ShouldHaveSingleItem();
+        var sent = h.Stripe.Requests[0];
+        h.Stripe.Requests.Count(x => x.Path == "/v1/events").ShouldBe(1);
         (sent.Method, sent.Path).ShouldBe(("GET", "/v1/events"));
         // On the connected account, with the platform's key. A read: nothing to make idempotent.
         sent.Headers["Stripe-Account"].ShouldBe(h.Binding.Account);
@@ -40,8 +40,12 @@ public sealed partial class StripeSandboxProcessorTests
         // From five minutes before, for a clock that is not Stripe's, as a lookup's list is.
         sent.Query["created[gte]"].ShouldBe((new DateTimeOffset(Since).ToUnixTimeSeconds() - 300).ToString());
         sent.Query["limit"].ShouldBe("100");
+        // Exactly the types the reader maps, each once. Stripe takes at most twenty in one filter.
         sent.Query.Where(x => x.Key.StartsWith("types[", StringComparison.Ordinal)).Select(x => x.Value).ShouldBe(TypesRead, ignoreOrder: true);
         sent.Query.Count.ShouldBe(2 + TypesRead.Length);
+        TypesRead.Length.ShouldBe(7);
+        sent.Query.Keys.Where(x => x.StartsWith("types[", StringComparison.Ordinal)).Order(StringComparer.Ordinal)
+            .ShouldBe(Enumerable.Range(0, TypesRead.Length).Select(i => $"types[{i}]"));
 
         // The request is written out by hand, because the answer is wanted as text. Stripe's own
         // library, asked for the same list, sends the same thing: the names are not this code's guess.
@@ -62,24 +66,27 @@ public sealed partial class StripeSandboxProcessorTests
     }
 
     // The proof that a swept event and a delivered one are read by the same code: every recorded
-    // delivery about a payment's progress, read as the route reads it, is what the sweep makes of the
-    // same event in the recorded list. Nothing in either recording is changed.
+    // delivery that is read, a payment's progress or its dispute, read as the route reads it, is what
+    // the sweep makes of the same event in the recorded list. Nothing in either recording is changed.
+    // A dispute is read by asking Stripe, and the sweep asks what the delivery asked.
     [Fact]
     public async Task The_recorded_list_is_read_exactly_as_the_same_events_were_read_when_delivered()
     {
         var h = new Adapter();
-        h.Stripe.Answer = _ => StripeReplay.Recorded(RecordedEvents);
+        h.Stripe.Answer = RecordedList;
         var delivered = new List<ProcessorObservation>();
-        foreach (var (file, _, _, _, _, _) in Progress) { delivered.Add((await Read(h, StripeReplay.Delivered(file))).Value.ShouldNotBeNull()); }
+        foreach (var file in Progress.Select(x => x.File).Concat(AchDisputeEvents.Split(',')))
+        { delivered.Add((await Read(h, StripeReplay.Delivered(file))).Value.ShouldNotBeNull()); }
 
         var swept = await h.Processor.RecoverObservationsAsync(h.Binding, Since, Ct);
 
-        swept.Observations.Count.ShouldBe(9);
+        swept.Observations.Count.ShouldBe(12);
         swept.Observations.ShouldBe(delivered, ignoreOrder: true);
+        swept.Observations.Count(x => x.Kind == "Return").ShouldBe(3);
         // Equal as stored, which is what makes the second of the two a duplicate and not a conflict.
         swept.Observations.Select(x => PaymentEngine.Hash(System.Text.Json.JsonSerializer.Serialize(x)))
             .ShouldBe(delivered.Select(x => PaymentEngine.Hash(System.Text.Json.JsonSerializer.Serialize(x))), ignoreOrder: true);
-        // The probe asked for every type: the other thirty-one are listed and are not this step's.
+        // The probe asked for every type: the other twenty-eight are listed and are not read.
         (swept.Listed, swept.Unreadable).ShouldBe((40, 0));
         StripeReplay.RecordedBody(RecordedEvents)["data"]!.AsArray().Select(x => (string)x!["id"]!)
             .ShouldBe(StripeReplay.Deliveries().Select(x => (string)x.Event["id"]!), ignoreOrder: true);
@@ -89,7 +96,8 @@ public sealed partial class StripeSandboxProcessorTests
     public async Task A_sweep_follows_the_list_to_its_end()
     {
         var h = new Adapter();
-        h.Stripe.Answer = sent => sent.Query.GetValueOrDefault("starting_after") switch
+        // The first page ends on an event of the dispute, which is read by asking for its payment and charge.
+        h.Stripe.Answer = sent => sent.Path != "/v1/events" ? AchDispute()(sent) : sent.Query.GetValueOrDefault("starting_after") switch
         {
             null => Page(true, Listed("evt_synthetic000035"), Listed("evt_synthetic000040")),
             "evt_synthetic000040" => Page(true, Listed("evt_synthetic000026")),
@@ -99,12 +107,13 @@ public sealed partial class StripeSandboxProcessorTests
 
         var swept = await h.Processor.RecoverObservationsAsync(h.Binding, Since, Ct);
 
-        swept.Observations.Select(x => x.EventId).ShouldBe(["evt_synthetic000035", "evt_synthetic000026", "evt_synthetic000002"]);
+        swept.Observations.Select(x => x.EventId).ShouldBe(["evt_synthetic000035", "evt_synthetic000040", "evt_synthetic000026", "evt_synthetic000002"]);
         (swept.Listed, swept.Unreadable).ShouldBe((4, 0));
-        h.Stripe.Requests.Select(x => x.Query.GetValueOrDefault("starting_after")).ShouldBe([null, "evt_synthetic000040", "evt_synthetic000026"]);
+        var pages = h.Stripe.Requests.Where(x => x.Path == "/v1/events").ToArray();
+        pages.Select(x => x.Query.GetValueOrDefault("starting_after")).ShouldBe([null, "evt_synthetic000040", "evt_synthetic000026"]);
         // Every page is the same question, but for where it starts.
-        h.Stripe.Requests.ShouldAllBe(x => x.Query.Where(q => q.Key != "starting_after").OrderBy(q => q.Key)
-            .SequenceEqual(h.Stripe.Requests[0].Query.OrderBy(q => q.Key)));
+        pages.ShouldAllBe(x => x.Query.Where(q => q.Key != "starting_after").OrderBy(q => q.Key)
+            .SequenceEqual(pages[0].Query.OrderBy(q => q.Key)));
     }
 
     [Fact]
@@ -183,13 +192,16 @@ public sealed partial class StripeSandboxProcessorTests
         var h = new Adapter(("Payments:Fixtures:0:Generation", "0199e6a1-0000-7000-8000-000000000001"));
         var probes = Listed("evt_synthetic000011");
         probes["data"]!["object"]!["metadata"] = new JsonObject();
-        h.Stripe.Answer = _ => Page(false, [.. StripeReplay.RecordedBody(RecordedEvents)["data"]!.AsArray().Select(x => x!.DeepClone()), probes]);
+        h.Stripe.Answer = sent => sent.Path != "/v1/events" ? AchDispute()(sent)
+            : Page(false, [.. StripeReplay.RecordedBody(RecordedEvents)["data"]!.AsArray().Select(x => x!.DeepClone()), probes]);
 
         var swept = await h.Processor.RecoverObservationsAsync(h.Binding, Since, Ct);
 
         swept.Observations.ShouldBeEmpty();
         // Not this host's, which is not the same as unreadable.
         (swept.Listed, swept.Unreadable).ShouldBe((41, 0));
+        // The dispute's payment was asked for, to learn that: once for its three events, and its charge never.
+        h.Stripe.Requests.Select(x => x.Path).ShouldBe(["/v1/events", DisputedPayment]);
     }
 
     [Fact]
@@ -270,6 +282,10 @@ public sealed partial class StripeSandboxProcessorTests
         h.Stripe.Requests.ShouldBeEmpty();
     }
 
+    // The recorded list of events, and the recorded payment and charge its dispute's events name.
+    private static (int Status, string Body) RecordedList(StripeReplay.Sent sent) =>
+        sent.Path == "/v1/events" ? StripeReplay.Recorded(RecordedEvents) : AchDispute()(sent);
+
     /// <summary>One event of the recorded list, as Stripe listed it. A copy, for a test to change.</summary>
     internal static JsonObject Listed(string eventId) =>
         (JsonObject)StripeReplay.RecordedBody(RecordedEvents)["data"]!.AsArray().Single(x => (string)x!["id"]! == eventId)!.DeepClone();
@@ -302,10 +318,10 @@ public sealed partial class StripeSandboxHostTests
 
         await Sweep(h, ct);
 
-        // Asked of the fixture's account, from when the payment was made less the allowance for Stripe's clock.
+        // Asked of the fixture's account. The first sweep of a host asks for all that Stripe keeps.
         var asked = sandbox.Sweeps.ShouldHaveSingleItem();
         asked.Headers["Stripe-Account"].ShouldBe(Account);
-        asked.Query["created[gte]"].ShouldBe((new DateTimeOffset(waiting.CreatedAt).ToUnixTimeSeconds() - 300).ToString());
+        asked.Query["created[gte]"].ShouldBe(AskedFrom(h.Clock.GetUtcNow() - EventsKept));
         // Kept as a delivery would have been, and the payment woken: the worker's next pass judges it.
         var fact = (await h.Facts(ct)).ShouldHaveSingleItem();
         (fact.EventId, fact.Kind, fact.ProviderId).ShouldBe((FailedEvent, "Failed", Sandbox.IdFor(payment.Id)));
@@ -336,10 +352,14 @@ public sealed partial class StripeSandboxHostTests
         (await h.Facts(ct)).ShouldHaveSingleItem().EventId.ShouldBe(SucceededEvent);
         (await h.JournalEntries(ct)).ShouldBe(entries);
 
-        // Paid, so it waits for nothing the sweep could find: the next one asks Stripe nothing.
+        // Paid, it can still be disputed or refunded, so the next sweep is made all the same. It
+        // finds the event it found before, which is the fact already held.
         h.Clock.Advance(SweepInterval);
         await Sweep(h, ct);
-        sandbox.Sweeps.Count.ShouldBe(1);
+        sandbox.Sweeps.Count.ShouldBe(2);
+        await h.Run(ct);
+        (await h.Facts(ct)).ShouldHaveSingleItem().Kind.ShouldBe("Succeeded");
+        (await h.Operation(payment.Id, ct)).Status.ShouldBe("Processing");
     }
 
     // The recorded pair: delivery 018 and the list's evt_synthetic000011 are one event, recorded both
@@ -369,78 +389,6 @@ public sealed partial class StripeSandboxHostTests
         (fact.EventId, fact.Kind).ShouldBe((FailedEvent, "Failed"));
         var operation = await h.Operation(payment.Id, ct);
         (operation.Status, operation.Reason, operation.ProcessedCount).ShouldBe(("Failed", "collection_failed", 1));
-    }
-
-    [Fact]
-    public async Task With_no_payment_waiting_for_an_outcome_stripe_is_asked_nothing()
-    {
-        var ct = TestContext.Current.CancellationToken;
-        var sandbox = new Sandbox();
-        await using var h = await Setup(sandbox.Replay, ct);
-        var requests = sandbox.Replay.Requests.Count;
-
-        // No payment at all.
-        await Sweep(h, ct);
-        // One requested and not yet accepted: Stripe holds nothing it could have said anything about.
-        var payment = await h.Submit(500m, ct, PaymentMethods.Card);
-        h.Clock.Advance(SweepInterval);
-        await Sweep(h, ct);
-        sandbox.Replay.Requests.Count.ShouldBe(requests);
-
-        // Accepted, it waits, and that is when Stripe is asked: the nothing above was for want of one.
-        await h.Run(ct);
-        sandbox.Events = _ => StripeSandboxProcessorTests.Page(false);
-        h.Clock.Advance(SweepInterval);
-        await Sweep(h, ct);
-        sandbox.Sweeps.Count.ShouldBe(1);
-
-        // Paid, failed or with a person, it waits no longer.
-        (await h.Deliver(Event(Succeeded, h, payment), ct)).Status.ShouldBe(HttpStatusCode.NoContent);
-        await h.Run(ct);
-        h.Clock.Advance(SweepInterval);
-        await Sweep(h, ct);
-        sandbox.Sweeps.Count.ShouldBe(1);
-    }
-
-    [Fact]
-    public async Task A_sweep_asks_from_the_oldest_waiting_payment_and_never_further_back_than_stripe_keeps_events()
-    {
-        var ct = TestContext.Current.CancellationToken;
-        var sandbox = new Sandbox { Events = _ => StripeSandboxProcessorTests.Page(false) };
-        await using var h = await Setup(sandbox.Replay, ct);
-        var older = await h.Submit(200m, ct, PaymentMethods.Card);
-        var newer = await h.Submit(300m, ct, PaymentMethods.Card);
-        await h.Run(ct);
-        var now = h.Clock.GetUtcNow();
-        await Created(h, older.Id, now.UtcDateTime.AddDays(-3), ct);
-
-        await Sweep(h, ct);
-
-        var asked = sandbox.Sweeps.ShouldHaveSingleItem();
-        asked.Query["created[gte]"].ShouldBe((now.AddDays(-3).ToUnixTimeSeconds() - 300).ToString());
-        asked.Query.Where(x => x.Key.StartsWith("types[", StringComparison.Ordinal)).Select(x => x.Value)
-            .ShouldBe(["payment_intent.processing", "payment_intent.succeeded", "payment_intent.payment_failed"], ignoreOrder: true);
-
-        // Stripe keeps events for thirty days. Twenty-nine is asked for in full; past it, twenty-nine
-        // is all that is asked. Each of these sweeps is refused, which is the only way a payment
-        // this old is still waiting: one that Stripe answered would have sent it to a person.
-        sandbox.Events = _ => Fault;
-        foreach (var days in new[] { 29, 30, 400 })
-        {
-            h.Clock.Advance(SweepInterval);
-            now = h.Clock.GetUtcNow();
-            await Created(h, older.Id, now.UtcDateTime.AddDays(-days), ct);
-            await Sweep(h, ct);
-            sandbox.Sweeps[^1].Query["created[gte]"].ShouldBe((now.AddDays(-29).ToUnixTimeSeconds() - 300).ToString(), $"{days} days");
-            (await h.Operation(older.Id, ct)).Status.ShouldBe("Processing");
-        }
-        sandbox.Sweeps.Count.ShouldBe(4);
-        // A day inside it, the payment's own time is asked for.
-        h.Clock.Advance(SweepInterval);
-        now = h.Clock.GetUtcNow();
-        await Created(h, older.Id, now.UtcDateTime.AddDays(-28), ct);
-        await Sweep(h, ct);
-        sandbox.Sweeps[^1].Query["created[gte]"].ShouldBe((now.AddDays(-28).ToUnixTimeSeconds() - 300).ToString());
     }
 
     [Fact]
@@ -491,7 +439,7 @@ public sealed partial class StripeSandboxHostTests
 
         var first = await h.Submit(200m, ct, PaymentMethods.Card);
         await Until(async () => (await h.Operation(first.Id, ct)).ProviderId is not null, "the worker to collect the first payment", ct);
-        // Stripe is asked only while a payment waits, and refuses every time: any sweep seen has failed.
+        // Stripe refuses every time: any sweep seen has failed.
         await AnotherSweep(h, sandbox, ct);
 
         var second = await h.Submit(201m, ct, PaymentMethods.Card);
@@ -637,6 +585,9 @@ public sealed partial class StripeSandboxHostTests
         var elsewhere = await h.Submit(200m, ct, PaymentMethods.Card);
         var ours = await h.Submit(201m, ct, PaymentMethods.Card);
         await h.Run(ct);
+        // A sweep kept whole first: the one after asks from it, unless a waiting payment is older.
+        await Sweep(h, ct);
+        h.Clock.Advance(SweepInterval);
         var now = h.Clock.GetUtcNow();
         await Created(h, elsewhere.Id, now.UtcDateTime.AddDays(-20), ct);
         await Created(h, ours.Id, now.UtcDateTime.AddDays(-8), ct);
@@ -645,7 +596,8 @@ public sealed partial class StripeSandboxHostTests
 
         await Sweep(h, ct);
 
-        sandbox.Sweeps.ShouldHaveSingleItem().Query["created[gte]"].ShouldBe((now.AddDays(-8).ToUnixTimeSeconds() - 300).ToString());
+        sandbox.Sweeps.Count.ShouldBe(2);
+        sandbox.Sweeps[^1].Query["created[gte]"].ShouldBe((now.AddDays(-8).ToUnixTimeSeconds() - 300).ToString());
         (await h.Operation(elsewhere.Id, ct)).Status.ShouldBe("Processing");
         (await h.Operation(ours.Id, ct)).Reason.ShouldBe("outcome_overdue");
     }
@@ -659,12 +611,16 @@ public sealed partial class StripeSandboxHostTests
         await using var h = await Setup(sandbox.Replay, ct);
         var payment = await h.Submit(200m, ct, PaymentMethods.Card);
         await h.Run(ct);
+        // After a sweep kept whole, so that it is the payment's age and not a first sweep that reaches back.
+        await Sweep(h, ct);
+        h.Clock.Advance(SweepInterval);
         var now = h.Clock.GetUtcNow();
         await Created(h, payment.Id, now.UtcDateTime.AddDays(-40), ct);
 
         await Sweep(h, ct);
 
-        sandbox.Sweeps.ShouldHaveSingleItem().Query["created[gte]"].ShouldBe((now.AddDays(-29).ToUnixTimeSeconds() - 300).ToString());
+        sandbox.Sweeps.Count.ShouldBe(2);
+        sandbox.Sweeps[^1].Query["created[gte]"].ShouldBe((now.AddDays(-29).ToUnixTimeSeconds() - 300).ToString());
         (await h.Operation(payment.Id, ct)).Reason.ShouldBe("outcome_overdue");
     }
 
@@ -812,10 +768,13 @@ public sealed partial class StripeSandboxHostTests
             (view.Status, view.Reason, view.CanCloseReview, view.CanRetry, view.CanPostReturn, view.ReceiptRecorded).ShouldBe(("NeedsReview", "outcome_overdue", true, false, false, false));
         }, ct);
 
-        // In review it waits for nothing: the next sweep asks Stripe nothing on its account.
+        // In review it waits for nothing, and Stripe is asked all the same: a sweep no longer needs a
+        // payment waiting. It is not aged again, and nothing about it changes.
         h.Clock.Advance(SweepInterval);
         await Sweep(h, ct);
-        sandbox.Sweeps.Count.ShouldBe(2);
+        sandbox.Sweeps.Count.ShouldBe(3);
+        var later = await h.Operation(payment.Id, ct);
+        (later.Status, later.Reason, later.ProcessedCount).ShouldBe(("NeedsReview", "outcome_overdue", operation.ProcessedCount));
     }
 
     // A payment must never go to a person while the events that could end it have not been asked for.

@@ -22,7 +22,9 @@ public sealed class StripeTransport(HttpMessageHandler handler)
 /// Collects a payment as a direct charge on a fixture's connected account in a Stripe sandbox, and
 /// finds it again (ADR-054). It sends the amount, a test payment method and two ids of LeaseBook's
 /// own; nothing that identifies a tenant. Of Stripe's events it reads how a payment went: processing,
-/// succeeded or failed. None of those is money at a bank, and payouts are not read yet.
+/// succeeded or failed; and what became of it afterwards: refunded, or disputed, which for an ACH
+/// debit is how Stripe reports a return. None of those is money at a bank or money leaving one, so
+/// nothing read here can post, and payouts are not read yet. It never refunds and never answers a dispute.
 /// </summary>
 public sealed class StripeSandboxProcessor : IPaymentProcessor
 {
@@ -226,9 +228,14 @@ public sealed class StripeSandboxProcessor : IPaymentProcessor
 
     private static readonly UTF8Encoding StrictUtf8 = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
 
-    // A snapshot event carries the payment it is about, so reading one asks Stripe nothing.
-    public Task<ProcessorRead<ProcessorObservation>> ReadObservationAsync(ProcessorNotice notice, CancellationToken ct) =>
-        Task.FromResult(Observation(notice.Body));
+    // An event that carries the payment it is about is read without asking Stripe anything. A dispute
+    // carries nothing of LeaseBook's, so reading one asks for the payment and the charge it names.
+    public async Task<ProcessorRead<ProcessorObservation>> ReadObservationAsync(ProcessorNotice notice, CancellationToken ct)
+    {
+        try { return await ObservationAsync(notice.Body, only: null, [], ct); }
+        // A test event about a payment or a charge Stripe marks live: refused, as an event marked live is.
+        catch (PaymentUnavailableException) { return ProcessorRead<ProcessorObservation>.Of(null); }
+    }
 
     // Payouts are read in a later step. Until then no delivery is payout evidence.
     public Task<ProcessorRead<ProcessorSettlement>> ReadSettlementAsync(ProcessorNotice notice, CancellationToken ct) =>
@@ -240,7 +247,10 @@ public sealed class StripeSandboxProcessor : IPaymentProcessor
     /// The trust is of another kind: the list was asked of Stripe, with the platform's key, over TLS,
     /// for one named account. So no notice is made of it, and an event counts only for the account
     /// that was asked about. The list is taken as text and read member by member, for the reason the
-    /// reader gives; the library's own list would put every event through its types first.
+    /// reader gives; the library's own list would put every event through its types first. An event
+    /// the reader must ask Stripe about is asked about here too, so that it is read as it was when
+    /// delivered. One that cannot be asked about is counted and passed over, so that it does not cost
+    /// the sweep what it could read; the caller asks for it again. An answer marked live fails the sweep.
     /// </summary>
     public async Task<ProcessorRecovery> RecoverObservationsAsync(FixtureBinding binding, DateTime since, CancellationToken ct)
     {
@@ -248,10 +258,12 @@ public sealed class StripeSandboxProcessor : IPaymentProcessor
         var from = new DateTimeOffset(DateTime.SpecifyKind(since, DateTimeKind.Utc) - ClockSkew).ToUnixTimeSeconds();
         // Only the types the reader maps: an account's other events are several times as many.
         var query = string.Create(CultureInfo.InvariantCulture, $"/v1/events?created[gte]={from}&limit={PageSize}")
-            + string.Concat(Progress.Select((x, i) => string.Create(CultureInfo.InvariantCulture, $"&types[{i}]={x.Type}")));
+            + string.Concat(Events.Select((x, i) => string.Create(CultureInfo.InvariantCulture, $"&types[{i}]={x.Type}")));
         var account = new RawRequestOptions { StripeAccount = binding.Account };
         var found = new List<ProcessorObservation>();
-        var (listed, unreadable) = (0, 0);
+        // What this sweep has asked Stripe so far. A dispute's events name one payment and one charge.
+        var asked = new Dictionary<string, string?>(StringComparer.Ordinal);
+        var (listed, unreadable, unasked) = (0, 0, 0);
         string? after = null;
         for (var page = 0; ; page++)
         {
@@ -276,11 +288,15 @@ public sealed class StripeSandboxProcessor : IPaymentProcessor
                 foreach (var item in data.EnumerateArray())
                 {
                     listed++;
-                    var read = Observation(Encoding.UTF8.GetBytes(item.GetRawText()));
+                    // The reader routes by any binding of this host. Here only one account was asked.
+                    ProcessorRead<ProcessorObservation> read;
+                    try { read = await ObservationAsync(Encoding.UTF8.GetBytes(item.GetRawText()), binding, asked, ct); }
+                    // Stripe would not say what the event is about. Nothing is known of it, so it is
+                    // neither kept nor called unreadable; the events beside it are not held up by it.
+                    catch (Exception ex) when (ex is not PaymentUnavailableException && !ct.IsCancellationRequested) { unasked++; continue; }
                     // One that cannot be read is counted and passed over: it must not hide the rest.
                     if (read.Value is null) { unreadable += read.Ignored ? 0 : 1; continue; }
-                    // The reader routes by any binding of this host. Here only one account was asked.
-                    if (read.Value.Account == binding.Account) { found.Add(read.Value); }
+                    found.Add(read.Value);
                 }
                 if (more.ValueKind == JsonValueKind.False) { break; }
                 // More to come and nothing to say where from: not the end, so not an answer.
@@ -288,7 +304,7 @@ public sealed class StripeSandboxProcessor : IPaymentProcessor
                 after = Id(data[data.GetArrayLength() - 1], "id") ?? throw NotAList();
             }
         }
-        return new ProcessorRecovery(found, listed, unreadable);
+        return new ProcessorRecovery(found, listed, unreadable, unasked);
     }
 
     private static IOException NotAList() => new("The Stripe sandbox did not answer with a list of events.");
@@ -301,25 +317,49 @@ public sealed class StripeSandboxProcessor : IPaymentProcessor
                 && data.TryGetProperty("object", out var inner) && inner.ValueKind == JsonValueKind.Object
                 && inner.TryGetProperty("livemode", out var innerLive) && innerLive.ValueKind == JsonValueKind.True));
 
-    // The events read, and what each says of a payment. The reader and the sweep's filter both take
-    // them from here, so that a sweep asks for exactly what a delivery would be read as.
-    private static readonly (string Type, string Kind)[] Progress =
+    // The events read: what kind of object each carries, and what it says of a payment. The reader
+    // and the sweep's filter both take them from here, so that a sweep asks for exactly what a
+    // delivery would be read as. Stripe takes at most twenty types in one filter.
+    private static readonly (string Type, string About, string Kind)[] Events =
     [
-        ("payment_intent.processing", "Processing"),
-        ("payment_intent.succeeded", "Succeeded"),
-        ("payment_intent.payment_failed", "Failed"),
+        ("payment_intent.processing", "payment_intent", "Processing"),
+        ("payment_intent.succeeded", "payment_intent", "Succeeded"),
+        ("payment_intent.payment_failed", "payment_intent", "Failed"),
+        // The charge as a refund left it, which carries the payment's metadata. A refund's other
+        // events carry the refund, which has none, and say nothing this one does not.
+        ("charge.refunded", "charge", "Refund"),
+        // A dispute, and a "Return" instead when the charge it names was an ACH debit. No other
+        // dispute event has been recorded, so no other is read.
+        ("charge.dispute.created", "dispute", "Dispute"),
+        ("charge.dispute.funds_withdrawn", "dispute", "Dispute"),
+        ("charge.dispute.closed", "dispute", "Dispute"),
     ];
+
+    private enum Whose { Ours, NotOurs, Unreadable }
 
     /// <summary>
     /// What an authentic event says of one payment. Read member by member and not into the library's
     /// types, which throw on a shape or an API version they do not expect. In this order: an event
     /// that is not one, or is marked live, is unreadable whoever it is for; one for an account no
-    /// fixture here is bound to, of another kind, or about a payment of another fixture generation is
-    /// not this host's; and one that is this host's and cannot be taken as it stands is unreadable.
-    /// The generation and bank on the result are the binding's. Nothing read here is bank evidence:
-    /// it has no evidence id, no payout and is never complete.
+    /// fixture here is bound to (or, in a sweep, any account but the one asked), of another kind, or
+    /// about a payment of another fixture generation is not this host's; and one that is this host's
+    /// and cannot be taken as it stands is unreadable. The generation and bank on the result are the
+    /// binding's. Nothing read here is bank evidence: it has no payout and is never complete.
+    /// <para>
+    /// A dispute says whose payment it is about only by Stripe's id, so that payment is asked for and
+    /// put to the test a payment's own event gets. What cannot be asked is thrown, never taken as an
+    /// answer; anything live in an answer throws <see cref="PaymentUnavailableException"/>. The events
+    /// of one dispute carry the dispute's id and date, not their own, so that they agree with each other.
+    /// </para>
+    /// <para>
+    /// An event for this fixture's payment in a currency that was not charged is kept as conflicting
+    /// evidence, with the currency and amount it names. The amount is Stripe's count of the
+    /// currency's smallest unit taken as hundredths, which is exact for a currency with two decimal
+    /// places and not for one with none or three; it is evidence for a person and is never posted.
+    /// </para>
     /// </summary>
-    private ProcessorRead<ProcessorObservation> Observation(byte[] body)
+    private async Task<ProcessorRead<ProcessorObservation>> ObservationAsync(byte[] body, FixtureBinding? only,
+        Dictionary<string, string?> asked, CancellationToken ct)
     {
         var unreadable = ProcessorRead<ProcessorObservation>.Of(null);
         var notOurs = ProcessorRead<ProcessorObservation>.NotOurs;
@@ -330,46 +370,145 @@ public sealed class StripeSandboxProcessor : IPaymentProcessor
         {
             var root = document.RootElement;
             if (root.ValueKind != JsonValueKind.Object || Id(root, "id") is not { } eventId || Text(root, "type") is not { } type
-                || !root.TryGetProperty("created", out var created) || created.ValueKind != JsonValueKind.Number
-                || !created.TryGetInt64(out var seconds) || seconds is <= 0 or > MaxUnixSeconds)
+                || Seconds(root, "created") is not { } seconds)
             { return unreadable; }
             // The event's own flag is the one that counts, and it must be there and exactly false: a
             // live event is refused, not acknowledged, and so is an event that does not say.
             if (!root.TryGetProperty("livemode", out var live) || live.ValueKind != JsonValueKind.False) { return unreadable; }
             // The platform's own events name no account. Routing reads the host's bindings and nothing
             // else: no organization is entered and none is read to decide that an event is not ours.
-            if (Text(root, "account") is not { } account || _settings.ForAccount(account) is not { } binding) { return notOurs; }
-            var kind = Progress.Where(x => x.Type == type).Select(x => x.Kind).FirstOrDefault();
-            if (kind is null) { return notOurs; }
-            // The payment inside carries the flag too. It may be absent, the event having answered; when
-            // it is there it must also be exactly false.
-            if (!root.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Object
-                || !data.TryGetProperty("object", out var payment) || payment.ValueKind != JsonValueKind.Object
-                || Text(payment, "object") != "payment_intent" || Id(payment, "id") is not { } providerId
-                || (payment.TryGetProperty("livemode", out var paymentLive) && paymentLive.ValueKind != JsonValueKind.False))
-            { return unreadable; }
-            // The account also holds payments of the probe and of older fixture generations. They are
-            // authentic and not this host's, whatever else is true of them.
-            if (!payment.TryGetProperty("metadata", out var metadata) || metadata.ValueKind != JsonValueKind.Object
-                || !Guid.TryParse(Text(metadata, GenerationKey), out var generation) || generation != binding.Generation
-                || !Guid.TryParse(Text(metadata, OperationKey), out _))
+            if (Text(root, "account") is not { } account || _settings.ForAccount(account) is not { } binding
+                || (only is not null && binding != only))
             { return notOurs; }
-            if (Text(payment, "currency") != "usd" || !payment.TryGetProperty("amount", out var amount)
-                || amount.ValueKind != JsonValueKind.Number || !amount.TryGetInt64(out var minor) || minor is <= 0 or > MaxMinorUnits)
+            var read = Events.FirstOrDefault(x => x.Type == type);
+            if (read.Type is null) { return notOurs; }
+            // What the event is about carries the flag too. It may be absent, the event having
+            // answered; when it is there it must also be exactly false.
+            if (!root.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Object
+                || !data.TryGetProperty("object", out var about) || about.ValueKind != JsonValueKind.Object
+                || Text(about, "object") != read.About || Id(about, "id") is not { } aboutId
+                || (about.TryGetProperty("livemode", out var aboutLive) && aboutLive.ValueKind != JsonValueKind.False))
             { return unreadable; }
             var at = DateTimeOffset.FromUnixTimeSeconds(seconds).UtcDateTime;
-            var charged = minor / 100m;
+            var (providerId, evidenceId, kind, date, amountName) = (aboutId, "", read.Kind, DateOnly.FromDateTime(at), "amount");
+            switch (read.About)
+            {
+                // The account also holds payments of the probe and of older fixture generations. They
+                // are authentic and not this host's, whatever else is true of them.
+                case "payment_intent":
+                    if (!MadeHere(about, binding)) { return notOurs; }
+                    break;
+                // The amount refunded is the total so far, so a second refund of one charge says more than the first.
+                case "charge":
+                    if (!MadeHere(about, binding)) { return notOurs; }
+                    if (Id(about, "payment_intent") is not { } refunded) { return unreadable; }
+                    (providerId, evidenceId, amountName) = (refunded, aboutId, "amount_refunded");
+                    break;
+                default:
+                    // Only a payment LeaseBook made can be its own, and it makes no charge without one.
+                    if (!about.TryGetProperty("payment_intent", out var named) || named.ValueKind == JsonValueKind.Null) { return notOurs; }
+                    if (Named(about, "payment_intent") is not { } disputed) { return unreadable; }
+                    switch (await WhoseAsync(disputed, binding, asked, ct))
+                    {
+                        case Whose.NotOurs: return notOurs;
+                        case Whose.Unreadable: return unreadable;
+                        default: break;
+                    }
+                    if (Seconds(about, "created") is not { } opened) { return unreadable; }
+                    (providerId, evidenceId, date) = (disputed, aboutId, DateOnly.FromDateTime(DateTimeOffset.FromUnixTimeSeconds(opened).UtcDateTime));
+                    break;
+            }
+            if (Text(about, "currency") is not { Length: 3 } currency || !currency.All(char.IsAsciiLetter)
+                || !about.TryGetProperty(amountName, out var amount) || amount.ValueKind != JsonValueKind.Number
+                || !amount.TryGetInt64(out var minor) || minor is <= 0 or > MaxMinorUnits)
+            { return unreadable; }
+            currency = currency.ToUpperInvariant();
+            if (currency != "USD") { kind = PaymentEngine.ConflictKind; }
+            // Asked last, and only of a dispute that is otherwise kept as one.
+            else if (read.About == "dispute" && await AchDebitAsync(Named(about, "charge"), providerId, binding, asked, ct)) { kind = "Return"; }
+            var said = minor / 100m;
             return ProcessorRead<ProcessorObservation>.Of(new ProcessorObservation(eventId, providerId, binding.Account, binding.Mode,
-                binding.Generation, kind, charged, 0m, charged, "USD", binding.BankId, DateOnly.FromDateTime(at),
-                EvidenceId: "", PayoutId: "", Complete: false, at));
+                binding.Generation, kind, said, 0m, said, currency, binding.BankId, date, evidenceId, PayoutId: "", Complete: false, at));
         }
     }
+
+    // This fixture's own: made by LeaseBook for an operation, under the generation bound to the account.
+    private static bool MadeHere(JsonElement made, FixtureBinding binding) =>
+        made.TryGetProperty("metadata", out var metadata) && metadata.ValueKind == JsonValueKind.Object
+        && Guid.TryParse(Text(metadata, GenerationKey), out var generation) && generation == binding.Generation
+        && Guid.TryParse(Text(metadata, OperationKey), out _);
+
+    // Whose payment a dispute is about, by the payment Stripe holds under the id the dispute names.
+    // None there is nobody's here. One that is not the payment asked for, or does not say it is a
+    // test, is no answer to rely on.
+    private async Task<Whose> WhoseAsync(string payment, FixtureBinding binding, Dictionary<string, string?> asked, CancellationToken ct)
+    {
+        if (await AskAsync("/v1/payment_intents/" + payment, binding, asked, ct) is not { } answer) { return Whose.NotOurs; }
+        using var document = Answer(answer);
+        var held = document.RootElement;
+        if (!held.TryGetProperty("livemode", out var live) || live.ValueKind != JsonValueKind.False
+            || Text(held, "object") != "payment_intent" || Text(held, "id") != payment)
+        { return Whose.Unreadable; }
+        return MadeHere(held, binding) ? Whose.Ours : Whose.NotOurs;
+    }
+
+    // Whether a disputed charge was an ACH debit, which makes the dispute a bank's return of it. The
+    // charge Stripe holds says so, under the id the dispute names and for the payment it names. The
+    // dispute's own account of how it was paid is null for ACH, and an id's prefix is not a statement.
+    // It is held to what the payment is held to: one that does not say it is a test is not read as
+    // one. Whatever does not say so plainly leaves the dispute a dispute, which a person still reads.
+    private async Task<bool> AchDebitAsync(string? charge, string payment, FixtureBinding binding, Dictionary<string, string?> asked, CancellationToken ct)
+    {
+        if (charge is null || await AskAsync("/v1/charges/" + charge, binding, asked, ct) is not { } answer) { return false; }
+        using var document = Answer(answer);
+        var held = document.RootElement;
+        return held.TryGetProperty("livemode", out var live) && live.ValueKind == JsonValueKind.False
+            && Text(held, "object") == "charge" && Text(held, "id") == charge && Text(held, "payment_intent") == payment
+            && held.TryGetProperty("payment_method_details", out var details) && details.ValueKind == JsonValueKind.Object
+            && Text(details, "type") == "us_bank_account";
+    }
+
+    // One object asked of Stripe by its id, on the fixture's account: its text, or null when Stripe
+    // has none under that id. The path is all that is sent. Whatever else Stripe answers is left as
+    // thrown: it says nothing about the object, and the event is read again another time.
+    private async Task<string?> AskAsync(string path, FixtureBinding binding, Dictionary<string, string?> asked, CancellationToken ct)
+    {
+        if (asked.TryGetValue(path, out var known)) { return known; }
+        string? answer;
+        try { answer = (await _client.RawRequestAsync(HttpMethod.Get, path, null, new RawRequestOptions { StripeAccount = binding.Account }, ct)).Content; }
+        catch (StripeException ex) when (ex.HttpStatusCode == HttpStatusCode.NotFound) { answer = null; }
+        return asked[path] = answer;
+    }
+
+    // An answer as one object, with anything in it that is marked live refused before it is read.
+    private static JsonDocument Answer(string text)
+    {
+        JsonDocument document;
+        try { document = JsonDocument.Parse(text); }
+        catch (JsonException) { throw NotAnObject(); }
+        if (document.RootElement.ValueKind != JsonValueKind.Object) { document.Dispose(); throw NotAnObject(); }
+        if (document.RootElement.TryGetProperty("livemode", out var live) && live.ValueKind == JsonValueKind.True)
+        { document.Dispose(); throw new PaymentUnavailableException(); }
+        return document;
+    }
+
+    private static IOException NotAnObject() => new("The Stripe sandbox did not answer with the object asked for.");
 
     private static string? Text(JsonElement owner, string name) =>
         owner.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
 
     // An id as it is stored: text, not empty, and no longer than its column.
     private static string? Id(JsonElement owner, string name) => Text(owner, name) is { Length: > 0 and <= MaxIdLength } id ? id : null;
+
+    // An id that can be asked for by name. Stripe's are letters, digits and underscores; anything
+    // else could make the path it is put in another path, so it is never sent.
+    private static string? Named(JsonElement owner, string name) =>
+        Id(owner, name) is { } id && id.All(x => char.IsAsciiLetterOrDigit(x) || x == '_') ? id : null;
+
+    // A time as Stripe gives one: whole seconds, after the epoch and within what a date can hold.
+    private static long? Seconds(JsonElement owner, string name) =>
+        owner.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Number
+        && value.TryGetInt64(out var seconds) && seconds is > 0 and <= MaxUnixSeconds ? seconds : null;
 
     /// <summary>
     /// Refuses a key that is not the platform's. A connected account with its own dashboard has test
