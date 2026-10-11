@@ -23,8 +23,11 @@ public sealed class StripeTransport(HttpMessageHandler handler)
 /// finds it again (ADR-054). It sends the amount, a test payment method and two ids of LeaseBook's
 /// own; nothing that identifies a tenant. Of Stripe's events it reads how a payment went: processing,
 /// succeeded or failed; and what became of it afterwards: refunded, or disputed, which for an ACH
-/// debit is how Stripe reports a return. None of those is money at a bank or money leaving one, so
-/// nothing read here can post, and payouts are not read yet. It never refunds and never answers a dispute.
+/// debit is how Stripe reports a return. It also reads that a payout was paid, with Stripe's own list
+/// of what the payout contains, and that one failed. None of those is money at a bank or money
+/// leaving one: a payout Stripe marks paid can still fail. So nothing read here can post, and a payout
+/// waits for a bank's evidence, which never comes from Stripe. It never refunds, never answers a
+/// dispute, never makes a payout and never works out for itself what a payout covers.
 /// </summary>
 public sealed class StripeSandboxProcessor : IPaymentProcessor
 {
@@ -237,9 +240,19 @@ public sealed class StripeSandboxProcessor : IPaymentProcessor
         catch (PaymentUnavailableException) { return ProcessorRead<ProcessorObservation>.Of(null); }
     }
 
-    // Payouts are read in a later step. Until then no delivery is payout evidence.
+    // Stripe never speaks for a bank: a payout it marks paid is not proof the bank received it. So
+    // nothing it delivers is a payout together with its bank evidence, which is what this would read.
     public Task<ProcessorRead<ProcessorSettlement>> ReadSettlementAsync(ProcessorNotice notice, CancellationToken ct) =>
         Task.FromResult(ProcessorRead<ProcessorSettlement>.NotOurs);
+
+    // A payout event carries the payout and nothing it covers, so reading one that was paid asks
+    // Stripe for the payout's balance lines, and for the charge behind each dispute among them.
+    public async Task<ProcessorRead<ProcessorPayout>> ReadPayoutAsync(ProcessorNotice notice, CancellationToken ct)
+    {
+        try { return await PayoutAsync(notice.Body, only: null, [], ct); }
+        // A test event about a payout whose lines Stripe marks live: refused, as an event marked live is.
+        catch (PaymentUnavailableException) { return ProcessorRead<ProcessorPayout>.Of(null); }
+    }
 
     /// <summary>
     /// Lists the events Stripe holds for one fixture's account since a time, for one that was never
@@ -256,11 +269,13 @@ public sealed class StripeSandboxProcessor : IPaymentProcessor
     {
         if (_settings.ForOrg(binding.OrgId) != binding) { throw new PaymentUnavailableException(); }
         var from = new DateTimeOffset(DateTime.SpecifyKind(since, DateTimeKind.Utc) - ClockSkew).ToUnixTimeSeconds();
-        // Only the types the reader maps: an account's other events are several times as many.
+        // Only the types the readers map: an account's other events are several times as many.
         var query = string.Create(CultureInfo.InvariantCulture, $"/v1/events?created[gte]={from}&limit={PageSize}")
-            + string.Concat(Events.Select((x, i) => string.Create(CultureInfo.InvariantCulture, $"&types[{i}]={x.Type}")));
+            + string.Concat(Events.Select(x => x.Type).Concat(PayoutEvents.Select(x => x.Type))
+                .Select((x, i) => string.Create(CultureInfo.InvariantCulture, $"&types[{i}]={x}")));
         var account = new RawRequestOptions { StripeAccount = binding.Account };
         var found = new List<ProcessorObservation>();
+        var payouts = new List<ProcessorPayout>();
         // What this sweep has asked Stripe so far. A dispute's events name one payment and one charge.
         var asked = new Dictionary<string, string?>(StringComparer.Ordinal);
         var (listed, unreadable, unasked) = (0, 0, 0);
@@ -289,13 +304,26 @@ public sealed class StripeSandboxProcessor : IPaymentProcessor
                 {
                     listed++;
                     // The reader routes by any binding of this host. Here only one account was asked.
+                    var body = Encoding.UTF8.GetBytes(item.GetRawText());
                     ProcessorRead<ProcessorObservation> read;
-                    try { read = await ObservationAsync(Encoding.UTF8.GetBytes(item.GetRawText()), binding, asked, ct); }
+                    ProcessorRead<ProcessorPayout> payout = ProcessorRead<ProcessorPayout>.NotOurs;
+                    try
+                    {
+                        read = await ObservationAsync(body, binding, asked, ct);
+                        // What says nothing of a payment may be about a payout, read as its delivery is.
+                        if (read.Ignored) { payout = await PayoutAsync(body, binding, asked, ct); }
+                    }
                     // Stripe would not say what the event is about. Nothing is known of it, so it is
                     // neither kept nor called unreadable; the events beside it are not held up by it.
                     catch (Exception ex) when (ex is not PaymentUnavailableException && !ct.IsCancellationRequested) { unasked++; continue; }
+                    if (read.Ignored)
+                    {
+                        if (payout.Value is not null) { payouts.Add(payout.Value); }
+                        else if (!payout.Ignored) { unreadable++; }
+                        continue;
+                    }
                     // One that cannot be read is counted and passed over: it must not hide the rest.
-                    if (read.Value is null) { unreadable += read.Ignored ? 0 : 1; continue; }
+                    if (read.Value is null) { unreadable++; continue; }
                     found.Add(read.Value);
                 }
                 if (more.ValueKind == JsonValueKind.False) { break; }
@@ -304,7 +332,7 @@ public sealed class StripeSandboxProcessor : IPaymentProcessor
                 after = Id(data[data.GetArrayLength() - 1], "id") ?? throw NotAList();
             }
         }
-        return new ProcessorRecovery(found, listed, unreadable, unasked);
+        return new ProcessorRecovery(found, listed, unreadable, unasked) { Payouts = payouts };
     }
 
     private static IOException NotAList() => new("The Stripe sandbox did not answer with a list of events.");
@@ -431,6 +459,210 @@ public sealed class StripeSandboxProcessor : IPaymentProcessor
                 binding.Generation, kind, said, 0m, said, currency, binding.BankId, date, evidenceId, PayoutId: "", Complete: false, at));
         }
     }
+
+    // The payout events read, and what each says became of the payout. Every other payout event is
+    // acknowledged and dropped: that one was created, updated or reconciled is not grounds for anything.
+    private static readonly (string Type, string State)[] PayoutEvents =
+    [
+        ("payout.paid", ProcessorPayoutStates.Paid),
+        ("payout.failed", ProcessorPayoutStates.Failed),
+    ];
+
+    /// <summary>
+    /// What an authentic event says of one payout, read as a payment's event is and in the same
+    /// order: not an event or marked live, unreadable; for no fixture here or of another kind, not
+    /// this host's; this host's and not to be taken as it stands, unreadable. A payout belongs to the
+    /// fixture bound to its account. It carries nothing of LeaseBook's and no generation: what it
+    /// covers says whose it is, line by line, and that is the engine's to judge.
+    /// <para>
+    /// A payout Stripe says it paid is read with Stripe's own list of its balance lines, asked for by
+    /// the payout's id. Only an automatic payout has such a list. A manual one is read without lines
+    /// and named manual, so that it is stored for a person and never posted: the adapter does not
+    /// decide what a payout covers. A payout Stripe says failed is read without lines too.
+    /// </para>
+    /// <para>
+    /// What cannot be asked is thrown, never taken as an answer, and anything live in an answer throws
+    /// <see cref="PaymentUnavailableException"/>. Amounts are Stripe's counts of cents, taken as
+    /// hundredths only when they are whole numbers that fit what is stored.
+    /// </para>
+    /// </summary>
+    private async Task<ProcessorRead<ProcessorPayout>> PayoutAsync(byte[] body, FixtureBinding? only,
+        Dictionary<string, string?> asked, CancellationToken ct)
+    {
+        var unreadable = ProcessorRead<ProcessorPayout>.Of(null);
+        var notOurs = ProcessorRead<ProcessorPayout>.NotOurs;
+        JsonDocument document;
+        try { document = JsonDocument.Parse(body, new JsonDocumentOptions { AllowDuplicateProperties = false }); }
+        catch (JsonException) { return unreadable; }
+        using (document)
+        {
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object || Id(root, "id") is null || Text(root, "type") is not { } type
+                || Seconds(root, "created") is not { } seconds)
+            { return unreadable; }
+            if (!root.TryGetProperty("livemode", out var live) || live.ValueKind != JsonValueKind.False) { return unreadable; }
+            if (Text(root, "account") is not { } account || _settings.ForAccount(account) is not { } binding
+                || (only is not null && binding != only))
+            { return notOurs; }
+            var read = PayoutEvents.FirstOrDefault(x => x.Type == type);
+            if (read.Type is null) { return notOurs; }
+            if (!root.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Object
+                || !data.TryGetProperty("object", out var about) || about.ValueKind != JsonValueKind.Object
+                || Text(about, "object") != "payout" || Named(about, "id") is not { } payoutId
+                || (about.TryGetProperty("livemode", out var aboutLive) && aboutLive.ValueKind != JsonValueKind.False)
+                || Minor(about, "amount") is not { } amount || Currency(about) is not { } currency
+                || !about.TryGetProperty("automatic", out var automatic) || automatic.ValueKind is not (JsonValueKind.True or JsonValueKind.False)
+                || Text(about, "method") is not { Length: > 0 and <= 20 } method)
+            { return unreadable; }
+            // "standard" is the one type a payout posts under. Stripe's other method, and a payout a
+            // person made, are each stored under a name that is not it.
+            var payoutType = automatic.ValueKind == JsonValueKind.True ? method : SettlementPayoutTypes.Manual;
+            IReadOnlyList<ProcessorSettlementItem> items = [];
+            if (read.State == ProcessorPayoutStates.Paid && automatic.ValueKind == JsonValueKind.True)
+            {
+                // Only once Stripe has finished reconciling the payout can its lines be listed in
+                // full. Listed sooner they may be short, and a payout stored short is one the whole
+                // list would later contradict. An event is what the payout was when it was sent, and
+                // never changes, so when it does not say the lines are ready Stripe is asked what the
+                // payout is now. Not ready is not an answer about the payout: it is thrown, like a
+                // list that cannot be had, so that a delivery is sent again and a sweep asks again.
+                if (Text(about, "reconciliation_status") != ReconciliationCompleted && !await ReconciledAsync(payoutId, binding, asked, ct))
+                { throw new IOException("The Stripe sandbox has not finished reconciling the payout; its lines are not read yet."); }
+                items = await LinesAsync(payoutId, binding, asked, ct);
+            }
+            return ProcessorRead<ProcessorPayout>.Of(new ProcessorPayout(payoutId, binding.Account, binding.Mode, binding.Generation,
+                payoutType, read.State, amount / 100m, currency, binding.BankId, DateTimeOffset.FromUnixTimeSeconds(seconds).UtcDateTime, items));
+        }
+    }
+
+    private const string ReconciliationCompleted = "completed";
+
+    // Whether Stripe now says a payout's lines can be listed in full, by the payout it holds under
+    // that id on the fixture's account. Held to what the event is held to: this payout, in test mode.
+    // One Stripe does not hold, or that is not what was asked for, is no answer to list lines on.
+    private async Task<bool> ReconciledAsync(string payoutId, FixtureBinding binding, Dictionary<string, string?> asked, CancellationToken ct)
+    {
+        if (await AskAsync("/v1/payouts/" + payoutId, binding, asked, ct) is not { } answer)
+        { throw new IOException("The Stripe sandbox does not hold the payout its event is about."); }
+        using var document = Answer(answer);
+        var held = document.RootElement;
+        if (!held.TryGetProperty("livemode", out var live) || live.ValueKind != JsonValueKind.False
+            || Text(held, "object") != "payout" || Text(held, "id") != payoutId)
+        { throw NotAnObject(); }
+        return Text(held, "reconciliation_status") == ReconciliationCompleted;
+    }
+
+    // Stripe's own list of what a payout contains: its balance transactions, every page, each with
+    // the object it came from. The request names the payout and nothing else. A list that cannot be
+    // had whole is thrown: part of one would be a payout that does not come to what Stripe paid.
+    private async Task<IReadOnlyList<ProcessorSettlementItem>> LinesAsync(string payoutId, FixtureBinding binding,
+        Dictionary<string, string?> asked, CancellationToken ct)
+    {
+        var query = string.Create(CultureInfo.InvariantCulture, $"/v1/balance_transactions?payout={payoutId}&limit={PageSize}&expand[]=data.source");
+        var account = new RawRequestOptions { StripeAccount = binding.Account };
+        var items = new List<ProcessorSettlementItem>();
+        string? after = null;
+        for (var page = 0; ; page++)
+        {
+            if (page == MaxPages) { throw new IOException("The Stripe sandbox listed more balance lines than a payout is read with."); }
+            var response = await _client.RawRequestAsync(HttpMethod.Get,
+                after is null ? query : query + "&starting_after=" + Uri.EscapeDataString(after), null, account, ct);
+            JsonDocument document;
+            try { document = JsonDocument.Parse(response.Content); }
+            catch (JsonException) { throw NotLines(); }
+            using (document)
+            {
+                var root = document.RootElement;
+                if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Array
+                    || !root.TryGetProperty("has_more", out var more) || more.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+                { throw NotLines(); }
+                foreach (var line in data.EnumerateArray()) { items.AddRange(await LineAsync(line, payoutId, binding, asked, ct)); }
+                if (more.ValueKind == JsonValueKind.False) { break; }
+                if (data.GetArrayLength() == 0) { throw NotLines(); }
+                after = Id(data[data.GetArrayLength() - 1], "id") ?? throw NotLines();
+            }
+        }
+        return items;
+    }
+
+    private static IOException NotLines() => new("The Stripe sandbox did not answer with a payout's balance lines.");
+
+    // The longest line reference kept, less the room the reference of a dispute's own fee takes.
+    private const int MaxLineId = 56;
+    private const string DisputeFeeSuffix = ".fee";
+
+    /// <summary>
+    /// One balance line as the items it is stored as. None for the payout's own line, which is what
+    /// Stripe paid and not something it contains. One for every other line, whatever it is: a line
+    /// left out would leave a payout that no longer comes to the bank's figure. Two for a dispute on
+    /// an ACH debit, which is a bank's return of the whole charge and, apart from it, Stripe's fee for
+    /// the dispute. What a line names is stored as Stripe gives it, a payment of another fixture
+    /// generation included; whether LeaseBook knows that payment is the engine's to find.
+    /// <para>
+    /// Only three kinds can post: a charge's line as a payment, an ACH dispute's as a return, and that
+    /// dispute's fee. A card dispute, a refund, a failed debit taken back and anything not named here
+    /// are each stored under a kind nothing posts, with Stripe's own figures, so that the whole
+    /// payout goes to a person.
+    /// </para>
+    /// </summary>
+    private async Task<IReadOnlyList<ProcessorSettlementItem>> LineAsync(JsonElement line, string payoutId, FixtureBinding binding,
+        Dictionary<string, string?> asked, CancellationToken ct)
+    {
+        if (line.ValueKind != JsonValueKind.Object || Text(line, "object") != "balance_transaction"
+            || Id(line, "id") is not { Length: <= MaxLineId } id || Text(line, "type") is not { } type
+            || Minor(line, "amount") is not { } amount || Minor(line, "fee") is not { } fee || Minor(line, "net") is not { } net
+            || Currency(line) is not { } currency)
+        { throw NotLines(); }
+        // Expanded, the source is the object; otherwise its id, or nothing.
+        var source = line.TryGetProperty("source", out var from) ? from : default;
+        var about = source.ValueKind == JsonValueKind.Object ? source : default;
+        if (about.ValueKind == JsonValueKind.Object && about.TryGetProperty("livemode", out var live) && live.ValueKind == JsonValueKind.True)
+        { throw new PaymentUnavailableException(); }
+        var sourceId = about.ValueKind == JsonValueKind.Object ? Id(about, "id") : source.ValueKind == JsonValueKind.String ? source.GetString() : null;
+        var sourceKind = about.ValueKind == JsonValueKind.Object ? Text(about, "object") : null;
+        // The payment a line is about, where its source names one.
+        var payment = sourceKind is "charge" or "dispute" or "refund" ? Id(about, "payment_intent") ?? "" : "";
+        ProcessorSettlementItem As(string kind) => new(id, kind, payment, amount / 100m, fee / 100m, net / 100m, currency);
+
+        switch (type)
+        {
+            // This payout's own line: what left Stripe for the bank. Any other payout's is not.
+            case "payout" when sourceId == payoutId:
+                return [];
+            // A card payment and an ACH debit. Only one whose charge names its payment can be one.
+            case "charge" or "payment" when sourceKind == "charge" && payment.Length > 0:
+                return [As(SettlementItemKinds.Payment)];
+            case "adjustment" when sourceKind == "dispute":
+                // A return only when the charge says ACH, for this payment, as a dispute event is
+                // read; and only when the line is the whole of it: money taken back, a fee on top,
+                // and nothing else. Anything short of that stays a dispute, which a person reads.
+                if (currency == "USD" && amount < 0 && fee >= 0 && net == amount - fee && payment.Length > 0
+                    && Named(about, "payment_intent") is not null
+                    && await AchDebitAsync(Named(about, "charge"), payment, binding, asked, ct))
+                {
+                    var back = new ProcessorSettlementItem(id, SettlementItemKinds.Return, payment, -amount / 100m, 0m, amount / 100m, currency);
+                    return fee == 0 ? [back]
+                        : [back, new ProcessorSettlementItem(id + DisputeFeeSuffix, SettlementItemKinds.Fee, "", 0m, fee / 100m, -fee / 100m, currency)];
+                }
+                return [As(SettlementItemKinds.Dispute)];
+            case "refund" or "payment_refund":
+                return [As(SettlementItemKinds.Refund)];
+            case "payment_failure_refund":
+                return [As(SettlementItemKinds.FailedDebit)];
+            default:
+                return [As(SettlementItemKinds.Unknown)];
+        }
+    }
+
+    // A count of a currency's smallest unit, as Stripe gives amounts: a whole number, of either sign,
+    // within what is stored. A fraction is not taken and rounded.
+    private static long? Minor(JsonElement owner, string name) =>
+        owner.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Number
+        && value.TryGetInt64(out var minor) && minor is >= -MaxMinorUnits and <= MaxMinorUnits ? minor : null;
+
+    // A currency as it is stored: three ASCII letters, in capitals.
+    private static string? Currency(JsonElement owner) =>
+        Text(owner, "currency") is { Length: 3 } currency && currency.All(char.IsAsciiLetter) ? currency.ToUpperInvariant() : null;
 
     // This fixture's own: made by LeaseBook for an operation, under the generation bound to the account.
     private static bool MadeHere(JsonElement made, FixtureBinding binding) =>

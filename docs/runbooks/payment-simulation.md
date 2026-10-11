@@ -66,7 +66,8 @@ or a fixed amount under **Online payment fees**; the tenant form then quotes the
 commits. Reloading the page resumes observation without submitting again. Repeating the same CLI
 event is idempotent. `payment-simulation step` runs one worker pass without starting a web server.
 `emit` and `payout` drive the simulator: against a host in any other mode they print a refusal and
-exit with code 1.
+exit with code 1. `bank` is the reverse: it belongs to the Stripe sandbox fixture, described under
+[A payout](#a-payout), and is refused in a simulation host.
 
 Other event kinds are `Processing`, `Succeeded`, `Available`, `PayoutPending`, `PayoutFailed`,
 `Failed`, `Return`, `Refund` and `Dispute`. A return after receipt preserves that receipt and routes
@@ -162,8 +163,11 @@ sandbox. It runs only in Development, only with a test-mode key, and only with S
 test payment methods, so it cannot move real money. Continuous integration never calls Stripe.
 
 Today the adapter submits a charge, finds it again, and reads Stripe's events about how it went:
-processing, succeeded and failed, and afterwards a dispute or a refund. It does not read payouts yet,
-so a payment can be seen to succeed, fail or go to review, and nothing posts to the ledger.
+processing, succeeded and failed, and afterwards a dispute or a refund. It also reads that a payout
+was paid or failed. A payout is stored with Stripe's own lines and held: no Stripe event posts
+anything. A payout posts only after you say what the bank received for it, with a fixture command, and
+only when that amount is Stripe's. [A payout](#a-payout) has the steps. A payout that posts has not
+yet been shown against a real sandbox: the run recorded in ADR-054 held its one payout for review.
 
 ### What you need
 
@@ -235,7 +239,7 @@ stripe listen --latest --all-snapshot --forward-to localhost:5080/callbacks/paym
 its connected account. The CLI prints each delivery and the host's answer.
 
 - `204` means the event was authentic. It was either stored or was not this host's to act on. Most
-  are the second kind: `--all-snapshot` forwards every event type and the host reads seven.
+  are the second kind: `--all-snapshot` forwards every event type and the host reads nine.
 - `400` on every delivery means the signature did not verify. Check that the secret is the one this
   CLI sign-in prints, and that this machine's clock is right: a signature more than 300 seconds from
   the host's clock, either way, is refused.
@@ -260,13 +264,18 @@ bound to that account, and takes nothing else in the event as saying which organ
   sends the payment to review with the reason `return_requires_review`: as a **Return** when the
   payment was an ACH debit, as a **Dispute** when it was a card. So does a refund
   (`charge.refunded`), as a **Refund**. To learn whose payment a dispute is about, the host asks
-  Stripe for the payment and its charge. A PMAdmin can close the review. **Post return** is not
-  offered: nothing has a receipt before payouts are read, and Stripe's word about a dispute is not
-  bank evidence. Every other event type is acknowledged and dropped.
-- A `500` on a dispute's delivery means Stripe could not be asked about it just then. The sweep reads
-  the event again within about five minutes.
+  Stripe for the payment and its charge. A PMAdmin can close the review. A dispute event never
+  posts a return, on a payment with a receipt included: Stripe's word about a dispute is not bank
+  evidence, and **Post return** on such a payment is refused. A return posts only inside a payout
+  that an administrator posts.
+- `payout.paid` and `payout.failed` are read as [A payout](#a-payout) describes. Every other event
+  type is acknowledged and dropped, Stripe's other four payout events included.
+- A `500` on a dispute's delivery means Stripe could not be asked about it just then. So does one on
+  a `payout.paid` delivery: its lines could not be listed in full, or Stripe has not finished
+  reconciling the payout. The sweep reads the event again within about five minutes.
 - A payment that succeeds gets its paid date and stays **Processing**. No receipt is recorded and no
-  journal entry is written: a Stripe event is never bank evidence, and payouts are not read yet.
+  journal entry is written: a Stripe event is never bank evidence. It is receipted, and becomes
+  **Settled**, only when a payout that holds it posts.
 - A payment that fails ends as **Failed**, with the reason `collection_failed`. This covers a
   declined card and an ACH debit that fails.
 - A payment counts only when it carries this fixture's generation. The same connected account may
@@ -283,8 +292,91 @@ bound to that account, and takes nothing else in the event as saying which organ
   that one payment instead. If Stripe then has no payment under a stored reference, the payment goes
   to review. Restarting the host or retrying never charges twice. An operation more than 23 hours old
   is not submitted at all; it goes to review.
-- `payment-simulation step` works with the same five variables and repeats the key check. `emit` and
-  `payout` are refused. The simulator's callback routes do not exist in this host.
+- `payment-simulation step` works with the same five variables and repeats the key check, and so
+  does `bank`. `emit` and `payout` are refused. The simulator's callback routes do not exist in this
+  host.
+
+### A payout
+
+Stripe pays a connected account out on its own schedule, usually a day or more after the charges, so
+this part of a run happens on a later day. LeaseBook never makes a payout and never works out for
+itself what one covers.
+
+**What the host reads.** A `payout.paid` or `payout.failed` event, delivered or found by the sweep.
+For a paid payout the host asks Stripe for the payout's balance lines, every page, and for the charge
+behind each dispute among them. If the event does not say the payout's reconciliation is `completed`,
+it first asks Stripe for the payout as it is now, and reads no lines until Stripe says so. Each
+request carries an identifier and nothing else. The payout is stored with every line Stripe listed
+and held. It shows in the **Payouts** list on Operations under its raw status, `AwaitingBank`, with a
+bank amount of zero; the list has no wording for a held payout yet. No journal entry is written.
+
+A payout belongs to the fixture bound to its account, whichever generation's payments it holds, so a
+payout of the probe's charges or of an earlier fixture is stored too.
+
+**How a line is read.**
+
+| Stripe's balance line                                     | Stored as                                             | Can it post?                                |
+| --------------------------------------------------------- | ----------------------------------------------------- | ------------------------------------------- |
+| `charge` (card) or `payment` (ACH) for a payment          | Payment                                               | Yes                                         |
+| `adjustment` for a dispute on an ACH debit                | Return, and a Fee beside it for the dispute's own fee | Only when an administrator posts the payout |
+| `adjustment` for any other dispute                        | Dispute                                               | No. The whole payout goes to review         |
+| `refund` or `payment_refund`                              | Refund                                                | No. The whole payout goes to review         |
+| `payment_failure_refund` (a failed ACH debit, taken back) | FailedDebit                                           | No. The whole payout goes to review         |
+| Anything else                                             | Unknown                                               | No. The whole payout goes to review         |
+| The payout's own line                                     | Not a line: it is Stripe's net for the payout         | Not applicable                              |
+
+A payout is checked once when it arrives, without the bank. One that could never post goes to review
+then, as `unsupported_settlement` for a line in the last four rows or for an instant payout,
+`settlement_incomplete` for a line whose charge is not a payment of this fixture generation, and so
+on. A manual payout is stored without lines, is not asked about, and goes to review as unsupported.
+Any other payout waits for the bank.
+
+**Say what the bank received.** Stripe never says this, and no HTTP route or staff control does. In
+a terminal with the same five variables as the host:
+
+```powershell
+$fixture = (Get-Content ./payment-fixture-stripe.local -Raw | ConvertFrom-Json).Payments.Fixtures[0]
+dotnet run --project src/LeaseBook.Web --no-launch-profile -- payment-simulation bank $fixture.OrgId <po_…> <bank-amount> <yyyy-MM-dd>
+```
+
+The amount is in dollars with at most two decimal places, negative for a payout that debited the
+bank. The date is the day the bank received it and may not be after today in UTC. The command signs
+the evidence with the fixture's signing key, checks and posts in its own process, and prints the
+payout's status and reason. It exits with code 1 when it refuses what it was given.
+
+| What you gave                                          | What happens                                                                                                                                           |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Stripe's net, for a payout that was only waiting       | Every line posts, or none. The payout is **Posted** and its payments **Settled**. A refused posting sends it to review under that reason               |
+| Stripe's net, for a waiting payout that holds a return | Review, as `settlement_requires_confirmation`. An administrator posts it from the **Payouts** list                                                     |
+| Any other amount, for a payout that was only waiting   | Review, as `bank_amount_mismatch`. Nothing posts and it can only be closed                                                                             |
+| Any amount, for a payout already in review             | The evidence is recorded and nothing is checked again. An administrator's **Post payout** checks it then                                               |
+| The same amount and date a second time                 | Nothing changes                                                                                                                                        |
+| A different amount or date after one was recorded      | Not recorded, exit code 1. A payout still awaiting a decision is marked `conflicting_evidence` and can only be closed, a later correct amount included |
+| A date after today                                     | Refused before anything is sent                                                                                                                        |
+| A payout id this fixture does not hold                 | Refused: `no Stripe payout … is held in this fixture`                                                                                                  |
+
+Give the evidence once and get it right: there is no command that corrects it.
+
+**In review.** An administrator can close a payout in review or one still waiting for its bank, with
+a note. Posting one that no bank has spoken for is answered with HTTP 409 and `bank_evidence_missing`.
+A payout in review is checked again only when an administrator posts it: the paid event arriving
+again, by redelivery or in a sweep, changes nothing. The **Payouts** list has no wording of its own
+yet for `bank_amount_mismatch` or `payout_failed`, and shows a line kind it does not know by its raw
+name. The staff API carries Stripe's figure as `processorAmount` and a failure's time as `failedAt`;
+no screen reads either yet.
+
+**A payout that fails.** `payout.failed` sends the payout to review as `payout_failed`, whatever
+state it was in, one already posted included. Nothing is reversed: what it posted stays posted, its
+payments stay as they were, and it can only be closed. Correct the ledger by hand if the fixture
+needs it.
+
+**Keep the account quiet while a payout forms.** Stripe decides what a payout covers, and other
+activity on the same connected account can land in the same payout. While charges you mean to see
+post are waiting to be paid out, do not run the [probe](stripe-sandbox-probe.md) against the same
+account and do not reset the fixture. The probe's charges, and those of a generation a reset
+replaced, land in the same payout as lines LeaseBook cannot tie to a payment, and the whole payout
+goes to review instead of posting. The same goes for a failing or disputed test payment made in that
+window. A payout holding only this generation's good payments is the one that posts.
 
 ### A lost event
 

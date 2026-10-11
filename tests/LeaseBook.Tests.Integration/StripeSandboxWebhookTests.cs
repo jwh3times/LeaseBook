@@ -1261,6 +1261,12 @@ public sealed partial class StripeSandboxHostTests
         public Func<StripeReplay.Sent, (int Status, string Body)>? Events { get; set; }
         /// <summary>When set, what every request for a charge is answered with. Payments are answered as usual.</summary>
         public (int Status, string Body)? ChargeRefused { get; set; }
+        /// <summary>What a payout's balance lines are answered with, by the payout's id. Asking for another's is unexpected and throws.</summary>
+        public System.Collections.Concurrent.ConcurrentDictionary<string, (int Status, string Body)> Lines { get; } = new();
+        /// <summary>A payout as the account holds it now, returned when it is asked for by its id. Asking for another is unexpected and throws.</summary>
+        public System.Collections.Concurrent.ConcurrentDictionary<string, (int Status, string Body)> Payouts { get; } = new();
+        /// <summary>The lists of balance lines asked for so far.</summary>
+        public IReadOnlyList<StripeReplay.Sent> LineRequests => [.. Replay.Requests.Where(x => x.Path == "/v1/balance_transactions")];
         /// <summary>The lists of events asked for so far.</summary>
         public IReadOnlyList<StripeReplay.Sent> Sweeps => [.. Replay.Requests.Where(x => x.Path == "/v1/events")];
 
@@ -1283,6 +1289,10 @@ public sealed partial class StripeSandboxHostTests
             { return StripeSandboxProcessorTests.Accounts(account: sent.Path["/v1/accounts/".Length..])(sent); }
             if (sent.Path.StartsWith("/v1/account", StringComparison.Ordinal)) { return _accounts(sent); }
             if (sent.Path == "/v1/events" && Events is { } events) { return events(sent); }
+            if (sent.Path == "/v1/balance_transactions" && sent.Query.TryGetValue("payout", out var payout) && Lines.TryGetValue(payout, out var lines))
+            { return lines; }
+            if (sent.Path.StartsWith("/v1/payouts/", StringComparison.Ordinal) && Payouts.TryGetValue(sent.Path["/v1/payouts/".Length..], out var held))
+            { return held; }
             if (Refused is { } refused) { return refused; }
             const string payments = "/v1/payment_intents";
             if (sent.Method == "POST" && sent.Path == payments)

@@ -28,6 +28,7 @@ public sealed partial class StripeSandboxProcessorTests
     [
         "payment_intent.processing", "payment_intent.succeeded", "payment_intent.payment_failed",
         "charge.refunded", "charge.dispute.created", "charge.dispute.funds_withdrawn", "charge.dispute.closed",
+        "payout.paid", "payout.failed",
     ];
 
     [Fact]

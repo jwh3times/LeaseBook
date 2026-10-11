@@ -268,13 +268,16 @@ public sealed class PaymentEngine(DbContext db, IOrgContext org, TimeProvider cl
         await RequireFixtureAsync(binding, ct);
         await LockAsync(id.ToString(), ct);
         var op = await db.Set<PaymentOperation>().SingleAsync(x => x.Id == id, ct);
-        if (op.LeaseClaimId != token || op.JournalId is not null) { return; }
+        if (op.LeaseClaimId != token) { return; }
         // A payment a person holds, or has closed, under a reason of its own stays exactly there
         // whatever fails while a late fact is judged. Made "Processing" with a technical failure it
         // would lose that reason, and the retry would judge it as a payment nobody had looked at: a
         // complete bank credit would then post. It is still tried again on the same schedule, so
         // that the fact is judged, and CompleteAsync keeps it with a person.
-        var held = op.Status is "NeedsReview" or "ReviewClosed" && op.Reason is not (null or "technical_failure");
+        // A payment with a receipt keeps its status and reason the same way, whatever they are: what
+        // is on the ledger is not undone by a failed attempt. Its lease is still given up and its
+        // next attempt scheduled; left as they were, it would be claimed again each time the lease ran out.
+        var held = op.JournalId is not null || (op.Status is "NeedsReview" or "ReviewClosed" && op.Reason is not (null or "technical_failure"));
         op.LeaseUntil = null; op.LeaseClaimId = null; op.Attempts++;
         var again = reason == "technical_failure" && op.Attempts <= RetrySeconds.Length;
         op.DueAt = again ? Now.AddSeconds(RetrySeconds[op.Attempts - 1]) : DateTime.SpecifyKind(DateTime.MaxValue, DateTimeKind.Utc);

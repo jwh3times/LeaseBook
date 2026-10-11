@@ -14,9 +14,16 @@ public sealed record SettlementItemView(string Item, string Kind, Guid? PaymentI
 /// A payout batch as staff see it (ADR-053): the bank amount and date, why it is waiting if it is, and
 /// its lines. Staff-only; no tenant surface reads a payout.
 /// </summary>
+/// <param name="ProcessorAmount">
+/// What the processor says the payout comes to, for a payout it reported apart from any bank
+/// (ADR-054). While such a payout waits for the bank, <paramref name="BankAmount"/> is zero and
+/// <paramref name="BankDate"/> is no date: this is the only figure there is.
+/// </param>
+/// <param name="FailedAt">When the processor said the payout failed, if it did. Nothing is reversed for it.</param>
 public sealed record SettlementView(Guid Id, string PayoutReference, DateOnly BankDate, decimal BankAmount,
     string Status, string? Reason, string? ReasonItem, DateTime CreatedAt, DateTime? PostedAt, string? ReviewNote,
-    DateTime? ReviewClosedAt, bool CanPost, bool CanClose, IReadOnlyList<SettlementItemView> Items);
+    DateTime? ReviewClosedAt, bool CanPost, bool CanClose, IReadOnlyList<SettlementItemView> Items,
+    decimal? ProcessorAmount = null, DateTime? FailedAt = null);
 
 /// <summary>The newest payouts, at most 100, or the one named.</summary>
 public sealed record GetSettlements(Guid? Id = null) : IQuery<IReadOnlyList<SettlementView>>;
@@ -37,14 +44,18 @@ internal sealed class GetSettlementsHandler(DbContext db) : IQueryHandler<GetSet
         return rows.Select(x => new SettlementView(x.Id, x.PayoutId, x.BankDate, x.BankAmount, x.Status, x.Reason,
             x.ReasonItem, x.CreatedAt, x.PostedAt, x.ReviewNote, x.ReviewClosedAt,
             // Conflicting evidence cannot be posted whatever a person decides; it can only be closed.
-            // A payout still marked received is one whose check never finished: it has both ways out.
-            CanPost: x.Status is SettlementStatuses.NeedsReview or SettlementStatuses.Received
-                && x.Reason != "conflicting_evidence",
-            CanClose: x.Status is SettlementStatuses.NeedsReview or SettlementStatuses.Received,
+            // Nor can a payout the processor says failed, one the bank received another amount for,
+            // or one no bank has spoken for. A payout still marked received is one whose check never
+            // finished: it has both ways out.
+            CanPost: x.Status is SettlementStatuses.NeedsReview or SettlementStatuses.Received && x.Banked && x.FailedAt is null
+                && x.Reason is not ("conflicting_evidence" or SettlementReasons.PayoutFailed or SettlementReasons.BankAmountMismatch),
+            // One waiting for the bank can be closed too: the evidence may never come.
+            CanClose: x.Status is SettlementStatuses.NeedsReview or SettlementStatuses.Received or SettlementStatuses.AwaitingBank,
             items.Where(i => i.SettlementId == x.Id).OrderBy(i => i.Item, StringComparer.Ordinal)
                 .Select(i => new SettlementItemView(i.Item, i.Kind,
                     payments.TryGetValue(i.ProviderId, out var paymentId) ? paymentId : null,
-                    i.Gross, i.Fee, i.Net, i.EntryId, i.FeeEntryId)).ToArray())).ToArray();
+                    i.Gross, i.Fee, i.Net, i.EntryId, i.FeeEntryId)).ToArray(),
+            x.ProcessorAmount, x.FailedAt)).ToArray();
     }
 }
 
@@ -70,6 +81,12 @@ public sealed record SettlementReviewResult(SettlementView Settlement, string? R
             "Checking this payout could not finish. Post it to try again, or close the review.",
         "conflicting_evidence" =>
             "The evidence for this payout conflicts with what is already recorded, so nothing was posted. Review it, then close the review.",
+        SettlementReasons.BankAmountMismatch =>
+            "The bank received a different amount from the one the processor says it paid, so nothing was posted. Review it, then close the review.",
+        SettlementReasons.PayoutFailed =>
+            "The processor reports that this payout failed. Nothing was reversed. Review the ledger, then close the review.",
+        SettlementReasons.BankEvidenceMissing =>
+            "The bank has not yet confirmed this payout, so nothing was posted.",
         var code when code.StartsWith("return_", StringComparison.Ordinal) =>
             "A return in this payout cannot be posted: " + PaymentReviewResult.Describe(code),
         _ => "Accounting refused this payout, so nothing was posted. Review the ledger, then close the review.",
@@ -95,7 +112,8 @@ internal sealed class PostSettlementHandler(SettlementEngine engine, ISender sen
         var settlement = await engine.EvaluateAsync(c.Binding, c.Id, c.UserId, ct);
         if (settlement is null) { return null; }
         return new((await sender.Query(new GetSettlements(c.Id), ct)).Single(),
-            settlement.Status == SettlementStatuses.Posted ? null : settlement.Reason);
+            // A payout still waiting for its bank has no reason of its own, and was not posted either.
+            settlement.Status == SettlementStatuses.Posted ? null : settlement.Reason ?? SettlementReasons.BankEvidenceMissing);
     }
 }
 

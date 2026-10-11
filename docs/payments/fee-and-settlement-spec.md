@@ -3,7 +3,7 @@
 - **Audience:** Implementers and reviewers of processor fees and payouts (issues #498 and #500)
 - **Status:** Accepted for the simulation and built there; its provisional assumptions are unverified and live payments remain unapproved
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-06
+- **Last reviewed:** 2026-10-11
 
 ## Evidence and boundary
 
@@ -106,7 +106,8 @@ A batch is one unit of work. It posts completely or not at all.
    As built, a refund or a dispute is not a line the batch can post at all. It is caught at step 3 as
    `unsupported_settlement`, in line with ADR-052, which posts neither. So is a return of less than
    the whole charge. A processor fee with no payment beside it is a shortfall and does not, by itself,
-   need a person.
+   need a person. Unsupported content is judged first, before identifying and tying: a payout of an
+   unsupported type with no lines at all is `unsupported_settlement`, not `settlement_incomplete`.
 
 5. **Post.** Under the posting lock, post every item's lines and record one effect per item. A
    refused guard — the shortfall guard, any ADR-052 return guard, a locked period — rolls the whole
@@ -119,11 +120,22 @@ A batch is one unit of work. It posts completely or not at all.
 
 A payout whose items net to a bank debit is a batch like any other, with a negative bank amount.
 Nothing is posted from a processor's notice that a payout was paid; only bank evidence opens a batch.
+Where a processor reports a payout apart from any bank, as the Stripe sandbox adapter does
+([ADR-054](../adr/ADR-054-stripe-sandbox-adapter.md), proposed), the payout is stored with the
+processor's lines and its figure and held as `AwaitingBank`, with no journal effect. Its lines are
+tied to the processor's figure when it arrives, and one that could not post goes to review then. Bank
+evidence releases the rest: an amount equal to the processor's figure opens the batch, and any other
+amount is `bank_amount_mismatch`, judged before anything the lines say. The
+[simulated payment specification](simulated-payment-spec.md#bank-evidence-for-a-held-payout) owns the
+detail.
 
 Evidence for a payout is stored once. A redelivery is ignored. The same payout arriving with different
 content is not stored and marks the stored payout `conflicting_evidence`, unless it has already posted.
 A payout is checked when it arrives and again each time an administrator posts it; nothing rechecks a
-waiting payout by itself.
+waiting payout by itself. A held payout is also checked when its bank evidence releases it. A payout
+in review is not checked again when its evidence arrives another time, however often and whether or
+not the cause has gone: a payout whose fees were since funded or whose period was since reopened does
+not post unattended.
 
 A line for a payment that already has a receipt, or a return of a payment already returned, is
 `conflicting_evidence`: the single-payment evidence of the earlier simulation still posts a clean
@@ -131,7 +143,11 @@ payment, and whichever arrives second is refused, never posted twice. So is a li
 decision already recorded on the payment: a payment line for anything but a payment still waiting for
 its bank evidence, or a return line for anything but a settled payment or one whose return is waiting
 for a decision. A payout does not settle a failed payment, or reverse one whose return review staff
-closed by hand.
+closed by hand. What is stored about a payment counts as well as what was last judged of it: a payment
+line is refused while a failure, a return, a refund, a dispute or a conflict is stored for the
+payment, and a return line is refused while a failure, a refund, a dispute or a conflict is. A return
+line for a payment in review needs a stored return behind that review; a review a refund or a dispute
+raised is not one.
 
 ### What each line must say
 
@@ -247,6 +263,8 @@ As built:
 | `settlement_incomplete`            | An item maps to no payment, or a return names one never receipted.    | More evidence, or close with a note        |
 | `settlement_untied`                | Items do not sum to the bank amount, or a charged amount differs.     | Corrected evidence, or close with a note   |
 | `unsupported_settlement`           | A reserve, hold, instant or manual payout, partial refund, non-USD.   | Close with a note after correcting by hand |
+| `bank_amount_mismatch`             | The bank received another amount than the processor says it paid.     | Close with a note                          |
+| `payout_failed`                    | The processor says the payout failed. Nothing is reversed for it.     | Close with a note after correcting by hand |
 | `settlement_requires_confirmation` | The batch contains a return and has passed every other check.         | An administrator posts the batch           |
 | `pm_fees_insufficient`             | A shortfall would take held PM fees below zero.                       | Fund held fees, then post; or close        |
 | `return_*`                         | A return in the batch failed an ADR-052 guard.                        | As ADR-052                                 |
@@ -255,7 +273,11 @@ As built:
 | `attribution_unavailable`          | A tenant in the payout has no lease on the bank date.                 | Correct the lease, then post; or close     |
 | `technical_failure`                | Checking or posting did not finish.                                   | Post to try again, or close                |
 
-Closing a batch with a note posts nothing, as closing a payment review does today.
+Closing a batch with a note posts nothing, as closing a payment review does today. A payout held for
+its bank can be closed the same way. `bank_evidence_missing` is not a stored reason: it is the answer
+to an administrator who posts a payout no bank has spoken for, and the payout stays as it was.
+`unsupported_settlement` also covers a line a processor's adapter stores for a person to read and
+nothing posts: a refund, a card dispute, a failed debit taken back, or a line it does not recognise.
 
 ## What an implementation needs
 

@@ -145,6 +145,9 @@ worked figures, the review reasons and how a payout reconciles. In short:
   stored once, and posts completely or not at all.
 - A fee difference is the property manager's. It moves held PM fees, never a tenant or an owner.
 - A payout that contains a return waits for an administrator.
+- In a `StripeSandbox` host a payout arrives without bank evidence, as the processor's own account of
+  it. It is stored and held as `AwaitingBank` with no journal effect until bank evidence releases it;
+  see [Bank evidence for a held payout](#bank-evidence-for-a-held-payout).
 - Staff see payouts in the **Payouts** list on the Operations page; an administrator posts a waiting
   one or closes it with a note.
 
@@ -247,9 +250,14 @@ unknown outcome.
 A callback is handled in two steps, both outside the org transaction. `Authenticate(raw body,
 signature)` proves the body came from the processor; it does no I/O, and nothing in the body is
 trusted before it passes. Only that step can produce the notice the next one reads, which an
-architecture test enforces. `ReadObservationAsync` and `ReadSettlementAsync` then turn an
-authenticated notice into an observation of one payment or the evidence for one payout, fetching from
-the processor whatever the notice does not carry. Each answers one of three ways: the content; not
+architecture test enforces. `ReadObservationAsync`, `ReadSettlementAsync` and `ReadPayoutAsync` then
+turn an authenticated notice into an observation of one payment, the evidence for one payout, or a
+processor's own account of one payout, fetching from the processor whatever the notice does not
+carry. The last two are different things and have different types: payout evidence carries the bank
+amount, date and evidence reference with the processor's lines, and a processor's account of a payout
+carries its figure and its lines and nothing of a bank's. The simulator answers not this host's to
+every notice read as the second; the Stripe adapter answers the same to every notice read as the
+first, because Stripe never speaks for a bank. Each answers one of three ways: the content; not
 this host's to act on, which is acknowledged with HTTP 204 and dropped; or unreadable, which is
 refused with HTTP 400 so the sender does not count it as delivered. The content carries
 account/mode/object identity and evidence, not journal lines. The generation and bank on it are the
@@ -259,8 +267,7 @@ them from its own binding for the account, never from the notice.
 The simulator implements this interface first. No processor DTO leaks into Accounting. A second
 implementation, the Stripe sandbox adapter of
 [ADR-054](../adr/ADR-054-stripe-sandbox-adapter.md), implements submit, lookup, authentication and
-the reading of a payment's events. It reads no payout: every notice is, as payout evidence, not this
-host's. It cannot promise permanent
+the reading of a payment's events and of a payout's. It cannot promise permanent
 provider dedupe, because Stripe may forget an idempotency key after a day. It therefore looks a
 payment up before every submit, by listing the connected account's payments from the operation's
 creation time and matching the operation id it stored, and it never submits an operation more than
@@ -272,9 +279,8 @@ acting. Any other state goes to review, as does a payment found twice or found w
 operation, amount, currency or generation. A failed connection, a rate limit, a fault at Stripe and a
 key or permission Stripe refuses are technical failures and stay retryable.
 
-The adapter reads seven event types and drops every other as not this host's, until the work that
-reads payouts. Nothing it reads is ever complete, so none can be the bank evidence a receipt or a
-return posts from.
+The adapter reads nine event types and drops every other as not this host's. Nothing it reads is
+ever complete, so none can be the bank evidence a receipt or a return posts from.
 
 - `payment_intent.processing`, `payment_intent.succeeded` and `payment_intent.payment_failed` are the
   `Processing`, `Succeeded` and `Failed` observations the simulator also produces. A snapshot event
@@ -296,21 +302,79 @@ return posts from.
   nothing else. A dispute about a payment that is not this fixture's, or that Stripe has no payment
   for, is dropped. When Stripe cannot be asked, a delivery is answered with an error so that it is
   not counted as delivered, and the sweep reads the event later.
+- `payout.paid` and `payout.failed` are a processor's account of a payout, read by `ReadPayoutAsync`.
+  Stripe's other four payout events are dropped. A payout belongs to the fixture bound to its
+  account and carries no generation, so every payout on a bound account is read, one holding the
+  probe's charges or an earlier generation's included; whose payments it holds is found line by line.
+  A failed payout is read without lines. So is a manual one, under the type `manual`, and Stripe is
+  not asked about it. For an automatic payout that was paid the adapter asks Stripe for the payout's
+  balance transactions with their sources, every page, by the payout's id, and for the charge behind
+  each dispute among them. It lists them only once Stripe reports the payout's
+  `reconciliation_status` as `completed`: when the event does not say so, it asks for the payout as it
+  is now, and if that does not say so either the payout is not read yet. A list that cannot be had
+  whole is thrown, never stored in part: a delivery is answered with an error and a sweep asks for the
+  same window again. An automatic payout keeps Stripe's method as its type, so an instant one is
+  unsupported.
+
+  The payout's own balance line is Stripe's net and not an item. A `charge` or `payment` line whose
+  charge names a payment is a `Payment`. An `adjustment` for a dispute is a `Return` of the whole
+  charge with nothing given back, and a `Fee` beside it for the dispute's own fee, under the line's
+  reference with `.fee` added; this holds only when the charge confirms an ACH debit and the line is
+  in USD, takes money back and nets to its amount less its fee. Any other dispute line is a
+  `Dispute`, `refund` and `payment_refund` are a `Refund`, `payment_failure_refund` is a
+  `FailedDebit` and anything else is `Unknown`. Those four kinds keep Stripe's signed figures and
+  nothing posts them: a payout holding one is `unsupported_settlement`. No line is skipped.
 
 A `Return`, a `Dispute` and a `Refund` each send the payment to Needs review with reason
-`return_requires_review`, and a PMAdmin can close the review. None can be posted: a return posts only
-from complete evidence, and Stripe's word about a dispute is not that. Posting a return waits for the
-work that reads payouts, where the payout carries the debit.
+`return_requires_review`, and a PMAdmin can close the review. None can be posted from the event: a
+return posts only from complete evidence, and Stripe's word about a dispute is not that. A return
+posts only as a line of a payout that an administrator posts.
 
-`RecoverObservationsAsync` answers what the processor still holds about one fixture's payments since
-a given time, as the same observations a delivery would have produced. The Stripe adapter lists the
-connected account's events from Stripe's Events API, filtered to the event types it reads, and reads
-each with the reader a delivery goes through, so a swept event and its delivered twin are the same
-observation. These events carry no signature. The trust is that the list was asked of Stripe with the
+### Bank evidence for a held payout
+
+A processor's account of a payout is stored once, with its lines, the processor's figure in
+`processor_amount` and the host's mode, and is found by account, mode and payout reference together.
+It is checked when it arrives, against the processor's figure and without a bank. One that could not
+post goes to review at once under that reason. Any other is held as `AwaitingBank`, with a bank
+amount of zero and no bank date or evidence reference. Nothing posts for a payout no bank has spoken
+for, whoever asks: an administrator who tries is answered with HTTP 409 and `bank_evidence_missing`.
+A check constraint refuses any payout marked posted that holds no evidence reference.
+
+Bank evidence is the amount the bank received and the day. In the sandbox its one source is the
+fixture command `payment-simulation bank <org-id> <stripe-payout-id> <bank-amount> <bank-date>`; no
+HTTP route and no staff control supplies it. The body is signed with the fixture's signing key under
+a purpose of its own, so a simulator notice cannot be presented as bank evidence or the reverse, and
+is verified only in a `StripeSandbox` host and within 300 seconds. A bank date after today, in UTC,
+is refused by the command and by the engine.
+
+- Evidence is stored for any payout the processor reported by itself, whatever its status, and is
+  given once. The same amount and date again change nothing. Different ones are not stored and mark a
+  payout still awaiting a decision `conflicting_evidence`, a later correct amount included.
+- For a payout that was only waiting, the evidence is followed by the check and the posting. An
+  amount equal to the processor's posts every line or none through the existing
+  `PostPaymentSettlement` path. Any other amount is `bank_amount_mismatch`, judged before anything
+  the lines say; such a payout can only be closed.
+- For a payout already in review, the evidence is kept and nothing is checked again until an
+  administrator posts.
+- A processor's word that a payout failed is `payout_failed`. Its time is stored once in `failed_at`.
+  It sends the payout to review from any state, a posted or closed one included, and such a payout
+  can only be closed. Nothing is reversed: what it posted stays posted and its payments stay as they
+  were. A failure that arrives before the paid event stores the payout without lines, and a paid
+  event after a failure changes nothing.
+
+The staff API's payout view carries `processorAmount` and `failedAt`. No screen reads either yet, and
+the Payouts list shows a held payout by its raw status.
+
+`RecoverObservationsAsync` answers what the processor still holds about one fixture's payments and
+payouts since a given time, as the same observations and payouts a delivery would have produced; its
+result carries the payouts beside the observations. The Stripe adapter lists the
+connected account's events from Stripe's Events API, filtered to the nine event types it reads, and reads
+each with the readers a delivery goes through, so a swept event and its delivered twin are the same
+observation or the same payout. These events carry no signature. The trust is that the list was asked of Stripe with the
 platform's key, over TLS, for one named account; an event that names any other account is not taken.
 Anything in the list marked live refuses the whole sweep, as does a list that cannot be read to its
 end, and a payment or charge asked for about a dispute that Stripe marks live. An event that cannot be read is counted and skipped. So is a dispute whose payment or charge
-Stripe could not be asked for; the rest of the list is still read, and the sweep is not counted as
+Stripe could not be asked for, and a paid payout whose lines could not be listed in full; the rest of the list is still read, and the sweep is not counted as
 complete. Stripe keeps events for 30 days.
 
 ## Transaction and recovery protocol
@@ -365,7 +429,8 @@ not. It asks for everything since the last sweep that completed, less ten minute
 oldest waiting payment was created if that is earlier. The first sweep in a process asks for 29
 days, and none asks further back than that. Each observation that comes back goes through callback
 receipt (step 3), one organization transaction each, so one already stored is dropped by its event
-id. The time of the last complete sweep is held in memory and nowhere else: a restarted host sweeps
+id. Each payout that comes back is stored and checked as a delivered one is; one already held is
+left as it stands. The time of the last complete sweep is held in memory and nowhere else: a restarted host sweeps
 at once, over the whole 29 days. A sweep is complete only when the list was read to its end, every
 event in it that needed Stripe to be asked was answered, and everything found was stored. One that is
 not complete is logged and its window is asked for again at the next interval; it never stops due
@@ -457,7 +522,9 @@ After verification the adapter applies these rules, in this order:
   time, is refused with HTTP 400.
 - An event that names no account, or an account no fixture on this host is bound to, is acknowledged
   with HTTP 204 and dropped. No organization scope is opened and no database command runs.
-- An event of a type the adapter does not read is acknowledged and dropped the same way.
+- An event of a type the adapter does not read is acknowledged and dropped the same way. The route
+  offers an event to the payment reader first and, when that passes it over, to the payout reader;
+  only an event both pass over is acknowledged as not this host's.
 - A payment counts only when its metadata carries this fixture's generation and an operation id. A
   connected account can also hold payments of the probe or of an earlier fixture generation; their
   events are authentic, not this host's, and dropped.

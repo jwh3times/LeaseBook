@@ -2004,6 +2004,10 @@ namespace LeaseBook.Web.Migrations
                         .HasColumnType("character varying(100)")
                         .HasColumnName("evidence_id");
 
+                    b.Property<DateTime?>("FailedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("failed_at");
+
                     b.Property<string>("Fingerprint")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -2013,6 +2017,14 @@ namespace LeaseBook.Web.Migrations
                     b.Property<Guid>("Generation")
                         .HasColumnType("uuid")
                         .HasColumnName("generation");
+
+                    b.Property<string>("Mode")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("Simulation")
+                        .HasColumnName("mode");
 
                     b.Property<Guid>("OrgId")
                         .HasColumnType("uuid")
@@ -2037,6 +2049,11 @@ namespace LeaseBook.Web.Migrations
                     b.Property<Guid?>("PostedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("posted_by");
+
+                    b.Property<decimal?>("ProcessorAmount")
+                        .HasPrecision(14, 2)
+                        .HasColumnType("numeric(14,2)")
+                        .HasColumnName("processor_amount");
 
                     b.Property<string>("Reason")
                         .HasMaxLength(60)
@@ -2079,13 +2096,15 @@ namespace LeaseBook.Web.Migrations
                     b.HasIndex("OrgId", "Generation")
                         .HasDatabaseName("ix_payment_settlements_org_id_generation");
 
-                    b.HasIndex("OrgId", "Account", "PayoutId")
+                    b.HasIndex("OrgId", "Account", "Mode", "PayoutId")
                         .IsUnique()
-                        .HasDatabaseName("ix_payment_settlements_org_id_account_payout_id");
+                        .HasDatabaseName("ix_payment_settlements_org_id_account_mode_payout_id");
 
                     b.ToTable("payment_settlements", null, t =>
                         {
-                            t.HasCheckConstraint("ck_payment_settlement_status", "status IN ('Received','NeedsReview','Posted','Closed')");
+                            t.HasCheckConstraint("ck_payment_settlement_posted_banked", "status <> 'Posted' OR evidence_id <> ''");
+
+                            t.HasCheckConstraint("ck_payment_settlement_status", "status IN ('Received','AwaitingBank','NeedsReview','Posted','Closed')");
                         });
                 });
 

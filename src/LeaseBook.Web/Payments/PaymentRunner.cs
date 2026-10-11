@@ -19,7 +19,7 @@ public sealed record PayoutDelivery(Guid? Id, bool Malformed);
 
 /// <summary>Owns the transaction boundaries around the transport seam, including failure bookkeeping.</summary>
 public sealed class PaymentRunner(IServiceScopeFactory scopes, SimulationSettings settings,
-    IPaymentProcessor processor, ILogger<PaymentRunner> log, TimeProvider clock)
+    IPaymentProcessor processor, ILogger<PaymentRunner> log, TimeProvider clock, BankEvidenceSigner bankEvidence)
 {
     private static readonly TimeSpan SweepInterval = TimeSpan.FromMinutes(5);
     // Stripe keeps an event for thirty days. A day inside that, so that the oldest asked for is still there.
@@ -139,13 +139,15 @@ public sealed class PaymentRunner(IServiceScopeFactory scopes, SimulationSetting
         var recovery = await processor.RecoverObservationsAsync(binding, since > kept ? since : kept, ct);
         // One organization transaction each, as for a callback. One already held is dropped there.
         foreach (var observation in recovery.Observations) { await ReceiveAsync(observation, ct); }
+        // A payout found here is kept as a delivered one is, and held the same way. One already held is dropped there.
+        foreach (var payout in recovery.Payouts) { await ReceivePayoutAsync(payout, ct); }
         // Only now, with everything found handed on and none of it refused: a sweep that failed
         // anywhere above leaves the time where it was, and the next one asks for the same again. So
         // does one that left an event unread because the processor would not answer about it.
         if (recovery.Unasked == 0) { _keptFrom[binding.OrgId] = now; }
         log.LogInformation(new EventId(4606, "PaymentRecoverySwept"),
             "Payment recovery sweep listed {Listed} events: {Kept} stored or already held, {Unreadable} unreadable, {Unasked} to be asked about again",
-            recovery.Listed, recovery.Observations.Count, recovery.Unreadable, recovery.Unasked);
+            recovery.Listed, recovery.Observations.Count + recovery.Payouts.Count, recovery.Unreadable, recovery.Unasked);
         // Only here, after a list that was answered in full: a payment must never go to a person
         // while the events that could end it have not been asked for. An event left to be asked
         // about again does not stand in the way. Only a dispute needs asking about, and a dispute
@@ -208,6 +210,63 @@ public sealed class PaymentRunner(IServiceScopeFactory scopes, SimulationSetting
             log.LogInformation(new EventId(4602, "PaymentCallbackIgnored"), "Malformed simulated payout evidence refused");
             return new(null, true);
         }
+        await EvaluateAsync(binding, id, ct);
+        return new(id, false);
+    }
+
+    /// <summary>
+    /// Stores a processor's own account of a payout and checks it. Nothing posts: no bank has spoken.
+    /// A payout whose lines could not post goes to a person now; any other waits for the bank. Two
+    /// transactions, as for a payout that arrives with its evidence, so that what was stored stays
+    /// stored when the check fails.
+    /// </summary>
+    public async Task<PayoutDelivery> ReceivePayoutAsync(ProcessorPayout payout, CancellationToken ct)
+    {
+        var binding = settings.ForAccount(payout.Account);
+        if (binding is null || payout.Mode != binding.Mode || payout.Generation != binding.Generation)
+        {
+            log.LogInformation(new EventId(4602, "PaymentCallbackIgnored"), "Unmapped payout notice ignored");
+            return new(null, false);
+        }
+        if (await InOrg(binding, sp => sp.GetRequiredService<SettlementEngine>().ReceivePayoutAsync(binding, payout, ct), ct) is not { } id)
+        {
+            log.LogInformation(new EventId(4602, "PaymentCallbackIgnored"), "Malformed payout notice refused");
+            return new(null, true);
+        }
+        // A payout reported failed is with a person already, and there is nothing to check it against.
+        if (payout.State == ProcessorPayoutStates.Paid) { await EvaluateAsync(binding, id, ct); }
+        return new(id, false);
+    }
+
+    /// <summary>
+    /// Takes bank evidence for a payout held for it: signed with the fixture key, in a Stripe sandbox
+    /// host, for a payout a fixture here holds. Evidence that was exactly what a payout waited for is
+    /// followed by the check and the posting, in a transaction of their own, as when a payout arrives
+    /// with its evidence. Anything else changes nothing, or sends the payout to a person.
+    /// </summary>
+    public async Task<BankEvidenceDelivery> ReceiveBankEvidenceAsync(byte[] body, string? signature, CancellationToken ct)
+    {
+        if (bankEvidence.Verify(body, signature) is not { } notice || settings.ForAccount(notice.Account) is not { } binding
+            || binding.Mode != PaymentModes.StripeSandbox)
+        {
+            log.LogInformation(new EventId(4602, "PaymentCallbackIgnored"), "Bank evidence that could not be verified refused");
+            return new(BankEvidenceDelivery.Refused);
+        }
+        // The evidence's own reference says what it says, so that the same again is seen to be the same.
+        var evidence = new BankEvidence(notice.PayoutId, binding.Account, binding.Mode, binding.Generation, notice.BankAmount, notice.BankDate,
+            string.Create(System.Globalization.CultureInfo.InvariantCulture, $"bank-{notice.BankDate:yyyyMMdd}-{notice.BankAmount:0.00}"));
+        var result = await InOrg(binding, sp => sp.GetRequiredService<SettlementEngine>().ReceiveBankEvidenceAsync(binding, evidence, ct), ct);
+        if (result.Id is not { } id) { return new(result.Outcome); }
+        if (result.Evaluate) { await EvaluateAsync(binding, id, ct); }
+        var settlement = await InOrg(binding, sp => sp.GetRequiredService<AppDbContext>().Set<PaymentSettlement>().AsNoTracking()
+            .SingleAsync(x => x.Id == id, ct), ct);
+        return new(result.Outcome, id, settlement.Status, settlement.Reason);
+    }
+
+    // Checks a stored payout and posts it if it can be posted, in a transaction apart from the one
+    // that stored it. Never throws but for a cancellation: what it could not do is said on the payout.
+    private async Task EvaluateAsync(FixtureBinding binding, Guid id, CancellationToken ct)
+    {
         try
         {
             var settlement = await InOrg(binding, sp => sp.GetRequiredService<SettlementEngine>().EvaluateAsync(binding, id, null, ct), ct);
@@ -231,7 +290,6 @@ public sealed class PaymentRunner(IServiceScopeFactory scopes, SimulationSetting
             log.LogWarning(new EventId(4605, "PaymentSettlementNeedsAttention"),
                 "Simulated payout {SettlementId} could not be checked ({ExceptionType})", id, ex.GetType().Name);
         }
-        return new(id, false);
     }
 
     private async Task<T> InOrg<T>(FixtureBinding binding, Func<IServiceProvider, Task<T>> work, CancellationToken ct)

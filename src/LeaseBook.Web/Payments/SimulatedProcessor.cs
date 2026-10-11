@@ -71,6 +71,10 @@ public sealed class SimulatedProcessor(IServiceScopeFactory scopes, SimulationSe
     public Task<ProcessorRead<ProcessorObservation>> ReadObservationAsync(ProcessorNotice notice, CancellationToken ct) =>
         Task.FromResult(ProcessorRead<ProcessorObservation>.Of(Observation(notice.Body)));
 
+    // A simulated payout arrives with its bank evidence, as a settlement. There is no other account of one.
+    public Task<ProcessorRead<ProcessorPayout>> ReadPayoutAsync(ProcessorNotice notice, CancellationToken ct) =>
+        Task.FromResult(ProcessorRead<ProcessorPayout>.NotOurs);
+
     // The simulator's driver always delivers, so there is nothing to ask it for again.
     public Task<ProcessorRecovery> RecoverObservationsAsync(FixtureBinding binding, DateTime since, CancellationToken ct) =>
         Task.FromResult(ProcessorRecovery.Nothing);
