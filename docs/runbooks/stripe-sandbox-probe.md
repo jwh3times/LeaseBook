@@ -88,8 +88,9 @@ node scripts/stripe-probe.mjs payouts stripe-probe.local/<run>
 ```
 
 It records the balance and the twenty most recent payouts and, for the three most recent automatic
-ones, the lines Stripe says each covers. It needs the same two environment variables. It makes no
-charge. It never creates a payout: which charges a payout covers has to come from Stripe.
+ones, the lines Stripe says each covers. It also records the events Stripe sent about payouts, asked
+for by type because a payout is made long after the run. It needs the same two environment variables.
+It makes no charge. It never creates a payout: which charges a payout covers has to come from Stripe.
 
 ## Commit the recorded payloads
 

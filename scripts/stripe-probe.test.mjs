@@ -604,6 +604,28 @@ function fakeStripe({
         ],
       });
     }
+    if (pathname === "/v1/events" && searchParams.has("types[]")) {
+      assert.ok(
+        searchParams.getAll("types[]").every((t) => t.startsWith("payout.")),
+      );
+      return json(200, {
+        has_more: false,
+        data: [
+          {
+            id: real("evt", "paid"),
+            type: "payout.paid",
+            account: real("acct"),
+            data: { object: { id: real("po"), status: "paid" } },
+          },
+          {
+            id: real("evt", "created"),
+            type: "payout.created",
+            account: real("acct"),
+            data: { object: { id: real("po"), status: "in_transit" } },
+          },
+        ],
+      });
+    }
     if (pathname === "/v1/events") {
       return json(200, {
         has_more: false,
@@ -704,6 +726,7 @@ test("a whole run answers every question, holds nothing real where it is read, a
       "A refund with status=succeeded, amount=5000",
       "the charge then has refunded=false, amount_refunded=5000",
       "1 automatic of 1 payout(s)",
+      "payout.created (in_transit), payout.paid (paid)",
       "their net sums to 50000 against a payout of 50000",
       "payment_intent.succeeded",
     ]);

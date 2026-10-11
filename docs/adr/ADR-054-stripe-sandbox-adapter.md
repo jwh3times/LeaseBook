@@ -108,6 +108,11 @@ payloads are under `tests/fixtures/stripe/`.
   exactly. The lines were of four types beside the payout's own: `charge` for a card payment,
   `payment` for an ACH payment, `payment_failure_refund` for an ACH debit that failed, and
   `adjustment` for a dispute. A failed ACH debit and a dispute each carry a fee of their own.
+  Stripe sent four events about it, recorded on 2026-10-11: `payout.created` and
+  `payout.reconciliation_completed` in the second it was made, both `in_transit` with the
+  reconciliation already `completed`, then `payout.paid` and `payout.updated` five minutes later.
+  Each carries the payout and nothing of LeaseBook's, so what a payout covers still has to be asked
+  for. No payout has failed, so `payout.failed` is not recorded.
 - **Can the documented test payment methods be used directly on a connected account?** Yes, for card
   and for ACH, as direct charges with no customer object.
 - **Do the ACH test payment methods need a small test deposit verified first, and how long does a

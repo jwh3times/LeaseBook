@@ -44,6 +44,14 @@ export const API_VERSION = "2026-09-30.endive";
 export const FIXTURE_ROOT = join("tests", "fixtures", "stripe");
 const RAW_ROOT = "stripe-probe.local";
 const API = "https://api.stripe.com";
+const PAYOUT_EVENTS = [
+  "payout.created",
+  "payout.updated",
+  "payout.paid",
+  "payout.failed",
+  "payout.canceled",
+  "payout.reconciliation_completed",
+];
 
 /** Waiting goes through here so that the tests do not wait. */
 export const timing = {
@@ -963,6 +971,21 @@ async function payouts(context) {
         : `No: ${describeError(last)} (${last.file})`,
     );
   }
+  // What Stripe says as a payout moves, which the list above shows only as it ends. Asked for by
+  // type and not by time, because a payout is made on Stripe's schedule, long after the run.
+  const said = await call("GET", "/v1/events", {
+    params: { types: PAYOUT_EVENTS, limit: 100 },
+    label: "payout-events",
+  });
+  run.find(
+    "Which events did Stripe send about payouts, oldest first?",
+    said.ok
+      ? (said.body.data
+          .toReversed()
+          .map((event) => `${event.type} (${event.data?.object?.status})`)
+          .join(", ") || "none") + ` (${said.file})`
+      : `Could not list them: ${describeError(said)} (${said.file})`,
+  );
 }
 
 async function events(context, startedSeconds) {
