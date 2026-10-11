@@ -44,8 +44,10 @@ From the repository root:
 node scripts/stripe-probe.mjs run
 ```
 
-The run makes six test charges on the connected account: three by card and three by ACH, including
-a decline, a failed debit and a disputed debit. It waits for each ACH payment to finish and for the
+The run makes nine test charges on the connected account: six by card and three by ACH. They include
+a decline, a failed debit, a disputed debit, a disputed card payment, and two card payments the probe
+then refunds, one in full and one in part. The probe refunds only so that Stripe's refund events can
+be recorded; the application never refunds. It waits for each ACH payment to finish and for each
 dispute to appear, up to ten minutes each. The first recorded run took about ten minutes; allow up
 to forty.
 
@@ -125,7 +127,10 @@ Running again makes new charges, so name the ones you need with `--only`.
   issue.
 - **A payment method is not accepted on the connected account.** That is a finding, not a failure.
   The run records it and goes on.
-- **No dispute arrived.** Run `--only=ach-dispute` with a longer `--wait-minutes`.
+- **No dispute arrived.** Run `--only=ach-dispute` or `--only=card-dispute` with a longer
+  `--wait-minutes`.
+- **A charge was answered with HTTP 500.** Stripe's sandbox does this now and then. Run that charge
+  again with `--only`.
 - **Webhook deliveries were not captured.** Check that `stripe listen --print-secret` prints a
   secret and that the CLI is signed in to the sandbox the key belongs to. If the port is in use,
   choose another with `--port`.

@@ -1,0 +1,107 @@
+{
+  "route": "/connect",
+  "signed": true,
+  "verified": true,
+  "event": {
+    "id": "evt_synthetic000002",
+    "object": "event",
+    "account": "acct_synthetic000002",
+    "api_version": "2026-09-30.endive",
+    "context": "acct_synthetic000002",
+    "created": 1791571514,
+    "data": {
+      "object": {
+        "id": "pi_synthetic000001",
+        "object": "payment_intent",
+        "allowed_payment_method_types": null,
+        "amount": 20000,
+        "amount_capturable": 0,
+        "amount_details": {
+          "tip": {}
+        },
+        "amount_received": 0,
+        "application": "ca_synthetic000001",
+        "application_fee_amount": null,
+        "automatic_payment_methods": {
+          "allow_redirects": "never",
+          "enabled": true
+        },
+        "canceled_at": null,
+        "cancellation_reason": null,
+        "capture_method": "automatic_async",
+        "client_secret": "[scrubbed]",
+        "confirmation_method": "automatic",
+        "created": 1791571514,
+        "currency": "usd",
+        "customer": null,
+        "customer_account": null,
+        "description": null,
+        "excluded_payment_method_types": null,
+        "last_payment_error": null,
+        "latest_charge": null,
+        "livemode": false,
+        "managed_payments": {
+          "enabled": false
+        },
+        "metadata": {
+          "leasebook_operation": "ef44f65b-6c6f-4651-a348-598265ccebf6",
+          "leasebook_generation": "54df5b97-25ed-48a3-bd77-5f525ddff0e5"
+        },
+        "next_action": null,
+        "on_behalf_of": null,
+        "payment_method": null,
+        "payment_method_configuration_details": {
+          "id": "pmc_synthetic000001",
+          "parent": "pmc_synthetic000002"
+        },
+        "payment_method_options": {
+          "card": {
+            "installments": null,
+            "mandate_options": null,
+            "network": null,
+            "request_three_d_secure": "automatic"
+          },
+          "link": {
+            "persistent_token": null
+          },
+          "us_bank_account": {
+            "financial_connections": {
+              "permissions": [
+                "payment_method"
+              ],
+              "prefetch": []
+            },
+            "mandate_options": {},
+            "transaction_purpose": "unspecified",
+            "verification_method": "automatic"
+          }
+        },
+        "payment_method_types": [
+          "card",
+          "link",
+          "us_bank_account"
+        ],
+        "payment_record": null,
+        "processing": null,
+        "receipt_email": null,
+        "review": null,
+        "setup_future_usage": null,
+        "shared_payment_granted_token": null,
+        "shipping": null,
+        "source": null,
+        "statement_descriptor": null,
+        "statement_descriptor_suffix": null,
+        "status": "requires_payment_method",
+        "transfer_data": null,
+        "transfer_group": null
+      }
+    },
+    "livemode": false,
+    "pending_webhooks": 2,
+    "request": {
+      "id": "req_synthetic000003",
+      "idempotency_key": "ef44f65b-6c6f-4651-a348-598265ccebf6"
+    },
+    "type": "payment_intent.created"
+  }
+}

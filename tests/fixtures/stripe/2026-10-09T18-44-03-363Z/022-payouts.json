@@ -1,0 +1,51 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/v1/payouts",
+    "params": {
+      "limit": 20
+    },
+    "platform": false,
+    "idempotencyKey": null
+  },
+  "status": 200,
+  "requestId": "req_synthetic000013",
+  "stripeVersion": "2026-09-30.endive",
+  "elapsedMs": 91,
+  "body": {
+    "object": "list",
+    "data": [
+      {
+        "id": "po_synthetic000001",
+        "object": "payout",
+        "amount": 147060,
+        "application_fee": null,
+        "application_fee_amount": null,
+        "arrival_date": 1791504000,
+        "automatic": true,
+        "balance_transaction": "txn_synthetic000005",
+        "created": 1791506536,
+        "currency": "usd",
+        "description": "[scrubbed]",
+        "destination": "ba_synthetic000001",
+        "failure_balance_transaction": null,
+        "failure_code": null,
+        "failure_message": null,
+        "livemode": false,
+        "metadata": {},
+        "method": "standard",
+        "original_payout": null,
+        "payout_method": null,
+        "reconciliation_status": "completed",
+        "reversed_by": null,
+        "source_type": "card",
+        "statement_descriptor": null,
+        "status": "paid",
+        "trace_id": {},
+        "type": "bank_account"
+      }
+    ],
+    "has_more": false,
+    "url": "[scrubbed]"
+  }
+}

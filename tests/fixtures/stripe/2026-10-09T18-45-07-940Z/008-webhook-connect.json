@@ -1,0 +1,84 @@
+{
+  "route": "/connect",
+  "signed": true,
+  "verified": true,
+  "event": {
+    "id": "evt_synthetic000005",
+    "object": "event",
+    "account": "acct_synthetic000002",
+    "api_version": "2026-09-30.endive",
+    "context": "acct_synthetic000002",
+    "created": 1791571526,
+    "data": {
+      "object": {
+        "id": "du_synthetic000001",
+        "object": "dispute",
+        "amount": 20000,
+        "balance_transaction": "txn_synthetic000001",
+        "balance_transactions": [
+          {
+            "available_on": 1791571526,
+            "created": 1791571526,
+            "net": -21500,
+            "currency": "usd",
+            "source": "du_synthetic000001",
+            "reporting_category": "dispute",
+            "fee_details": [
+              {
+                "application": null,
+                "amount": 1500,
+                "type": "stripe_fee",
+                "description": "[scrubbed]",
+                "currency": "usd"
+              }
+            ],
+            "amount": -20000,
+            "status": "available",
+            "balance_type": "payments",
+            "object": "balance_transaction",
+            "id": "txn_synthetic000001",
+            "exchange_rate": null,
+            "type": "adjustment",
+            "description": "[scrubbed]",
+            "fee": 1500
+          }
+        ],
+        "charge": "ch_synthetic000001",
+        "created": 1791571526,
+        "currency": "usd",
+        "enhanced_eligibility_types": [],
+        "evidence": {},
+        "evidence_details": {
+          "due_by": 1792281599,
+          "enhanced_eligibility": {},
+          "has_evidence": false,
+          "past_due": false,
+          "submission_count": 0
+        },
+        "intended_submission_method": "prefer_manual",
+        "is_charge_refundable": false,
+        "livemode": false,
+        "metadata": {},
+        "payment_intent": "pi_synthetic000001",
+        "payment_method_details": {
+          "card": {
+            "brand": "visa",
+            "case_type": "chargeback",
+            "network": "visa",
+            "network_reason_code": "10.4"
+          },
+          "type": "card"
+        },
+        "reason": "fraudulent",
+        "status": "needs_response"
+      }
+    },
+    "livemode": false,
+    "pending_webhooks": 2,
+    "request": {
+      "id": "req_synthetic000003",
+      "idempotency_key": "ef44f65b-6c6f-4651-a348-598265ccebf6"
+    },
+    "type": "charge.dispute.funds_withdrawn"
+  }
+}

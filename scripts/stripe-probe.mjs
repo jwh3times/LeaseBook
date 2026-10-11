@@ -621,6 +621,30 @@ export const SCENARIOS = [
     type: "us_bank_account",
     amount: 20000,
     paymentMethod: "pm_usBankAccount_dispute",
+    dispute: "How does an ACH return after success appear?",
+  },
+  // A card dispute, and a refund in full and in part: none is an outcome the adapter acts on, and
+  // each is something it has to recognise and hand to a person.
+  {
+    name: "card-dispute",
+    type: "card",
+    amount: 20000,
+    paymentMethod: "pm_card_createDispute",
+    dispute: "How does a card dispute appear?",
+  },
+  {
+    name: "card-refund",
+    type: "card",
+    amount: 20000,
+    paymentMethod: "pm_card_visa",
+    refund: null,
+  },
+  {
+    name: "card-refund-partial",
+    type: "card",
+    amount: 20000,
+    paymentMethod: "pm_card_visa",
+    refund: 5000,
   },
 ];
 
@@ -799,12 +823,12 @@ async function recovery(context, first, startedSeconds) {
   );
 }
 
-async function dispute(context, charged) {
+async function dispute(context, scenario, charged) {
   const { call, run } = context;
   if (charged.intent.status !== "succeeded") {
     run.find(
-      "How does an ACH return after success appear?",
-      `Not reached: the payment ended as ${charged.intent.status}, and a return follows only a success.`,
+      scenario.dispute,
+      `Not reached: the payment ended as ${charged.intent.status}, and a dispute follows only a success.`,
     );
     return;
   }
@@ -822,14 +846,59 @@ async function dispute(context, charged) {
     if (found || Date.now() >= deadline) break;
     await timing.sleep(20_000);
   }
-  const file = run.record("ach-dispute-final", last);
+  const file = run.record(`${scenario.name}-final`, last);
   run.find(
-    "How does an ACH return after success appear?",
+    scenario.dispute,
     found
       ? `A dispute after ${Math.round((Date.now() - started) / 1000)}s: reason=${found.reason}, ` +
           `status=${found.status}, amount=${found.amount} (${file})`
-      : `No dispute within ${context.waitMinutes} minute(s). Run again with --only=ach-dispute and ` +
+      : `No dispute within ${context.waitMinutes} minute(s). Run again with --only=${scenario.name} and ` +
           `a longer --wait-minutes. (${file})`,
+  );
+}
+
+// The probe refunds so that Stripe's refund events can be recorded. The adapter never refunds.
+async function refund(context, scenario, charged) {
+  const { call, run } = context;
+  const question = `${scenario.name}: how does a ${scenario.refund === null ? "full" : "partial"} refund appear?`;
+  if (charged.intent.status !== "succeeded") {
+    run.find(
+      question,
+      `Not reached: the payment ended as ${charged.intent.status}, and only a success is refunded.`,
+    );
+    return;
+  }
+  const refunded = await call("POST", "/v1/refunds", {
+    params: {
+      payment_intent: charged.intent.id,
+      ...(scenario.refund === null ? {} : { amount: scenario.refund }),
+    },
+    idempotencyKey: randomUUID(),
+    label: `${scenario.name}-refund`,
+  });
+  if (!refunded.ok) {
+    run.find(
+      question,
+      `Refused: ${describeError(refunded)} (${refunded.file})`,
+    );
+    return;
+  }
+  const id =
+    typeof charged.intent.latest_charge === "string"
+      ? charged.intent.latest_charge
+      : charged.intent.latest_charge?.id;
+  const after = id
+    ? await call("GET", `/v1/charges/${id}`, {
+        label: `${scenario.name}-refunded-charge`,
+      })
+    : null;
+  run.find(
+    question,
+    `A refund with status=${refunded.body.status}, amount=${refunded.body.amount} (${refunded.file})` +
+      (after?.ok
+        ? `; the charge then has refunded=${after.body.refunded}, ` +
+          `amount_refunded=${after.body.amount_refunded} (${after.file})`
+        : ""),
   );
 }
 
@@ -1119,10 +1188,17 @@ async function runProbe(root, options, environment) {
         recovery(context, done.card, startedSeconds),
       );
     }
-    if (done["ach-dispute"]?.intent) {
-      await step(run, "ach-dispute", () =>
-        dispute(context, done["ach-dispute"]),
-      );
+    for (const scenario of SCENARIOS) {
+      const charged = done[scenario.name];
+      if (!charged?.intent) continue;
+      if ("refund" in scenario)
+        await step(run, `${scenario.name}-refund`, () =>
+          refund(context, scenario, charged),
+        );
+      if (scenario.dispute)
+        await step(run, scenario.name, () =>
+          dispute(context, scenario, charged),
+        );
     }
     await step(run, "payouts", () => payouts(context));
     await step(run, "events", () => events(context, startedSeconds));
