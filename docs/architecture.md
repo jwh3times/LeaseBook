@@ -29,9 +29,12 @@ See the README [port map](../README.md#port-map) for every port the project bind
 Each bounded context is its own project — `Accounting`, `Directory`, `Banking`, `Reporting`,
 `Operations`, `Capabilities`, `Payments`, `Migrator` — over a shared `SharedKernel` that holds only
 cross-cutting primitives (money, ids, the CQRS spine, tenancy, result types). All of them carry real
-behavior. `Payments` implements an isolated development simulator with durable dispatch, signed
-observations and atomic Accounting receipt effects; it has no live provider adapter. See
-[ADR-046](adr/ADR-046-simulated-payment-recognition.md). It also owns refund checks: the check record,
+behavior. `Payments` implements online tenant payments for an isolated development fixture, with
+durable dispatch, authenticated observations and atomic Accounting receipt effects. A host runs one
+of two non-live payment modes: `Simulation`, where the processor is a simulator, or `StripeSandbox`,
+where it is an adapter to a Stripe sandbox that collects with test payment methods only. There is no
+live provider adapter. See [ADR-046](adr/ADR-046-simulated-payment-recognition.md) and
+[ADR-054](adr/ADR-054-stripe-sandbox-adapter.md), which is proposed. It also owns refund checks: the check record,
 its print history and per-bank print calibration
 ([ADR-050](adr/ADR-050-refund-checks.md)), and each bank account's check stock and write-only MICR
 details, decrypted only to draw a blank-stock check's MICR line
@@ -72,7 +75,14 @@ processor's account of a payout, with Stripe's list of the payout's balance line
 bank. Payments stores such a payout and holds it with no journal effect. Bank evidence, which in the
 sandbox only a signed fixture command supplies and no route or staff control does, releases it: an
 amount equal to the processor's posts every line through `PostPaymentSettlement` or none, and any
-other amount sends the payout to review. No Stripe event posts by itself. The seam also answers
+other amount sends the payout to review. No Stripe event posts by itself. What posts, and when,
+differs by mode only in where the bank evidence comes from. In a Simulation host a receipt posts from
+complete single-payment bank evidence, or from a payout that arrives with its bank evidence. In a
+StripeSandbox host a receipt posts only when a held payout's bank evidence arrives and equals
+Stripe's net, and a return only when an administrator posts the payout that carries it. The lines
+and amounts of a posting are the same in both modes. Its description alone differs, and follows the
+mode stored on the evidence, never the host's mode and never a capability. The staff and tenant
+payment lists report the host's mode, and the screens word themselves from it. The seam also answers
 what a processor still holds about a fixture's payments and payouts since a given time: the payment
 worker asks at most every five minutes for each fixture, whether or not a payment is waiting on its
 outcome, so an event that was never delivered is read from Stripe's event list as a delivered one is. A payment
@@ -80,7 +90,9 @@ still without an outcome after seven days goes to review under either processor,
 reported both failed and succeeded. A host also maps only its own processor's anonymous callback routes, outside `/api`:
 the simulator's two under `/callbacks/payments/simulation` in a Simulation host, and
 `POST /callbacks/payments/stripe` in a StripeSandbox host, which has its own rate limit and is not
-part of the published API contract. The Stripe library is referenced from
+part of the published API contract. Reading a dispute or a paid payout asks Stripe; when Stripe
+cannot be asked, that route keeps nothing and defers the delivery with HTTP 503 and the problem code
+`payment_callback_deferred`, and the sweep reads the event later. The Stripe library is referenced from
 the host alone and used only under `src/LeaseBook.Web/Payments/Stripe/`; an architecture test fails
 the build on a Stripe type in any module or elsewhere in the host.
 
@@ -211,8 +223,9 @@ the link, explicitly verifies the RLS-exempt Identity user's org, and asks Direc
 resident name on every request. Revocation therefore applies to the next request with an existing
 cookie. The selector-free `/api/portal/tenant/ledger` dispatches the existing Accounting ledger query
 and returns only resident-facing ledger fields, with `Cache-Control: no-store`. The portal displays
-the rent ledger balance, excluding held security deposits. It accepts payments only as the isolated,
-development-only simulation (ADR-046). Tenant navigation uses a dedicated shell; staff routes deny access before
+the rent ledger balance, excluding held security deposits. It accepts payments only in the isolated
+development fixture, as a simulated payment or as a Stripe sandbox test payment (ADR-046, ADR-054).
+The portal has no processor payment form in either mode. Tenant navigation uses a dedicated shell; staff routes deny access before
 mounting staff queries. Account security and sign-out reuse the existing auth flows.
 
 The read-only owner portal mirrors that shape. A host-owned `owner_access` link, with the same forced
@@ -404,8 +417,11 @@ The isolated Development payment fixture uses a host `BackgroundService` to poll
 durable dispatch rows once per second. It starts only in a web host whose payment mode is Simulation
 or StripeSandbox; the CLI can run the same worker pass explicitly. Each claim, callback receipt, effect and failure-bookkeeping transaction
 establishes a separate org scope. Thirty-second leases and durable provider lookup recover interrupted
-work. This simulator-only scheduler choice is recorded in
-[ADR-046](adr/ADR-046-simulated-payment-recognition.md); it does not select a live payment scheduler.
+work. After each pass over due work the same loop runs the catch-up sweep, at most every five minutes
+for each fixture. This fixture-only scheduler choice is recorded in
+[ADR-046](adr/ADR-046-simulated-payment-recognition.md); it does not select a live payment scheduler,
+and [ADR-054](adr/ADR-054-stripe-sandbox-adapter.md) lists the sweep running inline among its known
+limits.
 
 Portal invitation delivery uses a Development-only web `BackgroundService` to poll durable invitation
 rows once per second, independently of `Jobs:Enabled`. Each organization receives a separate system

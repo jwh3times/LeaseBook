@@ -175,6 +175,51 @@ from the PM fees held in the trust bank and a surplus is added to them; neither 
 an owner (ADR-053).
 _Avoid_: processing fee, bank fee (a charge the bank makes), fee adjustment
 
+**Payment mode**:
+Which processor a host's online payments go through: none, the payment simulation, or the Stripe
+sandbox. A host runs exactly one, and no mode that exists can move real money (ADR-054).
+_Avoid_: payment provider, environment, live mode (no mode reaches a live account)
+
+**Stripe sandbox**:
+The payment mode in which a real processor's test environment is charged, with its documented test
+payment methods only. It proves the processor seam against a processor nobody here wrote; nothing in
+it is money (ADR-054).
+_Avoid_: test mode (Stripe's word for a kind of key), Stripe mode, staging
+
+**Test payment**:
+A tenant's online payment in the Stripe sandbox mode, as the screens name it. The same payment in the
+payment simulation is a _simulated payment_.
+_Avoid_: sandbox payment (in screen text), demo payment, real payment
+
+**Bank evidence**:
+What the bank says it received for a payment or a payout: an amount and a date. A receipt, a return
+and a payout post only from it. A processor's word that it paid is never bank evidence (ADR-046,
+ADR-054).
+_Avoid_: payout confirmation, proof of payment, settlement notice
+
+**Held payout**:
+A payout the processor has reported and no bank has yet spoken for. It is kept with the processor's
+own lines, reads "Waiting for the bank", and posts nothing until bank evidence arrives (ADR-054).
+_Avoid_: pending payout (Stripe's word for one not yet paid), unconfirmed payout, funds in transit
+(that is a tenant-side figure)
+
+**Payout line**:
+One entry in the processor's list of what a payout contains, of a named kind. A payment, a returned
+payment and a processor fee can post. A card dispute, a refund, a failed bank debit and an
+unrecognised line cannot, and any one of them sends the whole payout to a person (ADR-053, ADR-054).
+_Avoid_: balance transaction (Stripe's object), transaction, entry (an entry is in the journal)
+
+**Card dispute**:
+A cardholder's challenge to a card payment, as the processor reports it. It sends the payment to
+review and is never posted. What a processor calls a dispute on an ACH debit is not one: that is a
+returned payment.
+_Avoid_: chargeback, return (for a card), dispute (unqualified)
+
+**Deferred callback**:
+A processor's delivery that could not be read because the processor could not be asked what reading
+it needs. Nothing is kept and the sender is told to send it again; it is not a fault in LeaseBook.
+_Avoid_: failed callback, rejected callback (a rejected one did not prove where it came from), retry
+
 **Outstanding check**:
 An issued check whose bank line has not cleared. It is already out of the book balance and shows as an
 uncleared withdrawal in the register until the bank pays it.

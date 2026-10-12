@@ -300,6 +300,7 @@ Accepted, to revisit before the ADR is accepted: a host's first sweep reads 29 d
 in the worker, with up to two requests for each disputed payment in them; a host whose clock is more
 than fifteen minutes ahead of Stripe's can miss an event between sweeps until it restarts; and a card
 dispute's closing event can arrive weeks later and reopens a closed review without saying what is new.
+These are now listed under [Known limits](#known-limits).
 
 **Implementation note, 2026-10-11 (payouts).** The adapter now reads payouts. A payout Stripe marks
 paid is stored with Stripe's own list of its balance lines and held, with no journal effect. Bank
@@ -399,6 +400,7 @@ payment whose late fact cannot be judged after five tries rests until the next f
 the staff surface shows a held payout by its raw status with a bank amount of zero. The staff API
 returns the processor's figure and the time of a failure, and no screen reads either yet. The next
 note removes that last limit, and changes the 500 a delivery answers when a list cannot be had to a 503.
+The first two are now listed under [Known limits](#known-limits).
 
 **Implementation note, 2026-10-11 (surfaces).** The screens, the journal description and the logs
 now say what a sandbox payment and a held payout are. No posting template, money path or capability
@@ -427,7 +429,8 @@ decided these points on 2026-10-11:
   reasons `bank_amount_mismatch` and `payout_failed` and the four line kinds nothing posts have words
   of their own.
 - **Operational items no person can see will be recorded as known limits, not fixed.** They are
-  written down in the documents part. A failed ACH debit still sends its whole payout to review.
+  written down in the documents part, under [Known limits](#known-limits). A failed ACH debit still
+  sends its whole payout to review.
 
 Three things were found while building and settled in code:
 
@@ -461,6 +464,106 @@ payout has posted.
 
 The provisional assumptions of ADR-053 stay open. This ADR verifies none of them, and nothing here
 is approval to move real money.
+
+## Known limits
+
+These hold in the code as it stands on 2026-10-11. Each is tolerable in a development fixture that
+one maintainer runs and that can post nothing without a person's bank evidence. None is fixed here,
+and each is to be settled before any adapter that can reach a live account. Where a dated note above
+says "to revisit", this list is where the item now lives.
+
+**The worker and its catch-up sweep**
+
+- **The sweep runs inline in the one worker loop.** It follows the pass over due payments and
+  nothing else runs beside it. It reads at most 100 pages of 100 events, and each request to Stripe
+  may take 20 seconds, so a long sweep delays the next pass. A fixture has few events; a real account
+  needs a schedule and a bound of its own.
+- **A restarted host reads up to 29 days of events in its first sweep.** No position is stored. That
+  sweep makes up to two more requests for each disputed payment and lists the lines of every payout
+  paid in those 29 days.
+- **Every later sweep reads again the lines of each payout paid inside its overlap.** A sweep asks
+  from fifteen minutes before the last complete one, and a paid payout in that window has its lines
+  listed again. The stored payout is not changed by it; the cost is the requests.
+- **A host clock more than fifteen minutes ahead of Stripe's can miss an event between sweeps.** The
+  sweep's start is the host's own time less ten minutes of overlap and five of allowance. An event
+  missed this way is read only by the first sweep after a restart.
+- **A fault in reading a listed event is counted, not logged.** The sweep counts it as "to be asked
+  about again" whatever the fault was, and the log line for the sweep carries the count and no
+  exception. A sweep with any such event is not complete, so the next one asks from the same start.
+  An event that can never be read, such as a payout with more than 10,000 balance lines, holds that
+  start in place until the event is more than 29 days old.
+- **Within one fixture, a payment whose claim throws stops the payments due after it in that pass.**
+  It is logged as a worker failure and the pass is made again a second later. The payments behind it
+  wait for as long as it keeps throwing. Other fixtures are not held up.
+- **A late fact that cannot be judged is left as it is.** When a payment that has a receipt, or is with
+  a person, gets a new fact and every scheduled attempt to judge it fails, it stays as it was until
+  another fact arrives. No staff control retries it.
+
+**Payouts**
+
+- **A failed ACH debit sends its whole payout to review.** Stripe lists one as
+  `payment_failure_refund`, which is stored as a kind nothing posts. Whether its two lines should net
+  to the failure fee, so that the rest of the payout can post, is an open question and not a
+  decision.
+- **A payout that holds both a payment and that payment's return cannot post.** The payment line is
+  refused because a return is stored for the payment, and the return line because the payment has no
+  receipt to reverse. Stripe's ACH dispute test method disputes a payment minutes after it succeeds,
+  so in a sandbox the two usually reach the same payout, as they did in the one payout recorded. A
+  return posts only for a payment an earlier payout receipted.
+- **Closing a payment's review for an ACH return, before the payout that carries the return arrives,
+  stops that payout from posting.** The payout then contradicts a closed review and can only be
+  closed. The staff text in the sandbox says to leave such a review open.
+- **The engine takes the adapter's word that a returned payment was an ACH debit.** The adapter
+  decides it from the charge Stripe holds. For a settled payment the engine accepts a return line
+  without comparing it with the payment's own method. An administrator still has to post the payout.
+- **A payout that cannot be stored is not shown to staff.** One whose id, type or figures do not fit
+  what is stored is refused and logged, and appears nowhere on Operations.
+- **A held payout whose first check throws shows no reason.** The failure is logged and the payout
+  stays "Waiting for the bank". It is checked again when bank evidence arrives.
+- **After a fixture is reset on the same connected account, Stripe's earlier payouts come back.** The
+  new fixture's first sweep stores every payout of the last 29 days. Their lines name payments the
+  new generation does not hold, so each goes to review. A payout's fingerprint also includes the
+  generation, so one stored under a generation and reported again under another would be marked as
+  conflicting; the fixture commands never keep a database across generations.
+- **A fixture database made before payouts were read needs its migrations applied.** The fixture
+  script applies migrations only when it creates a database. A host from `main` cannot sweep against
+  an older one until `dotnet ef database update` has run against it as the migrator role.
+- **An amount in another currency is Stripe's integer divided by one hundred.** That is wrong for a
+  currency without two decimal places. Such an amount is kept as evidence for a person and never
+  posts.
+
+**Disputes**
+
+- **A card dispute's closing event can arrive weeks later and reopens a closed review.** It is
+  stored as one more fact of the same dispute, and nothing on the screen says what is new.
+
+**Screens and wording**
+
+- **"Original receipt remains recorded" can be false.** After a return has posted, a payment that
+  goes back to review, or whose review is then closed, still reads that way although the receipt was
+  reversed. This is so in both modes.
+- **A sandbox host whose first read of the payment list fails uses the simulation's wording.** The
+  mode arrives with the list, so until one read succeeds the error says "Couldn’t load simulated
+  payments".
+- **The tenant's payment list carries reason codes no tenant screen shows.** A return reason is
+  reduced to `return_requires_review`; any other, such as `outcome_overdue`, is returned as stored.
+- **The fixture's seeded names say "Simulation" in both modes.** The organization, owner, bank,
+  tenants and the opening rent charge are seeded the same way for a sandbox fixture.
+
+**Not yet shown**
+
+- **A payout that posts has not been shown against a real sandbox.** The sandbox has made no payout
+  that holds only this fixture's good payments. Posting is proven in tests and against replayed
+  payloads. The sandbox description of a journal entry has therefore not been seen there either. This
+  ADR is not accepted until it has.
+- **Two payloads were built, not recorded.** A `payout.failed` event and a refund line in a payout,
+  because neither has occurred.
+- **The screens were checked against a real sandbox through the API, not in a browser.**
+- **Not every outgoing header is pinned by a test.** A test pins the fields of a charge and the
+  `Stripe-Account`, `Idempotency-Key` and `Stripe-Version` headers. The library's other headers, its
+  user agent among them, are not asserted.
+- **Whether an event on the platform's own account is signed with the same secret is not shown.**
+  None was delivered. The adapter drops an event that names no connected account.
 
 ## Revisit trigger
 
