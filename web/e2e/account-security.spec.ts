@@ -1,5 +1,6 @@
-import { expect, test } from '@playwright/test';
+import { expect } from '@playwright/test';
 import { runA11y } from './helpers';
+import { test } from './test';
 
 // The HTTP state transitions are covered against real Identity/Postgres by AccountSecurityTests.
 // This browser test isolates the required-enrollment route, keyboard path, QR and one-time display.

@@ -26,5 +26,20 @@ export default defineConfig({
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
     css: false,
+    // Measurement only (ADR-055): collected by `npm run test:coverage`, never by `npm run test`,
+    // and no threshold is set, so a figure cannot fail a run. `include` names the whole source tree
+    // so a file no test imports counts as uncovered instead of going missing from the report.
+    coverage: {
+      provider: 'v8',
+      include: ['src/**/*.{ts,tsx}'],
+      exclude: [
+        'src/api/generated/**',
+        'src/test/**',
+        'src/**/*.{test,spec}.{ts,tsx}',
+        'src/**/*.d.ts',
+      ],
+      reporter: ['text-summary', 'html', 'cobertura', 'json-summary'],
+      reportsDirectory: './coverage/unit',
+    },
   },
 });

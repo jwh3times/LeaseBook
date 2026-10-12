@@ -1,6 +1,7 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 import type { BudgetTelemetryRequest } from '@/api';
 import { captureDownload, DEMO_ADMIN, runA11y, signIn } from './helpers';
+import { test } from './test';
 
 // Refund checks (#473), end to end against the seeded demo org: issue a check for Jasmine Carter's
 // held security deposit (1,450.00 on the Security Deposit Trust — DemoJournalSeed's `DepositCr(T1, O1)`)

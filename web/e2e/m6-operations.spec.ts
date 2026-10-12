@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
+import { test } from './test';
 
 // M6 WP-5 e2e smoke — dashboard CTA navigation (§M6 WP-5).
 // Full run-cycle walkthrough is WP-7. This spec verifies:

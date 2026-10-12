@@ -1,5 +1,6 @@
-import { expect, test } from '@playwright/test';
+import { expect } from '@playwright/test';
 import { DEMO_ADMIN, runA11y, signIn } from './helpers';
+import { test } from './test';
 
 // WP-8 Trust Compliance Pack e2e (§M8), against the seeded Tarheel demo org. The pack is a
 // PMAdmin-only ZIP for one trust account × a *closed* period.

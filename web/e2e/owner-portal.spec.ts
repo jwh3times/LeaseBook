@@ -1,5 +1,6 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 import { DEMO_ADMIN, PORTAL_OWNER, PORTAL_RESIDENT, seedTheme, signIn } from './helpers';
+import { test } from './test';
 
 // The read-only owner portal (#464). Signs in as Owner A of the `seed --org portal` fixture.
 

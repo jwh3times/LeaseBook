@@ -3,7 +3,7 @@
 - **Audience:** Evaluators, contributors, operators, and maintainers
 - **Status:** Living index
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-11
+- **Last reviewed:** 2026-10-12
 
 Use this page to find the maintained source for a question. Documents intentionally have one owner;
 summaries elsewhere should link here rather than restating mutable detail.
@@ -19,6 +19,7 @@ summaries elsewhere should link here rather than restating mutable detail.
 | Understand trust-accounting behavior              | [Accounting](accounting.md)                            |
 | Set up or operate a development environment       | [Local-development runbook](runbooks/local-dev.md)     |
 | Measure read-path latency against the budget      | [Performance](perf.md)                                 |
+| See what the test suites exercise, and measure it | [Test coverage](testing/coverage.md)                   |
 | Contribute a change                               | [Contributing guide](../CONTRIBUTING.md)               |
 | See shipped capabilities and broad direction      | [Roadmap](ROADMAP.md) and [changelog](../CHANGELOG.md) |
 

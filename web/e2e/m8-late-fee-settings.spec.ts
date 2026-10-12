@@ -1,5 +1,6 @@
-import { expect, test } from '@playwright/test';
+import { expect } from '@playwright/test';
 import { DEMO_ADMIN, signIn } from './helpers';
+import { test } from './test';
 
 /**
  * M8 WP-6 — the late-fee policy settings surface.

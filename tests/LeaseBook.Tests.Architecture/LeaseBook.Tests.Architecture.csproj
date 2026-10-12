@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <PackageReference Include="xunit.v3.mtp-v2" />
+    <PackageReference Include="Microsoft.Testing.Extensions.CodeCoverage" />
     <PackageReference Include="Shouldly" />
     <PackageReference Include="NetArchTest.Rules" />
     <PackageReference Include="Mono.Cecil" />

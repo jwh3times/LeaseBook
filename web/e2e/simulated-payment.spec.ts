@@ -1,8 +1,9 @@
 import { createHmac } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { type APIRequestContext, expect, test } from '@playwright/test';
+import { type APIRequestContext, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { runA11y, signIn } from './helpers';
+import { test } from './test';
 
 interface Manifest {
   SigningKey: string;

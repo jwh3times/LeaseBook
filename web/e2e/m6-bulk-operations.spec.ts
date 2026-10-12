@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
+import { test } from './test';
 
 // M6 full-month exit-criteria e2e (§D WP-7 — the M6 milestone gate).
 // Serial, against a freshly seeded demo org (same pattern as M4/M5 specs).

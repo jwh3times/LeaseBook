@@ -1,5 +1,6 @@
-import { expect, test } from '@playwright/test';
+import { expect } from '@playwright/test';
 import { DEMO_ADMIN, signIn } from './helpers';
+import { test } from './test';
 
 // The PMAdmin audit-review surface (#321), against the seeded Tarheel demo org. The seed itself is
 // what makes this demoable: provisioning the org writes an `org-provisioned` row and every directory

@@ -1,5 +1,6 @@
-import { expect, test } from '@playwright/test';
+import { expect } from '@playwright/test';
 import { paletteOptions, seedTheme, visualSnapshot } from './helpers';
+import { test } from './test';
 
 // The budgeted M2 flows (§D step 6), run against the seeded demo org. The seeded admin has no MFA
 // enrolled (M0 seed), so login is email + password → dashboard.

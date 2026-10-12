@@ -1,5 +1,6 @@
-import { expect, test } from '@playwright/test';
+import { expect } from '@playwright/test';
 import { DEMO_ADMIN, runA11y, seedTheme, signIn } from './helpers';
+import { test } from './test';
 
 for (const persona of ['tenant', 'owner'] as const) {
   test(`${persona} invitation, enrollment and revocation with local test delivery`, async ({

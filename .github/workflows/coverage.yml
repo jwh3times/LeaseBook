@@ -1,0 +1,134 @@
+name: Coverage (e2e)
+
+# What the Playwright suite reaches (ADR-055, docs/testing/coverage.md): the host's code by module,
+# the web source by area, and the API routes. The .NET suites and the web unit suite report their
+# coverage on every pull request, inside ci.yml, where it costs little. This run wraps the host in a
+# collector and records every page's JavaScript coverage, which is slower, so it stays off pull
+# requests: the `E2E (Playwright + a11y)` job there runs exactly as it did before this existed.
+#
+# Measurement only. No figure is compared to a threshold. The job fails when a test fails or a
+# report cannot be produced, so the measurement cannot rot quietly, and never because of a number.
+on:
+  push:
+    branches: [main]
+  schedule:
+    # Nightly at 06:23 UTC, off the top of the hour, when scheduled workflows queue longest. It
+    # re-measures `main` on days nothing merged, so a drift in the tools shows up without a push.
+    - cron: '23 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e-coverage:
+    name: E2E coverage + route inventory
+    runs-on: ubuntu-latest
+    # The pull-request e2e job this mirrors typically takes ~6 min against a 20-minute bound. This
+    # one adds the collector, the browser coverage and three reports. Re-measure after the first
+    # runs on `main` and tighten by the ci.yml policy (3-8x the observed maximum, floor 10).
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: dev_postgres_pw
+          POSTGRES_DB: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      ASPNETCORE_ENVIRONMENT: Development
+      # App-role connection string → the service container, as in the ci.yml e2e job. The coverage
+      # runner derives the payment fixture's from it.
+      ConnectionStrings__Default: Host=localhost;Port=5432;Database=leasebook;Username=leasebook_app;Password=dev_app_pw
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '26'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      # Setup is the ci.yml e2e job's, step for step: bootstrap, migrate, seed, install.
+      - name: Create database + roles (bootstrap.sql)
+        run: psql "host=localhost port=5432 user=postgres dbname=postgres" -v ON_ERROR_STOP=1 -f infra/db/bootstrap.sql
+        env:
+          PGPASSWORD: dev_postgres_pw
+      # Restores dotnet-ef and the two coverage tools, dotnet-coverage and ReportGenerator.
+      - run: dotnet tool restore
+      - run: dotnet restore src/LeaseBook.Web
+      - name: Apply migrations as the migrator role
+        run: dotnet ef database update --project src/LeaseBook.Web --context AppDbContext
+        env:
+          ConnectionStrings__Migrations: Host=localhost;Port=5432;Database=leasebook;Username=leasebook_migrator;Password=dev_migrator_pw
+      - name: Seed demo + cutover + portal fixtures (app role)
+        run: |
+          dotnet run --project src/LeaseBook.Web -- seed --org demo
+          dotnet run --project src/LeaseBook.Web -- seed --org cutover
+          dotnet run --project src/LeaseBook.Web -- seed --org portal
+      # ci.yml creates this fixture between its two Playwright passes. Here it comes first, because
+      # one command runs both passes under one collector. It is a separate database, so the main
+      # pass does not see it.
+      - name: Initialize isolated payment fixture
+        shell: pwsh
+        run: ./scripts/payment-fixture.ps1 init -Container '${{ job.services.postgres.id }}' -Port 5432
+      - name: Install web dependencies
+        working-directory: web
+        run: npm ci
+      # The same mirror workaround as the ci.yml e2e job, for the same reason; see the note there.
+      - name: Work around the hosted runner's stalling apt mirror
+        run: |
+          sudo sed -i 's|azure.archive.ubuntu.com|archive.ubuntu.com|g' /etc/apt/sources.list.d/ubuntu.sources || true
+          sudo sed -i 's|azure.archive.ubuntu.com|archive.ubuntu.com|g' /etc/apt/sources.list || true
+          conf=/etc/apt/apt.conf.d/99-leasebook-timeouts
+          echo 'Acquire::Retries "3";' | sudo tee "$conf" > /dev/null
+          echo 'Acquire::http::Timeout "20";' | sudo tee -a "$conf" > /dev/null
+          echo 'Acquire::https::Timeout "20";' | sudo tee -a "$conf" > /dev/null
+      - name: Install Playwright browser
+        working-directory: web
+        run: npx playwright install --with-deps chromium
+      # Runs the documented command and not a copy of its steps: the collector, both Playwright
+      # passes with E2E_COVERAGE=1, and the three reports (scripts/e2e-coverage.mjs).
+      - name: Run e2e with coverage (main pass + simulated-payment pass)
+        working-directory: web
+        run: npm run e2e:coverage -- --payments
+      # The summary is written before the runner reports a failing pass, so a red run still shows
+      # what it reached. A missing summary is a report that was not produced, and fails here too.
+      - name: Publish the coverage summary
+        if: ${{ !cancelled() }}
+        run: cat web/coverage/e2e/summary.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload e2e coverage reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: e2e-coverage
+          # host/: the collector's Cobertura file and the HTML report by module. web/: the browser
+          # coverage report by source file. routes/: the route inventory as JSON and markdown.
+          # requests/: the method and path of every API request, as recorded.
+          path: |
+            web/coverage/e2e/summary.md
+            web/coverage/e2e/host/
+            web/coverage/e2e/web/
+            web/coverage/e2e/routes/
+            web/coverage/e2e/requests/
+            !web/coverage/e2e/web/.cache/
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload Playwright report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: playwright-report-coverage
+          path: |
+            web/playwright-report/
+            web/playwright-report-payments/
+            web/test-results/
+          retention-days: 7

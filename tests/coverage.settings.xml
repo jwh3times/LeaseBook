@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Coverage collection settings (ADR-055, docs/testing/coverage.md). One file serves both
+     collections: the test projects (the MTP `coverage-settings` option) and the host under the
+     Playwright run (`dotnet-coverage collect` with `settings`), so the two figures count the same code. -->
+<Configuration>
+  <CodeCoverage>
+    <ModulePaths>
+      <Include>
+        <!-- Product assemblies only: the modules, SharedKernel, Migrator and the Web host. -->
+        <ModulePath>.*[\\/]LeaseBook\.[^\\/]*\.dll$</ModulePath>
+      </Include>
+      <Exclude>
+        <ModulePath>.*[\\/]LeaseBook\.Tests\.[^\\/]*\.dll$</ModulePath>
+      </Exclude>
+    </ModulePaths>
+    <Sources>
+      <Exclude>
+        <!-- EF migrations are generated and run once per database, not per test. -->
+        <Source>.*[\\/]src[\\/]LeaseBook\.Web[\\/]Migrations[\\/].*</Source>
+        <!-- Compiler and source-generator output (regex, logging, OpenAPI, minimal-API generators). -->
+        <Source>.*[\\/]obj[\\/].*</Source>
+        <Source>.*\.g\.cs$</Source>
+        <Source>.*\.generated\.cs$</Source>
+      </Exclude>
+    </Sources>
+    <Attributes>
+      <Exclude>
+        <Attribute>^System\.CodeDom\.Compiler\.GeneratedCodeAttribute$</Attribute>
+      </Exclude>
+    </Attributes>
+  </CodeCoverage>
+</Configuration>

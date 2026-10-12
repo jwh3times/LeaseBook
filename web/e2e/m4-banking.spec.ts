@@ -1,5 +1,6 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 import { visualSnapshot } from './helpers';
+import { test } from './test';
 
 // The M4 banking budgeted flows (§D step 5), run against the seeded demo org. The seeded admin (Renée
 // Calloway) has no MFA, so login is email + password. These two specs are SERIAL and designed to run
