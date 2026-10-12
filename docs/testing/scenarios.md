@@ -93,9 +93,11 @@ host, when a scenario had no test that ran, and when the run posted an event typ
 did not find in the source. A request the test answered itself with `page.route` does not count. A
 request made through the test's own request client does.
 
-Attribution by time is sound because the suite runs on one worker. The journal is read as the
-runtime role, one organization at a time, with the organization and the persona set for a read-only
-transaction.
+Attribution by time is sound because the suite runs on one worker. The journal is read in a
+read-only transaction as the database container's own superuser. A runtime role would have to set
+the organization context to read it, and only the product's executor may do that
+([ADR-048](../adr/ADR-048-per-persona-row-level-security.md)). The run's database is a development
+or CI one.
 
 The run then executes `check-invariants --all` on each database a pass used, and fails on a
 violation. Every organization a scenario drove is checked once, after the last scenario has finished

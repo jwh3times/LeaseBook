@@ -118,38 +118,29 @@ export function parseConnection(connection) {
       .slice(index + 1)
       .trim();
   }
-  for (const required of ["database", "username", "password"]) {
-    if (!parts[required]) {
-      throw new Error(`The connection string names no ${required}.`);
-    }
+  if (!parts.database) {
+    throw new Error("The connection string names no database.");
   }
   return parts;
 }
 
-const UUID = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
-
 /**
- * The SQL that reads the journal entries posted since a moment, one organization at a time.
+ * The SQL that reads the journal entries posted since a moment, in every organization.
  *
- * `journal_entries` is under row-level security and the reader is the runtime role, so each read
- * sets the organization and the persona for its own read-only transaction, the way an operator's
- * session has to. Without them the read returns no rows and no error.
+ * It sets no organization context. `journal_entries` is under row-level security, and only
+ * `OrgScopedExecutor` may set the context a runtime role reads through (ADR-048; an architecture
+ * test scans `scripts/` for a second setter). So the reader is the container's own superuser, which
+ * row-level security does not bind, in a read-only transaction, the way `payment-fixture.ps1`
+ * reads its fixture. That is acceptable only because this database is a development or CI one.
  */
-export function journalQuery(orgIds, sinceMs) {
+export function journalQuery(sinceMs) {
   if (!Number.isInteger(sinceMs)) throw new Error("`since` is not a time.");
-  return orgIds
-    .map((orgId) => {
-      if (!UUID.test(orgId))
-        throw new Error(`Not an organization id: ${orgId}`);
-      return [
-        "BEGIN TRANSACTION READ ONLY;",
-        `SELECT set_config('app.org_id', '${orgId}', true), set_config('app.persona', 'staff', true);`,
-        "SELECT 'entry', event_type, floor(extract(epoch FROM posted_at) * 1000)::bigint",
-        `  FROM journal_entries WHERE posted_at >= to_timestamp(${sinceMs} / 1000.0);`,
-        "COMMIT;",
-      ].join("\n");
-    })
-    .join("\n");
+  return [
+    "BEGIN TRANSACTION READ ONLY;",
+    "SELECT 'entry', event_type, floor(extract(epoch FROM posted_at) * 1000)::bigint",
+    `  FROM journal_entries WHERE posted_at >= to_timestamp(${sinceMs} / 1000.0);`,
+    "COMMIT;",
+  ].join("\n");
 }
 
 /** The `entry|<event type>|<milliseconds>` lines of the journal read, as postings of a pass. */
@@ -300,33 +291,26 @@ function reportRoutes() {
   ]);
 }
 
+// Runs as the container's `postgres` superuser over its local socket; see `journalQuery` for why.
 function psql(connection, sql) {
-  const { database, username, password } = parseConnection(connection);
+  const { database } = parseConnection(connection);
   const container = process.env.E2E_DB_CONTAINER ?? "leasebook-db";
   const result = spawnSync(
     "docker",
     [
       "exec",
       "-i",
-      "-e",
-      "PGPASSWORD",
       container,
       "psql",
-      "-h",
-      "localhost",
       "-U",
-      username,
+      "postgres",
       "-d",
       database,
       "-v",
       "ON_ERROR_STOP=1",
       "-At",
     ],
-    {
-      input: sql,
-      encoding: "utf8",
-      env: { ...process.env, PGPASSWORD: password },
-    },
+    { input: sql, encoding: "utf8" },
   );
   if (result.error) throw result.error;
   if (result.status !== 0) {
@@ -337,17 +321,15 @@ function psql(connection, sql) {
   return result.stdout;
 }
 
-// `orgs` is the organization catalog: it has no `org_id` and is not under row-level security.
 function readJournal(pass, connection, sinceMs) {
-  const orgIds = psql(connection, "SELECT id FROM orgs ORDER BY id;")
+  const orgCount = psql(connection, "SELECT id FROM orgs ORDER BY id;")
     .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
-  if (orgIds.length === 0) {
+    .filter((line) => line.trim()).length;
+  if (orgCount === 0) {
     throw new Error(`The ${pass} pass's database holds no organization.`);
   }
   const postings = parseJournalRows(
-    psql(connection, journalQuery(orgIds, sinceMs)),
+    psql(connection, journalQuery(sinceMs)),
     pass,
   );
   mkdirSync(journalDir, { recursive: true });
@@ -356,7 +338,7 @@ function readJournal(pass, connection, sinceMs) {
     `${JSON.stringify(postings, null, 2)}\n`,
   );
   console.log(
-    `${pass}: ${postings.length} journal entries posted during the run, in ${orgIds.length} organizations.`,
+    `${pass}: ${postings.length} journal entries posted during the run, in ${orgCount} organizations.`,
   );
 }
 

@@ -92,53 +92,39 @@ describe("paymentConnection", () => {
 });
 
 describe("parseConnection", () => {
-  it("reads the parts psql needs, whatever the case of the keys", () => {
+  it("reads the database, whatever the case of the keys", () => {
     const parts = parseConnection(
-      "Host=localhost;Port=5432;Database=leasebook;username=leasebook_app;Password=dev_app_pw",
+      "Host=localhost;Port=5432;database=leasebook;Username=leasebook_app;Password=dev_app_pw",
     );
     assert.equal(parts.database, "leasebook");
-    assert.equal(parts.username, "leasebook_app");
-    assert.equal(parts.password, "dev_app_pw");
   });
 
-  it("refuses a connection string with no user", () => {
+  it("refuses a connection string with no database", () => {
     assert.throws(
-      () => parseConnection("Host=localhost;Database=leasebook;Password=x"),
-      /names no username/,
+      () => parseConnection("Host=localhost;Username=x;Password=x"),
+      /names no database/,
     );
   });
 });
 
 describe("journalQuery", () => {
-  const org = "01923000-0000-7000-8000-0000000d3110";
-
-  it("sets the organization and the persona inside each read-only transaction", () => {
-    const sql = journalQuery(
-      [org, org.replace("d3110", "d3111")],
-      1700000000000,
-    );
-    assert.equal(sql.match(/BEGIN TRANSACTION READ ONLY;/g).length, 2);
-    assert.equal(sql.match(/COMMIT;/g).length, 2);
-    assert.match(
-      sql,
-      /set_config\('app\.org_id', '01923000-0000-7000-8000-0000000d3110', true\), set_config\('app\.persona', 'staff', true\)/,
-    );
+  it("reads in one read-only transaction and sets no organization context", () => {
+    const sql = journalQuery(1700000000000);
+    assert.equal(sql.match(/BEGIN TRANSACTION READ ONLY;/g).length, 1);
+    assert.equal(sql.match(/COMMIT;/g).length, 1);
+    assert.doesNotMatch(sql, /set_config|app\.(org_id|persona|user_id)/);
     assert.match(sql, /posted_at >= to_timestamp\(1700000000000 \/ 1000\.0\)/);
   });
 
-  it("refuses anything that is not an organization id or a time", () => {
-    assert.throws(
-      () => journalQuery(["x'; DROP TABLE orgs; --"], 1),
-      /Not an organization id/,
-    );
-    assert.throws(() => journalQuery([org], "now()"), /not a time/);
+  it("refuses anything that is not a time", () => {
+    assert.throws(() => journalQuery("now()"), /not a time/);
   });
 });
 
 describe("parseJournalRows", () => {
-  it("keeps the entry lines and drops what set_config and COMMIT print", () => {
+  it("keeps the entry lines and drops what BEGIN and COMMIT print", () => {
     const output =
-      "BEGIN\n01923000-0000-7000-8000-0000000d3110|staff\nentry|PaymentReceived|1700000000123\nentry|EntryVoided|1700000000456\nCOMMIT\n";
+      "BEGIN\nentry|PaymentReceived|1700000000123\nentry|EntryVoided|1700000000456\nCOMMIT\n";
     assert.deepEqual(parseJournalRows(output, "main"), [
       { pass: "main", eventType: "PaymentReceived", postedAt: 1700000000123 },
       { pass: "main", eventType: "EntryVoided", postedAt: 1700000000456 },
