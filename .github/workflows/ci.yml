@@ -30,8 +30,10 @@ jobs:
   backend:
     name: Backend (build + test)
     runs-on: ubuntu-latest
-    # Typically ~3.5 min; the widest variance here is NuGet restore and Testcontainers image pulls.
-    timeout-minutes: 20
+    # About 16.5 min before coverage collection (ADR-055) and 18.5 to 19 min with it, measured on
+    # 2026-10-12; the integration suite is nearly all of it. 30 is below the policy's 3x floor on
+    # purpose: a hang here should still fail well inside an hour. Re-measure if the suite grows.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
