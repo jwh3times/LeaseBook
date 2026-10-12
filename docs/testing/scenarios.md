@@ -163,7 +163,7 @@ not edit between the markers.
 <!-- scenario-catalogue:start -->
 <!-- prettier-ignore-start -->
 
-45 scenarios. 13 journal event types and 47 routes are exempt.
+49 scenarios. 8 journal event types and 42 routes are exempt.
 
 ### Scenarios
 
@@ -185,6 +185,10 @@ not edit between the markers.
 | `keyboard-navigation-and-focus` | Move through the palette, close a dialog and see the focus ring by keyboard | Accessibility | `keyboard-only.spec.ts` |  |  |  |
 | `keyboard-reconcile-select-all` | Drive a reconciliation to a $0.00 difference by keyboard | Banking | `keyboard-only.spec.ts` |  |  | `GET /api/accounting/banks/{bankAccountId}/register`<br>`GET /api/accounting/reconciliations` |
 | `bank-account-deactivation-guard` | Deactivating a bank account with uncleared items is refused | Settings | `keyboard-only.spec.ts` |  |  | `GET /api/settings/banks`<br>`PUT /api/settings/banks/{id}/active` |
+| `ledger-issue-credit` | Issue a tenant a credit from the ledger composer by keyboard, and see the balance fall by the amount | Accounting | `ledger-postings.spec.ts` | scenario | `CreditIssued` | `POST /api/accounting/tenants/{tenantId}/credits` |
+| `ledger-collect-and-apply-held-funds` | Collect a security deposit and a prepayment, then apply both against a charge, with an over-application refused | Accounting | `ledger-postings.spec.ts` | scenario | `DepositCollected`<br>`PrepaymentReceived`<br>`FeeCharged`<br>`DepositApplied`<br>`PrepaymentApplied` | `POST /api/accounting/tenants/{tenantId}/deposits`<br>`POST /api/accounting/tenants/{tenantId}/prepayments`<br>`POST /api/accounting/tenants/{tenantId}/charges`<br>`POST /api/accounting/tenants/{tenantId}/deposit-applications`<br>`POST /api/accounting/tenants/{tenantId}/prepayment-applications` |
+| `ledger-deposit-into-locked-month` | Collect a deposit dated into a reconciled month and get the lock refusal, with nothing posted | Accounting | `ledger-postings.spec.ts` |  |  | `POST /api/accounting/tenants/{tenantId}/deposits` |
+| `ledger-export-csv` | Export a tenant ledger as CSV and get the rows and the balance the screen shows | Accounting | `ledger-postings.spec.ts` |  |  | `GET /api/accounting/tenants/{tenantId}/ledger.csv` |
 | `ledger-record-and-void-payment` | Record a tenant payment in 3 interactions, then void it with a linked reversal and an audit trail | Accounting | `m3-ledger.spec.ts` | demo | `PaymentReceived`<br>`EntryVoided` | `POST /api/accounting/tenants/{tenantId}/payments`<br>`POST /api/accounting/entries/{entryId}/void`<br>`GET /api/accounting/entries/{entryId}/audit`<br>`GET /api/accounting/tenants/{tenantId}/ledger` |
 | `ledger-payment-into-issued-month` | Record a payment into a month whose owner statement is already issued, and see the notice | Accounting | `m3-ledger.spec.ts` | demo | `PaymentReceived`<br>`EntryVoided` | `POST /api/accounting/tenants/{tenantId}/payments`<br>`GET /api/statements/issued-coverage`<br>`POST /api/statements/{ownerId}/deliver` |
 | `ledger-composer-guards` | The ledger composer blocks an over-application of held funds, and renders in the dark theme | Accounting | `m3-ledger.spec.ts` |  |  | `POST /api/accounting/tenants/{tenantId}/deposit-applications` |
@@ -219,7 +223,7 @@ not edit between the markers.
 
 | Reason | Count |
 | :-- | --: |
-| baseline gap | 60 |
+| baseline gap | 50 |
 
 #### Journal event types with no scenario
 
@@ -227,15 +231,10 @@ not edit between the markers.
 | :-- | :-- | :-- | :-- |
 | `BalanceForward` | baseline gap | 2026-10-12 | #544 |
 | `BankFeeCharged` | baseline gap | 2026-10-12 | #544 |
-| `CreditIssued` | baseline gap | 2026-10-12 | #544 |
-| `DepositApplied` | baseline gap | 2026-10-12 | #544 |
-| `DepositCollected` | baseline gap | 2026-10-12 | #544 |
 | `DepositResponsibilityTransferred` | baseline gap | 2026-10-12 | #544 |
 | `InterestEarned` | baseline gap | 2026-10-12 | #544 |
 | `OwnerContribution` | baseline gap | 2026-10-12 | #544 |
 | `PMFeesSwept` | baseline gap | 2026-10-12 | #544 |
-| `PrepaymentApplied` | baseline gap | 2026-10-12 | #544 |
-| `PrepaymentReceived` | baseline gap | 2026-10-12 | #544 |
 | `TrustTransfer` | baseline gap | 2026-10-12 | #544 |
 | `VendorPaid` | baseline gap | 2026-10-12 | #544 |
 
@@ -248,11 +247,6 @@ not edit between the markers.
 | `GET /api/accounting/deposits` | baseline gap | 2026-10-12 | #544 |
 | `GET /api/accounting/trust-equation` | baseline gap | 2026-10-12 | #544 |
 | `POST /api/accounting/banks/{bankAccountId}/adjustments` | baseline gap | 2026-10-12 | #544 |
-| `POST /api/accounting/tenants/{tenantId}/credits` | baseline gap | 2026-10-12 | #544 |
-| `POST /api/accounting/tenants/{tenantId}/deposits` | baseline gap | 2026-10-12 | #544 |
-| `POST /api/accounting/tenants/{tenantId}/prepayments` | baseline gap | 2026-10-12 | #544 |
-| `POST /api/accounting/tenants/{tenantId}/prepayment-applications` | baseline gap | 2026-10-12 | #544 |
-| `GET /api/accounting/tenants/{tenantId}/ledger.csv` | baseline gap | 2026-10-12 | #544 |
 | `POST /api/accounting/reconciliations/{id}/unlock` | baseline gap | 2026-10-12 | #544 |
 | `GET /api/accounting/reconciliations/{id}/report` | baseline gap | 2026-10-12 | #544 |
 | `POST /api/directory/owners` | baseline gap | 2026-10-12 | #544 |
