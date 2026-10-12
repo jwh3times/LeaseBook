@@ -8,10 +8,11 @@
 The simulator exercises the real Payments and Accounting path. It has no provider network client
 and cannot move real money. Production and Staging reject Simulation; live/provider configuration
 is refused. A second mode, `StripeSandbox`, collects through a Stripe sandbox instead of the
-simulator, with test payment methods only; it is partly built, and
-[Run the Stripe sandbox fixture](#run-the-stripe-sandbox-fixture) says what works. Everything before
-that section describes the simulator. The [specification](../payments/simulated-payment-spec.md) owns
-the financial contract.
+simulator, with test payment methods only.
+[Run the Stripe sandbox fixture](#run-the-stripe-sandbox-fixture) takes one card payment and one ACH
+payment through to a posted payout in that mode, and says which part of that has been run against a
+real sandbox. Everything before that section describes the simulator. The
+[specification](../payments/simulated-payment-spec.md) owns the financial contract.
 
 ## Create the fixture
 
@@ -164,12 +165,38 @@ This mode proves the processor seam against Stripe
 sandbox. It runs only in Development, only with a test-mode key, and only with Stripe's documented
 test payment methods, so it cannot move real money. Continuous integration never calls Stripe.
 
-Today the adapter submits a charge, finds it again, and reads Stripe's events about how it went:
+The adapter submits a charge, finds it again, and reads Stripe's events about how it went:
 processing, succeeded and failed, and afterwards a dispute or a refund. It also reads that a payout
 was paid or failed. A payout is stored with Stripe's own lines and held: no Stripe event posts
 anything. A payout posts only after you say what the bank received for it, with a fixture command, and
-only when that amount is Stripe's. [A payout](#a-payout) has the steps. A payout that posts has not
-yet been shown against a real sandbox: the run recorded in ADR-054 held its one payout for review.
+only when that amount is Stripe's.
+
+### The run, in order
+
+This is the whole procedure for one card payment and one ACH payment. Each step has its own part
+below.
+
+1. Check [what you need](#what-you-need).
+2. [Create the sandbox fixture](#create-the-sandbox-fixture), or bring an older fixture's database
+   up to date.
+3. [Start the host](#start-the-host).
+4. [Forward Stripe's events](#forward-stripes-events).
+5. [Make a card payment and an ACH payment](#make-a-card-payment-and-an-ach-payment), and see each
+   reach "Paid on … on its way to the bank".
+6. Leave the account alone and [wait for Stripe's payout](#wait-for-stripes-payout). The host shows
+   it as **Waiting for the bank**.
+7. [Say what the bank received](#say-what-the-bank-received). The payout posts and both payments
+   become **Settled**.
+8. [Check the result](#check-the-result) with `check-invariants`.
+
+Steps 1 to 5 have been run against a real sandbox, as ADR-054 records: card and ACH payments were
+charged, succeeded and got their paid date, and nothing posted. The rest has not been run there for a
+payout that posts. The sandbox had made one payout by 2026-10-11. The host read it and stored it with
+its lines, but it also held failed and disputed test payments, so it went to review at once, and bank
+evidence for it posted nothing. A payout that waits for the bank and then posts is proven in the
+integration tests and against replayed payloads only, and steps 6 to 8 are written from those tests.
+The screens were checked against the sandbox through the API, not in a browser. If a real run differs
+from this page, believe the run and correct the page.
 
 ### What you need
 
@@ -177,10 +204,15 @@ yet been shown against a real sandbox: the run recorded in ADR-054 held its one 
   sandbox's own test-mode secret key (`sk_test_` or `rk_test_`), and a connected account that pays
   its own Stripe fees and has ACH debit turned on in its payment method settings.
 - The Stripe CLI, version 1.53 or later, signed in to that same sandbox. It forwards Stripe's events
-  to the local host and prints the secret they are signed with.
+  to the local host and prints the secret they are signed with. Run one Stripe CLI process at a
+  time, and let one finish before you start the next: two started together have once left the CLI
+  signed out of the sandbox.
 - The development Postgres container running (`./scripts/dev.ps1 up`).
+- A connected account that is quiet: everything charged on it before has already been paid out, and
+  nothing else will be charged on it for the days the run takes. See
+  [Wait for Stripe's payout](#wait-for-stripes-payout) before you start.
 
-### Create the fixture
+### Create the sandbox fixture
 
 ```powershell
 ./scripts/payment-fixture.ps1 init -StripeAccount <acct_…>
@@ -196,10 +228,22 @@ The manifest holds the account ids and never the key or the webhook signing secr
 neither and makes no call to Stripe; the script clears `Payments__Stripe__SecretKey` and
 `Payments__Stripe__WebhookSecret` for the processes it starts and puts them back afterwards.
 
+**An older fixture.** The script applies migrations only when it creates the database. A sandbox
+fixture created before 2026-10-11, when payouts were first stored, lacks the columns a held payout
+needs, and a host from `main` cannot read payouts against it. Either reset it, which discards its
+payments, or apply the migrations as the migrator role and keep it. Set the connection string
+first; without it the command does not reach the fixture database:
+
+```powershell
+$env:ASPNETCORE_ENVIRONMENT = 'Development'
+$env:ConnectionStrings__Migrations = 'Host=localhost;Port=5632;Database=leasebook_payment_fixture_stripe;Username=leasebook_migrator;Password=dev_migrator_pw'
+dotnet ef database update --project src/LeaseBook.Web --context AppDbContext
+```
+
 ### Start the host
 
 The host needs two secrets: the sandbox key, and the secret Stripe signs its events with. Print the
-second with the Stripe CLI, in any terminal:
+second with the Stripe CLI, in any terminal, and let the command finish before you run the CLI again:
 
 ```powershell
 stripe listen --print-secret
@@ -253,6 +297,47 @@ The host checks the `Stripe-Signature` header before it reads anything in the bo
 event not marked as test mode. It routes an event by the connected account it names, to the fixture
 bound to that account, and takes nothing else in the event as saying which organization it is for.
 
+### Make a card payment and an ACH payment
+
+**Set the fee rules first.** Stripe keeps a fee from every charge. A fee the tenant was not quoted is
+a shortfall, which is taken from management fees held in the trust bank, and a fresh fixture holds
+none: the payout would go to review as `pm_fees_insufficient` instead of posting. Sign in as
+`admin-a@payments.test`, open **Settings**, and under **Online payment fees** set **Card** to a rate
+of 2.9% and a fixed amount of $0.30, and **Bank debit (ACH)** to a rate of 0.8%. Those are the fees
+the sandbox kept in the runs ADR-054 records. With them, the fee quoted for the amounts below is the
+fee Stripe kept there, so nothing is left over either way.
+
+Then, as `tenant-a1@payments.test` in the tenant portal:
+
+1. The panel is headed **Test payments**, with the badge "Test payment — no real money moves". If it
+   says "Simulated payments", the host is not in this mode.
+2. Enter `500.00`, leave **Pay with** on **Bank debit (ACH)**, check the fee shown ($4.03, for a
+   total of $504.03) and choose **Submit test payment**.
+3. Enter `500.00` again, choose **Card**, check the fee ($15.24, for a total of $515.24) and submit.
+   Each submission is a payment of its own.
+
+What each payment then says:
+
+| When                                       | The tenant's row reads                                                   |
+| ------------------------------------------ | ------------------------------------------------------------------------ |
+| Submitted, not yet sent                    | Test payment requested                                                   |
+| Stripe has it and has not said how it went | Test payment processing — not yet on your ledger                         |
+| Stripe says it succeeded                   | Paid on _date_ — on its way to the bank, not yet on your ledger          |
+| Stripe says it failed                      | Test payment failed — no payment recorded                                |
+| It needs a person                          | Test payment needs review — no receipt recorded, and a sentence below it |
+| A payout that holds it has posted (step 7) | Test payment recorded                                                    |
+
+The card payment succeeds within a second or two. The ACH payment stays in processing for about half
+a minute. Once both have succeeded the panel also says "In transit: $1,000.00", and the tenant's
+balance has not moved: no journal entry has been written. On **Operations**, staff see the same two
+payments under **Test payments**, with the organization's total in transit.
+
+If a payment failed or went to review, [What to expect](#what-to-expect) says why. A failed ACH
+debit, a dispute or a refund lands in the same payout as the good payments and keeps all of it from
+posting. Resetting the fixture does not help, because Stripe still pays out what the account already
+holds. Wait for that payout to be made, which will go to review, and then make the two payments
+again.
+
 ### What to expect
 
 - A submitted payment is charged on the connected account as a direct charge, for the ledger amount
@@ -277,7 +362,7 @@ bound to that account, and takes nothing else in the event as saying which organ
   a `payout.paid` delivery: the payout or its lines could not be read in full, or Stripe has not
   finished reconciling the payout. The host logs event `4608`, and the sweep reads the event again
   within about five minutes. A `500` is a fault in the host: see the
-  [diagnostics runbook](diagnostics.md#simulated-payment-processing).
+  [diagnostics runbook](diagnostics.md#online-payment-processing).
 - A payment that succeeds gets its paid date and stays **Processing**. No receipt is recorded and no
   journal entry is written: a Stripe event is never bank evidence. It is receipted, and becomes
   **Settled**, only when a payout that holds it posts.
@@ -303,9 +388,35 @@ bound to that account, and takes nothing else in the event as saying which organ
 
 ### A payout
 
-Stripe pays a connected account out on its own schedule, usually a day or more after the charges, so
-this part of a run happens on a later day. LeaseBook never makes a payout and never works out for
-itself what one covers.
+Stripe pays a connected account out on its own schedule. LeaseBook never makes a payout and never
+works out for itself what one covers.
+
+#### Wait for Stripe's payout
+
+**Keep the account quiet while a payout forms.** Stripe decides what a payout covers, and other
+activity on the same connected account can land in the same payout. From the first of your two
+payments until the payout is posted, do not run the [probe](stripe-sandbox-probe.md) against the same
+account and do not reset the fixture. The probe's charges, and those of a generation a reset
+replaced, land in the same payout as lines LeaseBook cannot tie to a payment, and the whole payout
+goes to review instead of posting. The same goes for a failing or disputed test payment made in that
+window. A payout holding only this generation's good payments is the one that posts.
+
+**How long.** Nobody here can say exactly. The connected account's schedule reads daily with a
+two-day delay. The one automatic payout recorded so far was created under three hours after the
+first charges, with the same day as its arrival date, and was marked paid five minutes after it was
+created. No second payout had been made two days after that. Expect to wait between a few hours and
+a few days. The host can be stopped in the meantime: when it starts again it asks Stripe for the last
+29 days of events and finds the payout. Start it with the same key and signing secret, and start
+`stripe listen` again only after the host is up.
+
+**What to look for.** As `admin-a@payments.test`, open **Operations** and find the **Payouts** list.
+Before any payout it reads "No payouts yet. A payout appears here when the processor reports it."
+When Stripe has paid, the payout appears as **Payout po\_…** with the status **Waiting for the bank**,
+the words "No bank evidence has arrived for this payout. Nothing posts until the bank says what it
+received.", and "Processor’s payout amount: $1,000.00". Its two lines are of the kind **Payment**,
+each "Not on the ledger". There is no **Post payout** button: an administrator cannot post it. Note
+the payout's id and the processor's amount; the next step needs both. A payout that shows **Needs
+review — nothing posted** instead will not post: read why under [In review](#in-review).
 
 **What the host reads.** A `payout.paid` or `payout.failed` event, delivered or found by the sweep.
 For a paid payout the host asks Stripe for the payout's balance lines, every page, and for the charge
@@ -337,8 +448,11 @@ then, as `unsupported_settlement` for a line in the last four rows or for an ins
 on. A manual payout is stored without lines, is not asked about, and goes to review as unsupported.
 Any other payout waits for the bank.
 
-**Say what the bank received.** Stripe never says this, and no HTTP route or staff control does. In
-a terminal with the same five variables as the host:
+#### Say what the bank received
+
+Stripe never says this, and no HTTP route or staff control does. For the run above, the amount is the
+processor's payout amount the list shows, and the date is today's or the payout's arrival date. In a
+terminal with the same five variables as the host:
 
 ```powershell
 $fixture = (Get-Content ./payment-fixture-stripe.local -Raw | ConvertFrom-Json).Payments.Fixtures[0]
@@ -363,7 +477,34 @@ payout's status and reason. It exits with code 1 when it refuses what it was giv
 
 Give the evidence once and get it right: there is no command that corrects it.
 
-**In review.** An administrator can close a payout in review or one still waiting for its bank, with
+#### Check the result
+
+For the run above, with the fee rules set as described, the command prints that the payout is
+`Posted`, and:
+
+- The **Payouts** list shows the payout as **Posted**, with "$1,000.00 at the bank on" the date you
+  gave, and each line "On the ledger".
+- Each payment reads **Test payment recorded** for the tenant, and the tenant's balance is down by
+  $1,000.00. Nothing is in transit any more.
+- The journal has two new entries, one receipt of $500.00 for each payment, dated on the bank date
+  and described "Stripe sandbox tenant payment". Stripe's fees are not in the journal: the tenant
+  paid them on top, as the quoted convenience fee.
+- Had Stripe kept more or less than the quoted fee, each difference would be one more entry, against
+  the management fees held in the trust bank and with no tenant, owner or property on it.
+
+Then check the invariants, in a terminal with the same five variables as the host:
+
+```powershell
+dotnet run --project src/LeaseBook.Web --no-launch-profile -- check-invariants --all
+```
+
+It should print `all clean` for the fixture's organizations. To see the payout reconcile, import a
+statement on **Banking** as [Drive a payout](#drive-a-payout) describes for the simulator: one line
+for the bank amount on the bank date matches the payout as a group.
+
+#### In review
+
+An administrator can close a payout in review or one still waiting for its bank, with
 a note. Posting one that no bank has spoken for is answered with HTTP 409 and `bank_evidence_missing`.
 A payout in review is checked again only when an administrator posts it: the paid event arriving
 again, by redelivery or in a sweep, changes nothing. The **Payouts** list says in words why a payout
@@ -371,19 +512,18 @@ waits, `bank_amount_mismatch` and `payout_failed` included, and names each line'
 dispute**, **Refund**, **Failed bank debit**, or **Unrecognised line**. It shows Stripe's figure as
 the processor's payout amount and, for a failed payout, when Stripe said it failed.
 
-**A payout that fails.** `payout.failed` sends the payout to review as `payout_failed`, whatever
-state it was in, one already posted included. Nothing is reversed: what it posted stays posted, its
-payments stay as they were, and it can only be closed. For one that had posted, the list then reads
-**Needs review — posted, nothing reversed**. Correct the ledger by hand if the fixture
-needs it.
+A payment in review for a bank's return of an ACH debit is best left open until the payout that
+carries the return has been dealt with. The return posts only as a line of that payout, and a payout
+refuses a return for a payment whose review was closed. A payout that holds both a payment and that
+same payment's return cannot post at all; [ADR-054](../adr/ADR-054-stripe-sandbox-adapter.md#known-limits)
+lists this with the other known limits.
 
-**Keep the account quiet while a payout forms.** Stripe decides what a payout covers, and other
-activity on the same connected account can land in the same payout. While charges you mean to see
-post are waiting to be paid out, do not run the [probe](stripe-sandbox-probe.md) against the same
-account and do not reset the fixture. The probe's charges, and those of a generation a reset
-replaced, land in the same payout as lines LeaseBook cannot tie to a payment, and the whole payout
-goes to review instead of posting. The same goes for a failing or disputed test payment made in that
-window. A payout holding only this generation's good payments is the one that posts.
+#### A payout that fails
+
+`payout.failed` sends the payout to review as `payout_failed`, whatever state it was in, one already
+posted included. Nothing is reversed: what it posted stays posted, its payments stay as they were,
+and it can only be closed. For one that had posted, the list then reads **Needs review — posted,
+nothing reversed**. Correct the ledger by hand if the fixture needs it.
 
 ### A lost event
 

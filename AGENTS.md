@@ -86,7 +86,9 @@ this one, for current progress.
   stored with Stripe's own lines and held with no journal effect until a fixture-only command says
   what the bank received: an amount equal to Stripe's net posts the whole payout or none of it, and
   anything else goes to staff review. No Stripe event posts by itself, and a payout that posts has not
-  yet been shown against a real sandbox. In either payment mode, a payment with no outcome after seven
+  yet been shown against a real sandbox. The payment lists report the host's mode, and a sandbox
+  host's screens say "Test payment — no real money moves" and show a held payout as "Waiting for the
+  bank". ADR-054 lists the adapter's known limits. In either payment mode, a payment with no outcome after seven
   days goes to staff review, and so does one reported both failed and succeeded.
 
 The `private/` directory is gitignored by the public repository and is a separately versioned

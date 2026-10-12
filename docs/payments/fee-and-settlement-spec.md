@@ -1,7 +1,7 @@
 # Processor fee and batched settlement specification
 
-- **Audience:** Implementers and reviewers of processor fees and payouts (issues #498 and #500)
-- **Status:** Accepted for the simulation and built there; its provisional assumptions are unverified and live payments remain unapproved
+- **Audience:** Implementers and reviewers of processor fees and payouts (issues #498, #500 and #513)
+- **Status:** Accepted for the payment simulation and built there. The Stripe sandbox mode (ADR-054, proposed) holds and posts payouts through the same model. Its provisional assumptions are unverified and live payments remain unapproved
 - **Owner:** Maintainers
 - **Last reviewed:** 2026-10-11
 
@@ -10,10 +10,16 @@
 [ADR-053](../adr/ADR-053-processor-fees-and-batched-settlement.md) owns the decisions. This document
 owns the exact lines, the worked figures, the review reasons and the changes an implementation needs.
 [ADR-046](../adr/ADR-046-simulated-payment-recognition.md) and the
-[simulated payment specification](simulated-payment-spec.md) describe what is built today: gross,
-fee-free bank evidence for one payment. [ADR-052](../adr/ADR-052-guarded-simulated-payment-return.md)
-owns the guarded return. [Stripe research](../research/stripe-connect-payment-lifecycle.md) owns dated
-provider facts.
+[simulated payment specification](simulated-payment-spec.md) describe the payment itself and the
+evidence that came first: gross, fee-free bank evidence for one payment.
+[ADR-052](../adr/ADR-052-guarded-simulated-payment-return.md) owns the guarded return.
+[Stripe research](../research/stripe-connect-payment-lifecycle.md) owns dated provider facts.
+
+The model is the same in both non-live payment modes. In the payment simulation a payout arrives with
+its bank evidence. In the Stripe sandbox mode
+([ADR-054](../adr/ADR-054-stripe-sandbox-adapter.md), proposed) the processor reports a payout by
+itself, and it is held until bank evidence arrives separately. Where a rule belongs to one mode, the
+text says which.
 
 `PaymentSettlementEvidenceTests` posts the lines specified here through the existing Accounting
 engine and asserts the resulting balances and invariants. It is evidence for the model, not an
@@ -77,8 +83,8 @@ unreachable by an owner statement and changes no owner or tenant balance.
 
 The shortfall entry has the lines of the existing bank-fee entry. The surplus entry has the lines of
 the existing interest entry. Neither template is reused: the `ProcessorFeeDifference` posting template
-posts both, so the journal names what happened. It is the one part of this model that is built; nothing
-posts it yet.
+posts both, so the journal names what happened. `PostPaymentSettlement` posts it for each fee
+difference in a payout, and nothing else does.
 
 **Shortfall guard.** A shortfall posts only if the PM's held fees in that bank, after it, are at or
 above zero on the bank date and on every day since. The entry is dated on the bank date, so fees
@@ -279,6 +285,57 @@ to an administrator who posts a payout no bank has spoken for, and the payout st
 `unsupported_settlement` also covers a line a processor's adapter stores for a person to read and
 nothing posts: a refund, a card dispute, a failed debit taken back, or a line it does not recognise.
 
+## Payout statuses and what staff read
+
+A stored payout has one of five statuses. The **Payouts** list on the Operations page words each,
+and words a payout in review or closed by whether it ever posted. That fact is the payout's
+`postedAt`, which is kept whatever the status becomes.
+
+| Status         | Meaning                                                                      | The list reads                                                            |
+| -------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| `Received`     | Stored with bank evidence and not yet checked, or its check never finished.  | Waiting to be checked                                                     |
+| `AwaitingBank` | The processor's lines are stored and no bank has spoken. Nothing has posted. | Waiting for the bank                                                      |
+| `NeedsReview`  | It waits for a person, under a reason.                                       | Needs review — nothing posted, or Needs review — posted, nothing reversed |
+| `Posted`       | Every line posted, in one transaction.                                       | Posted                                                                    |
+| `Closed`       | An administrator closed it with a note.                                      | Closed — nothing posted, or Closed — posted, nothing reversed             |
+
+"Posted, nothing reversed" is a payout that posted and that the processor later said failed. Its
+entries stay on the ledger and its payments stay settled; a person corrects the ledger by hand and
+closes it. A payout with bank evidence shows "_amount_ at the bank on _date_". One without shows "No
+bank evidence has arrived for this payout.", and while it is `AwaitingBank`, "Nothing posts until the
+bank says what it received." A payout the processor reported by itself also shows "Processor’s
+payout amount", and one that failed shows when the processor said so.
+
+Each line is named by its kind:
+
+| Kind          | The list reads    | Posts?                                      |
+| ------------- | ----------------- | ------------------------------------------- |
+| `Payment`     | Payment           | Yes                                         |
+| `Return`      | Returned payment  | Only when an administrator posts the payout |
+| `Fee`         | Processor fee     | Yes, as a shortfall                         |
+| `Dispute`     | Card dispute      | No. The payout is `unsupported_settlement`  |
+| `Refund`      | Refund            | No. The payout is `unsupported_settlement`  |
+| `FailedDebit` | Failed bank debit | No. The payout is `unsupported_settlement`  |
+| `Unknown`     | Unrecognised line | No. The payout is `unsupported_settlement`  |
+
+The last four are kinds the Stripe sandbox adapter stores for a person to read. The simulator's
+fixture command can produce a `Refund` line too.
+
+The three reasons a held payout added are worded for staff as follows.
+
+| Reason                         | Staff read                                                                                                                                                                       |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bank_amount_mismatch`         | The bank received a different amount from the one the processor says it paid, so nothing was posted. Review it, then close the review.                                           |
+| `payout_failed`, never posted  | The processor reported that this payout failed. The payout was not posted, and nothing was reversed. Review it, then close the review.                                           |
+| `payout_failed`, after posting | The processor reported that this payout failed after it was posted. Nothing was reversed automatically, so the ledger still shows it. Correct the ledger, then close the review. |
+| `bank_evidence_missing`        | No bank has confirmed this payout, so an administrator cannot post it and nothing was posted. It can be posted once the bank’s evidence arrives.                                 |
+
+`bank_evidence_missing` is the answer to an administrator's post, with HTTP 409, and is not stored.
+The list offers no **Post payout** action for a payout no bank has spoken for, so staff meet it only
+through the API, whose own sentence for it is "The bank has not yet confirmed this payout, so nothing
+was posted." The list's text above is held for a payout that carries the code and is not reached
+today.
+
 ## What an implementation needs
 
 This list is the input to the implementation issue. Items marked built exist in the simulation; the rest do not.
@@ -305,6 +362,11 @@ This list is the input to the implementation issue. Items marked built exist in 
   `payment-simulation payout`, which produces a clean payout, a shortfall, a surplus, a return, a
   standalone fee, an untied payout and an unsupported line or payout type. The
   [runbook](../runbooks/payment-simulation.md) has the commands.
+- **Stripe sandbox adapter (built for a development fixture; ADR-054 is proposed):** a processor's
+  own account of a payout, read from `payout.paid` and `payout.failed` with Stripe's list of the
+  payout's balance lines; the held state `AwaitingBank`; and the fixture command
+  `payment-simulation bank`, the one source of bank evidence in that mode. A payout that posts has not
+  yet been shown against a real sandbox.
 - **Operations (built):** the consumer-owned `IFundsInTransit` port, and the caution on a late-fee
   preview row.
 - **Banking (built):** group matching of one statement line against a payout's bank lines, and the
@@ -324,7 +386,8 @@ is `unsupported_settlement` there, and a payout is the evidence for both.
 The two do not overlap. A payment that single-payment evidence has receipted is `conflicting_evidence`
 in a payout that names it as a payment, and a payment a payout has settled or returned is not demoted
 by its own single-payment notices. Whether a real processor adapter delivers anything but payouts is a
-question for that adapter, not for this model.
+question for that adapter, not for this model. The Stripe sandbox adapter delivers payouts only:
+nothing it reads about one payment is bank evidence.
 
 ## Provisional assumptions
 
@@ -340,4 +403,5 @@ money moves.
 5. A tenant's paid date may be used when deciding whether to charge a late fee.
 6. The processor publishes, for each payout, a complete list of items with gross, fee and net.
 
-Simulation conventions cannot settle them, and no configuration enables live processing.
+Simulation conventions cannot settle them, and no configuration enables live processing. Nothing a
+Stripe sandbox shows settles them either: ADR-054 verifies none of the six, and all six stay open.

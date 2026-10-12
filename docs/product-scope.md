@@ -3,7 +3,7 @@
 - **Audience:** Evaluators, contributors, and maintainers
 - **Status:** Living public scope
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-01
+- **Last reviewed:** 2026-10-11
 
 LeaseBook is property-management software for small residential property managers. Its defining
 requirement is correct trust accounting with low interaction cost for recurring operational work.
@@ -26,8 +26,10 @@ Phase 1 supports property-management staff operating a single organization with:
 
 Phase 2 includes a tenant own-ledger portal and a read-only owner portal, with account security and
 sign-out. Owners see their own trust balance, disbursements, activity and issued statements. A
-separate isolated development fixture supports one-time simulated payments and staff review. Only
-explicit, complete, fee-free simulated bank evidence creates a receipt; no real money moves.
+separate isolated development fixture supports one-time online payments and staff review, either
+simulated or collected through a Stripe sandbox with test payment methods. Only explicit, complete
+bank evidence creates a receipt, for one payment or for a whole processor payout; a processor's word
+that it paid never does, and no real money moves.
 Tenant and owner invitations and enrollment can be exercised locally with an admin-configurable
 staff permission and a development test inbox. Staff can issue refund checks for held security
 deposits and prepaid credit, print them on pre-printed check stock or on blank stock with a MICR line

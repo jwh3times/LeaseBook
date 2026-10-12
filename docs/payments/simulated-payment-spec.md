@@ -1,22 +1,36 @@
 # One-time simulated payment implementation specification
 
-- **Audience:** Implementers and reviewers of issue #456
-- **Status:** Implemented simulation contract for #456; live payments remain unapproved
+- **Audience:** Implementers and reviewers of issues #456 and #513
+- **Status:** Implemented contract for both non-live payment modes: the payment simulation (#456) and the Stripe sandbox (#513, ADR-054 proposed). Live payments remain unapproved
 - **Owner:** Maintainers
 - **Last reviewed:** 2026-10-11
 
 ## Evidence and boundary
 
-[ADR-046](../adr/ADR-046-simulated-payment-recognition.md) owns the simulation recognition decision.
+This document began as the contract of the payment simulation and keeps that title. It now covers
+both payment modes a development host can run, because they share one engine: the same operations,
+observations, review rules, transaction protocol and postings. A host runs one mode. In `Simulation`
+the processor is the simulator. In `StripeSandbox` it is an adapter that charges a Stripe sandbox
+with Stripe's test payment methods. Where a rule belongs to one mode alone, the text says which.
+
+[ADR-046](../adr/ADR-046-simulated-payment-recognition.md) owns the simulation recognition decision,
+and [ADR-054](../adr/ADR-054-stripe-sandbox-adapter.md), which is proposed, owns the sandbox adapter
+and lists its known limits.
 [Stripe research](../research/stripe-connect-payment-lifecycle.md) owns dated provider facts.
 `PaymentLifecycleEvidenceTests` exercises the actual Accounting engine, projections and invariant
-sweep. `SimulatedPaymentTests` covers durable state, transport, isolation and receipt atomicity.
-The [simulation runbook](../runbooks/payment-simulation.md) owns fixture commands and recovery.
+sweep. `SimulatedPaymentTests` covers durable state, transport, isolation and receipt atomicity. The
+`StripeSandbox…Tests` suites cover the adapter against recorded payloads, and `PaymentSurfacesTests`
+covers what each mode reports and how each describes a posting.
+The [simulation runbook](../runbooks/payment-simulation.md) owns fixture commands and recovery for
+both modes.
 
-The conventions here apply only to a deterministic, direct-charge-shaped simulator with one
+The simulation's conventions apply only to a deterministic, direct-charge-shaped simulator with one
 synthetic connected account bound to one fixture organization and one explicitly selected trust
-bank. They do not approve that funds flow for live use. No card numbers, bank credentials, mandates,
-Stripe secrets, provider network calls or production enrollment enter this slice.
+bank. Neither mode approves that funds flow for live use. No card numbers, bank credentials,
+mandates or production enrollment enter either. The simulation holds no Stripe secret and makes no
+provider network call. The sandbox mode holds a test-mode key and a webhook signing secret in local
+secrets, calls a Stripe sandbox only, and is refused outside Development; the
+[non-live barrier](#executable-non-live-barrier-and-fixture-lifecycle) below is what enforces that.
 
 ## Request and immutable facts
 
@@ -78,6 +92,84 @@ journal unchanged. Only a complete bank-credit evidence bundle can advance to Se
 simulator may deliver that bundle first: it contains its own payment/account/payout attribution and
 all required amounts, so earlier progress events are not prerequisites. An incomplete bundle waits
 for missing facts; it is never assumed complete because a timer expires.
+
+In a `StripeSandbox` host no single-payment bank bundle exists. A payment there becomes Settled only
+when a payout that holds it posts, and Returned only when a payout that holds its return is posted by
+an administrator.
+
+### Wording by mode
+
+The tenant wording in the table above is the simulation's. The screens word themselves from the
+`mode` the payment lists report, and a mode that is absent or not known reads as the simulation.
+These are the strings that differ:
+
+| Where                              | Simulation                                                          | Stripe sandbox                                                       |
+| ---------------------------------- | ------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| Panel heading                      | Simulated payments                                                  | Test payments                                                        |
+| Badge under the heading            | Simulation — no real money moves                                    | Test payment — no real money moves                                   |
+| Tenant's submit button             | Submit simulated payment                                            | Submit test payment                                                  |
+| Empty list                         | No simulated payments yet.                                          | No test payments yet.                                                |
+| List could not be read             | Couldn’t load simulated payments                                    | Couldn’t load test payments                                          |
+| Requested                          | Simulation requested                                                | Test payment requested                                               |
+| Processing, no success yet         | Simulated payment processing — not yet on your ledger               | Test payment processing — not yet on your ledger                     |
+| Failed                             | Simulated payment failed — no payment recorded                      | Test payment failed — no payment recorded                            |
+| Settled                            | Simulated payment recorded                                          | Test payment recorded                                                |
+| Returned                           | Simulated payment returned by the bank — the receipt was reversed   | Test payment returned by the bank — the receipt was reversed         |
+| Needs review, with a receipt       | Simulated payment needs review — original receipt remains recorded  | Test payment needs review — original receipt remains recorded        |
+| Needs review, no receipt           | Simulated payment needs review — no receipt recorded                | Test payment needs review — no receipt recorded                      |
+| Review closed, with a receipt      | Simulated payment review closed — original receipt remains recorded | Test payment review closed — original receipt remains recorded       |
+| Review closed, no receipt          | Simulated payment review closed — no receipt recorded               | Test payment review closed — no receipt recorded                     |
+| Staff text for `collection_failed` | Collection failed. The tenant may submit a new simulated payment.   | Collection failed. The tenant may submit a new test payment.         |
+| Payouts list with nothing in it    | No payouts yet. A payout appears here when the bank reports it.     | No payouts yet. A payout appears here when the processor reports it. |
+
+In both modes a payment in Processing whose success the processor has reported reads "Paid on
+_date_ — on its way to the bank, not yet on your ledger".
+
+Two texts exist in one mode only:
+
+- In the sandbox, a tenant whose payment needs review reads one more sentence: "This payment is
+  waiting for your property manager to check it." It ends "Nothing has been recorded on your
+  ledger." when the payment has no receipt. A tenant is never shown a reason code or the staff text
+  for one. The simulation's tenant screen does not carry this sentence.
+- Staff text for a receipted payment in review under `return_requires_review` whose evidence cannot
+  be posted as a return differs by mode. Both begin: "A return, refund or dispute was reported for
+  this payment, and its receipt is on the ledger. No automatic reversal was made. The evidence held
+  so far cannot be posted as a return." The simulation ends: "Review the evidence and the ledger,
+  then close the review." The sandbox ends: "If the bank returned an ACH payment, leave this review
+  open: the return posts with the payout that carries it, and closing the review first stops that
+  payout from posting. For a refund or a card dispute, correct the ledger, then close the review."
+
+"Original receipt remains recorded" follows `receiptRecorded`, which stays true after a return has
+posted. A payment that goes back to review after its return posted therefore still reads that way,
+in both modes. ADR-054 records this as a known limit.
+
+### What the payment lists report
+
+`GET /api/portal/tenant/payments` and `GET /api/payments` answer with `enabled`, `items`,
+`fundsInTransit` and `mode`; the staff list adds `unmatchedObservations`. `mode` is `Simulation` or
+`StripeSandbox`, the mode of the host. It is null, with `enabled` false and no items, wherever
+payments are not enabled for the organization, which then learns nothing of the host.
+
+Each payment carries `receiptRecorded`: whether a receipt's journal link exists. The staff list adds
+the review actions:
+
+- `canRetry`: the payment is in Needs review with reason `technical_failure` and has no receipt.
+- `canCloseReview`: the payment is in Needs review with any other reason.
+- `canPostReturn`: the payment is in Needs review under a `return_*` reason, has a receipt, and the
+  evidence held for it is evidence the return command would accept. That means at least one return
+  observation; every return observation agreeing on evidence reference, date and amount; no
+  conflict, refund or dispute observation; and each return complete, for the whole ledger amount with
+  no fee, in the payment's currency, bank and fixture generation, with a bank date. The view and
+  `POST /api/payments/{id}/return` read this one rule, so the action is not offered where the command
+  would refuse the evidence. The ledger's own guards, in the table under
+  [Posting a return](#posting-a-return-adr-052), can still refuse what the rule allows. A return the
+  Stripe sandbox adapter reports is never complete, so the action is never offered for one.
+
+In the tenant list `canPostReturn` and `canCloseReview` are always false, and there are no journal
+references and no review note. `canRetry` is reported there as it is to staff, but only an
+administrator's route can retry. The tenant's `reason` is `return_requires_review` for every
+`return_*` reason and for `evidence_after_return`, and otherwise the stored code. No tenant screen
+shows a code.
 
 ## Accounting contract
 
@@ -261,7 +353,10 @@ carries its figure and its lines and nothing of a bank's. The simulator answers 
 every notice read as the second; the Stripe adapter answers the same to every notice read as the
 first, because Stripe never speaks for a bank. Each answers one of three ways: the content; not
 this host's to act on, which is acknowledged with HTTP 204 and dropped; or unreadable, which is
-refused with HTTP 400 so the sender does not count it as delivered. The content carries
+refused with HTTP 400 so the sender does not count it as delivered. A read that needs the processor
+and cannot ask it answers none of the three: it throws, and the Stripe callback route defers the
+delivery with HTTP 503, as [Callback trust](#callback-trust-and-organization-routing) describes. The
+content carries
 account/mode/object identity and evidence, not journal lines. The generation and bank on it are the
 adapter's to supply: the simulator's notices carry them, and an adapter whose notices do not takes
 them from its own binding for the account, never from the notice.
@@ -302,8 +397,9 @@ ever complete, so none can be the bank evidence a receipt or a return posts from
   bank date is the day the dispute was opened, not the day of the event, so the events of one dispute
   agree with each other and raise one review. Both requests carry an identifier in the path and
   nothing else. A dispute about a payment that is not this fixture's, or that Stripe has no payment
-  for, is dropped. When Stripe cannot be asked, a delivery is answered with an error so that it is
-  not counted as delivered, and the sweep reads the event later.
+  for, is dropped. When Stripe cannot be asked, a delivery is answered with HTTP 503 and the problem
+  code `payment_callback_deferred`, so that it is not counted as delivered, and the sweep reads the
+  event later.
 - `payout.paid` and `payout.failed` are a processor's account of a payout, read by `ReadPayoutAsync`.
   Stripe's other four payout events are dropped. A payout belongs to the fixture bound to its
   account and carries no generation, so every payout on a bound account is read, one holding the
@@ -314,8 +410,8 @@ ever complete, so none can be the bank evidence a receipt or a return posts from
   each dispute among them. It lists them only once Stripe reports the payout's
   `reconciliation_status` as `completed`: when the event does not say so, it asks for the payout as it
   is now, and if that does not say so either the payout is not read yet. A list that cannot be had
-  whole is thrown, never stored in part: a delivery is answered with an error and a sweep asks for the
-  same window again. An automatic payout keeps Stripe's method as its type, so an instant one is
+  whole is thrown, never stored in part: a delivery is deferred with the same HTTP 503 and a sweep
+  asks for the same window again. An automatic payout keeps Stripe's method as its type, so an instant one is
   unsupported.
 
   The payout's own balance line is Stripe's net and not an item. A `charge` or `payment` line whose
@@ -365,9 +461,16 @@ is refused by the command and by the engine.
   event after a failure changes nothing.
 
 The staff API's payout view carries `processorAmount` and `failedAt`, and its `bankAmount` and
-`bankDate` are null until bank evidence exists: the stored zero is never returned as an amount. The
-Payouts list shows a held payout as "Waiting for the bank" with the processor's amount and no bank
-amount or date.
+`bankDate` are null until bank evidence exists: the stored zero is never returned as an amount. Its
+`postedAt` is the one fact that says whether a payout ever posted. It is kept whatever the status
+becomes, so a payout in review or closed with a `postedAt` posted and was not reversed, and one
+without it posted nothing. `canPost` is true only for a payout in review, or one whose check never
+finished, that has bank evidence, has not failed and is not held as `conflicting_evidence`,
+`payout_failed` or `bank_amount_mismatch`. `canClose` is true for any payout that is not posted or
+closed, one waiting for its bank included. The Payouts list shows a held payout as "Waiting for the
+bank" with the processor's amount and no bank amount or date. The
+[fee and settlement specification](fee-and-settlement-spec.md#payout-statuses-and-what-staff-read)
+has every status, line kind and reason as staff read them.
 
 `RecoverObservationsAsync` answers what the processor still holds about one fixture's payments and
 payouts since a given time, as the same observations and payouts a delivery would have produced; its
@@ -379,7 +482,8 @@ platform's key, over TLS, for one named account; an event that names any other a
 Anything in the list marked live refuses the whole sweep, as does a list that cannot be read to its
 end, and a payment or charge asked for about a dispute that Stripe marks live. An event that cannot be read is counted and skipped. So is a dispute whose payment or charge
 Stripe could not be asked for, and a paid payout whose lines could not be listed in full; the rest of the list is still read, and the sweep is not counted as
-complete. Stripe keeps events for 30 days.
+complete. Any other fault in reading one listed event is counted with these, as an event to be asked
+about again, and is not logged by itself. Stripe keeps events for 30 days.
 
 ## Transaction and recovery protocol
 
@@ -533,6 +637,14 @@ After verification the adapter applies these rules, in this order:
   connected account can also hold payments of the probe or of an earlier fixture generation; their
   events are authentic, not this host's, and dropped.
 - The observation's generation and bank come from the host's binding, never from the event.
+
+Reading a dispute or a paid payout asks Stripe. When Stripe cannot be asked, nothing is known of the
+event and nothing is kept. The route then answers HTTP 503 with the problem code
+`payment_callback_deferred`, so that the sender does not count the delivery and sends it again, and
+logs event `4608`. Only a failure to ask is deferred: a connection or library failure, a call that
+ran out of time, or an answer the adapter itself refuses, such as a payout Stripe has not finished
+reconciling. Any other fault in reading, and any failure to store what was read, is an unhandled
+error and HTTP 500. The catch-up sweep reads a deferred event whether or not it is sent again.
 
 An authentic event for this fixture's payment in a three-letter currency other than `usd`, with an
 amount that can be stored, is retained as a `Conflict` observation with that currency and amount, and

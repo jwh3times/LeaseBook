@@ -159,24 +159,38 @@ This returns, in order, everything logged for that one request:
 structured log this contract produces. Track B's B4 alert rules key on these ids, so a query can
 filter on `customDimensions.EventId` (or the trace message) instead of matching text:
 
-| Id   | Name                              | Level       | Meaning                                                                                                                                                                             |
-| ---- | --------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1000 | `UnhandledException`              | Error       | The terminal handler caught an exception no typed handler claimed. Always has the exception.                                                                                        |
-| 1001 | `DomainRejection`                 | Warning     | A typed accounting domain rule declined the request (a 404/409/422) — expected, not a defect.                                                                                       |
-| 1002 | `ValidationRejection`             | Warning     | A 400: a request failed FluentValidation (a command/query, or an auth or telemetry DTO), or the binder could not read it (`invalid_request`). The two log differently; see below.   |
-| 1003 | `ImportRowFailed`                 | Error       | One row of a migration import failed after parsing; the batch continued. Has the exception.                                                                                         |
-| 1100 | `SupersedeReversalRace`           | Information | The corrected re-import (supersede) path found the entry already reversed by a racing request; it converges on success anyway — expected, not a defect.                             |
-| 1101 | `HeldFeesShapeRejected`           | Warning     | A balance-import row's pm_income opening violated the held-fees shape at post time — never a 500. What follows depends on the caller; see below.                                    |
-| 1200 | `InvariantViolation`              | Error       | The nightly sweep found a trust-accounting invariant violated for one org. Fiduciary incorrectness — never routine noise; see below.                                                |
-| 1201 | `InvariantSweepCompleted`         | Information | The nightly sweep finished with no violations. Its **absence** is itself a signal: a silent night means the job did not run.                                                        |
-| 1300 | `CapabilityVersionConflict`       | Warning     | A run confirmation was rejected (409) because the capability set moved after its preview. Expected and recoverable; a sustained rate is the signal — see below.                     |
-| 1301 | `CapabilityCrossRunConflict`      | Warning     | A run confirmation was rejected (409) because a prior run for the period used different money-path capability state. Any occurrence is worth reading; a re-preview cannot clear it. |
-| 1400 | `StatementCarryForwardUnitemized` | Warning     | An owner statement's prior-period adjustments were not all attributable to entries posted after the preceding issued statement. The statement still renders exactly; see below.     |
+| Id   | Name                              | Level       | Meaning                                                                                                                                                                                                    |
+| ---- | --------------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1000 | `UnhandledException`              | Error       | The terminal handler caught an exception no typed handler claimed. Always has the exception.                                                                                                               |
+| 1001 | `DomainRejection`                 | Warning     | A typed accounting domain rule declined the request (a 404/409/422) — expected, not a defect.                                                                                                              |
+| 1002 | `ValidationRejection`             | Warning     | A 400: a request failed FluentValidation (a command/query, or an auth or telemetry DTO), or the binder could not read it (`invalid_request`). The two log differently; see below.                          |
+| 1003 | `ImportRowFailed`                 | Error       | One row of a migration import failed after parsing; the batch continued. Has the exception.                                                                                                                |
+| 1100 | `SupersedeReversalRace`           | Information | The corrected re-import (supersede) path found the entry already reversed by a racing request; it converges on success anyway — expected, not a defect.                                                    |
+| 1101 | `HeldFeesShapeRejected`           | Warning     | A balance-import row's pm_income opening violated the held-fees shape at post time — never a 500. What follows depends on the caller; see below.                                                           |
+| 1200 | `InvariantViolation`              | Error       | The nightly sweep found a trust-accounting invariant violated for one org. Fiduciary incorrectness — never routine noise; see below.                                                                       |
+| 1201 | `InvariantSweepCompleted`         | Information | The nightly sweep finished with no violations. Its **absence** is itself a signal: a silent night means the job did not run.                                                                               |
+| 1300 | `CapabilityVersionConflict`       | Warning     | A run confirmation was rejected (409) because the capability set moved after its preview. Expected and recoverable; a sustained rate is the signal — see below.                                            |
+| 1301 | `CapabilityCrossRunConflict`      | Warning     | A run confirmation was rejected (409) because a prior run for the period used different money-path capability state. Any occurrence is worth reading; a re-preview cannot clear it.                        |
+| 1400 | `StatementCarryForwardUnitemized` | Warning     | An owner statement's prior-period adjustments were not all attributable to entries posted after the preceding issued statement. The statement still renders exactly; see below.                            |
+| 4600 | `PaymentProcessed`                | Information | The payment worker finished one attempt on an online payment. Carries the operation id and the time taken.                                                                                                 |
+| 4601 | `PaymentNeedsAttention`           | Warning     | An attempt on an online payment ended with a reason, a payment was sent to review as `outcome_overdue`, or one could not be sent there. Carries the operation id and the reason or exception type.         |
+| 4602 | `PaymentCallbackIgnored`          | Information | An authentic payment notice was not acted on: not this host's, unmapped, too malformed to keep, or bank evidence that did not verify. Debug in a Stripe sandbox host for a notice that is not this host's. |
+| 4603 | `PaymentWorkerUnavailable`        | Error       | A pass of the payment worker could not complete. Carries the exception type; durable work is retried on the next pass.                                                                                     |
+| 4604 | `PaymentSettlementEvaluated`      | Information | The check that runs by itself judged a payout. Carries the payout's id, status and reason.                                                                                                                 |
+| 4605 | `PaymentSettlementNeedsAttention` | Warning     | That check could not finish. Carries the payout's id and the exception type.                                                                                                                               |
+| 4606 | `PaymentRecoverySwept`            | Information | A catch-up sweep of one fixture read the processor's list to its end. Carries four counts: listed, stored or already held, unreadable, and to be asked about again.                                        |
+| 4607 | `PaymentRecoveryFailed`           | Warning     | A catch-up sweep could not finish. Carries the exception type; it is made again at the next interval and no payment was aged.                                                                              |
+| 4608 | `PaymentCallbackDeferred`         | Warning     | A Stripe sandbox delivery was answered 503 because Stripe could not be asked what reading it needs. Nothing was kept. Carries the exception type and the adapter's own condition.                          |
 
 1000-1099 is reserved for host/error plumbing; 1100-1199 is the import-supersede/held-fees domain
 (WP-7 — the first block claimed under ADR-025's 1100+ convention); 1200-1299 is scheduled jobs
 (WP-11); 1300-1399 is platform capabilities; 1400-1499 is owner statements (ADR-045). Later domain
 areas take the next hundred-block (1500+, 1600+, …) as they add their own structured events.
+
+4600-4608 are the payment fixture's events. They are defined where they are logged, in
+`src/LeaseBook.Web/Payments/PaymentRunner.cs`, not in `LogEvents.cs`, and only a Development host
+with a payment mode produces them. [Online payment processing](#online-payment-processing) says how
+to read each.
 
 A 1002 comes in two shapes. A FluentValidation rejection logs the count of failed fields, never a
 value. A request the binder could not read (malformed JSON, a value of the wrong kind, a missing
@@ -600,9 +614,11 @@ Keep `Include Error Detail=true` **out of** production and staging Npgsql connec
 Configuration for those environments should not set it. This is a standing configuration
 requirement, not a per-incident step — verify it once per environment, not per diagnosis.
 
-## Simulated payment processing
+## Online payment processing
 
-The development-only payment worker logs stable events with the operation UUID: `4600`
+This section covers both payment modes of the development fixture: the payment simulation and the
+Stripe sandbox. Neither exists outside Development. The payment worker logs stable events with the
+operation UUID: `4600`
 (`PaymentProcessed`) records processing latency and `4601` (`PaymentNeedsAttention`) records a
 sanitized failure reason. `4602` (`PaymentCallbackIgnored`) records a verified notice that was not
 acted on, without its payload: one for no fixture on this host, or payout evidence too malformed to
@@ -626,7 +642,8 @@ list was read to its end, with how many events the processor listed, how many we
 many could not be read, and how many are to be asked about again. That last count is of dispute
 events whose payment or charge Stripe could not be asked for, and of paid-payout events whose lines
 could not be listed in full: a sweep with any is not complete, and the next one asks for the same
-window. Payouts handed on are counted with the payment events handed on. `4607` (`PaymentRecoveryFailed`) records a sweep that could
+window. Any other fault in reading one listed event is counted there too and is not logged by itself,
+so a count that does not go away is the only sign of an event that can never be read. Payouts handed on are counted with the payment events handed on. `4607` (`PaymentRecoveryFailed`) records a sweep that could
 not finish, which is tried again after five minutes. A payment sent to review for having no outcome
 after seven days is logged as `4601` with the reason `outcome_overdue`; a `4601` saying a payment
 could not be sent to review as overdue names the exception type, and that payment is offered again at
