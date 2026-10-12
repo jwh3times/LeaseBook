@@ -263,7 +263,12 @@ Two consecutive runs gave identical figures.
 
 ### Playwright run
 
-Both passes: 114 tests passed and 2 were skipped in the main pass, and 2 passed in the
+These figures were measured again on 2026-10-12 at commit `eaaba75` with the ledger-posting
+scenarios of #544 added, the first area that issue closes. The two suite baselines above are
+unchanged, because that change touches no product code. The figures before it are in this page's
+history: 82 routes reached by a browser, 57.3% of host lines and 76.0% of web lines.
+
+Both passes: 118 tests passed and 2 were skipped in the main pass, and 2 passed in the
 simulated-payment pass. The run was local, so the CI-only visual snapshots did not run; they assert
 on pixels and call no extra route.
 
@@ -271,17 +276,17 @@ Host coverage as reached by the browser, Debug build:
 
 | Module       | Classes | Lines covered |  Line | Branches covered | Branch |
 | :----------- | ------: | ------------: | ----: | ---------------: | -----: |
-| Accounting   |     293 |   2581 / 3966 | 65.1% |        539 / 949 |  56.8% |
-| Directory    |     162 |   1565 / 1969 | 79.5% |        313 / 482 |  64.9% |
+| Accounting   |     293 |   2823 / 3966 | 71.2% |        572 / 949 |  60.3% |
+| Directory    |     162 |   1567 / 1969 | 79.6% |        320 / 482 |  66.4% |
 | Banking      |      49 |     414 / 530 | 78.1% |        134 / 227 |  59.0% |
 | Reporting    |      23 |     205 / 241 | 85.1% |          20 / 44 |  45.5% |
-| Operations   |      53 |    691 / 1003 | 68.9% |        121 / 217 |  55.8% |
+| Operations   |      53 |    699 / 1003 | 69.7% |        125 / 217 |  57.6% |
 | Capabilities |      26 |     226 / 585 | 38.6% |         41 / 118 |  34.7% |
 | Payments     |     127 |   1002 / 1503 | 66.7% |       488 / 1100 |  44.4% |
 | SharedKernel |      26 |     323 / 450 | 71.8% |        111 / 156 |  71.2% |
 | Migrator     |      19 |     302 / 350 | 86.3% |         79 / 136 |  58.1% |
-| Web host     |     357 |  6558 / 13611 | 48.2% |      1925 / 4941 |  39.0% |
-| **Total**    |    1135 | 13867 / 24208 | 57.3% |      3771 / 8370 |  45.1% |
+| Web host     |     357 |  6558 / 13611 | 48.2% |      1928 / 4941 |  39.0% |
+| **Total**    |    1135 | 14119 / 24208 | 58.3% |      3818 / 8370 |  45.6% |
 
 Web coverage as reached by the browser:
 
@@ -289,19 +294,19 @@ Web coverage as reached by the browser:
 | :--------- | ----: | ------------: | ----: | ---------------: | -----: |
 | (src root) |     2 |       16 / 17 | 94.1% |            1 / 2 |  50.0% |
 | api        |     5 |       69 / 97 | 71.1% |          52 / 87 |  59.8% |
-| app        |     8 |     106 / 113 | 93.8% |          33 / 47 |  70.2% |
-| components |    13 |     172 / 196 | 87.8% |        126 / 176 |  71.6% |
+| app        |     8 |     106 / 113 | 93.8% |          36 / 47 |  76.6% |
+| components |    13 |     172 / 196 | 87.8% |        127 / 176 |  72.2% |
 | design     |    22 |     132 / 151 | 87.4% |        133 / 162 |  82.1% |
 | dev        |     1 |       10 / 14 | 71.4% |            0 / 0 |    n/a |
-| features   |    89 |   2224 / 3003 | 74.1% |      1647 / 2842 |  58.0% |
+| features   |    89 |   2237 / 3003 | 74.5% |      1669 / 2842 |  58.7% |
 | lib        |     9 |      85 / 111 | 76.6% |          46 / 55 |  83.6% |
-| **Total**  |   149 |   2814 / 3702 | 76.0% |      2038 / 3371 |  60.5% |
+| **Total**  |   149 |   2827 / 3702 | 76.4% |      2064 / 3371 |  61.2% |
 
-Route inventory, from 1,536 recorded requests:
+Route inventory, from 1,625 recorded requests:
 
 | Group             | Routes | Reached by a browser | Test client only | Not reached |
 | :---------------- | -----: | -------------------: | ---------------: | ----------: |
-| accounting        |     24 |                   12 |                0 |          12 |
+| accounting        |     24 |                   17 |                0 |           7 |
 | audit             |      4 |                    3 |                0 |           1 |
 | auth              |      9 |                    4 |                0 |           5 |
 | banking           |      5 |                    4 |                0 |           1 |
@@ -321,18 +326,17 @@ Route inventory, from 1,536 recorded requests:
 | settings          |      9 |                    5 |                0 |           4 |
 | statements        |      6 |                    6 |                0 |           0 |
 | telemetry         |      1 |                    1 |                0 |           0 |
-| **Total**         |    131 |                   82 |                2 |          47 |
+| **Total**         |    131 |                   87 |                2 |          42 |
 
-The 47 routes no test reached, by what they have in common:
+The 42 routes no test reached, by what they have in common:
 
 - **Creating and editing directory records (10).** `POST` and `PUT` for owners, properties, units and
   tenants, `POST /api/directory/leases` and `POST /api/directory/properties/{id}/ownership-transfers`.
   The browser tests read the directory and never write to it. `GET /api/directory/units` is also
   unreached.
-- **Ledger postings other than a payment and a charge (5).** Credits, deposits, prepayments and
-  prepayment applications on a tenant, and bank adjustments.
-- **Accounting reads (5).** Owner balances, the owner ledger, deposits, the trust equation and the
-  tenant ledger CSV.
+- **Bank adjustments (1).** No screen records a bank fee, interest or a transfer between accounts.
+- **Accounting reads (4).** Owner balances, the owner ledger, deposits and the trust equation. No
+  screen requests these routes; the screens that show the same figures get them from other routes.
 - **Reconciliation (2).** Unlocking a reconciliation and its report.
 - **Account security (5).** MFA sign-in, recovery and changing a password. The two MFA enrollment
   routes are requested, but the test answers them itself.
@@ -368,6 +372,10 @@ with both passes and the three reports, took 6:19.
 The scenario check and the two invariant runs were added afterwards
 ([End-to-end scenarios](scenarios.md)). With them the whole command took 6:27 on the same machine,
 with the main pass again at 5.6 minutes.
+
+The four ledger-posting tests of #544 add about 16 seconds to the main pass. With them, on
+2026-10-12, the plain `npm run e2e` took 5.1 minutes, the main pass with collection took 5.9
+minutes, and the whole command with both passes took 6:45.
 
 ## Console logging and the test run
 

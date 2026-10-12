@@ -154,6 +154,52 @@
       "routes": ["GET /api/settings/banks", "PUT /api/settings/banks/{id}/active"]
     },
     {
+      "id": "ledger-issue-credit",
+      "workflow": "Issue a tenant a credit from the ledger composer by keyboard, and see the balance fall by the amount",
+      "area": "Accounting",
+      "spec": "ledger-postings.spec.ts",
+      "org": "scenario",
+      "events": ["CreditIssued"],
+      "routes": ["POST /api/accounting/tenants/{tenantId}/credits"]
+    },
+    {
+      "id": "ledger-collect-and-apply-held-funds",
+      "workflow": "Collect a security deposit and a prepayment, then apply both against a charge, with an over-application refused",
+      "area": "Accounting",
+      "spec": "ledger-postings.spec.ts",
+      "org": "scenario",
+      "events": [
+        "DepositCollected",
+        "PrepaymentReceived",
+        "FeeCharged",
+        "DepositApplied",
+        "PrepaymentApplied"
+      ],
+      "routes": [
+        "POST /api/accounting/tenants/{tenantId}/deposits",
+        "POST /api/accounting/tenants/{tenantId}/prepayments",
+        "POST /api/accounting/tenants/{tenantId}/charges",
+        "POST /api/accounting/tenants/{tenantId}/deposit-applications",
+        "POST /api/accounting/tenants/{tenantId}/prepayment-applications"
+      ]
+    },
+    {
+      "id": "ledger-deposit-into-locked-month",
+      "workflow": "Collect a deposit dated into a reconciled month and get the lock refusal, with nothing posted",
+      "area": "Accounting",
+      "spec": "ledger-postings.spec.ts",
+      "events": [],
+      "routes": ["POST /api/accounting/tenants/{tenantId}/deposits"]
+    },
+    {
+      "id": "ledger-export-csv",
+      "workflow": "Export a tenant ledger as CSV and get the rows and the balance the screen shows",
+      "area": "Accounting",
+      "spec": "ledger-postings.spec.ts",
+      "events": [],
+      "routes": ["GET /api/accounting/tenants/{tenantId}/ledger.csv"]
+    },
+    {
       "id": "ledger-record-and-void-payment",
       "workflow": "Record a tenant payment in 3 interactions, then void it with a linked reversal and an audit trail",
       "area": "Accounting",
@@ -501,24 +547,6 @@
         "issue": 544
       },
       {
-        "event": "CreditIssued",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 544
-      },
-      {
-        "event": "DepositApplied",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 544
-      },
-      {
-        "event": "DepositCollected",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 544
-      },
-      {
         "event": "DepositResponsibilityTransferred",
         "reason": "baseline gap",
         "date": "2026-10-12",
@@ -538,18 +566,6 @@
       },
       {
         "event": "PMFeesSwept",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 544
-      },
-      {
-        "event": "PrepaymentApplied",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 544
-      },
-      {
-        "event": "PrepaymentReceived",
         "reason": "baseline gap",
         "date": "2026-10-12",
         "issue": 544
@@ -594,36 +610,6 @@
       },
       {
         "route": "POST /api/accounting/banks/{bankAccountId}/adjustments",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 544
-      },
-      {
-        "route": "POST /api/accounting/tenants/{tenantId}/credits",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 544
-      },
-      {
-        "route": "POST /api/accounting/tenants/{tenantId}/deposits",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 544
-      },
-      {
-        "route": "POST /api/accounting/tenants/{tenantId}/prepayments",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 544
-      },
-      {
-        "route": "POST /api/accounting/tenants/{tenantId}/prepayment-applications",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 544
-      },
-      {
-        "route": "GET /api/accounting/tenants/{tenantId}/ledger.csv",
         "reason": "baseline gap",
         "date": "2026-10-12",
         "issue": 544

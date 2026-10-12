@@ -23,6 +23,12 @@ export const PORTAL_OWNER: Credentials = {
   email: 'owner-a@portal.test',
   password: 'Portal-Fixture-2026!',
 };
+// A staff member (PMStaff, no MFA) in the scenario organization (`seed --org scenario`), which new
+// money scenarios drive (ADR-056). Its record ids are minted per seed, so specs find records by name.
+export const SCENARIO_STAFF: Credentials = {
+  email: 'staff@scenario.test',
+  password: 'Scenario-Staff-2026!',
+};
 
 // Force a theme deterministically before the app boots. ThemeProvider reads localStorage
 // ('leasebook.theme' → { theme, accent, density }) synchronously on first render and storage wins
