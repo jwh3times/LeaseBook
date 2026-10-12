@@ -82,7 +82,7 @@ async function selectMay2026(page: Page) {
 test.describe.serial('M6 full-month cycle', () => {
   // ── Step 1: Rent charge run — May 2026 ────────────────────────────────────
 
-  test('rent run: structural period guard shows 1 eligible (Devon Pryor $1,380) and 6 AlreadyDone; result total = $1,380.00', async ({
+  test('rent run: structural period guard shows 1 eligible (Devon Pryor $1,380) and 6 AlreadyDone; result total = $1,380.00 @scenario:month-cycle-rent-run', async ({
     page,
   }) => {
     await login(page);
@@ -142,7 +142,7 @@ test.describe.serial('M6 full-month cycle', () => {
 
   // ── Step 2: Late-fee run — May 2026 ───────────────────────────────────────
 
-  test('late-fee run: previews delinquent tenants and confirms (or shows empty with no eligible)', async ({
+  test('late-fee run: previews delinquent tenants and confirms (or shows empty with no eligible) @scenario:month-cycle-late-fee-run', async ({
     page,
   }) => {
     await login(page);
@@ -192,7 +192,7 @@ test.describe.serial('M6 full-month cycle', () => {
 
   // ── Step 3: Mid-month manual charge via M3 ledger composer ────────────────
 
-  test('mid-month manual charge: posts a maintenance fee to Jasmine Carter via the ledger composer', async ({
+  test('mid-month manual charge: posts a maintenance fee to Jasmine Carter via the ledger composer @scenario:month-cycle-manual-charge', async ({
     page,
   }) => {
     await login(page);
@@ -231,7 +231,7 @@ test.describe.serial('M6 full-month cycle', () => {
 
   // ── Step 4: Bank register / reconcile access ───────────────────────────────
 
-  test('bank register: reconcile mode is reachable in ≤ 2 clicks from the Banking page', async ({
+  test('bank register: reconcile mode is reachable in ≤ 2 clicks from the Banking page @scenario:month-cycle-reconcile-and-statement', async ({
     page,
   }) => {
     await login(page);
@@ -263,7 +263,7 @@ test.describe.serial('M6 full-month cycle', () => {
 
   // ── Step 5: Owner statement — O5 May 2026 fiduciary panel + ending balance ─
 
-  test('owner statement: O5 Ridgeline Investments May 2026 loads with 3 passing fiduciary checks and ending balance $22,640.30', async ({
+  test('owner statement: O5 Ridgeline Investments May 2026 loads with 3 passing fiduciary checks and ending balance $22,640.30 @scenario:month-cycle-reconcile-and-statement', async ({
     page,
   }) => {
     await login(page);
@@ -306,7 +306,7 @@ test.describe.serial('M6 full-month cycle', () => {
 
   // ── Step 6: Owner disbursement run — May 2026 ─────────────────────────────
 
-  test('disbursement run: previews eligible owners for May 2026 and confirms all', async ({
+  test('disbursement run: previews eligible owners for May 2026 and confirms all @scenario:month-cycle-disbursement-run', async ({
     page,
   }) => {
     await login(page);
@@ -353,7 +353,7 @@ test.describe.serial('M6 full-month cycle', () => {
 
   // ── Step 7: Run history — assert all three run types appear ──────────────
 
-  test('run history: shows Rent and Disbursement rows after the full-month cycle', async ({
+  test('run history: shows Rent and Disbursement rows after the full-month cycle @scenario:month-cycle-run-history', async ({
     page,
   }) => {
     await login(page);

@@ -192,7 +192,14 @@ Run `dotnet tool restore` once for `dotnet-ef`.
 - e2e accessibility gate only: `npm run e2e -- a11y.spec.ts`
 - Unit tests with coverage (report in `web/coverage/unit/`): `npm run test:coverage`
 - e2e with host and browser coverage plus the route inventory, against the same seeded database as
-  `npm run e2e` (report in `web/coverage/e2e/`; stop a running host first): `npm run e2e:coverage`
+  `npm run e2e` (report in `web/coverage/e2e/`; stop a running host first): `npm run e2e:coverage`.
+  It also checks each scenario against what its tests did and runs `check-invariants --all`, and
+  fails on either (ADR-056)
+- Scenario catalogue, static check (every journal event type and contract route has a scenario or an
+  exemption; every test carries a known `@scenario:<id>` tag), from the repo root:
+  `node scripts/scenario-catalogue.mjs check --openapi src/LeaseBook.Web/obj/openapi/LeaseBook.Web.json`
+  after `node scripts/emit-openapi.mjs`; regenerate the table with `node scripts/scenario-catalogue.mjs doc`
+  (`docs/testing/scenarios.md` owns the method and the catalogue table)
 - Public documentation quality and policy gate: `npm run docs:check`
 
 ### Container

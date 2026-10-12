@@ -4,7 +4,7 @@ import { test } from './test';
 
 // The HTTP state transitions are covered against real Identity/Postgres by AccountSecurityTests.
 // This browser test isolates the required-enrollment route, keyboard path, QR and one-time display.
-test('required enrollment is reachable by keyboard and shows recovery codes accessibly', async ({
+test('required enrollment is reachable by keyboard and shows recovery codes accessibly @scenario:mfa-enrollment-by-keyboard', async ({
   page,
 }) => {
   let enabled = false;

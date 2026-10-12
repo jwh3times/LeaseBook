@@ -112,7 +112,9 @@ async function getCsrfToken(page: Page): Promise<string> {
 test.describe.serial('M7 onboarding wizard', () => {
   // ── Step 1: empty dashboard redirects ─────────────────────────────────────
 
-  test('empty org dashboard redirects to /onboarding', async ({ page }) => {
+  test('empty org dashboard redirects to /onboarding @scenario:onboarding-import-verify-sign-off', async ({
+    page,
+  }) => {
     await login(page);
     // Dashboard detects no journal data + not signed off → navigate('/onboarding').
     await expect(page).toHaveURL(/\/onboarding/, { timeout: 15_000 });
@@ -128,7 +130,9 @@ test.describe.serial('M7 onboarding wizard', () => {
   // the wizard at the balance step because entitiesImported flips true after the first import),
   // each asserting its own success banner, then "Continue →" advances to the balance step.
 
-  test('banks configured: wizard lands on the entity import step', async ({ page }) => {
+  test('banks configured: wizard lands on the entity import step @scenario:onboarding-import-verify-sign-off', async ({
+    page,
+  }) => {
     await login(page);
     await page.waitForURL(/\/onboarding/, { timeout: 10_000 });
 
@@ -140,7 +144,7 @@ test.describe.serial('M7 onboarding wizard', () => {
     await page.screenshot({ path: 'e2e-results/m7-02-entity-step.png', fullPage: true });
   });
 
-  test('entity import: owners → properties → units → tenants_leases (each banner), then Continue', async ({
+  test('entity import: owners → properties → units → tenants_leases (each banner), then Continue @scenario:onboarding-import-verify-sign-off', async ({
     page,
   }) => {
     await login(page);
@@ -193,7 +197,7 @@ test.describe.serial('M7 onboarding wizard', () => {
   // resumes at the balance step. All four balance kinds are imported within ONE session,
   // then "Continue →" advances to the verify step.
 
-  test('balance import: owner_balances → deposit_liabilities → bank_balances → held_pm_fees (each banner), then Continue', async ({
+  test('balance import: owner_balances → deposit_liabilities → bank_balances → held_pm_fees (each banner), then Continue @scenario:onboarding-import-verify-sign-off', async ({
     page,
   }) => {
     await login(page);
@@ -245,7 +249,7 @@ test.describe.serial('M7 onboarding wizard', () => {
 
   // ── Step 4: non-tying path (before sign-off) ──────────────────────────────
 
-  test('non-tying verification: wrong figures → NOT TIED → sign-off button disabled and server returns 409', async ({
+  test('non-tying verification: wrong figures → NOT TIED → sign-off button disabled and server returns 409 @scenario:onboarding-import-verify-sign-off', async ({
     page,
   }) => {
     await login(page);
@@ -349,7 +353,7 @@ test.describe.serial('M7 onboarding wizard', () => {
   // even with the error), so a fresh page load resumes at the verify step (firstIncompleteStep=3);
   // navigate back to the balance step via the checklist — it is already "reached".
 
-  test('corrected re-import (supersede): fixes the understated owner balance, other row unchanged, then Continue', async ({
+  test('corrected re-import (supersede): fixes the understated owner balance, other row unchanged, then Continue @scenario:onboarding-import-verify-sign-off', async ({
     page,
   }) => {
     await login(page);
@@ -386,7 +390,7 @@ test.describe.serial('M7 onboarding wizard', () => {
 
   // ── Step 6: happy-path tied verification + sign-off ───────────────────────
 
-  test('tied verification: matching figures → TIED / $0.00 clearing residuals → sign off succeeds', async ({
+  test('tied verification: matching figures → TIED / $0.00 clearing residuals → sign off succeeds @scenario:onboarding-import-verify-sign-off', async ({
     page,
   }) => {
     await login(page);
@@ -475,7 +479,9 @@ test.describe.serial('M7 onboarding wizard', () => {
 
   // ── Step 7: dashboard after sign-off ──────────────────────────────────────
 
-  test('after sign-off: dashboard no longer redirects to /onboarding', async ({ page }) => {
+  test('after sign-off: dashboard no longer redirects to /onboarding @scenario:onboarding-import-verify-sign-off', async ({
+    page,
+  }) => {
     await login(page);
 
     // Signed-off org: hasJournalData=true (balances posted) + signedOff=true → normal dashboard.

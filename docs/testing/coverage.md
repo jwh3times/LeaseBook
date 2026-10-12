@@ -9,8 +9,13 @@ LeaseBook measures what its test suites exercise: which lines and branches of ea
 which API routes the browser tests called. This page records how that is measured, how to run each
 measurement locally, how to read the reports, and the baseline the later figures are compared with.
 
-**Nothing is gated.** No threshold is configured and no check fails because of a figure.
+**No figure is gated.** No threshold is configured and no check fails because of a figure.
 [ADR-055](../adr/ADR-055-test-coverage-measurement.md) records the tools, the cadence and why.
+
+The Playwright run also carries a check that is not a figure: each scenario in the catalogue has to
+produce the journal event types and routes it declares, and the invariants have to hold afterwards.
+[End-to-end scenarios](scenarios.md) owns that check and
+[ADR-056](../adr/ADR-056-scenario-catalogue.md) records it.
 
 ## What the figures mean
 
@@ -68,7 +73,7 @@ harness under `src/test` are left out. `npm run test` is the same run without co
 
 ### Playwright run
 
-`npm run e2e:coverage` runs `scripts/e2e-coverage.mjs`, which does five things:
+`npm run e2e:coverage` runs `scripts/e2e-coverage.mjs`, which does seven things:
 
 1. Starts a `dotnet-coverage` collector in server mode.
 2. Runs Playwright with `E2E_COVERAGE=1`. `web/playwright.config.ts` then starts the host as a
@@ -77,6 +82,10 @@ harness under `src/test` are left out. `npm run test` is the same run without co
    method and path of every API request. The fixture that does this is `web/e2e/coverage-fixture.ts`.
 4. Shuts the collector down, which writes the host's Cobertura file.
 5. Builds three reports: the host by module, the web source by area, and the route inventory.
+6. Reads the journal entries the run posted and checks every scenario against what its tests did.
+7. Runs `check-invariants --all` on each database a pass used.
+
+Steps 6 and 7 can fail the command. [End-to-end scenarios](scenarios.md) describes them.
 
 Without `E2E_COVERAGE=1` none of this happens. Every spec imports `test` from `web/e2e/test.ts`,
 which is Playwright's own `test` object unless that variable is set, so `npm run e2e` and the
@@ -166,8 +175,8 @@ Open `web/coverage/unit/index.html` for the report.
 
 ### Playwright run
 
-The database is the one `npm run e2e` uses, seeded the same way (demo, cutover and portal; see the
-[local-development runbook](../runbooks/local-dev.md)). The suite changes that database, so start
+The database is the one `npm run e2e` uses, seeded the same way (demo, cutover, portal and scenario;
+see the [local-development runbook](../runbooks/local-dev.md)). The suite changes that database, so start
 from a fresh seed, and stop any host or dev server already running: the coverage run starts its own
 host under the collector and will not reuse one. From `web/`:
 
@@ -190,8 +199,12 @@ Everything is written under `web/coverage/e2e/`:
 | `routes/route-inventory.md`   | Routes reached and not reached                              |
 | `routes/route-inventory.json` | The same, with request counts per route                     |
 | `requests/`                   | The method and path of every API request, one file per test |
+| `tests/`                      | Each test's tags, outcome and start and end times           |
+| `journal/`                    | The journal entries each pass posted, by event type         |
+| `scenarios/`                  | What each scenario produced against what it declares        |
 
 A failing test fails the command after the reports are written. They then describe a failing run.
+The same holds for a scenario that did not produce what it declares and for a violated invariant.
 
 ## Read the reports
 
@@ -351,6 +364,10 @@ artifact.
 The Playwright run is outside pull requests, so it adds nothing to them. Its main pass took 5.6
 minutes with collection and 4.8 minutes without, on two freshly seeded databases. The whole command,
 with both passes and the three reports, took 6:19.
+
+The scenario check and the two invariant runs were added afterwards
+([End-to-end scenarios](scenarios.md)). With them the whole command took 6:27 on the same machine,
+with the main pass again at 5.6 minutes.
 
 ## Console logging and the test run
 

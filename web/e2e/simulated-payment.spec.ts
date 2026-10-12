@@ -40,7 +40,7 @@ async function deliver(request: APIRequestContext, key: string, path: string, bo
  * with a surplus and one with a shortfall the surplus covers, and posts by itself; a payout with a
  * return waits for an administrator, who posts it from the keyboard.
  */
-test('a quoted fee, a payout with a shortfall, and a payout with a return an administrator posts', async ({
+test('a quoted fee, a payout with a shortfall, and a payout with a return an administrator posts @scenario:simulated-payment-fee-payout-return', async ({
   page,
   request,
   browser,
@@ -178,7 +178,7 @@ test('a quoted fee, a payout with a shortfall, and a payout with a return an adm
   await expect(mine(second).getByText('Simulated payment recorded', { exact: true })).toBeVisible();
 });
 
-test('simulation survives reload and posts only after separate bank evidence', async ({
+test('simulation survives reload and posts only after separate bank evidence @scenario:simulated-payment-reload-and-bank-evidence', async ({
   page,
   request,
   browser,

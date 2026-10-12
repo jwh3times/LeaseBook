@@ -37,7 +37,7 @@ async function mapAmountColumns(dialog: ReturnType<Page['getByRole']>) {
 }
 
 test.describe.serial('M4 banking', () => {
-  test('imports a CSV, auto-matches + clears a register line, and de-dups on re-import', async ({
+  test('imports a CSV, auto-matches + clears a register line, and de-dups on re-import @scenario:bank-statement-import-and-match', async ({
     page,
   }) => {
     await login(page);
@@ -78,7 +78,7 @@ test.describe.serial('M4 banking', () => {
     await wizard2.getByRole('button', { name: 'Cancel' }).click();
   });
 
-  test('reconciles Operating Trust to $0.00, finalizes, and locks the month against new postings', async ({
+  test('reconciles Operating Trust to $0.00, finalizes, and locks the month against new postings @scenario:bank-reconcile-finalize-and-lock', async ({
     page,
   }) => {
     await login(page);

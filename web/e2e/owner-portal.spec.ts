@@ -18,7 +18,7 @@ const TENANT_PORTAL_DATA = /^\/api\/portal\/tenant\//;
 const OWNER_PORTAL_DATA = /^\/api\/portal\/owner\//;
 
 for (const theme of ['light', 'dark'] as const) {
-  test(`owner sign-in, balance, statement PDF, denials and sign-out (${theme})`, async ({
+  test(`owner sign-in, balance, statement PDF, denials and sign-out (${theme}) @scenario:owner-portal-balance-and-statement`, async ({
     page,
   }) => {
     await seedTheme(page, theme);
@@ -78,7 +78,9 @@ for (const theme of ['light', 'dark'] as const) {
   });
 }
 
-test('a resident is denied the owner portal without requesting owner data', async ({ page }) => {
+test('a resident is denied the owner portal without requesting owner data @scenario:owner-portal-denials', async ({
+  page,
+}) => {
   await signIn(page, PORTAL_RESIDENT);
   await expect(page).toHaveURL(/\/portal\/tenant$/);
   const ownerRequests = recordRequests(page, OWNER_PORTAL_DATA);
@@ -87,7 +89,9 @@ test('a resident is denied the owner portal without requesting owner data', asyn
   expect(ownerRequests).toEqual([]);
 });
 
-test('staff are denied the owner portal and keep the dashboard destination', async ({ page }) => {
+test('staff are denied the owner portal and keep the dashboard destination @scenario:owner-portal-denials', async ({
+  page,
+}) => {
   await signIn(page, DEMO_ADMIN);
   await expect(page).toHaveURL(/\/dashboard$/);
   const ownerRequests = recordRequests(page, OWNER_PORTAL_DATA);

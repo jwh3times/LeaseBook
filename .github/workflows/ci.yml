@@ -156,7 +156,16 @@ jobs:
       # takes `test` from the recording fixture. The runner itself only runs in coverage.yml.
       - name: Test the coverage summary, route inventory and e2e coverage scripts
         working-directory: ${{ github.workspace }}
-        run: node --test scripts/coverage-summary.test.mjs scripts/route-inventory.test.mjs scripts/e2e-coverage.test.mjs
+        run: node --test scripts/coverage-summary.test.mjs scripts/route-inventory.test.mjs scripts/e2e-coverage.test.mjs scripts/scenario-catalogue.test.mjs
+      # The scenario catalogue's static check (ADR-056, docs/testing/scenarios.md), the part that
+      # needs no API contract: every journal event type in the product source has a scenario or a
+      # recorded exemption, every catalogue id has a tagged Playwright test and every test a known
+      # tag, and the generated table in the document is current. Playwright only lists the tests
+      # here; it starts no host and no browser. The routes are checked in the
+      # `API client matches OpenAPI contract` job, which is the one that emits the contract.
+      - name: Check the scenario catalogue (event types, test tags, generated table)
+        working-directory: ${{ github.workspace }}
+        run: node scripts/scenario-catalogue.mjs check
       # Public docs are formatted, structurally linted, spell-checked, and validated against the
       # repository's metadata, ADR-index, canonical-ownership, and private-link policies.
       - run: npm run docs:check
@@ -214,6 +223,12 @@ jobs:
             echo "::error file=web/src/api/generated::API client is stale. Run 'npm run api:generate' from web/ and commit web/src/api/generated/."
             exit 1
           fi
+      # The scenario catalogue's static check (ADR-056), the part that needs the contract the step
+      # above just emitted: every route in it has a scenario or a recorded exemption, and the
+      # catalogue names no route that has left it. `--no-tags` because this job does not install the
+      # web dependencies Playwright needs to list the tests; the `Web` job checks the tags.
+      - name: Check every contract route has a scenario or an exemption
+        run: node scripts/scenario-catalogue.mjs check --no-tags --openapi src/LeaseBook.Web/obj/openapi/LeaseBook.Web.json
 
   migration-check:
     name: Migrations apply to a blank DB
@@ -334,11 +349,14 @@ jobs:
         run: dotnet ef database update --project src/LeaseBook.Web --context AppDbContext
         env:
           ConnectionStrings__Migrations: Host=localhost;Port=5432;Database=leasebook;Username=leasebook_migrator;Password=dev_migrator_pw
-      - name: Seed demo + cutover + portal fixtures (app role)
+      # The scenario organization is the one new money scenarios drive (ADR-056). The specs that
+      # predate it stay on demo, cutover and portal.
+      - name: Seed demo + cutover + portal + scenario fixtures (app role)
         run: |
           dotnet run --project src/LeaseBook.Web -- seed --org demo
           dotnet run --project src/LeaseBook.Web -- seed --org cutover
           dotnet run --project src/LeaseBook.Web -- seed --org portal
+          dotnet run --project src/LeaseBook.Web -- seed --org scenario
       - name: Install web dependencies
         working-directory: web
         run: npm ci

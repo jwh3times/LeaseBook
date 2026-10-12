@@ -20,6 +20,7 @@ summaries elsewhere should link here rather than restating mutable detail.
 | Set up or operate a development environment       | [Local-development runbook](runbooks/local-dev.md)     |
 | Measure read-path latency against the budget      | [Performance](perf.md)                                 |
 | See what the test suites exercise, and measure it | [Test coverage](testing/coverage.md)                   |
+| Find or add an end-to-end scenario                | [End-to-end scenarios](testing/scenarios.md)           |
 | Contribute a change                               | [Contributing guide](../CONTRIBUTING.md)               |
 | See shipped capabilities and broad direction      | [Roadmap](ROADMAP.md) and [changelog](../CHANGELOG.md) |
 

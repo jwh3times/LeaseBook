@@ -37,6 +37,7 @@ not enforce this broader confidentiality boundary.
 | Skill-facing repository configuration            | `docs/agents/`                                   |
 | Read-path latency budget and measurements        | `docs/perf.md`                                   |
 | Test coverage method and baseline figures        | `docs/testing/coverage.md`                       |
+| End-to-end scenario catalogue and its checks     | `docs/testing/scenarios.md`                      |
 | Contribution requirements and Definition of Done | `CONTRIBUTING.md`                                |
 | Released capabilities                            | `CHANGELOG.md`                                   |
 | Broad future direction                           | `docs/ROADMAP.md`                                |

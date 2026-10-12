@@ -392,13 +392,16 @@ npx playwright install chromium
 
 The suite requires the `demo`, `cutover`, and `portal` fixtures (the a11y spec checks
 `/onboarding` on the cutover org, the tenant portal with a resident login, and the owner portal with
-an owner login):
+an owner login). Seed `scenario` beside them, as CI does: it is the organization new money scenarios
+drive ([End-to-end scenarios](../testing/scenarios.md)), and no spec written before the catalogue
+uses it yet:
 
 ```powershell
 $env:ASPNETCORE_ENVIRONMENT = "Development"
 dotnet run --project src/LeaseBook.Web -- seed --org demo
 dotnet run --project src/LeaseBook.Web -- seed --org cutover
 dotnet run --project src/LeaseBook.Web -- seed --org portal
+dotnet run --project src/LeaseBook.Web -- seed --org scenario
 ```
 
 Then start the API and SPA (inner-loop mode), and run the suite from `web/`:
@@ -422,6 +425,13 @@ CI runs the full suite in an `e2e` job (see `.github/workflows/ci.yml` and ADR-0
 the web source by area, and the API routes. It starts its own host under a coverage collector, so
 stop a running one first. [Test coverage](../testing/coverage.md) owns the method, the commands for
 the .NET and web unit suites, and the baseline figures.
+
+Every test ends its title with a `@scenario:<id>` tag that names an entry in
+`web/e2e/scenario-catalogue.json`. `npm run e2e:coverage` also checks each scenario against what its
+tests posted and called, then runs `check-invariants --all`; it reads the journal through `psql`
+inside the `leasebook-db` container (set `E2E_DB_CONTAINER` for another).
+[End-to-end scenarios](../testing/scenarios.md) owns the catalogue, the checks and how to add a
+scenario.
 
 ### Visual regression
 

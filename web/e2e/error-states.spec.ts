@@ -43,7 +43,7 @@ test.describe('error states', () => {
    * signed in — failing it too is the already-handled state, where the guard redirects correctly and
    * none of this code runs.
    */
-  test('an expired session offers sign-in, not a retry that can never succeed', async ({
+  test('an expired session offers sign-in, not a retry that can never succeed @scenario:error-and-empty-states', async ({
     page,
   }) => {
     // The body-shape the cookie handler writes for an unauthenticated /api request.
@@ -74,7 +74,7 @@ test.describe('error states', () => {
     await expect(page).toHaveURL(/\/login$/);
   });
 
-  test('a failed list query renders the designed error state, not a blank page or a fabricated figure', async ({
+  test('a failed list query renders the designed error state, not a blank page or a fabricated figure @scenario:error-and-empty-states', async ({
     page,
   }) => {
     // Scoped to this test only, and to the exact list endpoint the Owners page reads.
@@ -98,7 +98,7 @@ test.describe('error states', () => {
     await expect(errorState.getByRole('button', { name: 'Retry' })).toBeEnabled();
   });
 
-  test('a failed ledger payment post surfaces the composer error alert, with no phantom row posted', async ({
+  test('a failed ledger payment post surfaces the composer error alert, with no phantom row posted @scenario:error-and-empty-states', async ({
     page,
   }) => {
     await page.getByRole('button', { name: 'Tenants' }).click();
@@ -129,7 +129,7 @@ test.describe('error states', () => {
     await expect(page.getByRole('row').filter({ hasText: `$${amount}` })).toHaveCount(0);
   });
 
-  test('the owners filter renders the no-match empty state for a nonsense query, not a blank list', async ({
+  test('the owners filter renders the no-match empty state for a nonsense query, not a blank list @scenario:error-and-empty-states', async ({
     page,
   }) => {
     await page.getByRole('button', { name: 'Owners' }).click();
@@ -146,7 +146,7 @@ test.describe('error states', () => {
     await expect(noMatch).toContainText(nonsense);
   });
 
-  test('the ⌘K palette renders "no matches" for a nonsense query, not a blank list', async ({
+  test('the ⌘K palette renders "no matches" for a nonsense query, not a blank list @scenario:error-and-empty-states', async ({
     page,
   }) => {
     const search = await openPalette(page);
@@ -158,7 +158,7 @@ test.describe('error states', () => {
     await expect(noMatch).toContainText(nonsense);
   });
 
-  test('a zero-item owners list renders the true empty state (no fabricated rows)', async ({
+  test('a zero-item owners list renders the true empty state (no fabricated rows) @scenario:error-and-empty-states', async ({
     page,
   }) => {
     // Fulfills the real `PagedResponseOfOwnerListRow` shape with zero items, so `IndexView` reaches its

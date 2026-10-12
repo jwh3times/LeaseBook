@@ -3,6 +3,11 @@
 - **Status:** Accepted
 - **Date:** 2026-10-12
 - **Deciders:** Jerry Holland
+- **Amended by:** [ADR-056](ADR-056-scenario-catalogue.md)
+
+[ADR-056](ADR-056-scenario-catalogue.md) adds two failures to the coverage run that are not figures: a
+scenario that did not produce what the catalogue declares, and a violated invariant. It also seeds
+the scenario organization in the pull-request e2e job. Nothing below about figures changes.
 
 ## Context
 

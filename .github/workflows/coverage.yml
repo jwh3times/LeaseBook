@@ -6,8 +6,13 @@ name: Coverage (e2e)
 # collector and records every page's JavaScript coverage, which is slower, so it stays off pull
 # requests: the `E2E (Playwright + a11y)` job there runs exactly as it did before this existed.
 #
-# Measurement only. No figure is compared to a threshold. The job fails when a test fails or a
-# report cannot be produced, so the measurement cannot rot quietly, and never because of a number.
+# No figure is compared to a threshold. The job fails when a test fails or a report cannot be
+# produced, so the measurement cannot rot quietly, and never because of a number.
+#
+# It is also where the scenario catalogue is measured (ADR-056, docs/testing/scenarios.md). The run
+# fails when a scenario did not post a journal event type or call a route its catalogue entry
+# declares, and when `check-invariants --all` finds a violation in a database a pass used. The
+# static half of that check runs on every pull request, in ci.yml.
 on:
   push:
     branches: [main]
@@ -29,7 +34,7 @@ jobs:
     name: E2E coverage + route inventory
     runs-on: ubuntu-latest
     # The pull-request e2e job this mirrors typically takes ~6 min against a 20-minute bound. This
-    # one adds the collector, the browser coverage and three reports. Re-measure after the first
+    # one adds the collector, the browser coverage, three reports and the invariant run. Re-measure after the first
     # runs on `main` and tighten by the ci.yml policy (3-8x the observed maximum, floor 10).
     timeout-minutes: 30
     services:
@@ -69,11 +74,12 @@ jobs:
         run: dotnet ef database update --project src/LeaseBook.Web --context AppDbContext
         env:
           ConnectionStrings__Migrations: Host=localhost;Port=5432;Database=leasebook;Username=leasebook_migrator;Password=dev_migrator_pw
-      - name: Seed demo + cutover + portal fixtures (app role)
+      - name: Seed demo + cutover + portal + scenario fixtures (app role)
         run: |
           dotnet run --project src/LeaseBook.Web -- seed --org demo
           dotnet run --project src/LeaseBook.Web -- seed --org cutover
           dotnet run --project src/LeaseBook.Web -- seed --org portal
+          dotnet run --project src/LeaseBook.Web -- seed --org scenario
       # ci.yml creates this fixture between its two Playwright passes. Here it comes first, because
       # one command runs both passes under one collector. It is a separate database, so the main
       # pass does not see it.
@@ -96,10 +102,14 @@ jobs:
         working-directory: web
         run: npx playwright install --with-deps chromium
       # Runs the documented command and not a copy of its steps: the collector, both Playwright
-      # passes with E2E_COVERAGE=1, and the three reports (scripts/e2e-coverage.mjs).
+      # passes with E2E_COVERAGE=1, the three reports, the scenario catalogue's measured check and
+      # the invariant run (scripts/e2e-coverage.mjs). The runner reads the journal through `psql`
+      # inside the Postgres container, so it is told which container that is.
       - name: Run e2e with coverage (main pass + simulated-payment pass)
         working-directory: web
         run: npm run e2e:coverage -- --payments
+        env:
+          E2E_DB_CONTAINER: ${{ job.services.postgres.id }}
       # The summary is written before the runner reports a failing pass, so a red run still shows
       # what it reached. A missing summary is a report that was not produced, and fails here too.
       - name: Publish the coverage summary
@@ -112,13 +122,18 @@ jobs:
           name: e2e-coverage
           # host/: the collector's Cobertura file and the HTML report by module. web/: the browser
           # coverage report by source file. routes/: the route inventory as JSON and markdown.
-          # requests/: the method and path of every API request, as recorded.
+          # requests/: the method and path of every API request, as recorded. scenarios/: what each
+          # scenario produced against what it declares. tests/ and journal/: the evidence that was
+          # read for it, which is each test's tags and times and the entries the run posted.
           path: |
             web/coverage/e2e/summary.md
             web/coverage/e2e/host/
             web/coverage/e2e/web/
             web/coverage/e2e/routes/
             web/coverage/e2e/requests/
+            web/coverage/e2e/scenarios/
+            web/coverage/e2e/tests/
+            web/coverage/e2e/journal/
             !web/coverage/e2e/web/.cache/
           if-no-files-found: error
           retention-days: 14

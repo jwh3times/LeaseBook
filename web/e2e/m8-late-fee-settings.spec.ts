@@ -12,7 +12,7 @@ import { test } from './test';
  * The org policy is restored in a `finally` — the demo org is shared by every other spec, and a
  * leftover 0-day grace period would silently change what they see.
  */
-test('org late-fee policy round-trips and preview requires an open rent obligation', async ({
+test('org late-fee policy round-trips and preview requires an open rent obligation @scenario:late-fee-policy-settings', async ({
   page,
 }) => {
   await signIn(page, DEMO_ADMIN);
@@ -74,7 +74,7 @@ test('org late-fee policy round-trips and preview requires an open rent obligati
  * restored the same way — a stray override on a demo tenant would change that tenant's late fees for
  * every other spec and for the demo itself.
  */
-test('a lease late-fee override can be set and cleared from the tenant ledger', async ({
+test('a lease late-fee override can be set and cleared from the tenant ledger @scenario:lease-late-fee-override', async ({
   page,
 }) => {
   await signIn(page, DEMO_ADMIN);

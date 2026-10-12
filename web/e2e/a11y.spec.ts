@@ -36,13 +36,17 @@ const DEMO_INDEX_ROUTES = [
 ];
 
 for (const theme of THEMES) {
-  test(`no WCAG AA violations on tenant portal (${theme})`, async ({ page }) => {
+  test(`no WCAG AA violations on tenant portal (${theme}) @scenario:accessibility-portals`, async ({
+    page,
+  }) => {
     await seedTheme(page, theme);
     await signIn(page, PORTAL_RESIDENT);
     await expect(page.getByRole('heading', { name: 'Resident A' })).toBeVisible();
     await runA11y(page);
   });
-  test(`no WCAG AA violations on owner portal (${theme})`, async ({ page }) => {
+  test(`no WCAG AA violations on owner portal (${theme}) @scenario:accessibility-portals`, async ({
+    page,
+  }) => {
     await seedTheme(page, theme);
     await signIn(page, PORTAL_OWNER);
     await expect(page.getByRole('heading', { name: 'Owner A' })).toBeVisible();
@@ -53,7 +57,9 @@ for (const theme of THEMES) {
   });
   test.describe(`a11y (${theme}) — demo org pages`, () => {
     for (const route of DEMO_INDEX_ROUTES) {
-      test(`no WCAG AA violations on ${route}`, async ({ page }) => {
+      test(`no WCAG AA violations on ${route} @scenario:accessibility-staff-pages`, async ({
+        page,
+      }) => {
         await seedTheme(page, theme);
         await signIn(page, DEMO_ADMIN);
         // networkidle lets the TanStack Query data settle so axe scans loaded content, not a skeleton.
@@ -73,7 +79,9 @@ for (const theme of THEMES) {
       });
     }
 
-    test('no WCAG AA violations on a tenant detail (ledger)', async ({ page }) => {
+    test('no WCAG AA violations on a tenant detail (ledger) @scenario:accessibility-staff-pages', async ({
+      page,
+    }) => {
       await seedTheme(page, theme);
       await signIn(page, DEMO_ADMIN);
       await page.goto('/tenants', { waitUntil: 'networkidle' });
@@ -85,7 +93,9 @@ for (const theme of THEMES) {
 
     // #473: the refund-check dialog over the ledger, on loaded funds and prefilled fields. Opening it
     // posts nothing, so the scan leaves the freshly seeded org untouched.
-    test('no WCAG AA violations with the refund check dialog open', async ({ page }) => {
+    test('no WCAG AA violations with the refund check dialog open @scenario:accessibility-staff-pages', async ({
+      page,
+    }) => {
       await seedTheme(page, theme);
       await signIn(page, DEMO_ADMIN);
       await page.goto('/tenants', { waitUntil: 'networkidle' });
@@ -101,7 +111,9 @@ for (const theme of THEMES) {
 
     // #473: the per-account check print calibration, read but not saved — and, since #474, the
     // account's MICR details as an administrator sees them (the editable form, loaded).
-    test('no WCAG AA violations with the check print settings dialog open', async ({ page }) => {
+    test('no WCAG AA violations with the check print settings dialog open @scenario:accessibility-staff-pages', async ({
+      page,
+    }) => {
       await seedTheme(page, theme);
       await signIn(page, DEMO_ADMIN);
       await page.goto('/banking', { waitUntil: 'networkidle' });
@@ -113,7 +125,9 @@ for (const theme of THEMES) {
       await runA11y(page);
     });
 
-    test('no WCAG AA violations on an owner detail', async ({ page }) => {
+    test('no WCAG AA violations on an owner detail @scenario:accessibility-staff-pages', async ({
+      page,
+    }) => {
       await seedTheme(page, theme);
       await signIn(page, DEMO_ADMIN);
       await page.goto('/owners', { waitUntil: 'networkidle' });
@@ -122,7 +136,9 @@ for (const theme of THEMES) {
       await runA11y(page);
     });
 
-    test('no WCAG AA violations on a property detail', async ({ page }) => {
+    test('no WCAG AA violations on a property detail @scenario:accessibility-staff-pages', async ({
+      page,
+    }) => {
       await seedTheme(page, theme);
       await signIn(page, DEMO_ADMIN);
       await page.goto('/properties', { waitUntil: 'networkidle' });
@@ -139,7 +155,9 @@ for (const theme of THEMES) {
     // that is neither an `option` nor a `group` is an invalid listbox child — a structural fault axe
     // can see. What axe cannot see is whether the selection is announced at all; that is pinned by
     // the `aria-activedescendant` unit tests in web/src/features/palette/palette.test.tsx.
-    test('no WCAG AA violations with the palette open on results', async ({ page }) => {
+    test('no WCAG AA violations with the palette open on results @scenario:accessibility-command-palette', async ({
+      page,
+    }) => {
       await seedTheme(page, theme);
       await signIn(page, DEMO_ADMIN);
       const search = await openPalette(page);
@@ -150,7 +168,9 @@ for (const theme of THEMES) {
   });
 
   test.describe(`a11y (${theme}) — onboarding wizard (cutover org)`, () => {
-    test('no WCAG AA violations on /onboarding', async ({ page }) => {
+    test('no WCAG AA violations on /onboarding @scenario:accessibility-onboarding', async ({
+      page,
+    }) => {
       await seedTheme(page, theme);
       await signIn(page, CUTOVER_ADMIN);
       await page.waitForURL(/\/onboarding/, { timeout: 15_000 });
