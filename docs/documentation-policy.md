@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living policy
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-04
+- **Last reviewed:** 2026-10-12
 
 This policy keeps LeaseBook documentation public-safe, navigable, and maintainable. It applies to
 Markdown, runbooks, diagrams, planning artifacts, and documentation embedded in source or automation.
@@ -36,6 +36,7 @@ not enforce this broader confidentiality boundary.
 | Error-contract diagnosis and correlation lookup  | `docs/runbooks/diagnostics.md`                   |
 | Skill-facing repository configuration            | `docs/agents/`                                   |
 | Read-path latency budget and measurements        | `docs/perf.md`                                   |
+| Test coverage method and baseline figures        | `docs/testing/coverage.md`                       |
 | Contribution requirements and Definition of Done | `CONTRIBUTING.md`                                |
 | Released capabilities                            | `CHANGELOG.md`                                   |
 | Broad future direction                           | `docs/ROADMAP.md`                                |

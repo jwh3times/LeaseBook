@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect } from '@playwright/test';
 import {
   DEMO_ADMIN,
   openPalette,
@@ -7,6 +7,7 @@ import {
   routeFail,
   signIn,
 } from './helpers';
+import { test } from './test';
 
 // Error/empty-state e2e (WP-4 step 2, folded with step 3): asserts the SPA's designed error and empty
 // branches actually render — not a blank page, a raw network error, or a client-fabricated figure.

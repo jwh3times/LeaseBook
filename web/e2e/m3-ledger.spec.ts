@@ -1,6 +1,7 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 import type { BudgetTelemetryRequest } from '@/api';
 import { seedTheme, visualSnapshot } from './helpers';
+import { test } from './test';
 
 // The M3 ledger-hub budgeted flows (§D step 6), run against the seeded demo org. The seeded admin
 // (Renée Calloway) has no MFA, so login is email + password. Each spec mutates only with entries it

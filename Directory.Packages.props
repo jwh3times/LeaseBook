@@ -90,6 +90,13 @@
     <!-- Test stack (P7 / ADR-032): executable projects explicitly target Microsoft Testing
          Platform v2; global.json selects the .NET 10 MTP implementation of dotnet test. -->
     <PackageVersion Include="xunit.v3.mtp-v2" Version="4.0.1" />
+    <!-- Coverage collection for the test projects (ADR-055): adds the `coverage` options to each
+         MTP test executable and is inert unless one is passed. Peer-locked to the platform: each
+         release names an exact Microsoft.Testing.Platform, and 18.11.2 names 2.4.0, the version
+         xunit.v3.mtp-v2 4.0.1 resolves. A later release would raise the platform under xUnit, so
+         move this only together with xunit.v3.mtp-v2. The `dotnet-coverage` local tool in
+         .config/dotnet-tools.json is the same collector and stays at the same version. -->
+    <PackageVersion Include="Microsoft.Testing.Extensions.CodeCoverage" Version="18.11.2" />
     <!-- Abstractions-only (IAsyncLifetime, ICollectionFixture) for the shared, non-executable
          LeaseBook.Tests.Common fixture library; the full xUnit metapackage requires Exe.
          Peer-locked to xunit.v3.mtp-v2: the metapackage's transitives pin

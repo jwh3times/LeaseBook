@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect } from '@playwright/test';
 import {
   CUTOVER_ADMIN,
   DEMO_ADMIN,
@@ -10,6 +10,7 @@ import {
   seedTheme,
   signIn,
 } from './helpers';
+import { test } from './test';
 
 // Automated WCAG 2 AA gate (M8.2). Zero axe violations on every routed page in a logged-in session,
 // in BOTH themes (WP-2 extends ADR-022's light-only scan to dark). 'a11y' sorts first in discovery

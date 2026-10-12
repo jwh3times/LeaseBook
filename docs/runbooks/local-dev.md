@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living runbook; canonical development command reference
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-01
+- **Last reviewed:** 2026-10-12
 
 ## Prerequisites
 
@@ -417,6 +417,11 @@ themes on the default accent; the full accent×density matrix remains out of sco
 the a11y scan hits it — this is intentional and requires no special sequencing on your part.
 
 CI runs the full suite in an `e2e` job (see `.github/workflows/ci.yml` and ADR-022).
+
+`npm run e2e:coverage` runs the same suite and records what it reaches: the host's code by module,
+the web source by area, and the API routes. It starts its own host under a coverage collector, so
+stop a running one first. [Test coverage](../testing/coverage.md) owns the method, the commands for
+the .NET and web unit suites, and the baseline figures.
 
 ### Visual regression
 

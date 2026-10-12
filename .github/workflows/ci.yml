@@ -68,14 +68,48 @@ jobs:
       # with --results-directory rather than relying on the reporter's default: xunit.v3 4.0.0
       # moved that default out of each project's bin/ output and into a repo-root TestResults/,
       # which silently emptied the upload glob and failed this job on a fully green test run.
+      #
+      # The three `coverage` options make each test project also write a Cobertura file of the
+      # product code it ran (ADR-055, docs/testing/coverage.md). Measurement only: nothing here or
+      # below compares a figure to a threshold. The settings path is absolute so that it does not
+      # depend on the directory each test process starts in.
       - name: Run backend tests (Microsoft Testing Platform v2)
-        run: dotnet test -c Release --no-build --report-xunit-trx --results-directory TestResults
+        run: >-
+          dotnet test -c Release --no-build --report-xunit-trx --results-directory TestResults
+          --coverage --coverage-output-format cobertura
+          --coverage-settings "$GITHUB_WORKSPACE/tests/coverage.settings.xml"
+        env:
+          # The test host logs every SQL command to the console at Information: about 1 GB over the
+          # integration suite. `dotnet test` holds a test process's whole output in one string, and
+          # .NET caps a string near 1.07 billion characters, so the run sat just under a limit past
+          # which the CLI throws OutOfMemoryException with every test green. Collection slows the
+          # suite enough to add polling queries and cross it. This filters the console provider only:
+          # the log level itself is unchanged, so a test that captures log events still sees them.
+          # Issue #548 moves this into the test host and removes it from here.
+          Logging__Console__LogLevel__Default: Warning
       - name: Upload backend test results
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: backend-test-results
           path: TestResults/*.trx
+          if-no-files-found: error
+          retention-days: 7
+      # One report from the nine per-project files, grouped by assembly. ReportGenerator merges them;
+      # `coverage-summary.mjs` turns its JSON summary into the per-module table and fails if a
+      # product assembly is missing from it, so a filter that stops matching cannot pass as a figure.
+      # Runs only after green tests: figures from a failing run describe a run nobody wants.
+      # Node is the runner image's own; the script uses nothing newer than Node 20.
+      - name: Build the coverage report (measurement only, no threshold)
+        run: |
+          dotnet reportgenerator "-reports:TestResults/*.cobertura.xml" "-targetdir:TestResults/coverage" "-reporttypes:Html;Cobertura;JsonSummary" "-title:LeaseBook .NET suites" -verbosity:Warning
+          node scripts/coverage-summary.mjs dotnet --summary TestResults/coverage/Summary.json --title ".NET suite coverage by module" >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload backend coverage report
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: backend-coverage
+          # index.html is the report; Cobertura.xml is the merged file other tools read.
+          path: TestResults/coverage/
           if-no-files-found: error
           retention-days: 7
 
@@ -117,6 +151,12 @@ jobs:
       - name: Test the Stripe sandbox probe and its fixture guard
         working-directory: ${{ github.workspace }}
         run: node --test scripts/stripe-probe.test.mjs
+      # The coverage scripts (ADR-055): the per-module summary every coverage step prints, the route
+      # matcher behind the route inventory, and the e2e coverage runner's guard that every spec
+      # takes `test` from the recording fixture. The runner itself only runs in coverage.yml.
+      - name: Test the coverage summary, route inventory and e2e coverage scripts
+        working-directory: ${{ github.workspace }}
+        run: node --test scripts/coverage-summary.test.mjs scripts/route-inventory.test.mjs scripts/e2e-coverage.test.mjs
       # Public docs are formatted, structurally linted, spell-checked, and validated against the
       # repository's metadata, ADR-index, canonical-ownership, and private-link policies.
       - run: npm run docs:check
@@ -125,7 +165,18 @@ jobs:
       - run: npm run format:check
       - run: npm run lint
       - run: npm run typecheck
-      - run: npm run test
+      # The unit suite, once, with V8 coverage (ADR-055). `npm run test` is the same run without it.
+      # Measurement only: no threshold is configured, so only a failing test fails this step.
+      - run: npm run test:coverage
+      - name: Summarize web unit coverage
+        run: node ../scripts/coverage-summary.mjs web --summary coverage/unit/coverage-summary.json --title "Web unit coverage by area" >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload web unit coverage report
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: web-unit-coverage
+          path: web/coverage/unit/
+          if-no-files-found: error
+          retention-days: 7
       - run: npm run build
 
   schema-drift:

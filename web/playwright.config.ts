@@ -3,6 +3,18 @@ import { defineConfig, devices } from '@playwright/test';
 // e2e for the budgeted M2 flows (§D step 6). Runs the SPA via the Vite dev server (which proxies
 // /api → :5080) against the .NET host on :5080. The host must point at a Postgres seeded with the demo
 // org (`./scripts/dev.ps1 up` + `seed --org demo`) — the specs sign in as the seeded admin.
+//
+// Coverage run only (`npm run e2e:coverage`, ADR-055): with E2E_COVERAGE=1 the host starts as a
+// client of the `dotnet-coverage` session that `scripts/e2e-coverage.mjs` opened, and is stopped
+// with SIGTERM so that it exits the way a deployed host does and its shutdown path is counted too.
+// (The collector kept a SIGKILLed host's counters when that was tried, but nothing documents it.)
+// Unset, both values below are what they were before the coverage run existed: the plain
+// `dotnet run` command, and Playwright's default shutdown.
+const HOST_COMMAND =
+  'dotnet run --project ../src/LeaseBook.Web --no-launch-profile --urls http://localhost:5080';
+const coverageSession =
+  process.env.E2E_COVERAGE === '1' ? process.env.E2E_COVERAGE_SESSION : undefined;
+
 export default defineConfig({
   testDir: './e2e',
   expect: {
@@ -25,8 +37,12 @@ export default defineConfig({
   },
   webServer: [
     {
-      command:
-        'dotnet run --project ../src/LeaseBook.Web --no-launch-profile --urls http://localhost:5080',
+      command: coverageSession
+        ? `dotnet dotnet-coverage connect ${coverageSession} ${HOST_COMMAND}`
+        : HOST_COMMAND,
+      ...(coverageSession
+        ? { gracefulShutdown: { signal: 'SIGTERM' as const, timeout: 60_000 } }
+        : {}),
       url: 'http://localhost:5080/api/health',
       env: {
         ASPNETCORE_ENVIRONMENT: 'Development',
@@ -36,7 +52,9 @@ export default defineConfig({
           ? { ConnectionStrings__Default: process.env.ConnectionStrings__Default }
           : {}),
       },
-      reuseExistingServer: !process.env.CI && process.env.PAYMENT_SIMULATION_E2E !== '1',
+      // A host that is already running is not under the collector, so the coverage run never reuses one.
+      reuseExistingServer:
+        !process.env.CI && process.env.PAYMENT_SIMULATION_E2E !== '1' && !coverageSession,
       timeout: 180_000,
     },
     {

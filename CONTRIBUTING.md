@@ -189,6 +189,11 @@ validates public documentation, type-checks and builds the web app, runs the Pla
 including the accessibility gate, compiles the Bicep templates and parameter files, builds the container
 image and boots the full stack, and scans for secrets on every push and pull request.
 
+CI also reports what the suites exercise: line and branch coverage by module for the .NET suites and
+by area for the web unit suite on every pull request, and for the Playwright run, with the list of
+API routes no browser test reaches, on `main` and nightly. These are measurements in the job summary
+and its artifacts. No check fails because of a figure. See [test coverage](docs/testing/coverage.md).
+
 Workflow actions are pinned to commit SHAs and the repository enforces it, so a tag-pinned `uses:`
 is rejected by GitHub before any job starts — the run fails with a policy error rather than a test
 failure, which reads like an outage if you are not expecting it. Dependabot's `github-actions`

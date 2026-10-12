@@ -1,5 +1,6 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 import { captureDownload, seedTheme, visualSnapshot } from './helpers';
+import { test } from './test';
 
 // M5 reporting e2e specs (§D step 5), serial, against the seeded demo org.
 // The seeded admin (Renée Calloway) has no MFA; login is email + password.

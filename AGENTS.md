@@ -153,6 +153,10 @@ the configs it cites in sync when a port changes.
 - Format check: `dotnet format --verify-no-changes --exclude src/LeaseBook.Web/Migrations`
 - Run API on `:5080`: `$env:ASPNETCORE_ENVIRONMENT='Development'; dotnet run --project src/LeaseBook.Web`
 - Integration tests use Testcontainers. Docker must be running; local compose is not required.
+- Suite coverage by module (measurement only, nothing is gated; ADR-055): add
+  `--coverage --coverage-output-format cobertura --coverage-settings tests/coverage.settings.xml --results-directory TestResults`
+  to the test command, then build the report with `dotnet reportgenerator`
+  (`docs/testing/coverage.md` owns the commands, the method and the baseline figures)
 
 ### Database (run from repo root)
 
@@ -186,6 +190,9 @@ Run `dotnet tool restore` once for `dotnet-ef`.
 - Regenerate API client (emits the contract itself; no running host or database): `npm run api:generate`
 - e2e, against a seeded host: `npm run e2e`
 - e2e accessibility gate only: `npm run e2e -- a11y.spec.ts`
+- Unit tests with coverage (report in `web/coverage/unit/`): `npm run test:coverage`
+- e2e with host and browser coverage plus the route inventory, against the same seeded database as
+  `npm run e2e` (report in `web/coverage/e2e/`; stop a running host first): `npm run e2e:coverage`
 - Public documentation quality and policy gate: `npm run docs:check`
 
 ### Container

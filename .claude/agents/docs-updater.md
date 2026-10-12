@@ -41,6 +41,7 @@ docs/architecture.md          — canonical public map of the system AS IMPLEMEN
 docs/blueprint.md             — HISTORICAL pre-M0 baseline; superseded by ADRs. Do not refresh it
 docs/accounting.md            — double-entry model, trust equation, event catalog
 docs/perf.md                  — read-path p95 method and the recorded numbers
+docs/testing/coverage.md      — coverage method, local commands, and the dated baseline figures
 docs/payments/simulated-payment-spec.md — proposed non-live payment lifecycle and acceptance matrix
 docs/payments/fee-and-settlement-spec.md — proposed, unimplemented model for processor fees, batched payouts and funds in transit
 ```

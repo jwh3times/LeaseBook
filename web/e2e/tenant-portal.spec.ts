@@ -1,5 +1,6 @@
-import { expect, test } from '@playwright/test';
+import { expect } from '@playwright/test';
 import { DEMO_ADMIN, PORTAL_RESIDENT, seedTheme, signIn } from './helpers';
+import { test } from './test';
 
 test('staff sign-in retains its dashboard destination and denies the tenant portal', async ({
   page,

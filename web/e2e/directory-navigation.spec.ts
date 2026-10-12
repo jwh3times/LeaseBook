@@ -1,5 +1,6 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 import { DEMO_ADMIN, openPalette, paletteOptions, signIn } from './helpers';
+import { test } from './test';
 
 // Directory navigation e2e (WP-4 step 1, ADR-022's deferred coverage): owners/properties/tenants
 // list → detail, units surfaced via property detail (there is no /units/:id route), a ⌘K jump to one

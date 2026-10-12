@@ -1,7 +1,8 @@
 import path from 'path';
 import { fileURLToPath } from 'node:url';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 import { visualSnapshot } from './helpers';
+import { test } from './test';
 
 // __dirname is not defined in ESM scope; derive it from import.meta.url.
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
