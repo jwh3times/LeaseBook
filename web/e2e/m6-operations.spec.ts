@@ -17,7 +17,9 @@ async function login(page: Page) {
   await expect(page).toHaveURL(/\/dashboard/);
 }
 
-test('dashboard CTA navigates to the disbursement run screen', async ({ page }) => {
+test('dashboard CTA navigates to the disbursement run screen @scenario:operations-navigation', async ({
+  page,
+}) => {
   await login(page);
 
   // Dashboard should show the "Run owner disbursements" CTA button.
@@ -36,7 +38,9 @@ test('dashboard CTA navigates to the disbursement run screen', async ({ page }) 
   await expect(page.getByLabel('Select month')).toBeVisible();
 });
 
-test('operations page tab bar switches screens', async ({ page }) => {
+test('operations page tab bar switches screens @scenario:operations-navigation', async ({
+  page,
+}) => {
   await login(page);
   await page.goto('/operations');
 

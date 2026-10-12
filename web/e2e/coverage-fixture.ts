@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { appendFileSync, mkdirSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import type {
   APIRequestContext,
@@ -21,8 +21,13 @@ import { COVERAGE_DIR, webCoverageOptions } from './coverage-options';
 //     turns it into a per-source-file report through the Vite dev server's source maps.
 //   - The method and path of every API request, one JSON object per line, which
 //     `scripts/route-inventory.mjs` matches against the API contract's route templates.
+//
+// And one record per test attempt under `tests/`: its tags, its outcome and when it ran. The
+// scenario catalogue's measured check (ADR-056, `scripts/scenario-catalogue.mjs verify`) joins it to
+// the requests file of the same name, and to the journal entries posted between the two times.
 
 const REQUESTS_DIR = path.join(COVERAGE_DIR, 'requests');
+const TESTS_DIR = path.join(COVERAGE_DIR, 'tests');
 
 // A request is recorded when its path is one the host serves as an endpoint, not as the SPA or a
 // static file. `/openapi` is the development-only contract endpoint.
@@ -35,6 +40,7 @@ export const withCoverage = (base: typeof playwrightTest): typeof playwrightTest
   base.extend<{ recordCoverage: void }>({
     recordCoverage: [
       async ({ browser, request }, use, testInfo) => {
+        const startedAt = Date.now();
         const records: RecordedRequest[] = [];
         const pending: Promise<void>[] = [];
         const pages = new Set<Page>();
@@ -122,15 +128,29 @@ export const withCoverage = (base: typeof playwrightTest): typeof playwrightTest
           browser.newContext = newContext;
           await Promise.all([...pages].map(collectPage));
           await Promise.all(pending);
+          // One pair of files per test attempt: a retry writes its own and never rewrites another's.
+          const pass = process.env.E2E_COVERAGE_PASS ?? 'run';
+          const id = createHash('sha256')
+            .update(`${testInfo.testId}:${testInfo.retry}:${testInfo.repeatEachIndex}`)
+            .digest('hex')
+            .slice(0, 16);
+          mkdirSync(TESTS_DIR, { recursive: true });
+          writeFileSync(
+            path.join(TESTS_DIR, `${pass}-${id}.json`),
+            JSON.stringify({
+              pass,
+              file: path.basename(testInfo.file),
+              title: testInfo.titlePath.slice(1).join(' > '),
+              tags: testInfo.tags,
+              status: testInfo.status,
+              startedAt,
+              endedAt: Date.now(),
+            }) + '\n',
+          );
           if (records.length > 0) {
             mkdirSync(REQUESTS_DIR, { recursive: true });
-            // One file per test attempt: a retry appends its own file and never rewrites another's.
-            const id = createHash('sha256')
-              .update(`${testInfo.testId}:${testInfo.retry}:${testInfo.repeatEachIndex}`)
-              .digest('hex')
-              .slice(0, 16);
-            appendFileSync(
-              path.join(REQUESTS_DIR, `${process.env.E2E_COVERAGE_PASS ?? 'run'}-${id}.ndjson`),
+            writeFileSync(
+              path.join(REQUESTS_DIR, `${pass}-${id}.ndjson`),
               records.map((entry) => JSON.stringify(entry)).join('\n') + '\n',
             );
           }

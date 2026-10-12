@@ -62,7 +62,7 @@ async function gotoCarterLedger(page: Page): Promise<void> {
 }
 
 test.describe('keyboard-only operability', () => {
-  test('records a payment end-to-end by keyboard within the ≤ 3 interaction budget', async ({
+  test('records a payment end-to-end by keyboard within the ≤ 3 interaction budget @scenario:keyboard-record-payment', async ({
     page,
   }) => {
     await signIn(page, DEMO_ADMIN);
@@ -118,7 +118,7 @@ test.describe('keyboard-only operability', () => {
   // flow really costs three interactions, and the composer only knows that because the palette hands
   // its own spend over in navigation state. A regression there reports 2 and looks *better* than it
   // is, which is why this asserts the exact count rather than the ≤ 3 bound.
-  test('records a payment from the palette action within the ≤ 3 budget, counted honestly', async ({
+  test('records a payment from the palette action within the ≤ 3 budget, counted honestly @scenario:keyboard-record-payment', async ({
     page,
   }) => {
     await signIn(page, DEMO_ADMIN);
@@ -171,7 +171,7 @@ test.describe('keyboard-only operability', () => {
   // The palette action has to work from a tenant ledger too, which is the one place React Router does
   // NOT remount the page: `/tenants/t1` → `/tenants/t1?compose=payment` reconciles the same element,
   // so anything the composer reads only at mount time silently does nothing (#408).
-  test('the palette action opens the composer when already on a tenant ledger', async ({
+  test('the palette action opens the composer when already on a tenant ledger @scenario:keyboard-record-payment', async ({
     page,
   }) => {
     await signIn(page, DEMO_ADMIN);
@@ -194,7 +194,7 @@ test.describe('keyboard-only operability', () => {
   // The palette's spend belongs to the arrival it paid for. History state outlives that arrival — the
   // browser replays it on reload and on back/forward — so a re-seeded counter would over-report a
   // flow the palette had no part in, and could even fail the budget it is meant to measure (#408).
-  test('a reload of the composed URL does not re-charge the palette’s interactions', async ({
+  test('a reload of the composed URL does not re-charge the palette’s interactions @scenario:keyboard-record-payment', async ({
     page,
   }) => {
     await signIn(page, DEMO_ADMIN);
@@ -216,7 +216,7 @@ test.describe('keyboard-only operability', () => {
     expect(event.met).toBe(true);
   });
 
-  test('palette arrow keys move the selection and Enter activates the highlighted result', async ({
+  test('palette arrow keys move the selection and Enter activates the highlighted result @scenario:keyboard-navigation-and-focus', async ({
     page,
   }) => {
     await signIn(page, DEMO_ADMIN);
@@ -242,7 +242,9 @@ test.describe('keyboard-only operability', () => {
     await expect(page).not.toHaveURL(/\/dashboard/);
   });
 
-  test('closing a dialog with Escape returns focus to the trigger', async ({ page }) => {
+  test('closing a dialog with Escape returns focus to the trigger @scenario:keyboard-navigation-and-focus', async ({
+    page,
+  }) => {
     await signIn(page, DEMO_ADMIN);
     await gotoCarterLedger(page);
 
@@ -261,7 +263,9 @@ test.describe('keyboard-only operability', () => {
     await expect(historyButton).toBeFocused();
   });
 
-  test('keyboard focus is shown with a design-system focus-visible ring', async ({ page }) => {
+  test('keyboard focus is shown with a design-system focus-visible ring @scenario:keyboard-navigation-and-focus', async ({
+    page,
+  }) => {
     await signIn(page, DEMO_ADMIN);
 
     // Tab into the app shell by keyboard → the focused control reports :focus-visible, the state the
@@ -284,7 +288,7 @@ test.describe('keyboard-only operability', () => {
     expect(shadow).not.toBe('none');
   });
 
-  test('reconcile mode: Select All by keyboard drives the difference to $0.00 and surfaces Finalize', async ({
+  test('reconcile mode: Select All by keyboard drives the difference to $0.00 and surfaces Finalize @scenario:keyboard-reconcile-select-all', async ({
     page,
   }) => {
     await signIn(page, DEMO_ADMIN);
@@ -323,7 +327,7 @@ test.describe('keyboard-only operability', () => {
     await expect(page.getByRole('button', { name: 'Reconcile account' })).toBeVisible();
   });
 
-  test('deactivating a bank account with uncleared items is blocked by the server guard', async ({
+  test('deactivating a bank account with uncleared items is blocked by the server guard @scenario:bank-account-deactivation-guard', async ({
     page,
   }) => {
     await signIn(page, DEMO_ADMIN);

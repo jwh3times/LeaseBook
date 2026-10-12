@@ -67,7 +67,7 @@ async function selectMay2026Cash(page: Page) {
 test.describe.serial('M5 reports', () => {
   // ---- Flow A: Owner statement → fiduciary panel → export -----------------------
 
-  test('owner statement shows fiduciary panel with three passing checks and $0.00 variance', async ({
+  test('owner statement shows fiduciary panel with three passing checks and $0.00 variance @scenario:owner-statement-view-export-deliver', async ({
     page,
   }) => {
     await login(page);
@@ -111,7 +111,9 @@ test.describe.serial('M5 reports', () => {
   // serial block so it keeps the "runs after the M4 reconcile spec" ordering the file documents.
   // The data-theme assertion guards the bootstrap-from-CI-actuals flow (a failed seed would commit a
   // light image as the dark baseline).
-  test('owner statement renders in the dark theme', async ({ page }) => {
+  test('owner statement renders in the dark theme @scenario:owner-statement-view-export-deliver', async ({
+    page,
+  }) => {
     await seedTheme(page, 'dark'); // before login — ThemeProvider reads storage on boot
     await login(page);
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
@@ -123,7 +125,9 @@ test.describe.serial('M5 reports', () => {
     await expect(page.getByText('$22,640.30')).toBeVisible();
   });
 
-  test('owner statement PDF export downloads a non-empty PDF', async ({ page }) => {
+  test('owner statement PDF export downloads a non-empty PDF @scenario:owner-statement-view-export-deliver', async ({
+    page,
+  }) => {
     await login(page);
     await gotoO5Statement(page);
     await selectMay2026Cash(page);
@@ -142,7 +146,9 @@ test.describe.serial('M5 reports', () => {
     await page.screenshot({ path: 'e2e-results/m5-pdf-exported.png', fullPage: true });
   });
 
-  test('owner statement CSV export downloads a non-empty CSV', async ({ page }) => {
+  test('owner statement CSV export downloads a non-empty CSV @scenario:owner-statement-view-export-deliver', async ({
+    page,
+  }) => {
     await login(page);
     await gotoO5Statement(page);
     await selectMay2026Cash(page);
@@ -159,7 +165,9 @@ test.describe.serial('M5 reports', () => {
     expect(text).toContain('22640.30');
   });
 
-  test('deliver to owner issues the statement to the address on file', async ({ page }) => {
+  test('deliver to owner issues the statement to the address on file @scenario:owner-statement-view-export-deliver', async ({
+    page,
+  }) => {
     await login(page);
     await page.goto(`/owners/${O3_ID}/statement`);
     await expect(page.locator('.fw7').filter({ hasText: O3_NAME })).toBeVisible({
@@ -174,7 +182,9 @@ test.describe.serial('M5 reports', () => {
 
   // ---- Flow B: Report catalog → filter → live preview -------------------------
 
-  test('report catalog loads 8 reports; selecting one shows a live preview', async ({ page }) => {
+  test('report catalog loads 8 reports; selecting one shows a live preview @scenario:report-catalog-preview-and-export', async ({
+    page,
+  }) => {
     await login(page);
     await page.goto('/reports');
     await expect(page.locator('h2').filter({ hasText: 'Reports' })).toBeVisible();
@@ -207,7 +217,7 @@ test.describe.serial('M5 reports', () => {
     await page.screenshot({ path: 'e2e-results/m5-catalog-loaded.png', fullPage: true });
   });
 
-  test('selecting a report and changing the period filter updates the live preview', async ({
+  test('selecting a report and changing the period filter updates the live preview @scenario:report-catalog-preview-and-export', async ({
     page,
   }) => {
     await login(page);
@@ -277,7 +287,7 @@ test.describe.serial('M5 reports', () => {
   // permanently false: these chips never rendered and no report could be filtered by owner, property
   // or bank at all. FilterControlVocabularyTests catches the vocabulary drift at build time; only a
   // real browser proves the control is reachable and that choosing an owner reaches the wire.
-  test('owner statement builder offers the owner filter and sends ownerId to the preview', async ({
+  test('owner statement builder offers the owner filter and sends ownerId to the preview @scenario:report-catalog-preview-and-export', async ({
     page,
   }) => {
     await login(page);
@@ -316,7 +326,9 @@ test.describe.serial('M5 reports', () => {
     await previewWithOwner;
   });
 
-  test('report catalog Export CSV button returns a CSV file', async ({ page }) => {
+  test('report catalog Export CSV button returns a CSV file @scenario:report-catalog-preview-and-export', async ({
+    page,
+  }) => {
     await login(page);
     await page.goto('/reports');
 

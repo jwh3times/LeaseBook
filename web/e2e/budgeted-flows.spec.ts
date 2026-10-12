@@ -15,7 +15,9 @@ async function login(page: import('@playwright/test').Page) {
   await expect(page).toHaveURL(/\/dashboard/);
 }
 
-test('login lands on the dashboard with owner balances visible at 0 clicks', async ({ page }) => {
+test('login lands on the dashboard with owner balances visible at 0 clicks @scenario:sign-in-to-dashboard-balances', async ({
+  page,
+}) => {
   await login(page);
   await expect(page.getByText('Owner ending balances')).toBeVisible();
   await expect(page.getByText('Hargrove Family Trust')).toBeVisible();
@@ -33,7 +35,9 @@ test('login lands on the dashboard with owner balances visible at 0 clicks', asy
 // org's golden figures. The data-theme assertion is load-bearing: baselines are bootstrapped from CI
 // actuals, so a silently-failed seed would commit a LIGHT image as the dark baseline and the gate
 // would pass forever against the wrong picture.
-test('dashboard renders the flagship layout in the dark theme', async ({ page }) => {
+test('dashboard renders the flagship layout in the dark theme @scenario:sign-in-to-dashboard-balances', async ({
+  page,
+}) => {
   await seedTheme(page, 'dark'); // before login — ThemeProvider reads storage on boot
   await login(page);
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
@@ -43,7 +47,9 @@ test('dashboard renders the flagship layout in the dark theme', async ({ page })
   await visualSnapshot(page, 'dashboard-full-dark.png', { fullPage: true, mask: [paymentsCard] });
 });
 
-test('⌘K jumps to any tenant in ≤ 2 interactions', async ({ page }) => {
+test('⌘K jumps to any tenant in ≤ 2 interactions @scenario:palette-jump-to-tenant', async ({
+  page,
+}) => {
   await login(page);
   // Open the ⌘K palette robustly. The global keydown listener attaches in a useEffect after the app
   // shell mounts (web/src/lib/useGlobalShortcuts.ts), so a single press fired right after navigation
@@ -65,7 +71,9 @@ test('⌘K jumps to any tenant in ≤ 2 interactions', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Jasmine Carter' })).toBeVisible();
 });
 
-test('list row-click opens the detail in ≤ 2 interactions', async ({ page }) => {
+test('list row-click opens the detail in ≤ 2 interactions @scenario:list-row-opens-detail', async ({
+  page,
+}) => {
   await login(page);
   await page.getByRole('button', { name: 'Tenants' }).click(); // (1) open the Tenants index
   await expect(page).toHaveURL(/\/tenants$/);
@@ -74,7 +82,9 @@ test('list row-click opens the detail in ≤ 2 interactions', async ({ page }) =
   await expect(page.getByRole('heading', { name: 'Jasmine Carter' })).toBeVisible();
 });
 
-test('changing the accounting basis in settings persists across a reload', async ({ page }) => {
+test('changing the accounting basis in settings persists across a reload @scenario:settings-accounting-basis', async ({
+  page,
+}) => {
   await login(page);
   await page.goto('/settings');
   await page.getByLabel('Accounting basis').selectOption('accrual');

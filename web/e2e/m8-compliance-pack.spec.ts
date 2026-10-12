@@ -17,7 +17,7 @@ import { test } from './test';
 // The seeded admin (Renée Calloway) is a PMAdmin with no MFA, so login is email + password.
 
 test.describe('M8 trust compliance pack', () => {
-  test('PMAdmin sees the pack card and gets a clear "period not closed" message for an open period', async ({
+  test('PMAdmin sees the pack card and gets a clear "period not closed" message for an open period @scenario:compliance-pack-open-period', async ({
     page,
   }) => {
     await signIn(page, DEMO_ADMIN);

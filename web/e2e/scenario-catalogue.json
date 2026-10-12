@@ -1,0 +1,855 @@
+{
+  "scenarios": [
+    {
+      "id": "accessibility-portals",
+      "workflow": "The tenant and owner portals have no WCAG 2 AA violations, light and dark",
+      "area": "Accessibility",
+      "spec": "a11y.spec.ts",
+      "events": [],
+      "routes": []
+    },
+    {
+      "id": "accessibility-staff-pages",
+      "workflow": "Every routed staff page, the record details and the refund-check dialogs have no WCAG 2 AA violations, light and dark",
+      "area": "Accessibility",
+      "spec": "a11y.spec.ts",
+      "events": [],
+      "routes": [
+        "GET /api/refund-checks/micr/{bankAccountId}",
+        "GET /api/refund-checks/print-settings/{bankAccountId}"
+      ]
+    },
+    {
+      "id": "accessibility-command-palette",
+      "workflow": "The command palette open on results has no WCAG 2 AA violations",
+      "area": "Accessibility",
+      "spec": "a11y.spec.ts",
+      "events": [],
+      "routes": []
+    },
+    {
+      "id": "accessibility-onboarding",
+      "workflow": "The onboarding wizard has no WCAG 2 AA violations",
+      "area": "Accessibility",
+      "spec": "a11y.spec.ts",
+      "events": [],
+      "routes": []
+    },
+    {
+      "id": "mfa-enrollment-by-keyboard",
+      "workflow": "Enroll in MFA by keyboard and read the recovery codes, with the enrollment routes answered by the test",
+      "area": "Account security",
+      "spec": "account-security.spec.ts",
+      "events": [],
+      "routes": []
+    },
+    {
+      "id": "sign-in-to-dashboard-balances",
+      "workflow": "Sign in and see owner ending balances on the dashboard at 0 clicks",
+      "area": "Dashboard",
+      "spec": "budgeted-flows.spec.ts",
+      "events": [],
+      "routes": [
+        "GET /api/auth/csrf",
+        "POST /api/auth/login",
+        "GET /api/auth/me",
+        "GET /api/dashboard",
+        "GET /api/onboarding/status",
+        "GET /api/settings/org",
+        "POST /api/telemetry/budget"
+      ]
+    },
+    {
+      "id": "palette-jump-to-tenant",
+      "workflow": "Jump to a tenant from the command palette in 2 interactions",
+      "area": "Directory",
+      "spec": "budgeted-flows.spec.ts",
+      "events": [],
+      "routes": ["GET /api/search"]
+    },
+    {
+      "id": "list-row-opens-detail",
+      "workflow": "Open a record from its list row in 2 interactions",
+      "area": "Directory",
+      "spec": "budgeted-flows.spec.ts",
+      "events": [],
+      "routes": ["GET /api/directory/tenants", "GET /api/directory/tenants/{id}"]
+    },
+    {
+      "id": "settings-accounting-basis",
+      "workflow": "Change the accounting basis in settings and keep it across a reload",
+      "area": "Settings",
+      "spec": "budgeted-flows.spec.ts",
+      "events": [],
+      "routes": ["GET /api/settings/org", "PUT /api/settings/org"]
+    },
+    {
+      "id": "directory-browse-records",
+      "workflow": "Browse owners, properties and tenants from list to detail and page with the quick-switcher",
+      "area": "Directory",
+      "spec": "directory-navigation.spec.ts",
+      "events": [],
+      "routes": [
+        "GET /api/directory/owners",
+        "GET /api/directory/owners/{id}",
+        "GET /api/directory/properties",
+        "GET /api/directory/properties/{id}",
+        "GET /api/directory/tenants",
+        "GET /api/directory/tenants/{id}"
+      ]
+    },
+    {
+      "id": "directory-palette-jump",
+      "workflow": "Jump to an owner, a property, a tenant and a unit from the command palette",
+      "area": "Directory",
+      "spec": "directory-navigation.spec.ts",
+      "events": [],
+      "routes": ["GET /api/search"]
+    },
+    {
+      "id": "error-and-empty-states",
+      "workflow": "An expired session, a failed query, a failed post and an empty list each show their designed state",
+      "area": "Error states",
+      "spec": "error-states.spec.ts",
+      "events": [],
+      "routes": []
+    },
+    {
+      "id": "keyboard-record-payment",
+      "workflow": "Record a tenant payment by keyboard alone, from the ledger and from the palette action, in 3 interactions",
+      "area": "Accounting",
+      "spec": "keyboard-only.spec.ts",
+      "org": "demo",
+      "events": ["PaymentReceived"],
+      "routes": [
+        "POST /api/accounting/tenants/{tenantId}/payments",
+        "GET /api/accounting/tenants/{tenantId}/ledger"
+      ]
+    },
+    {
+      "id": "keyboard-navigation-and-focus",
+      "workflow": "Move through the palette, close a dialog and see the focus ring by keyboard",
+      "area": "Accessibility",
+      "spec": "keyboard-only.spec.ts",
+      "events": [],
+      "routes": []
+    },
+    {
+      "id": "keyboard-reconcile-select-all",
+      "workflow": "Drive a reconciliation to a $0.00 difference by keyboard",
+      "area": "Banking",
+      "spec": "keyboard-only.spec.ts",
+      "events": [],
+      "routes": [
+        "GET /api/accounting/banks/{bankAccountId}/register",
+        "GET /api/accounting/reconciliations"
+      ]
+    },
+    {
+      "id": "bank-account-deactivation-guard",
+      "workflow": "Deactivating a bank account with uncleared items is refused",
+      "area": "Settings",
+      "spec": "keyboard-only.spec.ts",
+      "events": [],
+      "routes": ["GET /api/settings/banks", "PUT /api/settings/banks/{id}/active"]
+    },
+    {
+      "id": "ledger-record-and-void-payment",
+      "workflow": "Record a tenant payment in 3 interactions, then void it with a linked reversal and an audit trail",
+      "area": "Accounting",
+      "spec": "m3-ledger.spec.ts",
+      "org": "demo",
+      "events": ["PaymentReceived", "EntryVoided"],
+      "routes": [
+        "POST /api/accounting/tenants/{tenantId}/payments",
+        "POST /api/accounting/entries/{entryId}/void",
+        "GET /api/accounting/entries/{entryId}/audit",
+        "GET /api/accounting/tenants/{tenantId}/ledger"
+      ]
+    },
+    {
+      "id": "ledger-payment-into-issued-month",
+      "workflow": "Record a payment into a month whose owner statement is already issued, and see the notice",
+      "area": "Accounting",
+      "spec": "m3-ledger.spec.ts",
+      "org": "demo",
+      "events": ["PaymentReceived", "EntryVoided"],
+      "routes": [
+        "POST /api/accounting/tenants/{tenantId}/payments",
+        "GET /api/statements/issued-coverage",
+        "POST /api/statements/{ownerId}/deliver"
+      ]
+    },
+    {
+      "id": "ledger-composer-guards",
+      "workflow": "The ledger composer blocks an over-application of held funds, and renders in the dark theme",
+      "area": "Accounting",
+      "spec": "m3-ledger.spec.ts",
+      "events": [],
+      "routes": ["POST /api/accounting/tenants/{tenantId}/deposit-applications"]
+    },
+    {
+      "id": "ledger-void-reason-staff-only",
+      "workflow": "A void's reason stays off the owner statement and shows only as a staff annotation",
+      "area": "Accounting",
+      "spec": "m3-ledger.spec.ts",
+      "org": "demo",
+      "events": ["PaymentReceived", "EntryVoided"],
+      "routes": [
+        "POST /api/accounting/entries/{entryId}/void",
+        "GET /api/statements/{ownerId}",
+        "GET /api/statements/{ownerId}/internal-notes"
+      ]
+    },
+    {
+      "id": "bank-statement-import-and-match",
+      "workflow": "Import a bank CSV, auto-match and clear a register line, and skip duplicates on re-import",
+      "area": "Banking",
+      "spec": "m4-banking.spec.ts",
+      "events": [],
+      "routes": [
+        "POST /api/banking/banks/{bankAccountId}/imports",
+        "POST /api/banking/imports/{importId}/confirm",
+        "GET /api/banking/imports/{importId}/matches",
+        "GET /api/banking/banks/{bankAccountId}/mappings",
+        "GET /api/accounting/banks/{bankAccountId}/register"
+      ]
+    },
+    {
+      "id": "bank-reconcile-finalize-and-lock",
+      "workflow": "Reconcile a trust account to $0.00, finalize, and see the locked month refuse a posting",
+      "area": "Banking",
+      "spec": "m4-banking.spec.ts",
+      "org": "demo",
+      "events": ["PaymentReceived"],
+      "routes": [
+        "GET /api/accounting/banks/balances",
+        "GET /api/accounting/reconciliations",
+        "POST /api/accounting/banks/clearances",
+        "POST /api/accounting/reconciliations",
+        "POST /api/accounting/reconciliations/{id}/finalize",
+        "POST /api/accounting/tenants/{tenantId}/payments"
+      ]
+    },
+    {
+      "id": "owner-statement-view-export-deliver",
+      "workflow": "View an owner statement with its fiduciary checks, export it as PDF and CSV, and deliver it",
+      "area": "Reporting",
+      "spec": "m5-reports.spec.ts",
+      "events": [],
+      "routes": [
+        "GET /api/statements/{ownerId}",
+        "GET /api/statements/{ownerId}/internal-notes",
+        "GET /api/statements/{ownerId}/pdf",
+        "GET /api/statements/{ownerId}/csv",
+        "POST /api/statements/{ownerId}/deliver"
+      ]
+    },
+    {
+      "id": "report-catalog-preview-and-export",
+      "workflow": "Open the report catalog, preview a report with filters, and export it as CSV",
+      "area": "Reporting",
+      "spec": "m5-reports.spec.ts",
+      "events": [],
+      "routes": ["GET /api/reports", "GET /api/reports/{id}/preview", "GET /api/reports/{id}/csv"]
+    },
+    {
+      "id": "month-cycle-rent-run",
+      "workflow": "Preview and confirm the monthly rent run",
+      "area": "Operations",
+      "spec": "m6-bulk-operations.spec.ts",
+      "org": "demo",
+      "events": ["RentCharged"],
+      "routes": [
+        "GET /api/operations/runs/{type}/preview",
+        "GET /api/operations/runs/{type}/preview/issued-coverage",
+        "POST /api/operations/runs/{type}/confirm"
+      ]
+    },
+    {
+      "id": "month-cycle-late-fee-run",
+      "workflow": "Preview the late-fee run, and confirm it when a tenant is eligible",
+      "area": "Operations",
+      "spec": "m6-bulk-operations.spec.ts",
+      "events": [],
+      "routes": ["GET /api/operations/runs/{type}/preview"]
+    },
+    {
+      "id": "month-cycle-manual-charge",
+      "workflow": "Post a maintenance fee to a tenant from the ledger composer",
+      "area": "Accounting",
+      "spec": "m6-bulk-operations.spec.ts",
+      "org": "demo",
+      "events": ["FeeCharged"],
+      "routes": ["POST /api/accounting/tenants/{tenantId}/charges"]
+    },
+    {
+      "id": "month-cycle-reconcile-and-statement",
+      "workflow": "Reach reconcile mode in 2 clicks, and read an owner statement that ties after the month's postings",
+      "area": "Reporting",
+      "spec": "m6-bulk-operations.spec.ts",
+      "events": [],
+      "routes": [
+        "GET /api/accounting/banks/{bankAccountId}/register",
+        "GET /api/statements/{ownerId}"
+      ]
+    },
+    {
+      "id": "month-cycle-disbursement-run",
+      "workflow": "Preview and confirm the owner disbursement run",
+      "area": "Operations",
+      "spec": "m6-bulk-operations.spec.ts",
+      "org": "demo",
+      "events": ["ManagementFeeAssessed", "OwnerDisbursed"],
+      "routes": [
+        "GET /api/operations/runs/{type}/preview",
+        "POST /api/operations/runs/{type}/confirm"
+      ]
+    },
+    {
+      "id": "month-cycle-run-history",
+      "workflow": "See the confirmed runs in the run history",
+      "area": "Operations",
+      "spec": "m6-bulk-operations.spec.ts",
+      "events": [],
+      "routes": ["GET /api/operations/runs"]
+    },
+    {
+      "id": "operations-navigation",
+      "workflow": "Reach the disbursement run from the dashboard, and switch between the operations screens",
+      "area": "Operations",
+      "spec": "m6-operations.spec.ts",
+      "events": [],
+      "routes": [
+        "GET /api/operations/runs",
+        "GET /api/operations/runs/{type}/preview",
+        "GET /api/payments"
+      ]
+    },
+    {
+      "id": "onboarding-import-verify-sign-off",
+      "workflow": "Import a portfolio and its opening balances, correct a non-tying import, verify and sign off",
+      "area": "Migration",
+      "spec": "m7-onboarding.spec.ts",
+      "org": "cutover",
+      "events": ["OpeningBalance", "EntryVoided"],
+      "routes": [
+        "GET /api/onboarding/status",
+        "POST /api/onboarding/import/{kind}",
+        "POST /api/onboarding/import-balances/{kind}",
+        "POST /api/onboarding/import-balances/{kind}/supersede",
+        "POST /api/onboarding/verification",
+        "POST /api/onboarding/verification/{id}/signoff"
+      ]
+    },
+    {
+      "id": "audit-log-review",
+      "workflow": "Read the audit trail, open one event, and narrow it with filters",
+      "area": "Audit",
+      "spec": "m8-audit-review.spec.ts",
+      "events": [],
+      "routes": ["GET /api/audit/events", "GET /api/audit/events/{id}", "GET /api/audit/filters"]
+    },
+    {
+      "id": "compliance-pack-open-period",
+      "workflow": "Ask for the trust compliance pack for an open period and get a clear refusal",
+      "area": "Reporting",
+      "spec": "m8-compliance-pack.spec.ts",
+      "events": [],
+      "routes": ["GET /api/reports/compliance-pack"]
+    },
+    {
+      "id": "late-fee-policy-settings",
+      "workflow": "Set the organization's late-fee policy and see the late-fee preview follow it",
+      "area": "Settings",
+      "spec": "m8-late-fee-settings.spec.ts",
+      "events": [],
+      "routes": ["PUT /api/settings/org", "GET /api/operations/runs/{type}/preview"]
+    },
+    {
+      "id": "lease-late-fee-override",
+      "workflow": "Set and clear a lease's late-fee override from the tenant ledger",
+      "area": "Directory",
+      "spec": "m8-late-fee-settings.spec.ts",
+      "events": [],
+      "routes": ["PUT /api/directory/leases/{id}"]
+    },
+    {
+      "id": "owner-portal-balance-and-statement",
+      "workflow": "An owner signs in, reads the balance, downloads a statement PDF and signs out",
+      "area": "Owner portal",
+      "spec": "owner-portal.spec.ts",
+      "events": [],
+      "routes": [
+        "GET /api/portal/owner/summary",
+        "GET /api/portal/owner/statements",
+        "GET /api/portal/owner/statements/{artifactId}/pdf",
+        "POST /api/auth/logout"
+      ]
+    },
+    {
+      "id": "owner-portal-denials",
+      "workflow": "A resident and a staff member are refused the owner portal",
+      "area": "Owner portal",
+      "spec": "owner-portal.spec.ts",
+      "events": [],
+      "routes": []
+    },
+    {
+      "id": "portal-invitation-enrollment-revocation",
+      "workflow": "Invite a tenant and an owner to their portal, enroll each, and revoke the access",
+      "area": "Portal access",
+      "spec": "portal-enrollment.spec.ts",
+      "events": [],
+      "routes": [
+        "GET /api/portal-access/{persona}/{targetId}",
+        "POST /api/portal-access/{persona}/{targetId}",
+        "GET /api/portal-access/test-inbox",
+        "POST /api/portal-enrollment/inspect",
+        "POST /api/portal-enrollment/accept",
+        "POST /api/portal-access/{persona}/{targetId}/users/{userId}/revoke"
+      ]
+    },
+    {
+      "id": "refund-check-issue-print-void",
+      "workflow": "Issue, print and void a deposit refund check in 4 interactions",
+      "area": "Accounting",
+      "spec": "refund-checks.spec.ts",
+      "org": "demo",
+      "events": ["RefundIssued", "EntryVoided"],
+      "routes": [
+        "GET /api/refund-checks/options",
+        "GET /api/refund-checks",
+        "POST /api/refund-checks",
+        "POST /api/refund-checks/{id}/pdf",
+        "POST /api/refund-checks/{id}/void"
+      ]
+    },
+    {
+      "id": "simulated-payment-fee-payout-return",
+      "workflow": "A tenant pays with a quoted fee; one payout arrives short and one carries a return an administrator posts",
+      "area": "Payments",
+      "spec": "simulated-payment.spec.ts",
+      "org": "payment fixture",
+      "pass": "payments",
+      "events": ["PaymentReceived", "ProcessorFeeDifference", "EntryVoided"],
+      "routes": [
+        "PUT /api/settings/payment-fees",
+        "GET /api/portal/tenant/payments/quote",
+        "POST /api/portal/tenant/payments",
+        "POST /callbacks/payments/simulation/payout",
+        "GET /api/payments/settlements",
+        "POST /api/payments/settlements/{id}/post"
+      ]
+    },
+    {
+      "id": "simulated-payment-reload-and-bank-evidence",
+      "workflow": "A simulated payment survives a reload and posts only after separate bank evidence",
+      "area": "Payments",
+      "spec": "simulated-payment.spec.ts",
+      "org": "payment fixture",
+      "pass": "payments",
+      "events": ["PaymentReceived", "EntryVoided"],
+      "routes": [
+        "POST /api/portal/tenant/payments",
+        "POST /callbacks/payments/simulation",
+        "GET /api/payments",
+        "POST /api/payments/{id}/return"
+      ]
+    },
+    {
+      "id": "spa-boot",
+      "workflow": "The application loads and shows the sign-in screen",
+      "area": "Platform",
+      "spec": "smoke.spec.ts",
+      "events": [],
+      "routes": []
+    },
+    {
+      "id": "tenant-portal-staff-denied",
+      "workflow": "A staff member is refused the tenant portal and keeps the dashboard",
+      "area": "Tenant portal",
+      "spec": "tenant-portal.spec.ts",
+      "events": [],
+      "routes": []
+    },
+    {
+      "id": "tenant-portal-ledger-and-security",
+      "workflow": "A resident signs in, reads the ledger, reaches account security and signs out",
+      "area": "Tenant portal",
+      "spec": "tenant-portal.spec.ts",
+      "events": [],
+      "routes": [
+        "GET /api/portal/tenant/ledger",
+        "GET /api/portal/tenant/payments",
+        "POST /api/auth/logout"
+      ]
+    }
+  ],
+  "exemptions": {
+    "events": [
+      {
+        "event": "BalanceForward",
+        "reason": "baseline gap",
+        "date": "2026-10-12",
+        "issue": 544
+      },
+      {
+        "event": "BankFeeCharged",
+        "reason": "baseline gap",
+        "date": "2026-10-12",
+        "issue": 544
+      },
+      {
+        "event": "CreditIssued",
+        "reason": "baseline gap",
+        "date": "2026-10-12",
+        "issue": 544
+      },
+      {
+        "event": "DepositApplied",
+        "reason": "baseline gap",
+        "date": "2026-10-12",
+        "issue": 544
+      },
+      {
+        "event": "DepositCollected",
+        "reason": "baseline gap",
+        "date": "2026-10-12",
+        "issue": 544
+      },
+      {
+        "event": "DepositResponsibilityTransferred",
+        "reason": "baseline gap",
+        "date": "2026-10-12",
+        "issue": 544
+      },
+      {
+        "event": "InterestEarned",
+        "reason": "baseline gap",
+        "date": "2026-10-12",
+        "issue": 544
+      },
+      {
+        "event": "OwnerContribution",
+        "reason": "baseline gap",
+        "date": "2026-10-12",
+        "issue": 544
+      },
+      {
+        "event": "PMFeesSwept",
+        "reason": "baseline gap",
+        "date": "2026-10-12",
+        "issue": 544
+      },
+      {
+        "event": "PrepaymentApplied",
+        "reason": "baseline gap",
+        "date": "2026-10-12",
+        "issue": 544
+      },
+      {
+        "event": "PrepaymentReceived",
+        "reason": "baseline gap",
+        "date": "2026-10-12",
+        "issue": 544
+      },
+      {
+        "event": "TrustTransfer",
+        "reason": "baseline gap",
+        "date": "2026-10-12",
+        "issue": 544
+      },
+      {
+        "event": "VendorPaid",
+        "reason": "baseline gap",
+        "date": "2026-10-12",
+        "issue": 544
+      }
+    ],
+    "routes": [
+      {
+        "route": "GET /api/accounting/owners/balances",
+        "reason": "baseline gap",
+        "date": "2026-10-12",
+        "issue": 544
+      },
+      {
+        "route": "GET /api/accounting/owners/{ownerId}/ledger",
+        "reason": "baseline gap",
+        "date": "2026-10-12",
+        "issue": 544
+      },
+      {
+        "route": "GET /api/accounting/deposits",
+        "reason": "baseline gap",
+        "date": "2026-10-12",
+        "issue": 544
+      },
+      {
+        "route": "GET /api/accounting/trust-equation",
+        "reason": "baseline gap",
+        "date": "2026-10-12",
+        "issue": 544
+      },
+      {
+        "route": "POST /api/accounting/banks/{bankAccountId}/adjustments",
+        "reason": "baseline gap",
+        "date": "2026-10-12",
+        "issue": 544
+      },
+      {
+        "route": "POST /api/accounting/tenants/{tenantId}/credits",
+        "reason": "baseline gap",
+        "date": "2026-10-12",
+        "issue": 544
+      },
+      {
+        "route": "POST /api/accounting/tenants/{tenantId}/deposits",
+        "reason": "baseline gap",
+        "date": "2026-10-12",
+        "issue": 544
+      },
+      {
+        "route": "POST /api/accounting/tenants/{tenantId}/prepayments",
+        "reason": "baseline gap",
+        "date": "2026-10-12",
+        "issue": 544
+      },
+      {
+        "route": "POST /api/accounting/tenants/{tenantId}/prepayment-applications",
+        "reason": "baseline gap",
+        "date": "2026-10-12",
+        "issue": 544
+      },
+      {
+        "route": "GET /api/accounting/tenants/{tenantId}/ledger.csv",
+        "reason": "baseline gap",
+        "date": "2026-10-12",
+        "issue": 544
+      },
+      {
+        "route": "POST /api/accounting/reconciliations/{id}/unlock",
+        "reason": "baseline gap",
+        "date": "2026-10-12",
+        "issue": 544
+      },
+      {
+        "route": "GET /api/accounting/reconciliations/{id}/report",
+        "reason": "baseline gap",
+        "date": "2026-10-12",
+        "issue": 544
+      },
+      {
+        "route": "POST /api/directory/owners",
+        "reason": "baseline gap",
+        "date": "2026-10-12",
+        "issue": 544
+      },
+      {
+        "route": "PUT /api/directory/owners/{id}",
+        "reason": "baseline gap",
+        "date": "2026-10-12",
+        "issue": 544
+      },
+      {
+        "route": "POST /api/directory/properties",
+        "reason": "baseline gap",
+        "date": "2026-10-12",
+        "issue": 544
+      },
+      {
+        "route": "PUT /api/directory/properties/{id}",
+        "reason": "baseline gap",
+        "date": "2026-10-12",
+        "issue": 544
+      },
+      {
+        "route": "POST /api/directory/properties/{id}/ownership-transfers",
+        "reason": "baseline gap",
+        "date": "2026-10-12",
+        "issue": 544
+      },
+      {
+        "route": "GET /api/directory/units",
+        "reason": "baseline gap",
+        "date": "2026-10-12",
+        "issue": 544
+      },
+      {
+        "route": "POST /api/directory/units",
+        "reason": "baseline gap",
+        "date": "2026-10-12",
+        "issue": 544
+      },
+      {
+        "route": "PUT /api/directory/units/{id}",
+        "reason": "baseline gap",
+        "date": "2026-10-12",
+        "issue": 544
+      },
+      {
+        "route": "POST /api/directory/tenants",
+        "reason": "baseline gap",
+        "date": "2026-10-12",
+        "issue": 544
+      },
+      {
+        "route": "PUT /api/directory/tenants/{id}",
+        "reason": "baseline gap",
+        "date": "2026-10-12",
+        "issue": 544
+      },
+      {
+        "route": "POST /api/directory/leases",
+        "reason": "baseline gap",
+        "date": "2026-10-12",
+        "issue": 544
+      },
+      {
+        "route": "GET /api/health",
+        "reason": "baseline gap",
+        "date": "2026-10-12",
+        "issue": 544
+      },
+      {
+        "route": "PUT /api/settings/portal-access",
+        "reason": "baseline gap",
+        "date": "2026-10-12",
+        "issue": 544
+      },
+      {
+        "route": "POST /api/settings/banks",
+        "reason": "baseline gap",
+        "date": "2026-10-12",
+        "issue": 544
+      },
+      {
+        "route": "GET /api/settings/banks/{id}",
+        "reason": "baseline gap",
+        "date": "2026-10-12",
+        "issue": 544
+      },
+      {
+        "route": "PUT /api/settings/banks/{id}",
+        "reason": "baseline gap",
+        "date": "2026-10-12",
+        "issue": 544
+      },
+      {
+        "route": "POST /api/banking/banks/{bankAccountId}/mappings",
+        "reason": "baseline gap",
+        "date": "2026-10-12",
+        "issue": 544
+      },
+      {
+        "route": "POST /api/portal-access/invitations/{id}/replace",
+        "reason": "baseline gap",
+        "date": "2026-10-12",
+        "issue": 544
+      },
+      {
+        "route": "POST /api/portal-access/invitations/{id}/cancel",
+        "reason": "baseline gap",
+        "date": "2026-10-12",
+        "issue": 544
+      },
+      {
+        "route": "POST /api/portal-access/invitations/{id}/retry",
+        "reason": "baseline gap",
+        "date": "2026-10-12",
+        "issue": 544
+      },
+      {
+        "route": "GET /api/portal/tenant/payments/{id}",
+        "reason": "baseline gap",
+        "date": "2026-10-12",
+        "issue": 544
+      },
+      {
+        "route": "POST /api/payments/{id}/retry",
+        "reason": "baseline gap",
+        "date": "2026-10-12",
+        "issue": 544
+      },
+      {
+        "route": "GET /api/payments/unmatched",
+        "reason": "baseline gap",
+        "date": "2026-10-12",
+        "issue": 544
+      },
+      {
+        "route": "POST /api/payments/settlements/{id}/close",
+        "reason": "baseline gap",
+        "date": "2026-10-12",
+        "issue": 544
+      },
+      {
+        "route": "POST /api/payments/{id}/close-review",
+        "reason": "baseline gap",
+        "date": "2026-10-12",
+        "issue": 544
+      },
+      {
+        "route": "PUT /api/refund-checks/print-settings/{bankAccountId}",
+        "reason": "baseline gap",
+        "date": "2026-10-12",
+        "issue": 544
+      },
+      {
+        "route": "PUT /api/refund-checks/micr/{bankAccountId}",
+        "reason": "baseline gap",
+        "date": "2026-10-12",
+        "issue": 544
+      },
+      {
+        "route": "POST /api/refund-checks/print-settings/{bankAccountId}/alignment",
+        "reason": "baseline gap",
+        "date": "2026-10-12",
+        "issue": 544
+      },
+      {
+        "route": "GET /api/operations/runs/{id}",
+        "reason": "baseline gap",
+        "date": "2026-10-12",
+        "issue": 544
+      },
+      {
+        "route": "GET /api/audit/events.csv",
+        "reason": "baseline gap",
+        "date": "2026-10-12",
+        "issue": 544
+      },
+      {
+        "route": "POST /api/auth/mfa/recovery",
+        "reason": "baseline gap",
+        "date": "2026-10-12",
+        "issue": 544
+      },
+      {
+        "route": "POST /api/auth/change-password",
+        "reason": "baseline gap",
+        "date": "2026-10-12",
+        "issue": 544
+      },
+      {
+        "route": "POST /api/auth/mfa",
+        "reason": "baseline gap",
+        "date": "2026-10-12",
+        "issue": 544
+      },
+      {
+        "route": "POST /api/auth/mfa/enroll",
+        "reason": "baseline gap",
+        "date": "2026-10-12",
+        "issue": 544
+      },
+      {
+        "route": "POST /api/auth/mfa/enroll/confirm",
+        "reason": "baseline gap",
+        "date": "2026-10-12",
+        "issue": 544
+      }
+    ]
+  }
+}

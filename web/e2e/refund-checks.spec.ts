@@ -30,7 +30,7 @@ function depositHeld(page: Page) {
   return page.locator('.pf-tstat').filter({ hasText: 'Deposit held' }).locator('.pf-money');
 }
 
-test('issues, prints and voids a deposit refund check within the ≤ 4 interaction budget', async ({
+test('issues, prints and voids a deposit refund check within the ≤ 4 interaction budget @scenario:refund-check-issue-print-void', async ({
   page,
 }) => {
   await signIn(page, DEMO_ADMIN);

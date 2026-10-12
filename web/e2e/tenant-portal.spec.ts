@@ -2,7 +2,7 @@ import { expect } from '@playwright/test';
 import { DEMO_ADMIN, PORTAL_RESIDENT, seedTheme, signIn } from './helpers';
 import { test } from './test';
 
-test('staff sign-in retains its dashboard destination and denies the tenant portal', async ({
+test('staff sign-in retains its dashboard destination and denies the tenant portal @scenario:tenant-portal-staff-denied', async ({
   page,
 }) => {
   await signIn(page, DEMO_ADMIN);
@@ -12,7 +12,7 @@ test('staff sign-in retains its dashboard destination and denies the tenant port
 });
 
 for (const theme of ['light', 'dark'] as const) {
-  test(`resident sign-in, staff denial, account security and sign-out (${theme})`, async ({
+  test(`resident sign-in, staff denial, account security and sign-out (${theme}) @scenario:tenant-portal-ledger-and-security`, async ({
     page,
   }) => {
     await seedTheme(page, theme);

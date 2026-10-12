@@ -34,7 +34,7 @@ test.describe('directory navigation', () => {
     await signIn(page, DEMO_ADMIN);
   });
 
-  test('owners: list row-click opens the detail, and the back button returns to the list', async ({
+  test('owners: list row-click opens the detail, and the back button returns to the list @scenario:directory-browse-records', async ({
     page,
   }) => {
     await openList(page, 'Owners');
@@ -49,7 +49,7 @@ test.describe('directory navigation', () => {
     await expect(page).toHaveURL(/\/owners$/);
   });
 
-  test('properties: list row-click opens the detail aggregating units, tenants, and owner, and the back button returns to the list', async ({
+  test('properties: list row-click opens the detail aggregating units, tenants, and owner, and the back button returns to the list @scenario:directory-browse-records', async ({
     page,
   }) => {
     await openList(page, 'Properties');
@@ -75,7 +75,7 @@ test.describe('directory navigation', () => {
     await expect(page).toHaveURL(/\/properties$/);
   });
 
-  test('tenants: list row-click opens the ledger; there is no back button, only the record quick-switcher', async ({
+  test('tenants: list row-click opens the ledger; there is no back button, only the record quick-switcher @scenario:directory-browse-records', async ({
     page,
   }) => {
     await openList(page, 'Tenants');
@@ -89,7 +89,7 @@ test.describe('directory navigation', () => {
     await expect(page.locator('.pf-page').getByRole('button', { name: 'Tenants' })).toHaveCount(0);
   });
 
-  test('the record quick-switcher pages through the owners list order, then back', async ({
+  test('the record quick-switcher pages through the owners list order, then back @scenario:directory-browse-records', async ({
     page,
   }) => {
     await openList(page, 'Owners');
@@ -134,7 +134,9 @@ test.describe('directory navigation', () => {
   // matter since #408: filtering by the entity's name matches its contextual action row too ("Owner
   // statement · Hargrove Family Trust"), and a substring check plus an unanchored URL would stay green
   // with an action row leading the list and the statement page opening instead of the record.
-  test('⌘K jumps to an owner, a property, and a tenant', async ({ page }) => {
+  test('⌘K jumps to an owner, a property, and a tenant @scenario:directory-palette-jump', async ({
+    page,
+  }) => {
     // Owner.
     let search = await openPalette(page);
     await search.fill('hargrove');
@@ -178,7 +180,9 @@ test.describe('directory navigation', () => {
   // id tiebreak — whichever Postgres returns first decides whether this passes. `#2B` is unique in
   // the org AND differs from every property address, which matters because one seeded unit is
   // labelled `88 Riverside Dr` — the address of the very property it sits on.
-  test('⌘K opens a unit on its owning property', async ({ page }) => {
+  test('⌘K opens a unit on its owning property @scenario:directory-palette-jump', async ({
+    page,
+  }) => {
     await openList(page, 'Properties');
     await page.locator('tbody tr').filter({ hasText: '412 Oakmont Ave' }).first().click();
     await expect(page).toHaveURL(/\/properties\/[0-9a-f-]+$/);

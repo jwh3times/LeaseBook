@@ -12,7 +12,9 @@ import { test } from './test';
 // The seeded admin (Renée Calloway) is a PMAdmin with no MFA, so login is email + password.
 
 test.describe('M8 audit-log review', () => {
-  test('an admin reaches the trail from the sidebar and reads one event', async ({ page }) => {
+  test('an admin reaches the trail from the sidebar and reads one event @scenario:audit-log-review', async ({
+    page,
+  }) => {
     await signIn(page, DEMO_ADMIN);
 
     // The nav item is admin-only; reaching the page through it is the discoverability claim.
@@ -38,7 +40,7 @@ test.describe('M8 audit-log review', () => {
     await expect(drawer.getByText('Record', { exact: true })).toBeVisible();
   });
 
-  test('filters narrow the trail, and the whole audited universe is reachable', async ({
+  test('filters narrow the trail, and the whole audited universe is reachable @scenario:audit-log-review', async ({
     page,
   }) => {
     await signIn(page, DEMO_ADMIN);

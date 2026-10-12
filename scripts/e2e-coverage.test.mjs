@@ -4,7 +4,13 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
-import { paymentConnection, specsBypassingFixture } from "./e2e-coverage.mjs";
+import {
+  journalQuery,
+  parseConnection,
+  parseJournalRows,
+  paymentConnection,
+  specsBypassingFixture,
+} from "./e2e-coverage.mjs";
 
 const scratch = [];
 function specDir(files) {
@@ -82,5 +88,46 @@ describe("paymentConnection", () => {
       () => paymentConnection("Host=localhost;Port=5432"),
       /names no database/,
     );
+  });
+});
+
+describe("parseConnection", () => {
+  it("reads the database, whatever the case of the keys", () => {
+    const parts = parseConnection(
+      "Host=localhost;Port=5432;database=leasebook;Username=leasebook_app;Password=dev_app_pw",
+    );
+    assert.equal(parts.database, "leasebook");
+  });
+
+  it("refuses a connection string with no database", () => {
+    assert.throws(
+      () => parseConnection("Host=localhost;Username=x;Password=x"),
+      /names no database/,
+    );
+  });
+});
+
+describe("journalQuery", () => {
+  it("reads in one read-only transaction and sets no organization context", () => {
+    const sql = journalQuery(1700000000000);
+    assert.equal(sql.match(/BEGIN TRANSACTION READ ONLY;/g).length, 1);
+    assert.equal(sql.match(/COMMIT;/g).length, 1);
+    assert.doesNotMatch(sql, /set_config|app\.(org_id|persona|user_id)/);
+    assert.match(sql, /posted_at >= to_timestamp\(1700000000000 \/ 1000\.0\)/);
+  });
+
+  it("refuses anything that is not a time", () => {
+    assert.throws(() => journalQuery("now()"), /not a time/);
+  });
+});
+
+describe("parseJournalRows", () => {
+  it("keeps the entry lines and drops what BEGIN and COMMIT print", () => {
+    const output =
+      "BEGIN\nentry|PaymentReceived|1700000000123\nentry|EntryVoided|1700000000456\nCOMMIT\n";
+    assert.deepEqual(parseJournalRows(output, "main"), [
+      { pass: "main", eventType: "PaymentReceived", postedAt: 1700000000123 },
+      { pass: "main", eventType: "EntryVoided", postedAt: 1700000000456 },
+    ]);
   });
 });

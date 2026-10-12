@@ -28,7 +28,7 @@ async function openTenantLedger(page: Page) {
   await expect(page.getByRole('heading', { name: 'Jasmine Carter' })).toBeVisible();
 }
 
-test('records a payment in ≤ 3 interactions, then voids it with a linked reversal and audit trail', async ({
+test('records a payment in ≤ 3 interactions, then voids it with a linked reversal and audit trail @scenario:ledger-record-and-void-payment', async ({
   page,
 }) => {
   await login(page);
@@ -95,7 +95,7 @@ test('records a payment in ≤ 3 interactions, then voids it with a linked rever
 // is voided back to baseline, so the demo org's golden figures stay reproducible.
 const DEMO_OWNER_O1 = '01923000-0000-7000-8000-000000000a01';
 
-test('a payment into a month with an issued owner statement shows a notice and stays within 3 interactions', async ({
+test('a payment into a month with an issued owner statement shows a notice and stays within 3 interactions @scenario:ledger-payment-into-issued-month', async ({
   page,
 }) => {
   await login(page);
@@ -158,7 +158,9 @@ test('a payment into a month with an issued owner statement shows a notice and s
 // and repeating the mutation would write a second payment+reversal pair into the demo org for a
 // picture we already take. Same Date mask (the field defaults to wall-clock today). The data-theme
 // assertion guards the bootstrap-from-CI-actuals flow: a failed seed would bake a light baseline.
-test('the ledger composer renders in the dark theme', async ({ page }) => {
+test('the ledger composer renders in the dark theme @scenario:ledger-composer-guards', async ({
+  page,
+}) => {
   await seedTheme(page, 'dark'); // before login — ThemeProvider reads storage on boot
   await login(page);
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
@@ -172,7 +174,7 @@ test('the ledger composer renders in the dark theme', async ({ page }) => {
   });
 });
 
-test('an over-application of held funds is blocked with a warning and the modal stays open', async ({
+test('an over-application of held funds is blocked with a warning and the modal stays open @scenario:ledger-composer-guards', async ({
   page,
 }) => {
   await login(page);
@@ -195,7 +197,7 @@ test('an over-application of held funds is blocked with a warning and the modal 
 // payment's note and the void's reason as not on the owner's copy — and the owner-facing CSV carries
 // neither. Jasmine Carter's payment settles her open receivable, a cash owner-equity line on her owner's
 // (O1) statement; it is voided back to baseline, so the demo org's golden figures stay reproducible.
-test('a void’s reason stays staff-only: the statement shows “Void — …” and the note only as a staff annotation', async ({
+test('a void’s reason stays staff-only: the statement shows “Void — …” and the note only as a staff annotation @scenario:ledger-void-reason-staff-only', async ({
   page,
 }) => {
   await login(page);

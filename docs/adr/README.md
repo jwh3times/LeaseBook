@@ -79,7 +79,8 @@ form, write it, and add a row to the index below. When a decision is replaced, m
 | [052](ADR-052-guarded-simulated-payment-return.md)                   | A returned simulated payment posts only as a guarded full reversal              | Accepted                               | 2026-10-04 |
 | [053](ADR-053-processor-fees-and-batched-settlement.md)              | Processor fees stay out of the trust journal; a payout posts as one tied batch  | Accepted                               | 2026-10-05 |
 | [054](ADR-054-stripe-sandbox-adapter.md)                             | A Stripe sandbox adapter proves the seam; a payout waits for bank evidence      | Proposed                               | 2026-10-07 |
-| [055](ADR-055-test-coverage-measurement.md)                          | Measure what the test suites exercise, and gate nothing on the figures          | Accepted                               | 2026-10-12 |
+| [055](ADR-055-test-coverage-measurement.md)                          | Measure what the test suites exercise, and gate nothing on the figures          | Accepted (amended by ADR-056)          | 2026-10-12 |
+| [056](ADR-056-scenario-catalogue.md)                                 | Every journal event type and route has a scenario or a recorded exemption       | Accepted                               | 2026-10-12 |
 
 ## Status legend
 

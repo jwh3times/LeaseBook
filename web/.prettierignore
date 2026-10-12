@@ -4,3 +4,4 @@ playwright-report
 test-results
 node_modules
 src/api/generated
+playwright-report-payments
