@@ -23,8 +23,12 @@ public sealed record SettlementsResponse(IReadOnlyList<SettlementView> Items);
 /// Ledger amounts collected by the processor and not yet at the bank (ADR-053): the caller's own for a
 /// tenant, the organization's for staff. A figure beside the balance, never part of it.
 /// </param>
+/// <param name="Mode">
+/// The payment mode of this host, <c>Simulation</c> or <c>StripeSandbox</c>, for a screen to word itself
+/// by. Null wherever payments are not enabled for the organization, which then learns nothing of the host.
+/// </param>
 public sealed record PaymentsResponse(bool Enabled, IReadOnlyList<PaymentView> Items, int UnmatchedObservations = 0,
-    decimal FundsInTransit = 0m);
+    decimal FundsInTransit = 0m, string? Mode = null);
 
 public sealed class PaymentEndpoints : IEndpointModule
 {
@@ -34,7 +38,7 @@ public sealed class PaymentEndpoints : IEndpointModule
     public void MapEndpoints(IEndpointRouteBuilder app)
     {
         var settings = app.ServiceProvider.GetRequiredService<SimulationSettings>();
-        var tenant = app.MapGroup("/api/portal/tenant/payments").WithTags("Simulated payments")
+        var tenant = app.MapGroup("/api/portal/tenant/payments").WithTags("Online payments")
             .RequireAuthorization(AuthPolicies.RequireTenant).AddEndpointFilter<ResidentAccessFilter>();
         tenant.MapGet("", async (CurrentResident resident, IOrgContext org, ISender sender, PaymentEngine engine, CancellationToken ct) =>
         {
@@ -43,7 +47,7 @@ public sealed class PaymentEndpoints : IEndpointModule
             await engine.RequireFixtureAsync(binding, ct);
             var tenantId = resident.Identity!.TenantId;
             return TypedResults.Ok(new PaymentsResponse(true, await sender.Query(new GetPayments(tenantId), ct),
-                FundsInTransit: (await sender.Query(new GetFundsInTransit([tenantId]), ct)).Sum(x => x.Amount)));
+                FundsInTransit: (await sender.Query(new GetFundsInTransit([tenantId]), ct)).Sum(x => x.Amount), Mode: binding.Mode));
         });
         tenant.MapGet("/{id:guid}", async Task<Results<Ok<PaymentView>, NotFound>> (Guid id,
             CurrentResident resident, IOrgContext org, PaymentEngine engine, ISender sender, CancellationToken ct) =>
@@ -55,7 +59,7 @@ public sealed class PaymentEndpoints : IEndpointModule
             return result is null ? TypedResults.NotFound() : TypedResults.Ok(result);
         });
 
-        var staff = app.MapGroup("/api/payments").WithTags("Simulated payments").RequireAuthorization(AuthPolicies.RequirePMStaff);
+        var staff = app.MapGroup("/api/payments").WithTags("Online payments").RequireAuthorization(AuthPolicies.RequirePMStaff);
         staff.MapGet("", async (IOrgContext org, ISender sender, PaymentEngine engine, HttpContext http, CancellationToken ct) =>
         {
             http.Response.Headers.CacheControl = "no-store";
@@ -64,7 +68,7 @@ public sealed class PaymentEndpoints : IEndpointModule
             await engine.RequireFixtureAsync(binding, ct);
             return TypedResults.Ok(new PaymentsResponse(true, await sender.Query(new GetPayments(null), ct),
                 await sender.Query(new GetUnmatchedPaymentObservations(), ct),
-                (await sender.Query(new GetFundsInTransit(), ct)).Sum(x => x.Amount)));
+                (await sender.Query(new GetFundsInTransit(), ct)).Sum(x => x.Amount), binding.Mode));
         });
         // OpenAPI generation maps the contract without activating any simulator infrastructure.
         if (!settings.Enabled && Environment.GetEnvironmentVariable("LEASEBOOK_OPENAPI_BUILD") != "1") { return; }
@@ -180,7 +184,7 @@ public sealed class PaymentEndpoints : IEndpointModule
         if (settings.Mode == PaymentModes.StripeSandbox)
         {
             app.MapPost("/callbacks/payments/stripe", ReceiveStripe).AllowAnonymous().RequireRateLimiting(CallbackRateLimit)
-                .WithTags("Stripe sandbox payment callbacks").Produces(204).ProducesProblem(400);
+                .WithTags("Stripe sandbox payment callbacks").Produces(204).ProducesProblem(400).ProducesProblem(503);
         }
     }
 
@@ -194,22 +198,48 @@ public sealed class PaymentEndpoints : IEndpointModule
     // Stripe has one route for everything it sends. An event that says nothing of a payment may be
     // about a payout, so it is offered to that reader next, and only then acknowledged as not ours.
     // What is read of a payout is stored and held: it is Stripe's word, and nothing here is a bank's.
+    //
+    // Reading may ask Stripe: whose payment a dispute is about, what a payout contains. When Stripe
+    // cannot be asked, nothing is known of the event and nothing is kept. That is not a fault of this
+    // host and is not answered as one: the delivery is refused with a 503 so that Stripe sends it
+    // again, and the sweep reads the event whether or not it does. Only the two reads are covered.
+    // A failure to store what was read is still the fault it always was.
+    //
+    // And only a failure to ask is covered: what the adapter says the processor would not answer, a
+    // connection or a stream that failed, and a call that ran out of time. Anything else thrown by a
+    // read is a fault in the reading, and goes where faults go.
     private static async Task<IResult> ReceiveStripe(HttpContext http, IPaymentProcessor processor, PaymentRunner runner, CancellationToken ct)
     {
         if (await ReadBodyAsync(http, StripeSandboxProcessor.MaxNoticeBytes, ct) is not { } body) { return Invalid(http); }
         if (processor.Authenticate(body, http.Request.Headers["Stripe-Signature"].ToString()) is not { } notice) { return Invalid(http); }
-        var read = await processor.ReadObservationAsync(notice, ct);
+        ProcessorRead<ProcessorObservation> read;
+        ProcessorRead<ProcessorPayout> payout = default;
+        try
+        {
+            read = await processor.ReadObservationAsync(notice, ct);
+            if (read.Ignored) { payout = await processor.ReadPayoutAsync(notice, ct); }
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested && CouldNotBeAsked(ex))
+        {
+            runner.Defer(ex);
+            return ProblemResults.Problem(http, "payment_callback_deferred",
+                "The payment notification could not be read yet. Send it again.", StatusCodes.Status503ServiceUnavailable);
+        }
         if (!read.Ignored)
         {
             if (read.Value is not { } observation) { return Invalid(http); }
             await runner.ReceiveAsync(observation, ct);
             return TypedResults.NoContent();
         }
-        var payout = await processor.ReadPayoutAsync(notice, ct);
         if (payout.Ignored) { runner.Ignore(); return TypedResults.NoContent(); }
         if (payout.Value is not { } paid) { return Invalid(http); }
         return (await runner.ReceivePayoutAsync(paid, ct)).Malformed ? Invalid(http) : TypedResults.NoContent();
     }
+
+    // The seam's own exception is an IOException, and is named for what this is about. A cancellation
+    // here is never the request's own, which the caller has already ruled out: it is a call that timed out.
+    private static bool CouldNotBeAsked(Exception ex) =>
+        ex is ProcessorUnansweredException or HttpRequestException or IOException or OperationCanceledException or TimeoutException;
 
     // One flow for every processor: the body whole and within its limit, proved authentic, read, and
     // only then routed to an organization. What differs is the header the proof arrives in and the limit.

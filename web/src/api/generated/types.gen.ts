@@ -781,6 +781,7 @@ export type PaymentsResponse = {
     items: Array<PaymentView>;
     unmatchedObservations?: number | string;
     fundsInTransit?: number | string;
+    mode?: null | string;
 };
 
 export type PmBrandingRow = {
@@ -1152,8 +1153,8 @@ export type SettlementItemView = {
 export type SettlementView = {
     id: string;
     payoutReference: string;
-    bankDate: string;
-    bankAmount: number | string;
+    bankDate: null | string;
+    bankAmount: null | number | string;
     status: string;
     reason: null | string;
     reasonItem: null | string;

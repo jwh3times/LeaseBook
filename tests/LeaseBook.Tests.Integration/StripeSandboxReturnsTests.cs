@@ -637,7 +637,7 @@ public sealed partial class StripeSandboxHostTests
             var db = sp.GetRequiredService<AppDbContext>();
             var operation = await db.Set<PaymentOperation>().SingleAsync(x => x.Id == payment.Id, ct);
             operation.JournalId = await sp.GetRequiredService<IPaymentLedger>().RecordSettledReceiptAsync(operation.TenantId, operation.BankId,
-                operation.Amount, new DateOnly(2026, 10, 5), operation.Method, $"sim-payment:{operation.Id:N}:receipt", ct);
+                operation.Amount, new DateOnly(2026, 10, 5), operation.Method, PaymentMemos.Receipt(h.Binding.Mode), $"sim-payment:{operation.Id:N}:receipt", ct);
             operation.Status = "Settled";
             await db.SaveChangesAsync(ct);
         }, ct);
@@ -655,7 +655,8 @@ public sealed partial class StripeSandboxHostTests
         {
             var sender = sp.GetRequiredService<LeaseBook.SharedKernel.Cqrs.ISender>();
             var view = (await sender.Query(new GetPayments(null, payment.Id), ct)).ShouldHaveSingleItem();
-            (view.Status, view.Reason, view.CanPostReturn, view.ReceiptRecorded).ShouldBe(("NeedsReview", "return_requires_review", true, true));
+            // Not offered: the fact is never complete, so the engine refuses it however often it is asked. It is asked here all the same.
+            (view.Status, view.Reason, view.CanPostReturn, view.ReceiptRecorded).ShouldBe(("NeedsReview", "return_requires_review", false, true));
 
             var result = (await sender.Send(new PostPaymentReturn(h.Binding, payment.Id), ct)).ShouldNotBeNull();
 
@@ -795,7 +796,8 @@ public sealed partial class StripeSandboxHostTests
     {
         var ct = TestContext.Current.CancellationToken;
         var sandbox = new Sandbox { Status = "processing" };
-        await using var h = await Setup(sandbox.Replay, ct);
+        using var logs = new Observability.CapturingLoggerProvider();
+        await using var h = await Setup(sandbox.Replay, ct, logs: logs);
         var payment = await h.Submit(200m, ct);
         var entries = await h.JournalEntries(ct);
         await h.Run(ct);
@@ -806,8 +808,20 @@ public sealed partial class StripeSandboxHostTests
 
         var delivered = await h.Deliver(Disputed(StripeReplay.Delivered(DisputeCreated), payment), ct);
 
-        // An unexpected failure, with a reference and nothing about why. Not a 2xx, so Stripe does not count it delivered.
-        delivered.Status.ShouldBe(HttpStatusCode.InternalServerError, delivered.Body);
+        // A refusal the host meant: not a 2xx, so Stripe does not count it delivered and sends it
+        // again, with a code and a reference and nothing about why.
+        delivered.Status.ShouldBe(HttpStatusCode.ServiceUnavailable, delivered.Body);
+        var problem = JsonNode.Parse(delivered.Body)!;
+        ((string?)problem["code"], (int?)problem["status"]).ShouldBe(("payment_callback_deferred", 503));
+        ((string?)problem["correlationId"]).ShouldNotBeNullOrWhiteSpace();
+        delivered.Body.ShouldNotContain("Stripe");
+        delivered.Body.ShouldNotContain("Exception");
+        // Logged as what it is, under an id of the payments' own, and not as a fault nobody handled.
+        var deferred = logs.Entries.Where(x => x.EventId.Id == 4608).ShouldHaveSingleItem();
+        (deferred.Level, deferred.EventId.Name).ShouldBe((Microsoft.Extensions.Logging.LogLevel.Warning, "PaymentCallbackDeferred"));
+        deferred.Message.ShouldContain("StripeException");
+        logs.Entries.ShouldNotContain(x => x.EventId.Id == 1000);
+        logs.Entries.ShouldNotContain(x => x.Level >= Microsoft.Extensions.Logging.LogLevel.Error);
         delivered.Commands.ShouldBe(0);
         (await h.Facts(ct)).ShouldHaveSingleItem().Kind.ShouldBe("Succeeded");
 

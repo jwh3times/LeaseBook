@@ -102,7 +102,9 @@ Zero lines are omitted. The exact current template is:
 No unit dimension is added by this event. `Both` participates once in each basis. Accrual owner
 equity was recognized by the original charge; receiving cash clears its receivable. Use payment
 method `ach`, description `Simulated tenant payment`, and stable source reference
-`sim-payment:{operation UUID in N format}:receipt`. The fixture's explicit bank must be an
+`sim-payment:{operation UUID in N format}:receipt`. A receipt posted from Stripe sandbox evidence is
+described `Stripe sandbox tenant payment` instead; the description follows the mode stored on the
+evidence and is all that differs between the two modes in a posting. The fixture's explicit bank must be an
 org-owned trust bank. The binding is immutable once used; changing the configured bank cannot
 retarget an in-flight operation. Capabilities may gate submission only and cannot change lines.
 
@@ -362,8 +364,10 @@ is refused by the command and by the engine.
   were. A failure that arrives before the paid event stores the payout without lines, and a paid
   event after a failure changes nothing.
 
-The staff API's payout view carries `processorAmount` and `failedAt`. No screen reads either yet, and
-the Payouts list shows a held payout by its raw status.
+The staff API's payout view carries `processorAmount` and `failedAt`, and its `bankAmount` and
+`bankDate` are null until bank evidence exists: the stored zero is never returned as an amount. The
+Payouts list shows a held payout as "Waiting for the bank" with the processor's amount and no bank
+amount or date.
 
 `RecoverObservationsAsync` answers what the processor still holds about one fixture's payments and
 payouts since a given time, as the same observations and payouts a delivery would have produced; its

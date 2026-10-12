@@ -19,31 +19,31 @@ import { QueryErrorState } from '@/components/QueryErrorState';
 import { Badge, Button, Card, Input, Money, Select } from '@/design';
 import { useSession } from '@/features/auth/useSession';
 import { PayoutBatches } from './PayoutBatches';
-import { REASONS } from './reasons';
+import { paymentReason, tenantReviewNote } from './reasons';
 import { UnmatchedObservations } from './UnmatchedObservations';
+import { wording, type Wording } from './wording';
 
-function description(payment: PaymentView) {
+function description(payment: PaymentView, words: Wording) {
+  const status = words.status;
   switch (payment.status) {
     case 'Requested':
-      return 'Simulation requested';
+      return status.requested;
     case 'Processing':
       return payment.paidAt
         ? `Paid on ${payment.paidAt.slice(0, 10)} — on its way to the bank, not yet on your ledger`
-        : 'Simulated payment processing — not yet on your ledger';
+        : status.processing;
     case 'Failed':
-      return 'Simulated payment failed — no payment recorded';
+      return status.failed;
     case 'Settled':
-      return 'Simulated payment recorded';
+      return status.settled;
     case 'Returned':
-      return 'Simulated payment returned by the bank — the receipt was reversed';
+      return status.returned;
     case 'ReviewClosed':
       return payment.receiptRecorded
-        ? 'Simulated payment review closed — original receipt remains recorded'
-        : 'Simulated payment review closed — no receipt recorded';
+        ? status.reviewClosedWithReceipt
+        : status.reviewClosedNoReceipt;
     default:
-      return payment.receiptRecorded
-        ? 'Simulated payment needs review — original receipt remains recorded'
-        : 'Simulated payment needs review — no receipt recorded';
+      return payment.receiptRecorded ? status.needsReviewWithReceipt : status.needsReviewNoReceipt;
   }
 }
 
@@ -76,18 +76,25 @@ export function PaymentPanel({ staff = false }: { staff?: boolean }) {
   const [method, setMethod] = useState('ach');
   const request = useRef<SubmitPaymentBody | null>(null);
   const [closing, setClosing] = useState<{ id: string; note: string } | null>(null);
+  // The mode the list last reported. Until a read succeeds it is unknown, and reads as the simulation.
+  const mode = useRef<string | null | undefined>(undefined);
   const list = useQuery({
     queryKey: ['simulated-payments', staff],
     queryFn: () =>
       unwrap(
         staff ? getApiPayments() : getApiPortalTenantPayments(),
-        'Unable to load simulated payments.',
+        wording(mode.current).loadFailed,
       ),
     retry: false,
     gcTime: 0,
     staleTime: 0,
     refetchInterval: (query) => (query.state.data?.enabled ? 2000 : false),
   });
+  const words = wording(list.data?.mode);
+  const sandbox = list.data?.mode === 'StripeSandbox';
+  useEffect(() => {
+    if (list.data) mode.current = list.data.mode;
+  }, [list.data]);
   const recorded = list.data?.items
     .filter((p) => p.receiptRecorded)
     .map((p) => p.id)
@@ -112,10 +119,7 @@ export function PaymentPanel({ staff = false }: { staff?: boolean }) {
   });
   const submit = useMutation<PaymentView, ApiError, SubmitPaymentBody>({
     mutationFn: (body: SubmitPaymentBody) =>
-      unwrap(
-        postApiPortalTenantPayments({ body }),
-        'Unable to confirm the simulated payment request.',
-      ),
+      unwrap(postApiPortalTenantPayments({ body }), words.submitFailed),
     onSuccess: () => {
       request.current = null;
       setAmount('');
@@ -132,7 +136,7 @@ export function PaymentPanel({ staff = false }: { staff?: boolean }) {
   const feeChanged = submit.isError && submit.error.code === 'fee_quote_changed';
   const retry = useMutation({
     mutationFn: (id: string) =>
-      unwrap(postApiPaymentsByIdRetry({ path: { id } }), 'Unable to retry the simulated payment.'),
+      unwrap(postApiPaymentsByIdRetry({ path: { id } }), words.retryFailed),
     onSuccess: () => void queries.invalidateQueries({ queryKey: ['simulated-payments'] }),
   });
   // A refused return is a 409 that still changed the payment: its reason now names what stopped it.
@@ -169,18 +173,14 @@ export function PaymentPanel({ staff = false }: { staff?: boolean }) {
   }
   if (list.isError)
     return (
-      <QueryErrorState
-        query={list}
-        title="Couldn’t load simulated payments"
-        fallback="Unable to load simulated payments."
-      />
+      <QueryErrorState query={list} title={words.loadFailedTitle} fallback={words.loadFailed} />
     );
   if (list.isPending) return <p aria-live="polite">Loading payment availability…</p>;
   if (!list.data.enabled) return null;
   return (
     <Card>
-      <h3>Simulated payments</h3>
-      <Badge dot>Simulation — no real money moves</Badge>
+      <h3>{words.heading}</h3>
+      <Badge dot>{words.badge}</Badge>
       {Number(list.data.fundsInTransit ?? 0) > 0 && (
         <p role="status">
           In transit: <Money value={Number(list.data.fundsInTransit)} />.{' '}
@@ -190,7 +190,7 @@ export function PaymentPanel({ staff = false }: { staff?: boolean }) {
         </p>
       )}
       {staff && <UnmatchedObservations count={Number(list.data.unmatchedObservations ?? 0)} />}
-      {staff && <PayoutBatches admin={admin} />}
+      {staff && <PayoutBatches admin={admin} words={words} />}
       {!staff && (
         <form
           className="col gap12"
@@ -264,14 +264,11 @@ export function PaymentPanel({ staff = false }: { staff?: boolean }) {
               ? 'Submitting…'
               : request.current
                 ? 'Retry same payment request'
-                : 'Submit simulated payment'}
+                : words.submit}
           </Button>
           {submit.isError && (
             <>
-              <ApiErrorNotice
-                error={submit.error}
-                fallback="Unable to confirm the simulated payment request."
-              />
+              <ApiErrorNotice error={submit.error} fallback={words.submitFailed} />
               {feeChanged ? (
                 <p>Nothing was requested. Check the fee shown above, then submit again.</p>
               ) : (
@@ -284,7 +281,7 @@ export function PaymentPanel({ staff = false }: { staff?: boolean }) {
       )}
       {retry.isError && (
         <>
-          <ApiErrorNotice error={retry.error} fallback="Unable to retry the simulated payment." />
+          <ApiErrorNotice error={retry.error} fallback={words.retryFailed} />
           <ErrorAction error={retry.error} />
         </>
       )}
@@ -302,7 +299,7 @@ export function PaymentPanel({ staff = false }: { staff?: boolean }) {
       )}
       <div aria-live="polite" aria-atomic="false">
         {list.data.items.length === 0 ? (
-          <p>No simulated payments yet.</p>
+          <p>{words.empty}</p>
         ) : (
           <ul>
             {list.data.items.map((payment) => (
@@ -314,16 +311,16 @@ export function PaymentPanel({ staff = false }: { staff?: boolean }) {
                     <Money value={Number(payment.chargedAmount)} /> charged
                   </span>
                 )}
-                <span>{description(payment)}</span>
+                <span>{description(payment, words)}</span>
+                {/* A tenant is never shown a reason code or the staff text for one. The simulation
+                    keeps its tenant screen as it was, so only the sandbox adds this sentence. */}
+                {!staff && sandbox && payment.status === 'NeedsReview' && (
+                  <span>{tenantReviewNote(payment)}</span>
+                )}
                 <span>Payment reference: {payment.id}</span>
                 {staff && (
                   <>
-                    {payment.reason && (
-                      <p>
-                        {REASONS[payment.reason] ??
-                          'Review required. Contact the fixture operator.'}
-                      </p>
-                    )}
+                    {payment.reason && <p>{paymentReason(payment, words)}</p>}
                     <span>Reason: {payment.reason ?? 'None'}</span>
                     {payment.evidenceReference && (
                       <span>Evidence reference: {payment.evidenceReference}</span>

@@ -76,6 +76,12 @@ revisit trigger for "automatic return" is not fired, because nothing posts witho
 The reversal's owner-facing description is `Void — Simulated tenant payment`, as for every reversal.
 A returned payment is therefore worded as a void on the tenant ledger and the owner statement.
 
+**Note, 2026-10-11.** A receipt posted from Stripe sandbox evidence
+([ADR-054](ADR-054-stripe-sandbox-adapter.md), proposed) is described `Stripe sandbox tenant
+payment`, so its reversal reads `Void — Stripe sandbox tenant payment`. The simulation's wording
+above is unchanged. "Post return" is now offered only when the evidence held passes the checks this
+record names; the command and its guards are as decided here.
+
 The closing note lives on the payment row. The tenant portal never returns it, but the tenant
 persona's row grant on its own payments ([ADR-048](ADR-048-per-persona-row-level-security.md)) covers
 the row that holds it. The note is written for staff and should not contain anything a tenant must

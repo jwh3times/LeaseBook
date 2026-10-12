@@ -246,7 +246,7 @@ public sealed class PaymentEngine(DbContext db, IOrgContext org, TimeProvider cl
             {
                 // Receipt, immutable effect, summary and consumed inbox count commit in this ONE transaction.
                 var journalId = await ledger.RecordSettledReceiptAsync(op.TenantId, op.BankId, op.Amount, credit.BankDate,
-                    op.Method, $"sim-payment:{op.Id:N}:receipt", ct);
+                    op.Method, PaymentMemos.Receipt(credit.Mode), $"sim-payment:{op.Id:N}:receipt", ct);
                 db.Add(new PaymentEffect { Id = UuidV7.NewId(), OperationId = op.Id, ObservationId = credit.Id, JournalId = journalId });
                 op.JournalId = journalId; op.Status = "Settled"; op.Reason = null;
             }
@@ -315,27 +315,15 @@ public sealed class PaymentEngine(DbContext db, IOrgContext org, TimeProvider cl
         MatchBinding(op, binding);
         // The effect is the idempotency record: a repeat finds it and posts nothing.
         if (op.Status == "Returned") { return new(op, null); }
-        if (op.Status != "NeedsReview" || op.JournalId is null || op.ProviderId is null
-            || op.Reason?.StartsWith("return_", StringComparison.Ordinal) != true)
-        { throw new PaymentConflictException(); }
+        if (!ReturnAwaitsDecision(op) || op.JournalId is not { } receiptId) { throw new PaymentConflictException(); }
 
         var facts = await db.Set<PaymentObservation>().AsNoTracking().Where(x => x.ProviderId == op.ProviderId).ToListAsync(ct);
-        var returns = facts.Where(x => x.Kind == "Return").ToArray();
-        string? refusal = null;
-        if (facts.Any(x => x.Kind == ConflictKind)
-            || returns.Select(x => (x.EvidenceId, x.BankDate, x.Gross)).Distinct().Count() > 1)
-        { refusal = "return_conflicting_evidence"; }
-        else if (returns.Length == 0 || facts.Any(x => x.Kind is "Refund" or "Dispute"))
-        { refusal = "return_kind_unsupported"; }
-        else if (returns.Any(x => x.Gross != op.Amount || x.Fee != 0 || x.Net != op.Amount || !x.Complete
-            || x.Currency != op.Currency || x.BankId != op.BankId || x.Generation != op.Generation
-            || x.BankDate == default))
-        { refusal = "return_partial_unsupported"; }
-        else
+        var refusal = ReturnEvidenceRefusal(op, facts);
+        if (refusal is null)
         {
-            var evidence = returns[0];
-            var outcome = await ledger.ReturnSettledReceiptAsync(op.JournalId.Value, evidence.BankDate,
-                $"sim-payment:{op.Id:N}:return", "Bank returned this simulated tenant payment.", ct);
+            var evidence = facts.First(x => x.Kind == "Return");
+            var outcome = await ledger.ReturnSettledReceiptAsync(receiptId, evidence.BankDate,
+                $"sim-payment:{op.Id:N}:return", PaymentMemos.Returned(evidence.Mode), ct);
             if (outcome.JournalId is { } journalId)
             {
                 // Reversal, effect and status commit in this ONE transaction, like the receipt.
@@ -414,6 +402,37 @@ public sealed class PaymentEngine(DbContext db, IOrgContext org, TimeProvider cl
         op.Status = "NeedsReview"; op.Reason = "outcome_overdue";
         await db.SaveChangesAsync(ct);
         return true;
+    }
+
+    /// <summary>
+    /// Whether a person may ask for this payment's return to be posted at all: it is in review for a
+    /// return, and it has a receipt to reverse. Anything else is refused as a conflict before any
+    /// evidence is read.
+    /// </summary>
+    public static bool ReturnAwaitsDecision(PaymentOperation op) =>
+        op.Status == "NeedsReview" && op.JournalId is not null && op.ProviderId is not null
+        && op.Reason?.StartsWith("return_", StringComparison.Ordinal) == true;
+
+    /// <summary>
+    /// Why the evidence held for a payment cannot be posted as its return, or null when it can be put
+    /// to the ledger: one complete return of the whole ledger amount, with nothing that disagrees
+    /// with it and no refund or dispute beside it. <paramref name="facts"/> is everything held under
+    /// the payment's reference. The one rule, read by <see cref="PostReturnAsync"/> to refuse and by
+    /// the staff view to decide whether to offer the action, so that the two cannot come apart. The
+    /// ledger may still refuse what this allows; that is found only by asking it, and can be mended.
+    /// </summary>
+    public static string? ReturnEvidenceRefusal(PaymentOperation op, IReadOnlyCollection<PaymentObservation> facts)
+    {
+        var returns = facts.Where(x => x.Kind == "Return").ToArray();
+        if (facts.Any(x => x.Kind == ConflictKind)
+            || returns.Select(x => (x.EvidenceId, x.BankDate, x.Gross)).Distinct().Count() > 1)
+        { return "return_conflicting_evidence"; }
+        if (returns.Length == 0 || facts.Any(x => x.Kind is "Refund" or "Dispute")) { return "return_kind_unsupported"; }
+        if (returns.Any(x => x.Gross != op.Amount || x.Fee != 0 || x.Net != op.Amount || !x.Complete
+            || x.Currency != op.Currency || x.BankId != op.BankId || x.Generation != op.Generation
+            || x.BankDate == default))
+        { return "return_partial_unsupported"; }
+        return null;
     }
 
     private static void MatchBinding(PaymentOperation op, FixtureBinding binding)

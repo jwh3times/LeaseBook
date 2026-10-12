@@ -305,7 +305,8 @@ public sealed class SettlementEngine(DbContext db, TimeProvider clock, PaymentEn
         { reason = "settlement_requires_confirmation"; }
         if (reason is not null) { return await HoldAsync(settlement, reason, null, ct); }
 
-        var outcome = await ledger.PostSettlementAsync(settlement.BankId, settlement.BankDate, settlement.PayoutId, lines, ct);
+        var outcome = await ledger.PostSettlementAsync(settlement.BankId, settlement.BankDate, settlement.PayoutId,
+            PaymentMemos.Receipt(settlement.Mode), lines, ct);
         if (outcome.Refusal is not null) { return await HoldAsync(settlement, outcome.Refusal, outcome.RefusedItem, ct); }
 
         // Entries, effects, payment statuses and the payout's own status commit in this ONE transaction.

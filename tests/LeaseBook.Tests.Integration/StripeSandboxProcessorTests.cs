@@ -21,6 +21,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Shouldly;
 
 namespace LeaseBook.Tests.Integration;
@@ -830,7 +831,7 @@ public sealed partial class StripeSandboxHostTests(PostgresFixture fixture)
     // The worker is taken out, so that a test says when a pass runs, unless a test is about the worker's own loop.
     // A second account, when a test names one, is a second fixture organization on the same host, bound after the first.
     private async Task<Harness> Setup(StripeReplay stripe, CancellationToken ct, Func<FixtureBinding, FixtureBinding>? configured = null,
-        bool worker = false, string? secondAccount = null)
+        bool worker = false, string? secondAccount = null, Observability.CapturingLoggerProvider? logs = null)
     {
         var binding = new FixtureBinding(UuidV7.NewId(), UuidV7.NewId(), UuidV7.NewId(), Account) { Mode = PaymentModes.StripeSandbox };
         var suffix = UuidV7.NewId().ToString("N");
@@ -869,6 +870,8 @@ public sealed partial class StripeSandboxHostTests(PostgresFixture fixture)
             services.RemoveAll<StripeTransport>(); services.AddSingleton(new StripeTransport(stripe));
             services.RemoveAll<TimeProvider>(); services.AddSingleton<TimeProvider>(clock);
             services.ConfigureDbContext<AppDbContext>(options => options.AddInterceptors(commands));
+            // Every level for the capture alone, whatever the host's own providers are told to keep.
+            if (logs is not null) { services.AddLogging(logging => logging.AddProvider(logs).AddFilter<Observability.CapturingLoggerProvider>(null, LogLevel.Trace)); }
         }));
         try
         {
@@ -909,6 +912,15 @@ public sealed partial class StripeSandboxHostTests(PostgresFixture fixture)
             (await tenant.PostAsJsonAsync("/api/auth/login", new { email = $"tenant-{suffix}1@payments.test", password = PaymentFixtureBootstrap.Password }, ct)).EnsureSuccessStatusCode();
             await tenant.PrimeCsrfAsync(ct);
             return tenant;
+        }
+        // The fixture's administrator, signed in as staff sign in.
+        public async Task<HttpClient> Admin(CancellationToken ct)
+        {
+            var admin = app.CreateClient();
+            await admin.PrimeCsrfAsync(ct);
+            (await admin.PostAsJsonAsync("/api/auth/login", new { email = $"admin-{suffix}@payments.test", password = PaymentFixtureBootstrap.Password }, ct)).EnsureSuccessStatusCode();
+            await admin.PrimeCsrfAsync(ct);
+            return admin;
         }
         public Task Run(CancellationToken ct) => app.Services.GetRequiredService<PaymentRunner>().RunOnceAsync(ct);
         /// <summary>

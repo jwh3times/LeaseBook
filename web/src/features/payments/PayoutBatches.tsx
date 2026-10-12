@@ -13,23 +13,56 @@ import { ErrorAction } from '@/components/ErrorAction';
 import { QueryErrorState } from '@/components/QueryErrorState';
 import { Badge, type BadgeTone, Button, Input, Money, Table, type TableColumn } from '@/design';
 import { payoutReason } from './reasons';
+import { wording, type Wording } from './wording';
 
-const STATUS: Record<string, { label: string; tone: BadgeTone }> = {
-  Received: { label: 'Waiting to be checked', tone: 'neutral' },
-  NeedsReview: { label: 'Needs review — nothing posted', tone: 'warn' },
-  Posted: { label: 'Posted', tone: 'pos' },
-  Closed: { label: 'Closed — nothing posted', tone: 'neutral' },
-};
+/**
+ * A payout's status in words. A payout that posted keeps `postedAt` when the processor later says it
+ * failed, and nothing is reversed for it: in review or closed, it says which of the two it is, and
+ * never "nothing posted" about a payout that did post.
+ */
+function status(payout: SettlementView): { label: string; tone: BadgeTone } {
+  const posted = payout.postedAt != null;
+  switch (payout.status) {
+    case 'Received':
+      return { label: 'Waiting to be checked', tone: 'neutral' };
+    case 'AwaitingBank':
+      return { label: 'Waiting for the bank', tone: 'neutral' };
+    case 'NeedsReview':
+      return {
+        label: posted ? 'Needs review — posted, nothing reversed' : 'Needs review — nothing posted',
+        tone: 'warn',
+      };
+    case 'Posted':
+      return { label: 'Posted', tone: 'pos' };
+    case 'Closed':
+      return {
+        label: posted ? 'Closed — posted, nothing reversed' : 'Closed — nothing posted',
+        tone: 'neutral',
+      };
+    default:
+      return { label: payout.status, tone: 'neutral' };
+  }
+}
 
 const KINDS: Record<string, string> = {
   Payment: 'Payment',
   Return: 'Returned payment',
   Fee: 'Processor fee',
+  Dispute: 'Card dispute',
+  Refund: 'Refund',
+  FailedDebit: 'Failed bank debit',
+  Unknown: 'Unrecognised line',
 };
+
+/** A line's kind in words. A kind this page does not know is named as one, never left blank. */
+function kind(value: string) {
+  if (KINDS[value]) return KINDS[value];
+  return value.trim() ? `Unrecognised line (${value.trim()})` : 'Unrecognised line';
+}
 
 const COLUMNS: TableColumn<SettlementItemView>[] = [
   { key: 'item', header: 'Line', render: (row) => row.item },
-  { key: 'kind', header: 'Kind', render: (row) => KINDS[row.kind] ?? row.kind },
+  { key: 'kind', header: 'Kind', render: (row) => kind(row.kind) },
   {
     key: 'gross',
     header: 'Charged',
@@ -65,12 +98,19 @@ const COLUMNS: TableColumn<SettlementItemView>[] = [
 const KEY = ['simulated-payments', 'settlements'] as const;
 
 /**
- * The processor payouts of the payment simulation and what became of each (ADR-053). A payout posts
- * completely or not at all. A clean one posts by itself; one that waits says why, and an
- * administrator posts it with one action or closes it with a note. Staff who are not administrators
- * read the same list without the actions.
+ * The processor payouts of the host's payment mode and what became of each (ADR-053, ADR-054). A
+ * payout posts completely or not at all. A clean one posts by itself; one that waits says why, and an
+ * administrator posts it with one action or closes it with a note. A sandbox payout is first heard of
+ * from the processor and is held, with no bank amount or date to show, until a bank says what it
+ * received. Staff who are not administrators read the same list without the actions.
  */
-export function PayoutBatches({ admin }: { admin: boolean }) {
+export function PayoutBatches({
+  admin,
+  words = wording(null),
+}: {
+  admin: boolean;
+  words?: Wording;
+}) {
   const queries = useQueryClient();
   const [closing, setClosing] = useState<{ id: string; note: string } | null>(null);
   const list = useQuery({
@@ -124,7 +164,7 @@ export function PayoutBatches({ admin }: { admin: boolean }) {
       ) : list.isPending ? (
         <p role="status">Loading payouts…</p>
       ) : list.data.items.length === 0 ? (
-        <p>No payouts yet. A payout appears here when the bank reports it.</p>
+        <p>{words.noPayouts}</p>
       ) : (
         <ul className="col gap12">
           {list.data.items.map((payout) => (
@@ -199,7 +239,10 @@ function Payout({
   onCancelClose: () => void;
   onClose: () => void;
 }) {
-  const status = STATUS[payout.status] ?? { label: payout.status, tone: 'neutral' as BadgeTone };
+  const state = status(payout);
+  // Bank evidence is the amount and the date together. Without both there is none to show: a null
+  // amount is not a zero, and is never rendered as one.
+  const banked = payout.bankAmount != null && payout.bankDate != null;
   const name = `Payout ${payout.payoutReference}`;
   return (
     <li className="col gap8" aria-label={name}>
@@ -207,18 +250,37 @@ function Payout({
         <strong ref={nameRef} tabIndex={-1}>
           {name}
         </strong>
-        <Badge tone={status.tone} dot>
-          {status.label}
+        <Badge tone={state.tone} dot>
+          {state.label}
         </Badge>
       </div>
-      <span>
-        <Money value={Number(payout.bankAmount)} /> at the bank on {payout.bankDate}
-      </span>
+      {banked ? (
+        <span>
+          <Money value={Number(payout.bankAmount)} /> at the bank on {payout.bankDate}
+        </span>
+      ) : (
+        <span>
+          No bank evidence has arrived for this payout.
+          {payout.status === 'AwaitingBank' &&
+            ' Nothing posts until the bank says what it received.'}
+        </span>
+      )}
+      {payout.processorAmount != null && (
+        <span>
+          Processor’s payout amount: <Money value={Number(payout.processorAmount)} />
+        </span>
+      )}
+      {payout.failedAt && (
+        <span>
+          The processor reported that this payout failed on{' '}
+          <time dateTime={payout.failedAt}>{new Date(payout.failedAt).toLocaleString()}</time>.
+        </span>
+      )}
       {failure}
       {/* Why it waits, and what to do about it: only while it still waits. */}
       {payout.reason && (payout.status === 'NeedsReview' || payout.status === 'Received') && (
         <p>
-          {payoutReason(payout.reason)}
+          {payoutReason(payout.reason, payout.postedAt != null)}
           {payout.reasonItem ? ` Line: ${payout.reasonItem}.` : ''}
         </p>
       )}

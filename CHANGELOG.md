@@ -92,6 +92,15 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   goes to review, and nothing is reversed by itself. No screen changes yet: staff see a held payout
   by its raw status.
 
+- **The screens say what a sandbox payment is, and a held payout reads "Waiting for the bank".** In a
+  host running the `StripeSandbox` mode, the tenant and staff payment screens say "Test payment — no
+  real money moves" where the simulation says "Simulation". A payout Stripe has paid and no bank has
+  confirmed reads "Waiting for the bank", with Stripe's amount and no bank amount or date. The
+  Payouts list words a bank amount that differs and a payout the processor reports as failed, names
+  a card dispute, a refund and a failed bank debit, and shows when a payout failed. A tenant whose
+  sandbox payment is in review is told the property manager is checking it, and never sees a reason
+  code. The simulation's screens are unchanged.
+
 - **A sandbox payment that is disputed or refunded goes to review.** A sandbox host now reads Stripe's
   dispute events and its refund event. A disputed ACH debit becomes a returned payment, a disputed
   card payment a dispute, and a refund a refund; each sends the payment to review on Operations, where
@@ -113,6 +122,16 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   sandbox fixture in its own database beside the simulation fixture.
 
 ### Changed
+
+- **A sandbox journal entry says it came from the Stripe sandbox.** A receipt posted from sandbox
+  evidence is described as "Stripe sandbox tenant payment", and its reversal and return note follow.
+  Nothing else in the posting differs from the simulation's, whose descriptions are unchanged.
+
+- **A Stripe notice that could not be read is refused so that Stripe sends it again.** When Stripe
+  could not be asked about a dispute or a paid payout, the delivery answered 500 and was logged as an
+  unhandled error. It now answers 503 with the code `payment_callback_deferred` and is logged as
+  event `4608` at Warning. Payment log messages no longer say "Simulated" in either mode; their event
+  ids are unchanged. A sandbox delivery that is not this host's is logged at Debug.
 
 - **A payout in review is checked again only when an administrator posts it.** Before, the same
   payout evidence arriving a second time checked the payout again and could post it once the cause
@@ -152,6 +171,12 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   credentials is refused. An existing fixture manifest is unaffected.
 
 ### Fixed
+
+- **A payout that failed after it posted no longer reads "nothing posted".** The Payouts list now
+  says "posted, nothing reversed" for a payout in review or closed that had posted.
+
+- **Post return is offered only when it can be posted.** Staff were offered **Post return** on a
+  refund, a card dispute, a partial return and conflicting evidence, and the server then refused it.
 
 - **Check alignment and MICR fields are ready as soon as their saved values load.** The offset fields
   in the check print settings and in a bank account's MICR details appeared empty and disabled for a

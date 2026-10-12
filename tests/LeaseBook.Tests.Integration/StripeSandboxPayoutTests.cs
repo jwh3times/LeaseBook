@@ -505,7 +505,9 @@ public sealed partial class StripeSandboxHostTests
 
         // An administrator cannot post it either. Only a bank's evidence releases it, and no route supplies that.
         var view = await View(h, payout.Id, ct);
-        (view.Status, view.CanPost, view.CanClose, view.BankAmount, view.ProcessorAmount, view.FailedAt).ShouldBe(("AwaitingBank", false, true, 0m, 198.40m, null));
+        // No bank amount and no bank date either: the zero and the empty date it is stored with are not evidence.
+        (view.Status, view.CanPost, view.CanClose, view.BankAmount, view.BankDate, view.ProcessorAmount, view.FailedAt, view.PostedAt)
+            .ShouldBe(("AwaitingBank", false, true, null, null, 198.40m, null, null));
         (await Post(h, payout.Id, ct)).Refusal.ShouldBe("bank_evidence_missing");
         (await Stored(h, Payout, ct)).Payout.Status.ShouldBe("AwaitingBank");
         (await h.JournalEntries(ct)).ShouldBe(entries);
@@ -943,6 +945,13 @@ public sealed partial class StripeSandboxHostTests
         (await h.Operation(payment.Id, ct)).Status.ShouldBe(status);
         var view = await View(h, payout.Id, ct);
         (view.CanPost, view.CanClose, view.FailedAt, view.ProcessorAmount).ShouldBe((false, true, payout.FailedAt, 198.40m));
+        // Staff can tell a payout that posted and then failed from one where nothing posted: when it
+        // posted is kept, and so is what the bank said, under a status that is the same for both.
+        (view.Status, view.Reason).ShouldBe(("NeedsReview", "payout_failed"));
+        (view.PostedAt, view.BankAmount, view.BankDate).ShouldBe(when == "after it has posted"
+            ? (payout.PostedAt, 198.40m, Today(h)) : ((DateTime?)null, (decimal?)null, (DateOnly?)null));
+        view.PostedAt.HasValue.ShouldBe(when == "after it has posted");
+        view.Items.Any(x => x.EntryId is not null).ShouldBe(when == "after it has posted");
 
         // Nothing that comes afterwards posts: the paid event again or for the first time, a bank's
         // evidence, an administrator. The failure again does not reopen what a person closes.
@@ -1067,7 +1076,8 @@ public sealed partial class StripeSandboxHostTests
 
         var delivered = await h.Deliver(paid, ct);
 
-        delivered.Status.ShouldBe(HttpStatusCode.InternalServerError, delivered.Body);
+        delivered.Status.ShouldBe(HttpStatusCode.ServiceUnavailable, delivered.Body);
+        ((string?)JsonNode.Parse(delivered.Body)!["code"]).ShouldBe("payment_callback_deferred");
         delivered.Commands.ShouldBe(0);
         (await Payouts(h, ct)).ShouldBeEmpty();
 
