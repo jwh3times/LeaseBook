@@ -263,12 +263,13 @@ Two consecutive runs gave identical figures.
 
 ### Playwright run
 
-These figures were measured again on 2026-10-12 at commit `eaaba75` with the ledger-posting
-scenarios of #544 added, the first area that issue closes. The two suite baselines above are
-unchanged, because that change touches no product code. The figures before it are in this page's
-history: 82 routes reached by a browser, 57.3% of host lines and 76.0% of web lines.
+These figures were measured again on 2026-10-12 at commit `3cec0d0` with the directory-record
+scenarios of #544 added, the second area that issue closes. The two suite baselines above are
+unchanged, because that change touches no product code. The earlier figures are in this page's
+history. At the first baseline: 82 routes reached by a browser, 57.3% of host lines and 76.0% of web
+lines. After the first area: 87 routes, 58.3% and 76.4%.
 
-Both passes: 118 tests passed and 2 were skipped in the main pass, and 2 passed in the
+Both passes: 121 tests passed and 2 were skipped in the main pass, and 2 passed in the
 simulated-payment pass. The run was local, so the CI-only visual snapshots did not run; they assert
 on pixels and call no extra route.
 
@@ -276,33 +277,33 @@ Host coverage as reached by the browser, Debug build:
 
 | Module       | Classes | Lines covered |  Line | Branches covered | Branch |
 | :----------- | ------: | ------------: | ----: | ---------------: | -----: |
-| Accounting   |     293 |   2823 / 3966 | 71.2% |        572 / 949 |  60.3% |
-| Directory    |     162 |   1567 / 1969 | 79.6% |        320 / 482 |  66.4% |
+| Accounting   |     293 |   2823 / 3966 | 71.2% |        573 / 949 |  60.4% |
+| Directory    |     162 |   1577 / 1969 | 80.1% |        335 / 482 |  69.5% |
 | Banking      |      49 |     414 / 530 | 78.1% |        134 / 227 |  59.0% |
 | Reporting    |      23 |     205 / 241 | 85.1% |          20 / 44 |  45.5% |
 | Operations   |      53 |    699 / 1003 | 69.7% |        125 / 217 |  57.6% |
 | Capabilities |      26 |     226 / 585 | 38.6% |         41 / 118 |  34.7% |
 | Payments     |     127 |   1002 / 1503 | 66.7% |       488 / 1100 |  44.4% |
-| SharedKernel |      26 |     323 / 450 | 71.8% |        111 / 156 |  71.2% |
+| SharedKernel |      26 |     332 / 450 | 73.8% |        112 / 156 |  71.8% |
 | Migrator     |      19 |     302 / 350 | 86.3% |         79 / 136 |  58.1% |
-| Web host     |     357 |  6558 / 13611 | 48.2% |      1928 / 4941 |  39.0% |
-| **Total**    |    1135 | 14119 / 24208 | 58.3% |      3818 / 8370 |  45.6% |
+| Web host     |     357 |  6567 / 13611 | 48.2% |      1937 / 4941 |  39.2% |
+| **Total**    |    1135 | 14147 / 24208 | 58.4% |      3844 / 8370 |  45.9% |
 
 Web coverage as reached by the browser:
 
 | Area       | Files | Lines covered |  Line | Branches covered | Branch |
 | :--------- | ----: | ------------: | ----: | ---------------: | -----: |
 | (src root) |     2 |       16 / 17 | 94.1% |            1 / 2 |  50.0% |
-| api        |     5 |       69 / 97 | 71.1% |          52 / 87 |  59.8% |
+| api        |     5 |       75 / 97 | 77.3% |          57 / 87 |  65.5% |
 | app        |     8 |     106 / 113 | 93.8% |          36 / 47 |  76.6% |
-| components |    13 |     172 / 196 | 87.8% |        127 / 176 |  72.2% |
+| components |    13 |     172 / 196 | 87.8% |        128 / 176 |  72.7% |
 | design     |    22 |     132 / 151 | 87.4% |        133 / 162 |  82.1% |
 | dev        |     1 |       10 / 14 | 71.4% |            0 / 0 |    n/a |
-| features   |    89 |   2237 / 3003 | 74.5% |      1669 / 2842 |  58.7% |
-| lib        |     9 |      85 / 111 | 76.6% |          46 / 55 |  83.6% |
-| **Total**  |   149 |   2827 / 3702 | 76.4% |      2064 / 3371 |  61.2% |
+| features   |    89 |   2272 / 3003 | 75.7% |      1707 / 2842 |  60.1% |
+| lib        |     9 |      91 / 111 | 82.0% |          46 / 55 |  83.6% |
+| **Total**  |   149 |   2874 / 3702 | 77.6% |      2108 / 3371 |  62.5% |
 
-Route inventory, from 1,625 recorded requests:
+Route inventory, from 1,682 recorded requests:
 
 | Group             | Routes | Reached by a browser | Test client only | Not reached |
 | :---------------- | -----: | -------------------: | ---------------: | ----------: |
@@ -312,7 +313,7 @@ Route inventory, from 1,625 recorded requests:
 | banking           |      5 |                    4 |                0 |           1 |
 | callbacks         |      2 |                    0 |                2 |           0 |
 | dashboard         |      1 |                    1 |                0 |           0 |
-| directory         |     18 |                    7 |                0 |          11 |
+| directory         |     18 |                   10 |                0 |           8 |
 | health            |      1 |                    0 |                0 |           1 |
 | onboarding        |      6 |                    6 |                0 |           0 |
 | operations        |      5 |                    4 |                0 |           1 |
@@ -326,18 +327,20 @@ Route inventory, from 1,625 recorded requests:
 | settings          |      9 |                    5 |                0 |           4 |
 | statements        |      6 |                    6 |                0 |           0 |
 | telemetry         |      1 |                    1 |                0 |           0 |
-| **Total**         |    131 |                   87 |                2 |          42 |
+| **Total**         |    131 |                   90 |                2 |          39 |
 
-The 42 routes no test reached, by what they have in common:
+The 39 routes no test reached, by what they have in common:
 
-- **Creating and editing directory records (10).** `POST` and `PUT` for owners, properties, units and
-  tenants, `POST /api/directory/leases` and `POST /api/directory/properties/{id}/ownership-transfers`.
-  The browser tests read the directory and never write to it. `GET /api/directory/units` is also
-  unreached.
+- **Directory records with no screen (8).** `PUT` for owners, properties, units and tenants, `GET`
+  and `POST /api/directory/units`, `POST /api/directory/leases` and
+  `POST /api/directory/properties/{id}/ownership-transfers`. The web client has a function for each
+  and no screen calls one. The screens create an owner, a property and a tenant, and edit only a
+  lease's late-fee terms. A property's units arrive with the property.
 - **Bank adjustments (1).** No screen records a bank fee, interest or a transfer between accounts.
 - **Accounting reads (4).** Owner balances, the owner ledger, deposits and the trust equation. No
   screen requests these routes; the screens that show the same figures get them from other routes.
-- **Reconciliation (2).** Unlocking a reconciliation and its report.
+  The catalogue records these four as permanent exemptions.
+- **Reconciliation (2).** Unlocking a reconciliation and its report. No screen unlocks one.
 - **Account security (5).** MFA sign-in, recovery and changing a password. The two MFA enrollment
   routes are requested, but the test answers them itself.
 - **Payments review (4).** Retrying a payment, the unmatched list, closing a settlement and closing a
@@ -376,6 +379,10 @@ with the main pass again at 5.6 minutes.
 The four ledger-posting tests of #544 add about 16 seconds to the main pass. With them, on
 2026-10-12, the plain `npm run e2e` took 5.1 minutes, the main pass with collection took 5.9
 minutes, and the whole command with both passes took 6:45.
+
+The three directory-record tests of #544 add about 18 seconds. With them, on 2026-10-12, the plain
+`npm run e2e` took 5.2 minutes, the main pass with collection took 6.0 minutes, and the whole command
+with both passes took 6:50.
 
 ## Console logging and the test run
 

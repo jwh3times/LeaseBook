@@ -107,6 +107,30 @@
       "routes": ["GET /api/search"]
     },
     {
+      "id": "directory-create-owner",
+      "workflow": "Create an owner from the owner list by keyboard, with a fee over 100% refused, and see it on its page and in the list",
+      "area": "Directory",
+      "spec": "directory-records.spec.ts",
+      "events": [],
+      "routes": ["POST /api/directory/owners"]
+    },
+    {
+      "id": "directory-create-property",
+      "workflow": "Create a property for a new owner by keyboard, with a blank address refused, and see it on its page, in the list and under its owner",
+      "area": "Directory",
+      "spec": "directory-records.spec.ts",
+      "events": [],
+      "routes": ["POST /api/directory/properties"]
+    },
+    {
+      "id": "directory-create-tenant",
+      "workflow": "Create a tenant from the tenant list by keyboard, with a malformed email refused, and see it on its page and in the list",
+      "area": "Directory",
+      "spec": "directory-records.spec.ts",
+      "events": [],
+      "routes": ["POST /api/directory/tenants"]
+    },
+    {
       "id": "error-and-empty-states",
       "workflow": "An expired session, a failed query, a failed post and an empty list each show their designed state",
       "area": "Error states",
@@ -538,87 +562,83 @@
         "event": "BalanceForward",
         "reason": "baseline gap",
         "date": "2026-10-12",
-        "issue": 544
+        "issue": 556
       },
       {
         "event": "BankFeeCharged",
         "reason": "baseline gap",
         "date": "2026-10-12",
-        "issue": 544
+        "issue": 553
       },
       {
         "event": "DepositResponsibilityTransferred",
         "reason": "baseline gap",
         "date": "2026-10-12",
-        "issue": 544
+        "issue": 555
       },
       {
         "event": "InterestEarned",
         "reason": "baseline gap",
         "date": "2026-10-12",
-        "issue": 544
+        "issue": 553
       },
       {
         "event": "OwnerContribution",
         "reason": "baseline gap",
         "date": "2026-10-12",
-        "issue": 544
+        "issue": 556
       },
       {
         "event": "PMFeesSwept",
         "reason": "baseline gap",
         "date": "2026-10-12",
-        "issue": 544
+        "issue": 556
       },
       {
         "event": "TrustTransfer",
         "reason": "baseline gap",
         "date": "2026-10-12",
-        "issue": 544
+        "issue": 553
       },
       {
         "event": "VendorPaid",
         "reason": "baseline gap",
         "date": "2026-10-12",
-        "issue": 544
+        "issue": 556
       }
     ],
     "routes": [
       {
         "route": "GET /api/accounting/owners/balances",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 544
+        "reason": "No screen requests it; the screens that show these figures get them from other routes.",
+        "date": "2026-10-12"
       },
       {
         "route": "GET /api/accounting/owners/{ownerId}/ledger",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 544
+        "reason": "No screen requests it; the screens that show these figures get them from other routes.",
+        "date": "2026-10-12"
       },
       {
         "route": "GET /api/accounting/deposits",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 544
+        "reason": "No screen requests it; the screens that show these figures get them from other routes.",
+        "date": "2026-10-12"
       },
       {
         "route": "GET /api/accounting/trust-equation",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 544
+        "reason": "No screen requests it; the screens that show these figures get them from other routes.",
+        "date": "2026-10-12"
       },
       {
         "route": "POST /api/accounting/banks/{bankAccountId}/adjustments",
         "reason": "baseline gap",
         "date": "2026-10-12",
-        "issue": 544
+        "issue": 553
       },
       {
         "route": "POST /api/accounting/reconciliations/{id}/unlock",
         "reason": "baseline gap",
         "date": "2026-10-12",
-        "issue": 544
+        "issue": 554
       },
       {
         "route": "GET /api/accounting/reconciliations/{id}/report",
@@ -627,19 +647,7 @@
         "issue": 544
       },
       {
-        "route": "POST /api/directory/owners",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 544
-      },
-      {
         "route": "PUT /api/directory/owners/{id}",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 544
-      },
-      {
-        "route": "POST /api/directory/properties",
         "reason": "baseline gap",
         "date": "2026-10-12",
         "issue": 544
@@ -654,7 +662,7 @@
         "route": "POST /api/directory/properties/{id}/ownership-transfers",
         "reason": "baseline gap",
         "date": "2026-10-12",
-        "issue": 544
+        "issue": 555
       },
       {
         "route": "GET /api/directory/units",
@@ -670,12 +678,6 @@
       },
       {
         "route": "PUT /api/directory/units/{id}",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 544
-      },
-      {
-        "route": "POST /api/directory/tenants",
         "reason": "baseline gap",
         "date": "2026-10-12",
         "issue": 544
