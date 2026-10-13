@@ -1,6 +1,6 @@
-import { createHmac } from 'node:crypto';
+import { createHmac, randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { type APIRequestContext, expect } from '@playwright/test';
+import { type APIRequestContext, type Page, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { runA11y, signIn } from './helpers';
 import { test } from './test';
@@ -12,11 +12,13 @@ interface Manifest {
 
 const PASSWORD = 'Payment-Fixture-2026!';
 
-function fixture() {
+// The manifest binds two organizations. The first two scenarios drive the first, and the two review
+// scenarios drive the second, so that neither pair sees the other's payments, payouts or fee rule.
+function fixture(index = 0) {
   const manifest = (
     JSON.parse(readFileSync(process.env.Payments__ManifestPath!, 'utf8')) as { Payments: Manifest }
   ).Payments;
-  const binding = manifest.Fixtures[0];
+  const binding = manifest.Fixtures[index];
   if (!binding) throw new Error('Payment fixture binding missing');
   return { manifest, binding };
 }
@@ -277,4 +279,205 @@ test('simulation survives reload and posts only after separate bank evidence @sc
   await expect(
     page.getByText('Simulated payment returned by the bank — the receipt was reversed'),
   ).toBeVisible();
+});
+
+// The second fixture organization: its tenants, its administrator, and the notices a processor sends
+// about one of its payments. Its fee rule is never set, so a payment there is charged no fee.
+function reviewFixture() {
+  const { manifest, binding } = fixture(1);
+  const generationN = binding.Generation.replaceAll('-', '');
+  const providerId = (paymentId: string) => `sim_${generationN}_${paymentId.replaceAll('-', '')}`;
+  const today = new Date().toISOString().slice(0, 10);
+  return { manifest, binding, providerId, today };
+}
+
+// The tenant submits one fee-free payment and waits until the processor has accepted it.
+async function submitPayment(page: Page, amount: string) {
+  await page.getByLabel('Amount (USD)').fill(amount);
+  await expect(page.getByText(`No convenience fee · Total charged: $${amount}`)).toBeVisible();
+  const submitted = page.waitForResponse(
+    (r) => r.url().endsWith('/api/portal/tenant/payments') && r.request().method() === 'POST',
+  );
+  await page.getByRole('button', { name: 'Submit simulated payment' }).click();
+  const payment = (await (await submitted).json()) as { id: string };
+  const mine = page.getByRole('listitem').filter({ hasText: payment.id });
+  await expect(mine).toContainText('Simulated payment processing — not yet on your ledger');
+  return { id: payment.id, mine };
+}
+
+/**
+ * A dispute after the receipt (ADR-052): the receipt stays, nothing is reversed, and the evidence
+ * cannot be posted as a return. The administrator closes the review with a note, from the keyboard.
+ * The tenant sees that the review is closed and never sees the note.
+ */
+test('an administrator closes the review of a disputed payment with a note @scenario:simulated-payment-review-closed', async ({
+  page,
+  request,
+  browser,
+}) => {
+  test.skip(
+    process.env.PAYMENT_SIMULATION_E2E !== '1',
+    'Requires the isolated payment fixture database.',
+  );
+  const { manifest, binding, providerId, today } = reviewFixture();
+  const note = `Dispute settled with the tenant by hand ${randomBytes(4).toString('hex')}`;
+
+  await signIn(page, { email: 'tenant-b1@payments.test', password: PASSWORD });
+  const payment = await submitPayment(page, '12.50');
+  const notify = (kind: string) =>
+    deliver(
+      request,
+      manifest.SigningKey,
+      '/callbacks/payments/simulation',
+      JSON.stringify({
+        EventId: `${payment.id.replaceAll('-', '')}:${kind}`,
+        ProviderId: providerId(payment.id),
+        Account: binding.Account,
+        Mode: 'Simulation',
+        Generation: binding.Generation,
+        Kind: kind,
+        Gross: 12.5,
+        Fee: 0,
+        Net: 12.5,
+        Currency: 'USD',
+        BankId: binding.BankId,
+        BankDate: today,
+        EvidenceId: `bank-${payment.id}`,
+        PayoutId: `payout-${payment.id}`,
+        Complete: true,
+        ObservedAt: new Date().toISOString(),
+      }),
+    );
+  await notify('BankCredit');
+  await expect(payment.mine.getByText('Simulated payment recorded', { exact: true })).toBeVisible();
+  await notify('Dispute');
+  await expect(payment.mine).toContainText(
+    'Simulated payment needs review — original receipt remains recorded',
+  );
+
+  const staff = await browser.newContext();
+  const admin = await staff.newPage();
+  await signIn(admin, { email: 'admin-b@payments.test', password: PASSWORD });
+  await admin.goto('/operations');
+  const review = admin.getByRole('listitem').filter({ hasText: payment.id });
+  await expect(review).toContainText('$12.50');
+  await expect(review).toContainText(
+    'The evidence held so far cannot be posted as a return. Review the evidence and the ledger, then close the review.',
+  );
+  await expect(review.getByText(/^Receipt entry: /)).toBeVisible();
+  // A dispute is not a return: the only way out is to close the review.
+  await expect(review.getByRole('button', { name: 'Post return' })).toHaveCount(0);
+  await expect(review.getByRole('button', { name: 'Retry operation' })).toHaveCount(0);
+
+  await review.getByRole('button', { name: 'Close review…' }).focus();
+  await admin.keyboard.press('Enter');
+  const resolution = review.getByLabel('How was this resolved? (staff only)');
+  await expect(resolution).toBeFocused();
+  await expect(review.getByText('Closing posts nothing.')).toBeVisible();
+  // A note is required: with none, the review cannot be closed.
+  await expect(review.getByRole('button', { name: 'Close review', exact: true })).toBeDisabled();
+  // The review form open on a payment. `nested-interactive` is the Operations page's documented
+  // deferral for the disbursement rows (see a11y.spec.ts).
+  await runA11y(admin, { disableRules: ['nested-interactive'] });
+  await admin.keyboard.type(note);
+  await admin.keyboard.press('Enter');
+  await expect(review).toContainText(
+    'Simulated payment review closed — original receipt remains recorded',
+  );
+  await expect(review).toContainText(`Review closed by staff: ${note}`);
+  await expect(review.getByRole('button')).toHaveCount(0);
+  await staff.close();
+
+  await expect(payment.mine).toContainText(
+    'Simulated payment review closed — original receipt remains recorded',
+  );
+  await expect(page.getByText(note)).toHaveCount(0);
+});
+
+/**
+ * A payout whose lines do not add up to what the bank received (ADR-053) posts nothing and waits.
+ * The administrator closes it with a note, from the keyboard: still nothing posts, and the payment
+ * it named is no nearer the tenant's ledger.
+ */
+test('an administrator closes a payout that does not add up to the bank amount, and nothing posts @scenario:simulated-payment-payout-review-closed', async ({
+  page,
+  request,
+  browser,
+}) => {
+  test.skip(
+    process.env.PAYMENT_SIMULATION_E2E !== '1',
+    'Requires the isolated payment fixture database.',
+  );
+  const { manifest, binding, providerId, today } = reviewFixture();
+  const run = randomBytes(4).toString('hex');
+  const payoutId = `po_${run}_untied`;
+  const note = `Bank deposit corrected by the processor ${run}`;
+
+  await signIn(page, { email: 'tenant-b2@payments.test', password: PASSWORD });
+  const payment = await submitPayment(page, '25.00');
+
+  // The processor says it paid out the whole $25.00. The bank received $24.00.
+  await deliver(
+    request,
+    manifest.SigningKey,
+    '/callbacks/payments/simulation/payout',
+    JSON.stringify({
+      PayoutId: payoutId,
+      Account: binding.Account,
+      Mode: 'Simulation',
+      Generation: binding.Generation,
+      PayoutType: 'standard',
+      BankAmount: 24,
+      Currency: 'USD',
+      BankId: binding.BankId,
+      BankDate: today,
+      EvidenceId: `bank-${payoutId}`,
+      ObservedAt: new Date().toISOString(),
+      Items: [
+        {
+          Item: '1',
+          Kind: 'Payment',
+          ProviderId: providerId(payment.id),
+          Gross: 25,
+          Fee: 0,
+          Net: 25,
+          Currency: 'USD',
+        },
+      ],
+    }),
+  );
+
+  const staff = await browser.newContext();
+  const admin = await staff.newPage();
+  await signIn(admin, { email: 'admin-b@payments.test', password: PASSWORD });
+  await admin.goto('/operations');
+  const payout = admin.getByRole('listitem', { name: `Payout ${payoutId}` });
+  await expect(payout.getByText('Needs review — nothing posted')).toBeVisible();
+  await expect(payout).toContainText('$24.00 at the bank');
+  await expect(payout).toContainText(
+    'The lines of this payout do not add up to the bank amount, or a charge differs from the payment, so nothing was posted.',
+  );
+  await expect(payout.getByRole('row').nth(1)).toContainText('$25.00');
+  await expect(payout.getByRole('row').nth(1)).toContainText('Not on the ledger');
+
+  await payout.getByRole('button', { name: `Close review of payout ${payoutId}` }).focus();
+  await admin.keyboard.press('Enter');
+  await expect(payout.getByLabel('How was this resolved? (staff only)')).toBeFocused();
+  await expect(payout.getByRole('button', { name: 'Close review', exact: true })).toBeDisabled();
+  // The review form open on a payout; the same deferral as above.
+  await runA11y(admin, { disableRules: ['nested-interactive'] });
+  await admin.keyboard.type(note);
+  await admin.keyboard.press('Enter');
+  await expect(payout.getByText('Closed — nothing posted')).toBeVisible();
+  await expect(payout).toContainText(`Review closed by staff: ${note}`);
+  await expect(payout.getByRole('row').nth(1)).toContainText('Not on the ledger');
+  await expect(payout.getByRole('button')).toHaveCount(0);
+  // Focus lands on the payout's name, so a keyboard user stays on the payout they closed.
+  await expect(payout.getByText(`Payout ${payoutId}`, { exact: true })).toBeFocused();
+  await staff.close();
+
+  await expect(payment.mine).toContainText('Simulated payment processing — not yet on your ledger');
+  await expect(payment.mine.getByText('Simulated payment recorded', { exact: true })).toHaveCount(
+    0,
+  );
 });
