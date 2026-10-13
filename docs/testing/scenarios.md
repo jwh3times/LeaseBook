@@ -168,7 +168,7 @@ not edit between the markers.
 <!-- scenario-catalogue:start -->
 <!-- prettier-ignore-start -->
 
-52 scenarios. 8 journal event types and 39 routes are exempt.
+55 scenarios. 8 journal event types and 33 routes are exempt.
 
 ### Scenarios
 
@@ -179,6 +179,9 @@ not edit between the markers.
 | `accessibility-command-palette` | The command palette open on results has no WCAG 2 AA violations | Accessibility | `a11y.spec.ts` |  |  |  |
 | `accessibility-onboarding` | The onboarding wizard has no WCAG 2 AA violations | Accessibility | `a11y.spec.ts` |  |  |  |
 | `mfa-enrollment-by-keyboard` | Enroll in MFA by keyboard and read the recovery codes, with the enrollment routes answered by the test | Account security | `account-security.spec.ts` |  |  |  |
+| `reconciliation-report-download` | Download the stored report of a finalized reconciliation, by click and by keyboard, and get the month and the statement balance the history shows | Banking | `banking-accounts.spec.ts` |  |  | `GET /api/accounting/reconciliations`<br>`GET /api/accounting/reconciliations/{id}/report` |
+| `bank-account-create-and-edit` | Create a bank account in settings by keyboard, with an over-long name refused, see its empty register on Banking, then rename and deactivate it | Settings | `banking-accounts.spec.ts` |  |  | `GET /api/settings/banks`<br>`POST /api/settings/banks`<br>`PUT /api/settings/banks/{id}`<br>`PUT /api/settings/banks/{id}/active` |
+| `check-print-settings-and-micr` | Save a bank account's check print offsets by keyboard and its MICR details, with out-of-range offsets and a bad routing number refused, and print the alignment page | Banking | `banking-accounts.spec.ts` |  |  | `GET /api/refund-checks/print-settings/{bankAccountId}`<br>`PUT /api/refund-checks/print-settings/{bankAccountId}`<br>`POST /api/refund-checks/print-settings/{bankAccountId}/alignment`<br>`GET /api/refund-checks/micr/{bankAccountId}`<br>`PUT /api/refund-checks/micr/{bankAccountId}` |
 | `sign-in-to-dashboard-balances` | Sign in and see owner ending balances on the dashboard at 0 clicks | Dashboard | `budgeted-flows.spec.ts` |  |  | `GET /api/auth/csrf`<br>`POST /api/auth/login`<br>`GET /api/auth/me`<br>`GET /api/dashboard`<br>`GET /api/onboarding/status`<br>`GET /api/settings/org`<br>`POST /api/telemetry/budget` |
 | `palette-jump-to-tenant` | Jump to a tenant from the command palette in 2 interactions | Directory | `budgeted-flows.spec.ts` |  |  | `GET /api/search` |
 | `list-row-opens-detail` | Open a record from its list row in 2 interactions | Directory | `budgeted-flows.spec.ts` |  |  | `GET /api/directory/tenants`<br>`GET /api/directory/tenants/{id}` |
@@ -232,7 +235,7 @@ not edit between the markers.
 | Reason | Count |
 | :-- | --: |
 | No screen requests it; the screens that show these figures get them from other routes. | 4 |
-| baseline gap | 43 |
+| baseline gap | 37 |
 
 #### Journal event types with no scenario
 
@@ -257,20 +260,17 @@ not edit between the markers.
 | `GET /api/accounting/trust-equation` | No screen requests it; the screens that show these figures get them from other routes. | 2026-10-12 |  |
 | `POST /api/accounting/banks/{bankAccountId}/adjustments` | baseline gap | 2026-10-12 | #553 |
 | `POST /api/accounting/reconciliations/{id}/unlock` | baseline gap | 2026-10-12 | #554 |
-| `GET /api/accounting/reconciliations/{id}/report` | baseline gap | 2026-10-12 | #544 |
-| `PUT /api/directory/owners/{id}` | baseline gap | 2026-10-12 | #544 |
-| `PUT /api/directory/properties/{id}` | baseline gap | 2026-10-12 | #544 |
+| `PUT /api/directory/owners/{id}` | baseline gap | 2026-10-12 | #558 |
+| `PUT /api/directory/properties/{id}` | baseline gap | 2026-10-12 | #558 |
 | `POST /api/directory/properties/{id}/ownership-transfers` | baseline gap | 2026-10-12 | #555 |
-| `GET /api/directory/units` | baseline gap | 2026-10-12 | #544 |
-| `POST /api/directory/units` | baseline gap | 2026-10-12 | #544 |
-| `PUT /api/directory/units/{id}` | baseline gap | 2026-10-12 | #544 |
-| `PUT /api/directory/tenants/{id}` | baseline gap | 2026-10-12 | #544 |
-| `POST /api/directory/leases` | baseline gap | 2026-10-12 | #544 |
+| `GET /api/directory/units` | baseline gap | 2026-10-12 | #558 |
+| `POST /api/directory/units` | baseline gap | 2026-10-12 | #558 |
+| `PUT /api/directory/units/{id}` | baseline gap | 2026-10-12 | #558 |
+| `PUT /api/directory/tenants/{id}` | baseline gap | 2026-10-12 | #558 |
+| `POST /api/directory/leases` | baseline gap | 2026-10-12 | #558 |
 | `GET /api/health` | baseline gap | 2026-10-12 | #544 |
 | `PUT /api/settings/portal-access` | baseline gap | 2026-10-12 | #544 |
-| `POST /api/settings/banks` | baseline gap | 2026-10-12 | #544 |
 | `GET /api/settings/banks/{id}` | baseline gap | 2026-10-12 | #544 |
-| `PUT /api/settings/banks/{id}` | baseline gap | 2026-10-12 | #544 |
 | `POST /api/banking/banks/{bankAccountId}/mappings` | baseline gap | 2026-10-12 | #544 |
 | `POST /api/portal-access/invitations/{id}/replace` | baseline gap | 2026-10-12 | #544 |
 | `POST /api/portal-access/invitations/{id}/cancel` | baseline gap | 2026-10-12 | #544 |
@@ -280,9 +280,6 @@ not edit between the markers.
 | `GET /api/payments/unmatched` | baseline gap | 2026-10-12 | #544 |
 | `POST /api/payments/settlements/{id}/close` | baseline gap | 2026-10-12 | #544 |
 | `POST /api/payments/{id}/close-review` | baseline gap | 2026-10-12 | #544 |
-| `PUT /api/refund-checks/print-settings/{bankAccountId}` | baseline gap | 2026-10-12 | #544 |
-| `PUT /api/refund-checks/micr/{bankAccountId}` | baseline gap | 2026-10-12 | #544 |
-| `POST /api/refund-checks/print-settings/{bankAccountId}/alignment` | baseline gap | 2026-10-12 | #544 |
 | `GET /api/operations/runs/{id}` | baseline gap | 2026-10-12 | #544 |
 | `GET /api/audit/events.csv` | baseline gap | 2026-10-12 | #544 |
 | `POST /api/auth/mfa/recovery` | baseline gap | 2026-10-12 | #544 |
