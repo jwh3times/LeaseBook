@@ -264,15 +264,17 @@ Two consecutive runs gave identical figures.
 
 ### Playwright run
 
-These figures were measured again on 2026-10-13 at commit `10ca20d` with the account-security and
-audit-export scenarios of #544 added, the fifth area that issue closes and the last. The two suite
-baselines above are unchanged, because that change touches no product code. The earlier figures are
-in this page's history. At the first baseline: 82 routes reached by a browser, 57.3% of host lines
-and 76.0% of web lines. After the first area: 87 routes, 58.3% and 76.4%. After the second: 90
-routes, 58.4% and 77.6%. After the third: 96 routes, 59.4% and 77.8%. After the fourth: 101 routes,
-60.0% and 79.3%.
+These figures were measured again on 2026-10-13 at commit `1aaf695` with one more scenario added, a
+staff sign-in with an authenticator code, which is the last change of #544. The two suite baselines
+above are unchanged, because that change touches no product code. The earlier figures are in this
+page's history. At the first baseline: 82 routes reached by a browser, 57.3% of host lines and 76.0%
+of web lines. After the first area of #544: 87 routes, 58.3% and 76.4%. After the second: 90 routes,
+58.4% and 77.6%. After the third: 96 routes, 59.4% and 77.8%. After the fourth: 101 routes, 60.0%
+and 79.3%. After the fifth and last, account security and the audit export: 107 routes, 60.9% and
+79.8%. The staff sign-in reaches no route and no line the fifth area had not reached, so the three
+tables below are the same as that measurement's, and only the count of requests rose.
 
-Both passes: 129 tests passed and 4 were skipped in the main pass, and 4 passed in the
+Both passes: 130 tests passed and 4 were skipped in the main pass, and 4 passed in the
 simulated-payment pass. The four skipped are the simulated-payment tests, which run only in their
 own pass. The run was local, so the CI-only visual snapshots did not run; they assert on pixels and
 call no extra route.
@@ -307,7 +309,7 @@ Web coverage as reached by the browser:
 | lib        |     9 |      91 / 111 | 82.0% |          46 / 55 |  83.6% |
 | **Total**  |   149 |   2956 / 3702 | 79.8% |      2191 / 3371 |  65.0% |
 
-Route inventory, from 2,106 recorded requests:
+Route inventory, from 2,121 recorded requests:
 
 | Group             | Routes | Reached by a browser | Test client only | Not reached |
 | :---------------- | -----: | -------------------: | ---------------: | ----------: |
@@ -365,8 +367,8 @@ The 22 routes no test reached, by what they have in common:
   payment and no screen calls it: the portal reads the tenant's whole list. The catalogue records it
   as a permanent exemption. The web client has a function that reads one operations run with its
   items and no screen calls it: run history lists each run's counts and total and opens nothing.
-  That one is the last route still exempt against #544. `GET /api/health` is for probes, and the
-  catalogue records it as a permanent exemption.
+  Its exemption points at #573, and no exemption points at #544 any more. `GET /api/health` is for
+  probes, and the catalogue records it as a permanent exemption.
 
 All nine auth routes are now reached. The account-security tests change no seeded account. Setting
 up an authenticator cannot be undone from any screen, and a changed password would follow a seeded
@@ -377,6 +379,13 @@ an authenticator app computes them, and the recovery codes are the ones the scre
 test of required enrollment still answers the session and the enrollment routes itself: a
 Development host does not require an administrator to enroll, so no real sign-in is held on that
 screen.
+
+One test does sign in as a seeded user: the scenario organization's second administrator, the only
+seeded account with an authenticator. Its key is a development-only seed credential committed in
+`ScenarioSeeder`, and the test computes the codes from it. No other spec signs in as this user. The
+test sets nothing up, changes no password, uses no recovery code and does not sign out. Its one
+refused code is followed by an accepted one, which puts the account's count of failed attempts back
+at zero, so the account is the same after the test as before it.
 
 The two simulation callbacks are the "test client only" routes. That is by design: a processor calls
 them, and no screen does.
@@ -425,6 +434,9 @@ The two account-security tests of #544 take about 20 seconds when run by themsel
 inviting and enrolling the new portal account each one uses. The audit-export test takes about 3
 seconds. With them, on 2026-10-13, the main pass with collection took 7.2 minutes and the whole
 command with both passes took 8:16.
+
+The staff sign-in test of #544 takes about 3 seconds. With it, on 2026-10-13, the main pass with
+collection took 7.3 minutes and the whole command with both passes took 8:25.
 
 ## Console logging and the test run
 

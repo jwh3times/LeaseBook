@@ -1,6 +1,13 @@
 import { createHmac, randomBytes } from 'node:crypto';
 import { expect, type Browser, type Locator, type Page } from '@playwright/test';
-import { runA11y, SCENARIO_ADMIN, signIn, type Credentials } from './helpers';
+import {
+  runA11y,
+  SCENARIO_ADMIN,
+  SCENARIO_ADMIN_MFA,
+  SCENARIO_ADMIN_MFA_KEY,
+  signIn,
+  type Credentials,
+} from './helpers';
 import { test } from './test';
 
 // Required enrollment: the screen an administrator is held on until an authenticator is set up. A
@@ -358,4 +365,35 @@ test('a portal user changes their password, which signs their other browser out 
     await otherContext.close();
     await person.leave();
   }
+});
+
+// A staff sign-in with an authenticator, on the one seeded administrator who has one. No other spec
+// signs in as this user. The test leaves the account as it found it: it sets nothing up, changes no
+// password, uses no recovery code and does not sign out. Its one refused code is followed by an
+// accepted one, so the count of failed attempts is back at zero when it ends.
+test('an enrolled administrator signs in with a password and an authenticator code, by keyboard @scenario:staff-mfa-sign-in', async ({
+  page,
+}) => {
+  await reachCodeStep(page, SCENARIO_ADMIN_MFA);
+  const code = page.getByLabel('Authentication code');
+  await code.focus();
+
+  // A code that is not the authenticator's is refused, and the code step stays open.
+  await page.keyboard.type(wrongCode(SCENARIO_ADMIN_MFA_KEY));
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('alert')).toHaveText('Invalid authentication code.');
+  await expect(page).toHaveURL(/\/login/);
+
+  await code.fill(authenticatorCode(SCENARIO_ADMIN_MFA_KEY));
+  await code.press('Enter');
+  await expect(page).toHaveURL(/\/dashboard/);
+  await expect(page.getByText('Owner ending balances')).toBeVisible();
+
+  // Account security, reached from Settings as staff reach it: enabled, with no setup on offer.
+  await page.goto('/settings');
+  await page.getByRole('link', { name: 'Account security' }).click();
+  await expect(page.getByRole('heading', { name: 'Account security', exact: true })).toBeVisible();
+  await expect(page.getByText('Authenticator enabled.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Set up authenticator' })).toHaveCount(0);
+  await expect(page.getByLabel('Setup key')).toHaveCount(0);
 });

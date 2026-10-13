@@ -65,6 +65,14 @@
       "routes": ["POST /api/auth/change-password"]
     },
     {
+      "id": "staff-mfa-sign-in",
+      "workflow": "An administrator who has an authenticator signs in with a password and a code by keyboard, after a wrong code is refused, and account security shows it enabled",
+      "area": "Account security",
+      "spec": "account-security.spec.ts",
+      "events": [],
+      "routes": ["POST /api/auth/mfa"]
+    },
+    {
       "id": "reconciliation-report-download",
       "workflow": "Download the stored report of a finalized reconciliation, by click and by keyboard, and get the month and the statement balance the history shows",
       "area": "Banking",
@@ -833,7 +841,7 @@
         "route": "GET /api/operations/runs/{id}",
         "reason": "baseline gap",
         "date": "2026-10-12",
-        "issue": 544
+        "issue": 573
       }
     ]
   }
