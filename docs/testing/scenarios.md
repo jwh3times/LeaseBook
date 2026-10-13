@@ -234,8 +234,9 @@ not edit between the markers.
 
 | Reason | Count |
 | :-- | --: |
+| No screen requests it; the screens read the whole list of bank accounts. | 1 |
 | No screen requests it; the screens that show these figures get them from other routes. | 4 |
-| baseline gap | 37 |
+| baseline gap | 36 |
 
 #### Journal event types with no scenario
 
@@ -270,8 +271,8 @@ not edit between the markers.
 | `POST /api/directory/leases` | baseline gap | 2026-10-12 | #558 |
 | `GET /api/health` | baseline gap | 2026-10-12 | #544 |
 | `PUT /api/settings/portal-access` | baseline gap | 2026-10-12 | #544 |
-| `GET /api/settings/banks/{id}` | baseline gap | 2026-10-12 | #544 |
-| `POST /api/banking/banks/{bankAccountId}/mappings` | baseline gap | 2026-10-12 | #544 |
+| `GET /api/settings/banks/{id}` | No screen requests it; the screens read the whole list of bank accounts. | 2026-10-12 |  |
+| `POST /api/banking/banks/{bankAccountId}/mappings` | baseline gap | 2026-10-12 | #567 |
 | `POST /api/portal-access/invitations/{id}/replace` | baseline gap | 2026-10-12 | #544 |
 | `POST /api/portal-access/invitations/{id}/cancel` | baseline gap | 2026-10-12 | #544 |
 | `POST /api/portal-access/invitations/{id}/retry` | baseline gap | 2026-10-12 | #544 |

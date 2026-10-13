@@ -348,10 +348,11 @@ The 33 routes no test reached, by what they have in common:
   review.
 - **Settings (2).** Reading one bank account by its id, and the portal-access setting. The web client
   has a function for the first and no screen calls it: the screens read the whole list of accounts.
+  The catalogue records it as a permanent exemption.
 - **Portal invitations (3).** Replacing, cancelling and retrying an invitation.
 - **One each:** saving a bank CSV mapping, one tenant-portal payment, one operations run, the audit
   CSV export, and `GET /api/health`. No screen saves a CSV mapping: the import wizard offers the
-  saved ones and has no control that saves one.
+  saved ones and has no control that saves one (#567).
 
 The two simulation callbacks are the "test client only" routes. That is by design: a processor calls
 them, and no screen does.

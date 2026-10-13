@@ -740,15 +740,14 @@
       },
       {
         "route": "GET /api/settings/banks/{id}",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 544
+        "reason": "No screen requests it; the screens read the whole list of bank accounts.",
+        "date": "2026-10-12"
       },
       {
         "route": "POST /api/banking/banks/{bankAccountId}/mappings",
         "reason": "baseline gap",
         "date": "2026-10-12",
-        "issue": 544
+        "issue": 567
       },
       {
         "route": "POST /api/portal-access/invitations/{id}/replace",
