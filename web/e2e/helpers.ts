@@ -35,6 +35,16 @@ export const SCENARIO_ADMIN: Credentials = {
   email: 'admin@scenario.test',
   password: 'Scenario-Trust-2026!',
 };
+// The second administrator in that organization, the only seeded user with an authenticator: signing
+// in takes the password and then a code. The seed gives it no recovery codes. Both values are the
+// development-only seed credentials committed in `src/LeaseBook.Web/Seeding/ScenarioSeeder.cs`
+// (`Admin2Email`, `AdminPassword`, `Admin2TotpSecret`), which is the source of truth: change them
+// there first. The key is Base32, as an authenticator app takes it.
+export const SCENARIO_ADMIN_MFA: Credentials = {
+  email: 'admin2@scenario.test',
+  password: 'Scenario-Trust-2026!',
+};
+export const SCENARIO_ADMIN_MFA_KEY = 'LEASEBOOK2SCENARIO3TOTP4KEY5AA66';
 
 // Force a theme deterministically before the app boots. ThemeProvider reads localStorage
 // ('leasebook.theme' → { theme, accent, density }) synchronously on first render and storage wins

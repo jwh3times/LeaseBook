@@ -41,7 +41,8 @@ most.
 are two kinds:
 
 - The reason `baseline gap` marks a gap that existed when the check was introduced. It carries the
-  `issue` that closes it: #544, or the gap's own issue where it has one.
+  `issue` that closes it. #544 closed the gaps a browser test could close; each one left has its own
+  issue, for a screen that does not exist yet.
 - Any other reason is written out in the entry, and the entry has no `issue`. It is permanent:
   nothing is planned to close it. The four accounting reads that no screen requests are of this
   kind.
@@ -174,7 +175,7 @@ not edit between the markers.
 <!-- scenario-catalogue:start -->
 <!-- prettier-ignore-start -->
 
-62 scenarios. 8 journal event types and 22 routes are exempt.
+63 scenarios. 8 journal event types and 22 routes are exempt.
 
 ### Scenarios
 
@@ -187,6 +188,7 @@ not edit between the markers.
 | `mfa-enrollment-by-keyboard` | Be held on required MFA enrollment and complete it by keyboard, with the session and the enrollment routes answered by the test | Account security | `account-security.spec.ts` |  |  |  |
 | `mfa-enrollment-and-sign-in` | Set up an authenticator on a new portal account, then sign in with its code and with recovery codes that each work once | Account security | `account-security.spec.ts` |  |  | `POST /api/auth/mfa/enroll`<br>`POST /api/auth/mfa/enroll/confirm`<br>`POST /api/auth/mfa`<br>`POST /api/auth/mfa/recovery` |
 | `password-change` | Change the password of a new portal account, which signs its other browser out and stops the old password working | Account security | `account-security.spec.ts` |  |  | `POST /api/auth/change-password` |
+| `staff-mfa-sign-in` | An administrator who has an authenticator signs in with a password and a code by keyboard, after a wrong code is refused, and account security shows it enabled | Account security | `account-security.spec.ts` |  |  | `POST /api/auth/mfa` |
 | `reconciliation-report-download` | Download the stored report of a finalized reconciliation, by click and by keyboard, and get the month and the statement balance the history shows | Banking | `banking-accounts.spec.ts` |  |  | `GET /api/accounting/reconciliations`<br>`GET /api/accounting/reconciliations/{id}/report` |
 | `bank-account-create-and-edit` | Create a bank account in settings by keyboard, with an over-long name refused, see its empty register on Banking, then rename and deactivate it | Settings | `banking-accounts.spec.ts` |  |  | `GET /api/settings/banks`<br>`POST /api/settings/banks`<br>`PUT /api/settings/banks/{id}`<br>`PUT /api/settings/banks/{id}/active` |
 | `check-print-settings-and-micr` | Save a bank account's check print offsets by keyboard and its MICR details, with out-of-range offsets and a bad routing number refused, and print the alignment page | Banking | `banking-accounts.spec.ts` |  |  | `GET /api/refund-checks/print-settings/{bankAccountId}`<br>`PUT /api/refund-checks/print-settings/{bankAccountId}`<br>`POST /api/refund-checks/print-settings/{bankAccountId}/alignment`<br>`GET /api/refund-checks/micr/{bankAccountId}`<br>`PUT /api/refund-checks/micr/{bankAccountId}` |
@@ -294,7 +296,7 @@ not edit between the markers.
 | `GET /api/portal/tenant/payments/{id}` | No screen requests it; the portal reads the tenant's whole list of payments. | 2026-10-12 |  |
 | `POST /api/payments/{id}/retry` | The control appears only after six failed attempts with waits of up to ten minutes, and the simulated processor accepts every payment. | 2026-10-12 |  |
 | `GET /api/payments/unmatched` | The control appears only for a notice held for ten minutes, which a test would have to wait out. | 2026-10-12 |  |
-| `GET /api/operations/runs/{id}` | baseline gap | 2026-10-12 | #544 |
+| `GET /api/operations/runs/{id}` | baseline gap | 2026-10-12 | #573 |
 
 <!-- prettier-ignore-end -->
 <!-- scenario-catalogue:end -->
