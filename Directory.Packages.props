@@ -14,7 +14,7 @@
   <ItemGroup>
     <!-- Application plumbing -->
     <PackageVersion Include="Scrutor" Version="7.0.0" />
-    <PackageVersion Include="FluentValidation" Version="12.1.1" />
+    <PackageVersion Include="FluentValidation" Version="12.2.0" />
     <!-- CSV export (P55 / stack default): the M3 ledger CSV. The general report/CSV catalog is M5. -->
     <PackageVersion Include="CsvHelper" Version="33.1.0" />
   </ItemGroup>
@@ -89,20 +89,20 @@
   <ItemGroup>
     <!-- Test stack (P7 / ADR-032): executable projects explicitly target Microsoft Testing
          Platform v2; global.json selects the .NET 10 MTP implementation of dotnet test. -->
-    <PackageVersion Include="xunit.v3.mtp-v2" Version="4.0.1" />
+    <PackageVersion Include="xunit.v3.mtp-v2" Version="4.0.2" />
     <!-- Coverage collection for the test projects (ADR-055): adds the `coverage` options to each
          MTP test executable and is inert unless one is passed. Peer-locked to the platform: each
          release names an exact Microsoft.Testing.Platform, and 18.11.2 names 2.4.0, the version
          xunit.v3.mtp-v2 4.0.1 resolves. A later release would raise the platform under xUnit, so
          move this only together with xunit.v3.mtp-v2. The `dotnet-coverage` local tool in
          .config/dotnet-tools.json is the same collector and stays at the same version. -->
-    <PackageVersion Include="Microsoft.Testing.Extensions.CodeCoverage" Version="18.11.2" />
+    <PackageVersion Include="Microsoft.Testing.Extensions.CodeCoverage" Version="18.12.0" />
     <!-- Abstractions-only (IAsyncLifetime, ICollectionFixture) for the shared, non-executable
          LeaseBook.Tests.Common fixture library; the full xUnit metapackage requires Exe.
          Peer-locked to xunit.v3.mtp-v2: the metapackage's transitives pin
          xunit.v3.extensibility.core / xunit.v3.common to an exact version, so these two
          PackageVersions must move together or restore fails NU1608. -->
-    <PackageVersion Include="xunit.v3.extensibility.core" Version="4.0.1" />
+    <PackageVersion Include="xunit.v3.extensibility.core" Version="4.0.2" />
     <PackageVersion Include="Shouldly" Version="4.3.0" />
     <PackageVersion Include="NetArchTest.Rules" Version="1.3.2" />
     <!-- Direct architecture-test use; already resolved transitively by NetArchTest at this version. -->
