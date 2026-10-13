@@ -44,6 +44,44 @@
       "routes": []
     },
     {
+      "id": "reconciliation-report-download",
+      "workflow": "Download the stored report of a finalized reconciliation, by click and by keyboard, and get the month and the statement balance the history shows",
+      "area": "Banking",
+      "spec": "banking-accounts.spec.ts",
+      "events": [],
+      "routes": [
+        "GET /api/accounting/reconciliations",
+        "GET /api/accounting/reconciliations/{id}/report"
+      ]
+    },
+    {
+      "id": "bank-account-create-and-edit",
+      "workflow": "Create a bank account in settings by keyboard, with an over-long name refused, see its empty register on Banking, then rename and deactivate it",
+      "area": "Settings",
+      "spec": "banking-accounts.spec.ts",
+      "events": [],
+      "routes": [
+        "GET /api/settings/banks",
+        "POST /api/settings/banks",
+        "PUT /api/settings/banks/{id}",
+        "PUT /api/settings/banks/{id}/active"
+      ]
+    },
+    {
+      "id": "check-print-settings-and-micr",
+      "workflow": "Save a bank account's check print offsets by keyboard and its MICR details, with out-of-range offsets and a bad routing number refused, and print the alignment page",
+      "area": "Banking",
+      "spec": "banking-accounts.spec.ts",
+      "events": [],
+      "routes": [
+        "GET /api/refund-checks/print-settings/{bankAccountId}",
+        "PUT /api/refund-checks/print-settings/{bankAccountId}",
+        "POST /api/refund-checks/print-settings/{bankAccountId}/alignment",
+        "GET /api/refund-checks/micr/{bankAccountId}",
+        "PUT /api/refund-checks/micr/{bankAccountId}"
+      ]
+    },
+    {
       "id": "sign-in-to-dashboard-balances",
       "workflow": "Sign in and see owner ending balances on the dashboard at 0 clicks",
       "area": "Dashboard",
@@ -641,22 +679,16 @@
         "issue": 554
       },
       {
-        "route": "GET /api/accounting/reconciliations/{id}/report",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 544
-      },
-      {
         "route": "PUT /api/directory/owners/{id}",
         "reason": "baseline gap",
         "date": "2026-10-12",
-        "issue": 544
+        "issue": 558
       },
       {
         "route": "PUT /api/directory/properties/{id}",
         "reason": "baseline gap",
         "date": "2026-10-12",
-        "issue": 544
+        "issue": 558
       },
       {
         "route": "POST /api/directory/properties/{id}/ownership-transfers",
@@ -668,31 +700,31 @@
         "route": "GET /api/directory/units",
         "reason": "baseline gap",
         "date": "2026-10-12",
-        "issue": 544
+        "issue": 558
       },
       {
         "route": "POST /api/directory/units",
         "reason": "baseline gap",
         "date": "2026-10-12",
-        "issue": 544
+        "issue": 558
       },
       {
         "route": "PUT /api/directory/units/{id}",
         "reason": "baseline gap",
         "date": "2026-10-12",
-        "issue": 544
+        "issue": 558
       },
       {
         "route": "PUT /api/directory/tenants/{id}",
         "reason": "baseline gap",
         "date": "2026-10-12",
-        "issue": 544
+        "issue": 558
       },
       {
         "route": "POST /api/directory/leases",
         "reason": "baseline gap",
         "date": "2026-10-12",
-        "issue": 544
+        "issue": 558
       },
       {
         "route": "GET /api/health",
@@ -707,28 +739,15 @@
         "issue": 544
       },
       {
-        "route": "POST /api/settings/banks",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 544
-      },
-      {
         "route": "GET /api/settings/banks/{id}",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 544
-      },
-      {
-        "route": "PUT /api/settings/banks/{id}",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 544
+        "reason": "No screen requests it; the screens read the whole list of bank accounts.",
+        "date": "2026-10-12"
       },
       {
         "route": "POST /api/banking/banks/{bankAccountId}/mappings",
         "reason": "baseline gap",
         "date": "2026-10-12",
-        "issue": 544
+        "issue": 567
       },
       {
         "route": "POST /api/portal-access/invitations/{id}/replace",
@@ -774,24 +793,6 @@
       },
       {
         "route": "POST /api/payments/{id}/close-review",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 544
-      },
-      {
-        "route": "PUT /api/refund-checks/print-settings/{bankAccountId}",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 544
-      },
-      {
-        "route": "PUT /api/refund-checks/micr/{bankAccountId}",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 544
-      },
-      {
-        "route": "POST /api/refund-checks/print-settings/{bankAccountId}/alignment",
         "reason": "baseline gap",
         "date": "2026-10-12",
         "issue": 544
