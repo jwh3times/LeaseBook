@@ -37,9 +37,14 @@ scenario. `routes` names the routes the scenario exists to cover. A test also ca
 page needs, such as the session check, and those are declared once, by the scenario they belong to
 most.
 
-**Exemptions.** An event type or a route with no scenario, each with a `reason` and a `date`. The
-reason `baseline gap` marks a gap that existed when the check was introduced, and it carries the
-`issue` that closes it. Any other reason is written out in the entry.
+**Exemptions.** An event type or a route with no scenario, each with a `reason` and a `date`. There
+are two kinds:
+
+- The reason `baseline gap` marks a gap that existed when the check was introduced. It carries the
+  `issue` that closes it: #544, or the gap's own issue where it has one.
+- Any other reason is written out in the entry, and the entry has no `issue`. It is permanent:
+  nothing is planned to close it. The four accounting reads that no screen requests are of this
+  kind.
 
 ### Journal event types
 
@@ -163,7 +168,7 @@ not edit between the markers.
 <!-- scenario-catalogue:start -->
 <!-- prettier-ignore-start -->
 
-49 scenarios. 8 journal event types and 42 routes are exempt.
+52 scenarios. 8 journal event types and 39 routes are exempt.
 
 ### Scenarios
 
@@ -180,6 +185,9 @@ not edit between the markers.
 | `settings-accounting-basis` | Change the accounting basis in settings and keep it across a reload | Settings | `budgeted-flows.spec.ts` |  |  | `GET /api/settings/org`<br>`PUT /api/settings/org` |
 | `directory-browse-records` | Browse owners, properties and tenants from list to detail and page with the quick-switcher | Directory | `directory-navigation.spec.ts` |  |  | `GET /api/directory/owners`<br>`GET /api/directory/owners/{id}`<br>`GET /api/directory/properties`<br>`GET /api/directory/properties/{id}`<br>`GET /api/directory/tenants`<br>`GET /api/directory/tenants/{id}` |
 | `directory-palette-jump` | Jump to an owner, a property, a tenant and a unit from the command palette | Directory | `directory-navigation.spec.ts` |  |  | `GET /api/search` |
+| `directory-create-owner` | Create an owner from the owner list by keyboard, with a fee over 100% refused, and see it on its page and in the list | Directory | `directory-records.spec.ts` |  |  | `POST /api/directory/owners` |
+| `directory-create-property` | Create a property for a new owner by keyboard, with a blank address refused, and see it on its page, in the list and under its owner | Directory | `directory-records.spec.ts` |  |  | `POST /api/directory/properties` |
+| `directory-create-tenant` | Create a tenant from the tenant list by keyboard, with a malformed email refused, and see it on its page and in the list | Directory | `directory-records.spec.ts` |  |  | `POST /api/directory/tenants` |
 | `error-and-empty-states` | An expired session, a failed query, a failed post and an empty list each show their designed state | Error states | `error-states.spec.ts` |  |  |  |
 | `keyboard-record-payment` | Record a tenant payment by keyboard alone, from the ledger and from the palette action, in 3 interactions | Accounting | `keyboard-only.spec.ts` | demo | `PaymentReceived` | `POST /api/accounting/tenants/{tenantId}/payments`<br>`GET /api/accounting/tenants/{tenantId}/ledger` |
 | `keyboard-navigation-and-focus` | Move through the palette, close a dialog and see the focus ring by keyboard | Accessibility | `keyboard-only.spec.ts` |  |  |  |
@@ -223,41 +231,39 @@ not edit between the markers.
 
 | Reason | Count |
 | :-- | --: |
-| baseline gap | 50 |
+| No screen requests it; the screens that show these figures get them from other routes. | 4 |
+| baseline gap | 43 |
 
 #### Journal event types with no scenario
 
 | Event type | Reason | Date | Issue |
 | :-- | :-- | :-- | :-- |
-| `BalanceForward` | baseline gap | 2026-10-12 | #544 |
-| `BankFeeCharged` | baseline gap | 2026-10-12 | #544 |
-| `DepositResponsibilityTransferred` | baseline gap | 2026-10-12 | #544 |
-| `InterestEarned` | baseline gap | 2026-10-12 | #544 |
-| `OwnerContribution` | baseline gap | 2026-10-12 | #544 |
-| `PMFeesSwept` | baseline gap | 2026-10-12 | #544 |
-| `TrustTransfer` | baseline gap | 2026-10-12 | #544 |
-| `VendorPaid` | baseline gap | 2026-10-12 | #544 |
+| `BalanceForward` | baseline gap | 2026-10-12 | #556 |
+| `BankFeeCharged` | baseline gap | 2026-10-12 | #553 |
+| `DepositResponsibilityTransferred` | baseline gap | 2026-10-12 | #555 |
+| `InterestEarned` | baseline gap | 2026-10-12 | #553 |
+| `OwnerContribution` | baseline gap | 2026-10-12 | #556 |
+| `PMFeesSwept` | baseline gap | 2026-10-12 | #556 |
+| `TrustTransfer` | baseline gap | 2026-10-12 | #553 |
+| `VendorPaid` | baseline gap | 2026-10-12 | #556 |
 
 #### Routes with no scenario
 
 | Route | Reason | Date | Issue |
 | :-- | :-- | :-- | :-- |
-| `GET /api/accounting/owners/balances` | baseline gap | 2026-10-12 | #544 |
-| `GET /api/accounting/owners/{ownerId}/ledger` | baseline gap | 2026-10-12 | #544 |
-| `GET /api/accounting/deposits` | baseline gap | 2026-10-12 | #544 |
-| `GET /api/accounting/trust-equation` | baseline gap | 2026-10-12 | #544 |
-| `POST /api/accounting/banks/{bankAccountId}/adjustments` | baseline gap | 2026-10-12 | #544 |
-| `POST /api/accounting/reconciliations/{id}/unlock` | baseline gap | 2026-10-12 | #544 |
+| `GET /api/accounting/owners/balances` | No screen requests it; the screens that show these figures get them from other routes. | 2026-10-12 |  |
+| `GET /api/accounting/owners/{ownerId}/ledger` | No screen requests it; the screens that show these figures get them from other routes. | 2026-10-12 |  |
+| `GET /api/accounting/deposits` | No screen requests it; the screens that show these figures get them from other routes. | 2026-10-12 |  |
+| `GET /api/accounting/trust-equation` | No screen requests it; the screens that show these figures get them from other routes. | 2026-10-12 |  |
+| `POST /api/accounting/banks/{bankAccountId}/adjustments` | baseline gap | 2026-10-12 | #553 |
+| `POST /api/accounting/reconciliations/{id}/unlock` | baseline gap | 2026-10-12 | #554 |
 | `GET /api/accounting/reconciliations/{id}/report` | baseline gap | 2026-10-12 | #544 |
-| `POST /api/directory/owners` | baseline gap | 2026-10-12 | #544 |
 | `PUT /api/directory/owners/{id}` | baseline gap | 2026-10-12 | #544 |
-| `POST /api/directory/properties` | baseline gap | 2026-10-12 | #544 |
 | `PUT /api/directory/properties/{id}` | baseline gap | 2026-10-12 | #544 |
-| `POST /api/directory/properties/{id}/ownership-transfers` | baseline gap | 2026-10-12 | #544 |
+| `POST /api/directory/properties/{id}/ownership-transfers` | baseline gap | 2026-10-12 | #555 |
 | `GET /api/directory/units` | baseline gap | 2026-10-12 | #544 |
 | `POST /api/directory/units` | baseline gap | 2026-10-12 | #544 |
 | `PUT /api/directory/units/{id}` | baseline gap | 2026-10-12 | #544 |
-| `POST /api/directory/tenants` | baseline gap | 2026-10-12 | #544 |
 | `PUT /api/directory/tenants/{id}` | baseline gap | 2026-10-12 | #544 |
 | `POST /api/directory/leases` | baseline gap | 2026-10-12 | #544 |
 | `GET /api/health` | baseline gap | 2026-10-12 | #544 |
