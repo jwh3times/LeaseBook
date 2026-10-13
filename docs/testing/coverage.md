@@ -351,16 +351,19 @@ The 28 routes no test reached, by what they have in common:
   600 seconds between them. The simulator accepts every payment, so nothing a screen or a signed
   notice does makes one fail that way. **Show unmatched notifications** appears once a notice that
   names no payment has been held for ten minutes by the host's clock. A signed notice can produce
-  one, but a test would then have to wait the ten minutes out.
+  one, but a test would then have to wait the ten minutes out. The catalogue records both as
+  permanent exemptions.
 - **Settings (1).** Reading one bank account by its id. The web client has a function for it and no
   screen calls it: the screens read the whole list of accounts. The catalogue records it as a
   permanent exemption.
 - **Portal invitations (1).** Retrying an invitation. **Retry test delivery** is offered only for an
-  invitation whose delivery to the local test inbox failed, and no screen makes a delivery fail.
+  invitation whose delivery to the local test inbox failed, and no screen makes a delivery fail. The
+  catalogue records it as a permanent exemption.
 - **One each:** saving a bank CSV mapping, one tenant-portal payment, one operations run, the audit
   CSV export, and `GET /api/health`. No screen saves a CSV mapping: the import wizard offers the
   saved ones and has no control that saves one (#567). The web client has a function that reads one
-  tenant-portal payment and no screen calls it: the portal reads the tenant's whole list.
+  tenant-portal payment and no screen calls it: the portal reads the tenant's whole list. The
+  catalogue records it as a permanent exemption.
 
 The two simulation callbacks are the "test client only" routes. That is by design: a processor calls
 them, and no screen does.

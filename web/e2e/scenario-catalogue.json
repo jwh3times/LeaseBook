@@ -783,27 +783,23 @@
       },
       {
         "route": "POST /api/portal-access/invitations/{id}/retry",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 544
+        "reason": "The control appears only when delivery to the local test inbox failed, and no screen makes a delivery fail.",
+        "date": "2026-10-12"
       },
       {
         "route": "GET /api/portal/tenant/payments/{id}",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 544
+        "reason": "No screen requests it; the portal reads the tenant's whole list of payments.",
+        "date": "2026-10-12"
       },
       {
         "route": "POST /api/payments/{id}/retry",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 544
+        "reason": "The control appears only after six failed attempts with waits of up to ten minutes, and the simulated processor accepts every payment.",
+        "date": "2026-10-12"
       },
       {
         "route": "GET /api/payments/unmatched",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 544
+        "reason": "The control appears only for a notice held for ten minutes, which a test would have to wait out.",
+        "date": "2026-10-12"
       },
       {
         "route": "GET /api/operations/runs/{id}",

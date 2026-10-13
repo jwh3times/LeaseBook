@@ -239,9 +239,13 @@ not edit between the markers.
 
 | Reason | Count |
 | :-- | --: |
+| No screen requests it; the portal reads the tenant's whole list of payments. | 1 |
 | No screen requests it; the screens read the whole list of bank accounts. | 1 |
 | No screen requests it; the screens that show these figures get them from other routes. | 4 |
-| baseline gap | 31 |
+| The control appears only after six failed attempts with waits of up to ten minutes, and the simulated processor accepts every payment. | 1 |
+| The control appears only for a notice held for ten minutes, which a test would have to wait out. | 1 |
+| The control appears only when delivery to the local test inbox failed, and no screen makes a delivery fail. | 1 |
+| baseline gap | 27 |
 
 #### Journal event types with no scenario
 
@@ -277,10 +281,10 @@ not edit between the markers.
 | `GET /api/health` | baseline gap | 2026-10-12 | #544 |
 | `GET /api/settings/banks/{id}` | No screen requests it; the screens read the whole list of bank accounts. | 2026-10-12 |  |
 | `POST /api/banking/banks/{bankAccountId}/mappings` | baseline gap | 2026-10-12 | #567 |
-| `POST /api/portal-access/invitations/{id}/retry` | baseline gap | 2026-10-12 | #544 |
-| `GET /api/portal/tenant/payments/{id}` | baseline gap | 2026-10-12 | #544 |
-| `POST /api/payments/{id}/retry` | baseline gap | 2026-10-12 | #544 |
-| `GET /api/payments/unmatched` | baseline gap | 2026-10-12 | #544 |
+| `POST /api/portal-access/invitations/{id}/retry` | The control appears only when delivery to the local test inbox failed, and no screen makes a delivery fail. | 2026-10-12 |  |
+| `GET /api/portal/tenant/payments/{id}` | No screen requests it; the portal reads the tenant's whole list of payments. | 2026-10-12 |  |
+| `POST /api/payments/{id}/retry` | The control appears only after six failed attempts with waits of up to ten minutes, and the simulated processor accepts every payment. | 2026-10-12 |  |
+| `GET /api/payments/unmatched` | The control appears only for a notice held for ten minutes, which a test would have to wait out. | 2026-10-12 |  |
 | `GET /api/operations/runs/{id}` | baseline gap | 2026-10-12 | #544 |
 | `GET /api/audit/events.csv` | baseline gap | 2026-10-12 | #544 |
 | `POST /api/auth/mfa/recovery` | baseline gap | 2026-10-12 | #544 |
