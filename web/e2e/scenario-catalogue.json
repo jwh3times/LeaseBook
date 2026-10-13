@@ -519,6 +519,25 @@
       ]
     },
     {
+      "id": "portal-invitation-replace-and-cancel",
+      "workflow": "Replace a pending portal invitation, then cancel the replacement, by keyboard, and see each old link stop working",
+      "area": "Portal access",
+      "spec": "portal-invitations.spec.ts",
+      "events": [],
+      "routes": [
+        "POST /api/portal-access/invitations/{id}/replace",
+        "POST /api/portal-access/invitations/{id}/cancel"
+      ]
+    },
+    {
+      "id": "portal-access-staff-permission",
+      "workflow": "An administrator stops staff managing portal invitations and access in settings, staff lose the controls, and the administrator allows it again",
+      "area": "Portal access",
+      "spec": "portal-invitations.spec.ts",
+      "events": [],
+      "routes": ["PUT /api/settings/portal-access"]
+    },
+    {
       "id": "refund-check-issue-print-void",
       "workflow": "Issue, print and void a deposit refund check in 4 interactions",
       "area": "Accounting",
@@ -564,6 +583,25 @@
         "GET /api/payments",
         "POST /api/payments/{id}/return"
       ]
+    },
+    {
+      "id": "simulated-payment-review-closed",
+      "workflow": "A receipted simulated payment is disputed, and an administrator closes its review with a note by keyboard, with nothing reversed",
+      "area": "Payments",
+      "spec": "simulated-payment.spec.ts",
+      "org": "payment fixture",
+      "pass": "payments",
+      "events": ["PaymentReceived"],
+      "routes": ["POST /api/payments/{id}/close-review"]
+    },
+    {
+      "id": "simulated-payment-payout-review-closed",
+      "workflow": "A payout that does not add up to the bank amount posts nothing, and an administrator closes it with a note by keyboard",
+      "area": "Payments",
+      "spec": "simulated-payment.spec.ts",
+      "pass": "payments",
+      "events": [],
+      "routes": ["POST /api/payments/settlements/{id}/close"]
     },
     {
       "id": "spa-boot",
@@ -733,12 +771,6 @@
         "issue": 544
       },
       {
-        "route": "PUT /api/settings/portal-access",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 544
-      },
-      {
         "route": "GET /api/settings/banks/{id}",
         "reason": "No screen requests it; the screens read the whole list of bank accounts.",
         "date": "2026-10-12"
@@ -748,18 +780,6 @@
         "reason": "baseline gap",
         "date": "2026-10-12",
         "issue": 567
-      },
-      {
-        "route": "POST /api/portal-access/invitations/{id}/replace",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 544
-      },
-      {
-        "route": "POST /api/portal-access/invitations/{id}/cancel",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 544
       },
       {
         "route": "POST /api/portal-access/invitations/{id}/retry",
@@ -781,18 +801,6 @@
       },
       {
         "route": "GET /api/payments/unmatched",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 544
-      },
-      {
-        "route": "POST /api/payments/settlements/{id}/close",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 544
-      },
-      {
-        "route": "POST /api/payments/{id}/close-review",
         "reason": "baseline gap",
         "date": "2026-10-12",
         "issue": 544
