@@ -1,3 +1,4 @@
+import { randomBytes, randomInt } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { expect, type Locator, type Page } from '@playwright/test';
 import { captureDownload, SCENARIO_ADMIN, SCENARIO_STAFF, signIn } from './helpers';
@@ -37,7 +38,7 @@ const ON_US = '123456789U';
 
 /** A per-run suffix, so a record is found by text that no other run wrote. */
 function runId(): string {
-  return Math.random().toString(36).slice(2, 8).padEnd(6, '0');
+  return randomBytes(3).toString('hex');
 }
 
 /** Reads a figure the screen shows (`$2,252.63`, or the dash that stands for zero) as cents. */
@@ -196,8 +197,8 @@ test('creates a bank account by keyboard and renames it: an over-long name is re
   const id = runId();
   const name = `Z e2e Operating ${id}`;
   const renamed = `Z e2e Renamed ${id}`;
-  const mask = String(1000 + Math.floor(Math.random() * 9000));
-  const newMask = String(1000 + Math.floor(Math.random() * 9000));
+  const mask = String(randomInt(1000, 10000));
+  const newMask = String(randomInt(1000, 10000));
   const creates = countRequests(page, 'POST', /^\/api\/settings\/banks$/);
   const updates = countRequests(page, 'PUT', /^\/api\/settings\/banks\/[0-9a-f-]+$/);
 
