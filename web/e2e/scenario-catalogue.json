@@ -44,6 +44,44 @@
       "routes": []
     },
     {
+      "id": "reconciliation-report-download",
+      "workflow": "Download the stored report of a finalized reconciliation, by click and by keyboard, and get the month and the statement balance the history shows",
+      "area": "Banking",
+      "spec": "banking-accounts.spec.ts",
+      "events": [],
+      "routes": [
+        "GET /api/accounting/reconciliations",
+        "GET /api/accounting/reconciliations/{id}/report"
+      ]
+    },
+    {
+      "id": "bank-account-create-and-edit",
+      "workflow": "Create a bank account in settings by keyboard, with an over-long name refused, see its empty register on Banking, then rename and deactivate it",
+      "area": "Settings",
+      "spec": "banking-accounts.spec.ts",
+      "events": [],
+      "routes": [
+        "GET /api/settings/banks",
+        "POST /api/settings/banks",
+        "PUT /api/settings/banks/{id}",
+        "PUT /api/settings/banks/{id}/active"
+      ]
+    },
+    {
+      "id": "check-print-settings-and-micr",
+      "workflow": "Save a bank account's check print offsets by keyboard and its MICR details, with out-of-range offsets and a bad routing number refused, and print the alignment page",
+      "area": "Banking",
+      "spec": "banking-accounts.spec.ts",
+      "events": [],
+      "routes": [
+        "GET /api/refund-checks/print-settings/{bankAccountId}",
+        "PUT /api/refund-checks/print-settings/{bankAccountId}",
+        "POST /api/refund-checks/print-settings/{bankAccountId}/alignment",
+        "GET /api/refund-checks/micr/{bankAccountId}",
+        "PUT /api/refund-checks/micr/{bankAccountId}"
+      ]
+    },
+    {
       "id": "sign-in-to-dashboard-balances",
       "workflow": "Sign in and see owner ending balances on the dashboard at 0 clicks",
       "area": "Dashboard",
@@ -481,6 +519,25 @@
       ]
     },
     {
+      "id": "portal-invitation-replace-and-cancel",
+      "workflow": "Replace a pending portal invitation, then cancel the replacement, by keyboard, and see each old link stop working",
+      "area": "Portal access",
+      "spec": "portal-invitations.spec.ts",
+      "events": [],
+      "routes": [
+        "POST /api/portal-access/invitations/{id}/replace",
+        "POST /api/portal-access/invitations/{id}/cancel"
+      ]
+    },
+    {
+      "id": "portal-access-staff-permission",
+      "workflow": "An administrator stops staff managing portal invitations and access in settings, staff lose the controls, and the administrator allows it again",
+      "area": "Portal access",
+      "spec": "portal-invitations.spec.ts",
+      "events": [],
+      "routes": ["PUT /api/settings/portal-access"]
+    },
+    {
       "id": "refund-check-issue-print-void",
       "workflow": "Issue, print and void a deposit refund check in 4 interactions",
       "area": "Accounting",
@@ -526,6 +583,25 @@
         "GET /api/payments",
         "POST /api/payments/{id}/return"
       ]
+    },
+    {
+      "id": "simulated-payment-review-closed",
+      "workflow": "A receipted simulated payment is disputed, and an administrator closes its review with a note by keyboard, with nothing reversed",
+      "area": "Payments",
+      "spec": "simulated-payment.spec.ts",
+      "org": "payment fixture",
+      "pass": "payments",
+      "events": ["PaymentReceived"],
+      "routes": ["POST /api/payments/{id}/close-review"]
+    },
+    {
+      "id": "simulated-payment-payout-review-closed",
+      "workflow": "A payout that does not add up to the bank amount posts nothing, and an administrator closes it with a note by keyboard",
+      "area": "Payments",
+      "spec": "simulated-payment.spec.ts",
+      "pass": "payments",
+      "events": [],
+      "routes": ["POST /api/payments/settlements/{id}/close"]
     },
     {
       "id": "spa-boot",
@@ -641,22 +717,16 @@
         "issue": 554
       },
       {
-        "route": "GET /api/accounting/reconciliations/{id}/report",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 544
-      },
-      {
         "route": "PUT /api/directory/owners/{id}",
         "reason": "baseline gap",
         "date": "2026-10-12",
-        "issue": 544
+        "issue": 558
       },
       {
         "route": "PUT /api/directory/properties/{id}",
         "reason": "baseline gap",
         "date": "2026-10-12",
-        "issue": 544
+        "issue": 558
       },
       {
         "route": "POST /api/directory/properties/{id}/ownership-transfers",
@@ -668,31 +738,31 @@
         "route": "GET /api/directory/units",
         "reason": "baseline gap",
         "date": "2026-10-12",
-        "issue": 544
+        "issue": 558
       },
       {
         "route": "POST /api/directory/units",
         "reason": "baseline gap",
         "date": "2026-10-12",
-        "issue": 544
+        "issue": 558
       },
       {
         "route": "PUT /api/directory/units/{id}",
         "reason": "baseline gap",
         "date": "2026-10-12",
-        "issue": 544
+        "issue": 558
       },
       {
         "route": "PUT /api/directory/tenants/{id}",
         "reason": "baseline gap",
         "date": "2026-10-12",
-        "issue": 544
+        "issue": 558
       },
       {
         "route": "POST /api/directory/leases",
         "reason": "baseline gap",
         "date": "2026-10-12",
-        "issue": 544
+        "issue": 558
       },
       {
         "route": "GET /api/health",
@@ -701,100 +771,35 @@
         "issue": 544
       },
       {
-        "route": "PUT /api/settings/portal-access",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 544
-      },
-      {
-        "route": "POST /api/settings/banks",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 544
-      },
-      {
         "route": "GET /api/settings/banks/{id}",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 544
-      },
-      {
-        "route": "PUT /api/settings/banks/{id}",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 544
+        "reason": "No screen requests it; the screens read the whole list of bank accounts.",
+        "date": "2026-10-12"
       },
       {
         "route": "POST /api/banking/banks/{bankAccountId}/mappings",
         "reason": "baseline gap",
         "date": "2026-10-12",
-        "issue": 544
-      },
-      {
-        "route": "POST /api/portal-access/invitations/{id}/replace",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 544
-      },
-      {
-        "route": "POST /api/portal-access/invitations/{id}/cancel",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 544
+        "issue": 567
       },
       {
         "route": "POST /api/portal-access/invitations/{id}/retry",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 544
+        "reason": "The control appears only when delivery to the local test inbox failed, and no screen makes a delivery fail.",
+        "date": "2026-10-12"
       },
       {
         "route": "GET /api/portal/tenant/payments/{id}",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 544
+        "reason": "No screen requests it; the portal reads the tenant's whole list of payments.",
+        "date": "2026-10-12"
       },
       {
         "route": "POST /api/payments/{id}/retry",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 544
+        "reason": "The control appears only after six failed attempts with waits of up to ten minutes, and the simulated processor accepts every payment.",
+        "date": "2026-10-12"
       },
       {
         "route": "GET /api/payments/unmatched",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 544
-      },
-      {
-        "route": "POST /api/payments/settlements/{id}/close",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 544
-      },
-      {
-        "route": "POST /api/payments/{id}/close-review",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 544
-      },
-      {
-        "route": "PUT /api/refund-checks/print-settings/{bankAccountId}",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 544
-      },
-      {
-        "route": "PUT /api/refund-checks/micr/{bankAccountId}",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 544
-      },
-      {
-        "route": "POST /api/refund-checks/print-settings/{bankAccountId}/alignment",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 544
+        "reason": "The control appears only for a notice held for ten minutes, which a test would have to wait out.",
+        "date": "2026-10-12"
       },
       {
         "route": "GET /api/operations/runs/{id}",

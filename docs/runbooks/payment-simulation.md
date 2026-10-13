@@ -3,7 +3,7 @@
 - **Audience:** Developers and test operators
 - **Status:** Implemented, non-live only
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-11
+- **Last reviewed:** 2026-10-13
 
 The simulator exercises the real Payments and Accounting path. It has no provider network client
 and cannot move real money. Production and Staging reject Simulation; live/provider configuration
@@ -597,5 +597,9 @@ CI initializes a separate payment database and runs this test after the ordinary
 It covers keyboard submission, reload, separate payout/bank evidence, real ledger refresh, late
 return wording and WCAG 2 AA checks. A second test sets a fee rule on the Settings page, pays twice
 with a quoted fee, delivers a payout whose surplus covers its shortfall, and has an administrator
-post a payout that contains a return from the keyboard. Backend integration tests additionally inject failures around
+post a payout that contains a return from the keyboard. Two more tests drive the second fixture
+organization, so that they share no payment, payout or fee rule with the first two. In one, a
+receipted payment is disputed and its administrator closes the review with a note. In the other, a
+payout arrives that does not add up to the bank amount, and the administrator closes it with a note
+and nothing posts. Both close from the keyboard. Backend integration tests additionally inject failures around
 provider acceptance and ledger commit, validate routing/isolation and exercise locked periods.

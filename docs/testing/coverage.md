@@ -3,7 +3,7 @@
 - **Audience:** Contributors, reviewers and maintainers
 - **Status:** Living measurement record
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-12
+- **Last reviewed:** 2026-10-13
 
 LeaseBook measures what its test suites exercise: which lines and branches of each module ran, and
 which API routes the browser tests called. This page records how that is measured, how to run each
@@ -263,31 +263,33 @@ Two consecutive runs gave identical figures.
 
 ### Playwright run
 
-These figures were measured again on 2026-10-12 at commit `3cec0d0` with the directory-record
-scenarios of #544 added, the second area that issue closes. The two suite baselines above are
-unchanged, because that change touches no product code. The earlier figures are in this page's
-history. At the first baseline: 82 routes reached by a browser, 57.3% of host lines and 76.0% of web
-lines. After the first area: 87 routes, 58.3% and 76.4%.
+These figures were measured again on 2026-10-13 at commit `722b102` with the payment-review and
+portal-invitation scenarios of #544 added, the fourth area that issue closes. The two suite baselines
+above are unchanged, because that change touches no product code. The earlier figures are in this
+page's history. At the first baseline: 82 routes reached by a browser, 57.3% of host lines and 76.0%
+of web lines. After the first area: 87 routes, 58.3% and 76.4%. After the second: 90 routes, 58.4%
+and 77.6%. After the third: 96 routes, 59.4% and 77.8%.
 
-Both passes: 121 tests passed and 2 were skipped in the main pass, and 2 passed in the
-simulated-payment pass. The run was local, so the CI-only visual snapshots did not run; they assert
-on pixels and call no extra route.
+Both passes: 126 tests passed and 4 were skipped in the main pass, and 4 passed in the
+simulated-payment pass. The four skipped are the simulated-payment tests, which run only in their
+own pass. The run was local, so the CI-only visual snapshots did not run; they assert on pixels and
+call no extra route.
 
 Host coverage as reached by the browser, Debug build:
 
 | Module       | Classes | Lines covered |  Line | Branches covered | Branch |
 | :----------- | ------: | ------------: | ----: | ---------------: | -----: |
-| Accounting   |     293 |   2823 / 3966 | 71.2% |        573 / 949 |  60.4% |
-| Directory    |     162 |   1577 / 1969 | 80.1% |        335 / 482 |  69.5% |
+| Accounting   |     293 |   2883 / 3966 | 72.7% |        585 / 949 |  61.6% |
+| Directory    |     162 |   1641 / 1969 | 83.3% |        343 / 482 |  71.2% |
 | Banking      |      49 |     414 / 530 | 78.1% |        134 / 227 |  59.0% |
 | Reporting    |      23 |     205 / 241 | 85.1% |          20 / 44 |  45.5% |
 | Operations   |      53 |    699 / 1003 | 69.7% |        125 / 217 |  57.6% |
 | Capabilities |      26 |     226 / 585 | 38.6% |         41 / 118 |  34.7% |
-| Payments     |     127 |   1002 / 1503 | 66.7% |       488 / 1100 |  44.4% |
+| Payments     |     127 |   1124 / 1503 | 74.8% |       550 / 1100 |  50.0% |
 | SharedKernel |      26 |     332 / 450 | 73.8% |        112 / 156 |  71.8% |
 | Migrator     |      19 |     302 / 350 | 86.3% |         79 / 136 |  58.1% |
-| Web host     |     357 |  6567 / 13611 | 48.2% |      1937 / 4941 |  39.2% |
-| **Total**    |    1135 | 14147 / 24208 | 58.4% |      3844 / 8370 |  45.9% |
+| Web host     |     357 |  6696 / 13611 | 49.2% |      1966 / 4941 |  39.8% |
+| **Total**    |    1135 | 14522 / 24208 | 60.0% |      3955 / 8370 |  47.3% |
 
 Web coverage as reached by the browser:
 
@@ -299,15 +301,15 @@ Web coverage as reached by the browser:
 | components |    13 |     172 / 196 | 87.8% |        128 / 176 |  72.7% |
 | design     |    22 |     132 / 151 | 87.4% |        133 / 162 |  82.1% |
 | dev        |     1 |       10 / 14 | 71.4% |            0 / 0 |    n/a |
-| features   |    89 |   2272 / 3003 | 75.7% |      1707 / 2842 |  60.1% |
+| features   |    89 |   2334 / 3003 | 77.7% |      1768 / 2842 |  62.2% |
 | lib        |     9 |      91 / 111 | 82.0% |          46 / 55 |  83.6% |
-| **Total**  |   149 |   2874 / 3702 | 77.6% |      2108 / 3371 |  62.5% |
+| **Total**  |   149 |   2936 / 3702 | 79.3% |      2169 / 3371 |  64.3% |
 
-Route inventory, from 1,682 recorded requests:
+Route inventory, from 1,946 recorded requests:
 
 | Group             | Routes | Reached by a browser | Test client only | Not reached |
 | :---------------- | -----: | -------------------: | ---------------: | ----------: |
-| accounting        |     24 |                   17 |                0 |           7 |
+| accounting        |     24 |                   18 |                0 |           6 |
 | audit             |      4 |                    3 |                0 |           1 |
 | auth              |      9 |                    4 |                0 |           5 |
 | banking           |      5 |                    4 |                0 |           1 |
@@ -317,19 +319,19 @@ Route inventory, from 1,682 recorded requests:
 | health            |      1 |                    0 |                0 |           1 |
 | onboarding        |      6 |                    6 |                0 |           0 |
 | operations        |      5 |                    4 |                0 |           1 |
-| payments          |      8 |                    4 |                0 |           4 |
+| payments          |      8 |                    6 |                0 |           2 |
 | portal            |      8 |                    7 |                0 |           1 |
-| portal-access     |      7 |                    4 |                0 |           3 |
+| portal-access     |      7 |                    6 |                0 |           1 |
 | portal-enrollment |      2 |                    2 |                0 |           0 |
-| refund-checks     |     10 |                    7 |                0 |           3 |
+| refund-checks     |     10 |                   10 |                0 |           0 |
 | reports           |      4 |                    4 |                0 |           0 |
 | search            |      1 |                    1 |                0 |           0 |
-| settings          |      9 |                    5 |                0 |           4 |
+| settings          |      9 |                    8 |                0 |           1 |
 | statements        |      6 |                    6 |                0 |           0 |
 | telemetry         |      1 |                    1 |                0 |           0 |
-| **Total**         |    131 |                   90 |                2 |          39 |
+| **Total**         |    131 |                  101 |                2 |          28 |
 
-The 39 routes no test reached, by what they have in common:
+The 28 routes no test reached, by what they have in common:
 
 - **Directory records with no screen (8).** `PUT` for owners, properties, units and tenants, `GET`
   and `POST /api/directory/units`, `POST /api/directory/leases` and
@@ -340,16 +342,28 @@ The 39 routes no test reached, by what they have in common:
 - **Accounting reads (4).** Owner balances, the owner ledger, deposits and the trust equation. No
   screen requests these routes; the screens that show the same figures get them from other routes.
   The catalogue records these four as permanent exemptions.
-- **Reconciliation (2).** Unlocking a reconciliation and its report. No screen unlocks one.
+- **Reconciliation (1).** Unlocking a reconciliation. No screen unlocks one.
 - **Account security (5).** MFA sign-in, recovery and changing a password. The two MFA enrollment
   routes are requested, but the test answers them itself.
-- **Payments review (4).** Retrying a payment, the unmatched list, closing a settlement and closing a
-  review.
-- **Settings (4).** Creating, reading and editing a bank account, and the portal-access setting.
-- **Portal invitations (3).** Replacing, cancelling and retrying an invitation.
-- **Refund-check setup (3).** Print settings, MICR details and the alignment print.
+- **Payments review (2).** Retrying a payment, and the unmatched list. Each has a control on the
+  Operations page that a browser test cannot bring up. **Retry operation** is offered for a payment
+  whose delivery or posting failed for a technical reason six times, with waits of 1, 5, 30, 120 and
+  600 seconds between them. The simulator accepts every payment, so nothing a screen or a signed
+  notice does makes one fail that way. **Show unmatched notifications** appears once a notice that
+  names no payment has been held for ten minutes by the host's clock. A signed notice can produce
+  one, but a test would then have to wait the ten minutes out. The catalogue records both as
+  permanent exemptions.
+- **Settings (1).** Reading one bank account by its id. The web client has a function for it and no
+  screen calls it: the screens read the whole list of accounts. The catalogue records it as a
+  permanent exemption.
+- **Portal invitations (1).** Retrying an invitation. **Retry test delivery** is offered only for an
+  invitation whose delivery to the local test inbox failed, and no screen makes a delivery fail. The
+  catalogue records it as a permanent exemption.
 - **One each:** saving a bank CSV mapping, one tenant-portal payment, one operations run, the audit
-  CSV export, and `GET /api/health`.
+  CSV export, and `GET /api/health`. No screen saves a CSV mapping: the import wizard offers the
+  saved ones and has no control that saves one (#567). The web client has a function that reads one
+  tenant-portal payment and no screen calls it: the portal reads the tenant's whole list. The
+  catalogue records it as a permanent exemption.
 
 The two simulation callbacks are the "test client only" routes. That is by design: a processor calls
 them, and no screen does.
@@ -383,6 +397,16 @@ minutes, and the whole command with both passes took 6:45.
 The three directory-record tests of #544 add about 18 seconds. With them, on 2026-10-12, the plain
 `npm run e2e` took 5.2 minutes, the main pass with collection took 6.0 minutes, and the whole command
 with both passes took 6:50.
+
+The three banking tests of #544 take about 14 seconds when run by themselves. With them, on
+2026-10-12, the main pass with collection took 6.3 minutes. The plain run and the whole command were
+not timed again.
+
+The two portal-invitation tests of #544 take about 28 seconds when run by themselves, in the main
+pass. The two payment-review tests take about 25 seconds, in the simulated-payment pass, which now
+takes 52 seconds. With them, on 2026-10-13, the main pass with collection took 6.7 minutes and the
+whole command with both passes took 7:54. Other checks were running on the same machine for the
+first minutes of that run, so read those two figures as upper bounds.
 
 ## Console logging and the test run
 

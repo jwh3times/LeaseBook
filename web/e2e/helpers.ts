@@ -29,6 +29,12 @@ export const SCENARIO_STAFF: Credentials = {
   email: 'staff@scenario.test',
   password: 'Scenario-Staff-2026!',
 };
+// An administrator (PMAdmin, no MFA) in the same organization, for the settings a staff member can
+// read and only an administrator can change: bank accounts and a bank account's MICR details.
+export const SCENARIO_ADMIN: Credentials = {
+  email: 'admin@scenario.test',
+  password: 'Scenario-Trust-2026!',
+};
 
 // Force a theme deterministically before the app boots. ThemeProvider reads localStorage
 // ('leasebook.theme' → { theme, accent, density }) synchronously on first render and storage wins
