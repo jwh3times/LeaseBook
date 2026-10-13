@@ -122,6 +122,11 @@ field says which. New money scenarios use the scenario organization. The simulat
 use the payment fixture, which is a separate database with two organizations. The two scenarios
 that close a review drive the second one, so they share nothing with the two that came first.
 
+A scenario that changes how an account signs in does not use a seeded account. The database is not
+reset between specs, and no screen removes an authenticator, so the change would reach every later
+spec and the next run. The account-security scenarios invite a portal tenant at an address made for
+the run and change that new account.
+
 ## Add or change a scenario
 
 1. Add the entry to `web/e2e/scenario-catalogue.json`.
@@ -169,7 +174,7 @@ not edit between the markers.
 <!-- scenario-catalogue:start -->
 <!-- prettier-ignore-start -->
 
-59 scenarios. 8 journal event types and 28 routes are exempt.
+62 scenarios. 8 journal event types and 22 routes are exempt.
 
 ### Scenarios
 
@@ -179,7 +184,9 @@ not edit between the markers.
 | `accessibility-staff-pages` | Every routed staff page, the record details and the refund-check dialogs have no WCAG 2 AA violations, light and dark | Accessibility | `a11y.spec.ts` |  |  | `GET /api/refund-checks/micr/{bankAccountId}`<br>`GET /api/refund-checks/print-settings/{bankAccountId}` |
 | `accessibility-command-palette` | The command palette open on results has no WCAG 2 AA violations | Accessibility | `a11y.spec.ts` |  |  |  |
 | `accessibility-onboarding` | The onboarding wizard has no WCAG 2 AA violations | Accessibility | `a11y.spec.ts` |  |  |  |
-| `mfa-enrollment-by-keyboard` | Enroll in MFA by keyboard and read the recovery codes, with the enrollment routes answered by the test | Account security | `account-security.spec.ts` |  |  |  |
+| `mfa-enrollment-by-keyboard` | Be held on required MFA enrollment and complete it by keyboard, with the session and the enrollment routes answered by the test | Account security | `account-security.spec.ts` |  |  |  |
+| `mfa-enrollment-and-sign-in` | Set up an authenticator on a new portal account, then sign in with its code and with recovery codes that each work once | Account security | `account-security.spec.ts` |  |  | `POST /api/auth/mfa/enroll`<br>`POST /api/auth/mfa/enroll/confirm`<br>`POST /api/auth/mfa`<br>`POST /api/auth/mfa/recovery` |
+| `password-change` | Change the password of a new portal account, which signs its other browser out and stops the old password working | Account security | `account-security.spec.ts` |  |  | `POST /api/auth/change-password` |
 | `reconciliation-report-download` | Download the stored report of a finalized reconciliation, by click and by keyboard, and get the month and the statement balance the history shows | Banking | `banking-accounts.spec.ts` |  |  | `GET /api/accounting/reconciliations`<br>`GET /api/accounting/reconciliations/{id}/report` |
 | `bank-account-create-and-edit` | Create a bank account in settings by keyboard, with an over-long name refused, see its empty register on Banking, then rename and deactivate it | Settings | `banking-accounts.spec.ts` |  |  | `GET /api/settings/banks`<br>`POST /api/settings/banks`<br>`PUT /api/settings/banks/{id}`<br>`PUT /api/settings/banks/{id}/active` |
 | `check-print-settings-and-micr` | Save a bank account's check print offsets by keyboard and its MICR details, with out-of-range offsets and a bad routing number refused, and print the alignment page | Banking | `banking-accounts.spec.ts` |  |  | `GET /api/refund-checks/print-settings/{bankAccountId}`<br>`PUT /api/refund-checks/print-settings/{bankAccountId}`<br>`POST /api/refund-checks/print-settings/{bankAccountId}/alignment`<br>`GET /api/refund-checks/micr/{bankAccountId}`<br>`PUT /api/refund-checks/micr/{bankAccountId}` |
@@ -218,6 +225,7 @@ not edit between the markers.
 | `operations-navigation` | Reach the disbursement run from the dashboard, and switch between the operations screens | Operations | `m6-operations.spec.ts` |  |  | `GET /api/operations/runs`<br>`GET /api/operations/runs/{type}/preview`<br>`GET /api/payments` |
 | `onboarding-import-verify-sign-off` | Import a portfolio and its opening balances, correct a non-tying import, verify and sign off | Migration | `m7-onboarding.spec.ts` | cutover | `OpeningBalance`<br>`EntryVoided` | `GET /api/onboarding/status`<br>`POST /api/onboarding/import/{kind}`<br>`POST /api/onboarding/import-balances/{kind}`<br>`POST /api/onboarding/import-balances/{kind}/supersede`<br>`POST /api/onboarding/verification`<br>`POST /api/onboarding/verification/{id}/signoff` |
 | `audit-log-review` | Read the audit trail, open one event, and narrow it with filters | Audit | `m8-audit-review.spec.ts` |  |  | `GET /api/audit/events`<br>`GET /api/audit/events/{id}`<br>`GET /api/audit/filters` |
+| `audit-log-export` | Export the filtered audit trail as a CSV, by click and by keyboard, and find each export recorded in the trail | Audit | `m8-audit-review.spec.ts` |  |  | `GET /api/audit/events.csv` |
 | `compliance-pack-open-period` | Ask for the trust compliance pack for an open period and get a clear refusal | Reporting | `m8-compliance-pack.spec.ts` |  |  | `GET /api/reports/compliance-pack` |
 | `late-fee-policy-settings` | Set the organization's late-fee policy and see the late-fee preview follow it | Settings | `m8-late-fee-settings.spec.ts` |  |  | `PUT /api/settings/org`<br>`GET /api/operations/runs/{type}/preview` |
 | `lease-late-fee-override` | Set and clear a lease's late-fee override from the tenant ledger | Directory | `m8-late-fee-settings.spec.ts` |  |  | `PUT /api/directory/leases/{id}` |
@@ -239,13 +247,14 @@ not edit between the markers.
 
 | Reason | Count |
 | :-- | --: |
+| No screen requests it; container probes and the test runner poll it to see that the host is up. | 1 |
 | No screen requests it; the portal reads the tenant's whole list of payments. | 1 |
 | No screen requests it; the screens read the whole list of bank accounts. | 1 |
 | No screen requests it; the screens that show these figures get them from other routes. | 4 |
 | The control appears only after six failed attempts with waits of up to ten minutes, and the simulated processor accepts every payment. | 1 |
 | The control appears only for a notice held for ten minutes, which a test would have to wait out. | 1 |
 | The control appears only when delivery to the local test inbox failed, and no screen makes a delivery fail. | 1 |
-| baseline gap | 27 |
+| baseline gap | 20 |
 
 #### Journal event types with no scenario
 
@@ -278,7 +287,7 @@ not edit between the markers.
 | `PUT /api/directory/units/{id}` | baseline gap | 2026-10-12 | #558 |
 | `PUT /api/directory/tenants/{id}` | baseline gap | 2026-10-12 | #558 |
 | `POST /api/directory/leases` | baseline gap | 2026-10-12 | #558 |
-| `GET /api/health` | baseline gap | 2026-10-12 | #544 |
+| `GET /api/health` | No screen requests it; container probes and the test runner poll it to see that the host is up. | 2026-10-12 |  |
 | `GET /api/settings/banks/{id}` | No screen requests it; the screens read the whole list of bank accounts. | 2026-10-12 |  |
 | `POST /api/banking/banks/{bankAccountId}/mappings` | baseline gap | 2026-10-12 | #567 |
 | `POST /api/portal-access/invitations/{id}/retry` | The control appears only when delivery to the local test inbox failed, and no screen makes a delivery fail. | 2026-10-12 |  |
@@ -286,12 +295,6 @@ not edit between the markers.
 | `POST /api/payments/{id}/retry` | The control appears only after six failed attempts with waits of up to ten minutes, and the simulated processor accepts every payment. | 2026-10-12 |  |
 | `GET /api/payments/unmatched` | The control appears only for a notice held for ten minutes, which a test would have to wait out. | 2026-10-12 |  |
 | `GET /api/operations/runs/{id}` | baseline gap | 2026-10-12 | #544 |
-| `GET /api/audit/events.csv` | baseline gap | 2026-10-12 | #544 |
-| `POST /api/auth/mfa/recovery` | baseline gap | 2026-10-12 | #544 |
-| `POST /api/auth/change-password` | baseline gap | 2026-10-12 | #544 |
-| `POST /api/auth/mfa` | baseline gap | 2026-10-12 | #544 |
-| `POST /api/auth/mfa/enroll` | baseline gap | 2026-10-12 | #544 |
-| `POST /api/auth/mfa/enroll/confirm` | baseline gap | 2026-10-12 | #544 |
 
 <!-- prettier-ignore-end -->
 <!-- scenario-catalogue:end -->
