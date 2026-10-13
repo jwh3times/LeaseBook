@@ -10,7 +10,7 @@
 #                       image deliberately cannot migrate — this image does, via an EF bundle.
 
 # --- Stage 1: build the React SPA ---
-FROM node:26-bookworm-slim@sha256:662933cf47f013bc8e4beb31a6116448427a82057ba7c42c97e4c5ba766504c2 AS web
+FROM node:26-bookworm-slim@sha256:86f07bc9c5dce4578cf37e5a418b7bfc7f817cda25cde66e2b66e95ed86c4567 AS web
 WORKDIR /web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci
