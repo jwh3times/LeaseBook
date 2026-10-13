@@ -3,7 +3,7 @@
 - **Audience:** Contributors, reviewers and maintainers
 - **Status:** Living catalogue and method
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-12
+- **Last reviewed:** 2026-10-13
 
 A scenario is one workflow a person carries out in the product, driven through a real browser by
 one or more Playwright tests. This page records how scenarios are catalogued, what CI checks about
@@ -119,7 +119,8 @@ e2e database is seeded with `demo`, `cutover`, `portal` and `scenario`.
 
 The specs written before the catalogue stay on the organization they already use, and the `org`
 field says which. New money scenarios use the scenario organization. The simulated-payment scenarios
-use the payment fixture, which is a separate database.
+use the payment fixture, which is a separate database with two organizations. The two scenarios
+that close a review drive the second one, so they share nothing with the two that came first.
 
 ## Add or change a scenario
 
@@ -168,7 +169,7 @@ not edit between the markers.
 <!-- scenario-catalogue:start -->
 <!-- prettier-ignore-start -->
 
-55 scenarios. 8 journal event types and 33 routes are exempt.
+59 scenarios. 8 journal event types and 28 routes are exempt.
 
 ### Scenarios
 
@@ -223,9 +224,13 @@ not edit between the markers.
 | `owner-portal-balance-and-statement` | An owner signs in, reads the balance, downloads a statement PDF and signs out | Owner portal | `owner-portal.spec.ts` |  |  | `GET /api/portal/owner/summary`<br>`GET /api/portal/owner/statements`<br>`GET /api/portal/owner/statements/{artifactId}/pdf`<br>`POST /api/auth/logout` |
 | `owner-portal-denials` | A resident and a staff member are refused the owner portal | Owner portal | `owner-portal.spec.ts` |  |  |  |
 | `portal-invitation-enrollment-revocation` | Invite a tenant and an owner to their portal, enroll each, and revoke the access | Portal access | `portal-enrollment.spec.ts` |  |  | `GET /api/portal-access/{persona}/{targetId}`<br>`POST /api/portal-access/{persona}/{targetId}`<br>`GET /api/portal-access/test-inbox`<br>`POST /api/portal-enrollment/inspect`<br>`POST /api/portal-enrollment/accept`<br>`POST /api/portal-access/{persona}/{targetId}/users/{userId}/revoke` |
+| `portal-invitation-replace-and-cancel` | Replace a pending portal invitation, then cancel the replacement, by keyboard, and see each old link stop working | Portal access | `portal-invitations.spec.ts` |  |  | `POST /api/portal-access/invitations/{id}/replace`<br>`POST /api/portal-access/invitations/{id}/cancel` |
+| `portal-access-staff-permission` | An administrator stops staff managing portal invitations and access in settings, staff lose the controls, and the administrator allows it again | Portal access | `portal-invitations.spec.ts` |  |  | `PUT /api/settings/portal-access` |
 | `refund-check-issue-print-void` | Issue, print and void a deposit refund check in 4 interactions | Accounting | `refund-checks.spec.ts` | demo | `RefundIssued`<br>`EntryVoided` | `GET /api/refund-checks/options`<br>`GET /api/refund-checks`<br>`POST /api/refund-checks`<br>`POST /api/refund-checks/{id}/pdf`<br>`POST /api/refund-checks/{id}/void` |
 | `simulated-payment-fee-payout-return` | A tenant pays with a quoted fee; one payout arrives short and one carries a return an administrator posts | Payments | `simulated-payment.spec.ts` | payment fixture | `PaymentReceived`<br>`ProcessorFeeDifference`<br>`EntryVoided` | `PUT /api/settings/payment-fees`<br>`GET /api/portal/tenant/payments/quote`<br>`POST /api/portal/tenant/payments`<br>`POST /callbacks/payments/simulation/payout`<br>`GET /api/payments/settlements`<br>`POST /api/payments/settlements/{id}/post` |
 | `simulated-payment-reload-and-bank-evidence` | A simulated payment survives a reload and posts only after separate bank evidence | Payments | `simulated-payment.spec.ts` | payment fixture | `PaymentReceived`<br>`EntryVoided` | `POST /api/portal/tenant/payments`<br>`POST /callbacks/payments/simulation`<br>`GET /api/payments`<br>`POST /api/payments/{id}/return` |
+| `simulated-payment-review-closed` | A receipted simulated payment is disputed, and an administrator closes its review with a note by keyboard, with nothing reversed | Payments | `simulated-payment.spec.ts` | payment fixture | `PaymentReceived` | `POST /api/payments/{id}/close-review` |
+| `simulated-payment-payout-review-closed` | A payout that does not add up to the bank amount posts nothing, and an administrator closes it with a note by keyboard | Payments | `simulated-payment.spec.ts` |  |  | `POST /api/payments/settlements/{id}/close` |
 | `spa-boot` | The application loads and shows the sign-in screen | Platform | `smoke.spec.ts` |  |  |  |
 | `tenant-portal-staff-denied` | A staff member is refused the tenant portal and keeps the dashboard | Tenant portal | `tenant-portal.spec.ts` |  |  |  |
 | `tenant-portal-ledger-and-security` | A resident signs in, reads the ledger, reaches account security and signs out | Tenant portal | `tenant-portal.spec.ts` |  |  | `GET /api/portal/tenant/ledger`<br>`GET /api/portal/tenant/payments`<br>`POST /api/auth/logout` |
@@ -234,9 +239,13 @@ not edit between the markers.
 
 | Reason | Count |
 | :-- | --: |
+| No screen requests it; the portal reads the tenant's whole list of payments. | 1 |
 | No screen requests it; the screens read the whole list of bank accounts. | 1 |
 | No screen requests it; the screens that show these figures get them from other routes. | 4 |
-| baseline gap | 36 |
+| The control appears only after six failed attempts with waits of up to ten minutes, and the simulated processor accepts every payment. | 1 |
+| The control appears only for a notice held for ten minutes, which a test would have to wait out. | 1 |
+| The control appears only when delivery to the local test inbox failed, and no screen makes a delivery fail. | 1 |
+| baseline gap | 27 |
 
 #### Journal event types with no scenario
 
@@ -270,17 +279,12 @@ not edit between the markers.
 | `PUT /api/directory/tenants/{id}` | baseline gap | 2026-10-12 | #558 |
 | `POST /api/directory/leases` | baseline gap | 2026-10-12 | #558 |
 | `GET /api/health` | baseline gap | 2026-10-12 | #544 |
-| `PUT /api/settings/portal-access` | baseline gap | 2026-10-12 | #544 |
 | `GET /api/settings/banks/{id}` | No screen requests it; the screens read the whole list of bank accounts. | 2026-10-12 |  |
 | `POST /api/banking/banks/{bankAccountId}/mappings` | baseline gap | 2026-10-12 | #567 |
-| `POST /api/portal-access/invitations/{id}/replace` | baseline gap | 2026-10-12 | #544 |
-| `POST /api/portal-access/invitations/{id}/cancel` | baseline gap | 2026-10-12 | #544 |
-| `POST /api/portal-access/invitations/{id}/retry` | baseline gap | 2026-10-12 | #544 |
-| `GET /api/portal/tenant/payments/{id}` | baseline gap | 2026-10-12 | #544 |
-| `POST /api/payments/{id}/retry` | baseline gap | 2026-10-12 | #544 |
-| `GET /api/payments/unmatched` | baseline gap | 2026-10-12 | #544 |
-| `POST /api/payments/settlements/{id}/close` | baseline gap | 2026-10-12 | #544 |
-| `POST /api/payments/{id}/close-review` | baseline gap | 2026-10-12 | #544 |
+| `POST /api/portal-access/invitations/{id}/retry` | The control appears only when delivery to the local test inbox failed, and no screen makes a delivery fail. | 2026-10-12 |  |
+| `GET /api/portal/tenant/payments/{id}` | No screen requests it; the portal reads the tenant's whole list of payments. | 2026-10-12 |  |
+| `POST /api/payments/{id}/retry` | The control appears only after six failed attempts with waits of up to ten minutes, and the simulated processor accepts every payment. | 2026-10-12 |  |
+| `GET /api/payments/unmatched` | The control appears only for a notice held for ten minutes, which a test would have to wait out. | 2026-10-12 |  |
 | `GET /api/operations/runs/{id}` | baseline gap | 2026-10-12 | #544 |
 | `GET /api/audit/events.csv` | baseline gap | 2026-10-12 | #544 |
 | `POST /api/auth/mfa/recovery` | baseline gap | 2026-10-12 | #544 |
