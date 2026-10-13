@@ -37,11 +37,32 @@
     },
     {
       "id": "mfa-enrollment-by-keyboard",
-      "workflow": "Enroll in MFA by keyboard and read the recovery codes, with the enrollment routes answered by the test",
+      "workflow": "Be held on required MFA enrollment and complete it by keyboard, with the session and the enrollment routes answered by the test",
       "area": "Account security",
       "spec": "account-security.spec.ts",
       "events": [],
       "routes": []
+    },
+    {
+      "id": "mfa-enrollment-and-sign-in",
+      "workflow": "Set up an authenticator on a new portal account, then sign in with its code and with recovery codes that each work once",
+      "area": "Account security",
+      "spec": "account-security.spec.ts",
+      "events": [],
+      "routes": [
+        "POST /api/auth/mfa/enroll",
+        "POST /api/auth/mfa/enroll/confirm",
+        "POST /api/auth/mfa",
+        "POST /api/auth/mfa/recovery"
+      ]
+    },
+    {
+      "id": "password-change",
+      "workflow": "Change the password of a new portal account, which signs its other browser out and stops the old password working",
+      "area": "Account security",
+      "spec": "account-security.spec.ts",
+      "events": [],
+      "routes": ["POST /api/auth/change-password"]
     },
     {
       "id": "reconciliation-report-download",
@@ -459,6 +480,14 @@
       "routes": ["GET /api/audit/events", "GET /api/audit/events/{id}", "GET /api/audit/filters"]
     },
     {
+      "id": "audit-log-export",
+      "workflow": "Export the filtered audit trail as a CSV, by click and by keyboard, and find each export recorded in the trail",
+      "area": "Audit",
+      "spec": "m8-audit-review.spec.ts",
+      "events": [],
+      "routes": ["GET /api/audit/events.csv"]
+    },
+    {
       "id": "compliance-pack-open-period",
       "workflow": "Ask for the trust compliance pack for an open period and get a clear refusal",
       "area": "Reporting",
@@ -766,9 +795,8 @@
       },
       {
         "route": "GET /api/health",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 544
+        "reason": "No screen requests it; container probes and the test runner poll it to see that the host is up.",
+        "date": "2026-10-12"
       },
       {
         "route": "GET /api/settings/banks/{id}",
@@ -803,42 +831,6 @@
       },
       {
         "route": "GET /api/operations/runs/{id}",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 544
-      },
-      {
-        "route": "GET /api/audit/events.csv",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 544
-      },
-      {
-        "route": "POST /api/auth/mfa/recovery",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 544
-      },
-      {
-        "route": "POST /api/auth/change-password",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 544
-      },
-      {
-        "route": "POST /api/auth/mfa",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 544
-      },
-      {
-        "route": "POST /api/auth/mfa/enroll",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 544
-      },
-      {
-        "route": "POST /api/auth/mfa/enroll/confirm",
         "reason": "baseline gap",
         "date": "2026-10-12",
         "issue": 544
