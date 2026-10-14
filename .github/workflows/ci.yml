@@ -432,9 +432,10 @@ jobs:
   e2e-stand-in:
     name: E2E (Stripe stand-in)
     runs-on: ubuntu-latest
-    # Not yet measured on a hosted runner. Estimated at 4 to 5 min from the `e2e` job's setup steps
-    # and a local run of the one scenario (about 30 s with the host already built). Re-measure once
-    # it has run, and when scenarios are added. `playwright install` is the step that has hung.
+    # Measured at 3 min on a hosted runner with one scenario. The spec now holds eight, which take
+    # 2.5 to 2.7 min locally with the host already built (three runs on 2026-10-13), against about
+    # 30 s for the one; so expect about 5 to 6 min here. Re-measure when scenarios are added.
+    # `playwright install` is the step that has hung.
     timeout-minutes: 15
     services:
       postgres:

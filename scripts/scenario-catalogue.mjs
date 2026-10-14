@@ -12,8 +12,9 @@
  *
  *   check   Static, for pull requests. Every journal event type in the code and every route in the
  *           API contract has a scenario or an exemption, and never both. Every catalogue id has a
- *           tagged test in its spec, and every test has a tag the catalogue knows. The generated
- *           part of docs/testing/scenarios.md matches the catalogue.
+ *           tagged test in its spec, and every test has a tag the catalogue knows. A scenario that
+ *           records a known limit as an expected failure and its tests say so in the same way. The
+ *           generated part of docs/testing/scenarios.md matches the catalogue.
  *   doc     Rewrites the generated part of docs/testing/scenarios.md.
  *   verify  Measured, for the coverage run (`npm run e2e:coverage`). Compares what each scenario
  *           declares with what its tests did: the requests they made, and the journal entries
@@ -66,6 +67,13 @@ export const CATALOGUE_PATH = path.join(
 export const DOC_PATH = path.join(repoRoot, "docs", "testing", "scenarios.md");
 
 export const TAG_PREFIX = "@scenario:";
+/**
+ * The tag on a test that shows a known limit and is expected to fail where it states the intended
+ * outcome. Its scenario carries `expectedFailure`, the reason. A test marks itself with Playwright's
+ * `test.fail()` once its setup has passed, so that a failure in the setup is still a failure; that
+ * call cannot be seen without running the test, so this tag is what the static check reads.
+ */
+export const EXPECTED_FAILURE_TAG = "@expected-failure";
 export const BASELINE_GAP = "baseline gap";
 const DOC_START = "<!-- scenario-catalogue:start -->";
 const DOC_END = "<!-- scenario-catalogue:end -->";
@@ -292,6 +300,15 @@ export function validateCatalogue(catalogue) {
         problems.push(`${name}: \`${repeated}\` is listed twice.`);
       }
     }
+    if (
+      scenario.expectedFailure !== undefined &&
+      (typeof scenario.expectedFailure !== "string" ||
+        scenario.expectedFailure.trim() === "")
+    ) {
+      problems.push(
+        `${name}: \`expectedFailure\` is the reason its test is expected to fail, naming the known limit it shows.`,
+      );
+    }
     // A pass nobody runs would leave the scenario unjudged for ever, so a name that is not one is
     // refused here and not found out by a measured run.
     if (scenario.pass !== undefined && !PASSES.includes(scenario.pass)) {
@@ -439,7 +456,11 @@ export function testsFromPlaywrightList(report) {
   return tests;
 }
 
-/** Every catalogue id has a tagged test in its spec, and every test has a tag the catalogue knows. */
+/**
+ * Every catalogue id has a tagged test in its spec, and every test has a tag the catalogue knows.
+ * A test of a scenario that is an expected failure carries the expected-failure tag, and no other
+ * test does.
+ */
 export function checkTags(catalogue, tests) {
   const problems = [];
   const byId = new Map(catalogue.scenarios.map((entry) => [entry.id, entry]));
@@ -447,6 +468,21 @@ export function checkTags(catalogue, tests) {
   for (const test of tests) {
     const ids = scenarioIdsOf(test.tags);
     const name = `${test.file}: "${test.title}"`;
+    const expected = (test.tags ?? []).includes(EXPECTED_FAILURE_TAG);
+    for (const id of ids) {
+      const scenario = byId.get(id);
+      if (!scenario || scenario.spec !== test.file) continue;
+      if (scenario.expectedFailure && !expected) {
+        problems.push(
+          `${name} is a test of ${id}, which the catalogue records as an expected failure, and is not tagged ${EXPECTED_FAILURE_TAG}.`,
+        );
+      }
+      if (!scenario.expectedFailure && expected) {
+        problems.push(
+          `${name} is tagged ${EXPECTED_FAILURE_TAG}, and the catalogue records no \`expectedFailure\` for ${id}.`,
+        );
+      }
+    }
     if (ids.length === 0) {
       problems.push(
         `${name} carries no scenario tag. Give it \`{ tag: '${TAG_PREFIX}<id>' }\`.`,
@@ -495,8 +531,13 @@ export function renderDoc(catalogue) {
     reasons.set(entry.reason, (reasons.get(entry.reason) ?? 0) + 1);
   }
   const issue = (entry) => (entry.issue === undefined ? "" : `#${entry.issue}`);
+  const expected = scenarios.filter((scenario) => scenario.expectedFailure);
   const lines = [
-    `${scenarios.length} scenarios. ${exemptions.events.length} journal event types and ` +
+    `${scenarios.length} scenarios` +
+      (expected.length > 0
+        ? `, ${expected.length} of them an expected failure that shows a known limit`
+        : "") +
+      `. ${exemptions.events.length} journal event types and ` +
       `${exemptions.routes.length} routes are exempt.`,
     "",
     "### Scenarios",
@@ -506,7 +547,11 @@ export function renderDoc(catalogue) {
   ];
   for (const scenario of scenarios) {
     lines.push(
-      `| ${code(scenario.id)} | ${scenario.workflow} | ${scenario.area} | ${code(scenario.spec)} | ` +
+      `| ${code(scenario.id)} | ${scenario.workflow}` +
+        (scenario.expectedFailure
+          ? ` **Expected to fail:** ${scenario.expectedFailure}`
+          : "") +
+        ` | ${scenario.area} | ${code(scenario.spec)} | ` +
         `${scenario.org ?? ""} | ${cell(scenario.events)} | ${cell(scenario.routes)} |`,
     );
   }
@@ -580,6 +625,11 @@ export function docIsCurrent(document, catalogue) {
  *
  * The suite runs on one worker, so a journal entry posted between a test's start and end was
  * posted by that test.
+ *
+ * A scenario recorded as an expected failure is judged the same way, against what it declares,
+ * which is what its test does today, up to the point where it fails. One that produced it is
+ * reported as an expected failure and not as verified, since its workflow does not yet do what its
+ * test says it should. One whose test passed fails the check: the limit it shows may be fixed.
  */
 export function verifyRun({
   catalogue,
@@ -667,6 +717,18 @@ export function verifyRun({
     if (row.missingEvents.length + row.missingRoutes.length > 0) {
       row.state = "failed";
     }
+    if (scenario.expectedFailure) {
+      // Playwright records an expected failure that failed as `failed`, and one that did not as `passed`.
+      if (attempts.some((attempt) => attempt.status === "passed")) {
+        row.state = "failed";
+        problems.push(
+          `Scenario ${scenario.id} is recorded as an expected failure, and a test of it passed. The limit it shows may be fixed: ` +
+            `remove \`expectedFailure\`, the ${EXPECTED_FAILURE_TAG} tag and the test's \`test.fail()\`.`,
+        );
+      } else if (row.state === "verified") {
+        row.state = "expected failure";
+      }
+    }
     return row;
   });
 
@@ -677,11 +739,15 @@ export function verifyRun({
 export function renderEvidence(result, title = "Scenario catalogue") {
   const { rows, problems } = result;
   const count = (state) => rows.filter((row) => row.state === state).length;
+  const expected = count("expected failure");
   const lines = [
     `## ${title}`,
     "",
-    `${count("verified")} of ${rows.length} scenarios produced what they declare. ` +
-      `${count("failed")} did not, and ${count("pass not run")} belong to a pass this run did not make.`,
+    `${count("verified") + expected} of ${rows.length} scenarios produced what they declare` +
+      (expected > 0
+        ? `, ${expected} of them as an expected failure that shows a known limit`
+        : "") +
+      `. ${count("failed")} did not, and ${count("pass not run")} belong to a pass this run did not make.`,
     "",
   ];
   if (problems.length > 0) {
@@ -909,7 +975,9 @@ export function run(argv) {
   }
   writeFileSync(options.outJson, `${JSON.stringify(result, null, 2)}\n`);
   writeFileSync(options.outMd, renderEvidence(result));
-  const verified = result.rows.filter((row) => row.state === "verified").length;
+  const verified = result.rows.filter((row) =>
+    ["verified", "expected failure"].includes(row.state),
+  ).length;
   return {
     problems: result.problems,
     notes: [

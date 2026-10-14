@@ -495,6 +495,24 @@ reach another Stripe environment or a proxy in front of Stripe: nothing but this
 named. `localhost` is trusted to mean this machine, as the machine's own name resolution says. No
 posting template, money path or capability was added, and `Live` stays refused.
 
+**Implementation note, 2026-10-13 (the stand-in scenarios).** The sandbox screens are now driven
+through a browser, in continuous integration, against the local stand-in for Stripe that the note
+above admits (#545). It answers the host from the recorded payloads and sends it signed deliveries;
+it is a stand-in, not a sandbox, and shows nothing about Stripe that the recordings do not. Eight
+scenarios run through the tenant portal and the staff Operations page: a card payment and an ACH
+debit each to a payout that posts on bank evidence equal to the net; a card dispute; a refund in full and one of part;
+a payout that fails before and after it posts; a bank amount that differs from the net; and the one
+recorded payout with its fifteen lines, served as recorded but for the account and the payout's id.
+Each sends what this ADR says it should to a person, and nothing posts that this ADR says should
+not. The receipts the posted payouts make carry the description `Stripe sandbox tenant payment` in
+the journal; no scenario reads it on a screen. The last scenario asserts that a payout holding both a payment and that payment's return
+posts, and is marked as an expected failure, so that the first known limit under Payouts has a test
+that turns red when it is fixed. Built answers are listed in the
+[runbook](../runbooks/payment-simulation.md#what-the-stand-in-answers): among them `payout.failed`,
+a payout that holds only this fixture's payments, and the fee on each charge. What "Not yet shown"
+says of a real sandbox stands: a payout that posts has still not been shown against one. No decision
+changes, and this ADR stays Proposed.
+
 The provisional assumptions of ADR-053 stay open. This ADR verifies none of them, and nothing here
 is approval to move real money.
 

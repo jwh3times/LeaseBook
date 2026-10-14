@@ -667,57 +667,92 @@ the browser test reads and requires to be empty.
 Its answers come from the payloads recorded from a real sandbox under `tests/fixtures/stripe/`. No
 recorded payload is changed and none is added. A recorded shape is copied and given this run's
 values: identifiers, amounts, times, the connected account, and the two ids of LeaseBook's that a
-charge carries.
+charge carries. Each recorded run numbers its synthetic identifiers from one, so the stand-in
+replaces an identifier only beside the run it came from.
 
-| The host asks, or Stripe sends              | The stand-in's answer                                        | Recorded or built                                                                                                                          |
-| ------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `GET /v1/account`                           | The platform's account                                       | Recorded, unchanged                                                                                                                        |
-| `GET /v1/accounts/{id}`                     | A fixture's connected account, which pays its own fees       | Recorded shape; the id is substituted                                                                                                      |
-| `POST /v1/payment_intents`, `pm_card_visa`  | A card payment that has succeeded                            | Recorded shape; ids, amount, time and metadata are substituted                                                                             |
-| The same idempotency key and parameters     | The same payment                                             | The behaviour was recorded; the answer is the payment the stand-in holds                                                                   |
-| The same idempotency key, another parameter | HTTP 400, `idempotency_error`                                | Recorded; the key in the message is substituted                                                                                            |
-| `GET /v1/payment_intents/{id}` and the list | The payment as it was created; a list of them                | The payment is the recorded shape. Retrieving one was not recorded for a card payment. The list's envelope is recorded                     |
-| `GET /v1/charges/{id}`                      | The payment's charge                                         | Recorded shape: the charge inside the recorded `charge.updated` event, substituted                                                         |
-| The four events of a card payment           | `charge.succeeded`, `payment_intent.succeeded`, and two more | Recorded deliveries, in the order Stripe sent them, substituted                                                                            |
-| The four events of a payout                 | `payout.created` through `payout.updated`                    | Recorded shapes, substituted. They were recorded from Stripe's list of events and not as deliveries                                        |
-| `GET /v1/balance_transactions?payout=…`     | The payout's own line and one line for each payment          | Recorded shapes: the recorded payout's own line and its line for a card charge, substituted. The charge inside a line is the payment's own |
-| `GET /v1/events`                            | The events the stand-in has made, newest first, in pages     | The envelope is recorded; the events are the ones above                                                                                    |
-| `GET /v1/payouts/{id}`                      | The payout as its last event left it                         | Built from the recorded payout: retrieving one was not recorded                                                                            |
-| An id it does not hold, on a route it knows | HTTP 404, `resource_missing`                                 | Built: no such answer was recorded                                                                                                         |
+| The host asks, or Stripe sends                                | The stand-in's answer                                                                                         | Recorded or built                                                                                                                                                                                                               |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /v1/account`                                             | The platform's account                                                                                        | Recorded, unchanged                                                                                                                                                                                                             |
+| `GET /v1/accounts/{id}`                                       | A fixture's connected account, which pays its own fees                                                        | Recorded shape; the id is substituted                                                                                                                                                                                           |
+| `POST /v1/payment_intents`, `pm_card_visa`                    | A card payment that has succeeded                                                                             | Recorded shape; ids, amount, time and metadata are substituted                                                                                                                                                                  |
+| `POST /v1/payment_intents`, `pm_usBankAccount_success`        | An ACH debit that is processing, with its charge pending                                                      | Recorded shapes: the debit Stripe answered, and the charge in the recorded `charge.pending`; substituted. The offline mandate is required                                                                                       |
+| The same idempotency key and parameters                       | The same payment                                                                                              | The behaviour was recorded; the answer is the payment the stand-in holds                                                                                                                                                        |
+| The same idempotency key, another parameter                   | HTTP 400, `idempotency_error`                                                                                 | Recorded; the key in the message is substituted                                                                                                                                                                                 |
+| `GET /v1/payment_intents/{id}` and the list                   | The payment as it was created; a list of them                                                                 | The payment is the recorded shape. Retrieving one was not recorded for a card payment. The list's envelope is recorded                                                                                                          |
+| `GET /v1/charges/{id}`                                        | The payment's charge                                                                                          | Recorded shape: the charge inside the recorded `charge.updated` event, substituted                                                                                                                                              |
+| The four events of a card payment                             | `charge.succeeded`, `payment_intent.succeeded`, and two more                                                  | Recorded deliveries, in the order Stripe sent them, substituted                                                                                                                                                                 |
+| The eight events of an ACH debit                              | `payment_intent.processing` through `charge.succeeded`, two `mandate.updated` among them                      | Recorded deliveries, in order, substituted. The payment and its charge are then the recorded succeeded debit and its charge                                                                                                     |
+| The two events of a card dispute                              | `charge.dispute.created`, `charge.dispute.funds_withdrawn`                                                    | Recorded deliveries of the 2026-10-09 dispute run, substituted. The charge is then the recorded disputed charge                                                                                                                 |
+| The three events of an ACH return                             | `charge.dispute.created`, `charge.dispute.funds_withdrawn`, `charge.dispute.closed`, the dispute already lost | Recorded deliveries, substituted. The charge is then the recorded charge of the disputed debit                                                                                                                                  |
+| The four events of a refund, in full or of part               | `refund.created`, `charge.refunded`, `refund.updated`, `charge.refund.updated`                                | Recorded shapes, substituted, with the part refunded that the test names. Three were recorded as deliveries; the partial refund's `refund.created` and both refunds' last two events were recorded from Stripe's list of events |
+| The four events of a payout                                   | `payout.created` through `payout.updated`                                                                     | Recorded shapes, substituted. They were recorded from Stripe's list of events and not as deliveries                                                                                                                             |
+| `GET /v1/balance_transactions?payout=…`                       | The payout's own line and one line for each payment                                                           | Recorded shapes: the recorded payout's own line and its line for a card charge, substituted. The charge inside a line is the payment's own                                                                                      |
+| The same, for an ACH debit and an ACH return                  | A `payment` line, and an `adjustment` line taking the whole charge back with a $15.00 fee                     | Recorded shapes: the recorded payout's lines for an ACH debit and for a dispute, substituted. The dispute inside the second is the recorded one, given this payment's ids                                                       |
+| The recorded payout                                           | Its four events and its fourteen balance lines, $1,470.60                                                     | Recorded, unchanged but for the connected account and the payout's id, which is new each time                                                                                                                                   |
+| `GET /v1/charges/{id}` for the recorded payout's two disputes | An ACH debit's charge, for the payment the dispute line names                                                 | Built, as the adapter's tests build it: the recorded charge of a disputed debit, under that id and payment. Neither was recorded                                                                                                |
+| `payout.failed`                                               | The payout's own `payout.paid` event, with the status `failed` and the failure code `account_closed`          | Built, as the adapter's tests build it. No payout has failed in a sandbox                                                                                                                                                       |
+| `GET /v1/events`                                              | The events the stand-in has made, newest first, in pages                                                      | The envelope is recorded; the events are the ones above                                                                                                                                                                         |
+| `GET /v1/payouts/{id}`                                        | The payout as its last event left it                                                                          | Built from the recorded payout: retrieving one was not recorded                                                                                                                                                                 |
+| An id it does not hold, on a route it knows                   | HTTP 404, `resource_missing`                                                                                  | Built: no such answer was recorded                                                                                                                                                                                              |
 
-Three things are built and not recorded, and a test that passes against them shows less than one
+Six things are built and not recorded, and a test that passes against them shows less than one
 against a sandbox would:
 
-- **A payout that holds only good payments.** The sandbox has made none
+- **A payout that holds only this fixture's payments.** The sandbox has made none
   ([ADR-054](../adr/ADR-054-stripe-sandbox-adapter.md#known-limits), "Not yet shown"). The stand-in
-  builds one from the recorded payout's shapes: its amount is the sum of its payments' nets, and
-  its lines come to nothing against it, as the recorded payout's do.
+  builds one from the recorded payout's shapes: its amount is the sum of its payments' nets, less
+  each return it carries and that return's fee, and its lines come to nothing against it, as the
+  recorded payout's do.
 - **The fee on a charge.** No recording holds a charge of the amount a test pays. The stand-in
-  works it out at the rates the sandbox kept in the recorded runs: 2.9% plus $0.30 for a card, to
-  the nearest cent. For the recorded card charges of $515.24 and $200.00 it gives the fees Stripe
-  kept, $15.24 and $6.10.
-- **When things happen.** Stripe sends a card payment's events within seconds and makes a payout
-  on its own schedule. The stand-in sends each when a test tells it to.
+  works it out at the rates the sandbox kept in the recorded runs: 2.9% plus $0.30 for a card and
+  0.8% for an ACH debit, to the nearest cent. For the recorded card charges of $515.24 and $200.00
+  it gives the fees Stripe kept, $15.24 and $6.10, and for the ACH debit of $504.03, $4.03.
+- **When things happen.** Stripe sends a card payment's events within seconds, an ACH debit's over
+  about twenty, a dispute when it likes, and makes a payout on its own schedule. The stand-in sends
+  each when a test tells it to.
+- **A dispute or a refund of a payment made with `pm_card_visa`.** At Stripe a card that disputes
+  is a test payment method of its own, and a refund is asked for. A fixture binds one card method,
+  so here a test starts the dispute or the refund on a payment that has succeeded.
+- **`payout.failed`.** No payout has failed in a sandbox. It is the payout's own paid event with
+  the status `failed`, as the adapter's tests build it.
+- **The charges behind the recorded payout's two disputes.** Reading the payout asks Stripe for
+  them and no recording holds them. Each is the recorded charge of a disputed ACH debit, under the
+  id and payment the dispute line names, as the adapter's tests build them.
 
-A payment method other than `pm_card_visa` has no recorded timeline here yet and is refused as an
-unknown request.
+A payment method other than `pm_card_visa` and `pm_usBankAccount_success` has no recorded timeline
+here and is refused as an unknown request.
 
 ### Tell the stand-in what happens next
 
 Stripe acts by itself; the stand-in acts when told. Its control surface is under `/stand-in/`, which
 no route of Stripe's begins with, and takes the same key in `Authorization: Bearer …`.
 
-| Request                                                | What it does                                                                                                                                                                        |
-| ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /stand-in/health`                                 | Answers `{"ok":true}` with no key. Says nothing else                                                                                                                                |
-| `GET /stand-in/state`                                  | The accounts, payments and payouts it holds, the deliveries it sent with the host's answers, and the list of unexpected requests                                                    |
-| `POST /stand-in/payments/{payment reference}/timeline` | Body `{"timeline":"card-succeeds"}`. Sends the recorded events of that timeline for the payment LeaseBook made under that reference, and answers with each delivery's HTTP status   |
-| `POST /stand-in/payouts`                               | Body `{"payments":["<payment reference>", …]}`. Forms one automatic payout from payments Stripe has said were paid, sends its four events, and answers with the payout's id and net |
+| Request                                                | What it does                                                                                                                                                                                                                                           |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `GET /stand-in/health`                                 | Answers `{"ok":true}` with no key. Says nothing else                                                                                                                                                                                                   |
+| `GET /stand-in/state`                                  | The accounts, payments and payouts it holds, the deliveries it sent with the host's answers, and the list of unexpected requests                                                                                                                       |
+| `POST /stand-in/payments/{payment reference}/timeline` | Body `{"timeline":"<name>"}`. Sends the recorded events of that timeline for the payment LeaseBook made under that reference, and answers with each delivery's HTTP status. The timelines are below                                                    |
+| `POST /stand-in/payouts`                               | Body `{"payments":["<payment reference>", …]}`, and `"returns"` with the same for the ACH returns it also carries. Forms one automatic payout from payments Stripe has said were paid, sends its four events, and answers with the payout's id and net |
+| `POST /stand-in/payouts/recorded`                      | Body `{"account":"acct_…"}`, the first fixture's account when left out. Holds the one recorded payout on that account under a new id, sends its four events, and answers with its id, net and number of lines                                          |
+| `POST /stand-in/payouts/{payout id}/fail`              | Sends `payout.failed` for a payout the stand-in holds, once                                                                                                                                                                                            |
 
-Either `POST` takes `"deliver": false`, which makes the events without sending them, as an event
+| Timeline                | Applies to                           | What Stripe is then said to have sent                                                          |
+| ----------------------- | ------------------------------------ | ---------------------------------------------------------------------------------------------- |
+| `card-succeeds`         | A card payment                       | Its four events. A payout may then hold it                                                     |
+| `ach-succeeds`          | An ACH debit                         | Its eight events. A payout may then hold it                                                    |
+| `card-disputed`         | A card payment after `card-succeeds` | A dispute's two events, the dispute open                                                       |
+| `ach-disputed`          | An ACH debit after `ach-succeeds`    | A dispute's three events, the dispute lost. A payout may then carry its return under `returns` |
+| `card-refunded`         | A card payment after `card-succeeds` | A refund in full: four events                                                                  |
+| `card-refunded-in-part` | A card payment after `card-succeeds` | A refund of the part named by `"refund"`, in cents: four events                                |
+
+A timeline runs once for a payment, and a payment is refunded in full or in part, not both.
+
+Every `POST` takes `"deliver": false`, which makes the events without sending them, as an event
 Stripe never delivered: `GET /v1/events` then lists them for the host's catch-up sweep. No browser
-test drives that yet. Deliveries are real signed requests to the host's callback route, and the
-stand-in does not send one again.
+test drives that. The host sweeps when it starts and then every five minutes, an interval fixed in
+the code, so a test would wait up to five minutes for a sweep to find what it left undelivered; the
+stand-in's unit tests cover the listing instead. Deliveries are real signed requests to the host's
+callback route, and the stand-in does not send one again.
 
 To take a payment through by hand: pay by card in the tenant portal as
 [above](#make-a-card-payment-and-an-ach-payment), after setting the card fee rule; copy the payment
@@ -780,12 +815,39 @@ host the stand-in's address and key, and a signing secret it makes for the run. 
 job of its own, `E2E (Stripe stand-in)`, beside the ordinary e2e job; in that job Stripe's hosts
 resolve to nothing, so a request to Stripe would fail and not be made quietly.
 
-The test drives one scenario so far: a card payment that reaches a posted payout. The tenant pays in
-the portal under the words "Test payment — no real money moves". The stand-in says the payment
-succeeded, and the tenant sees it paid and not yet on the ledger. The stand-in pays out, and an
-administrator sees the payout **Waiting for the bank** with the processor's amount and nothing to
-post. The test then runs the `bank` command with the processor's net, the payout shows **Posted**,
-and the tenant's payment is recorded and the balance is down by the amount. It checks WCAG 2 AA at
-each of those states, runs `check-invariants --all` after the scenario, and requires that the
-stand-in was asked nothing it does not know. The fixture is not reset between runs, and the test
-can be run again against the same database.
+The test drives eight scenarios, each from the tenant portal and the staff Operations page, with a
+WCAG 2 AA check at each main state, `check-invariants --all` after each, and a check that the
+stand-in was asked nothing it does not know:
+
+- **A card payment to a posted payout.** The tenant pays under the words "Test payment — no real
+  money moves". The stand-in says the payment succeeded, and the tenant sees it paid and not yet on
+  the ledger. The stand-in pays out, and an administrator sees the payout **Waiting for the bank**
+  with the processor's amount and nothing to post. The `bank` command with the processor's net
+  posts it, and the tenant's payment is recorded and the balance is down by the amount.
+- **An ACH debit to a posted payout.** The same, by ACH, after the organization's ACH rule is set
+  on Settings to the 0.8% the recorded ACH debit's balance line carries. The payout's line shows
+  what was charged, what Stripe kept and what reaches the bank, and posts with no fee difference.
+- **A card dispute.** The payment goes to review with no receipt. The tenant is told the property
+  manager is checking it. Staff see the reason, the dispute's reference and no way to post; an
+  administrator closes the review from the keyboard.
+- **A refund in full and a refund of part**, each of a payment whose receipt has posted. Each goes
+  to review with its receipt still on the ledger and nothing reversed, and an administrator closes
+  each review.
+- **A failed payout**, once while it waits for the bank and once after it has posted. Both go to
+  review; the second reads "Needs review — posted, nothing reversed". Bank evidence for the first
+  releases nothing, and an administrator closes both.
+- **A bank amount that differs from Stripe's net.** The payout goes to review as
+  `bank_amount_mismatch` and cannot be posted. The right amount afterwards is refused and makes it
+  `conflicting_evidence`. An administrator closes it from the keyboard.
+- **The one recorded payout**, with its fifteen lines. It goes to review as unsupported at once.
+  Bank evidence equal to $1,470.60 releases nothing, an administrator who posts it is refused, and
+  the review is closed.
+- **A payout that holds an ACH debit and that debit's return**, which is the known limit in
+  [ADR-054](../adr/ADR-054-stripe-sandbox-adapter.md#known-limits). The test asserts that bank
+  evidence equal to the net lets the payout post, with the receipt and its reversal, and is marked
+  with Playwright's `test.fail()` once its setup and today's refusal have passed. It is reported as
+  expected to fail. A failure before that point is an ordinary failure, and the run turns red when
+  a fix makes the payout post. The scenario runs on the second organization, whose ACH rule
+  charges $20.00 beside the 0.8%, so that the payout's fee surplus covers what the return costs.
+
+The fixture is not reset between runs, and the test can be run again against the same database.
