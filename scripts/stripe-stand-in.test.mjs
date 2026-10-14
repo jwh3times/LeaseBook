@@ -1,13 +1,14 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { API_VERSION, verifySignature } from "./stripe-probe.mjs";
+import { API_VERSION, FIXTURE_ROOT, verifySignature } from "./stripe-probe.mjs";
 import {
+  DISPUTE_FEE,
   STAND_IN_KEY,
   createStandIn,
   loopbackAddress,
@@ -55,7 +56,7 @@ function standIn({ status = 204 } = {}) {
   return { ...made, ask, sent, clock };
 }
 
-/** The form the adapter sends for a card charge. */
+/** The form the adapter sends for a charge: a card charge, or with an ACH method an ACH debit. */
 function charge(operation, amount = 10330, method = "pm_card_visa") {
   return new URLSearchParams({
     amount: String(amount),
@@ -66,24 +67,47 @@ function charge(operation, amount = 10330, method = "pm_card_visa") {
     "automatic_payment_methods[allow_redirects]": "never",
     "metadata[leasebook_operation]": operation,
     "metadata[leasebook_generation]": GENERATION,
+    ...(method.startsWith("pm_usBankAccount_")
+      ? { "mandate_data[customer_acceptance][type]": "offline" }
+      : {}),
   }).toString();
 }
 
-async function paid(h, amount = 10330) {
+const ACH = "pm_usBankAccount_success";
+
+/** Tells the stand-in to move a payment along a timeline. */
+const move = (h, operation, json) =>
+  h.ask("POST", `/stand-in/payments/${operation}/timeline`, {
+    account: null,
+    json,
+  });
+
+/** A charge made and moved along the timeline that says it was paid. */
+async function paid(h, amount = 10330, method = "pm_card_visa") {
   const operation = randomUUID();
   const made = await h.ask("POST", "/v1/payment_intents", {
     key: operation,
-    form: charge(operation, amount),
+    form: charge(operation, amount, method),
   });
   assert.equal(made.status, 200);
-  const moved = await h.ask(
-    "POST",
-    `/stand-in/payments/${operation}/timeline`,
-    { account: null, json: { timeline: "card-succeeds" } },
-  );
+  const moved = await move(h, operation, {
+    timeline: method === ACH ? "ach-succeeds" : "card-succeeds",
+  });
   assert.equal(moved.status, 200);
   return { operation, intent: made.body, deliveries: moved.body.deliveries };
 }
+
+/** What a recorded file holds, as the probe wrote it. */
+const recordedFile = (run, file) =>
+  JSON.parse(
+    readFileSync(
+      join(import.meta.dirname, "..", FIXTURE_ROOT, run, file),
+      "utf8",
+    ),
+  );
+
+/** No identifier of a recording is left where one of this run's belongs. */
+const RECORDED_ID = /\b(pi|ch|py|txn|du|re|evt|acct|po)_synthetic\d+/;
 
 test("only an address on this machine is an address", () => {
   for (const good of [
@@ -760,4 +784,565 @@ test("over HTTP on loopback it answers a request and its bodies are JSON", async
     server.close();
     callback.close();
   }
+});
+
+test("an ACH debit is answered processing, with a pending charge, and carries an offline mandate", async () => {
+  const h = standIn();
+  const operation = randomUUID();
+  const made = await h.ask("POST", "/v1/payment_intents", {
+    key: operation,
+    form: charge(operation, 10081, ACH),
+  });
+  assert.equal(made.status, 200);
+  assert.deepEqual(
+    [made.body.status, made.body.amount, made.body.created],
+    ["processing", 10081, h.clock.now],
+  );
+  assert.match(made.body.latest_charge, /^py_standin[0-9a-f]+$/);
+  assert.doesNotMatch(JSON.stringify(made.body), RECORDED_ID);
+  const pending = await h.ask("GET", `/v1/charges/${made.body.latest_charge}`);
+  assert.deepEqual(
+    [pending.body.status, pending.body.payment_method_details.type],
+    ["pending", "us_bank_account"],
+  );
+  // 0.8% of the charge, as the recorded debit's balance line kept.
+  assert.equal(h.state().payments[0].fee, 81);
+
+  // A debit without its mandate, and a card charge with one, are not what the adapter sends.
+  const other = randomUUID();
+  const bare = new URLSearchParams(charge(other, 10081, ACH));
+  bare.delete("mandate_data[customer_acceptance][type]");
+  const card = new URLSearchParams(charge(other));
+  card.set("mandate_data[customer_acceptance][type]", "offline");
+  for (const form of [bare, card]) {
+    const refused = await h.ask("POST", "/v1/payment_intents", {
+      key: other,
+      form: form.toString(),
+    });
+    assert.equal(refused.body.error.code, "stand_in_unknown_request");
+  }
+  assert.equal(h.state().unexpected.length, 2);
+});
+
+test("the ACH timeline sends the eight recorded events in order, and leaves the debit succeeded", async () => {
+  const h = standIn();
+  const { operation, intent, deliveries } = await paid(h, 10081, ACH);
+  assert.deepEqual(
+    deliveries.map((sent) => [sent.type, sent.status]),
+    [
+      ["payment_intent.processing", 204],
+      ["payment_intent.created", 204],
+      ["charge.pending", 204],
+      ["charge.updated", 204],
+      ["mandate.updated", 204],
+      ["mandate.updated", 204],
+      ["payment_intent.succeeded", 204],
+      ["charge.succeeded", 204],
+    ],
+  );
+  for (const sent of h.sent) {
+    assert.ok(verifySignature(sent.body, sent.signature, SECRET, h.clock.now));
+    assert.equal(sent.event.account, ACCOUNT);
+    assert.doesNotMatch(sent.body, RECORDED_ID);
+    // The mandate events carry nothing of LeaseBook's; the others carry this payment's two ids.
+    if (sent.event.type !== "mandate.updated")
+      assert.deepEqual(sent.event.data.object.metadata, {
+        leasebook_generation: GENERATION,
+        leasebook_operation: operation,
+      });
+  }
+  const succeeded = h.sent[6].event.data.object;
+  assert.deepEqual(
+    [succeeded.id, succeeded.status, succeeded.amount],
+    [intent.id, "succeeded", 10081],
+  );
+  // Stripe holds it succeeded now, and its charge with the balance line the debit made.
+  assert.equal(
+    (await h.ask("GET", `/v1/payment_intents/${intent.id}`)).body.status,
+    "succeeded",
+  );
+  const held = (await h.ask("GET", `/v1/charges/${intent.latest_charge}`)).body;
+  assert.deepEqual(
+    [
+      held.status,
+      held.payment_intent,
+      held.payment_method_details.type,
+      held.balance_transaction.amount,
+      held.balance_transaction.fee,
+      held.balance_transaction.net,
+    ],
+    ["succeeded", intent.id, "us_bank_account", 10081, 81, 10000],
+  );
+  // A card timeline does not apply to a debit, nor an ACH one to a card.
+  assert.equal(
+    (await move(h, operation, { timeline: "card-succeeds" })).status,
+    409,
+  );
+  const card = await paid(h);
+  assert.equal(
+    (await move(h, card.operation, { timeline: "ach-succeeds" })).status,
+    409,
+  );
+});
+
+test("a card dispute is the two recorded events, about the payment by Stripe's id only, after the payment succeeded", async () => {
+  const h = standIn();
+  const operation = randomUUID();
+  await h.ask("POST", "/v1/payment_intents", {
+    key: operation,
+    form: charge(operation),
+  });
+  // Nothing to dispute before Stripe has said it was paid.
+  assert.equal(
+    (await move(h, operation, { timeline: "card-disputed" })).status,
+    409,
+  );
+  await move(h, operation, { timeline: "card-succeeds" });
+  h.sent.length = 0;
+  const disputed = await move(h, operation, { timeline: "card-disputed" });
+  assert.deepEqual(
+    disputed.body.deliveries.map((sent) => [sent.type, sent.status]),
+    [
+      ["charge.dispute.created", 204],
+      ["charge.dispute.funds_withdrawn", 204],
+    ],
+  );
+  const payment = h.state().payments[0];
+  const intent = (await h.ask("GET", `/v1/payment_intents/${payment.id}`)).body;
+  for (const sent of h.sent) {
+    const dispute = sent.event.data.object;
+    assert.deepEqual(
+      [
+        dispute.object,
+        dispute.id,
+        dispute.amount,
+        dispute.payment_intent,
+        dispute.charge,
+        dispute.status,
+        dispute.payment_method_details.type,
+        dispute.metadata,
+        dispute.created,
+      ],
+      [
+        "dispute",
+        payment.dispute,
+        10330,
+        intent.id,
+        intent.latest_charge,
+        "needs_response",
+        "card",
+        {},
+        h.clock.now,
+      ],
+    );
+    assert.deepEqual(
+      [
+        dispute.balance_transactions[0].amount,
+        dispute.balance_transactions[0].fee,
+        dispute.balance_transactions[0].net,
+      ],
+      [-10330, DISPUTE_FEE, -10330 - DISPUTE_FEE],
+    );
+    assert.doesNotMatch(sent.body, RECORDED_ID);
+  }
+  // The charge Stripe then holds says it is disputed, and that it was a card.
+  const held = (await h.ask("GET", `/v1/charges/${intent.latest_charge}`)).body;
+  assert.deepEqual(
+    [held.disputed, held.dispute, held.payment_method_details.type],
+    [true, payment.dispute, "card"],
+  );
+  assert.equal(
+    (await move(h, operation, { timeline: "card-disputed" })).status,
+    409,
+  );
+  assert.deepEqual(h.state().unexpected.length, 2);
+});
+
+test("an ACH return is the three recorded dispute events, already lost, and its charge says ACH", async () => {
+  const h = standIn();
+  const { operation, intent } = await paid(h, 10081, ACH);
+  h.sent.length = 0;
+  const disputed = await move(h, operation, { timeline: "ach-disputed" });
+  assert.deepEqual(
+    disputed.body.deliveries.map((sent) => [sent.type, sent.status]),
+    [
+      ["charge.dispute.created", 204],
+      ["charge.dispute.funds_withdrawn", 204],
+      ["charge.dispute.closed", 204],
+    ],
+  );
+  const payment = h.state().payments[0];
+  for (const sent of h.sent) {
+    const dispute = sent.event.data.object;
+    assert.deepEqual(
+      [
+        dispute.id,
+        dispute.payment_intent,
+        dispute.charge,
+        dispute.status,
+        dispute.reason,
+        dispute.amount,
+      ],
+      [
+        payment.dispute,
+        intent.id,
+        intent.latest_charge,
+        "lost",
+        "debit_not_authorized",
+        10081,
+      ],
+    );
+    assert.doesNotMatch(sent.body, RECORDED_ID);
+  }
+  const held = (await h.ask("GET", `/v1/charges/${intent.latest_charge}`)).body;
+  assert.deepEqual(
+    [held.id, held.payment_intent, held.payment_method_details.type],
+    [intent.latest_charge, intent.id, "us_bank_account"],
+  );
+});
+
+test("a refund in full and a refund of part are the four recorded events each, with the total refunded on the charge", async () => {
+  const h = standIn();
+  const whole = await paid(h);
+  const part = await paid(h, 6210);
+  h.sent.length = 0;
+  const refunded = await move(h, whole.operation, {
+    timeline: "card-refunded",
+  });
+  const events = [
+    ["refund.created", 204],
+    ["charge.refunded", 204],
+    ["refund.updated", 204],
+    ["charge.refund.updated", 204],
+  ];
+  assert.deepEqual(
+    refunded.body.deliveries.map((sent) => [sent.type, sent.status]),
+    events,
+  );
+  const charged = h.sent[1].event.data.object;
+  assert.deepEqual(
+    [
+      charged.id,
+      charged.payment_intent,
+      charged.amount,
+      charged.amount_refunded,
+      charged.refunded,
+      charged.metadata,
+    ],
+    [
+      whole.intent.latest_charge,
+      whole.intent.id,
+      10330,
+      10330,
+      true,
+      {
+        leasebook_generation: GENERATION,
+        leasebook_operation: whole.operation,
+      },
+    ],
+  );
+  // The three refund events are about one refund of this charge, and carry nothing of LeaseBook's.
+  const refunds = [0, 2, 3].map((index) => h.sent[index].event.data.object);
+  assert.equal(new Set(refunds.map((refund) => refund.id)).size, 1);
+  for (const refund of refunds)
+    assert.deepEqual(
+      [
+        refund.object,
+        refund.charge,
+        refund.payment_intent,
+        refund.amount,
+        refund.metadata,
+      ],
+      ["refund", whole.intent.latest_charge, whole.intent.id, 10330, {}],
+    );
+  for (const sent of h.sent) assert.doesNotMatch(sent.body, RECORDED_ID);
+
+  h.sent.length = 0;
+  // A part is named in cents, more than nothing and less than the charge.
+  for (const refund of [undefined, 0, 6210, 12.5])
+    assert.equal(
+      (
+        await move(h, part.operation, {
+          timeline: "card-refunded-in-part",
+          refund,
+        })
+      ).status,
+      400,
+    );
+  const some = await move(h, part.operation, {
+    timeline: "card-refunded-in-part",
+    refund: 2500,
+  });
+  assert.deepEqual(
+    some.body.deliveries.map((sent) => [sent.type, sent.status]),
+    events,
+  );
+  const partly = h.sent[1].event.data.object;
+  assert.deepEqual(
+    [partly.amount, partly.amount_refunded, partly.refunded],
+    [6210, 2500, false],
+  );
+  assert.equal(h.sent[0].event.data.object.amount, 2500);
+  assert.deepEqual(
+    (await h.ask("GET", `/v1/charges/${part.intent.latest_charge}`)).body
+      .amount_refunded,
+    2500,
+  );
+  // A payment is refunded one way or the other, once.
+  for (const timeline of ["card-refunded", "card-refunded-in-part"])
+    assert.equal(
+      (await move(h, part.operation, { timeline, refund: 100 })).status,
+      409,
+    );
+});
+
+test("a payout can hold ACH debits and an ACH debit's return, whose line is the whole charge taken back and Stripe's fee", async () => {
+  const h = standIn();
+  const returned = await paid(h, 12097, ACH);
+  const kept = await paid(h, 12097, ACH);
+  // A debit that was not taken back has no return for a payout to carry.
+  assert.equal(
+    (
+      await h.ask("POST", "/stand-in/payouts", {
+        account: null,
+        json: { payments: [kept.operation], returns: [kept.operation] },
+      })
+    ).status,
+    409,
+  );
+  await move(h, returned.operation, { timeline: "ach-disputed" });
+  // A return alone, or one that outweighs the payout, is not a balance Stripe pays out.
+  assert.equal(
+    (
+      await h.ask("POST", "/stand-in/payouts", {
+        account: null,
+        json: { payments: [returned.operation], returns: [returned.operation] },
+      })
+    ).status,
+    409,
+  );
+  const formed = await h.ask("POST", "/stand-in/payouts", {
+    account: null,
+    json: {
+      payments: [returned.operation, kept.operation],
+      returns: [returned.operation],
+    },
+  });
+  assert.equal(formed.status, 200);
+  // Two debits of 120.97 less 0.97 each, less the 120.97 taken back and the 15.00 fee.
+  assert.deepEqual([formed.body.amount, formed.body.net], [10403, "104.03"]);
+  const lines = (
+    await h.ask(
+      "GET",
+      `/v1/balance_transactions?payout=${formed.body.id}&limit=100&expand[]=data.source`,
+    )
+  ).body.data;
+  assert.deepEqual(
+    lines.map((line) => [
+      line.type,
+      line.amount,
+      line.fee,
+      line.net,
+      line.source.object,
+      line.source.payment_intent ?? null,
+    ]),
+    [
+      ["payout", -10403, 0, -10403, "payout", null],
+      ["payment", 12097, 97, 12000, "charge", returned.intent.id],
+      ["payment", 12097, 97, 12000, "charge", kept.intent.id],
+      [
+        "adjustment",
+        -12097,
+        DISPUTE_FEE,
+        -12097 - DISPUTE_FEE,
+        "dispute",
+        returned.intent.id,
+      ],
+    ],
+  );
+  assert.equal(
+    lines.reduce((sum, line) => sum + line.net, 0),
+    0,
+  );
+  const disputed = h.state().payments[0];
+  assert.deepEqual(
+    [lines[3].id, lines[3].source.id, lines[3].source.charge],
+    [
+      lines[3].source.balance_transaction,
+      disputed.dispute,
+      returned.intent.latest_charge,
+    ],
+  );
+  assert.equal(lines[1].source.payment_method_details.type, "us_bank_account");
+  assert.doesNotMatch(JSON.stringify(lines), RECORDED_ID);
+  // A return is in one payout.
+  const again = await paid(h, 12097, ACH);
+  assert.equal(
+    (
+      await h.ask("POST", "/stand-in/payouts", {
+        account: null,
+        json: { payments: [again.operation], returns: [returned.operation] },
+      })
+    ).status,
+    409,
+  );
+  assert.deepEqual(h.state().unexpected.length, 3);
+});
+
+test("the recorded payout is served as recorded, on the fixture's account and under an id of its own", async () => {
+  const h = standIn();
+  const served = await h.ask("POST", "/stand-in/payouts/recorded", {
+    account: null,
+    json: { account: OTHER },
+  });
+  assert.equal(served.status, 200);
+  const payout = served.body;
+  assert.match(payout.id, /^po_standin[0-9a-f]+$/);
+  assert.deepEqual(
+    [payout.account, payout.amount, payout.net, payout.lines],
+    [OTHER, 147060, "1470.60", 14],
+  );
+  assert.deepEqual(
+    payout.deliveries.map((sent) => [sent.type, sent.status]),
+    [
+      ["payout.created", 204],
+      ["payout.reconciliation_completed", 204],
+      ["payout.paid", 204],
+      ["payout.updated", 204],
+    ],
+  );
+  const recordedEvents = recordedFile(
+    "2026-10-09T18-44-03-363Z",
+    "029-payout-events.json",
+  ).body.data;
+  const paidEvent = h.sent[2].event;
+  const was = recordedEvents.find((event) => event.type === "payout.paid");
+  // The event as recorded, but for its own id, the account and the payout's id.
+  assert.deepEqual(
+    { ...paidEvent, id: was.id },
+    JSON.parse(
+      JSON.stringify(was)
+        .replaceAll("acct_synthetic000002", OTHER)
+        .replaceAll("po_synthetic000001", payout.id),
+    ),
+  );
+  const lines = await h.ask(
+    "GET",
+    `/v1/balance_transactions?payout=${payout.id}&limit=100&expand[]=data.source`,
+    { account: OTHER },
+  );
+  const recordedLines = recordedFile(
+    "2026-10-09T18-44-03-363Z",
+    "023-payout-lines.json",
+  ).body.data;
+  assert.deepEqual(
+    lines.body.data,
+    JSON.parse(
+      JSON.stringify(recordedLines).replaceAll("po_synthetic000001", payout.id),
+    ),
+  );
+  // The charges behind its two disputes are ACH debits, of the payments the dispute lines name.
+  for (const [id, payment] of [
+    ["py_synthetic000002", "pi_synthetic000005"],
+    ["py_synthetic000005", "pi_synthetic000009"],
+  ]) {
+    const held = await h.ask("GET", `/v1/charges/${id}`, { account: OTHER });
+    assert.deepEqual(
+      [
+        held.body.id,
+        held.body.payment_intent,
+        held.body.payment_method_details.type,
+      ],
+      [id, payment, "us_bank_account"],
+    );
+  }
+  // The first fixture's account holds none of it.
+  assert.equal(
+    (await h.ask("GET", "/v1/charges/py_synthetic000002")).status,
+    404,
+  );
+  const stranger = await h.ask("POST", "/stand-in/payouts/recorded", {
+    account: null,
+    json: { account: "acct_standin000009" },
+  });
+  assert.equal(stranger.status, 404);
+});
+
+test("a payout fails with an event built from its own paid event, once", async () => {
+  const h = standIn();
+  const { operation } = await paid(h);
+  const formed = (
+    await h.ask("POST", "/stand-in/payouts", {
+      account: null,
+      json: { payments: [operation] },
+    })
+  ).body;
+  const paidEvent = h.sent.find((sent) => sent.event.type === "payout.paid");
+  h.clock.now += 600;
+  const failed = await h.ask("POST", `/stand-in/payouts/${formed.id}/fail`, {
+    account: null,
+    json: {},
+  });
+  assert.equal(failed.status, 200);
+  assert.deepEqual(
+    failed.body.deliveries.map((sent) => [sent.type, sent.status]),
+    [["payout.failed", 204]],
+  );
+  const sent = h.sent.at(-1);
+  assert.ok(verifySignature(sent.body, sent.signature, SECRET, h.clock.now));
+  const event = sent.event;
+  assert.notEqual(event.id, paidEvent.event.id);
+  assert.deepEqual(
+    [
+      event.type,
+      event.created,
+      event.account,
+      event.data.object.id,
+      event.data.object.amount,
+      event.data.object.status,
+      event.data.object.failure_code,
+      event.data.object.automatic,
+    ],
+    [
+      "payout.failed",
+      h.clock.now,
+      ACCOUNT,
+      formed.id,
+      formed.amount,
+      "failed",
+      "account_closed",
+      true,
+    ],
+  );
+  // Only the status and the failure differ from the paid event's payout.
+  const failure = ["status", "failure_code", "failure_message"];
+  const rest = (payout) =>
+    Object.fromEntries(
+      Object.entries(payout).filter(([key]) => !failure.includes(key)),
+    );
+  assert.deepEqual(rest(event.data.object), rest(paidEvent.event.data.object));
+  const { status, failure_message } = event.data.object;
+  assert.deepEqual([status, failure_message], ["failed", "[scrubbed]"]);
+  assert.equal(
+    (await h.ask("GET", `/v1/payouts/${formed.id}`)).body.status,
+    "failed",
+  );
+  assert.equal(
+    (
+      await h.ask("POST", `/stand-in/payouts/${formed.id}/fail`, {
+        account: null,
+        json: {},
+      })
+    ).status,
+    409,
+  );
+  assert.equal(
+    (
+      await h.ask("POST", "/stand-in/payouts/po_standin0000/fail", {
+        account: null,
+        json: {},
+      })
+    ).status,
+    404,
+  );
 });

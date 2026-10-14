@@ -21,16 +21,17 @@ holds two lists.
 
 **Scenarios.** Each entry has:
 
-| Field      | Meaning                                                                                    |
-| ---------- | ------------------------------------------------------------------------------------------ |
-| `id`       | Lower-case words joined by hyphens. The tag on the tests is `@scenario:<id>`.              |
-| `workflow` | What a person does, in one sentence.                                                       |
-| `area`     | The part of the product, for reading the table.                                            |
-| `spec`     | The file under `web/e2e/` that holds the scenario's tests.                                 |
-| `org`      | The organization the scenario drives. Required when `events` is not empty.                 |
-| `pass`     | `payments` or `stand-in` for a scenario of one of those passes. Left out for the rest.     |
-| `events`   | The journal event types the scenario's tests post. May be empty.                           |
-| `routes`   | The API routes the scenario is there to call, as `METHOD /path/{parameter}`. May be empty. |
+| Field             | Meaning                                                                                                             |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `id`              | Lower-case words joined by hyphens. The tag on the tests is `@scenario:<id>`.                                       |
+| `workflow`        | What a person does, in one sentence.                                                                                |
+| `area`            | The part of the product, for reading the table.                                                                     |
+| `spec`            | The file under `web/e2e/` that holds the scenario's tests.                                                          |
+| `org`             | The organization the scenario drives. Required when `events` is not empty.                                          |
+| `pass`            | `payments` or `stand-in` for a scenario of one of those passes. Left out for the rest.                              |
+| `events`          | The journal event types the scenario's tests post. May be empty.                                                    |
+| `routes`          | The API routes the scenario is there to call, as `METHOD /path/{parameter}`. May be empty.                          |
+| `expectedFailure` | For a scenario that shows a known limit: why its test is expected to fail, naming the limit. Left out for the rest. |
 
 A pass is one run of the suite against one database. `payments` is the simulated-payment pass, on
 the payment fixture. `stand-in` is the Stripe stand-in pass, on the stand-in fixture, where the host
@@ -42,6 +43,17 @@ refused by the static check.
 scenario. `routes` names the routes the scenario exists to cover. A test also calls routes every
 page needs, such as the session check, and those are declared once, by the scenario they belong to
 most.
+
+**Expected failures.** A scenario can show a known limit: its test asserts what the product should
+do and fails today where it says so. Such a test carries the tag `@expected-failure` beside its
+scenario tag, and its scenario carries `expectedFailure`. The test calls Playwright's `test.fail()`
+only after its setup has passed, so a failure in the setup is an ordinary failure and only the
+intended outcome is expected to fail. It declares in `events` and `routes` what it does today up to
+that point. When a fix lands, the test passes, Playwright reports that a test expected to fail
+passed, and the run turns red; the fix then removes `test.fail()`, the tag and `expectedFailure`.
+One scenario is of this kind: `stripe-stand-in-payment-and-return-in-one-payout`, for the limit in
+[ADR-054](../adr/ADR-054-stripe-sandbox-adapter.md#known-limits) that a payout holding both a payment
+and that payment's return cannot post.
 
 **Exemptions.** An event type or a route with no scenario, each with a `reason` and a `date`. There
 are two kinds:
@@ -83,6 +95,9 @@ So the event types the catalogue covers are the templates, and the business even
 - the catalogue names an event type or a route that does not exist;
 - a catalogue id has no tagged test in its `spec`, a tag names no catalogue entry, or a test has no
   scenario tag;
+- a test of a scenario with `expectedFailure` is not tagged `@expected-failure`, or a test with that
+  tag belongs to a scenario without it. `test.fail()` is called while the test runs, so the static
+  check reads the tag instead;
 - the generated table at the end of this page does not match the catalogue.
 
 No single job has both inputs, so two jobs run it:
@@ -118,6 +133,11 @@ with it.
 The result is written to `web/coverage/e2e/scenarios/` and joined to the run's summary. It also
 lists, without failing, the event types a scenario posted and does not declare.
 
+A scenario with `expectedFailure` is judged against what it declares, as any other. When it produced
+that, it is reported as an expected failure and not as verified, because its workflow does not yet do
+what its test says it should. When its test passed, the check fails: the limit it shows may be
+fixed.
+
 The coverage run does not make the `stand-in` pass yet, so the measured check reports a scenario of
 that pass as belonging to a pass that did not run, and does not judge it. Until it does, the
 `E2E (Stripe stand-in)` job of `ci.yml` is what runs those scenarios, on every pull request, with
@@ -136,7 +156,9 @@ that close a review drive the second one, so they share nothing with the two tha
 
 The Stripe stand-in scenarios use the stand-in payment fixture, a third database of the same shape.
 `./scripts/payment-fixture.ps1 init -StandIn` creates it. Its two organizations are bound to
-synthetic connected accounts, and the scenario so far drives the first.
+synthetic connected accounts. Seven scenarios drive the first, and set its card and ACH fee rules to
+what Stripe keeps. The expected failure drives the second, whose ACH rule charges a fixed fee beside
+Stripe's, so that the two share no payout and no fee rule.
 
 A scenario that changes how an account signs in does not use a seeded account. The database is not
 reset between specs, and no screen removes an authenticator, so the change would reach every later
@@ -190,7 +212,7 @@ not edit between the markers.
 <!-- scenario-catalogue:start -->
 <!-- prettier-ignore-start -->
 
-64 scenarios. 8 journal event types and 22 routes are exempt.
+71 scenarios, 1 of them an expected failure that shows a known limit. 8 journal event types and 22 routes are exempt.
 
 ### Scenarios
 
@@ -257,6 +279,13 @@ not edit between the markers.
 | `simulated-payment-review-closed` | A receipted simulated payment is disputed, and an administrator closes its review with a note by keyboard, with nothing reversed | Payments | `simulated-payment.spec.ts` | payment fixture | `PaymentReceived` | `POST /api/payments/{id}/close-review` |
 | `simulated-payment-payout-review-closed` | A payout that does not add up to the bank amount posts nothing, and an administrator closes it with a note by keyboard | Payments | `simulated-payment.spec.ts` |  |  | `POST /api/payments/settlements/{id}/close` |
 | `stripe-stand-in-card-to-posted-payout` | A tenant pays by card in the Stripe sandbox mode; the payout waits for the bank and posts when the bank evidence equals the processor's net | Payments | `stripe-stand-in.spec.ts` | stand-in payment fixture | `PaymentReceived` | `GET /api/portal/tenant/payments/quote`<br>`POST /api/portal/tenant/payments`<br>`GET /api/payments`<br>`GET /api/payments/settlements` |
+| `stripe-stand-in-ach-to-posted-payout` | A tenant pays by ACH debit in the Stripe sandbox mode under a fee rule that matches Stripe's; the debit is processing, then succeeds, and its payout posts when the bank evidence equals the processor's net | Payments | `stripe-stand-in.spec.ts` | stand-in payment fixture | `PaymentReceived` | `PUT /api/settings/payment-fees`<br>`GET /api/portal/tenant/payments/quote`<br>`POST /api/portal/tenant/payments`<br>`GET /api/payments/settlements` |
+| `stripe-stand-in-card-dispute` | Stripe reports a card dispute; the payment goes to staff review with nothing posted, and an administrator closes the review by keyboard | Payments | `stripe-stand-in.spec.ts` | stand-in payment fixture |  | `GET /api/payments`<br>`POST /api/payments/{id}/close-review` |
+| `stripe-stand-in-refund` | Stripe reports a refund in full and a refund of part of two receipted card payments; each goes to staff review, nothing is reversed, and an administrator closes both reviews | Payments | `stripe-stand-in.spec.ts` | stand-in payment fixture | `PaymentReceived` | `GET /api/payments`<br>`POST /api/payments/{id}/close-review` |
+| `stripe-stand-in-failed-payout` | Stripe says two payouts failed, one waiting for the bank and one already posted; both go to staff review with nothing reversed, and an administrator closes each | Payments | `stripe-stand-in.spec.ts` | stand-in payment fixture | `PaymentReceived` | `GET /api/payments/settlements`<br>`POST /api/payments/settlements/{id}/close` |
+| `stripe-stand-in-bank-amount-differs` | The bank receives a cent less than Stripe's net; the payout goes to review, the right amount afterwards is refused as conflicting, and an administrator closes the payout by keyboard | Payments | `stripe-stand-in.spec.ts` | stand-in payment fixture |  | `GET /api/payments/settlements`<br>`POST /api/payments/settlements/{id}/close` |
+| `stripe-stand-in-recorded-payout` | The one payout a sandbox has made arrives as recorded with its fifteen lines; it goes to review, bank evidence releases nothing, an administrator's post is refused, and the review is closed | Payments | `stripe-stand-in.spec.ts` | stand-in payment fixture |  | `GET /api/payments/settlements`<br>`POST /api/payments/settlements/{id}/post`<br>`POST /api/payments/settlements/{id}/close` |
+| `stripe-stand-in-payment-and-return-in-one-payout` | A payout holds an ACH debit and that debit's return; bank evidence equal to the net should let it post, with the receipt and its reversal **Expected to fail:** ADR-054 known limit: a payout that holds both a payment and that payment's return cannot post. Today it goes to review; the test fails where it asserts that the payout posts. | Payments | `stripe-stand-in.spec.ts` | stand-in payment fixture |  | `PUT /api/settings/payment-fees`<br>`GET /api/payments/settlements` |
 | `spa-boot` | The application loads and shows the sign-in screen | Platform | `smoke.spec.ts` |  |  |  |
 | `tenant-portal-staff-denied` | A staff member is refused the tenant portal and keeps the dashboard | Tenant portal | `tenant-portal.spec.ts` |  |  |  |
 | `tenant-portal-ledger-and-security` | A resident signs in, reads the ledger, reaches account security and signs out | Tenant portal | `tenant-portal.spec.ts` |  |  | `GET /api/portal/tenant/ledger`<br>`GET /api/portal/tenant/payments`<br>`POST /api/auth/logout` |

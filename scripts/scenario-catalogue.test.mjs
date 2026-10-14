@@ -7,6 +7,7 @@ import { routesFromOpenApi } from "./route-inventory.mjs";
 import {
   CATALOGUE_PATH,
   DOC_PATH,
+  EXPECTED_FAILURE_TAG,
   PASSES,
   checkEvents,
   checkRoutes,
@@ -194,6 +195,20 @@ describe("validateCatalogue", () => {
     );
   });
 
+  it("requires an expected failure to give its reason", () => {
+    const named = catalogue();
+    named.scenarios[1].expectedFailure =
+      "ADR-000 known limit: owners cannot be listed.";
+    assert.deepEqual(validateCatalogue(named), []);
+    for (const reason of ["", "  ", true]) {
+      named.scenarios[1].expectedFailure = reason;
+      assert.match(
+        validateCatalogue(named).join("\n"),
+        /browse-owners: `expectedFailure` is the reason its test is expected to fail/,
+      );
+    }
+  });
+
   it("requires a money scenario to name its organization", () => {
     const broken = catalogue();
     delete broken.scenarios[0].org;
@@ -361,6 +376,20 @@ describe("checkTags", () => {
     );
   });
 
+  it("requires the tests of an expected failure, and only those, to carry the expected-failure tag", () => {
+    const expected = catalogue();
+    expected.scenarios[1].expectedFailure = "ADR-000 known limit.";
+    const listed = tests();
+    assert.deepEqual(checkTags(expected, listed), [
+      'directory.spec.ts: "owners > lists" is a test of browse-owners, which the catalogue records as an expected failure, and is not tagged @expected-failure.',
+    ]);
+    listed[1].tags.push(EXPECTED_FAILURE_TAG);
+    assert.deepEqual(checkTags(expected, listed), []);
+    assert.deepEqual(checkTags(catalogue(), listed), [
+      'directory.spec.ts: "owners > lists" is tagged @expected-failure, and the catalogue records no `expectedFailure` for browse-owners.',
+    ]);
+  });
+
   it("fails when the tagged test is not in the spec the catalogue names", () => {
     const listed = tests();
     listed[1].file = "other.spec.ts";
@@ -439,6 +468,20 @@ describe("the generated document", () => {
     assert.match(
       text,
       /\| `GET \/api\/health` \| baseline gap \| 2026-10-12 \| #544 \|/,
+    );
+  });
+
+  it("says which scenarios are expected failures, and why", () => {
+    const expected = catalogue();
+    expected.scenarios[1].expectedFailure = "ADR-000 known limit.";
+    const text = renderDoc(expected);
+    assert.match(
+      text,
+      /^2 scenarios, 1 of them an expected failure that shows a known limit\. 2 journal event types/,
+    );
+    assert.match(
+      text,
+      /\| `browse-owners` \| Browse the owners list \*\*Expected to fail:\*\* ADR-000 known limit\. \| Directory \|/,
     );
   });
 
@@ -598,6 +641,43 @@ describe("verifyRun", () => {
     const text = renderEvidence(result);
     assert.match(text, /2 of 2 scenarios produced what they declare/);
     assert.match(text, /- `record-payment`: `EntryVoided`/);
+  });
+
+  it("reports an expected failure that produced what it declares as one, and not as verified", () => {
+    const expected = catalogue();
+    expected.scenarios[1].expectedFailure = "ADR-000 known limit.";
+    const tests = [
+      attempt(),
+      {
+        ...owners(),
+        tags: ["@scenario:browse-owners", EXPECTED_FAILURE_TAG],
+        status: "failed",
+      },
+    ];
+    const result = verify({ catalogue: expected, tests });
+    assert.deepEqual(result.problems, []);
+    assert.deepEqual(
+      result.rows.map((row) => [row.id, row.state]),
+      [
+        ["record-payment", "verified"],
+        ["browse-owners", "expected failure"],
+      ],
+    );
+    assert.match(
+      renderEvidence(result),
+      /2 of 2 scenarios produced what they declare, 1 of them as an expected failure that shows a known limit\. 0 did not/,
+    );
+  });
+
+  it("fails an expected failure whose test passed, since the limit it shows may be fixed", () => {
+    const expected = catalogue();
+    expected.scenarios[1].expectedFailure = "ADR-000 known limit.";
+    const { rows, problems } = verify({ catalogue: expected });
+    assert.equal(rows[1].state, "failed");
+    assert.deepEqual(problems, [
+      "Scenario browse-owners is recorded as an expected failure, and a test of it passed. The limit it shows may be fixed: " +
+        "remove `expectedFailure`, the @expected-failure tag and the test's `test.fail()`.",
+    ]);
   });
 
   it("puts the failures in the summary", () => {

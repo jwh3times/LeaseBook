@@ -26,8 +26,9 @@
  * Two surfaces:
  *
  *   /v1/...        what the adapter asks Stripe
- *   /stand-in/...  what a test tells the stand-in to do: move a payment along a recorded timeline,
- *                  form a payout from named payments, and read what has happened
+ *   /stand-in/...  what a test tells the stand-in to do: move a payment along a recorded timeline
+ *                  (paid, disputed, refunded), form a payout from named payments, serve the one
+ *                  recorded payout, fail a payout, and read what has happened
  *
  * docs/runbooks/payment-simulation.md owns the procedure, and says which answers are recorded
  * shapes with values substituted and which are built.
@@ -47,8 +48,11 @@ export const DEFAULT_ADDRESS = "http://127.0.0.1:4010";
 export const DEFAULT_CALLBACK =
   "http://127.0.0.1:5080/callbacks/payments/stripe";
 
+// The three recorded runs. Each numbers its synthetic identifiers from one, so an identifier means
+// something only beside the run it came from.
 const CARD_RUN = "2026-10-08T21-56-17-265Z";
 const PAYOUT_RUN = "2026-10-09T18-44-03-363Z";
+const DISPUTE_RUN = "2026-10-09T18-45-07-940Z";
 const LOOPBACK = ["127.0.0.1", "localhost", "[::1]"];
 const MAX_BODY = 64 * 1024;
 
@@ -141,12 +145,15 @@ function loadRecorded(root) {
   const read = (run, file) =>
     JSON.parse(readFileSync(join(root, FIXTURE_ROOT, run, file), "utf8"));
   const body = (run, file) => read(run, file).body;
-  const delivered = (file) => read(CARD_RUN, file).event;
+  const delivered = (file, run = CARD_RUN) => read(run, file).event;
   const lines = body(PAYOUT_RUN, "023-payout-lines.json");
   const line = (id) => lines.data.find((item) => item.id === id);
   const payoutEvents = body(PAYOUT_RUN, "029-payout-events.json");
   const payoutEvent = (type) =>
     payoutEvents.data.find((item) => item.type === type);
+  // An event Stripe listed and the probe was not sent: the refund events beyond the first two.
+  const listed = (run, file, id) =>
+    body(run, file).data.find((item) => item.id === id);
   return {
     platformAccount: body(CARD_RUN, "001-platform-account.json"),
     connectedAccount: body(CARD_RUN, "002-connected-account.json"),
@@ -161,6 +168,65 @@ function loadRecorded(root) {
       ],
       // The balance line of a card charge in the one recorded payout.
       line: line("txn_synthetic000012"),
+      // A card payment Stripe disputed: its two dispute events, and its charge as Stripe then held it.
+      dispute: {
+        events: [
+          delivered("007-webhook-connect.json", DISPUTE_RUN),
+          delivered("008-webhook-connect.json", DISPUTE_RUN),
+        ],
+        charge: body(DISPUTE_RUN, "009-card-dispute-charge.json"),
+      },
+      // A refund in full and a refund of part. The first two events of each are in the refund run,
+      // where only `charge.refunded` of the partial one was delivered; the last two were listed in
+      // the dispute run, under that run's own identifiers.
+      refund: {
+        full: [
+          delivered("016-webhook-connect.json", PAYOUT_RUN),
+          delivered("017-webhook-connect.json", PAYOUT_RUN),
+        ],
+        fullLater: [
+          listed(DISPUTE_RUN, "014-events-api.json", "evt_synthetic000008"),
+          listed(DISPUTE_RUN, "014-events-api.json", "evt_synthetic000007"),
+        ],
+        part: [
+          listed(PAYOUT_RUN, "024-events-api.json", "evt_synthetic000010"),
+          delivered("021-webhook-connect.json", PAYOUT_RUN),
+        ],
+        partLater: [
+          listed(DISPUTE_RUN, "014-events-api.json", "evt_synthetic000010"),
+          listed(DISPUTE_RUN, "014-events-api.json", "evt_synthetic000009"),
+        ],
+      },
+    },
+    ach: {
+      // What Stripe answered an ACH debit with, the eight events it then sent, in the order sent,
+      // and the payment and its charge as Stripe held them once the debit had succeeded.
+      intent: body(CARD_RUN, "019-ach-create.json"),
+      events: [
+        delivered("020-webhook-connect.json"),
+        delivered("021-webhook-connect.json"),
+        delivered("022-webhook-connect.json"),
+        delivered("023-webhook-connect.json"),
+        delivered("024-webhook-connect.json"),
+        delivered("025-webhook-connect.json"),
+        delivered("026-webhook-connect.json"),
+        delivered("027-webhook-connect.json"),
+      ],
+      final: body(CARD_RUN, "028-ach-final.json"),
+      charge: body(CARD_RUN, "029-ach-charge.json"),
+      // The balance line of that same debit in the one recorded payout: $504.03, of which $4.03 kept.
+      line: line("txn_synthetic000011"),
+      // An ACH debit Stripe disputed after it succeeded: the three dispute events, the charge Stripe
+      // held for it, and the dispute's balance line in the one recorded payout.
+      dispute: {
+        events: [
+          delivered("058-webhook-connect.json"),
+          delivered("059-webhook-connect.json"),
+          delivered("060-webhook-connect.json"),
+        ],
+        charge: body(CARD_RUN, "052-ach-dispute-charge.json"),
+        line: line("txn_synthetic000007"),
+      },
     },
     idempotencyChanged: read(CARD_RUN, "054-idempotent-changed.json"),
     list: {
@@ -176,40 +242,148 @@ function loadRecorded(root) {
         payoutEvent("payout.updated"),
       ],
       ownLine: line("txn_synthetic000005"),
+      // Every balance line Stripe listed for it, the payout's own first.
+      lines: lines.data,
     },
   };
 }
 
-/** The identifiers and values a recorded card payment is known by, to be replaced. */
+/**
+ * The identifiers and values a recorded payment is known by in one group of recorded objects, to
+ * be replaced with a payment's own. `created` is when the recorded payment was made. `at`, where
+ * there is one, is when the first event of a later timeline was made: a time from then on is moved
+ * to this moment, and an earlier one by as much as the payment's own creation was.
+ */
+const RECORDED_ACCOUNT = "acct_synthetic000002";
 const RECORDED_CARD = {
   intent: "pi_synthetic000001",
   charge: "ch_synthetic000001",
   line: "txn_synthetic000001",
-  account: "acct_synthetic000002",
   amount: 51524,
   created: 1791496583,
 };
-// The recorded payout's line for a card charge. The charge inside it is replaced whole.
-const RECORDED_CARD_LINE = {
-  line: "txn_synthetic000012",
+const RECORDED_ACH = {
+  intent: "pi_synthetic000004",
+  charge: "py_synthetic000001",
+  line: "txn_synthetic000003",
+  amount: 50403,
+  fee: 403,
+  net: 50000,
+  created: 1791496593,
+};
+// The card payment of the dispute run, which Stripe disputed in the second it succeeded.
+const RECORDED_CARD_DISPUTE = {
+  intent: "pi_synthetic000001",
+  charge: "ch_synthetic000001",
+  line: "txn_synthetic000002",
+  dispute: "du_synthetic000001",
+  disputeLine: "txn_synthetic000001",
   amount: 20000,
   fee: 610,
   net: 19390,
+  taken: 21500,
+  created: 1791571514,
+  at: 1791571526,
 };
+// The ACH debit of the first run that Stripe disputed about ten minutes after it succeeded.
+const RECORDED_ACH_DISPUTE = {
+  intent: "pi_synthetic000006",
+  charge: "py_synthetic000003",
+  line: "txn_synthetic000006",
+  dispute: "du_synthetic000001",
+  disputeLine: "txn_synthetic000007",
+  amount: 20000,
+  fee: 160,
+  net: 19840,
+  taken: 21500,
+  created: 1791496659,
+  at: 1791497247,
+};
+// The two refunded card payments, as the refund run names them and as the dispute run does.
+const RECORDED_REFUND = {
+  full: {
+    intent: "pi_synthetic000002",
+    charge: "ch_synthetic000001",
+    line: "txn_synthetic000001",
+    refund: "re_synthetic000001",
+    refundLine: "txn_synthetic000003",
+    amount: 20000,
+    created: 1791571478,
+    at: 1791571487,
+  },
+  fullLater: {
+    intent: "pi_synthetic000011",
+    charge: "ch_synthetic000004",
+    line: "txn_synthetic000020",
+    refund: "re_synthetic000001",
+    refundLine: "txn_synthetic000017",
+    amount: 20000,
+    created: 1791571478,
+    at: 1791571487,
+  },
+  part: {
+    intent: "pi_synthetic000003",
+    charge: "ch_synthetic000003",
+    line: "txn_synthetic000002",
+    refund: "re_synthetic000002",
+    refundLine: "txn_synthetic000004",
+    amount: 20000,
+    refunded: 5000,
+    created: 1791571483,
+    at: 1791571488,
+  },
+  partLater: {
+    intent: "pi_synthetic000012",
+    charge: "ch_synthetic000005",
+    line: "txn_synthetic000019",
+    refund: "re_synthetic000002",
+    refundLine: "txn_synthetic000018",
+    amount: 20000,
+    refunded: 5000,
+    created: 1791571483,
+    at: 1791571488,
+  },
+};
+// The recorded payout's line for a charge of each kind. The charge inside it is replaced whole.
+const RECORDED_LINE = {
+  card: { line: "txn_synthetic000012", amount: 20000, fee: 610, net: 19390 },
+  ach: { line: "txn_synthetic000011", amount: 50403, fee: 403, net: 50000 },
+};
+// The recorded payout's line for a disputed ACH debit: the whole charge taken back, and a fee.
+const RECORDED_DISPUTE_LINE = {
+  line: "txn_synthetic000007",
+  dispute: "du_synthetic000001",
+  charge: "py_synthetic000002",
+  intent: "pi_synthetic000005",
+  amount: 20000,
+  taken: 21500,
+};
+/** What Stripe took for a dispute beside the amount, in every recording: $15.00. */
+export const DISPUTE_FEE = 1500;
 const RECORDED_PAYOUT = {
   payout: "po_synthetic000001",
   line: "txn_synthetic000005",
-  account: "acct_synthetic000002",
+  account: RECORDED_ACCOUNT,
   amount: 147060,
   paid: 1791506838,
+  // The charges behind its two dispute lines, and the payment each names. Stripe is asked for
+  // them, and no recording holds either: the tests that replay this payout build them from the
+  // recorded charge of the disputed ACH debit, and so does this.
+  disputed: [
+    ["py_synthetic000002", "pi_synthetic000005"],
+    ["py_synthetic000005", "pi_synthetic000009"],
+  ],
 };
 
 /**
- * What a test payment method does. A method not listed is refused as unknown. Later timelines are
- * added here and under `TIMELINES`; nothing else names a method.
+ * What a test payment method does. A method not listed is refused as unknown. A payment's later
+ * life is told to the stand-in through `TIMELINES`; nothing else names a method. A fixture binds
+ * one card method and one ACH method, so a dispute or a refund is a timeline a test starts, and
+ * not a method of its own as it is at Stripe.
  */
 const PAYMENT_METHODS = {
   pm_card_visa: { method: "card", status: "succeeded" },
+  pm_usBankAccount_success: { method: "ach", status: "processing" },
 };
 
 // --- The stand-in ----------------------------------------------------------------------------
@@ -234,6 +408,8 @@ export function createStandIn({
       {
         payments: new Map(),
         payouts: new Map(),
+        // Charges Stripe holds that are no payment's of this run: those the recorded payout names.
+        charges: new Map(),
         events: [],
         idempotency: new Map(),
       },
@@ -292,6 +468,7 @@ export function createStandIn({
       "automatic_payment_methods[allow_redirects]",
       "metadata[leasebook_operation]",
       "metadata[leasebook_generation]",
+      "mandate_data[customer_acceptance][type]",
     ]);
     const stranger = [...form.keys()].find((key) => !known.has(key));
     if (stranger)
@@ -334,13 +511,17 @@ export function createStandIn({
       form.get("automatic_payment_methods[enabled]") !== "true" ||
       form.get("automatic_payment_methods[allow_redirects]") !== "never" ||
       !operation ||
-      !generation
+      !generation ||
+      // An ACH debit carries a mandate accepted offline, and a card charge carries none.
+      (form.get("mandate_data[customer_acceptance][type]") ?? null) !==
+        (how.method === "ach" ? "offline" : null)
     )
       throw new Unknown("A charge was not made as the adapter makes one.");
     const created = now();
     const payment = {
       id: newId("pi"),
-      charge: newId("ch"),
+      // Stripe names a card charge `ch_` and an ACH debit `py_`.
+      charge: newId(how.method === "ach" ? "py" : "ch"),
       line: newId("txn"),
       account,
       operation,
@@ -354,33 +535,76 @@ export function createStandIn({
       // Whether Stripe has said it was paid, which is what a payout may then hold.
       paid: false,
       payout: null,
+      // The dispute and the refund Stripe holds for it, once a timeline has made one, and the
+      // payout that carries an ACH dispute's line.
+      dispute: null,
+      disputeLine: null,
+      disputedAt: null,
+      returnPayout: null,
+      refund: null,
+      refundLine: null,
+      refunded: null,
       timelines: [],
     };
-    payment.intent = asPayment(recorded.card.intent, payment);
-    // The charge as its last recorded event left it, with its balance line attached.
-    payment.chargeObject = asPayment(
-      recorded.card.events.at(-1).data.object,
-      payment,
-    );
+    if (how.method === "ach") {
+      // Processing, with its charge pending, until the debit succeeds.
+      payment.intent = asPayment(recorded.ach.intent, payment, RECORDED_ACH);
+      payment.chargeObject = asPayment(
+        recorded.ach.events[2].data.object,
+        payment,
+        RECORDED_ACH,
+      );
+    } else {
+      payment.intent = asPayment(recorded.card.intent, payment, RECORDED_CARD);
+      // The charge as its last recorded event left it, with its balance line attached.
+      payment.chargeObject = asPayment(
+        recorded.card.events.at(-1).data.object,
+        payment,
+        RECORDED_CARD,
+      );
+    }
     book.payments.set(payment.id, payment);
     book.idempotency.set(idempotencyKey, { fingerprint, id: payment.id });
     return { status: 200, body: payment.intent };
   }
 
-  // A recorded object of the card payment, made this payment's: its ids, amount, times and the two
-  // ids of LeaseBook's it carries. A time is moved by as much as the payment's own was, and never
-  // past this moment.
-  function asPayment(object, payment) {
+  // A recorded object about a payment, made this payment's: its ids, amounts, times and the two
+  // ids of LeaseBook's it carries. `was` says what the recorded payment was known by. A time is
+  // moved by as much as the payment's own creation was, or to this moment when it belongs to a
+  // later timeline, and never past this moment.
+  function asPayment(object, payment, was) {
+    const net = payment.amount - payment.fee;
+    const ids = {
+      [was.intent]: payment.id,
+      [was.charge]: payment.charge,
+      [was.line]: payment.line,
+      [RECORDED_ACCOUNT]: payment.account,
+    };
+    const amounts = { [was.amount]: payment.amount };
+    if (was.fee !== undefined) amounts[was.fee] = payment.fee;
+    if (was.net !== undefined) amounts[was.net] = net;
+    if (was.dispute !== undefined) {
+      ids[was.dispute] = payment.dispute;
+      ids[was.disputeLine] = payment.disputeLine;
+      amounts[-was.amount] = -payment.amount;
+      amounts[-was.taken] = -(payment.amount + DISPUTE_FEE);
+    }
+    if (was.refund !== undefined) {
+      ids[was.refund] = payment.refund;
+      ids[was.refundLine] = payment.refundLine;
+      if (was.refunded !== undefined) amounts[was.refunded] = payment.refunded;
+    }
+    const moment = now();
     const copy = substitute(object, {
-      ids: {
-        [RECORDED_CARD.intent]: payment.id,
-        [RECORDED_CARD.charge]: payment.charge,
-        [RECORDED_CARD.line]: payment.line,
-        [RECORDED_CARD.account]: payment.account,
-      },
-      amounts: { [RECORDED_CARD.amount]: payment.amount },
+      ids,
+      amounts,
       time: (at) =>
-        Math.min(now(), at + payment.created - RECORDED_CARD.created),
+        Math.min(
+          moment,
+          was.at !== undefined && at >= was.at
+            ? at + moment - was.at
+            : at + payment.created - was.created,
+        ),
     });
     const stamp = (value) => {
       if (Array.isArray(value)) return value.forEach(stamp);
@@ -449,9 +673,8 @@ export function createStandIn({
       const payment = [...book.payments.values()].find(
         (item) => item.charge === charge[1],
       );
-      return payment
-        ? { status: 200, body: payment.chargeObject }
-        : missing("charge", charge[1]);
+      const held = payment?.chargeObject ?? book.charges.get(charge[1]);
+      return held ? { status: 200, body: held } : missing("charge", charge[1]);
     }
     if (method === "GET" && path === "/v1/events") {
       const since = Number(query.get("created[gte]") ?? 0);
@@ -512,43 +735,183 @@ export function createStandIn({
     return sent;
   }
 
+  // The events of a timeline as this payment's: each a recorded event under an id of its own.
+  // `own` says the request that caused the recorded event was the charge itself, whose idempotency
+  // key is then this payment's.
+  const asEvents = (events, payment, was, { own = false } = {}) =>
+    events.map((event) => {
+      const copy = asPayment(event, payment, was);
+      copy.id = newId("evt");
+      if (own && copy.request?.idempotency_key)
+        copy.request.idempotency_key = payment.idempotencyKey;
+      return copy;
+    });
+
   /**
    * The recorded timelines a payment can be moved along, by name. Each sends, in the order Stripe
-   * sent them, the events recorded for a payment of that kind. A later timeline is one more entry.
+   * sent them, the events recorded for a payment of that kind. `after` names what must have
+   * happened to the payment first, and `then` what the payment is at Stripe afterwards. A later
+   * timeline is one more entry.
    */
   const TIMELINES = {
     // A card payment that succeeds: `charge.succeeded`, `payment_intent.succeeded`,
     // `payment_intent.created`, and `charge.updated` once the balance line exists.
     "card-succeeds": {
       method: "card",
-      paid: true,
       events: (payment) =>
-        recorded.card.events.map((event) => {
-          const copy = asPayment(event, payment);
-          copy.id = newId("evt");
-          if (copy.request?.idempotency_key)
-            copy.request.idempotency_key = payment.idempotencyKey;
-          return copy;
+        asEvents(recorded.card.events, payment, RECORDED_CARD, { own: true }),
+      then: (payment) => {
+        payment.paid = true;
+      },
+    },
+    // An ACH debit that succeeds: `payment_intent.processing`, `payment_intent.created` and
+    // `charge.pending` at once, then `charge.updated` with the balance line, two `mandate.updated`,
+    // `payment_intent.succeeded` and `charge.succeeded`. Stripe took about twenty seconds over it.
+    "ach-succeeds": {
+      method: "ach",
+      events: (payment) =>
+        asEvents(recorded.ach.events, payment, RECORDED_ACH, { own: true }),
+      then: (payment) => {
+        payment.paid = true;
+        payment.status = "succeeded";
+        payment.intent = asPayment(recorded.ach.final, payment, RECORDED_ACH);
+        payment.chargeObject = asPayment(
+          recorded.ach.charge,
+          payment,
+          RECORDED_ACH,
+        );
+      },
+    },
+    // A card payment Stripe says is disputed: `charge.dispute.created` and
+    // `charge.dispute.funds_withdrawn`, the dispute open and needing a response.
+    "card-disputed": {
+      method: "card",
+      after: ["card-succeeds"],
+      begin: (payment) => {
+        payment.dispute = newId("du");
+        payment.disputeLine = newId("txn");
+        payment.disputedAt = now();
+      },
+      events: (payment) =>
+        asEvents(recorded.card.dispute.events, payment, RECORDED_CARD_DISPUTE, {
+          own: true,
         }),
+      then: (payment) => {
+        payment.chargeObject = asPayment(
+          recorded.card.dispute.charge,
+          payment,
+          RECORDED_CARD_DISPUTE,
+        );
+      },
+    },
+    // An ACH debit the bank took back, which Stripe reports as a dispute already lost:
+    // `charge.dispute.created`, `charge.dispute.funds_withdrawn` and `charge.dispute.closed`.
+    "ach-disputed": {
+      method: "ach",
+      after: ["ach-succeeds"],
+      begin: (payment) => {
+        payment.dispute = newId("du");
+        payment.disputeLine = newId("txn");
+        payment.disputedAt = now();
+      },
+      events: (payment) =>
+        asEvents(recorded.ach.dispute.events, payment, RECORDED_ACH_DISPUTE),
+      then: (payment) => {
+        payment.chargeObject = asPayment(
+          recorded.ach.dispute.charge,
+          payment,
+          RECORDED_ACH_DISPUTE,
+        );
+      },
+    },
+    // A card payment refunded in full at Stripe: `refund.created` and `charge.refunded`, then
+    // `refund.updated` and `charge.refund.updated`.
+    "card-refunded": {
+      method: "card",
+      after: ["card-succeeds"],
+      never: ["card-refunded-in-part"],
+      begin: (payment) => {
+        payment.refund = newId("re");
+        payment.refundLine = newId("txn");
+        payment.refunded = payment.amount;
+      },
+      events: (payment) => [
+        ...asEvents(recorded.card.refund.full, payment, RECORDED_REFUND.full),
+        ...asEvents(
+          recorded.card.refund.fullLater,
+          payment,
+          RECORDED_REFUND.fullLater,
+        ),
+      ],
+      then: (payment) => {
+        payment.chargeObject = asPayment(
+          recorded.card.refund.full[1].data.object,
+          payment,
+          RECORDED_REFUND.full,
+        );
+      },
+    },
+    // A card payment of which a part was refunded: the same four events, with the amount refunded
+    // so far on the charge. The test names the part, in cents.
+    "card-refunded-in-part": {
+      method: "card",
+      after: ["card-succeeds"],
+      never: ["card-refunded"],
+      begin: (payment, given) => {
+        const part = given.refund;
+        if (!Number.isInteger(part) || part <= 0 || part >= payment.amount)
+          throw new Unknown(
+            "A refund of part names `refund`, in cents: more than nothing and less than the charge.",
+            400,
+          );
+        payment.refund = newId("re");
+        payment.refundLine = newId("txn");
+        payment.refunded = part;
+      },
+      events: (payment) => [
+        ...asEvents(recorded.card.refund.part, payment, RECORDED_REFUND.part),
+        ...asEvents(
+          recorded.card.refund.partLater,
+          payment,
+          RECORDED_REFUND.partLater,
+        ),
+      ],
+      then: (payment) => {
+        payment.chargeObject = asPayment(
+          recorded.card.refund.part[1].data.object,
+          payment,
+          RECORDED_REFUND.part,
+        );
+      },
     },
   };
 
-  async function runTimeline(operation, name, send) {
-    const timeline = TIMELINES[name];
+  async function runTimeline(operation, given, send) {
+    const name = given.timeline;
+    const timeline = Object.hasOwn(TIMELINES, name) ? TIMELINES[name] : null;
     if (!timeline)
       throw new Unknown(`No recorded timeline named ${name}.`, 400);
     const payment = paymentFor(operation);
-    if (payment.method !== timeline.method || payment.timelines.includes(name))
+    if (
+      payment.method !== timeline.method ||
+      payment.timelines.includes(name) ||
+      (timeline.after ?? []).some(
+        (first) => !payment.timelines.includes(first),
+      ) ||
+      (timeline.never ?? []).some((other) => payment.timelines.includes(other))
+    )
       throw new Unknown(
-        `The timeline ${name} does not apply to payment ${operation}, or has already run.`,
+        `The timeline ${name} does not apply to payment ${operation} as it stands, or has already run.`,
         409,
       );
+    timeline.begin?.(payment, given);
     payment.timelines.push(name);
     const book = held.get(payment.account);
+    // What Stripe holds changes first, and its events say so afterwards.
+    const events = timeline.events(payment);
+    timeline.then?.(payment);
     const sent = [];
-    for (const event of timeline.events(payment))
-      sent.push(await happen(book, event, send));
-    if (timeline.paid) payment.paid = true;
+    for (const event of events) sent.push(await happen(book, event, send));
     return { payment: payment.id, deliveries: sent };
   }
 
@@ -560,37 +923,57 @@ export function createStandIn({
   }
 
   /**
-   * Forms one automatic payout from the payments named and sends its events. Stripe decides what a
-   * payout covers; here the test does, standing in for Stripe. The payout's own line and its events
-   * are the recorded ones, and each payment's line is the recorded line of a charge of its kind,
-   * all with this payout's ids, amounts and times. No recorded payout holds only good payments, so
-   * the whole is built from those shapes.
+   * Forms one automatic payout and sends its events. Stripe decides what a payout covers; here the
+   * test does, standing in for Stripe: the payments it names, and under `returns` the payments
+   * whose ACH dispute the payout also carries. The payout's own line and its events are the
+   * recorded ones, each payment's line is the recorded line of a charge of its kind, and each
+   * dispute's line is the recorded line of a disputed ACH debit, all with this payout's ids,
+   * amounts and times. No recorded payout holds only good payments, so the whole is built from
+   * those shapes.
    */
-  async function formPayout(operations, send) {
-    if (!Array.isArray(operations) || operations.length === 0)
+  async function formPayout(given, send) {
+    const operations = given.payments;
+    const returned = given.returns ?? [];
+    if (
+      !Array.isArray(operations) ||
+      !Array.isArray(returned) ||
+      operations.length === 0
+    )
       throw new Unknown("A payout is formed from at least one payment.", 400);
     const payments = operations.map(paymentFor);
+    const disputes = returned.map(paymentFor);
     const account = payments[0].account;
     if (
       new Set(operations).size !== operations.length ||
+      new Set(returned).size !== returned.length ||
       payments.some(
         (payment) =>
           payment.account !== account ||
           payment.payout !== null ||
           !payment.paid,
+      ) ||
+      disputes.some(
+        (payment) =>
+          payment.account !== account ||
+          payment.returnPayout !== null ||
+          !payment.timelines.includes("ach-disputed"),
       )
     )
       throw new Unknown(
-        "A payout holds payments of one account that Stripe has said were paid and that are in no other payout.",
+        "A payout holds payments of one account that Stripe has said were paid and that are in no other payout, and the disputes of ACH debits that are in no other payout.",
+        409,
+      );
+    const amount =
+      payments.reduce((sum, payment) => sum + payment.amount - payment.fee, 0) -
+      disputes.reduce((sum, payment) => sum + payment.amount + DISPUTE_FEE, 0);
+    if (amount <= 0)
+      throw new Unknown(
+        "What the payout holds comes to nothing or less, and Stripe pays out only a balance.",
         409,
       );
     const book = held.get(account);
     const id = newId("po");
     const ownLine = newId("txn");
-    const amount = payments.reduce(
-      (sum, payment) => sum + payment.amount - payment.fee,
-      0,
-    );
     const paid = now();
     const midnight = paid - (paid % 86400);
     const asPayout = (object) => {
@@ -622,12 +1005,13 @@ export function createStandIn({
     const lines = [
       asPayout(recorded.payout.ownLine),
       ...payments.map((payment) => {
-        const line = substitute(recorded.card.line, {
-          ids: { [RECORDED_CARD_LINE.line]: payment.line },
+        const was = RECORDED_LINE[payment.method];
+        const line = substitute(recorded[payment.method].line, {
+          ids: { [was.line]: payment.line },
           amounts: {
-            [RECORDED_CARD_LINE.amount]: payment.amount,
-            [RECORDED_CARD_LINE.fee]: payment.fee,
-            [RECORDED_CARD_LINE.net]: payment.amount - payment.fee,
+            [was.amount]: payment.amount,
+            [was.fee]: payment.fee,
+            [was.net]: payment.amount - payment.fee,
           },
           time: () => payment.created,
         });
@@ -635,6 +1019,23 @@ export function createStandIn({
         line.source = payment.chargeObject;
         return line;
       }),
+      // The whole charge taken back and Stripe's fee with it, with the dispute it came from.
+      ...disputes.map((payment) =>
+        substitute(recorded.ach.dispute.line, {
+          ids: {
+            [RECORDED_DISPUTE_LINE.line]: payment.disputeLine,
+            [RECORDED_DISPUTE_LINE.dispute]: payment.dispute,
+            [RECORDED_DISPUTE_LINE.charge]: payment.charge,
+            [RECORDED_DISPUTE_LINE.intent]: payment.id,
+          },
+          amounts: {
+            [RECORDED_DISPUTE_LINE.amount]: payment.amount,
+            [-RECORDED_DISPUTE_LINE.amount]: -payment.amount,
+            [-RECORDED_DISPUTE_LINE.taken]: -(payment.amount + DISPUTE_FEE),
+          },
+          time: () => payment.disputedAt,
+        }),
+      ),
     ];
     const made = {
       id,
@@ -643,11 +1044,15 @@ export function createStandIn({
       status: "paid",
       // The payout as its last event left it.
       object: events.at(-1).data.object,
+      paidEvent: events.find((event) => event.type === "payout.paid"),
       lines,
       payments: payments.map((payment) => payment.operation),
+      returns: disputes.map((payment) => payment.operation),
+      recorded: false,
     };
     book.payouts.set(id, made);
     for (const payment of payments) payment.payout = id;
+    for (const payment of disputes) payment.returnPayout = id;
     const sent = [];
     for (const event of events) sent.push(await happen(book, event, send));
     return {
@@ -657,6 +1062,91 @@ export function createStandIn({
       net: (amount / 100).toFixed(2),
       deliveries: sent,
     };
+  }
+
+  /**
+   * Holds the one payout a sandbox has really made, and sends its four events: $1,470.60, with the
+   * fourteen balance lines Stripe listed for it. Everything is as recorded but two things. The
+   * connected account is the fixture's. And the payout's own id is new each time, because a
+   * fixture's database is kept from one run to the next and a payout is known there by its id; the
+   * lines keep their recorded ids, amounts and times, and name the payments of the three fixture
+   * generations that made them, none of which is this fixture's. The charges behind its two
+   * dispute lines are built, as `RECORDED_PAYOUT.disputed` says.
+   */
+  async function recordedPayout(given, send) {
+    const account = given.account ?? [...held.keys()][0];
+    const book = held.get(account);
+    if (!book)
+      throw new Unknown(
+        "The recorded payout was asked for on an account this stand-in does not hold.",
+        404,
+      );
+    const id = newId("po");
+    const asHeld = (object) =>
+      substitute(object, {
+        ids: {
+          [RECORDED_PAYOUT.payout]: id,
+          [RECORDED_PAYOUT.account]: account,
+        },
+      });
+    const events = recorded.payout.events.map((event) => {
+      const copy = asHeld(event);
+      copy.id = newId("evt");
+      return copy;
+    });
+    for (const [charge, payment] of RECORDED_PAYOUT.disputed)
+      book.charges.set(charge, {
+        ...structuredClone(recorded.ach.dispute.charge),
+        id: charge,
+        payment_intent: payment,
+      });
+    book.payouts.set(id, {
+      id,
+      account,
+      amount: RECORDED_PAYOUT.amount,
+      status: "paid",
+      object: events.at(-1).data.object,
+      paidEvent: events.find((event) => event.type === "payout.paid"),
+      lines: recorded.payout.lines.map(asHeld),
+      payments: [],
+      returns: [],
+      recorded: true,
+    });
+    const sent = [];
+    for (const event of events) sent.push(await happen(book, event, send));
+    return {
+      id,
+      account,
+      amount: RECORDED_PAYOUT.amount,
+      net: (RECORDED_PAYOUT.amount / 100).toFixed(2),
+      lines: recorded.payout.lines.length,
+      deliveries: sent,
+    };
+  }
+
+  /**
+   * Says a payout failed, as Stripe can of one it marked paid. No payout has failed in a sandbox,
+   * so `payout.failed` is not recorded: it is built as the adapter's tests build it, from the
+   * payout's own `payout.paid` event with the status `failed` and a failure code.
+   */
+  async function failPayout(id, send) {
+    const book = [...held.values()].find((item) => item.payouts.has(id));
+    if (!book) throw new Unknown(`No payout ${id} to fail.`, 404);
+    const made = book.payouts.get(id);
+    if (made.status === "failed")
+      throw new Unknown(`The payout ${id} has already failed.`, 409);
+    const failed = structuredClone(made.paidEvent);
+    failed.id = newId("evt");
+    failed.type = "payout.failed";
+    failed.created = Math.max(now(), failed.created);
+    Object.assign(failed.data.object, {
+      status: "failed",
+      failure_code: "account_closed",
+      failure_message: "[scrubbed]",
+    });
+    made.status = "failed";
+    made.object = failed.data.object;
+    return { id, deliveries: [await happen(book, failed, send)] };
   }
 
   // --- /stand-in: what a test tells it ---------------------------------------------------------
@@ -676,6 +1166,9 @@ export function createStandIn({
           paid: payment.paid,
           timelines: payment.timelines,
           payout: payment.payout,
+          dispute: payment.dispute,
+          returnPayout: payment.returnPayout,
+          refunded: payment.refunded,
         })),
       ),
       payouts: [...held.values()].flatMap((book) =>
@@ -685,6 +1178,8 @@ export function createStandIn({
           amount: payout.amount,
           status: payout.status,
           payments: payout.payments,
+          returns: payout.returns,
+          recorded: payout.recorded,
         })),
       ),
       deliveries,
@@ -702,16 +1197,23 @@ export function createStandIn({
     if (method === "POST" && timeline)
       return {
         status: 200,
-        body: await runTimeline(
-          timeline[1],
-          body.timeline,
-          body.deliver !== false,
-        ),
+        body: await runTimeline(timeline[1], body, body.deliver !== false),
       };
     if (method === "POST" && path === "/stand-in/payouts")
       return {
         status: 200,
-        body: await formPayout(body.payments, body.deliver !== false),
+        body: await formPayout(body, body.deliver !== false),
+      };
+    if (method === "POST" && path === "/stand-in/payouts/recorded")
+      return {
+        status: 200,
+        body: await recordedPayout(body, body.deliver !== false),
+      };
+    const failing = /^\/stand-in\/payouts\/(po_[A-Za-z0-9]+)\/fail$/.exec(path);
+    if (method === "POST" && failing)
+      return {
+        status: 200,
+        body: await failPayout(failing[1], body.deliver !== false),
       };
     throw new Unknown(
       `${method} ${path} is not a request this stand-in knows.`,
