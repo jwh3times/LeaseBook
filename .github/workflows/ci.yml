@@ -153,6 +153,12 @@ jobs:
       - name: Test the Stripe sandbox probe and its fixture guard
         working-directory: ${{ github.workspace }}
         run: node --test scripts/stripe-probe.test.mjs
+      # The local stand-in for Stripe that the `E2E (Stripe stand-in)` job drives a host against. These
+      # are its own tests: what it answers, what it refuses, and that its deliveries are signed as
+      # Stripe signs them. They start no host and no browser.
+      - name: Test the Stripe stand-in
+        working-directory: ${{ github.workspace }}
+        run: node --test scripts/stripe-stand-in.test.mjs
       # The coverage scripts (ADR-055): the per-module summary every coverage step prints, the route
       # matcher behind the route inventory, and the e2e coverage runner's guard that every spec
       # takes `test` from the recording fixture. The runner itself only runs in coverage.yml.
@@ -409,6 +415,105 @@ jobs:
           path: |
             web/playwright-report/
             web/playwright-report-payments/
+            web/test-results/
+          retention-days: 7
+
+  # The Stripe sandbox mode, driven through the tenant and staff screens (ADR-054, #545). A job of its
+  # own beside `e2e`, so that neither waits for the other. The host runs in `StripeSandbox` mode
+  # against `scripts/stripe-stand-in.mjs` on loopback, which answers from the recorded payloads under
+  # `tests/fixtures/stripe/` and sends the host signed deliveries. Nothing here calls Stripe:
+  #
+  #   - The host holds the stand-in's own key and no other. Its settings admit that key only beside a
+  #     loopback address and refuse it without one, so it cannot be sent to Stripe.
+  #   - No Stripe key and no webhook secret of Stripe's is in this job. The signing secret is made
+  #     by `web/playwright.config.ts` for the run and is never written down.
+  #   - As a tripwire, Stripe's hosts resolve to nothing for the whole job (first step), and the
+  #     step proves it. A request to Stripe would then fail and not be made quietly.
+  e2e-stand-in:
+    name: E2E (Stripe stand-in)
+    runs-on: ubuntu-latest
+    # Not yet measured on a hosted runner. Estimated at 4 to 5 min from the `e2e` job's setup steps
+    # and a local run of the one scenario (about 30 s with the host already built). Re-measure once
+    # it has run, and when scenarios are added. `playwright install` is the step that has hung.
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: dev_postgres_pw
+          POSTGRES_DB: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      ASPNETCORE_ENVIRONMENT: Development
+      # The stand-in fixture's own database, as the app role, on the service container.
+      ConnectionStrings__Default: Host=localhost;Port=5432;Database=leasebook_payment_fixture_standin;Username=leasebook_app;Password=dev_app_pw
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Make Stripe unreachable from this job
+        run: |
+          echo '0.0.0.0 api.stripe.com files.stripe.com connect.stripe.com meter-events.stripe.com hooks.stripe.com m.stripe.com' | sudo tee -a /etc/hosts > /dev/null
+          if curl --silent --show-error --max-time 10 --output /dev/null https://api.stripe.com/; then
+            echo '::error::api.stripe.com is still reachable from this job.'
+            exit 1
+          fi
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '26'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      # For the three database roles. The `leasebook` database it also creates is not used here.
+      - name: Create database roles (bootstrap.sql)
+        run: psql "host=localhost port=5432 user=postgres dbname=postgres" -v ON_ERROR_STOP=1 -f infra/db/bootstrap.sql
+        env:
+          PGPASSWORD: dev_postgres_pw
+      - run: dotnet tool restore
+      - run: dotnet restore src/LeaseBook.Web
+      # A sandbox fixture bound to synthetic connected accounts, in a database and manifest of its
+      # own. The script applies the migrations and seeds two organizations; it makes no call to Stripe.
+      - name: Initialize the stand-in payment fixture
+        shell: pwsh
+        run: ./scripts/payment-fixture.ps1 init -StandIn -Container '${{ job.services.postgres.id }}' -Port 5432
+      - name: Install web dependencies
+        working-directory: web
+        run: npm ci
+      # The same mirror workaround as the `e2e` job, for the same reason; see the note there.
+      - name: Work around the hosted runner's stalling apt mirror
+        run: |
+          sudo sed -i 's|azure.archive.ubuntu.com|archive.ubuntu.com|g' /etc/apt/sources.list.d/ubuntu.sources || true
+          sudo sed -i 's|azure.archive.ubuntu.com|archive.ubuntu.com|g' /etc/apt/sources.list || true
+          conf=/etc/apt/apt.conf.d/99-leasebook-timeouts
+          echo 'Acquire::Retries "3";' | sudo tee "$conf" > /dev/null
+          echo 'Acquire::http::Timeout "20";' | sudo tee -a "$conf" > /dev/null
+          echo 'Acquire::https::Timeout "20";' | sudo tee -a "$conf" > /dev/null
+      - name: Install Playwright browser
+        working-directory: web
+        run: npx playwright install --with-deps chromium
+      # Playwright starts the stand-in, then the host, then the SPA. The test also runs
+      # `check-invariants --all` after each scenario, while the host is up.
+      - name: Run the Stripe stand-in browser flow
+        working-directory: web
+        run: npx playwright test stripe-stand-in.spec.ts
+        env:
+          STRIPE_STAND_IN_E2E: '1'
+          Payments__ManifestPath: ${{ github.workspace }}/payment-fixture-standin.local
+          PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report-stand-in
+      # Once more with the host stopped: the state every scenario left behind, in every organization
+      # of the fixture. No payment setting is given, so this host has payments disabled.
+      - name: Check invariants in the stand-in fixture
+        run: dotnet run --project src/LeaseBook.Web -- check-invariants --all
+      - name: Upload Playwright report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: playwright-report-stand-in
+          path: |
+            web/playwright-report-stand-in/
             web/test-results/
           retention-days: 7
 

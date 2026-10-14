@@ -188,6 +188,7 @@ with `LEASEBOOK_APP_BIND`.
 | `5080` | .NET API / host (`dotnet run`)                  | `src/LeaseBook.Web/Properties/launchSettings.json` (`http` profile) · proxied from `web/vite.config.ts` · `web/playwright.config.ts` (`--urls`) |
 | `5632` | PostgreSQL (Docker, published to the host)      | `docker-compose.yml` (`db`) · connection strings in `appsettings.Development.json`                                                              |
 | `5250` | pgAdmin (Docker)                                | `docker-compose.yml` (`pgadmin`)                                                                                                                |
+| `4010` | Local stand-in for Stripe (browser test only)   | `Payments__Stripe__ApiBase` · defaults in `web/playwright.config.ts` and `scripts/stripe-stand-in.mjs`                                          |
 
 **Full Docker stack** — the whole product in containers (`./scripts/dev.ps1 app-up`, Compose `full` profile):
 

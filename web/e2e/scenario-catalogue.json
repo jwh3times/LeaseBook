@@ -641,6 +641,21 @@
       "routes": ["POST /api/payments/settlements/{id}/close"]
     },
     {
+      "id": "stripe-stand-in-card-to-posted-payout",
+      "workflow": "A tenant pays by card in the Stripe sandbox mode; the payout waits for the bank and posts when the bank evidence equals the processor's net",
+      "area": "Payments",
+      "spec": "stripe-stand-in.spec.ts",
+      "org": "stand-in payment fixture",
+      "pass": "stand-in",
+      "events": ["PaymentReceived"],
+      "routes": [
+        "GET /api/portal/tenant/payments/quote",
+        "POST /api/portal/tenant/payments",
+        "GET /api/payments",
+        "GET /api/payments/settlements"
+      ]
+    },
+    {
       "id": "spa-boot",
       "workflow": "The application loads and shows the sign-in screen",
       "area": "Platform",
