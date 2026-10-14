@@ -3,7 +3,7 @@
 - **Audience:** Contributors, reviewers and maintainers
 - **Status:** Living catalogue and method
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-13
+- **Last reviewed:** 2026-10-14
 
 A scenario is one workflow a person carries out in the product, driven through a real browser by
 one or more Playwright tests. This page records how scenarios are catalogued, what CI checks about
@@ -138,10 +138,17 @@ that, it is reported as an expected failure and not as verified, because its wor
 what its test says it should. When its test passed, the check fails: the limit it shows may be
 fixed.
 
-The coverage run does not make the `stand-in` pass yet, so the measured check reports a scenario of
-that pass as belonging to a pass that did not run, and does not judge it. Until it does, the
-`E2E (Stripe stand-in)` job of `ci.yml` is what runs those scenarios, on every pull request, with
-`check-invariants --all` after each one and once more when the host has stopped.
+The coverage run makes all three passes with `npm run e2e:coverage -- --payments --stand-in`. A
+scenario of a pass the command was not asked for is reported as belonging to a pass that did not run,
+and is not judged. The `stand-in` pass also runs on every pull request, in the
+`E2E (Stripe stand-in)` job of `ci.yml`, with `check-invariants --all` after each scenario and once
+more when the host has stopped; there it is not measured.
+
+The expected failure passes through two verdicts. Playwright counts a test marked with `test.fail()`
+that fails as the expected outcome, so the pass succeeds and the coverage command does not fail for
+it. The measured check reads the outcome the test recorded, `failed`, and reports the scenario as an
+expected failure once it produced what it declares. A test that passes fails both: Playwright reports
+that a test expected to fail passed, and the check fails the scenario.
 
 ## Organizations
 
@@ -183,7 +190,7 @@ the run and change that new account.
    [Test coverage](coverage.md#playwright-run).
 
    ```bash
-   cd web && npm run e2e:coverage -- --payments
+   cd web && npm run e2e:coverage -- --payments --stand-in
    ```
 
 To run one scenario's tests: `npm run e2e -- --grep "@scenario:record-payment"` from `web/`.

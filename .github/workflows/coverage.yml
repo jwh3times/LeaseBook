@@ -13,6 +13,12 @@ name: Coverage (e2e)
 # fails when a scenario did not post a journal event type or call a route its catalogue entry
 # declares, and when `check-invariants --all` finds a violation in a database a pass used. The
 # static half of that check runs on every pull request, in ci.yml.
+#
+# It runs three passes: the main one on the seeded development organizations, the simulated-payment
+# pass on the payment fixture, and the Stripe stand-in pass on the stand-in fixture, where the host
+# runs in `StripeSandbox` mode against `scripts/stripe-stand-in.mjs` on loopback (ADR-054). Nothing
+# here calls Stripe; the first step makes Stripe's hosts unreachable, as the `E2E (Stripe stand-in)`
+# job of ci.yml does.
 on:
   push:
     branches: [main]
@@ -33,10 +39,13 @@ jobs:
   e2e-coverage:
     name: E2E coverage + route inventory
     runs-on: ubuntu-latest
-    # The pull-request e2e job this mirrors typically takes ~6 min against a 20-minute bound. This
-    # one adds the collector, the browser coverage, three reports and the invariant run. Re-measure after the first
-    # runs on `main` and tighten by the ci.yml policy (3-8x the observed maximum, floor 10).
-    timeout-minutes: 30
+    # With the main and simulated-payment passes, 11 to 14.6 min over the successful runs on `main`
+    # from 2026-10-12 to 2026-10-14, about 10 of it the coverage command. The stand-in pass adds its
+    # fixture (about 25 s) and its spec, which takes about 2.6 min locally without collection and
+    # about 5 min in the `E2E (Stripe stand-in)` job of ci.yml, so expect about 20 min. 45 is below
+    # the ci.yml policy's 3x floor on purpose, as for the `Backend` job there: a hang should still
+    # fail well inside an hour. Re-measure after the first runs with the stand-in pass.
+    timeout-minutes: 45
     services:
       postgres:
         image: postgres:18
@@ -50,10 +59,20 @@ jobs:
     env:
       ASPNETCORE_ENVIRONMENT: Development
       # App-role connection string → the service container, as in the ci.yml e2e job. The coverage
-      # runner derives the payment fixture's from it.
+      # runner derives the two payment fixtures' from it.
       ConnectionStrings__Default: Host=localhost;Port=5432;Database=leasebook;Username=leasebook_app;Password=dev_app_pw
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # The tripwire of the `E2E (Stripe stand-in)` job of ci.yml, for the stand-in pass: Stripe's
+      # hosts resolve to nothing for the whole job, and the step proves it. A request to Stripe
+      # would then fail and not be made quietly.
+      - name: Make Stripe unreachable from this job
+        run: |
+          echo '0.0.0.0 api.stripe.com files.stripe.com connect.stripe.com meter-events.stripe.com hooks.stripe.com m.stripe.com' | sudo tee -a /etc/hosts > /dev/null
+          if curl --silent --show-error --max-time 10 --output /dev/null https://api.stripe.com/; then
+            echo '::error::api.stripe.com is still reachable from this job.'
+            exit 1
+          fi
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: '10.0.x'
@@ -80,12 +99,16 @@ jobs:
           dotnet run --project src/LeaseBook.Web -- seed --org cutover
           dotnet run --project src/LeaseBook.Web -- seed --org portal
           dotnet run --project src/LeaseBook.Web -- seed --org scenario
-      # ci.yml creates this fixture between its two Playwright passes. Here it comes first, because
-      # one command runs both passes under one collector. It is a separate database, so the main
-      # pass does not see it.
+      # ci.yml creates these fixtures beside its Playwright passes. Here they come first, because
+      # one command runs every pass under one collector. Each is a separate database, so the main
+      # pass does not see them. The stand-in fixture is bound to synthetic connected accounts, and
+      # the script makes no call to Stripe.
       - name: Initialize isolated payment fixture
         shell: pwsh
         run: ./scripts/payment-fixture.ps1 init -Container '${{ job.services.postgres.id }}' -Port 5432
+      - name: Initialize the stand-in payment fixture
+        shell: pwsh
+        run: ./scripts/payment-fixture.ps1 init -StandIn -Container '${{ job.services.postgres.id }}' -Port 5432
       - name: Install web dependencies
         working-directory: web
         run: npm ci
@@ -101,13 +124,13 @@ jobs:
       - name: Install Playwright browser
         working-directory: web
         run: npx playwright install --with-deps chromium
-      # Runs the documented command and not a copy of its steps: the collector, both Playwright
-      # passes with E2E_COVERAGE=1, the three reports, the scenario catalogue's measured check and
-      # the invariant run (scripts/e2e-coverage.mjs). The runner reads the journal through `psql`
-      # inside the Postgres container, so it is told which container that is.
-      - name: Run e2e with coverage (main pass + simulated-payment pass)
+      # Runs the documented command and not a copy of its steps: the collector, the three
+      # Playwright passes with E2E_COVERAGE=1, the three reports, the scenario catalogue's measured
+      # check and the invariant run (scripts/e2e-coverage.mjs). The runner reads the journal through
+      # `psql` inside the Postgres container, so it is told which container that is.
+      - name: Run e2e with coverage (main, simulated-payment and Stripe stand-in passes)
         working-directory: web
-        run: npm run e2e:coverage -- --payments
+        run: npm run e2e:coverage -- --payments --stand-in
         env:
           E2E_DB_CONTAINER: ${{ job.services.postgres.id }}
       # The summary is written before the runner reports a failing pass, so a red run still shows
@@ -145,5 +168,6 @@ jobs:
           path: |
             web/playwright-report/
             web/playwright-report-payments/
+            web/playwright-report-stand-in/
             web/test-results/
           retention-days: 7

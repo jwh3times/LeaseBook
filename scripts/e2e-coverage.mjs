@@ -6,13 +6,22 @@
  *
  * Usage (from `web/`):
  *
- *   npm run e2e:coverage                 # the main pass
- *   npm run e2e:coverage -- --payments   # and the simulated-payment pass on the payment fixture
+ *   npm run e2e:coverage                              # the main pass
+ *   npm run e2e:coverage -- --payments                # and the simulated-payment pass
+ *   npm run e2e:coverage -- --stand-in                # and the Stripe stand-in pass
+ *   npm run e2e:coverage -- --payments --stand-in     # all three
  *
  * The database is the one `npm run e2e` uses, and it must be seeded the same way (demo, cutover,
  * portal and scenario). `--payments` also needs the payment fixture `scripts/payment-fixture.ps1
- * init` creates. The journal is read through `psql` inside the Postgres container, which is
- * `leasebook-db` unless E2E_DB_CONTAINER names another.
+ * init` creates, and `--stand-in` the stand-in fixture `scripts/payment-fixture.ps1 init -StandIn`
+ * creates. Each fixture pass runs on its own database, named from the main connection string with
+ * the database swapped, and its own manifest at the repository root. The journal is read through
+ * `psql` inside the Postgres container, which is `leasebook-db` unless E2E_DB_CONTAINER names
+ * another.
+ *
+ * The stand-in pass runs `stripe-stand-in.spec.ts` with STRIPE_STAND_IN_E2E=1, so
+ * `playwright.config.ts` starts `scripts/stripe-stand-in.mjs` on loopback before the host, and the
+ * host runs in `StripeSandbox` mode against it (ADR-054). It makes no call to Stripe.
  *
  * What it does, in order:
  *
@@ -21,7 +30,7 @@
  *   2. Starts a `dotnet-coverage` collector in server mode. `playwright.config.ts` starts the host
  *      as a client of that session when E2E_COVERAGE=1, so one collector spans every host the run
  *      starts, and the host can stop without ending the collection.
- *   3. Runs Playwright with E2E_COVERAGE=1, once or twice.
+ *   3. Runs Playwright with E2E_COVERAGE=1, once for each pass.
  *   4. Shuts the collector down, which is what writes the host's coverage file.
  *   5. Builds the reports under `web/coverage/e2e/` and joins their summaries into `summary.md`.
  *   6. Reads the journal entries each pass posted, and checks every scenario in the catalogue
@@ -29,9 +38,11 @@
  *   7. Runs `check-invariants --all` on each database a pass used, so every organization a
  *      scenario drove is checked after the last scenario has finished with it.
  *
- * A failing test fails this script, after the reports are written. A report that cannot be produced
- * fails it. So does a scenario that did not produce what it declares, and so does a violated
- * invariant. A coverage figure never does.
+ * A failing test fails this script, after the reports are written. A test marked with
+ * `test.fail()` that fails does not: Playwright counts it as the expected outcome and exits 0, and
+ * the scenario check reports its scenario as an expected failure. One that passes does fail it,
+ * through both. A report that cannot be produced fails it. So does a scenario that did not produce
+ * what it declares, and so does a violated invariant. A coverage figure never does.
  */
 
 import { spawn, spawnSync } from "node:child_process";
@@ -70,6 +81,8 @@ const openApiDocument = path.join(
 const DEFAULT_CONNECTION =
   "Host=localhost;Port=5632;Database=leasebook;Username=leasebook_app;Password=dev_app_pw";
 const PAYMENT_DATABASE = "leasebook_payment_fixture";
+const STAND_IN_DATABASE = "leasebook_payment_fixture_standin";
+const USAGE = "Usage: e2e-coverage.mjs [--payments] [--stand-in]";
 
 /**
  * The spec files that import `test` straight from '@playwright/test'. They would run without the
@@ -97,15 +110,101 @@ export function specsBypassingFixture(specDir) {
     .sort();
 }
 
-/** The payment fixture's connection string: the main one with the database swapped. */
-export function paymentConnection(mainConnection) {
-  if (!/(^|;)\s*Database=/i.test(mainConnection)) {
+/** A connection string with its database swapped and the rest kept. */
+export function withDatabase(connection, database) {
+  if (!/(^|;)\s*Database=/i.test(connection)) {
     throw new Error("The connection string names no database.");
   }
-  return mainConnection.replace(
-    /(^|;)(\s*Database=)[^;]*/i,
-    `$1$2${PAYMENT_DATABASE}`,
-  );
+  return connection.replace(/(^|;)(\s*Database=)[^;]*/i, `$1$2${database}`);
+}
+
+/** The payment fixture's connection string: the main one with the database swapped. */
+export function paymentConnection(mainConnection) {
+  return withDatabase(mainConnection, PAYMENT_DATABASE);
+}
+
+/** The stand-in fixture's connection string: the main one with the database swapped. */
+export function standInConnection(mainConnection) {
+  return withDatabase(mainConnection, STAND_IN_DATABASE);
+}
+
+/**
+ * The Playwright passes the arguments ask for, in the order they run: `main` always, then
+ * `payments` with `--payments`, then `stand-in` with `--stand-in`, whatever order the flags came in.
+ *
+ * Each pass has a name, which is what its test records and journal reading are filed under and what
+ * the scenario check calls it (`PASSES` in `scenario-catalogue.mjs`); a title for the log; the spec
+ * files it runs, none meaning all; the connection string its journal and invariants are read
+ * through; the manifest it needs, if any; and the environment its Playwright run adds. A fixture pass
+ * names its own database to the host and to the test's own commands, and its own HTML report
+ * directory, so that it does not overwrite the main pass's.
+ *
+ * `env` is the caller's environment. Only the simulated-payment pass takes a manifest from it,
+ * `Payments__ManifestPath`, as it did before the stand-in pass existed. The stand-in pass never
+ * does: that variable names the payment fixture's manifest when it is set.
+ */
+export function planPasses(
+  argv,
+  { mainConnection, env = {}, root = repoRoot },
+) {
+  const flags = { "--payments": "payments", "--stand-in": "stand-in" };
+  const unknown = argv.filter((argument) => !(argument in flags));
+  if (unknown.length > 0) {
+    throw new Error(`Unknown argument: ${unknown[0]}. ${USAGE}`);
+  }
+  const passes = [
+    {
+      name: "main",
+      title: "main pass",
+      specs: [],
+      connection: mainConnection,
+      env: {},
+    },
+  ];
+  if (argv.includes("--payments")) {
+    const connection = paymentConnection(mainConnection);
+    const manifest =
+      env.Payments__ManifestPath ?? path.join(root, "payment-fixture.local");
+    passes.push({
+      name: "payments",
+      title: "simulated-payment pass",
+      specs: ["simulated-payment.spec.ts"],
+      connection,
+      manifest,
+      create: "./scripts/payment-fixture.ps1 init",
+      env: {
+        PAYMENT_SIMULATION_E2E: "1",
+        Payments__ManifestPath: manifest,
+        ConnectionStrings__Default: connection,
+        PLAYWRIGHT_HTML_OUTPUT_DIR: "playwright-report-payments",
+      },
+    });
+  }
+  if (argv.includes("--stand-in")) {
+    const connection = standInConnection(mainConnection);
+    const manifest = path.join(root, "payment-fixture-standin.local");
+    passes.push({
+      name: "stand-in",
+      title: "Stripe stand-in pass",
+      specs: ["stripe-stand-in.spec.ts"],
+      connection,
+      manifest,
+      create: "./scripts/payment-fixture.ps1 init -StandIn",
+      env: {
+        STRIPE_STAND_IN_E2E: "1",
+        Payments__ManifestPath: manifest,
+        ConnectionStrings__Default: connection,
+        PLAYWRIGHT_HTML_OUTPUT_DIR: "playwright-report-stand-in",
+      },
+    });
+  }
+  return passes;
+}
+
+/** `a`, `a and b`, `a, b and c`. */
+export function listed(names) {
+  if (names.length <= 1) return names.join("");
+  return `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
 }
 
 /** The parts of an Npgsql connection string, by lower-cased key. */
@@ -174,10 +273,18 @@ function runOrThrow(command, args, options = {}) {
   }
 }
 
-function playwright(args, env) {
+/**
+ * Runs Playwright and returns its exit status, which is the whole of a pass's own verdict here.
+ * Playwright exits 0 when every test had the outcome it expected. A test marked with `test.fail()`
+ * that fails had it, so a pass whose only failure is an expected one succeeds; one that passes did
+ * not, so the pass fails. The scenario check then reports the first as an expected failure and fails
+ * on the second, from the outcome each test recorded.
+ */
+export function playwright(args, env, options = {}) {
   const result = spawnSync("npx", ["playwright", "test", ...args], {
     cwd: webRoot,
     stdio: "inherit",
+    ...options,
     env: { ...process.env, ...env },
   });
   if (result.error) throw result.error;
@@ -394,13 +501,18 @@ function checkInvariants(connection) {
 }
 
 async function main(argv) {
-  const unknown = argv.filter((argument) => argument !== "--payments");
-  if (unknown.length > 0) {
-    throw new Error(
-      `Unknown argument: ${unknown[0]}. Usage: e2e-coverage.mjs [--payments]`,
-    );
+  const mainConnection =
+    process.env.ConnectionStrings__Default ?? DEFAULT_CONNECTION;
+  const passes = planPasses(argv, { mainConnection, env: process.env });
+  // A missing manifest would fail its pass only after the main pass had run for minutes.
+  for (const pass of passes) {
+    if (pass.manifest && !existsSync(pass.manifest)) {
+      throw new Error(
+        `The ${pass.title} needs ${path.relative(repoRoot, pass.manifest)}, which does not exist. ` +
+          `Create its fixture with \`${pass.create}\`.`,
+      );
+    }
   }
-  const payments = argv.includes("--payments");
 
   const bypassing = specsBypassingFixture(path.join(webRoot, "e2e"));
   if (bypassing.length > 0) {
@@ -419,36 +531,18 @@ async function main(argv) {
   await ready;
 
   const coverageEnv = { E2E_COVERAGE: "1", E2E_COVERAGE_SESSION: session };
-  const mainConnection =
-    process.env.ConnectionStrings__Default ?? DEFAULT_CONNECTION;
-  const passes = [{ name: "main", connection: mainConnection }];
-  if (payments) {
-    passes.push({
-      name: "payments",
-      connection: paymentConnection(mainConnection),
-    });
-  }
   // Only entries posted from here on are the run's own: the seeds posted the rest.
   const since = Date.now();
-  let failedPasses = 0;
+  const failedPasses = [];
   try {
-    step("Playwright: main pass");
-    if (playwright([], { ...coverageEnv, E2E_COVERAGE_PASS: "main" }) !== 0) {
-      failedPasses += 1;
-    }
-    if (payments) {
-      step("Playwright: simulated-payment pass");
-      const status = playwright(["simulated-payment.spec.ts"], {
+    for (const pass of passes) {
+      step(`Playwright: ${pass.title}`);
+      const status = playwright(pass.specs, {
         ...coverageEnv,
-        E2E_COVERAGE_PASS: "payments",
-        PAYMENT_SIMULATION_E2E: "1",
-        Payments__ManifestPath:
-          process.env.Payments__ManifestPath ??
-          path.join(repoRoot, "payment-fixture.local"),
-        ConnectionStrings__Default: passes[1].connection,
-        PLAYWRIGHT_HTML_OUTPUT_DIR: "playwright-report-payments",
+        E2E_COVERAGE_PASS: pass.name,
+        ...pass.env,
       });
-      if (status !== 0) failedPasses += 1;
+      if (status !== 0) failedPasses.push(pass.name);
     }
   } finally {
     step("Stopping the coverage collector");
@@ -475,10 +569,12 @@ async function main(argv) {
     step(`Invariants: every organization of the ${pass.name} pass`);
     if (checkInvariants(pass.connection) !== 0) violated.push(pass.name);
   }
+  const passNames = (names) =>
+    `${listed(names)} pass${names.length > 1 ? "es" : ""}`;
   const invariants =
     violated.length === 0
-      ? `Every organization passed \`check-invariants --all\` after the ${passes.map((pass) => pass.name).join(" and ")} pass.`
-      : `\`check-invariants --all\` failed after the ${violated.join(" and ")} pass.`;
+      ? `Every organization passed \`check-invariants --all\` after the ${passNames(passes.map((pass) => pass.name))}.`
+      : `\`check-invariants --all\` failed after the ${passNames(violated)}.`;
   writeFileSync(
     path.join(scenariosDir, "invariants.md"),
     `### Invariants after the run\n\n${invariants}\n`,
@@ -500,9 +596,9 @@ async function main(argv) {
   );
 
   const failures = [];
-  if (failedPasses > 0) {
+  if (failedPasses.length > 0) {
     failures.push(
-      "A Playwright pass failed. The reports above were still written, but they describe a failing run.",
+      `The Playwright ${passNames(failedPasses)} failed. The reports above were still written, but they describe a failing run.`,
     );
   }
   if (scenariosFailed) {
@@ -512,7 +608,7 @@ async function main(argv) {
   }
   if (violated.length > 0) {
     failures.push(
-      `An invariant was violated after the ${violated.join(" and ")} pass. See the check-invariants output above.`,
+      `An invariant was violated after the ${passNames(violated)}. See the check-invariants output above.`,
     );
   }
   if (failures.length > 0) throw new Error(failures.join("\n"));
