@@ -14,6 +14,10 @@ name: Mutation (nightly)
 # against its own test project, which needs Docker for its Postgres container (Testcontainers), as
 # the Backend job of ci.yml does.
 on:
+  # TEMPORARY, reverted before merge: a first real run on this branch, since a workflow not yet on
+  # the default branch cannot be dispatched.
+  push:
+    branches: [mutation-nightly]
   schedule:
     # Nightly at 00:17 UTC, off the top of the hour, when scheduled workflows queue longest. Even at
     # Accounting's timeout it ends before the Coverage (e2e) workflow at 06:23 and the production
