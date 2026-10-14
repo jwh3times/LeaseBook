@@ -9,6 +9,10 @@
 scenario that did not produce what the catalogue declares, and a violated invariant. It also seeds
 the scenario organization in the pull-request e2e job. Nothing below about figures changes.
 
+The [2026-10-14 addendum](#addendum--mutation-testing-with-strykernet-2026-10-14) adds nightly
+mutation testing on Accounting and Payments. Its score gates nothing either; what can fail its run,
+once a module's gate is on, is a surviving mutant nobody has explained.
+
 ## Context
 
 Nothing measured what the test suites exercise. The .NET suites, the web unit suite and the
@@ -112,3 +116,58 @@ Reopen when any of these happens:
 - `xunit.v3.mtp-v2` moves to a platform version the pinned extension does not name, or Microsoft
   stops publishing the extension for the platform in use.
 - Coverage data needs to leave CI, for example to annotate pull requests through a hosted service.
+
+## Addendum — mutation testing with Stryker.NET (2026-10-14)
+
+Coverage says which lines ran, not whether a test would notice them being wrong. Issue #547 asks that
+question of the two modules where a wrong answer is a fiduciary error, Accounting and Payments.
+
+**The tool is Stryker.NET 5.0.0**, pinned as the `dotnet-stryker` local tool in
+`.config/dotnet-tools.json`. It runs with its Microsoft Testing Platform runner
+(`--test-runner mtp`), which matches the platform these test projects run on
+([ADR-032](ADR-032-microsoft-testing-platform-v2.md)). Stryker marks that runner as a preview and
+says so on every run. So a survivor is confirmed by hand before anyone acts on it: make the edit, run
+the test project, and see it pass, before writing a test for it or recording it as equivalent.
+
+Two limits of that runner shape the setup:
+
+- `test-case-filter` is unavailable with the xUnit v3 MTP runner. A module cannot be mutated against
+  part of a test project.
+- MTP coverage analysis filters only the mutants no test covers. It does not map tests to mutants, so
+  every covered mutant reruns the whole test project. Per-test coverage capture would then cost one
+  test session per test and buy nothing, so the configuration asks for one coverage pass
+  (`coverage-analysis: all`).
+
+So each module is mutated against a fast test project of its own, never against the integration
+suite, which boots the host: Accounting against `LeaseBook.Tests.Accounting`, and Payments against
+`LeaseBook.Tests.Payments`, which was added for this. Its tests drive the payment engines directly
+over the real schema, with the ledger, eligibility and fee-rule ports replaced by stand-ins the test
+controls.
+
+**Report, then fail.** While a module has unexplained survivors, its nightly run only reports. Once a
+module is clean, an unexplained survivor fails its run. A survivor is explained when it matches an
+entry in the committed equivalents list, `tests/mutation/equivalent-mutants.json`, and every entry
+carries its reason. The same file holds each module's gate, and both gates ship off. Stryker's own
+`break` threshold is 0 in both configurations, so no score fails a run; the gate is the only failure
+apart from Stryker failing.
+
+**It runs nightly and never on a pull request**, in `mutation.yml`, one job per module so that
+Accounting's run, measured in hours, does not hold up Payments'. The method, the measured run times,
+what counts as an equivalent mutant and how to run one module locally are in
+[`docs/testing/mutation.md`](../testing/mutation.md).
+
+Consequences:
+
+- One more pinned development tool, and one more test project in the `Backend` job of every pull
+  request.
+- When a mutant fails to compile in a way Stryker cannot pin to that mutant, Stryker's safe mode
+  marks every mutant in the method as a compile error, and the method goes unmeasured. Today that
+  is `PaymentEngine.PostReturnAsync`, where a pattern variable is assigned in one operand of `||`,
+  and two Accounting methods, which `docs/testing/mutation.md` names. The summary counts their
+  mutants, and a later step can rewrite the code or accept the gap.
+- The score is per module and is never compared with a threshold. What is acted on is the list of
+  survivors, one area at a time.
+
+Reopen this addendum when Stryker's MTP runner leaves preview or learns to select tests per mutant,
+when a module's nightly run comes near GitHub's six-hour job limit, or when both modules are clean
+and the measurement widens to the organization-isolation code, as #547 plans.

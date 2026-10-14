@@ -157,6 +157,10 @@ the configs it cites in sync when a port changes.
   `--coverage --coverage-output-format cobertura --coverage-settings tests/coverage.settings.xml --results-directory TestResults`
   to the test command, then build the report with `dotnet reportgenerator`
   (`docs/testing/coverage.md` owns the commands, the method and the baseline figures)
+- Mutation testing on Accounting or Payments (report only until a module's gate is on; ADR-055 addendum):
+  `node scripts/mutation.mjs payments --concurrency 4` (or `accounting`, or `all`; add
+  `--mutate '<glob>'` to mutate part of a module) (`docs/testing/mutation.md` owns the commands,
+  the equivalents list and the gate)
 
 ### Database (run from repo root)
 

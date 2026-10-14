@@ -198,6 +198,10 @@ CI does fail when a posting template, a business event or an API route has neith
 scenario nor a recorded exemption, and when a Playwright test carries no scenario tag. See
 [end-to-end scenarios](docs/testing/scenarios.md).
 
+A nightly workflow runs mutation testing on the Accounting and Payments modules and lists, in its job
+summary, each code change their fast test projects did not notice. It reports only, until a module
+has no unexplained survivor and its gate is turned on. See [mutation testing](docs/testing/mutation.md).
+
 Workflow actions are pinned to commit SHAs and the repository enforces it, so a tag-pinned `uses:`
 is rejected by GitHub before any job starts — the run fails with a policy error rather than a test
 failure, which reads like an outage if you are not expecting it. Dependabot's `github-actions`

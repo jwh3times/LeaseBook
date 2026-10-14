@@ -3,7 +3,7 @@
 - **Audience:** Evaluators, contributors, operators, and maintainers
 - **Status:** Living index
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-12
+- **Last reviewed:** 2026-10-14
 
 Use this page to find the maintained source for a question. Documents intentionally have one owner;
 summaries elsewhere should link here rather than restating mutable detail.
@@ -21,6 +21,7 @@ summaries elsewhere should link here rather than restating mutable detail.
 | Measure read-path latency against the budget      | [Performance](perf.md)                                 |
 | See what the test suites exercise, and measure it | [Test coverage](testing/coverage.md)                   |
 | Find or add an end-to-end scenario                | [End-to-end scenarios](testing/scenarios.md)           |
+| See which code changes the tests would not notice | [Mutation testing](testing/mutation.md)                |
 | Contribute a change                               | [Contributing guide](../CONTRIBUTING.md)               |
 | See shipped capabilities and broad direction      | [Roadmap](ROADMAP.md) and [changelog](../CHANGELOG.md) |
 

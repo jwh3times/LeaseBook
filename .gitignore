@@ -27,6 +27,9 @@ test-results/
 e2e-results/
 # Coverage reports (ADR-055): web/coverage/unit from Vitest, web/coverage/e2e from the Playwright run
 coverage/
+# Mutation reports (ADR-055 addendum): StrykerOutput/<module> from scripts/mutation.mjs, or beside a
+# test project when Stryker is run there directly
+StrykerOutput/
 *.tsbuildinfo
 
 # Local environment / secrets

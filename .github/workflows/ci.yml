@@ -97,7 +97,7 @@ jobs:
           path: TestResults/*.trx
           if-no-files-found: error
           retention-days: 7
-      # One report from the nine per-project files, grouped by assembly. ReportGenerator merges them;
+      # One report from the ten per-project files, grouped by assembly. ReportGenerator merges them;
       # `coverage-summary.mjs` turns its JSON summary into the per-module table and fails if a
       # product assembly is missing from it, so a filter that stops matching cannot pass as a figure.
       # Runs only after green tests: figures from a failing run describe a run nobody wants.
@@ -162,9 +162,12 @@ jobs:
       # The coverage scripts (ADR-055): the per-module summary every coverage step prints, the route
       # matcher behind the route inventory, and the e2e coverage runner's guard that every spec
       # takes `test` from the recording fixture. The runner itself only runs in coverage.yml.
-      - name: Test the coverage summary, route inventory and e2e coverage scripts
+      # Beside them, the mutation runner's own tests (ADR-055 addendum): how it reads a Stryker
+      # report, matches the equivalents list and decides the gate, and that the committed list is
+      # well formed. Stryker itself only runs in mutation.yml.
+      - name: Test the coverage summary, route inventory, e2e coverage and mutation scripts
         working-directory: ${{ github.workspace }}
-        run: node --test scripts/coverage-summary.test.mjs scripts/route-inventory.test.mjs scripts/e2e-coverage.test.mjs scripts/scenario-catalogue.test.mjs
+        run: node --test scripts/coverage-summary.test.mjs scripts/route-inventory.test.mjs scripts/e2e-coverage.test.mjs scripts/scenario-catalogue.test.mjs scripts/mutation.test.mjs
       # The scenario catalogue's static check (ADR-056, docs/testing/scenarios.md), the part that
       # needs no API contract: every journal event type in the product source has a scenario or a
       # recorded exemption, every catalogue id has a tagged Playwright test and every test a known
