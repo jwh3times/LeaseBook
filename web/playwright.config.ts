@@ -39,6 +39,24 @@ if (standIn) {
   }
 }
 
+// A maintainer's run against a real Stripe sandbox only (STRIPE_SANDBOX_E2E=1, ADR-054, #546), set by
+// `scripts/stripe-sandbox-run.mjs` and by nothing else. That script has already started the host on
+// a copy of the sandbox fixture, on a port of its own (STRIPE_SANDBOX_E2E_HOST), with the sandbox's
+// key in that process alone, so Playwright starts no host. It starts the SPA on a port of its own
+// too, proxying `/api` to that host, so neither a developer's running dev server nor their host on
+// :5080 can be reused by mistake. The pass never retries: its first step makes real test charges.
+const sandbox = process.env.STRIPE_SANDBOX_E2E === '1';
+const SANDBOX_SPA = 'http://localhost:5390';
+const sandboxServers = [
+  {
+    command: 'npm run dev -- --port 5390 --strictPort',
+    url: SANDBOX_SPA,
+    reuseExistingServer: false,
+    env: { LEASEBOOK_API_PROXY_TARGET: process.env.STRIPE_SANDBOX_E2E_HOST ?? '' },
+    timeout: 120_000,
+  },
+];
+
 export default defineConfig({
   testDir: './e2e',
   expect: {
@@ -53,56 +71,58 @@ export default defineConfig({
   // M3 June payment posts+voids before the M4 spec locks June.
   workers: 1,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
+  retries: process.env.CI && !sandbox ? 2 : 0,
   reporter: 'html',
   use: {
-    baseURL: 'http://localhost:5373',
+    baseURL: sandbox ? SANDBOX_SPA : 'http://localhost:5373',
     trace: 'on-first-retry',
   },
-  webServer: [
-    ...(standIn
-      ? [
-          {
-            command: 'node ../scripts/stripe-stand-in.mjs',
-            url: `${process.env.Payments__Stripe__ApiBase}/stand-in/health`,
-            // Its state is one run's, and it signs with this run's secret: never one left running.
-            reuseExistingServer: false,
-            // Every request it answers and every delivery it sends, in the run's own output.
-            stdout: 'pipe' as const,
-            timeout: 30_000,
+  webServer: sandbox
+    ? sandboxServers
+    : [
+        ...(standIn
+          ? [
+              {
+                command: 'node ../scripts/stripe-stand-in.mjs',
+                url: `${process.env.Payments__Stripe__ApiBase}/stand-in/health`,
+                // Its state is one run's, and it signs with this run's secret: never one left running.
+                reuseExistingServer: false,
+                // Every request it answers and every delivery it sends, in the run's own output.
+                stdout: 'pipe' as const,
+                timeout: 30_000,
+              },
+            ]
+          : []),
+        {
+          command: coverageSession
+            ? `dotnet dotnet-coverage connect ${coverageSession} ${HOST_COMMAND}`
+            : HOST_COMMAND,
+          ...(coverageSession
+            ? { gracefulShutdown: { signal: 'SIGTERM' as const, timeout: 60_000 } }
+            : {}),
+          url: 'http://localhost:5080/api/health',
+          env: {
+            ASPNETCORE_ENVIRONMENT: 'Development',
+            // In CI, ConnectionStrings__Default points the host at the Postgres service container
+            // (port 5432, app role). Unset locally → host uses appsettings.Development.json (5632).
+            ...(process.env.ConnectionStrings__Default
+              ? { ConnectionStrings__Default: process.env.ConnectionStrings__Default }
+              : {}),
           },
-        ]
-      : []),
-    {
-      command: coverageSession
-        ? `dotnet dotnet-coverage connect ${coverageSession} ${HOST_COMMAND}`
-        : HOST_COMMAND,
-      ...(coverageSession
-        ? { gracefulShutdown: { signal: 'SIGTERM' as const, timeout: 60_000 } }
-        : {}),
-      url: 'http://localhost:5080/api/health',
-      env: {
-        ASPNETCORE_ENVIRONMENT: 'Development',
-        // In CI, ConnectionStrings__Default points the host at the Postgres service container
-        // (port 5432, app role). Unset locally → host uses appsettings.Development.json (5632).
-        ...(process.env.ConnectionStrings__Default
-          ? { ConnectionStrings__Default: process.env.ConnectionStrings__Default }
-          : {}),
-      },
-      // A host that is already running is not under the collector, so the coverage run never reuses one.
-      reuseExistingServer:
-        !process.env.CI &&
-        process.env.PAYMENT_SIMULATION_E2E !== '1' &&
-        !standIn &&
-        !coverageSession,
-      timeout: 180_000,
-    },
-    {
-      command: 'npm run dev',
-      url: 'http://localhost:5373',
-      reuseExistingServer: !process.env.CI,
-      timeout: 120_000,
-    },
-  ],
+          // A host that is already running is not under the collector, so the coverage run never reuses one.
+          reuseExistingServer:
+            !process.env.CI &&
+            process.env.PAYMENT_SIMULATION_E2E !== '1' &&
+            !standIn &&
+            !coverageSession,
+          timeout: 180_000,
+        },
+        {
+          command: 'npm run dev',
+          url: 'http://localhost:5373',
+          reuseExistingServer: !process.env.CI,
+          timeout: 120_000,
+        },
+      ],
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
 });

@@ -8,6 +8,7 @@ import {
   CATALOGUE_PATH,
   DOC_PATH,
   EXPECTED_FAILURE_TAG,
+  MAINTAINER_ONLY_PASSES,
   PASSES,
   checkEvents,
   checkRoutes,
@@ -184,14 +185,28 @@ describe("validateCatalogue", () => {
 
   it("refuses a pass that is not one of the passes that run", () => {
     const named = catalogue();
-    for (const pass of PASSES) {
+    for (const pass of PASSES.filter(
+      (name) => !MAINTAINER_ONLY_PASSES.includes(name),
+    )) {
       named.scenarios[0].pass = pass;
       assert.deepEqual(validateCatalogue(named), []);
     }
     named.scenarios[0].pass = "standin";
     assert.match(
       validateCatalogue(named).join("\n"),
-      /record-payment: `pass` must be one of main, payments, stand-in, or left out for main/,
+      /record-payment: `pass` must be one of main, payments, stand-in, sandbox, or left out for main/,
+    );
+  });
+
+  it("lets a maintainer-only scenario declare no event and no route", () => {
+    const named = catalogue();
+    named.scenarios[1].pass = "sandbox";
+    named.scenarios[1].routes = [];
+    assert.deepEqual(validateCatalogue(named), []);
+    named.scenarios[0].pass = "sandbox";
+    assert.match(
+      validateCatalogue(named).join("\n"),
+      /record-payment: a scenario of the maintainer-only sandbox pass declares no `events` and no `routes`/,
     );
   });
 
@@ -621,6 +636,19 @@ describe("verifyRun", () => {
     const { rows, problems } = verify({ catalogue: later, tests: [owners()] });
     assert.deepEqual(problems, []);
     assert.equal(rows[0].state, "pass not run");
+  });
+
+  it("reports a maintainer-only scenario as one, and not as a pass the run left out", () => {
+    const sandbox = catalogue();
+    sandbox.scenarios[1].pass = "sandbox";
+    sandbox.scenarios[1].routes = [];
+    const result = verify({ catalogue: sandbox, tests: [attempt()] });
+    assert.deepEqual(result.problems, []);
+    assert.equal(result.rows[1].state, "maintainer only");
+    assert.match(
+      renderEvidence(result),
+      /1 of 2 scenarios produced what they declare\. 0 did not, and 0 belong to a pass this run did not make\. 1 belong to a maintainer-only pass \(sandbox\), which runs against a real Stripe sandbox by hand/,
+    );
   });
 
   it("fails on a posted event type the source reading does not hold", () => {

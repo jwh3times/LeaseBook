@@ -10,8 +10,8 @@ and cannot move real money. Production and Staging reject Simulation; live/provi
 is refused. A second mode, `StripeSandbox`, collects through a Stripe sandbox instead of the
 simulator, with test payment methods only.
 [Run the Stripe sandbox fixture](#run-the-stripe-sandbox-fixture) takes one card payment and one ACH
-payment through to a posted payout in that mode, and says which part of that has been run against a
-real sandbox. [Run against the Stripe stand-in](#run-against-the-stripe-stand-in) drives the same
+payment through to a posted payout in that mode, with one command up to the held payout, and says
+which part of that has been run against a real sandbox. [Run against the Stripe stand-in](#run-against-the-stripe-stand-in) drives the same
 mode with no Stripe at all, for the browser test that continuous integration runs. Everything before
 those two sections describes the simulator. The
 [specification](../payments/simulated-payment-spec.md) owns the financial contract.
@@ -180,44 +180,53 @@ only when that amount is Stripe's.
 
 ### The run, in order
 
-This is the whole procedure for one card payment and one ACH payment. Each step has its own part
-below.
+`scripts/stripe-sandbox-run.mjs` does the run up to a held payout, in two halves: `start` charges
+one ACH payment and one card payment, and `resume`, hours or days later, finds Stripe's payout of
+them. Each step has its own part below.
 
-1. Check [what you need](#what-you-need).
-2. [Create the sandbox fixture](#create-the-sandbox-fixture), or bring an older fixture's database
-   up to date.
-3. [Start the host](#start-the-host).
-4. [Forward Stripe's events](#forward-stripes-events).
-5. [Make a card payment and an ACH payment](#make-a-card-payment-and-an-ach-payment), and see each
-   reach "Paid on … on its way to the bank".
-6. Leave the account alone and [wait for Stripe's payout](#wait-for-stripes-payout). The host shows
-   it as **Waiting for the bank**.
-7. [Say what the bank received](#say-what-the-bank-received). The payout posts and both payments
-   become **Settled**.
-8. [Check the result](#check-the-result) with `check-invariants`.
+1. Check [what you need](#what-you-need), and [create the sandbox fixture](#create-the-sandbox-fixture)
+   once.
+2. [Start the run](#start-the-run). Both payments reach "Paid on … on its way to the bank", and the
+   run's copy of the fixture is kept.
+3. Leave the account alone and [wait for Stripe's payout](#wait-for-stripes-payout).
+4. [Resume the run](#resume-the-run) with `--keep`. It finds the payout **Waiting for the bank**.
+5. [Say what the bank received](#say-what-the-bank-received), against the copy. The payout posts and
+   both payments become **Settled**.
+6. [Check the result](#check-the-result), then discard the copy.
 
-Steps 1 to 5 have been run against a real sandbox, as ADR-054 records: card and ACH payments were
-charged, succeeded and got their paid date, and nothing posted. The rest has not been run there for a
-payout that posts. The sandbox had made one payout by 2026-10-11. The host read it and stored it with
-its lines, but it also held failed and disputed test payments, so it went to review at once, and bank
-evidence for it posted nothing. A payout that waits for the bank and then posts is proven in the
-integration tests and against replayed payloads only, and steps 6 to 8 are written from those tests.
-The screens were checked against the sandbox through the API, not in a browser. If a real run differs
-from this page, believe the run and correct the page.
+**What has been run against a real sandbox.** The command was written on 2026-10-14 and has been
+run end to end only against [the stand-in](#try-the-sandbox-run-against-the-stand-in), whose CLI
+steps and quiet check are replaced. Its first `start` against the sandbox, that day, got as far as
+the quiet check: it copied and migrated the fixture, took the signing secret, started the host and
+the listener, saw the first sweep finish, and then refused to charge, because the account still
+held earlier test charges that Stripe had not paid out. It dropped its copy. No payment has yet been
+charged by the command. The
+steps it automates were run by hand before it existed, as ADR-054 records: card and ACH payments
+were charged, succeeded and got their paid date, and nothing posted. A payout that posts has not
+been run there. The sandbox had made one payout by 2026-10-11. The host read it and stored it with
+its lines, but it also held failed and disputed test payments, so it went to review at once, and
+bank evidence for it posted nothing. A payout that waits for the bank and then posts is proven in
+the integration tests, against replayed payloads and against the stand-in only, and steps 4 to 6 are
+written from those. If a real run differs from this page, believe the run and correct the page.
 
 ### What you need
 
 - A provisioned sandbox, as the [Stripe sandbox probe runbook](stripe-sandbox-probe.md) describes: the
   sandbox's own test-mode secret key (`sk_test_` or `rk_test_`), and a connected account that pays
   its own Stripe fees and has ACH debit turned on in its payment method settings.
-- The Stripe CLI, version 1.53 or later, signed in to that same sandbox. It forwards Stripe's events
-  to the local host and prints the secret they are signed with. Run one Stripe CLI process at a
-  time, and let one finish before you start the next: two started together have once left the CLI
-  signed out of the sandbox.
-- The development Postgres container running (`./scripts/dev.ps1 up`).
+- The key in `STRIPE_SANDBOX_SECRET_KEY`, put there by a secret manager for the command alone, for
+  example `op run --env-file=<references> -- node scripts/stripe-sandbox-run.mjs start`. Without it,
+  the command asks for the key, masked, when it runs in a terminal, and refuses otherwise.
+- The Stripe CLI, version 1.53 or later, signed in to that same sandbox. The command runs it twice,
+  one process after the other: `stripe listen --print-secret` for the secret Stripe signs its events
+  with, then `stripe listen` to forward them. Start no other Stripe CLI process while a run is going:
+  two at once have left the CLI signed out of the sandbox.
+- The development Postgres container running (`./scripts/dev.ps1 up`), the web dependencies and
+  Playwright's browser installed in `web/`, and ports 5090 and 5390 free (README Port map).
 - A connected account that is quiet: everything charged on it before has already been paid out, and
-  nothing else will be charged on it for the days the run takes. See
-  [Wait for Stripe's payout](#wait-for-stripes-payout) before you start.
+  nothing else will be charged on it for the days the run takes. `start` checks the first half and
+  refuses to charge otherwise; the second half is yours. See
+  [Wait for Stripe's payout](#wait-for-stripes-payout).
 
 ### Create the sandbox fixture
 
@@ -236,95 +245,61 @@ neither and makes no call to Stripe; the script clears `Payments__Stripe__Secret
 `Payments__Stripe__WebhookSecret` and `Payments__Stripe__ApiBase` for the processes it starts and
 puts them back afterwards.
 
-**An older fixture.** The script applies migrations only when it creates the database. A sandbox
-fixture created before 2026-10-11, when payouts were first stored, lacks the columns a held payout
-needs, and a host from `main` cannot read payouts against it. Either reset it, which discards its
-payments, or apply the migrations as the migrator role and keep it. Set the connection string
-first; without it the command does not reach the fixture database:
+The run command only ever copies this database. It never connects to it, migrates it, writes to it or
+resets it. A copy is migrated before every half of a run, so a fixture created before a migration
+needs nothing done to it: a run once found by accident that the fixture lacked one, which is why the
+copy is migrated every time.
 
-```powershell
-$env:ASPNETCORE_ENVIRONMENT = 'Development'
-$env:ConnectionStrings__Migrations = 'Host=localhost;Port=5632;Database=leasebook_payment_fixture_stripe;Username=leasebook_migrator;Password=dev_migrator_pw'
-dotnet ef database update --project src/LeaseBook.Web --context AppDbContext
+### Start the run
+
+From the repository root:
+
+```bash
+op run --env-file=<references> -- node scripts/stripe-sandbox-run.mjs start
 ```
 
-### Start the host
+It refuses when `CI` is set, when the key is not a test-mode key (a live key included), and when it
+has no key and no terminal to ask in. Then, in order:
 
-The host needs two secrets: the sandbox key, and the secret Stripe signs its events with. Print the
-second with the Stripe CLI, in any terminal, and let the command finish before you run the CLI again:
+1. It builds the host, and copies the fixture database to a new database named
+   `leasebook_sandbox_run_<8 hex digits>`: the run's name, which every later command takes. The copy
+   is made with `CREATE DATABASE … TEMPLATE` on the `leasebook-db` container, which Postgres refuses
+   while anything is connected to the fixture. The command then says the fixture is in use: stop
+   the host, `psql` or pgAdmin session connected to it and start again.
+2. It migrates the copy as the migrator role.
+3. It takes the signing secret from `stripe listen --print-secret` and lets that process finish.
+4. It starts a host on the copy, at `http://localhost:5090`: Development, the fixture's manifest, and
+   the key and the signing secret in that process's environment and no other's. It removes
+   `Payments__Stripe__ApiBase` and adds loopback to `NO_PROXY`, so that a proxy in the environment
+   cannot take the host's calls.
+5. Once the host answers, it starts `stripe listen --latest --all-snapshot` forwarding to the host's
+   callback route, `--forward-connect-to` included. The CLI prints each delivery and the host's answer:
+   `204` for an authentic event, `400` for a signature that did not verify (check this machine's
+   clock: a signature more than 300 seconds off is refused), and `429` for the callback's rate limit.
+6. It waits for the host's first sweep of each fixture: log event `4606`, or `4607`, which ends the
+   run.
+7. It asks Stripe for the connected account's balance. If anything is available or pending that
+   Stripe has not yet paid out, it refuses to charge: a payout is forming, and this run's payments
+   would land in it beside lines LeaseBook cannot tie to them. Wait for that payout and start again.
+   There is no override.
+8. It runs the `start` step of `web/e2e/stripe-sandbox.spec.ts` in a browser:
+   - As `admin-a@payments.test`, it sets the **Online payment fees** on **Settings**: **Card** at
+     2.9% and $0.30, **Bank debit (ACH)** at 0.8%. Stripe keeps a fee from every charge, and a fee
+     the tenant was not quoted is a shortfall taken from management fees held in the trust bank, of
+     which a fresh fixture holds none: the payout would go to review as `pm_fees_insufficient`
+     instead of posting. These are the fees the sandbox kept in the runs ADR-054 records, so the fee
+     quoted is the fee Stripe keeps.
+   - As `tenant-a1@payments.test`, under the heading **Test payments** and the badge "Test payment
+     — no real money moves", it submits $500.00 by **Bank debit (ACH)**, checking the fee of $4.03
+     for a total of $504.03, then $500.00 by **Card**, checking $15.24 for $515.24.
+   - It waits, up to five minutes each, until both read "Paid on … on its way to the bank". The card
+     payment succeeds within a second or two; the ACH payment stays in processing for about half a
+     minute.
+9. It stops the listener and the host and runs `check-invariants --all` on the copy.
+10. It prints the run's name, each payment's reference and what its row says, the invariant result,
+    and the next step, `resume <run>`. The copy is kept.
 
-```powershell
-stripe listen --print-secret
-```
-
-It prints one value beginning `whsec_`. Treat it like the key: keep it out of the repository, issues
-and chat.
-
-Use a terminal kept for this host. The key and the signing secret are each refused as an unknown
-setting by a host in any other mode, payments disabled included, so do not put either in a profile or
-in a terminal you use for anything else. Setting them as below supplies them to that terminal's
-processes only.
-
-```powershell
-$env:ASPNETCORE_ENVIRONMENT = 'Development'
-$env:ConnectionStrings__Default = 'Host=localhost;Port=5632;Database=leasebook_payment_fixture_stripe;Username=leasebook_app;Password=dev_app_pw'
-$env:Payments__ManifestPath = (Resolve-Path ./payment-fixture-stripe.local).Path
-$env:Payments__Stripe__SecretKey = Read-Host -MaskInput 'Sandbox secret key'
-$env:Payments__Stripe__WebhookSecret = Read-Host -MaskInput 'Webhook signing secret'
-dotnet run --project src/LeaseBook.Web --no-launch-profile --urls http://localhost:5080
-```
-
-Both are required. A host that ran in this mode before the signing secret existed does not start
-until it is supplied. The secret must be the whole value and nothing else: a space or a line break
-pasted with it is refused at startup.
-
-At startup the host asks Stripe whose key it holds and reads each fixture's account. It then starts
-the same worker the simulator uses. Start `npm run dev` from `web/` and sign in as a fixture tenant.
-
-### Forward Stripe's events
-
-In another terminal, once the host is up, forward the sandbox's events to it and leave this running:
-
-```powershell
-stripe listen --latest --all-snapshot --forward-to localhost:5080/callbacks/payments/stripe --forward-connect-to localhost:5080/callbacks/payments/stripe
-```
-
-`--forward-connect-to` is the one that matters: every event about a fixture's payment is an event on
-its connected account. The CLI prints each delivery and the host's answer.
-
-- `204` means the event was authentic. It was either stored or was not this host's to act on. Most
-  are the second kind: `--all-snapshot` forwards every event type and the host reads nine.
-- `400` on every delivery means the signature did not verify. Check that the secret is the one this
-  CLI sign-in prints, and that this machine's clock is right: a signature more than 300 seconds from
-  the host's clock, either way, is refused.
-- `429` means the callback route's rate limit, 1200 deliveries a minute from one address, was passed.
-
-The route is `POST /callbacks/payments/stripe`. It exists only in a host in this mode, is outside
-cookie-authenticated `/api`, and is not part of the published API contract. It reads at most 64 KiB.
-The host checks the `Stripe-Signature` header before it reads anything in the body. It refuses an
-event not marked as test mode. It routes an event by the connected account it names, to the fixture
-bound to that account, and takes nothing else in the event as saying which organization it is for.
-
-### Make a card payment and an ACH payment
-
-**Set the fee rules first.** Stripe keeps a fee from every charge. A fee the tenant was not quoted is
-a shortfall, which is taken from management fees held in the trust bank, and a fresh fixture holds
-none: the payout would go to review as `pm_fees_insufficient` instead of posting. Sign in as
-`admin-a@payments.test`, open **Settings**, and under **Online payment fees** set **Card** to a rate
-of 2.9% and a fixed amount of $0.30, and **Bank debit (ACH)** to a rate of 0.8%. Those are the fees
-the sandbox kept in the runs ADR-054 records. With them, the fee quoted for the amounts below is the
-fee Stripe kept there, so nothing is left over either way.
-
-Then, as `tenant-a1@payments.test` in the tenant portal:
-
-1. The panel is headed **Test payments**, with the badge "Test payment — no real money moves". If it
-   says "Simulated payments", the host is not in this mode.
-2. Enter `500.00`, leave **Pay with** on **Bank debit (ACH)**, check the fee shown ($4.03, for a
-   total of $504.03) and choose **Submit test payment**.
-3. Enter `500.00` again, choose **Card**, check the fee ($15.24, for a total of $515.24) and submit.
-   Each submission is a payment of its own.
-
-What each payment then says:
+What each payment says on the way:
 
 | When                                       | The tenant's row reads                                                   |
 | ------------------------------------------ | ------------------------------------------------------------------------ |
@@ -333,18 +308,55 @@ What each payment then says:
 | Stripe says it succeeded                   | Paid on _date_ — on its way to the bank, not yet on your ledger          |
 | Stripe says it failed                      | Test payment failed — no payment recorded                                |
 | It needs a person                          | Test payment needs review — no receipt recorded, and a sentence below it |
-| A payout that holds it has posted (step 7) | Test payment recorded                                                    |
+| A payout that holds it has posted (step 5) | Test payment recorded                                                    |
 
-The card payment succeeds within a second or two. The ACH payment stays in processing for about half
-a minute. Once both have succeeded the panel also says "In transit: $1,000.00", and the tenant's
-balance has not moved: no journal entry has been written. On **Operations**, staff see the same two
-payments under **Test payments**, with the organization's total in transit.
+Once both have succeeded the tenant's panel also says what is in transit, and the tenant's balance
+has not moved: no journal entry has been written. On **Operations**, staff see the same two payments
+under **Test payments**.
 
-If a payment failed or went to review, [What to expect](#what-to-expect) says why. A failed ACH
-debit, a dispute or a refund lands in the same payout as the good payments and keeps all of it from
-posting. Resetting the fixture does not help, because Stripe still pays out what the account already
-holds. Wait for that payout to be made, which will go to review, and then make the two payments
-again.
+**When it stops early.** Every way out stops the listener and the host, Ctrl-C included. A run that
+stops before a charge could have been submitted drops its copy. Once the browser step is about to
+submit the first payment, the copy is kept instead, whatever happens next, and the command says why:
+the charges exist at Stripe, and only that copy knows them. Resume it once Stripe has paid out, or
+discard it. If a payment failed or went to review, [What to expect](#what-to-expect) says why. A
+failed ACH debit, a dispute or a refund lands in the same payout as the good payments and keeps all
+of it from posting. Wait for that payout to be made, which will go to review, and start again.
+
+**What it prints.** Everything passes through a mask: the key, the signing secret, connected
+accounts and persons are never shown, and other Stripe ids keep only their last four characters, as
+in `po_…9Zz9`. It never prints the manifest, which holds a signing key, and nothing it starts writes
+its output to a file: the listener's first line holds the signing secret.
+
+### Resume the run
+
+```bash
+op run --env-file=<references> -- node scripts/stripe-sandbox-run.mjs resume <run> [--keep]
+```
+
+`<run>` is the name `start` printed, or its eight hex digits. `resume` migrates the copy again, since
+`main` may have moved, then takes the signing secret, starts the host and the listener as `start`
+does, and waits for the first sweep: a restarted host reads the last 29 days of events, which is how
+it finds a payout made while no host ran. It charges nothing and makes no balance check. A browser
+step then reads **Payouts** on **Operations** as `admin-a@payments.test`, finds the payout that holds
+the run's two payments, and the run ends one of three ways:
+
+| What it finds                        | What it checks and does                                                                                                                                                     |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| No payout of the run's payments      | Says so, stops everything and keeps the copy. Run `resume` again later                                                                                                      |
+| The payout, in review                | Reports the reason the screen gives, runs `check-invariants --all`, and drops the copy                                                                                      |
+| The payout, **Waiting for the bank** | Checks the processor's amount, $1,000.00, and that both lines are **Payment**, "Not on the ledger", with nothing to post; runs `check-invariants --all`, and drops the copy |
+
+With `--keep` the copy is kept in the last two cases, so that the bank's evidence can still be given
+by hand: that is the way on to a posted payout. A failed browser step, or invariants that fail, keep
+the copy too, and the command says so.
+
+Two more commands, neither of which needs the key:
+
+- `node scripts/stripe-sandbox-run.mjs list` shows the runs' copies, when each started and how its
+  last `resume` ended.
+- `node scripts/stripe-sandbox-run.mjs discard <run>` drops a copy. It refuses while a host answers
+  on port 5090 or anything is connected to the copy. Payments the copy made stay at Stripe; until
+  Stripe has paid them out, the next `start` refuses to charge.
 
 ### What to expect
 
@@ -412,19 +424,21 @@ window. A payout holding only this generation's good payments is the one that po
 **How long.** Nobody here can say exactly. The connected account's schedule reads daily with a
 two-day delay. The one automatic payout recorded so far was created under three hours after the
 first charges, with the same day as its arrival date, and was marked paid five minutes after it was
-created. No second payout had been made two days after that. Expect to wait between a few hours and
-a few days. The host can be stopped in the meantime: when it starts again it asks Stripe for the last
-29 days of events and finds the payout. Start it with the same key and signing secret, and start
-`stripe listen` again only after the host is up.
+created. No second payout had been made two days after that. On 2026-10-14, the account's charges
+from 2026-10-08 and 2026-10-09 were still pending, with Stripe making them available on 2026-10-15
+and 2026-10-16: about seven days, not two. Expect to wait up to a week or more. No host runs in the meantime: the one `resume` starts asks Stripe for the last 29 days
+of events and finds the payout. Running `resume` too early does no harm; it says there is no payout
+yet and keeps the copy.
 
-**What to look for.** As `admin-a@payments.test`, open **Operations** and find the **Payouts** list.
+**What to look for.** `resume` reads this for you, and checks it. As `admin-a@payments.test`, open
+**Operations** and find the **Payouts** list.
 Before any payout it reads "No payouts yet. A payout appears here when the processor reports it."
 When Stripe has paid, the payout appears as **Payout po\_…** with the status **Waiting for the bank**,
 the words "No bank evidence has arrived for this payout. Nothing posts until the bank says what it
 received.", and "Processor’s payout amount: $1,000.00". Its two lines are of the kind **Payment**,
-each "Not on the ledger". There is no **Post payout** button: an administrator cannot post it. Note
-the payout's id and the processor's amount; the next step needs both. A payout that shows **Needs
-review — nothing posted** instead will not post: read why under [In review](#in-review).
+each "Not on the ledger". There is no **Post payout** button: an administrator cannot post it. The
+next step needs the payout's id and the processor's amount. A payout that shows **Needs review —
+nothing posted** instead will not post: read why under [In review](#in-review).
 
 **What the host reads.** A `payout.paid` or `payout.failed` event, delivered or found by the sweep.
 For a paid payout the host asks Stripe for the payout's balance lines, every page, and for the charge
@@ -458,9 +472,29 @@ Any other payout waits for the bank.
 
 #### Say what the bank received
 
-Stripe never says this, and no HTTP route or staff control does. For the run above, the amount is the
-processor's payout amount the list shows, and the date is today's or the payout's arrival date. In a
-terminal with the same five variables as the host:
+Stripe never says this, and no HTTP route or staff control does, so this step is a person's. It
+needs the copy `resume --keep` kept. The amount is the processor's payout amount, $1,000.00 for the
+run above, and the date is today's or the payout's arrival date. The command prints a payout's id
+masked to its last four characters; read the whole id on the screen of a host started on the copy.
+
+Take the signing secret first, with no other Stripe CLI process running: `stripe listen --print-secret`
+prints one value beginning `whsec_`. Treat it like the key: keep it out of the repository, issues and
+chat. Then, in a terminal kept for this (the key and the secret are refused as unknown settings by a
+host in any other mode, so keep them out of a profile and of any other terminal):
+
+```powershell
+$env:ASPNETCORE_ENVIRONMENT = 'Development'
+$env:ConnectionStrings__Default = 'Host=localhost;Port=5632;Database=<run>;Username=leasebook_app;Password=dev_app_pw'
+$env:Payments__ManifestPath = (Resolve-Path ./payment-fixture-stripe.local).Path
+$env:Payments__Stripe__SecretKey = Read-Host -MaskInput 'Sandbox secret key'
+$env:Payments__Stripe__WebhookSecret = Read-Host -MaskInput 'Webhook signing secret'
+dotnet run --project src/LeaseBook.Web --no-launch-profile --urls http://localhost:5080
+```
+
+`<run>` is the copy's whole name. Each secret must be the whole value and nothing else: a space or a
+line break pasted with it is refused at startup. Start `npm run dev` from `web/`, sign in as
+`admin-a@payments.test` and read the payout's id under **Payouts** on **Operations**. Then, in a
+second terminal with the same five variables:
 
 ```powershell
 $fixture = (Get-Content ./payment-fixture-stripe.local -Raw | ConvertFrom-Json).Payments.Fixtures[0]
@@ -508,7 +542,9 @@ dotnet run --project src/LeaseBook.Web --no-launch-profile -- check-invariants -
 
 It should print `all clean` for the fixture's organizations. To see the payout reconcile, import a
 statement on **Banking** as [Drive a payout](#drive-a-payout) describes for the simulator: one line
-for the bank amount on the bank date matches the payout as a group.
+for the bank amount on the bank date matches the payout as a group. Then stop the host and drop the
+copy with `node scripts/stripe-sandbox-run.mjs discard <run>`, so that the run leaves no database
+behind.
 
 #### In review
 
@@ -570,13 +606,17 @@ and an ACH method `pm_usBankAccount_`, each followed by letters, digits or under
 Stripe's documented test payment methods. A saved payment method's id does not have that shape and is
 refused. Both settings are refused outside this mode.
 
-To see a payment fail, stop the host, name one of Stripe's failing test payment methods here, such as
-`pm_card_visa_chargeDeclined` for a card or `pm_usBankAccount_insufficientFunds` for ACH, and start
-the host again. With events forwarded, a payment made with it ends as **Failed**.
+To see a payment fail, name one of Stripe's failing test payment methods here before a run, such as
+`pm_card_visa_chargeDeclined` for a card or `pm_usBankAccount_insufficientFunds` for ACH. With events
+forwarded, a payment made with it ends as **Failed**. The run's `start` expects both payments to be
+paid, so it reports the failure and keeps the copy, since a charge was made; the failed payment
+also keeps the payout that holds the other from posting.
 
 ### Startup refusals
 
-Each names a setting by its path or a fixture by its organization id, never a key or a secret.
+A host started by `start` or `resume` prints its output through the command, which says that the host
+exited before it was ready. Each refusal names a setting by its path or a fixture by its organization
+id, never a key or a secret.
 
 | The host says                                                                     | What it means                                                                                                                                                                                                 |
 | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -754,9 +794,8 @@ the code, so a test would wait up to five minutes for a sweep to find what it le
 stand-in's unit tests cover the listing instead. Deliveries are real signed requests to the host's
 callback route, and the stand-in does not send one again.
 
-To take a payment through by hand: pay by card in the tenant portal as
-[above](#make-a-card-payment-and-an-ach-payment), after setting the card fee rule; copy the payment
-reference; then, in a terminal:
+To take a payment through by hand: set the card fee rule and pay by card in the tenant portal, as
+[the run's browser step](#start-the-run) does; copy the payment reference; then, in a terminal:
 
 ```powershell
 $key = @{ Authorization = 'Bearer sk_test_leasebook_stand_in' }
@@ -769,6 +808,21 @@ $payout.id; $payout.net
 The payout then shows on **Operations** as **Waiting for the bank**.
 [Say what the bank received](#say-what-the-bank-received) with the payout's id and its net, using
 `payment-fixture-standin.local` for the manifest and the same six variables.
+
+### Try the sandbox run against the stand-in
+
+`scripts/stripe-sandbox-run.mjs` can be run against the stand-in instead of a sandbox, to try its
+copy, migration, host, browser step, invariant check, `resume` and `discard` without Stripe. Its
+test-only switch `STRIPE_SANDBOX_RUN_TEST_SOURCE=standin` points it at the stand-in fixture and at a
+stand-in already listening on `127.0.0.1:4010`, with the stand-in's key. Nothing then reaches Stripe
+and no Stripe CLI runs: the signing secret is `STRIPE_SANDBOX_RUN_TEST_WEBHOOK_SECRET`, which must be
+the one the stand-in was started with; the listener is a loop that tells the stand-in each new payment
+succeeded, and, under `resume` with `STRIPE_SANDBOX_RUN_TEST_PAYOUT=1`, pays them out; and the quiet
+check answers from `STRIPE_SANDBOX_RUN_TEST_PENDING_CENTS`, which is zero when unset. Start the stand-in
+with `--callback=http://127.0.0.1:5090/callbacks/payments/stripe` and keep it running from `start` to
+the last `resume`: it forgets its payments when it stops. It proves the command's own steps, not
+anything about Stripe. Because the quiet check is answered here, payments of a copy discarded before
+its payout land in the next run's payout, which then goes to review, as it would at Stripe.
 
 ### Discard it
 
@@ -853,3 +907,9 @@ stand-in was asked nothing it does not know:
   charges $20.00 beside the 0.8%, so that the payout's fee surplus covers what the return costs.
 
 The fixture is not reset between runs, and the test can be run again against the same database.
+
+A maintainer's run against a real sandbox has a Playwright pass of its own, `sandbox`, in
+`stripe-sandbox.spec.ts`: the `start` and `resume` steps of [the run](#run-the-stripe-sandbox-fixture).
+Only `scripts/stripe-sandbox-run.mjs` makes it, by setting `STRIPE_SANDBOX_E2E=1`; it starts the host
+itself, and Playwright then starts only the SPA, on port 5390, proxying to that host. `npm run e2e`,
+the stand-in pass and the coverage run skip both tests, and the pass never retries.

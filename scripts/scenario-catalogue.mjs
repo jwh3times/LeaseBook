@@ -83,8 +83,16 @@ const DEFAULT_PASS = "main";
  * database: `main` on the seeded development organizations, `payments` on the simulation's payment
  * fixture, and `stand-in` on the Stripe stand-in's fixture, where the host runs in `StripeSandbox`
  * mode against `scripts/stripe-stand-in.mjs` (ADR-054). A scenario with no `pass` runs in `main`.
+ * `sandbox` is a maintainer's run against a real Stripe sandbox (`scripts/stripe-sandbox-run.mjs`),
+ * which no automated run can make.
  */
-export const PASSES = [DEFAULT_PASS, "payments", "stand-in"];
+export const PASSES = [DEFAULT_PASS, "payments", "stand-in", "sandbox"];
+/**
+ * The passes only a maintainer runs, by hand. The coverage run never makes them, so their scenarios
+ * are reported as such and not as a pass the run left out, and they may declare no journal event or
+ * route: a scenario nothing automated runs cannot stand in for coverage.
+ */
+export const MAINTAINER_ONLY_PASSES = ["sandbox"];
 
 const routeKey = (route) => `${route.method} ${route.path}`;
 
@@ -314,6 +322,14 @@ export function validateCatalogue(catalogue) {
     if (scenario.pass !== undefined && !PASSES.includes(scenario.pass)) {
       problems.push(
         `${name}: \`pass\` must be one of ${PASSES.join(", ")}, or left out for ${DEFAULT_PASS}.`,
+      );
+    }
+    if (
+      MAINTAINER_ONLY_PASSES.includes(scenario.pass) &&
+      ((scenario.events ?? []).length > 0 || (scenario.routes ?? []).length > 0)
+    ) {
+      problems.push(
+        `${name}: a scenario of the maintainer-only ${scenario.pass} pass declares no \`events\` and no \`routes\`; no automated run makes it, so it cannot cover them.`,
       );
     }
     // A scenario that posts to the journal is a money scenario. It names the organization it
@@ -661,7 +677,9 @@ export function verifyRun({
       undeclaredEvents: [],
     };
     if (!passes.includes(pass)) {
-      row.state = "pass not run";
+      row.state = MAINTAINER_ONLY_PASSES.includes(pass)
+        ? "maintainer only"
+        : "pass not run";
       return row;
     }
     const attempts = tests.filter(
@@ -740,6 +758,7 @@ export function renderEvidence(result, title = "Scenario catalogue") {
   const { rows, problems } = result;
   const count = (state) => rows.filter((row) => row.state === state).length;
   const expected = count("expected failure");
+  const maintainer = count("maintainer only");
   const lines = [
     `## ${title}`,
     "",
@@ -747,7 +766,10 @@ export function renderEvidence(result, title = "Scenario catalogue") {
       (expected > 0
         ? `, ${expected} of them as an expected failure that shows a known limit`
         : "") +
-      `. ${count("failed")} did not, and ${count("pass not run")} belong to a pass this run did not make.`,
+      `. ${count("failed")} did not, and ${count("pass not run")} belong to a pass this run did not make.` +
+      (maintainer > 0
+        ? ` ${maintainer} belong to a maintainer-only pass (${MAINTAINER_ONLY_PASSES.join(", ")}), which runs against a real Stripe sandbox by hand and never in an automated run.`
+        : ""),
     "",
   ];
   if (problems.length > 0) {
