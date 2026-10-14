@@ -3,7 +3,7 @@
 - **Audience:** Developers and test operators
 - **Status:** Implemented, non-live only
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-13
+- **Last reviewed:** 2026-10-14
 
 The simulator exercises the real Payments and Accounting path. It has no provider network client
 and cannot move real money. Production and Staging reject Simulation; live/provider configuration
@@ -813,7 +813,9 @@ npx playwright test stripe-stand-in.spec.ts
 Playwright starts the stand-in, then the host, then the SPA, and stops them afterwards. It gives the
 host the stand-in's address and key, and a signing secret it makes for the run. CI runs this in a
 job of its own, `E2E (Stripe stand-in)`, beside the ordinary e2e job; in that job Stripe's hosts
-resolve to nothing, so a request to Stripe would fail and not be made quietly.
+resolve to nothing, so a request to Stripe would fail and not be made quietly. The coverage run
+measures the same test as its `stand-in` pass, `npm run e2e:coverage -- --stand-in`
+([Test coverage](../testing/coverage.md#playwright-run)).
 
 The test drives eight scenarios, each from the tenant portal and the staff Operations page, with a
 WCAG 2 AA check at each main state, `check-invariants --all` after each, and a check that the

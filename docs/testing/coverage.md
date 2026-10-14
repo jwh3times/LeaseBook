@@ -3,7 +3,7 @@
 - **Audience:** Contributors, reviewers and maintainers
 - **Status:** Living measurement record
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-13
+- **Last reviewed:** 2026-10-14
 
 LeaseBook measures what its test suites exercise: which lines and branches of each module ran, and
 which API routes the browser tests called. This page records how that is measured, how to run each
@@ -123,8 +123,10 @@ Three limits are worth knowing when reading the list:
   callback `/callbacks/payments/stripe` (mapped only in the Stripe sandbox mode), and the fallback
   that serves the SPA. A request that matches no contract route is listed in its own section of the
   report, so one of these shows up if a test ever calls it.
-- The eight `/api/payments` routes and the two simulation callbacks are mapped only by a host with
-  payments enabled. Only the second pass (`--payments`) starts one.
+- The eight `/api/payments` routes are mapped only by a host with payments enabled. Only the two
+  fixture passes start one: `--payments` in the simulation mode and `--stand-in` in the Stripe
+  sandbox mode. The Stripe callback is called by the stand-in and not by a test, so no request to it
+  is recorded.
 - `GET /api/health` is listed as not reached. Playwright polls it to see that the host is up, and no
   test requests it. No screen requests it either, so the catalogue records it as a permanent
   exemption.
@@ -182,12 +184,30 @@ from a fresh seed, and stop any host or dev server already running: the coverage
 host under the collector and will not reuse one. From `web/`:
 
 ```bash
-npm run e2e:coverage                 # the main pass
-npm run e2e:coverage -- --payments   # and the simulated-payment pass
+npm run e2e:coverage                              # the main pass
+npm run e2e:coverage -- --payments                # and the simulated-payment pass
+npm run e2e:coverage -- --stand-in                # and the Stripe stand-in pass
+npm run e2e:coverage -- --payments --stand-in     # all three, as CI runs it
 ```
 
-`--payments` also needs the payment fixture, created with `./scripts/payment-fixture.ps1 init` as the
-[payment simulation runbook](../runbooks/payment-simulation.md) describes.
+Each pass is one run of Playwright against one database, under the same collector:
+
+| Pass       | Flag         | Specs                       | Database                            | Manifest                        |
+| ---------- | ------------ | --------------------------- | ----------------------------------- | ------------------------------- |
+| `main`     | none         | every spec                  | the one `npm run e2e` uses          | none                            |
+| `payments` | `--payments` | `simulated-payment.spec.ts` | `leasebook_payment_fixture`         | `payment-fixture.local`         |
+| `stand-in` | `--stand-in` | `stripe-stand-in.spec.ts`   | `leasebook_payment_fixture_standin` | `payment-fixture-standin.local` |
+
+The runner names a fixture pass's database by swapping the database in the main connection string,
+and finds its manifest at the repository root. It refuses to start when a manifest is missing.
+`--payments` needs the payment fixture, created with `./scripts/payment-fixture.ps1 init`, and
+`--stand-in` the stand-in fixture, created with `./scripts/payment-fixture.ps1 init -StandIn`; the
+[payment simulation runbook](../runbooks/payment-simulation.md) describes both. In the stand-in pass
+Playwright starts the stand-in for Stripe before the host, and the host runs in the Stripe sandbox
+mode against it. Nothing in the run calls Stripe.
+
+Each fixture pass writes its Playwright report to a directory of its own: `web/playwright-report/`
+for the main pass, then `web/playwright-report-payments/` and `web/playwright-report-stand-in/`.
 
 Everything is written under `web/coverage/e2e/`:
 
@@ -205,7 +225,10 @@ Everything is written under `web/coverage/e2e/`:
 | `scenarios/`                  | What each scenario produced against what it declares        |
 
 A failing test fails the command after the reports are written. They then describe a failing run.
-The same holds for a scenario that did not produce what it declares and for a violated invariant.
+The same holds for a scenario that did not produce what it declares and for a violated invariant. A
+test marked with `test.fail()` that fails is not a failing test: Playwright counts it as the expected
+outcome and the pass succeeds. Its scenario is reported as an expected failure
+([End-to-end scenarios](scenarios.md#the-measured-check)).
 
 ## Read the reports
 
@@ -264,20 +287,29 @@ Two consecutive runs gave identical figures.
 
 ### Playwright run
 
-These figures were measured again on 2026-10-13 at commit `1aaf695` with one more scenario added, a
-staff sign-in with an authenticator code, which is the last change of #544. The two suite baselines
-above are unchanged, because that change touches no product code. The earlier figures are in this
-page's history. At the first baseline: 82 routes reached by a browser, 57.3% of host lines and 76.0%
-of web lines. After the first area of #544: 87 routes, 58.3% and 76.4%. After the second: 90 routes,
-58.4% and 77.6%. After the third: 96 routes, 59.4% and 77.8%. After the fourth: 101 routes, 60.0%
-and 79.3%. After the fifth and last, account security and the audit export: 107 routes, 60.9% and
-79.8%. The staff sign-in reaches no route and no line the fifth area had not reached, so the three
-tables below are the same as that measurement's, and only the count of requests rose.
+These figures were measured again on 2026-10-14 at commit `87faaed`, with the coverage run making
+the Stripe stand-in pass for the first time (#545). The change that adds the pass touches no product
+code. The two changes before it, which admit the stand-in's address and drive the stand-in
+scenarios, did, so the host counts 24,232 lines where it counted 24,208. The two suite baselines
+above were not measured again. The earlier figures are in this page's history. At the first
+baseline: 82 routes reached by a browser, 57.3% of host lines and 76.0% of web lines. After the
+first area of #544: 87 routes, 58.3% and 76.4%. After the second: 90 routes, 58.4% and 77.6%. After
+the third: 96 routes, 59.4% and 77.8%. After the fourth: 101 routes, 60.0% and 79.3%. After the
+fifth and last, account security and the audit export: 107 routes, 60.9% and 79.8%, which the staff
+sign-in with an authenticator code left as they were.
 
-Both passes: 130 tests passed and 4 were skipped in the main pass, and 4 passed in the
-simulated-payment pass. The four skipped are the simulated-payment tests, which run only in their
-own pass. The run was local, so the CI-only visual snapshots did not run; they assert on pixels and
-call no extra route.
+The stand-in pass reaches no route the other two passes had not reached, so the route table is the
+same as that measurement's. It reaches host code they do not: the Stripe sandbox adapter and the
+callback that receives Stripe's events. Payments rises from 74.8% to 80.8% of its lines, and the Web
+host from 50.8% to 53.8%.
+
+All three passes: 130 tests passed and 12 were skipped in the main pass, 4 passed in the
+simulated-payment pass, and 8 ran in the stand-in pass, 7 passing and 1 failing as expected. The 12
+skipped are the two fixture passes' tests, which run only in their own pass. Each of the 71
+scenarios produced what it declares, 1 of them as an expected failure, and none belongs to a pass
+the run did not make. `check-invariants --all` was clean in the 5 organizations of the main pass and
+in the 2 of each fixture pass. The run was local, so the CI-only visual snapshots did not run; they
+assert on pixels and call no extra route.
 
 Host coverage as reached by the browser, Debug build:
 
@@ -289,11 +321,11 @@ Host coverage as reached by the browser, Debug build:
 | Reporting    |      23 |     205 / 241 | 85.1% |          20 / 44 |  45.5% |
 | Operations   |      53 |    699 / 1003 | 69.7% |        125 / 217 |  57.6% |
 | Capabilities |      26 |     226 / 585 | 38.6% |         41 / 118 |  34.7% |
-| Payments     |     127 |   1124 / 1503 | 74.8% |       550 / 1100 |  50.0% |
+| Payments     |     127 |   1215 / 1503 | 80.8% |       622 / 1106 |  56.2% |
 | SharedKernel |      26 |     332 / 450 | 73.8% |        112 / 156 |  71.8% |
 | Migrator     |      19 |     302 / 350 | 86.3% |         79 / 136 |  58.1% |
-| Web host     |     357 |  6912 / 13611 | 50.8% |      2022 / 4941 |  40.9% |
-| **Total**    |    1135 | 14738 / 24208 | 60.9% |      4011 / 8370 |  47.9% |
+| Web host     |     357 |  7336 / 13635 | 53.8% |      2363 / 4967 |  47.6% |
+| **Total**    |    1135 | 15253 / 24232 | 62.9% |      4424 / 8402 |  52.7% |
 
 Web coverage as reached by the browser:
 
@@ -302,14 +334,14 @@ Web coverage as reached by the browser:
 | (src root) |     2 |       16 / 17 | 94.1% |            1 / 2 |  50.0% |
 | api        |     5 |       75 / 97 | 77.3% |          57 / 87 |  65.5% |
 | app        |     8 |     106 / 113 | 93.8% |          36 / 47 |  76.6% |
-| components |    13 |     172 / 196 | 87.8% |        128 / 176 |  72.7% |
+| components |    13 |     172 / 196 | 87.8% |        129 / 176 |  73.3% |
 | design     |    22 |     132 / 151 | 87.4% |        133 / 162 |  82.1% |
 | dev        |     1 |       10 / 14 | 71.4% |            0 / 0 |    n/a |
-| features   |    89 |   2354 / 3003 | 78.4% |      1790 / 2842 |  63.0% |
+| features   |    89 |   2357 / 3003 | 78.5% |      1811 / 2842 |  63.7% |
 | lib        |     9 |      91 / 111 | 82.0% |          46 / 55 |  83.6% |
-| **Total**  |   149 |   2956 / 3702 | 79.8% |      2191 / 3371 |  65.0% |
+| **Total**  |   149 |   2959 / 3702 | 79.9% |      2213 / 3371 |  65.6% |
 
-Route inventory, from 2,121 recorded requests:
+Route inventory, from 2,458 recorded requests:
 
 | Group             | Routes | Reached by a browser | Test client only | Not reached |
 | :---------------- | -----: | -------------------: | ---------------: | ----------: |
@@ -437,6 +469,12 @@ command with both passes took 8:16.
 
 The staff sign-in test of #544 takes about 3 seconds. With it, on 2026-10-13, the main pass with
 collection took 7.3 minutes and the whole command with both passes took 8:25.
+
+The Stripe stand-in pass of #545 took 2.6 minutes with collection, the same as its spec takes
+without. On 2026-10-14, the whole command with all three passes took 11:20: the main pass 7.4
+minutes, the simulated-payment pass 54 seconds, the stand-in pass 2.6 minutes, and the reports, the
+scenario check and the three invariant runs the rest. The main and simulated-payment passes ran on
+databases seeded for the run, and the stand-in pass on a stand-in fixture made new for it.
 
 ## Console logging and the test run
 
