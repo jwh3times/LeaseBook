@@ -198,6 +198,10 @@ Each pass is one run of Playwright against one database, under the same collecto
 | `payments` | `--payments` | `simulated-payment.spec.ts` | `leasebook_payment_fixture`         | `payment-fixture.local`         |
 | `stand-in` | `--stand-in` | `stripe-stand-in.spec.ts`   | `leasebook_payment_fixture_standin` | `payment-fixture-standin.local` |
 
+A fourth pass, `sandbox`, is a maintainer's run against a real Stripe sandbox
+([runbook](../runbooks/payment-simulation.md#run-the-stripe-sandbox-fixture)). The coverage run never
+makes it, and its scenario check reports that pass's scenarios as maintainer-only.
+
 The runner names a fixture pass's database by swapping the database in the main connection string,
 and finds its manifest at the repository root. It refuses to start when a manifest is missing.
 `--payments` needs the payment fixture, created with `./scripts/payment-fixture.ps1 init`, and

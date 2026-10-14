@@ -4,6 +4,9 @@ import { defineConfig } from 'vitest/config';
 
 // https://vite.dev — dev server on 5373 (offset from the default), /api proxied to the
 // .NET host on 5080. The 5373 port lets the SPA coexist with other local projects' Vite servers.
+// LEASEBOOK_API_PROXY_TARGET points the proxy at another host: only the Stripe sandbox run's
+// Playwright pass sets it (`playwright.config.ts`), for the host `scripts/stripe-sandbox-run.mjs`
+// starts on a port of its own.
 export default defineConfig({
   plugins: [react()],
   resolve: {
@@ -15,7 +18,7 @@ export default defineConfig({
     port: 5373,
     proxy: {
       '/api': {
-        target: 'http://localhost:5080',
+        target: process.env.LEASEBOOK_API_PROXY_TARGET || 'http://localhost:5080',
         changeOrigin: true,
       },
     },

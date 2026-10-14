@@ -28,7 +28,7 @@ holds two lists.
 | `area`            | The part of the product, for reading the table.                                                                     |
 | `spec`            | The file under `web/e2e/` that holds the scenario's tests.                                                          |
 | `org`             | The organization the scenario drives. Required when `events` is not empty.                                          |
-| `pass`            | `payments` or `stand-in` for a scenario of one of those passes. Left out for the rest.                              |
+| `pass`            | `payments`, `stand-in` or `sandbox` for a scenario of one of those passes. Left out for the rest.                   |
 | `events`          | The journal event types the scenario's tests post. May be empty.                                                    |
 | `routes`          | The API routes the scenario is there to call, as `METHOD /path/{parameter}`. May be empty.                          |
 | `expectedFailure` | For a scenario that shows a known limit: why its test is expected to fail, naming the limit. Left out for the rest. |
@@ -36,8 +36,16 @@ holds two lists.
 A pass is one run of the suite against one database. `payments` is the simulated-payment pass, on
 the payment fixture. `stand-in` is the Stripe stand-in pass, on the stand-in fixture, where the host
 runs in `StripeSandbox` mode against a local stand-in for Stripe
-([runbook](../runbooks/payment-simulation.md#run-against-the-stripe-stand-in)). Any other name is
+([runbook](../runbooks/payment-simulation.md#run-against-the-stripe-stand-in)). `sandbox` is a
+maintainer's run against a real Stripe sandbox, made by hand with `scripts/stripe-sandbox-run.mjs`
+([runbook](../runbooks/payment-simulation.md#run-the-stripe-sandbox-fixture)). Any other name is
 refused by the static check.
+
+**Maintainer-only passes.** No automated run makes `sandbox`, so the coverage run never judges its
+scenarios: the measured check reports each as maintainer-only, and not as a pass the run left out.
+For the same reason such a scenario declares no `events` and no `routes`, and the static check
+refuses one that does: a scenario nothing automated runs cannot stand in for coverage. Its tests
+still carry their scenario tags, and the static check holds them to the catalogue like any other.
 
 `events` is exact for what it lists: every event type named must be posted by a test of the
 scenario. `routes` names the routes the scenario exists to cover. A test also calls routes every
@@ -131,7 +139,8 @@ violation. Every organization a scenario drove is checked once, after the last s
 with it.
 
 The result is written to `web/coverage/e2e/scenarios/` and joined to the run's summary. It also
-lists, without failing, the event types a scenario posted and does not declare.
+lists, without failing, the event types a scenario posted and does not declare, and counts the
+scenarios of a maintainer-only pass apart.
 
 A scenario with `expectedFailure` is judged against what it declares, as any other. When it produced
 that, it is reported as an expected failure and not as verified, because its workflow does not yet do
@@ -219,7 +228,7 @@ not edit between the markers.
 <!-- scenario-catalogue:start -->
 <!-- prettier-ignore-start -->
 
-71 scenarios, 1 of them an expected failure that shows a known limit. 8 journal event types and 22 routes are exempt.
+73 scenarios, 1 of them an expected failure that shows a known limit. 8 journal event types and 22 routes are exempt.
 
 ### Scenarios
 
@@ -293,6 +302,8 @@ not edit between the markers.
 | `stripe-stand-in-bank-amount-differs` | The bank receives a cent less than Stripe's net; the payout goes to review, the right amount afterwards is refused as conflicting, and an administrator closes the payout by keyboard | Payments | `stripe-stand-in.spec.ts` | stand-in payment fixture |  | `GET /api/payments/settlements`<br>`POST /api/payments/settlements/{id}/close` |
 | `stripe-stand-in-recorded-payout` | The one payout a sandbox has made arrives as recorded with its fifteen lines; it goes to review, bank evidence releases nothing, an administrator's post is refused, and the review is closed | Payments | `stripe-stand-in.spec.ts` | stand-in payment fixture |  | `GET /api/payments/settlements`<br>`POST /api/payments/settlements/{id}/post`<br>`POST /api/payments/settlements/{id}/close` |
 | `stripe-stand-in-payment-and-return-in-one-payout` | A payout holds an ACH debit and that debit's return; bank evidence equal to the net should let it post, with the receipt and its reversal **Expected to fail:** ADR-054 known limit: a payout that holds both a payment and that payment's return cannot post. Today it goes to review; the test fails where it asserts that the payout posts. | Payments | `stripe-stand-in.spec.ts` | stand-in payment fixture |  | `PUT /api/settings/payment-fees`<br>`GET /api/payments/settlements` |
+| `stripe-sandbox-start` | A maintainer's run against a real Stripe sandbox: an administrator sets Stripe's own fee rules, a tenant pays $500.00 by ACH and $500.00 by card, and both read paid and on their way to the bank, with nothing posted | Payments | `stripe-sandbox.spec.ts` | copy of the Stripe sandbox fixture |  |  |
+| `stripe-sandbox-resume` | The same run, resumed once Stripe has paid out: an administrator finds the payout of those two payments on Operations, in review with its reason, or waiting for the bank with the processor's $1,000.00 and two payment lines not on the ledger | Payments | `stripe-sandbox.spec.ts` | copy of the Stripe sandbox fixture |  |  |
 | `spa-boot` | The application loads and shows the sign-in screen | Platform | `smoke.spec.ts` |  |  |  |
 | `tenant-portal-staff-denied` | A staff member is refused the tenant portal and keeps the dashboard | Tenant portal | `tenant-portal.spec.ts` |  |  |  |
 | `tenant-portal-ledger-and-security` | A resident signs in, reads the ledger, reaches account security and signs out | Tenant portal | `tenant-portal.spec.ts` |  |  | `GET /api/portal/tenant/ledger`<br>`GET /api/portal/tenant/payments`<br>`POST /api/auth/logout` |

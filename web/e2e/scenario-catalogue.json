@@ -736,6 +736,26 @@
       "routes": ["PUT /api/settings/payment-fees", "GET /api/payments/settlements"]
     },
     {
+      "id": "stripe-sandbox-start",
+      "workflow": "A maintainer's run against a real Stripe sandbox: an administrator sets Stripe's own fee rules, a tenant pays $500.00 by ACH and $500.00 by card, and both read paid and on their way to the bank, with nothing posted",
+      "area": "Payments",
+      "spec": "stripe-sandbox.spec.ts",
+      "org": "copy of the Stripe sandbox fixture",
+      "pass": "sandbox",
+      "events": [],
+      "routes": []
+    },
+    {
+      "id": "stripe-sandbox-resume",
+      "workflow": "The same run, resumed once Stripe has paid out: an administrator finds the payout of those two payments on Operations, in review with its reason, or waiting for the bank with the processor's $1,000.00 and two payment lines not on the ledger",
+      "area": "Payments",
+      "spec": "stripe-sandbox.spec.ts",
+      "org": "copy of the Stripe sandbox fixture",
+      "pass": "sandbox",
+      "events": [],
+      "routes": []
+    },
+    {
       "id": "spa-boot",
       "workflow": "The application loads and shows the sign-in screen",
       "area": "Platform",

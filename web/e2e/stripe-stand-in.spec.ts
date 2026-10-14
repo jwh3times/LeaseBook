@@ -2,8 +2,19 @@ import { execFile } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { promisify } from 'node:util';
-import { type Browser, type Locator, type Page, expect } from '@playwright/test';
-import { runA11y, signIn } from './helpers';
+import { type Locator, type Page, expect } from '@playwright/test';
+import { signIn } from './helpers';
+import {
+  type Method,
+  PASSWORD,
+  STRIPE_FEES,
+  administrator,
+  chargeStripesFee,
+  scanStaff,
+  scanTenant,
+  setFeeRule,
+  staffPayout,
+} from './stripe-screens';
 import { test } from './test';
 
 // The Stripe sandbox mode, driven through the tenant and staff screens against a host whose Stripe
@@ -14,7 +25,6 @@ import { test } from './test';
 // The database is the stand-in fixture's and is not reset between runs, so a test finds a payment
 // and a payout by their own references and reads a balance as a difference.
 
-const PASSWORD = 'Payment-Fixture-2026!';
 const STAND_IN_KEY = 'sk_test_leasebook_stand_in';
 const run = promisify(execFile);
 
@@ -27,17 +37,7 @@ interface Payout {
   net: string;
   deliveries: Delivery[];
 }
-type Method = 'card' | 'ach';
 
-// The fee Stripe keeps in the recorded runs, as a convenience-fee rule: 2.9% plus $0.30 of a card
-// charge and 0.8% of an ACH debit, with no cap. The recorded ACH debit of $504.03 carries a balance
-// line with a fee of $4.03, and every other ACH line in the recorded payout carries 0.8% too. An
-// organization that charges exactly this is quoted the fee a payout's line then carries, so nothing
-// is left over.
-const STRIPE_FEES: Record<Method, { group: string; rate: string; fixed: string }> = {
-  card: { group: 'Card', rate: '2.9', fixed: '0.30' },
-  ach: { group: 'Bank debit (ACH)', rate: '0.8', fixed: '0.00' },
-};
 const PAYOUT_EVENTS = [
   ['payout.created', 204],
   ['payout.reconciliation_completed', 204],
@@ -117,29 +117,6 @@ function bank(org: number, payout: string, amount: string, date: string) {
   return command('payment-simulation', 'bank', fixture(org).OrgId, payout, amount, date);
 }
 
-// An axe scan reads colors as they are at that instant, so it waits for any transition to end.
-async function settled(page: Page): Promise<void> {
-  await expect
-    .poll(() =>
-      page.evaluate(
-        () => document.getAnimations().filter((motion) => motion.playState === 'running').length,
-      ),
-    )
-    .toBe(0);
-}
-
-// The staff Operations page. `nested-interactive` is its documented deferral for the disbursement
-// rows (see a11y.spec.ts).
-async function scanStaff(admin: Page): Promise<void> {
-  await settled(admin);
-  await runA11y(admin, { disableRules: ['nested-interactive'] });
-}
-
-async function scanTenant(page: Page): Promise<void> {
-  await settled(page);
-  await runA11y(page);
-}
-
 // The tenant's balance as the portal shows it, in dollars: what is owed is positive, a credit is
 // negative, and exactly nothing is a dash.
 async function balance(page: Page): Promise<number> {
@@ -161,30 +138,6 @@ function receipts(page: Page, amount: string): Locator {
     .filter({ hasText: 'Posted' })
     .filter({ hasText: amount });
 }
-
-// An administrator of a fixture organization, signed in a browser context of their own.
-async function administrator(browser: Browser, org: 'a' | 'b') {
-  const staff = await browser.newContext();
-  const admin = await staff.newPage();
-  await signIn(admin, { email: `admin-${org}@payments.test`, password: PASSWORD });
-  return { staff, admin };
-}
-
-// Sets one method's convenience-fee rule on the Settings page, with no cap. The other method's
-// rule is left as it is.
-async function setFeeRule(admin: Page, group: string, rate: string, fixed: string): Promise<void> {
-  await admin.goto('/settings');
-  const rule = admin.getByRole('group', { name: group });
-  await rule.getByLabel('Rate (%)').fill(rate);
-  await rule.getByLabel('Fixed amount ($)').fill(fixed);
-  await rule.getByLabel('Cap ($)').fill('');
-  await rule.getByLabel('Cap ($)').press('Enter');
-  await expect(admin.getByText('Saved', { exact: true })).toBeVisible();
-}
-
-// The organization charges for a method exactly what Stripe keeps for it.
-const chargeStripesFee = (admin: Page, method: Method) =>
-  setFeeRule(admin, STRIPE_FEES[method].group, STRIPE_FEES[method].rate, STRIPE_FEES[method].fixed);
 
 // A tenant pays an amount toward the ledger from the portal, by keyboard, after reading the quote.
 // The host then charges it at the stand-in, which has not yet said how it went.
@@ -241,10 +194,6 @@ async function readAgain(admin: Page): Promise<void> {
 // A payment on the staff Operations page, by its own reference.
 const staffPayment = (admin: Page, id: string) =>
   admin.getByRole('listitem').filter({ hasText: `Payment reference: ${id}` });
-
-// A payout on the staff Operations page, by its own reference.
-const staffPayout = (admin: Page, id: string) =>
-  admin.getByRole('listitem', { name: `Payout ${id}` });
 
 // An administrator closes a review from the keyboard, with a note: of a payment, or of a payout.
 async function closeReview(admin: Page, item: Locator, open: Locator, note: string) {

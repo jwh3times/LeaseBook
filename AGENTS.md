@@ -175,6 +175,10 @@ Run `dotnet tool restore` once for `dotnet-ef`.
   `$env:ASPNETCORE_ENVIRONMENT='Development'; dotnet run --project src/LeaseBook.Web -- capabilities list [--org demo] [--stale]`
   (also `flag enable|disable|clear <name>`, `grant|revoke <name> --org <id|demo>`,
   `cohort add|remove <name> --org <id|demo> [--user <id>]`; `docs/runbooks/local-dev.md` owns the detail)
+- A maintainer's Stripe sandbox run, up to a held payout (never CI; the test-mode key comes from a
+  secret manager): `op run --env-file=<refs> -- node scripts/stripe-sandbox-run.mjs start`, later
+  `resume <run> [--keep]`; also `list` and `discard <run>`. It copies the sandbox fixture and never
+  touches it (`docs/runbooks/payment-simulation.md` owns the procedure)
 - Measure read-path p95 against a running host: `$env:ASPNETCORE_ENVIRONMENT='Development'; dotnet run --project src/LeaseBook.Web -- perf-probe`
   (needs the load fixture seeded and the host already running; `docs/perf.md` owns the method and the
   recorded numbers)

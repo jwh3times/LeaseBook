@@ -189,6 +189,8 @@ with `LEASEBOOK_APP_BIND`.
 | `5632` | PostgreSQL (Docker, published to the host)      | `docker-compose.yml` (`db`) · connection strings in `appsettings.Development.json`                                                              |
 | `5250` | pgAdmin (Docker)                                | `docker-compose.yml` (`pgadmin`)                                                                                                                |
 | `4010` | Local stand-in for Stripe (browser test only)   | `Payments__Stripe__ApiBase` · defaults in `web/playwright.config.ts` and `scripts/stripe-stand-in.mjs`                                          |
+| `5090` | .NET host of a maintainer's Stripe sandbox run  | `scripts/stripe-sandbox-run.mjs` (`HOST_PORT`) · proxied from the run's SPA via `LEASEBOOK_API_PROXY_TARGET`                                    |
+| `5390` | Vite dev server of the same run (Playwright)    | `web/playwright.config.ts` (`SANDBOX_SPA`, with `STRIPE_SANDBOX_E2E=1`) · `web/vite.config.ts` reads the proxy target                           |
 
 **Full Docker stack** — the whole product in containers (`./scripts/dev.ps1 app-up`, Compose `full` profile):
 
