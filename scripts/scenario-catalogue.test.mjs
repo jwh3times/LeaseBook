@@ -7,6 +7,7 @@ import { routesFromOpenApi } from "./route-inventory.mjs";
 import {
   CATALOGUE_PATH,
   DOC_PATH,
+  PASSES,
   checkEvents,
   checkRoutes,
   checkTags,
@@ -178,6 +179,19 @@ describe("validateCatalogue", () => {
     assert.match(problems, /Scenario id record-payment is used twice/);
     assert.match(problems, /`\/api\/owners` is not "METHOD \/path"/);
     assert.match(problems, /`workflow` is required/);
+  });
+
+  it("refuses a pass that is not one of the passes that run", () => {
+    const named = catalogue();
+    for (const pass of PASSES) {
+      named.scenarios[0].pass = pass;
+      assert.deepEqual(validateCatalogue(named), []);
+    }
+    named.scenarios[0].pass = "standin";
+    assert.match(
+      validateCatalogue(named).join("\n"),
+      /record-payment: `pass` must be one of main, payments, stand-in, or left out for main/,
+    );
   });
 
   it("requires a money scenario to name its organization", () => {

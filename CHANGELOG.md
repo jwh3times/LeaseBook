@@ -21,8 +21,8 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   and only together with one fixed stand-in key that Stripe never issues. That key is refused without
   the address, so a key of Stripe's is never sent to a stand-in and the stand-in's key is never sent
   to Stripe. Every other mode refuses the setting at startup. It exists so that the sandbox screens
-  can be tested in a browser with no call to Stripe; no stand-in ships yet, and nothing changes for a
-  host that does not set it.
+  can be tested in a browser with no call to Stripe. Nothing changes for a host that does not set
+  it.
 
 - **Staff can review processor payouts, and an administrator can set online payment fees.** In the
   development payment fixture, Operations lists each payout with its status, the reason it waits and

@@ -7,10 +7,20 @@ param(
     [int]$Port = 5632,
     # Stripe sandbox connected accounts (acct_...), one fixture organization each. Given, the fixture is
     # the Stripe sandbox one, in its own database and manifest beside the simulation fixture.
-    [string[]]$StripeAccount = @()
+    [string[]]$StripeAccount = @(),
+    # The fixture a local stand-in for Stripe answers for (scripts/stripe-stand-in.mjs), for browser
+    # tests that make no call to Stripe. A sandbox fixture bound to synthetic connected accounts, in a
+    # database and manifest of its own beside the other two.
+    [switch]$StandIn
 )
 $ErrorActionPreference = 'Stop'
 $fixtureRoot = Split-Path -Parent $PSScriptRoot
+# Synthetic, and fixed: no account of Stripe's is named, and the stand-in holds whatever the manifest binds.
+$standInAccounts = @('acct_standin000001', 'acct_standin000002')
+if ($StandIn) {
+    if ($StripeAccount.Count -gt 0) { throw 'A stand-in fixture names no Stripe account: give -StandIn or -StripeAccount, not both.' }
+    $StripeAccount = $standInAccounts
+}
 $sandbox = $StripeAccount.Count -gt 0
 # Checked before anything is created: the bootstrap would refuse the same, with a database left behind.
 foreach ($account in $StripeAccount) {
@@ -18,8 +28,10 @@ foreach ($account in $StripeAccount) {
 }
 if (@($StripeAccount | Select-Object -Unique).Count -ne $StripeAccount.Count) { throw 'Each Stripe account may be given once.' }
 if ($StripeAccount.Count -gt 26) { throw 'At most 26 Stripe accounts, one fixture organization each.' }
-$manifest = Join-Path $fixtureRoot ($sandbox ? 'payment-fixture-stripe.local' : 'payment-fixture.local')
-$database = $sandbox ? 'leasebook_payment_fixture_stripe' : 'leasebook_payment_fixture'
+# Three fixtures, three fixed pairs of names. The switch alone chooses the pair, so a stand-in
+# command can reach neither the simulation fixture nor a maintainer's real sandbox fixture.
+$manifest = Join-Path $fixtureRoot ($StandIn ? 'payment-fixture-standin.local' : $sandbox ? 'payment-fixture-stripe.local' : 'payment-fixture.local')
+$database = $StandIn ? 'leasebook_payment_fixture_standin' : $sandbox ? 'leasebook_payment_fixture_stripe' : 'leasebook_payment_fixture'
 $mode = $sandbox ? 'StripeSandbox' : 'Simulation'
 function Sql([string]$databaseName, [string]$query) {
     $result = $query | docker exec -i $Container psql -U postgres -d $databaseName -v ON_ERROR_STOP=1 -At
@@ -39,6 +51,10 @@ try {
         # in the sandbox database. The count is the manifest's own, so it is compared, never trusted.
         $fixtures = @($config.Payments.Fixtures)
         if ($config.Payments.Mode -cne $mode -or $fixtures.Count -lt 1 -or (!$sandbox -and $fixtures.Count -ne 2)) { throw 'Not a fixture manifest.' }
+        # A stand-in manifest binds the synthetic accounts and no other, and a sandbox manifest binds
+        # none of them: a manifest under the wrong name is refused before anything is dropped.
+        $synthetic = @($fixtures | Where-Object { $standInAccounts -ccontains $_.Account }).Count
+        if ($StandIn ? ($synthetic -ne $fixtures.Count) : ($synthetic -ne 0)) { throw 'Not a fixture manifest.' }
         $orgCount = Sql $database 'SELECT count(*) FROM orgs;'
         if ($orgCount -ne "$($fixtures.Count)") { throw 'Reset refused: database contains unexpected organizations.' }
         foreach ($binding in $fixtures) {

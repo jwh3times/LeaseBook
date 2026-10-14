@@ -22,6 +22,7 @@ dist/
 .vite/
 playwright-report/
 playwright-report-payments/
+playwright-report-stand-in/
 test-results/
 e2e-results/
 # Coverage reports (ADR-055): web/coverage/unit from Vitest, web/coverage/e2e from the Playwright run

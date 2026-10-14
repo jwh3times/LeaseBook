@@ -28,9 +28,15 @@ holds two lists.
 | `area`     | The part of the product, for reading the table.                                            |
 | `spec`     | The file under `web/e2e/` that holds the scenario's tests.                                 |
 | `org`      | The organization the scenario drives. Required when `events` is not empty.                 |
-| `pass`     | `payments` for a scenario that runs in the simulated-payment pass. Left out for the rest.  |
+| `pass`     | `payments` or `stand-in` for a scenario of one of those passes. Left out for the rest.     |
 | `events`   | The journal event types the scenario's tests post. May be empty.                           |
 | `routes`   | The API routes the scenario is there to call, as `METHOD /path/{parameter}`. May be empty. |
+
+A pass is one run of the suite against one database. `payments` is the simulated-payment pass, on
+the payment fixture. `stand-in` is the Stripe stand-in pass, on the stand-in fixture, where the host
+runs in `StripeSandbox` mode against a local stand-in for Stripe
+([runbook](../runbooks/payment-simulation.md#run-against-the-stripe-stand-in)). Any other name is
+refused by the static check.
 
 `events` is exact for what it lists: every event type named must be posted by a test of the
 scenario. `routes` names the routes the scenario exists to cover. A test also calls routes every
@@ -112,6 +118,11 @@ with it.
 The result is written to `web/coverage/e2e/scenarios/` and joined to the run's summary. It also
 lists, without failing, the event types a scenario posted and does not declare.
 
+The coverage run does not make the `stand-in` pass yet, so the measured check reports a scenario of
+that pass as belonging to a pass that did not run, and does not judge it. Until it does, the
+`E2E (Stripe stand-in)` job of `ci.yml` is what runs those scenarios, on every pull request, with
+`check-invariants --all` after each one and once more when the host has stopped.
+
 ## Organizations
 
 Money scenarios drive the **scenario organization**, which `seed --org scenario` creates. It has
@@ -122,6 +133,10 @@ The specs written before the catalogue stay on the organization they already use
 field says which. New money scenarios use the scenario organization. The simulated-payment scenarios
 use the payment fixture, which is a separate database with two organizations. The two scenarios
 that close a review drive the second one, so they share nothing with the two that came first.
+
+The Stripe stand-in scenarios use the stand-in payment fixture, a third database of the same shape.
+`./scripts/payment-fixture.ps1 init -StandIn` creates it. Its two organizations are bound to
+synthetic connected accounts, and the scenario so far drives the first.
 
 A scenario that changes how an account signs in does not use a seeded account. The database is not
 reset between specs, and no screen removes an authenticator, so the change would reach every later
@@ -175,7 +190,7 @@ not edit between the markers.
 <!-- scenario-catalogue:start -->
 <!-- prettier-ignore-start -->
 
-63 scenarios. 8 journal event types and 22 routes are exempt.
+64 scenarios. 8 journal event types and 22 routes are exempt.
 
 ### Scenarios
 
@@ -241,6 +256,7 @@ not edit between the markers.
 | `simulated-payment-reload-and-bank-evidence` | A simulated payment survives a reload and posts only after separate bank evidence | Payments | `simulated-payment.spec.ts` | payment fixture | `PaymentReceived`<br>`EntryVoided` | `POST /api/portal/tenant/payments`<br>`POST /callbacks/payments/simulation`<br>`GET /api/payments`<br>`POST /api/payments/{id}/return` |
 | `simulated-payment-review-closed` | A receipted simulated payment is disputed, and an administrator closes its review with a note by keyboard, with nothing reversed | Payments | `simulated-payment.spec.ts` | payment fixture | `PaymentReceived` | `POST /api/payments/{id}/close-review` |
 | `simulated-payment-payout-review-closed` | A payout that does not add up to the bank amount posts nothing, and an administrator closes it with a note by keyboard | Payments | `simulated-payment.spec.ts` |  |  | `POST /api/payments/settlements/{id}/close` |
+| `stripe-stand-in-card-to-posted-payout` | A tenant pays by card in the Stripe sandbox mode; the payout waits for the bank and posts when the bank evidence equals the processor's net | Payments | `stripe-stand-in.spec.ts` | stand-in payment fixture | `PaymentReceived` | `GET /api/portal/tenant/payments/quote`<br>`POST /api/portal/tenant/payments`<br>`GET /api/payments`<br>`GET /api/payments/settlements` |
 | `spa-boot` | The application loads and shows the sign-in screen | Platform | `smoke.spec.ts` |  |  |  |
 | `tenant-portal-staff-denied` | A staff member is refused the tenant portal and keeps the dashboard | Tenant portal | `tenant-portal.spec.ts` |  |  |  |
 | `tenant-portal-ledger-and-security` | A resident signs in, reads the ledger, reaches account security and signs out | Tenant portal | `tenant-portal.spec.ts` |  |  | `GET /api/portal/tenant/ledger`<br>`GET /api/portal/tenant/payments`<br>`POST /api/auth/logout` |

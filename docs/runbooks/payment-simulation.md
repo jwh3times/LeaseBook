@@ -11,7 +11,9 @@ is refused. A second mode, `StripeSandbox`, collects through a Stripe sandbox in
 simulator, with test payment methods only.
 [Run the Stripe sandbox fixture](#run-the-stripe-sandbox-fixture) takes one card payment and one ACH
 payment through to a posted payout in that mode, and says which part of that has been run against a
-real sandbox. Everything before that section describes the simulator. The
+real sandbox. [Run against the Stripe stand-in](#run-against-the-stripe-stand-in) drives the same
+mode with no Stripe at all, for the browser test that continuous integration runs. Everything before
+those two sections describes the simulator. The
 [specification](../payments/simulated-payment-spec.md) owns the financial contract.
 
 ## Create the fixture
@@ -157,6 +159,11 @@ it. Its reset needs the accounts named again, because it recreates the fixture f
 `./scripts/payment-fixture.ps1 reset -StripeAccount <acct_…>`. The same checks apply, with the
 organization count taken from that manifest. Resetting does nothing at Stripe: payments already made
 in the sandbox stay there, and the new generation does not match them.
+
+The stand-in fixture is a third database and manifest. `./scripts/payment-fixture.ps1 reset -StandIn`
+discards and recreates it, and touches neither of the other two: the switch alone chooses which
+database and manifest a command names. It also refuses a manifest that binds anything but the
+stand-in's synthetic accounts.
 
 ## Run the Stripe sandbox fixture
 
@@ -587,6 +594,154 @@ Each names a setting by its path or a fixture by its organization id, never a ke
 | `requires the platform's test-mode key, not a connected account's own`            | The key belongs to a fixture's connected account. An account with its own dashboard has its own keys; copy the key from the sandbox itself.                                                                   |
 | `fixture organization <id> is not bound to a test connected account … fees`       | That fixture's account cannot be read with this key, or does not pay its own Stripe fees. Check the id, and that the account belongs to this sandbox and was created so.                                      |
 
+## Run against the Stripe stand-in
+
+`scripts/stripe-stand-in.mjs` is a local stand-in for Stripe
+([ADR-054](../adr/ADR-054-stripe-sandbox-adapter.md), the note of 2026-10-13). A host in
+`StripeSandbox` mode is pointed at it with `Payments:Stripe:ApiBase`, and then makes no call to
+Stripe. It needs no sandbox, no key of Stripe's and no Stripe CLI. It exists for one purpose: to
+drive the sandbox screens through a browser, in continuous integration and on a developer's
+machine. It proves nothing about Stripe itself; the recorded payloads it answers from go stale
+silently if Stripe changes a shape.
+
+The stand-in listens on loopback only and sends deliveries to loopback only. Every request but its
+health check must carry the fixed key `sk_test_leasebook_stand_in`, which Stripe issues to nobody
+and which the host refuses without a stand-in address. It keeps what it is told in memory and
+forgets it when it stops.
+
+### Create the stand-in fixture
+
+```powershell
+./scripts/dev.ps1 up
+./scripts/payment-fixture.ps1 init -StandIn
+```
+
+This creates the database `leasebook_payment_fixture_standin` and writes
+`payment-fixture-standin.local` (gitignored), beside the other two fixtures and independent of them.
+It is a sandbox fixture bound to two synthetic connected accounts, `acct_standin000001` and
+`acct_standin000002`, with one organization each. The sign-ins are those of
+[the sandbox fixture](#create-the-sandbox-fixture): `tenant-a1@payments.test`,
+`admin-a@payments.test`, and `b` for the second organization. `-StandIn` and `-StripeAccount` cannot
+be given together.
+
+### Start the stand-in and the host
+
+Both read the same variables, so set them once in a terminal kept for this and start each from it.
+The signing secret is made here and not kept: any value of the shape `whsec_…` that both hold will
+do, and the browser test makes its own for each run.
+
+```powershell
+$env:ASPNETCORE_ENVIRONMENT = 'Development'
+$env:ConnectionStrings__Default = 'Host=localhost;Port=5632;Database=leasebook_payment_fixture_standin;Username=leasebook_app;Password=dev_app_pw'
+$env:Payments__ManifestPath = (Resolve-Path ./payment-fixture-standin.local).Path
+$env:Payments__Stripe__ApiBase = 'http://127.0.0.1:4010'
+$env:Payments__Stripe__SecretKey = 'sk_test_leasebook_stand_in'
+$env:Payments__Stripe__WebhookSecret = 'whsec_' + [Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(24))
+node scripts/stripe-stand-in.mjs
+```
+
+Start the stand-in first: the host asks whose key it holds before it serves, and does not start
+without an answer. Then, in a second terminal with the same six variables:
+
+```powershell
+dotnet run --project src/LeaseBook.Web --no-launch-profile --urls http://localhost:5080
+```
+
+The stand-in listens where `Payments__Stripe__ApiBase` says, holds the connected accounts the
+manifest binds, and signs with the secret in `Payments__Stripe__WebhookSecret`. It sends deliveries
+to `http://127.0.0.1:5080/callbacks/payments/stripe`; `--callback=<url>` names another loopback
+address. It prints one line for each request it answers and each delivery it sends, and never a
+header, a key or the secret.
+
+**A proxy in the environment.** The host's HTTP client takes a proxy from `http_proxy`, `HTTP_PROXY`
+or `ALL_PROXY`, for a loopback address too. With one set, the host's requests to the stand-in go to
+the proxy and the host refuses to start, saying it could not read the account of its Stripe key. Set
+`NO_PROXY` to `127.0.0.1,localhost` in the host's terminal. The browser test sets it for itself.
+
+### What the stand-in answers
+
+It answers the requests the adapter makes and no others. A request it does not know is answered
+with an error whose code is `stand_in_unknown_request`, printed as `UNEXPECTED`, and kept on a list
+the browser test reads and requires to be empty.
+
+Its answers come from the payloads recorded from a real sandbox under `tests/fixtures/stripe/`. No
+recorded payload is changed and none is added. A recorded shape is copied and given this run's
+values: identifiers, amounts, times, the connected account, and the two ids of LeaseBook's that a
+charge carries.
+
+| The host asks, or Stripe sends              | The stand-in's answer                                        | Recorded or built                                                                                                                          |
+| ------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `GET /v1/account`                           | The platform's account                                       | Recorded, unchanged                                                                                                                        |
+| `GET /v1/accounts/{id}`                     | A fixture's connected account, which pays its own fees       | Recorded shape; the id is substituted                                                                                                      |
+| `POST /v1/payment_intents`, `pm_card_visa`  | A card payment that has succeeded                            | Recorded shape; ids, amount, time and metadata are substituted                                                                             |
+| The same idempotency key and parameters     | The same payment                                             | The behaviour was recorded; the answer is the payment the stand-in holds                                                                   |
+| The same idempotency key, another parameter | HTTP 400, `idempotency_error`                                | Recorded; the key in the message is substituted                                                                                            |
+| `GET /v1/payment_intents/{id}` and the list | The payment as it was created; a list of them                | The payment is the recorded shape. Retrieving one was not recorded for a card payment. The list's envelope is recorded                     |
+| `GET /v1/charges/{id}`                      | The payment's charge                                         | Recorded shape: the charge inside the recorded `charge.updated` event, substituted                                                         |
+| The four events of a card payment           | `charge.succeeded`, `payment_intent.succeeded`, and two more | Recorded deliveries, in the order Stripe sent them, substituted                                                                            |
+| The four events of a payout                 | `payout.created` through `payout.updated`                    | Recorded shapes, substituted. They were recorded from Stripe's list of events and not as deliveries                                        |
+| `GET /v1/balance_transactions?payout=…`     | The payout's own line and one line for each payment          | Recorded shapes: the recorded payout's own line and its line for a card charge, substituted. The charge inside a line is the payment's own |
+| `GET /v1/events`                            | The events the stand-in has made, newest first, in pages     | The envelope is recorded; the events are the ones above                                                                                    |
+| `GET /v1/payouts/{id}`                      | The payout as its last event left it                         | Built from the recorded payout: retrieving one was not recorded                                                                            |
+| An id it does not hold, on a route it knows | HTTP 404, `resource_missing`                                 | Built: no such answer was recorded                                                                                                         |
+
+Three things are built and not recorded, and a test that passes against them shows less than one
+against a sandbox would:
+
+- **A payout that holds only good payments.** The sandbox has made none
+  ([ADR-054](../adr/ADR-054-stripe-sandbox-adapter.md#known-limits), "Not yet shown"). The stand-in
+  builds one from the recorded payout's shapes: its amount is the sum of its payments' nets, and
+  its lines come to nothing against it, as the recorded payout's do.
+- **The fee on a charge.** No recording holds a charge of the amount a test pays. The stand-in
+  works it out at the rates the sandbox kept in the recorded runs: 2.9% plus $0.30 for a card, to
+  the nearest cent. For the recorded card charges of $515.24 and $200.00 it gives the fees Stripe
+  kept, $15.24 and $6.10.
+- **When things happen.** Stripe sends a card payment's events within seconds and makes a payout
+  on its own schedule. The stand-in sends each when a test tells it to.
+
+A payment method other than `pm_card_visa` has no recorded timeline here yet and is refused as an
+unknown request.
+
+### Tell the stand-in what happens next
+
+Stripe acts by itself; the stand-in acts when told. Its control surface is under `/stand-in/`, which
+no route of Stripe's begins with, and takes the same key in `Authorization: Bearer …`.
+
+| Request                                                | What it does                                                                                                                                                                        |
+| ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /stand-in/health`                                 | Answers `{"ok":true}` with no key. Says nothing else                                                                                                                                |
+| `GET /stand-in/state`                                  | The accounts, payments and payouts it holds, the deliveries it sent with the host's answers, and the list of unexpected requests                                                    |
+| `POST /stand-in/payments/{payment reference}/timeline` | Body `{"timeline":"card-succeeds"}`. Sends the recorded events of that timeline for the payment LeaseBook made under that reference, and answers with each delivery's HTTP status   |
+| `POST /stand-in/payouts`                               | Body `{"payments":["<payment reference>", …]}`. Forms one automatic payout from payments Stripe has said were paid, sends its four events, and answers with the payout's id and net |
+
+Either `POST` takes `"deliver": false`, which makes the events without sending them, as an event
+Stripe never delivered: `GET /v1/events` then lists them for the host's catch-up sweep. No browser
+test drives that yet. Deliveries are real signed requests to the host's callback route, and the
+stand-in does not send one again.
+
+To take a payment through by hand: pay by card in the tenant portal as
+[above](#make-a-card-payment-and-an-ach-payment), after setting the card fee rule; copy the payment
+reference; then, in a terminal:
+
+```powershell
+$key = @{ Authorization = 'Bearer sk_test_leasebook_stand_in' }
+$base = 'http://127.0.0.1:4010/stand-in'
+Invoke-RestMethod "$base/payments/<payment reference>/timeline" -Method Post -Headers $key -ContentType 'application/json' -Body '{"timeline":"card-succeeds"}'
+$payout = Invoke-RestMethod "$base/payouts" -Method Post -Headers $key -ContentType 'application/json' -Body '{"payments":["<payment reference>"]}'
+$payout.id; $payout.net
+```
+
+The payout then shows on **Operations** as **Waiting for the bank**.
+[Say what the bank received](#say-what-the-bank-received) with the payout's id and its net, using
+`payment-fixture-standin.local` for the manifest and the same six variables.
+
+### Discard it
+
+Stop the host and the stand-in. `./scripts/payment-fixture.ps1 reset -StandIn` discards the fixture
+and makes a new one. To remove it altogether, drop the database
+`leasebook_payment_fixture_standin` and delete `payment-fixture-standin.local`. Neither command
+touches the simulation fixture or a sandbox fixture.
+
 ## Browser validation
 
 Stop any existing host before running this against the dedicated fixture so Playwright cannot
@@ -607,3 +762,30 @@ receipted payment is disputed and its administrator closes the review with a not
 payout arrives that does not add up to the bank amount, and the administrator closes it with a note
 and nothing posts. Both close from the keyboard. Backend integration tests additionally inject failures around
 provider acceptance and ledger commit, validate routing/isolation and exercise locked periods.
+
+The Stripe sandbox mode has a browser test of its own, against
+[the stand-in](#run-against-the-stripe-stand-in). Create the stand-in fixture, stop any running host
+and stand-in, then from `web/`:
+
+```powershell
+$env:STRIPE_STAND_IN_E2E = '1'
+$env:ASPNETCORE_ENVIRONMENT = 'Development'
+$env:ConnectionStrings__Default = 'Host=localhost;Port=5632;Database=leasebook_payment_fixture_standin;Username=leasebook_app;Password=dev_app_pw'
+$env:Payments__ManifestPath = (Resolve-Path ../payment-fixture-standin.local).Path
+npx playwright test stripe-stand-in.spec.ts
+```
+
+Playwright starts the stand-in, then the host, then the SPA, and stops them afterwards. It gives the
+host the stand-in's address and key, and a signing secret it makes for the run. CI runs this in a
+job of its own, `E2E (Stripe stand-in)`, beside the ordinary e2e job; in that job Stripe's hosts
+resolve to nothing, so a request to Stripe would fail and not be made quietly.
+
+The test drives one scenario so far: a card payment that reaches a posted payout. The tenant pays in
+the portal under the words "Test payment — no real money moves". The stand-in says the payment
+succeeded, and the tenant sees it paid and not yet on the ledger. The stand-in pays out, and an
+administrator sees the payout **Waiting for the bank** with the processor's amount and nothing to
+post. The test then runs the `bank` command with the processor's net, the payout shows **Posted**,
+and the tenant's payment is recorded and the balance is down by the amount. It checks WCAG 2 AA at
+each of those states, runs `check-invariants --all` after the scenario, and requires that the
+stand-in was asked nothing it does not know. The fixture is not reset between runs, and the test
+can be run again against the same database.

@@ -24,7 +24,7 @@
  *   node scripts/scenario-catalogue.mjs check [--openapi <document.json>] [--no-tags]
  *   node scripts/scenario-catalogue.mjs doc
  *   node scripts/scenario-catalogue.mjs verify --openapi <document.json> --evidence <dir> \
- *     --passes main[,payments] --out-json <file> --out-md <file>
+ *     --passes main[,payments][,stand-in] --out-json <file> --out-md <file>
  *
  * `check` reads the routes only when `--openapi` names the emitted contract, and says so when it
  * does not. `--no-tags` skips the part that asks Playwright to list the tests, for a job without
@@ -70,6 +70,13 @@ export const BASELINE_GAP = "baseline gap";
 const DOC_START = "<!-- scenario-catalogue:start -->";
 const DOC_END = "<!-- scenario-catalogue:end -->";
 const DEFAULT_PASS = "main";
+/**
+ * The Playwright passes a scenario can belong to. Each is one run of the suite against one
+ * database: `main` on the seeded development organizations, `payments` on the simulation's payment
+ * fixture, and `stand-in` on the Stripe stand-in's fixture, where the host runs in `StripeSandbox`
+ * mode against `scripts/stripe-stand-in.mjs` (ADR-054). A scenario with no `pass` runs in `main`.
+ */
+export const PASSES = [DEFAULT_PASS, "payments", "stand-in"];
 
 const routeKey = (route) => `${route.method} ${route.path}`;
 
@@ -284,6 +291,13 @@ export function validateCatalogue(catalogue) {
       for (const repeated of duplicates(scenario[field] ?? [])) {
         problems.push(`${name}: \`${repeated}\` is listed twice.`);
       }
+    }
+    // A pass nobody runs would leave the scenario unjudged for ever, so a name that is not one is
+    // refused here and not found out by a measured run.
+    if (scenario.pass !== undefined && !PASSES.includes(scenario.pass)) {
+      problems.push(
+        `${name}: \`pass\` must be one of ${PASSES.join(", ")}, or left out for ${DEFAULT_PASS}.`,
+      );
     }
     // A scenario that posts to the journal is a money scenario. It names the organization it
     // drives, which is the one whose invariants the run checks afterwards.
