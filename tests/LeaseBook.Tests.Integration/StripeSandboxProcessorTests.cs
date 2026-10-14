@@ -441,6 +441,80 @@ public sealed partial class StripeSandboxProcessorTests
         Should.Throw<InvalidOperationException>(() => new StripeSandboxProcessor(simulation, TimeProvider.System, new StripeTransport(new StripeReplay())));
     }
 
+    // A stand-in's address (ADR-054, 2026-10-13) takes every request the adapter makes, whichever way
+    // it makes it: through the library's types, as a raw request, and at startup. Nothing is left
+    // addressed to Stripe, and what is sent carries the stand-in's key and no other.
+    [Theory]
+    [InlineData("http://127.0.0.1:4010")]
+    [InlineData("http://localhost:4010")]
+    [InlineData("http://[::1]:4010")]
+    public async Task With_a_stand_in_address_every_request_goes_to_it_and_none_to_stripe(string address)
+    {
+        var h = new Adapter(("Payments:Stripe:ApiBase", address), ("Payments:Stripe:SecretKey", StripeSandboxSettings.StandInSecretKey));
+        h.Stripe.Base = address;
+        var accounts = Accounts();
+        h.Stripe.Answer = sent => sent.Path.StartsWith("/v1/account", StringComparison.Ordinal) ? accounts(sent)
+            : sent.Method == "GET" ? StripeReplay.List(hasMore: false) : StripeReplay.Recorded("003-card-create.json");
+
+        await h.Processor.RequirePlatformKeyAsync(Ct);
+        await h.Processor.SubmitAsync(h.Request(CardOperation, 515.24m, PaymentMethods.Card), Ct);
+        await h.Processor.LookupAsync(h.Request(UuidV7.NewId(), 10m, PaymentMethods.Card), Ct);
+        await h.Processor.RecoverObservationsAsync(h.Binding, h.Clock.GetUtcNow().UtcDateTime, Ct);
+
+        var expected = new Uri(address);
+        h.Stripe.Addresses.Count.ShouldBe(5);
+        h.Stripe.Addresses.ShouldAllBe(x => x.Scheme == "http" && x.Host == expected.Host && x.Port == 4010);
+        h.Stripe.Addresses.Select(x => x.AbsolutePath).ShouldBe(["/v1/account", "/v1/accounts/" + h.Binding.Account,
+            "/v1/payment_intents", "/v1/payment_intents", "/v1/events"]);
+        h.Stripe.Requests.ShouldAllBe(x => x.Headers["Authorization"] == "Bearer " + StripeSandboxSettings.StandInSecretKey);
+        // The library has three more bases, which the adapter never calls. None is left aimed at Stripe.
+        var client = Client(h.Processor);
+        new[] { client.ApiBase, client.ConnectBase, client.FilesBase, client.MeterEventsBase }.ShouldAllBe(x => x == address);
+    }
+
+    [Fact]
+    public async Task With_no_stand_in_address_every_request_goes_to_stripe_over_https()
+    {
+        var h = new Adapter();
+        h.Settings.Stripe!.ApiBase.ShouldBeNull();
+        var accounts = Accounts();
+        h.Stripe.Answer = sent => sent.Path.StartsWith("/v1/account", StringComparison.Ordinal) ? accounts(sent)
+            : sent.Method == "GET" ? StripeReplay.List(hasMore: false) : StripeReplay.Recorded("003-card-create.json");
+
+        await h.Processor.RequirePlatformKeyAsync(Ct);
+        await h.Processor.SubmitAsync(h.Request(CardOperation, 515.24m, PaymentMethods.Card), Ct);
+        await h.Processor.LookupAsync(h.Request(UuidV7.NewId(), 10m, PaymentMethods.Card), Ct);
+        await h.Processor.RecoverObservationsAsync(h.Binding, h.Clock.GetUtcNow().UtcDateTime, Ct);
+
+        h.Stripe.Addresses.Count.ShouldBe(5);
+        h.Stripe.Addresses.ShouldAllBe(x => x.Scheme == "https" && x.Host == "api.stripe.com" && x.Port == 443);
+        var client = Client(h.Processor);
+        new[] { client.ApiBase, client.ConnectBase, client.FilesBase, client.MeterEventsBase }.ShouldBe(
+            ["https://api.stripe.com", "https://connect.stripe.com", "https://files.stripe.com", "https://meter-events.stripe.com"]);
+    }
+
+    // The library's client as the adapter built it. Read by its type, since nothing else says where
+    // the bases it never calls are aimed.
+    private static global::Stripe.StripeClient Client(StripeSandboxProcessor processor) =>
+        (global::Stripe.StripeClient)typeof(StripeSandboxProcessor)
+            .GetFields(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+            .Single(x => x.FieldType == typeof(global::Stripe.StripeClient)).GetValue(processor)!;
+
+    // The settings refuse both at startup. The adapter refuses them again where the key meets the
+    // address, so that settings built some other way cannot send a key of Stripe's to a stand-in, or
+    // the stand-in's key to Stripe.
+    [Fact]
+    public void The_adapter_is_not_built_with_a_stand_in_address_and_another_key_or_the_stand_in_key_and_no_address()
+    {
+        var withAddress = new Adapter(("Payments:Stripe:ApiBase", "http://127.0.0.1:4010"), ("Payments:Stripe:SecretKey", StripeSandboxSettings.StandInSecretKey)).Settings;
+        withAddress.Stripe!.SecretKey = "sk_test_abc";
+        Should.Throw<InvalidOperationException>(() => new StripeSandboxProcessor(withAddress, TimeProvider.System, new StripeTransport(new StripeReplay())));
+
+        var withKey = new Adapter().Settings;
+        withKey.Stripe!.SecretKey = StripeSandboxSettings.StandInSecretKey;
+        Should.Throw<InvalidOperationException>(() => new StripeSandboxProcessor(withKey, TimeProvider.System, new StripeTransport(new StripeReplay())));
+    }
+
     // The startup barrier (ADR-054): the key is the platform's, and each fixture's account is a test
     // account of that platform which pays its own Stripe fees. Admitted with what the probe recorded;
     // each refusal differs from that by one thing.
@@ -611,16 +685,23 @@ internal sealed class StripeReplay : HttpMessageHandler
     });
     private readonly Lock _gate = new();
     private readonly List<Sent> _requests = [];
+    private readonly List<Uri> _addresses = [];
 
     public sealed record Sent(string Method, string Path, IReadOnlyDictionary<string, string> Query,
         IReadOnlyDictionary<string, string> Form, IReadOnlyDictionary<string, string> Headers);
 
     public IReadOnlyList<Sent> Requests { get { lock (_gate) { return [.. _requests]; } } }
+    /// <summary>Where every request must be addressed: scheme, host and port.</summary>
+    public string Base { get; set; } = "https://api.stripe.com";
+    /// <summary>The whole address of every request, in the order they were sent.</summary>
+    public IReadOnlyList<Uri> Addresses { get { lock (_gate) { return [.. _addresses]; } } }
     public Func<Sent, (int Status, string Body)> Answer { get; set; } = sent => throw new InvalidOperationException("Unexpected request " + sent.Path);
 
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
-        request.RequestUri!.Host.ShouldBe("api.stripe.com");
+        // Stripe's own address unless a test says it configured a stand-in, and then exactly that one.
+        lock (_gate) { _addresses.Add(request.RequestUri!); }
+        request.RequestUri!.GetLeftPart(UriPartial.Authority).ShouldBe(Base);
         var form = request.Content is null ? "" : await request.Content.ReadAsStringAsync(cancellationToken);
         var sent = new Sent(request.Method.Method, request.RequestUri.AbsolutePath, Pairs(request.RequestUri.Query), Pairs(form),
             request.Headers.ToDictionary(x => x.Key, x => string.Join(",", x.Value), StringComparer.OrdinalIgnoreCase));

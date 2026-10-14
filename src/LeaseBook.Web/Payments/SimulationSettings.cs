@@ -8,9 +8,20 @@ namespace LeaseBook.Web.Payments;
 /// <summary>What the Stripe sandbox mode needs beyond the fixture bindings. Held in local secrets, never in a manifest.</summary>
 public sealed class StripeSandboxSettings
 {
+    /// <summary>
+    /// The one key a host pointed at a local stand-in holds. Stripe issues no key of this shape: its
+    /// own have letters and digits after the prefix and no underscore.
+    /// </summary>
+    public const string StandInSecretKey = "sk_test_leasebook_stand_in";
+
     public string SecretKey { get; set; } = "";
     /// <summary>The secret Stripe signs this host's callbacks with (whsec_…). Nothing delivered is read without it.</summary>
     public string WebhookSecret { get; set; } = "";
+    /// <summary>
+    /// Where a local stand-in for Stripe listens, as http://host:port on this machine, for browser
+    /// tests that must make no call to Stripe (ADR-054). Null in every host that talks to Stripe.
+    /// </summary>
+    public string? ApiBase { get; set; }
 }
 
 public sealed partial class SimulationSettings
@@ -21,7 +32,7 @@ public sealed partial class SimulationSettings
     private static partial Regex KnownSetting();
 
     // What a sandbox host may be given besides, and no other mode may.
-    [GeneratedRegex(@"^(Stripe:(SecretKey|WebhookSecret)|Fixtures:\d+:(CardPaymentMethod|AchPaymentMethod))\z", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"^(Stripe:(SecretKey|WebhookSecret|ApiBase)|Fixtures:\d+:(CardPaymentMethod|AchPaymentMethod))\z", RegexOptions.CultureInvariant)]
     private static partial Regex SandboxSetting();
 
     // Stripe's documented test payment methods, by their shape. A payer's saved method is pm_ and an
@@ -94,6 +105,22 @@ public sealed partial class SimulationSettings
         // Only a test-mode key. A live key is refused by its prefix, before any client could be built from it.
         if (sandbox && !TestKey(settings.Stripe?.SecretKey))
         { throw new InvalidOperationException("StripeSandbox requires a Stripe test-mode secret key."); }
+        // A stand-in address and the stand-in's key come together or not at all, so a key of Stripe's
+        // is never sent to a stand-in and the stand-in's key is never sent to Stripe. Both are named
+        // by their paths. Read as given and not as bound, so that an empty value is a value.
+        if (sandbox && section["Stripe:ApiBase"] is { } apiBase)
+        {
+            if (StandInAddress(apiBase) is not { } address)
+            {
+                throw new InvalidOperationException("Payments:Stripe:ApiBase must be a local stand-in's address and nothing else:"
+                    + " http, then 127.0.0.1, localhost or [::1], then a port.");
+            }
+            if (settings.Stripe!.SecretKey != StripeSandboxSettings.StandInSecretKey)
+            { throw new InvalidOperationException("Payments:Stripe:ApiBase is admitted only with the stand-in's own secret key in Payments:Stripe:SecretKey."); }
+            settings.Stripe.ApiBase = address;
+        }
+        else if (sandbox && settings.Stripe!.SecretKey == StripeSandboxSettings.StandInSecretKey)
+        { throw new InvalidOperationException("The stand-in's secret key in Payments:Stripe:SecretKey is admitted only with a stand-in's address in Payments:Stripe:ApiBase."); }
         // And the secret its callbacks are signed with: a host that could not tell Stripe's events from
         // anyone's must not serve the route. Named by its path and its prefix, never by what was given.
         if (sandbox && !SigningSecret(settings.Stripe?.WebhookSecret))
@@ -115,6 +142,21 @@ public sealed partial class SimulationSettings
 
     private static bool TestKey(string? key) => key is not null
         && new[] { "sk_test_", "rk_test_" }.Any(prefix => key.StartsWith(prefix, StringComparison.Ordinal) && key.Length > prefix.Length);
+
+    private static readonly string[] StandInHosts = ["127.0.0.1", "localhost", "[::1]"];
+
+    // The address as it is handed to the client, or null. Judged on the parsed address, and then the
+    // text given must be exactly what those parts spell, with at most a closing slash. So the port is
+    // written out, and a user, a path, a query, a fragment, a space or a line break is refused, as is
+    // another spelling of a loopback host.
+    private static string? StandInAddress(string given)
+    {
+        if (!Uri.TryCreate(given, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttp
+            || !StandInHosts.Contains(uri.Host, StringComparer.Ordinal) || uri.Port <= 0)
+        { return null; }
+        var address = string.Create(System.Globalization.CultureInfo.InvariantCulture, $"http://{uri.Host}:{uri.Port}");
+        return given == address || given == address + "/" ? address : null;
+    }
 
     // The whole value, with nothing before or after it: a secret pasted with a line break or a space
     // would start the host and then match no delivery at all.

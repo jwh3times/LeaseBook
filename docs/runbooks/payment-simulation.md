@@ -225,8 +225,9 @@ sign-ins are `tenant-a1@payments.test`, `tenant-a2@payments.test` and `admin-a@p
 second's use `b`, and so on, with the password given above.
 
 The manifest holds the account ids and never the key or the webhook signing secret. `init` needs
-neither and makes no call to Stripe; the script clears `Payments__Stripe__SecretKey` and
-`Payments__Stripe__WebhookSecret` for the processes it starts and puts them back afterwards.
+neither and makes no call to Stripe; the script clears `Payments__Stripe__SecretKey`,
+`Payments__Stripe__WebhookSecret` and `Payments__Stripe__ApiBase` for the processes it starts and
+puts them back afterwards.
 
 **An older fixture.** The script applies migrations only when it creates the database. A sandbox
 fixture created before 2026-10-11, when payouts were first stored, lacks the columns a held payout
@@ -570,18 +571,21 @@ the host again. With events forwarded, a payment made with it ends as **Failed**
 
 Each names a setting by its path or a fixture by its organization id, never a key or a secret.
 
-| The host says                                                                     | What it means                                                                                                                                                            |
-| --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `Unknown setting: Payments:Stripe:SecretKey`                                      | The key is set for a host that is not in this mode. Remove the variable, or point `Payments__ManifestPath` at the sandbox manifest.                                      |
-| `Unknown setting: Payments:Stripe:WebhookSecret`                                  | The same, for the webhook signing secret.                                                                                                                                |
-| `A payment fixture manifest must not hold provider credentials`                   | The key or the signing secret was written into the manifest. Take it out, and rotate a key that was there.                                                               |
-| `require Development, a fixture signing key and unique explicit fixture bindings` | The environment is not Development, or the manifest is not this mode's: every account must be `acct_…`, each once.                                                       |
-| `StripeSandbox requires a Stripe test-mode secret key`                            | The key is missing, or does not begin `sk_test_` or `rk_test_`. A live key is refused here, before any call is made.                                                     |
-| `StripeSandbox requires a Stripe webhook signing secret (whsec_…)`                | `Payments:Stripe:WebhookSecret` is missing, does not begin `whsec_`, or has a space or line break in it. Supply the value `stripe listen --print-secret` prints.         |
-| `collects only with Stripe's documented test payment methods`                     | An optional payment method does not have the test shape. The message names the setting.                                                                                  |
-| `could not read the account of its Stripe key`                                    | Stripe could not be reached, or it refused the key: revoked, mistyped, or a restricted key that may not read accounts.                                                   |
-| `requires the platform's test-mode key, not a connected account's own`            | The key belongs to a fixture's connected account. An account with its own dashboard has its own keys; copy the key from the sandbox itself.                              |
-| `fixture organization <id> is not bound to a test connected account … fees`       | That fixture's account cannot be read with this key, or does not pay its own Stripe fees. Check the id, and that the account belongs to this sandbox and was created so. |
+| The host says                                                                     | What it means                                                                                                                                                                                                 |
+| --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Unknown setting: Payments:Stripe:SecretKey`                                      | The key is set for a host that is not in this mode. Remove the variable, or point `Payments__ManifestPath` at the sandbox manifest.                                                                           |
+| `Unknown setting: Payments:Stripe:WebhookSecret`                                  | The same, for the webhook signing secret.                                                                                                                                                                     |
+| `A payment fixture manifest must not hold provider credentials`                   | The key or the signing secret was written into the manifest. Take it out, and rotate a key that was there.                                                                                                    |
+| `require Development, a fixture signing key and unique explicit fixture bindings` | The environment is not Development, or the manifest is not this mode's: every account must be `acct_…`, each once.                                                                                            |
+| `StripeSandbox requires a Stripe test-mode secret key`                            | The key is missing, or does not begin `sk_test_` or `rk_test_`. A live key is refused here, before any call is made.                                                                                          |
+| `StripeSandbox requires a Stripe webhook signing secret (whsec_…)`                | `Payments:Stripe:WebhookSecret` is missing, does not begin `whsec_`, or has a space or line break in it. Supply the value `stripe listen --print-secret` prints.                                              |
+| `Payments:Stripe:ApiBase must be a local stand-in's address and nothing else`     | The setting points the host at a local stand-in for Stripe, for browser tests (ADR-054). It takes `http`, then `127.0.0.1`, `localhost` or `[::1]`, then a port. To talk to the sandbox, remove the variable. |
+| `Payments:Stripe:ApiBase is admitted only with the stand-in's own secret key`     | A stand-in address is set beside a sandbox key. Remove the address to talk to the sandbox. A key of Stripe's is never sent to a stand-in.                                                                     |
+| `The stand-in's secret key … is admitted only with a stand-in's address`          | The key is the stand-in's and no address is set. Supply the sandbox's own key, or the stand-in's address.                                                                                                     |
+| `collects only with Stripe's documented test payment methods`                     | An optional payment method does not have the test shape. The message names the setting.                                                                                                                       |
+| `could not read the account of its Stripe key`                                    | Stripe could not be reached, or it refused the key: revoked, mistyped, or a restricted key that may not read accounts.                                                                                        |
+| `requires the platform's test-mode key, not a connected account's own`            | The key belongs to a fixture's connected account. An account with its own dashboard has its own keys; copy the key from the sandbox itself.                                                                   |
+| `fixture organization <id> is not bound to a test connected account … fees`       | That fixture's account cannot be read with this key, or does not pay its own Stripe fees. Check the id, and that the account belongs to this sandbox and was created so.                                      |
 
 ## Browser validation
 
