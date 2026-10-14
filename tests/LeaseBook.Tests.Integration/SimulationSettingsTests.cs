@@ -137,6 +137,140 @@ public sealed class SimulationSettingsTests
         }
     }
 
+    // A local stand-in for Stripe (ADR-054, 2026-10-13): an address on this machine, with the one key
+    // that is the stand-in's. Admitted with or without a closing slash, and held without one.
+    [Theory]
+    [InlineData("http://127.0.0.1:4010", "http://127.0.0.1:4010")]
+    [InlineData("http://localhost:4010", "http://localhost:4010")]
+    [InlineData("http://[::1]:4010", "http://[::1]:4010")]
+    [InlineData("http://127.0.0.1:4010/", "http://127.0.0.1:4010")]
+    [InlineData("http://localhost:80", "http://localhost:80")]
+    public void A_sandbox_host_is_admitted_with_a_stand_in_address_and_the_stand_in_key(string given, string held)
+    {
+        var settings = Read(StandIn(given));
+        settings.Stripe!.ApiBase.ShouldBe(held);
+        settings.Stripe.SecretKey.ShouldBe(StripeSandboxSettings.StandInSecretKey);
+        settings.Mode.ShouldBe(PaymentModes.StripeSandbox);
+        // Without the setting there is no address, and the host talks to Stripe as it always has.
+        Read(Sandbox()).Stripe!.ApiBase.ShouldBeNull();
+    }
+
+    // Stripe issues test keys as the prefix and then letters and digits. The stand-in's has
+    // underscores after the prefix, so no key of Stripe's can be it.
+    [Fact]
+    public void The_stand_in_key_is_a_test_key_in_a_shape_stripe_does_not_issue()
+    {
+        StripeSandboxSettings.StandInSecretKey.ShouldStartWith("sk_test_");
+        StripeSandboxSettings.StandInSecretKey["sk_test_".Length..].ShouldContain('_');
+    }
+
+    [Theory]
+    [InlineData("https://127.0.0.1:4010")]
+    [InlineData("https://localhost:4010")]
+    [InlineData("ftp://127.0.0.1:4010")]
+    // Another host, however near to one of the three it looks.
+    [InlineData("http://api.stripe.com:80")]
+    [InlineData("http://example.com:4010")]
+    [InlineData("http://localhost.example.com:4010")]
+    [InlineData("http://localhost.:4010")]
+    [InlineData("http://0.0.0.0:4010")]
+    [InlineData("http://192.168.1.20:4010")]
+    [InlineData("http://10.0.0.5:4010")]
+    [InlineData("http://127.0.0.2:4010")]
+    [InlineData("http://[::]:4010")]
+    // Another spelling of a loopback host is another text, and only the three are admitted.
+    [InlineData("http://127.1:4010")]
+    [InlineData("http://2130706433:4010")]
+    [InlineData("http://LOCALHOST:4010")]
+    [InlineData("HTTP://localhost:4010")]
+    [InlineData("http://[0:0:0:0:0:0:0:1]:4010")]
+    // The port is written out, and is one a listener can have.
+    [InlineData("http://127.0.0.1")]
+    [InlineData("http://localhost/")]
+    [InlineData("http://localhost:")]
+    [InlineData("http://localhost:0")]
+    [InlineData("http://localhost:04010")]
+    [InlineData("http://localhost:65536")]
+    // Nothing after the port but one slash.
+    [InlineData("http://127.0.0.1:4010/v1")]
+    [InlineData("http://127.0.0.1:4010//")]
+    [InlineData("http://127.0.0.1:4010?x=1")]
+    [InlineData("http://127.0.0.1:4010/?x=1")]
+    [InlineData("http://127.0.0.1:4010#x")]
+    [InlineData("http://127.0.0.1:4010/#")]
+    // A user, which is also how an address is made to read as one host and go to another.
+    [InlineData("http://user@127.0.0.1:4010")]
+    [InlineData("http://user:pw@localhost:4010")]
+    [InlineData("http://127.0.0.1:4010@example.com:4010")]
+    [InlineData("http://localhost:4010\\@example.com")]
+    // Pasted with what came along.
+    [InlineData(" http://127.0.0.1:4010")]
+    [InlineData("http://127.0.0.1:4010 ")]
+    [InlineData("http://127.0.0.1:4010\n")]
+    [InlineData("http://127.0.0.1:4010\r\n")]
+    [InlineData("http://127.0.0.1:4010\t")]
+    [InlineData("http://127.0.0.1 :4010")]
+    [InlineData("http://127.0.0.1:4010\u0000")]
+    [InlineData("127.0.0.1:4010")]
+    [InlineData("localhost:4010")]
+    [InlineData("not an address")]
+    [InlineData("")]
+    public void A_stand_in_address_is_refused_unless_it_is_loopback_http_with_a_port_and_nothing_else(string address)
+    {
+        var refusal = Should.Throw<InvalidOperationException>(() => Read(StandIn(address)));
+
+        refusal.Message.ShouldStartWith("Payments:Stripe:ApiBase must be a local stand-in's address");
+        if (address.Trim().Length > 0) { refusal.Message.ShouldNotContain(address.Trim()); }
+    }
+
+    // The two come together or not at all: a key of Stripe's is never sent to a stand-in, and the
+    // stand-in's key is never sent to Stripe.
+    [Theory]
+    [InlineData("sk_test_abc")]
+    [InlineData("rk_test_abc")]
+    [InlineData("sk_test_leasebook_stand_in_")]
+    [InlineData("sk_test_leasebook_standin")]
+    public void A_stand_in_address_is_refused_with_any_key_but_the_stand_ins_own(string key)
+    {
+        var refusal = Should.Throw<InvalidOperationException>(() => Read(StandIn("http://127.0.0.1:4010", ("Payments:Stripe:SecretKey", key))));
+
+        refusal.Message.ShouldBe("Payments:Stripe:ApiBase is admitted only with the stand-in's own secret key in Payments:Stripe:SecretKey.");
+        // With the stand-in's key it starts, so the refusal is the key's doing.
+        Read(StandIn("http://127.0.0.1:4010")).Enabled.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void The_stand_in_key_is_refused_with_no_stand_in_address()
+    {
+        var refusal = Should.Throw<InvalidOperationException>(() => Read(Sandbox(("Payments:Stripe:SecretKey", StripeSandboxSettings.StandInSecretKey))));
+
+        refusal.Message.ShouldBe("The stand-in's secret key in Payments:Stripe:SecretKey is admitted only with a stand-in's address in Payments:Stripe:ApiBase.");
+        refusal.Message.ShouldNotContain(StripeSandboxSettings.StandInSecretKey);
+    }
+
+    // A stand-in changes where requests go and nothing else that is asked of a sandbox host.
+    [Fact]
+    public void A_stand_in_host_is_still_held_to_everything_a_sandbox_host_is()
+    {
+        Should.Throw<InvalidOperationException>(() => Read(StandIn("http://127.0.0.1:4010"), "Production"));
+        Should.Throw<InvalidOperationException>(() => Read(StandIn("http://127.0.0.1:4010", ("Payments:Stripe:WebhookSecret", null))));
+        Should.Throw<InvalidOperationException>(() => Read(StandIn("http://127.0.0.1:4010", ("Payments:Fixtures:0:Account", "sim_fixture"))));
+        Should.Throw<InvalidOperationException>(() => Read(StandIn("http://127.0.0.1:4010", ("Payments:Stripe:ApiBase:Extra", "x"))));
+        Should.Throw<InvalidOperationException>(() => Read(StandIn("http://127.0.0.1:4010", ("Payments:Stripe:ConnectBase", "http://127.0.0.1:4010"))));
+    }
+
+    [Fact]
+    public void A_simulation_or_disabled_host_refuses_a_stand_in_address_by_its_path()
+    {
+        foreach (var values in new[] { Simulation(("Payments:Stripe:ApiBase", "http://127.0.0.1:4010")), new() { ["Payments:Stripe:ApiBase"] = "http://127.0.0.1:4010" },
+            new() { ["Payments:Mode"] = "Disabled", ["Payments:Stripe:ApiBase"] = "http://127.0.0.1:4010" } })
+        {
+            var refusal = Should.Throw<InvalidOperationException>(() => Read(values));
+            refusal.Message.ShouldContain("Unknown setting: Payments:Stripe:ApiBase.");
+            refusal.Message.ShouldNotContain("127.0.0.1");
+        }
+    }
+
     [Theory]
     [InlineData("sim_fixture")]
     [InlineData("acct_")]
@@ -187,6 +321,9 @@ public sealed class SimulationSettingsTests
     [InlineData("Payments:ManifestPath\n", "x")]
     [InlineData("Payments:Fixtures:0:Account\n", "acct_other")]
     [InlineData("Payments:Stripe:SecretKey\n", "sk_live_abc")]
+    [InlineData("Payments:Stripe:ApiBase\n", "http://127.0.0.1:4010")]
+    [InlineData("Payments:Fixtures:0:ApiBase", "http://127.0.0.1:4010")]
+    [InlineData("Payments:ApiBase", "http://127.0.0.1:4010")]
     [InlineData("Payments:Fixtures:0:CardPaymentMethod\n", "pm_card_visa")]
     public void A_setting_nobody_defined_is_refused_wherever_it_sits(string key, string value)
     {
@@ -206,6 +343,11 @@ public sealed class SimulationSettingsTests
 
             // The signing secret is a credential like the key: a manifest is a file beside the fixture.
             File.WriteAllText(path, """{ "Payments": { "Mode": "StripeSandbox", "Stripe": { "WebhookSecret": "whsec_abc" } } }""");
+            Should.Throw<InvalidOperationException>(() => SimulationSettings.AddManifest(new ConfigurationBuilder(), path));
+
+            // And so is a stand-in's address, with or without the stand-in's key beside it: where a
+            // host sends what it holds is not a fixture's to say.
+            File.WriteAllText(path, """{ "Payments": { "Mode": "StripeSandbox", "Stripe": { "ApiBase": "http://127.0.0.1:4010" } } }""");
             Should.Throw<InvalidOperationException>(() => SimulationSettings.AddManifest(new ConfigurationBuilder(), path));
 
             File.WriteAllText(path, """{ "Payments": { "Mode": "Disabled" } }""");
@@ -446,6 +588,10 @@ public sealed class SimulationSettingsTests
         ["Payments:Fixtures:0:BankId"] = Guid.NewGuid().ToString(),
         ["Payments:Fixtures:0:Account"] = "acct_fixture",
     }, changes);
+
+    // A sandbox host pointed at a stand-in: the address, and the one key admitted with it.
+    private static Dictionary<string, string?> StandIn(string address, params (string Key, string? Value)[] changes) =>
+        Sandbox([("Payments:Stripe:SecretKey", StripeSandboxSettings.StandInSecretKey), ("Payments:Stripe:ApiBase", address), .. changes]);
 
     // A null value removes the key, so that "absent" is tested as absent and not as empty.
     private static Dictionary<string, string?> With(Dictionary<string, string?> values, (string Key, string? Value)[] changes)

@@ -462,6 +462,39 @@ log named no mode, and no journal entry was written. The check read the API, not
 browser, and the sandbox description of a journal entry has not been seen there, because no sandbox
 payout has posted.
 
+**Implementation note, 2026-10-13 (a stand-in address).** The barrier now admits one more setting,
+`Payments:Stripe:ApiBase`: the address of a local stand-in for Stripe. The maintainer decided it on
+2026-10-13 so that the sandbox screens can be driven through a browser in continuous integration
+with no call to Stripe (#545). The stand-in and those scenarios are later work; this note covers the
+setting alone. Continuous integration still never calls Stripe. These rules hold at startup, before
+any client is built:
+
+- **Only a `StripeSandbox` host may be given it.** Every other mode refuses it as an unknown setting,
+  Disabled included, and a fixture manifest that holds it is refused like one that holds a key.
+- **The address is loopback http and nothing else.** The scheme is `http`, the host is exactly
+  `127.0.0.1`, `localhost` or `[::1]`, and the port is written out. A closing slash is allowed. A
+  user, a path, a query, a fragment, a space or a line break is refused, and so are `https`, any
+  other host, a name that only begins with `localhost`, `0.0.0.0` and another spelling of a loopback
+  address. The address is parsed, and the text given must then be exactly what the parsed parts
+  spell.
+- **The address comes with one fixed key, and that key comes with the address.** The key is
+  `sk_test_leasebook_stand_in`, a constant in the code. Stripe's test keys are the prefix followed by
+  letters and digits, so Stripe issues none of this shape. With an address, any other key is refused.
+  With no address, this key is refused. So a key of Stripe's is never sent to a stand-in, and the
+  stand-in's key is never sent to Stripe. The adapter refuses the same two cases again when it builds
+  its client.
+- **With an address, every base of the Stripe library is the stand-in's.** The adapter calls only the
+  API base. The library's bases for OAuth, files and meter events are set to the same address, so
+  none is left aimed at Stripe. With no address all four are the library's own, as before.
+- **A refusal names the setting by its path and never repeats what was given.**
+
+Everything else asked of a sandbox host is still asked: Development, the webhook signing secret, the
+fixture signing key, and each fixture bound to a connected account with test payment methods. The
+check that the key is the platform's is then answered by the stand-in. The setting is not a way to
+reach another Stripe environment or a proxy in front of Stripe: nothing but this machine can be
+named. `localhost` is trusted to mean this machine, as the machine's own name resolution says. No
+posting template, money path or capability was added, and `Live` stays refused.
+
 The provisional assumptions of ADR-053 stay open. This ADR verifies none of them, and nothing here
 is approval to move real money.
 

@@ -57,6 +57,11 @@ public sealed class StripeSandboxProcessor : IPaymentProcessor
     {
         if (settings.Mode != PaymentModes.StripeSandbox || settings.Stripe is null)
         { throw new InvalidOperationException("The Stripe sandbox processor runs only in a StripeSandbox host."); }
+        // The settings refuse this at startup. Held here as well, where a key and an address meet:
+        // only the stand-in's key goes to a stand-in, and it goes nowhere else.
+        var standIn = settings.Stripe.ApiBase;
+        if (standIn is null == (settings.Stripe.SecretKey == StripeSandboxSettings.StandInSecretKey))
+        { throw new InvalidOperationException("A stand-in's address and the stand-in's secret key are used together or not at all."); }
         _settings = settings;
         _clock = clock;
         // No retries inside the library: a repeat is the worker's to make, on its own schedule. The
@@ -65,8 +70,11 @@ public sealed class StripeSandboxProcessor : IPaymentProcessor
         // twice, because a repeat carries the same idempotency key and only the claim that still
         // holds the lease completes.
         var http = new HttpClient(transport.Handler, disposeHandler: false) { Timeout = TimeSpan.FromSeconds(20) };
+        // With no stand-in every base is null, which is the library's own: Stripe. With one, all four
+        // are the stand-in's. The adapter calls only the first, and none is left aimed at Stripe.
         _client = new StripeClient(settings.Stripe.SecretKey,
-            httpClient: new SystemNetHttpClient(http, maxNetworkRetries: 0, enableTelemetry: false));
+            httpClient: new SystemNetHttpClient(http, maxNetworkRetries: 0, enableTelemetry: false),
+            apiBase: standIn, connectBase: standIn, filesBase: standIn, meterEventsBase: standIn);
     }
 
     /// <summary>Registers this adapter as the host's one processor.</summary>

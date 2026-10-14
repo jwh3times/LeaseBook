@@ -3,7 +3,7 @@
 - **Audience:** Implementers and reviewers of issues #456 and #513
 - **Status:** Implemented contract for both non-live payment modes: the payment simulation (#456) and the Stripe sandbox (#513, ADR-054 proposed). Live payments remain unapproved
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-11
+- **Last reviewed:** 2026-10-13
 
 ## Evidence and boundary
 
@@ -675,7 +675,10 @@ In #456, implement these checks in executable startup, submission, callback and 
   `Payments:Stripe:SecretKey` is a Stripe test-mode key (`sk_test_` or `rk_test_`), so a live key is
   refused by its prefix; `Payments:Stripe:WebhookSecret` is a webhook signing secret, `whsec_`
   followed by printable characters with no whitespace; the fixture signing key is present; every
-  fixture is bound to its own connected account (`acct_`). `Payments:Stripe` is refused in every other mode, Disabled included,
+  fixture is bound to its own connected account (`acct_`). One more setting is optional,
+  `Payments:Stripe:ApiBase`: the loopback `http` address of a local stand-in for Stripe, admitted
+  only with the stand-in's fixed key, which is refused without it
+  ([ADR-054](../adr/ADR-054-stripe-sandbox-adapter.md), note of 2026-10-13). `Payments:Stripe` is refused in every other mode, Disabled included,
   and a top-level `Stripe` section is refused in every mode, this one included. In every mode a
   setting under `Payments` that the host does not recognise is a startup error at any depth, and the
   refusal names the setting's path, never its value. A simulator account in a sandbox host, or a
