@@ -37,6 +37,7 @@ public sealed class AccountClassConverter() : ValueConverter<AccountClass, strin
     };
 
     /// <summary>The CHECK-constraint set, single-quoted for inline SQL.</summary>
+    // Stryker disable once all : a static initializer runs once per test process (docs/testing/mutation.md, Static initializers)
     public static readonly string[] DbValues =
     [
         "trust_bank", "owner_equity", "tenant_receivable", "deposit_liability", "pm_income", "pm_operating_bank",
@@ -62,6 +63,7 @@ public sealed class EntryBasisConverter() : ValueConverter<EntryBasis, string>(v
         _ => throw new ArgumentOutOfRangeException(nameof(value), value, "Unknown entry basis text."),
     };
 
+    // Stryker disable once all : a static initializer runs once per test process (docs/testing/mutation.md, Static initializers)
     public static readonly string[] DbValues = ["cash", "accrual", "both"];
 }
 
@@ -81,6 +83,7 @@ public sealed class PeriodStatusConverter() : ValueConverter<PeriodStatus, strin
         _ => throw new ArgumentOutOfRangeException(nameof(value), value, "Unknown period status text."),
     };
 
+    // Stryker disable once all : a static initializer runs once per test process (docs/testing/mutation.md, Static initializers)
     public static readonly string[] DbValues = ["open", "closed"];
 }
 
@@ -102,6 +105,7 @@ public sealed class BankLineStatusConverter() : ValueConverter<BankLineStatus, s
         _ => throw new ArgumentOutOfRangeException(nameof(value), value, "Unknown bank line status text."),
     };
 
+    // Stryker disable once all : a static initializer runs once per test process (docs/testing/mutation.md, Static initializers)
     public static readonly string[] DbValues = ["uncleared", "cleared", "reconciled"];
 }
 
@@ -123,5 +127,6 @@ public sealed class ReconciliationStatusConverter() : ValueConverter<Reconciliat
         _ => throw new ArgumentOutOfRangeException(nameof(value), value, "Unknown reconciliation status text."),
     };
 
+    // Stryker disable once all : a static initializer runs once per test process (docs/testing/mutation.md, Static initializers)
     public static readonly string[] DbValues = ["in_progress", "finalized", "reopened"];
 }

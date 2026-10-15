@@ -206,8 +206,35 @@ the module was not measured.
   happens to `PaymentEngine.PostReturnAsync`, whose condition assigns a pattern variable in one
   operand of `||`. In Accounting it happens to the validator in `GetOwnerEquityLines.cs` and to the
   handler in `PostRefundCheck.cs`. Their mutants are counted as compile errors, not tested.
-- **Per-session cost.** Each test session starts its own Postgres container and applies the
-  migrations, which is a large part of each mutant's time.
+- **Per-process cost.** Each test process starts its own Postgres container and applies the
+  migrations.
+- **Static initializers are not mutated.** See below.
+
+### Static initializers
+
+The runner reuses a test process for more than one mutant. A static field's initializer runs once
+in a process, on first use, so a mutant inside one does not behave like any other mutant:
+
+- If the field was first used before the mutant was switched on, the mutant never takes effect and
+  survives, whatever the tests check. Emptying the payment-method map in `LedgerPostingShared.cs`
+  survived a whole Accounting run, though 23 tests fail when the same edit is made by hand.
+- If the field is first used while the mutant is on, the mutated value stays for the rest of that
+  process, and every later mutant tested there runs against it. Those are killed or time out
+  without being at fault.
+
+Stryker has no setting that restarts the process for each mutant. On 2026-10-15 the two halves of
+Accounting were run where the first whole run had been, on the same code. 146 mutants timed out
+that had survived or been killed before, and 51 more changed status. Made by hand, a sample of each
+behaved as the whole run said, apart from the static mutant above.
+
+So every static field whose initializer Stryker mutated carries a
+`// Stryker disable once all : <reason>` comment, and its mutants are reported as ignored with that
+reason: 51 in Accounting (the lookup maps in `LedgerPostingShared.cs`, `RefundCheckShared.cs` and
+`StatementSectionMap.cs`, the adjustment kinds in `RecordBankAdjustment.cs` and the `DbValues`
+arrays in `AccountingEnumConverters.cs`) and 17 in Payments (`RetrySeconds`, `EventKinds` and
+`Waiting` in `PaymentEngine.cs`). The tests of those values are not measured by mutation. When a
+summary lists a mutant inside a new static initializer, add the comment there too; a test-only
+change cannot make that mutant's result trustworthy.
 
 ## Cost
 
@@ -243,9 +270,12 @@ workflow, whole modules at concurrency 4:
 
 The whole Accounting run took 82% of GitHub's six-hour limit for a hosted job, and a job that times
 out reports nothing, so the workflow runs Accounting in two parts. Part 1 held 468 of those 956
-mutants and part 2 the other 488, so each should take about two and a half hours. Each part has a
-240-minute timeout and Payments 180. Re-measure after the first scheduled runs, and move a
-directory between the parts if one grows much longer than the other.
+mutants and part 2 the other 488, so each should take about two and a half hours. The first split
+run, on 2026-10-15, took 2:00:56 for part 2 and 1:29:04 for Payments, but 3:58:31 for part 1, whose
+146 timeouts each waited out Stryker's timeout before failing (see
+[Static initializers](#static-initializers)). Each part has a 300-minute timeout and Payments 180.
+Re-measure after the first scheduled runs, and move a directory between the parts if one grows much
+longer than the other.
 
 ## Baseline
 
@@ -273,5 +303,7 @@ compile errors, 49 ignored, across five files.
 
 **Accounting, the whole module: 49.0%**, from the hosted run. 572 killed, 384 survived, none timed
 out, 211 not covered, 155 compile errors, 220 ignored, across 71 files. The 595 undetected mutants
-are the module's first survivor list. In the same run Payments scored 54.0% again: 748 killed, 179
+are the module's first survivor list. They include the 51 mutants in static initializers, which all
+survived because the mutated value never took effect, and are ignored from the next run on (see
+[Static initializers](#static-initializers)). In the same run Payments scored 54.0% again: 748 killed, 179
 survived and 1 timed out. Of the 750 the local run killed, one survived here and one timed out.

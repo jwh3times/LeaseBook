@@ -20,6 +20,7 @@ public sealed record PostResult(Guid EntryId);
 /// </summary>
 internal static class LedgerPostingMaps
 {
+    // Stryker disable once all : a static initializer runs once per test process (docs/testing/mutation.md, Static initializers)
     public static readonly IReadOnlyDictionary<string, PaymentMethod> Methods =
         new Dictionary<string, PaymentMethod>(StringComparer.OrdinalIgnoreCase)
         {
@@ -29,6 +30,7 @@ internal static class LedgerPostingMaps
             ["cash"] = PaymentMethod.Cash,
         };
 
+    // Stryker disable once all : a static initializer runs once per test process (docs/testing/mutation.md, Static initializers)
     public static readonly IReadOnlyDictionary<string, DepositApplication> DepositTargets =
         new Dictionary<string, DepositApplication>(StringComparer.OrdinalIgnoreCase)
         {
@@ -37,6 +39,7 @@ internal static class LedgerPostingMaps
         };
 
     /// <summary>Charge kinds: <c>rent</c> posts <c>RentCharged</c>; the rest post <c>FeeCharged</c> with this fee kind.</summary>
+    // Stryker disable once all : a static initializer runs once per test process (docs/testing/mutation.md, Static initializers)
     public static readonly IReadOnlyDictionary<string, FeeKind?> ChargeKinds =
         new Dictionary<string, FeeKind?>(StringComparer.OrdinalIgnoreCase)
         {

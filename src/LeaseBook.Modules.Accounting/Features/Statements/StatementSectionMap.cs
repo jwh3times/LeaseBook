@@ -21,6 +21,7 @@ public static class StatementSectionMap
     /// invariant I8 sweeps the journal for owner-equity event types that are missing from it, and a
     /// second hand-maintained list would be free to disagree with the map it is supposed to guard.
     /// </summary>
+    // Stryker disable once all : a static initializer runs once per test process (docs/testing/mutation.md, Static initializers)
     private static readonly FrozenDictionary<string, StatementSectionKey> Sections =
         new Dictionary<string, StatementSectionKey>(StringComparer.Ordinal)
         {
@@ -44,6 +45,7 @@ public static class StatementSectionMap
     /// <c>GetOwnerStatementData</c> keeps opening-typed entries out of in-period movement and folds
     /// them into Beginning instead. Absence from this set is what invariant I8 reports.
     /// </summary>
+    // Stryker disable once all : a static initializer runs once per test process (docs/testing/mutation.md, Static initializers)
     public static readonly IReadOnlySet<string> CoveredEventTypes =
         Sections.Keys.Append("OpeningBalance").ToFrozenSet(StringComparer.Ordinal);
 

@@ -22,7 +22,9 @@ public sealed record WaitingPayment(Guid Id, DateTime CreatedAt);
 public sealed class PaymentEngine(DbContext db, IOrgContext org, TimeProvider clock,
     IPaymentLedger ledger, IPaymentEligibility eligibility, IPaymentFeeRules feeRules)
 {
+    // Stryker disable once all : a static initializer runs once per test process (docs/testing/mutation.md, Static initializers)
     public static readonly int[] RetrySeconds = [1, 5, 30, 120, 600];
+    // Stryker disable once all : a static initializer runs once per test process (docs/testing/mutation.md, Static initializers)
     public static readonly string[] EventKinds = ["Processing", "Succeeded", "Available", "PayoutPending",
         "PayoutPaid", "PayoutFailed", "Failed", "BankCredit", "Return", "Refund", "Dispute"];
     /// <summary>
@@ -34,6 +36,7 @@ public sealed class PaymentEngine(DbContext db, IOrgContext org, TimeProvider cl
     public const string ConflictKind = "Conflict";
     /// <summary>How long a payment may wait for its outcome before a person is asked to look.</summary>
     public static readonly TimeSpan OutcomeOverdueAfter = TimeSpan.FromDays(7);
+    // Stryker disable once all : a static initializer runs once per test process (docs/testing/mutation.md, Static initializers)
     private static readonly Expression<Func<PaymentOperation, bool>> Waiting =
         x => x.Status == "Processing" && x.ProviderId != null && x.PaidAt == null;
     private DateTime Now => clock.GetUtcNow().UtcDateTime;

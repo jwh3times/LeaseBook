@@ -27,6 +27,7 @@ internal static class RefundChecks
     /// <summary>Marks a <c>RefundIssued</c> entry as a refund check; the generic void refuses these.</summary>
     public const string SourceRefPrefix = "refund-check:";
 
+    // Stryker disable once all : a static initializer runs once per test process (docs/testing/mutation.md, Static initializers)
     public static readonly IReadOnlyDictionary<string, RefundSource> Sources =
         new Dictionary<string, RefundSource>(StringComparer.OrdinalIgnoreCase)
         {

@@ -166,6 +166,12 @@ Consequences:
   is `PaymentEngine.PostReturnAsync`, where a pattern variable is assigned in one operand of `||`,
   and two Accounting methods, which `docs/testing/mutation.md` names. The summary counts their
   mutants, and a later step can rewrite the code or accept the gap.
+- The runner reuses a test process for more than one mutant, and a static field's initializer runs
+  once per process, so a mutant inside one either never takes effect or stays in effect for every
+  later mutant in that process. Both were confirmed by hand on 2026-10-15. Each static field whose
+  initializer Stryker mutates therefore carries a `// Stryker disable once all` comment with its
+  reason, the only edit this addendum makes to product code: 51 mutants in Accounting and 17 in
+  Payments are reported as ignored, and the tests of those values go unmeasured.
 - The score is per module and is never compared with a threshold. What is acted on is the list of
   survivors, one area at a time.
 
