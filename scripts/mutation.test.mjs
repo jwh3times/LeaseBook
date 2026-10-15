@@ -12,11 +12,13 @@ import { afterEach, describe, it } from "node:test";
 import {
   CELL_LIMIT,
   EQUIVALENTS_FILE,
+  configMutate,
   MODULES,
   fails,
   matches,
   normalise,
   parseArgs,
+  partGlobs,
   readEquivalents,
   renderModule,
   repoPath,
@@ -148,6 +150,19 @@ describe("parseArgs", () => {
     );
     assert.throws(() => parseArgs(["payments", "--fast"]), /Unknown option/);
     assert.throws(
+      () => parseArgs(["payments", "--part", "1"]),
+      /not split into parts/,
+    );
+    assert.throws(() => parseArgs(["accounting", "--part", "3"]), /1 or 2/);
+    assert.throws(
+      () => parseArgs(["accounting", "--part", "1", "--mutate", "a"]),
+      /no --mutate/,
+    );
+    assert.throws(
+      () => parseArgs(["accounting", "--report", "r.json", "--part", "1"]),
+      /no Stryker options/,
+    );
+    assert.throws(
       () => parseArgs(["all", "--report", "r.json"]),
       /name the module/,
     );
@@ -155,6 +170,47 @@ describe("parseArgs", () => {
       () => parseArgs(["payments", "--report", "r.json", "--concurrency", "2"]),
       /runs nothing/,
     );
+  });
+});
+
+describe("parts of a split module", () => {
+  const CONFIG = ["**/*.cs", "!**/obj/**", "!**/Endpoints/**/*.cs"];
+
+  it("takes a part of a module that is split", () => {
+    assert.equal(parseArgs(["accounting", "--part", "2"]).part, 2);
+  });
+
+  it("mutates the named directories in part 1, without what the config excludes", () => {
+    assert.deepEqual(partGlobs(CONFIG, ["Features/Posting", "Ledgers"], 1), [
+      "**/Features/Posting/**/*.cs",
+      "**/Ledgers/**/*.cs",
+      "!**/obj/**",
+      "!**/Endpoints/**/*.cs",
+    ]);
+  });
+
+  it("mutates everything else the config does in part 2", () => {
+    assert.deepEqual(partGlobs(CONFIG, ["Features/Posting", "Ledgers"], 2), [
+      "**/*.cs",
+      "!**/obj/**",
+      "!**/Endpoints/**/*.cs",
+      "!**/Features/Posting/**/*.cs",
+      "!**/Ledgers/**/*.cs",
+    ]);
+  });
+
+  it("splits Accounting into directories its committed config still mutates", () => {
+    const config = configMutate("accounting");
+    assert.ok(config.includes("**/*.cs"));
+    assert.ok(MODULES.accounting.firstPart.length > 0);
+    for (const directory of MODULES.accounting.firstPart) {
+      assert.ok(
+        !config.some(
+          (glob) => glob.startsWith("!") && glob.includes(directory),
+        ),
+        `${directory} is excluded by the config, so part 1 would mutate nothing there`,
+      );
+    }
   });
 });
 
@@ -494,6 +550,12 @@ describe("running Stryker", () => {
     const repo = directory();
     for (const { testProject } of Object.values(MODULES)) {
       mkdirSync(path.join(repo, testProject), { recursive: true });
+      writeFileSync(
+        path.join(repo, testProject, "stryker-config.json"),
+        JSON.stringify({
+          "stryker-config": { mutate: ["**/*.cs", "!**/obj/**"] },
+        }),
+      );
     }
     mkdirSync(path.join(repo, "tests", "mutation"), { recursive: true });
     writeFileSync(
@@ -558,6 +620,29 @@ describe("running Stryker", () => {
       calls[0].cwd,
       path.join(repo, "tests/LeaseBook.Tests.Payments"),
     );
+  });
+
+  it("runs a part with its own globs and output, and names it in the summary", () => {
+    const repo = fakeRepo();
+    const calls = [];
+    const logged = [];
+    const code = run(["accounting", "--part", "2"], {
+      spawn: spawner(calls),
+      log: (text) => logged.push(text),
+      repo,
+    });
+    assert.equal(code, 0);
+    const { args } = calls[0];
+    assert.equal(
+      args[args.indexOf("--output") + 1],
+      path.join(repo, "StrykerOutput", "accounting-2"),
+    );
+    const globs = args.filter((_, i) => args[i - 1] === "--mutate");
+    assert.deepEqual(
+      globs,
+      partGlobs(["**/*.cs", "!**/obj/**"], MODULES.accounting.firstPart, 2),
+    );
+    assert.match(logged[0], /Mutation testing: Accounting, part 2 of 2/);
   });
 
   it("removes an old report before running, so it cannot pass for a new one", () => {

@@ -11,6 +11,7 @@
  *
  *   node scripts/mutation.mjs <accounting|payments|all> [--concurrency <n>] [--mutate <glob>]...
  *                             [--out-md <file>]
+ *   node scripts/mutation.mjs accounting --part <1|2> [--concurrency <n>] [--out-md <file>]
  *   node scripts/mutation.mjs <accounting|payments> --report <mutation-report.json> [--out-md <file>]
  *
  * The first form runs Stryker from the module's test project, where its `stryker-config.json` is,
@@ -18,6 +19,10 @@
  * pass through to Stryker. A `--mutate` given here replaces the config file's list rather than adding
  * to it, so it names the files to mutate: docs/testing/mutation.md has examples. The second form reads
  * a report a run already wrote and runs nothing.
+ *
+ * `--part` runs half of a module that is split in two: part 1 mutates the directories its entry in
+ * MODULES names, and part 2 everything else the config file mutates. CI runs Accounting that way, one
+ * job per part, because a whole run comes too near GitHub's six-hour limit for a hosted job.
  *
  * The markdown summary goes to standard output, and also to `--out-md` when given. CI appends it to
  * the job summary.
@@ -46,6 +51,17 @@ export const MODULES = {
   accounting: {
     name: "Accounting",
     testProject: "tests/LeaseBook.Tests.Accounting",
+    // Split in two for CI: a whole run took 296 minutes on a hosted runner, against GitHub's 360-minute
+    // limit for a job (docs/testing/mutation.md). Part 1 is these directories, which held 468 of the
+    // 956 mutants that run tested; part 2 is the rest of the module, so a directory added later falls
+    // into part 2 and is never left out.
+    firstPart: [
+      "Features/LedgerPosting",
+      "Features/Posting",
+      "Features/Statements",
+      "Features/Banking",
+      "Features/Reconciliation",
+    ],
   },
   payments: {
     name: "Payments",
@@ -97,6 +113,12 @@ export function parseArgs(argv) {
       case "--mutate":
         options.mutate.push(value());
         break;
+      case "--part": {
+        const part = Number(value());
+        if (part !== 1 && part !== 2) throw new Error("--part is 1 or 2.");
+        options.part = part;
+        break;
+      }
       case "--report":
         options.report = value();
         break;
@@ -120,8 +142,19 @@ export function parseArgs(argv) {
     throw new Error("--report reads one module's report; name the module.");
   }
   if (
+    options.part !== undefined &&
+    MODULES[options.module]?.firstPart === undefined
+  ) {
+    throw new Error(`${options.module} is not split into parts.`);
+  }
+  if (options.part !== undefined && options.mutate.length > 0) {
+    throw new Error("--part chooses what to mutate, so it takes no --mutate.");
+  }
+  if (
     options.report !== undefined &&
-    (options.concurrency !== undefined || options.mutate.length > 0)
+    (options.concurrency !== undefined ||
+      options.mutate.length > 0 ||
+      options.part !== undefined)
   ) {
     throw new Error("--report runs nothing, so it takes no Stryker options.");
   }
@@ -367,6 +400,38 @@ export function readEquivalents(file = path.join(REPO, EQUIVALENTS_FILE)) {
   return document;
 }
 
+/**
+ * The `mutate` list for one part of a split module, from the config file's list. Part 1 mutates the
+ * named directories, still without anything the config excludes; part 2 is the config's list with
+ * those directories excluded. Together they mutate what the config alone does.
+ */
+export function partGlobs(configMutate, firstPart, part) {
+  const directories = firstPart.map((directory) => `**/${directory}/**/*.cs`);
+  if (part === 1) {
+    return [
+      ...directories,
+      ...configMutate.filter((glob) => glob.startsWith("!")),
+    ];
+  }
+  return [...configMutate, ...directories.map((glob) => `!${glob}`)];
+}
+
+/** The `mutate` list in a module's stryker-config.json. */
+export function configMutate(key, repo = REPO) {
+  const file = path.join(repo, MODULES[key].testProject, "stryker-config.json");
+  const mutate = JSON.parse(readFileSync(file, "utf8"))["stryker-config"]
+    ?.mutate;
+  if (!Array.isArray(mutate) || mutate.length === 0) {
+    throw new Error(`${file} has no mutate list.`);
+  }
+  return mutate;
+}
+
+/** Where a run writes, and how the summary names it: the module, or the module and its part. */
+export function runName(key, part) {
+  return part === undefined ? key : `${key}-${part}`;
+}
+
 /** The arguments Stryker is run with, from the module's test project directory. */
 export function strykerArgs(output, options) {
   const args = ["stryker", "--output", output];
@@ -386,12 +451,20 @@ function defaultSpawn(command, args, cwd) {
  * or wrote none. The output directory is emptied first, so an old report cannot pass for a new one.
  */
 export function runStryker(key, options, spawn = defaultSpawn, repo = REPO) {
-  const output = path.join(repo, "StrykerOutput", key);
+  const output = path.join(repo, "StrykerOutput", runName(key, options.part));
   rmSync(output, { recursive: true, force: true });
   mkdirSync(output, { recursive: true });
+  const mutate =
+    options.part === undefined
+      ? options.mutate
+      : partGlobs(
+          configMutate(key, repo),
+          MODULES[key].firstPart,
+          options.part,
+        );
   const status = spawn(
     "dotnet",
-    strykerArgs(output, options),
+    strykerArgs(output, { ...options, mutate }),
     path.join(repo, MODULES[key].testProject),
   );
   if (status !== 0) {
@@ -427,7 +500,10 @@ export function run(
   const sections = [];
   let code = 0;
   for (const key of keys) {
-    const { name } = MODULES[key];
+    const name =
+      options.part === undefined
+        ? MODULES[key].name
+        : `${MODULES[key].name}, part ${options.part} of 2`;
     const { gate, equivalents } = document[key];
     let summary;
     try {

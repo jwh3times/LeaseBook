@@ -20,7 +20,7 @@ on:
     branches: [mutation-nightly]
   schedule:
     # Nightly at 00:17 UTC, off the top of the hour, when scheduled workflows queue longest. Even at
-    # Accounting's timeout it ends before the Coverage (e2e) workflow at 06:23 and the production
+    # the longest timeout it ends before the Coverage (e2e) workflow at 06:23 and the production
     # invariant sweep at 07:00, so the three never share a night's runners.
     - cron: '17 0 * * *'
   workflow_dispatch:
@@ -42,20 +42,21 @@ concurrency:
 
 jobs:
   mutation:
-    name: Mutation (${{ matrix.module }})
+    name: Mutation (${{ matrix.job.name }})
     runs-on: ubuntu-latest
     strategy:
-      # One job per module, in parallel, so Accounting's run does not hold up Payments' and a
-      # failure in one does not cancel the other. A scheduled run has no input and runs both.
+      # Payments is one job and Accounting two, all in parallel, so no run holds up another and a
+      # failure in one does not cancel the rest. A scheduled run has no input and runs all three.
+      #
+      # Accounting is split because a whole run took 296 min on a hosted runner, against GitHub's
+      # 360-minute limit for a job, and a job that times out reports nothing. Part 1 mutates the
+      # directories scripts/mutation.mjs names and part 2 the rest of the module, about half the
+      # mutants each. Payments took 88 min. The timeouts leave each job well over a third more than
+      # its expected time (docs/testing/mutation.md). Re-measure after the first scheduled runs.
       fail-fast: false
       matrix:
-        module: ${{ fromJSON(inputs.module == 'accounting' && '["accounting"]' || inputs.module == 'payments' && '["payments"]' || '["accounting","payments"]') }}
-    # Measured locally at concurrency 4 (docs/testing/mutation.md): Payments in full took 55 min, and
-    # one directory of Accounting puts the whole module near 2 h. A hosted runner's four cores are
-    # slower, so expect up to twice that. Accounting gets 330 min, under GitHub's 6 h limit for a
-    # hosted job; Payments 180. A job that times out reports nothing, which is why these are wide.
-    # Re-measure after the first scheduled runs.
-    timeout-minutes: ${{ matrix.module == 'accounting' && 330 || 180 }}
+        job: ${{ fromJSON(inputs.module == 'accounting' && '[{"name":"accounting, part 1","args":"accounting --part 1","out":"accounting-1","timeout":240},{"name":"accounting, part 2","args":"accounting --part 2","out":"accounting-2","timeout":240}]' || inputs.module == 'payments' && '[{"name":"payments","args":"payments","out":"payments","timeout":180}]' || '[{"name":"accounting, part 1","args":"accounting --part 1","out":"accounting-1","timeout":240},{"name":"accounting, part 2","args":"accounting --part 2","out":"accounting-2","timeout":240},{"name":"payments","args":"payments","out":"payments","timeout":180}]') }}
+    timeout-minutes: ${{ matrix.job.timeout }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
@@ -68,21 +69,21 @@ jobs:
       # exit code is the gate: non-zero only when Stryker failed, or when the module's gate is on and
       # a survivor is unexplained.
       - name: Run Stryker and summarise what survived
-        run: node scripts/mutation.mjs ${{ matrix.module }} --concurrency 4 --out-md "StrykerOutput/summary-${{ matrix.module }}.md"
+        run: node scripts/mutation.mjs ${{ matrix.job.args }} --concurrency 4 --out-md "StrykerOutput/summary-${{ matrix.job.out }}.md"
       # Written before the gate fails the job, so a red run still lists its survivors. A missing
       # summary is a run that did not report, and fails here too.
       - name: Publish the mutation summary
         if: ${{ !cancelled() }}
-        run: cat "StrykerOutput/summary-${{ matrix.module }}.md" >> "$GITHUB_STEP_SUMMARY"
+        run: cat "StrykerOutput/summary-${{ matrix.job.out }}.md" >> "$GITHUB_STEP_SUMMARY"
       - name: Upload the Stryker reports
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: mutation-${{ matrix.module }}
+          name: mutation-${{ matrix.job.out }}
           # reports/mutation-report.html is the report to open; mutation-report.json is what the
           # summary was read from.
           path: |
-            StrykerOutput/summary-${{ matrix.module }}.md
-            StrykerOutput/${{ matrix.module }}/reports/
+            StrykerOutput/summary-${{ matrix.job.out }}.md
+            StrykerOutput/${{ matrix.job.out }}/reports/
           if-no-files-found: error
           retention-days: 14

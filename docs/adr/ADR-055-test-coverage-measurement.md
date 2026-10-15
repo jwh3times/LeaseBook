@@ -151,10 +151,11 @@ carries its reason. The same file holds each module's gate, and both gates ship 
 `break` threshold is 0 in both configurations, so no score fails a run; the gate is the only failure
 apart from Stryker failing.
 
-**It runs nightly and never on a pull request**, in `mutation.yml`, one job per module so that
-Accounting's run, measured in hours, does not hold up Payments'. The method, the measured run times,
-what counts as an equivalent mutant and how to run one module locally are in
-[`docs/testing/mutation.md`](../testing/mutation.md).
+**It runs nightly and never on a pull request**, in `mutation.yml`, as parallel jobs so that no run
+holds up another. Payments is one job. Accounting is two, each mutating part of the module: its first
+whole run on a hosted runner took 296 minutes, against GitHub's 360-minute limit for a job, and a job
+that times out reports nothing. The method, the measured run times, what counts as an equivalent
+mutant and how to run one module locally are in [`docs/testing/mutation.md`](../testing/mutation.md).
 
 Consequences:
 
@@ -169,5 +170,5 @@ Consequences:
   survivors, one area at a time.
 
 Reopen this addendum when Stryker's MTP runner leaves preview or learns to select tests per mutant,
-when a module's nightly run comes near GitHub's six-hour job limit, or when both modules are clean
-and the measurement widens to the organization-isolation code, as #547 plans.
+when one job's nightly run comes near GitHub's six-hour job limit even after a split, or when both
+modules are clean and the measurement widens to the organization-isolation code, as #547 plans.

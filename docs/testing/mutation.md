@@ -51,9 +51,13 @@ Stryker still lists an excluded file in its report, with no mutants. The summary
 mutated only when it has one.
 
 The nightly run is [`.github/workflows/mutation.yml`](../../.github/workflows/mutation.yml), at 00:17
-UTC and on manual dispatch, where a module can be chosen. It never runs on a pull request. Each module
-is its own job, so Accounting's long run does not hold up Payments'. Each job writes the summary to
-its job summary and uploads `mutation-<module>`, which holds the summary, the HTML report
+UTC and on manual dispatch, where a module can be chosen. It never runs on a pull request. It runs
+three jobs in parallel: Payments, and Accounting in two parts. A whole Accounting run comes too near
+GitHub's six-hour limit for a hosted job (see [Cost](#cost)), and a job that times out reports
+nothing. Part 1 mutates the directories `scripts/mutation.mjs` names in `firstPart`, and part 2 the
+rest of what the configuration mutates, so a directory added later falls into part 2 and is never
+left out. Each job writes the summary to its job summary and uploads `mutation-<run>` (`payments`,
+`accounting-1` or `accounting-2`), which holds the summary, the HTML report
 (`reports/mutation-report.html`) and the JSON report the summary was read from.
 
 ## Run one module locally
@@ -79,6 +83,16 @@ node scripts/mutation.mjs payments --concurrency 4 --mutate '**/Processing/Settl
 
 A `--mutate` given on the command line replaces the configuration's list instead of adding to it, so
 the exclusions above no longer apply. Name only the files you mean.
+
+To run one of Accounting's two parts, as the nightly job does, which writes to
+`StrykerOutput/accounting-<part>/`:
+
+```bash
+node scripts/mutation.mjs accounting --part 1 --concurrency 4
+```
+
+`--part` builds the list itself from the configuration's, so the exclusions still apply, and it
+takes no `--mutate`.
 
 To render the summary again from a report a run already wrote, without running anything:
 
@@ -219,10 +233,19 @@ Per-test coverage capture, Stryker's default, runs one test session per test, ea
 own Postgres container: 164 sessions for Payments before any mutant is tested. The aggregate pass
 the configurations use took 24 seconds.
 
-GitHub's hosted runners have four slower cores, so expect a nightly job to take up to twice these
-times. The jobs have timeouts of 330 minutes for Accounting and 180 for Payments, under GitHub's
-six-hour limit for a hosted job. A job that times out reports nothing. Re-measure after the first
-scheduled runs.
+On GitHub's hosted runner (four cores), measured on 2026-10-14 from this branch's first run of the
+workflow, whole modules at concurrency 4:
+
+| Run                          | Mutants tested | Time    | Wall time per tested mutant |
+| ---------------------------- | -------------: | ------- | --------------------------: |
+| Payments, the whole module   |            928 | 1:28:28 |                       5.7 s |
+| Accounting, the whole module |            956 | 4:55:40 |                      18.6 s |
+
+The whole Accounting run took 82% of GitHub's six-hour limit for a hosted job, and a job that times
+out reports nothing, so the workflow runs Accounting in two parts. Part 1 held 468 of those 956
+mutants and part 2 the other 488, so each should take about two and a half hours. Each part has a
+240-minute timeout and Payments 180. Re-measure after the first scheduled runs, and move a
+directory between the parts if one grows much longer than the other.
 
 ## Baseline
 
@@ -247,3 +270,8 @@ boundary the tests do not reach; and the text of a lock name or a status.
 
 **Accounting, `Posting/` only: 60.7%.** 82 killed, 27 survived, none timed out, 26 not covered, 9
 compile errors, 49 ignored, across five files.
+
+**Accounting, the whole module: 49.0%**, from the hosted run. 572 killed, 384 survived, none timed
+out, 211 not covered, 155 compile errors, 220 ignored, across 71 files. The 595 undetected mutants
+are the module's first survivor list. In the same run Payments scored 54.0% again: 748 killed, 179
+survived and 1 timed out. Of the 750 the local run killed, one survived here and one timed out.
