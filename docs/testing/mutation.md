@@ -209,6 +209,8 @@ the module was not measured.
 - **Per-process cost.** Each test process starts its own Postgres container and applies the
   migrations.
 - **Static initializers are not mutated.** See below.
+- **A busy runner can time a mutant out.** Both configurations set `timeout-ratio` to 4. See
+  [Timeouts](#timeouts).
 
 ### Static initializers
 
@@ -223,9 +225,12 @@ in a process, on first use, so a mutant inside one does not behave like any othe
   without being at fault.
 
 Stryker has no setting that restarts the process for each mutant. On 2026-10-15 the two halves of
-Accounting were run where the first whole run had been, on the same code. 146 mutants timed out
-that had survived or been killed before, and 51 more changed status. Made by hand, a sample of each
-behaved as the whole run said, apart from the static mutant above.
+Accounting were run where the first whole run had been, on the same code. Leaving timeouts aside
+(see [Timeouts](#timeouts)), 51 mutants that had survived were killed, 20 of them static ones, and
+one that had been killed survived. Made by hand, a sample of each behaved as the whole run said,
+apart from the static mutant above. With the static mutants ignored, the next run changed only two
+statuses from the whole run, both in `AccountingPeriods.cs`, in a path that runs only when two
+requests race for the same month.
 
 So every static field whose initializer Stryker mutated carries a
 `// Stryker disable once all : <reason>` comment, and its mutants are reported as ignored with that
@@ -235,6 +240,25 @@ arrays in `AccountingEnumConverters.cs`) and 17 in Payments (`RetrySeconds`, `Ev
 `Waiting` in `PaymentEngine.cs`). The tests of those values are not measured by mutation. When a
 summary lists a mutant inside a new static initializer, add the comment there too; a test-only
 change cannot make that mutant's result trustworthy.
+
+### Timeouts
+
+Stryker stops a mutant's test run once it takes longer than `timeout-ratio` times the initial test
+run, plus `additional-timeout` (10 seconds by default), and counts the mutant as timed out, which
+the score counts as detected. The initial run is one test process alone. Mutants then run four at a
+time, each process with its own Postgres container, and on a four-core hosted runner that makes a
+run much slower than the one it is measured against. Locally the initial Accounting run took 38
+seconds, and at Stryker's default ratio of 2 each mutant had 85 seconds.
+
+At the default ratio, the two Accounting halves on 2026-10-15 timed out 146 mutants in one run and
+120 in the next, against none in the whole run, on the same code, and in different files each time.
+They came early in each half, three timeouts to one result, as if three of the four processes were
+stuck while one worked. A mutant in part 2 of the second run took 102 seconds per process on
+average. Made by hand, one of them, a validator rule removed in `RecordBankAdjustment.cs`, survived
+as the whole run said. So both configurations set
+`timeout-ratio` to 4, which leaves room for a run four times as slow as the initial one. A mutant
+that really loops forever now costs about four test runs before it is stopped; no run so far has had
+more than one.
 
 ## Cost
 
@@ -270,12 +294,17 @@ workflow, whole modules at concurrency 4:
 
 The whole Accounting run took 82% of GitHub's six-hour limit for a hosted job, and a job that times
 out reports nothing, so the workflow runs Accounting in two parts. Part 1 held 468 of those 956
-mutants and part 2 the other 488, so each should take about two and a half hours. The first split
-run, on 2026-10-15, took 2:00:56 for part 2 and 1:29:04 for Payments, but 3:58:31 for part 1, whose
-146 timeouts each waited out Stryker's timeout before failing (see
-[Static initializers](#static-initializers)). Each part has a 300-minute timeout and Payments 180.
-Re-measure after the first scheduled runs, and move a directory between the parts if one grows much
-longer than the other.
+mutants and part 2 the other 488, so each should take about two and a half hours. Each timed-out
+mutant waits out Stryker's timeout and then starts a new test process, so the split runs at the
+default timeout ratio took longer (see [Timeouts](#timeouts)):
+
+| Run, 2026-10-15                               | Part 1  | Part 2  | Payments |
+| --------------------------------------------- | ------- | ------- | -------- |
+| First split run (146 timeouts, all in part 1) | 3:58:31 | 2:00:56 | 1:29:04  |
+| After ignoring static mutants (120 timeouts)  | 3:32:17 | 3:22:11 | 1:32:39  |
+
+Each part has a 300-minute timeout and Payments 180. Re-measure after the first scheduled runs at
+`timeout-ratio` 4, and move a directory between the parts if one grows much longer than the other.
 
 ## Baseline
 
@@ -303,7 +332,16 @@ compile errors, 49 ignored, across five files.
 
 **Accounting, the whole module: 49.0%**, from the hosted run. 572 killed, 384 survived, none timed
 out, 211 not covered, 155 compile errors, 220 ignored, across 71 files. The 595 undetected mutants
-are the module's first survivor list. They include the 51 mutants in static initializers, which all
-survived because the mutated value never took effect, and are ignored from the next run on (see
-[Static initializers](#static-initializers)). In the same run Payments scored 54.0% again: 748 killed, 179
-survived and 1 timed out. Of the 750 the local run killed, one survived here and one timed out.
+include the 51 mutants in static initializers, which all survived because the mutated value never
+took effect (see [Static initializers](#static-initializers)). Ignoring those, as every later run
+does, leaves **51.3%**: 572 killed, 333 survived and 211 not covered, so 544 undetected mutants
+make the module's first survivor list. The run after the static mutants were ignored agreed with
+that apart from its spurious timeouts and the two `AccountingPeriods.cs` statuses above. In the whole
+hosted run Payments scored 54.0% again: 748 killed, 179 survived and 1 timed out. Of the 750 the
+local run killed, one survived here and one timed out.
+
+**Payments, with static mutants ignored: 54.3%**, from the hosted run on 2026-10-15. 743 killed,
+167 survived, 1 timed out, 460 not covered, 121 compile errors, 186 ignored. Against the whole run,
+the 17 static mutants are ignored and one more is killed: `op.DueAt > Now` made `>=` in
+`PaymentEngine.ClaimAsync`, which survived the whole run while it shared a process with mutated
+static fields, and fails a test when made by hand.

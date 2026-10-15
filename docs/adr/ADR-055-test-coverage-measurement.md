@@ -172,6 +172,10 @@ Consequences:
   initializer Stryker mutates therefore carries a `// Stryker disable once all` comment with its
   reason, the only edit this addendum makes to product code: 51 mutants in Accounting and 17 in
   Payments are reported as ignored, and the tests of those values go unmeasured.
+- Stryker measures its per-mutant timeout against one test process running alone, then runs four
+  at once, each with its own Postgres container. On a four-core hosted runner that timed out 146
+  and then 120 Accounting mutants that a whole run had not, so both configurations set
+  `timeout-ratio` to 4. A mutant that really loops costs about four test runs before it stops.
 - The score is per module and is never compared with a threshold. What is acted on is the list of
   survivors, one area at a time.
 

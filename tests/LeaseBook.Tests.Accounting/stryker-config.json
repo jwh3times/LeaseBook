@@ -4,6 +4,7 @@
     "test-runner": "mtp",
     "configuration": "Debug",
     "coverage-analysis": "all",
+    "timeout-ratio": 4,
     "concurrency": 4,
     "reporters": ["json", "html", "cleartext", "progress"],
     "mutation-level": "Standard",
