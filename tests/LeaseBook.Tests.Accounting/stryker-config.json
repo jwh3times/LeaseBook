@@ -1,0 +1,22 @@
+{
+  "stryker-config": {
+    "project": "LeaseBook.Modules.Accounting.csproj",
+    "test-runner": "mtp",
+    "configuration": "Debug",
+    "coverage-analysis": "all",
+    "timeout-ratio": 4,
+    "concurrency": 4,
+    "reporters": ["json", "html", "cleartext", "progress"],
+    "mutation-level": "Standard",
+    "thresholds": { "high": 80, "low": 60, "break": 0 },
+    "mutate": [
+      "**/*.cs",
+      "!**/obj/**",
+      "!**/ModuleMarker.cs",
+      "!**/AccountingModuleServiceCollectionExtensions.cs",
+      "!**/Endpoints/**/*.cs",
+      "!**/Persistence/*Configuration.cs",
+      "!**/Persistence/AccountingSql.cs"
+    ]
+  }
+}

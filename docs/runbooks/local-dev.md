@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living runbook; canonical development command reference
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-12
+- **Last reviewed:** 2026-10-14
 
 ## Prerequisites
 
@@ -328,6 +328,11 @@ through the real engine. Its iteration count is the `LEASEBOOK_PROPERTY_ITER` en
 ```powershell
 $env:LEASEBOOK_PROPERTY_ITER = "100"; dotnet test tests/LeaseBook.Tests.Accounting/LeaseBook.Tests.Accounting.csproj
 ```
+
+The accounting suite and `LeaseBook.Tests.Payments` are also what mutation testing reruns against
+each edit it makes to those two modules. `node scripts/mutation.mjs payments --concurrency 4` runs it
+for one module, and takes about an hour for Payments. [Mutation testing](../testing/mutation.md) owns
+the commands, how to run part of a module, and what to do about a survivor.
 
 ## Capability state
 

@@ -1,0 +1,10 @@
+{
+  "accounting": {
+    "gate": false,
+    "equivalents": []
+  },
+  "payments": {
+    "gate": false,
+    "equivalents": []
+  }
+}

@@ -25,8 +25,8 @@ including the ones that computed a figure nobody compared with anything.
 
 So the figures are good at one thing: finding code and routes that no test reaches at all. An
 uncovered line is certainly untested. A covered line is only possibly tested. Whether the suites
-would notice a covered line being wrong is a different measurement, mutation testing, which is a
-later slice of the same work (#547).
+would notice a covered line being wrong is a different measurement, mutation testing, which runs
+nightly on Accounting and Payments: [Mutation testing](mutation.md).
 
 Read the figures as a map of gaps. Do not read them as a score.
 
@@ -51,7 +51,7 @@ Each run writes a table to the job summary and uploads the full report as an art
 
 Every test project references `Microsoft.Testing.Extensions.CodeCoverage`, which adds the
 `coverage` options to the test executables. With them, each project writes a Cobertura file of the
-product code it ran. ReportGenerator merges the nine files into one report grouped by assembly.
+product code it ran. ReportGenerator merges the ten files into one report grouped by assembly.
 
 [`tests/coverage.settings.xml`](../../tests/coverage.settings.xml) decides what is counted:
 

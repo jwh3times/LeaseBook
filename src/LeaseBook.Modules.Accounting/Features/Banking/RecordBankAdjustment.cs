@@ -24,6 +24,7 @@ public sealed record RecordBankAdjustment(
 
 public sealed class RecordBankAdjustmentValidator : AbstractValidator<RecordBankAdjustment>
 {
+    // Stryker disable once all : a static initializer runs once per test process (docs/testing/mutation.md, Static initializers)
     public static readonly string[] Kinds = ["fee", "interest", "transfer"];
 
     public RecordBankAdjustmentValidator()
