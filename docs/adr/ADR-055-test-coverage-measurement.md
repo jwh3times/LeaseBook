@@ -175,7 +175,8 @@ Consequences:
 - Stryker measures its per-mutant timeout against one test process running alone, then runs four
   at once, each with its own Postgres container. On a four-core hosted runner that timed out 146
   and then 120 Accounting mutants that a whole run had not, so both configurations set
-  `timeout-ratio` to 4. A mutant that really loops costs about four test runs before it stops.
+  `timeout-ratio` to 4. The next run timed out none, and each of those mutants took the status the
+  whole run gave it. A mutant that really loops costs about four test runs before it stops.
 - The score is per module and is never compared with a threshold. What is acted on is the list of
   survivors, one area at a time.
 

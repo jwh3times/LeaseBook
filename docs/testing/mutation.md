@@ -211,6 +211,8 @@ the module was not measured.
 - **Static initializers are not mutated.** See below.
 - **A busy runner can time a mutant out.** Both configurations set `timeout-ratio` to 4. See
   [Timeouts](#timeouts).
+- **A few mutants are reached only by chance**, so their status can change between runs of the
+  same code. See [Chance results](#chance-results).
 
 ### Static initializers
 
@@ -228,9 +230,9 @@ Stryker has no setting that restarts the process for each mutant. On 2026-10-15 
 Accounting were run where the first whole run had been, on the same code. Leaving timeouts aside
 (see [Timeouts](#timeouts)), 51 mutants that had survived were killed, 20 of them static ones, and
 one that had been killed survived. Made by hand, a sample of each behaved as the whole run said,
-apart from the static mutant above. With the static mutants ignored, the next run changed only two
-statuses from the whole run, both in `AccountingPeriods.cs`, in a path that runs only when two
-requests race for the same month.
+apart from the static mutant above. With the static mutants ignored, the next two runs each changed
+only two statuses from the whole run, and every change was a mutant that tests reach only by chance
+(see [Chance results](#chance-results)).
 
 So every static field whose initializer Stryker mutated carries a
 `// Stryker disable once all : <reason>` comment, and its mutants are reported as ignored with that
@@ -255,10 +257,28 @@ At the default ratio, the two Accounting halves on 2026-10-15 timed out 146 muta
 They came early in each half, three timeouts to one result, as if three of the four processes were
 stuck while one worked. A mutant in part 2 of the second run took 102 seconds per process on
 average. Made by hand, one of them, a validator rule removed in `RecordBankAdjustment.cs`, survived
-as the whole run said. So both configurations set
-`timeout-ratio` to 4, which leaves room for a run four times as slow as the initial one. A mutant
-that really loops forever now costs about four test runs before it is stopped; no run so far has had
-more than one.
+as the whole run said. So both configurations set `timeout-ratio` to 4, which leaves room for a
+run four times as slow as the initial one. A mutant that really loops forever now costs about four
+test runs before it is stopped; no run so far has had more than one.
+
+The first run at ratio 4, also on 2026-10-15, timed out no Accounting mutant. Each of the 120 the
+run before had timed out took the status the whole run gave it, 95 survived and 25 killed, and
+Payments matched the run before mutant for mutant.
+
+### Chance results
+
+A few mutants are reached only by chance, so the same code can give them different statuses from
+one run to the next. A status change on one of these does not mean the code or the tests changed.
+
+- **`AccountingPeriods.cs`, the lost-race path of opening a period.** It runs only when two
+  requests race to create the same month, which a concurrency test does not always arrange.
+- **`GetOwnerLedger.cs`, `rows.Count > 0` made `>= 0`.** Only an owner ledger with no rows tells
+  them apart, and only the random sequences of
+  `InvariantPropertyTests.Random_valid_sequences_keep_the_invariants_and_converge_after_settlement`
+  produce one. Made by hand, the mutant failed one test run in three.
+
+Both are survivors to fix with a test that reaches the case every time. Add a mutant here when a
+summary shows a status change that the code does not explain.
 
 ## Cost
 
@@ -302,9 +322,12 @@ default timeout ratio took longer (see [Timeouts](#timeouts)):
 | --------------------------------------------- | ------- | ------- | -------- |
 | First split run (146 timeouts, all in part 1) | 3:58:31 | 2:00:56 | 1:29:04  |
 | After ignoring static mutants (120 timeouts)  | 3:32:17 | 3:22:11 | 1:32:39  |
+| At `timeout-ratio` 4 (no timeouts)            | 2:25:12 | 3:17:11 | 1:02:57  |
 
-Each part has a 300-minute timeout and Payments 180. Re-measure after the first scheduled runs at
-`timeout-ratio` 4, and move a directory between the parts if one grows much longer than the other.
+The same mutants took 2:00:56 in part 2 of one run and 3:17:11 in another, with no timeouts in
+either, so a hosted runner's speed varies by half again from one run to the next. Each part has a
+300-minute timeout and Payments 180. Re-measure after the first scheduled runs, and move a
+directory from part 2 to part 1 if part 2 keeps taking longest.
 
 ## Baseline
 
@@ -335,8 +358,8 @@ out, 211 not covered, 155 compile errors, 220 ignored, across 71 files. The 595 
 include the 51 mutants in static initializers, which all survived because the mutated value never
 took effect (see [Static initializers](#static-initializers)). Ignoring those, as every later run
 does, leaves **51.3%**: 572 killed, 333 survived and 211 not covered, so 544 undetected mutants
-make the module's first survivor list. The run after the static mutants were ignored agreed with
-that apart from its spurious timeouts and the two `AccountingPeriods.cs` statuses above. In the whole
+make the module's first survivor list. The run at `timeout-ratio` 4 gave exactly those counts, with
+two [chance results](#chance-results) trading places. In the whole
 hosted run Payments scored 54.0% again: 748 killed, 179 survived and 1 timed out. Of the 750 the
 local run killed, one survived here and one timed out.
 
