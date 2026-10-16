@@ -11,7 +11,7 @@
  *
  *   node scripts/mutation.mjs <accounting|payments|all> [--concurrency <n>] [--mutate <glob>]...
  *                             [--out-md <file>]
- *   node scripts/mutation.mjs accounting --part <1|2> [--concurrency <n>] [--out-md <file>]
+ *   node scripts/mutation.mjs <accounting|payments> --part <1|2> [--concurrency <n>] [--out-md <file>]
  *   node scripts/mutation.mjs <accounting|payments> --report <mutation-report.json> [--out-md <file>]
  *
  * The first form runs Stryker from the module's test project, where its `stryker-config.json` is,
@@ -21,8 +21,8 @@
  * a report a run already wrote and runs nothing.
  *
  * `--part` runs half of a module that is split in two: part 1 mutates the directories its entry in
- * MODULES names, and part 2 everything else the config file mutates. CI runs Accounting that way, one
- * job per part, because a whole run comes too near GitHub's six-hour limit for a hosted job.
+ * MODULES names, and part 2 everything else the config file mutates. CI runs both modules that way,
+ * one job per part, because a whole run of either comes too near a hosted job's time limit.
  *
  * The markdown summary goes to standard output, and also to `--out-md` when given. CI appends it to
  * the job summary.
@@ -66,6 +66,10 @@ export const MODULES = {
   payments: {
     name: "Payments",
     testProject: "tests/LeaseBook.Tests.Payments",
+    // Split in two for CI: once every mutant had a test, a whole run took 142 minutes locally, which
+    // a hosted runner, 1.2 to 1.75 times slower, could stretch past four hours. Part 1 is the two
+    // engines, 864 of the 1,369 mutants that run tested; part 2 is the rest of the module.
+    firstPart: ["Processing"],
   },
 };
 

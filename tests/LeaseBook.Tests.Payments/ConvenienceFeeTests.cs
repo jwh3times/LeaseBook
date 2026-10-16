@@ -2,7 +2,7 @@ using CsCheck;
 using LeaseBook.Modules.Payments.Domain;
 using Shouldly;
 
-namespace LeaseBook.Tests.Integration;
+namespace LeaseBook.Tests.Payments;
 
 /// <summary>
 /// The convenience-fee quote (ADR-053, #500): the charge is the smallest amount whose net, after the
@@ -64,15 +64,49 @@ public sealed class ConvenienceFeeTests
     public void An_amount_that_is_not_positive_whole_cents_cannot_be_quoted(string amount)
     {
         var ledgerAmount = decimal.Parse(amount, System.Globalization.CultureInfo.InvariantCulture);
-        Should.Throw<ArgumentOutOfRangeException>(() => Card.Quote(ledgerAmount));
+        var refused = Should.Throw<ArgumentOutOfRangeException>(() => Card.Quote(ledgerAmount));
+        // An unhandled refusal is logged by its message, so the message says what was wrong.
+        (refused.ParamName, refused.ActualValue).ShouldBe(("ledgerAmount", (object)ledgerAmount));
+        refused.Message.ShouldStartWith("A ledger amount is a positive amount in whole cents.");
     }
 
     [Fact]
-    public void A_rule_with_no_gross_up_is_refused_rather_than_looped_on()
+    public void The_smallest_amount_that_can_be_quoted_is_one_cent()
     {
-        Should.Throw<InvalidOperationException>(() => new ConvenienceFeeRule(10_000, 0m, null).Quote(100m));
-        Should.Throw<InvalidOperationException>(() => new ConvenienceFeeRule(-1, 0m, null).Quote(100m));
-        Should.Throw<InvalidOperationException>(() => new ConvenienceFeeRule(100, -0.01m, null).Quote(100m));
-        Should.Throw<InvalidOperationException>(() => new ConvenienceFeeRule(100, 0m, 0m).Quote(100m));
+        Card.Quote(0.01m).ShouldBe(new FeeQuote(0.01m, 0.31m, 0.32m));
+        ConvenienceFeeRule.None.Quote(0.01m).ShouldBe(new FeeQuote(0.01m, 0m, 0.01m));
+    }
+
+    public static TheoryData<string, ConvenienceFeeRule> Unusable => new()
+    {
+        { "a rate of all of the charge", new(10_000, 0m, null) },
+        { "a negative rate", new(-1, 0m, null) },
+        { "a negative fixed fee", new(100, -0.01m, null) },
+        { "a cap of nothing", new(100, 0m, 0m) },
+        { "a negative cap", new(100, 0m, -1m) },
+    };
+
+    [Theory]
+    [MemberData(nameof(Unusable))]
+    public void A_rule_with_no_gross_up_is_refused_rather_than_looped_on(string _, ConvenienceFeeRule rule)
+    {
+        Should.Throw<InvalidOperationException>(() => rule.Quote(100m))
+            .Message.ShouldBe("The fee rule is not one a charge can be grossed up for.");
+    }
+
+    // Each limit from the side a rule may stand on: the highest rate below all of the charge, no rate,
+    // no fixed fee, and the smallest cap.
+    public static TheoryData<string, ConvenienceFeeRule, FeeQuote> AtTheLimits => new()
+    {
+        { "a rate a basis point short of all of it", new(9_999, 0m, null), new(0.01m, 50m, 50.01m) },
+        { "no rate and no fixed fee", new(0, 0m, null), new(0.01m, 0m, 0.01m) },
+        { "a cap of one cent", new(9_999, 0m, 0.01m), new(0.01m, 0.01m, 0.02m) },
+    };
+
+    [Theory]
+    [MemberData(nameof(AtTheLimits))]
+    public void A_rule_at_the_edge_of_what_can_be_grossed_up_is_quoted(string _, ConvenienceFeeRule rule, FeeQuote expected)
+    {
+        rule.Quote(0.01m).ShouldBe(expected);
     }
 }
