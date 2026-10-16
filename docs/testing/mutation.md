@@ -3,7 +3,7 @@
 - **Audience:** Contributors, reviewers and maintainers
 - **Status:** Living method and measurement record
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-14
+- **Last reviewed:** 2026-10-16
 
 Mutation testing asks whether the tests would notice the code being wrong. A tool changes the code
 one small edit at a time, such as `>` to `>=`, `+` to `-`, or a call removed, and reruns the tests
