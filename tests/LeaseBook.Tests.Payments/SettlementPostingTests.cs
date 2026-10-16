@@ -1,3 +1,4 @@
+using System.Text.Json;
 using LeaseBook.Modules.Payments.Contracts;
 using LeaseBook.Modules.Payments.Domain;
 using LeaseBook.Modules.Payments.Processing;
@@ -122,6 +123,9 @@ public sealed class SettlementPostingTests(PostgresFixture fixture)
         { "a payment in review", "conflicting_evidence" },
         { "a failure stored and not judged", "conflicting_evidence" },
         { "a dispute stored and not judged", "conflicting_evidence" },
+        { "a return stored and not judged", "conflicting_evidence" },
+        { "a refund stored and not judged", "conflicting_evidence" },
+        { "a payment sent to a person as overdue", "conflicting_evidence" },
     };
 
     [Theory]
@@ -164,6 +168,13 @@ public sealed class SettlementPostingTests(PostgresFixture fixture)
             case "a payment in review": await h.EmitAsync(h.Observation(second, "Dispute"), ct); break;
             case "a failure stored and not judged": await h.ObserveAsync(h.Observation(second, "Failed"), ct); break;
             case "a dispute stored and not judged": await h.ObserveAsync(h.Observation(second, "Dispute"), ct); break;
+            case "a return stored and not judged": await h.ObserveAsync(h.Observation(second, "Return"), ct); break;
+            case "a refund stored and not judged": await h.ObserveAsync(h.Observation(second, "Refund"), ct); break;
+            case "a payment sent to a person as overdue":
+                // In review with nothing said of it at all: its status alone keeps it out.
+                h.Clock.Advance(PaymentEngine.OutcomeOverdueAfter + TimeSpan.FromHours(1));
+                (await h.InOrg(() => h.Payments.MarkOverdueAsync(h.Binding, second.Id, ct), ct)).ShouldBeTrue();
+                break;
         }
         var receiptsBefore = h.Ledger.Receipts.Count;
 
@@ -291,6 +302,9 @@ public sealed class SettlementPostingTests(PostgresFixture fixture)
         { "a refund stored", "conflicting_evidence" },
         { "a failure stored", "conflicting_evidence" },
         { "in review for something else", "conflicting_evidence" },
+        { "a dispute stored", "conflicting_evidence" },
+        { "a return in review closed by a person", "conflicting_evidence" },
+        { "in review for other credits, with a return stored", "conflicting_evidence" },
     };
 
     [Theory]
@@ -300,7 +314,7 @@ public sealed class SettlementPostingTests(PostgresFixture fixture)
         var ct = TestContext.Current.CancellationToken;
         await using var h = await PaymentsHarness.CreateAsync(fixture, ct);
         var op = await h.AcceptedAsync(600m, ct, fee: 6m);
-        if (scenario != "never receipted")
+        if (scenario is not ("never receipted" or "in review for other credits, with a return stored"))
         {
             await h.SettleAsync(h.Payout("po_1", 600m, Line("1", "Payment", op, 606m, 6m, 600m)), ct);
         }
@@ -317,6 +331,19 @@ public sealed class SettlementPostingTests(PostgresFixture fixture)
             case "a refund stored": await h.ObserveAsync(h.Observation(op, "Refund"), ct); break;
             case "a failure stored": await h.ObserveAsync(h.Observation(op, "Failed"), ct); break;
             case "in review for something else": await h.EmitAsync(h.Observation(op, "Dispute"), ct); break;
+            case "a dispute stored": await h.ObserveAsync(h.Observation(op, "Dispute"), ct); break;
+            case "a return in review closed by a person":
+                await h.EmitAsync(h.Observation(op, "Return"), ct);
+                await h.InOrg(() => h.Payments.CloseReviewAsync(h.Binding, op.Id, h.UserId, "Closed", ct), ct);
+                break;
+            case "in review for other credits, with a return stored":
+                // Receipted by its own credit, then sent to a person by a second credit naming other
+                // evidence: in review, with a receipt, under a reason that is not a return's.
+                await h.EmitAsync(h.Observation(op, "BankCredit"), ct);
+                await h.EmitAsync(h.Observation(op, "BankCredit", "second-credit") with { EvidenceId = "evidence-other" }, ct);
+                (await h.ReadAsync(op.Id, ct)).Reason.ShouldBe("conflicting_evidence");
+                await h.ObserveAsync(h.Observation(op, "Return"), ct);
+                break;
         }
         var postedBefore = h.Ledger.Settlements.Count;
 
@@ -378,7 +405,7 @@ public sealed class SettlementPostingTests(PostgresFixture fixture)
 
     public static TheoryData<string> Malformed() =>
         ["a colon in the reference", "a line named twice", "no evidence reference", "a long payout type", "a two-letter currency",
-         "a line with no kind"];
+         "a line with no kind", "a line with no reference"];
 
     [Theory]
     [MemberData(nameof(Malformed))]
@@ -396,12 +423,93 @@ public sealed class SettlementPostingTests(PostgresFixture fixture)
             "no evidence reference" => evidence with { EvidenceId = " " },
             "a long payout type" => evidence with { PayoutType = new string('s', 21) },
             "a two-letter currency" => evidence with { Currency = "US" },
+            "a line with no reference" => evidence with { Items = [line with { Item = "" }] },
             _ => evidence with { Items = [line with { Kind = "" }] },
         };
 
         (await h.InOrg(() => h.Settlements.ReceiveAsync(h.Binding, evidence, ct), ct)).ShouldBeNull();
 
         (await h.InOrg(() => h.Scope.Db.Set<PaymentSettlement>().CountAsync(ct), ct)).ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task Evidence_as_long_as_its_columns_allow_is_stored()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var h = await PaymentsHarness.CreateAsync(fixture, ct);
+        var line = new ProcessorSettlementItem(new string('i', 60), new string('k', 20), new string('p', 100), 0m, 0m, 0m, "USD");
+        var evidence = h.Payout(new string('o', 100), 0m, line) with { EvidenceId = new string('e', 100), PayoutType = new string('t', 20) };
+
+        var id = await h.InOrg(() => h.Settlements.ReceiveAsync(h.Binding, evidence, ct), ct);
+
+        id.ShouldNotBeNull();
+        (await h.ReadItemsAsync(id.Value, ct)).ShouldHaveSingleItem().ProviderId.ShouldBe(new string('p', 100));
+    }
+
+    [Fact]
+    public async Task A_payout_is_fingerprinted_by_what_it_says_with_its_lines_in_order_of_reference()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var h = await PaymentsHarness.CreateAsync(fixture, ct);
+        var second = new ProcessorSettlementItem("2", "Payment", "prov_b", 200m, 0m, 200m, "USD");
+        var first = new ProcessorSettlementItem("1", "Payment", "prov_a", 100m, 0m, 100m, "USD");
+        var evidence = h.Payout("po_1", 300m, second, first);
+
+        var id = (await h.InOrg(() => h.Settlements.ReceiveAsync(h.Binding, evidence, ct), ct))!.Value;
+
+        // The fingerprint is stored and every later delivery is compared with it, perhaps by a later
+        // release: how it is made is part of what is kept, and is pinned here.
+        (await h.ReadSettlementAsync(id, ct)).Fingerprint.ShouldBe(PaymentEngine.Hash(JsonSerializer.Serialize(new
+        {
+            evidence.PayoutId,
+            evidence.Account,
+            evidence.Mode,
+            evidence.Generation,
+            evidence.PayoutType,
+            evidence.BankAmount,
+            evidence.Currency,
+            evidence.BankId,
+            evidence.BankDate,
+            evidence.EvidenceId,
+            Items = new[] { first, second },
+        })));
+    }
+
+    [Fact]
+    public async Task A_payment_line_is_matched_by_its_reference_whatever_text_the_processor_gave_it()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var h = await PaymentsHarness.CreateAsync(fixture, ct);
+        var op = await h.InOrg(() => h.Payments.SubmitAsync(h.Binding, h.Tenants[0], h.UserId, UuidV7.NewId(), 100m, "USD",
+            PaymentMethods.Ach, 0m, ct), ct);
+        // A processor's reference is its own text, compared as text. This one is the text Stryker.NET
+        // puts in place of an empty string literal: a filter for lines with no reference that compared
+        // with anything but the empty string would drop a real payment's line.
+        const string reference = "Stryker was here!";
+        (await h.JudgeAsync(op.Id, ct, accept: reference)).ShouldBeTrue();
+
+        var payout = await h.SettleAsync(h.Payout("po_1", 100m, new ProcessorSettlementItem("1", "Payment", reference, 100m, 0m, 100m, "USD")), ct);
+
+        payout.Status.ShouldBe("Posted");
+        (await h.ReadAsync(op.Id, ct)).Status.ShouldBe("Settled");
+    }
+
+    [Fact]
+    public async Task A_ledger_answer_naming_an_item_the_payout_does_not_hold_is_refused_and_nothing_is_kept()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var h = await PaymentsHarness.CreateAsync(fixture, ct);
+        var op = await h.AcceptedAsync(100m, ct);
+        var id = (await h.InOrg(() => h.Settlements.ReceiveAsync(h.Binding,
+            h.Payout("po_1", 100m, Line("1", "Payment", op, 100m, 0m, 100m)), ct), ct))!.Value;
+        h.Ledger.StrayPostingItem = "9";
+
+        await Should.ThrowAsync<InvalidOperationException>(() =>
+            h.InOrg(() => h.Settlements.EvaluateAsync(h.Binding, id, null, ct), ct));
+
+        (await h.ReadSettlementAsync(id, ct)).Status.ShouldBe("Received");
+        (await h.ReadAsync(op.Id, ct)).Status.ShouldBe("Processing");
+        (await h.ReadEffectsAsync(ct)).ShouldBeEmpty();
     }
 
     [Fact]

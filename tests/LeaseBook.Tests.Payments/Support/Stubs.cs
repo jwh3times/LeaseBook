@@ -44,6 +44,12 @@ internal sealed class RecordingLedger(IAccountingEvents events, Guid ownerId, Gu
     /// <summary>When set, a payout is refused with this code, on this item, and nothing is posted.</summary>
     public (string Code, string? Item)? SettlementRefusal { get; set; }
 
+    /// <summary>
+    /// When set, a payout's answer also names a receipt for this item, which the payout does not
+    /// hold: a ledger answering outside its contract.
+    /// </summary>
+    public string? StrayPostingItem { get; set; }
+
     public async Task<Guid> RecordSettledReceiptAsync(Guid tenantId, Guid bankId, decimal amount, DateOnly date,
         string method, string memo, string sourceRef, CancellationToken ct)
     {
@@ -71,6 +77,7 @@ internal sealed class RecordingLedger(IAccountingEvents events, Guid ownerId, Gu
             if (line.Kind == SettlementItemKinds.Return) { postings.Add(new(line.Item, "Return", await EntryAsync(bankDate, ct))); }
             if (line.FeeDifference != 0m) { postings.Add(new(line.Item, "FeeDifference", await EntryAsync(bankDate, ct))); }
         }
+        if (StrayPostingItem is { } stray) { postings.Add(new(stray, "Receipt", await EntryAsync(bankDate, ct))); }
         return new(postings, null, null);
     }
 

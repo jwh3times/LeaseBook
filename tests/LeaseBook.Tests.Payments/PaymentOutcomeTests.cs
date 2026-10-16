@@ -361,6 +361,104 @@ public sealed class PaymentOutcomeTests(PostgresFixture fixture)
     }
 
     [Fact]
+    public async Task A_fact_that_arrives_before_its_payment_is_accepted_is_kept_and_judged_on_acceptance()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var h = await PaymentsHarness.CreateAsync(fixture, ct);
+        var op = await h.InOrg(() => h.Payments.SubmitAsync(h.Binding, h.Tenants[0], h.UserId, Guid.NewGuid(), 100m, "USD",
+            PaymentMethods.Ach, 0m, ct), ct);
+        var claim = (await h.InOrg(() => h.Payments.ClaimAsync(h.Binding, op.Id, ct), ct))!;
+
+        // No payment holds the reference yet: there is nothing to wake, and the fact is kept all the same.
+        await h.ObserveAsync(h.Observation(op, "Failed"), ct);
+        (await h.ReadObservationsAsync(ct)).ShouldHaveSingleItem().ProviderId.ShouldBe(PaymentsHarness.ProviderOf(op));
+        await h.InOrg(() => h.Payments.CompleteAsync(h.Binding, op.Id, claim.LeaseClaimId!.Value,
+            new ProcessorResult("Accepted", PaymentsHarness.ProviderOf(op)), ct), ct);
+
+        var failed = await h.ReadAsync(op.Id, ct);
+        (failed.Status, failed.Reason, failed.ProcessedCount).ShouldBe(("Failed", "collection_failed", 1));
+    }
+
+    [Fact]
+    public async Task A_notice_reused_to_name_another_payment_is_a_conflict_on_the_payment_it_first_named()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var h = await PaymentsHarness.CreateAsync(fixture, ct);
+        var first = await h.AcceptedAsync(100m, ct);
+        var second = await h.AcceptedAsync(200m, ct, tenant: 1);
+        var progress = h.Observation(first, "Processing");
+        await h.EmitAsync(progress, ct);
+
+        await h.ObserveAsync(progress with { ProviderId = PaymentsHarness.ProviderOf(second) }, ct);
+
+        var conflict = (await h.ReadObservationsAsync(ct)).Single(x => x.Kind == PaymentEngine.ConflictKind);
+        conflict.ProviderId.ShouldBe(PaymentsHarness.ProviderOf(first));
+        (await h.JudgeAsync(first.Id, ct)).ShouldBeTrue();
+        (await h.ReadAsync(first.Id, ct)).Reason.ShouldBe("conflicting_evidence");
+        (await h.JudgeAsync(second.Id, ct)).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task A_bank_credit_for_a_payment_a_payout_receipted_is_the_same_money_and_changes_nothing()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var h = await PaymentsHarness.CreateAsync(fixture, ct);
+        var op = await h.AcceptedAsync(600m, ct, fee: 6m);
+        await h.SettleAsync(h.Payout("po_1", 600m, PaymentsHarness.Line("1", "Payment", op, 606m, 6m, 600m)), ct);
+
+        // The processor's own word for the same money, keeping another fee than was quoted: not the
+        // clean item, and not grounds to send a correctly receipted payment to a person.
+        await h.EmitAsync(h.Observation(op, "BankCredit") with { Fee = 7m, Net = 599m }, ct);
+
+        var settled = await h.ReadAsync(op.Id, ct);
+        (settled.Status, settled.Reason).ShouldBe(("Settled", (string?)null));
+        h.Ledger.Receipts.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task A_second_bank_credit_naming_other_evidence_after_a_receipt_goes_to_review_and_the_receipt_stays()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var h = await PaymentsHarness.CreateAsync(fixture, ct);
+        var op = await h.AcceptedAsync(100m, ct);
+        await h.EmitAsync(h.Observation(op, "BankCredit"), ct);
+
+        await h.EmitAsync(h.Observation(op, "BankCredit", "second-credit") with { EvidenceId = "evidence-other" }, ct);
+
+        var held = await h.ReadAsync(op.Id, ct);
+        (held.Status, held.Reason, held.JournalId).ShouldBe(("NeedsReview", "conflicting_evidence", h.Ledger.Receipts.Single().EntryId));
+    }
+
+    [Fact]
+    public async Task A_payout_reported_failed_with_no_credit_beside_it_keeps_the_payment_waiting()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var h = await PaymentsHarness.CreateAsync(fixture, ct);
+        var op = await h.AcceptedAsync(100m, ct);
+
+        await h.EmitAsync(h.Observation(op, "PayoutFailed"), ct);
+
+        var waiting = await h.ReadAsync(op.Id, ct);
+        (waiting.Status, waiting.Reason).ShouldBe(("Processing", (string?)null));
+    }
+
+    [Fact]
+    public async Task A_technical_failure_tried_again_and_accepted_goes_on_waiting_for_its_outcome()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var h = await PaymentsHarness.CreateAsync(fixture, ct);
+        var op = await h.InOrg(() => h.Payments.SubmitAsync(h.Binding, h.Tenants[0], h.UserId, Guid.NewGuid(), 100m, "USD",
+            PaymentMethods.Ach, 0m, ct), ct);
+        var claim = (await h.InOrg(() => h.Payments.ClaimAsync(h.Binding, op.Id, ct), ct))!;
+        await h.InOrg(() => h.Payments.FailAsync(h.Binding, op.Id, claim.LeaseClaimId!.Value, "technical_failure", ct), ct);
+
+        (await h.JudgeAsync(op.Id, ct, accept: PaymentsHarness.ProviderOf(op))).ShouldBeTrue();
+
+        var waiting = await h.ReadAsync(op.Id, ct);
+        (waiting.Status, waiting.Reason, waiting.Attempts).ShouldBe(("Processing", (string?)null, 0));
+    }
+
+    [Fact]
     public async Task A_claim_is_a_lease_and_a_held_one_cannot_be_claimed_again()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -381,7 +479,7 @@ public sealed class PaymentOutcomeTests(PostgresFixture fixture)
         (await h.InOrg(() => h.Payments.ClaimAsync(h.Binding, Guid.NewGuid(), ct), ct)).ShouldBeNull();
     }
 
-    public static TheoryData<string> Ended() => ["Settled", "Failed", "NeedsReview"];
+    public static TheoryData<string> Ended() => ["Settled", "Failed", "NeedsReview", "Returned", "ReviewClosed"];
 
     [Theory]
     [MemberData(nameof(Ended))]
@@ -390,7 +488,21 @@ public sealed class PaymentOutcomeTests(PostgresFixture fixture)
         var ct = TestContext.Current.CancellationToken;
         await using var h = await PaymentsHarness.CreateAsync(fixture, ct);
         var op = await h.AcceptedAsync(100m, ct);
-        await h.EmitAsync(h.Observation(op, outcome switch { "Settled" => "BankCredit", "Failed" => "Failed", _ => "Dispute" }), ct);
+        switch (outcome)
+        {
+            case "Settled": await h.EmitAsync(h.Observation(op, "BankCredit"), ct); break;
+            case "Failed": await h.EmitAsync(h.Observation(op, "Failed"), ct); break;
+            case "NeedsReview": await h.EmitAsync(h.Observation(op, "Dispute"), ct); break;
+            case "Returned":
+                await h.EmitAsync(h.Observation(op, "BankCredit"), ct);
+                await h.EmitAsync(h.Observation(op, "Return"), ct);
+                await h.InOrg(() => h.Payments.PostReturnAsync(h.Binding, op.Id, ct), ct);
+                break;
+            default:
+                await h.EmitAsync(h.Observation(op, "Dispute"), ct);
+                await h.InOrg(() => h.Payments.CloseReviewAsync(h.Binding, op.Id, h.UserId, "Closed", ct), ct);
+                break;
+        }
         (await h.ReadAsync(op.Id, ct)).Status.ShouldBe(outcome);
 
         // Woken with nothing new, it is not claimed.

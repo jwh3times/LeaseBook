@@ -121,6 +121,48 @@ public sealed class PaymentRecoveryTests(PostgresFixture fixture)
         kept.DueAt.ShouldBe(h.Clock.GetUtcNow().UtcDateTime.AddSeconds(1), TimeSpan.FromMilliseconds(1));
     }
 
+    public static TheoryData<string, string, string, int> LateFailures() => new()
+    {
+        // Ended by its own facts, not held by a person: tried again like any other.
+        { "Failed", "Processing", "technical_failure", 1 },
+        // Closed by a person under a reason of its own: kept there.
+        { "ReviewClosed", "ReviewClosed", "return_requires_review", 1 },
+        // A technical failure out of tries is no reason of a person's: counted on, and still out of tries.
+        { "out of tries", "NeedsReview", "technical_failure", PaymentEngine.RetrySeconds.Length + 2 },
+    };
+
+    [Theory]
+    [MemberData(nameof(LateFailures))]
+    public async Task An_attempt_that_fails_while_a_late_fact_is_judged_holds_only_what_a_person_holds(
+        string state, string status, string reason, int attempts)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var h = await PaymentsHarness.CreateAsync(fixture, ct);
+        var op = await h.AcceptedAsync(100m, ct);
+        switch (state)
+        {
+            case "Failed": await h.EmitAsync(h.Observation(op, "Failed"), ct); break;
+            case "ReviewClosed":
+                await h.EmitAsync(h.Observation(op, "Dispute"), ct);
+                await h.InOrg(() => h.Payments.CloseReviewAsync(h.Binding, op.Id, h.UserId, "Closed", ct), ct);
+                break;
+            default:
+                await h.InOrg(async () =>
+                {
+                    var row = await h.Scope.Db.Set<PaymentOperation>().SingleAsync(x => x.Id == op.Id, ct);
+                    row.Status = "NeedsReview"; row.Reason = "technical_failure"; row.Attempts = PaymentEngine.RetrySeconds.Length + 1;
+                    await h.Scope.Db.SaveChangesAsync(ct);
+                }, ct);
+                break;
+        }
+        await h.ObserveAsync(h.Observation(op, "Processing", "late-progress"), ct);
+
+        await FailAsync(h, op.Id, await ClaimAsync(h, op.Id, ct), "technical_failure", ct);
+
+        var after = await h.ReadAsync(op.Id, ct);
+        (after.Status, after.Reason, after.Attempts).ShouldBe((status, reason, attempts));
+    }
+
     [Fact]
     public async Task A_person_retries_a_technical_failure_and_only_that()
     {
@@ -245,7 +287,38 @@ public sealed class PaymentRecoveryTests(PostgresFixture fixture)
         (await h.ReadAsync(op.Id, ct)).Status.ShouldBe("Failed");
     }
 
-    public static TheoryData<string> NotAtRest() => ["unjudged fact", "leased", "due", "reason", "paid", "failed", "no reference", "unknown"];
+    [Fact]
+    public async Task A_payment_is_overdue_from_exactly_seven_days_after_it_was_made()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var h = await PaymentsHarness.CreateAsync(fixture, ct);
+        var op = await h.AcceptedAsync(100m, ct);
+        var made = (await h.ReadAsync(op.Id, ct)).CreatedAt;
+
+        h.Clock.Advance(made + PaymentEngine.OutcomeOverdueAfter - h.Clock.GetUtcNow().UtcDateTime);
+
+        (await h.InOrg(() => h.Payments.MarkOverdueAsync(h.Binding, op.Id, ct), ct)).ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task A_lease_that_ends_at_this_moment_no_longer_holds_a_payment_back_from_aging()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var h = await PaymentsHarness.CreateAsync(fixture, ct);
+        var op = await h.AcceptedAsync(100m, ct);
+        h.Clock.Advance(PaymentEngine.OutcomeOverdueAfter + TimeSpan.FromHours(1));
+        await h.InOrg(async () =>
+        {
+            var row = await h.Scope.Db.Set<PaymentOperation>().SingleAsync(x => x.Id == op.Id, ct);
+            row.LeaseUntil = h.Clock.GetUtcNow().UtcDateTime;
+            await h.Scope.Db.SaveChangesAsync(ct);
+        }, ct);
+
+        (await h.InOrg(() => h.Payments.MarkOverdueAsync(h.Binding, op.Id, ct), ct)).ShouldBeTrue();
+    }
+
+    public static TheoryData<string> NotAtRest() =>
+        ["unjudged fact", "leased", "due", "due this moment", "reason", "paid", "failed", "no reference", "unknown"];
 
     [Theory]
     [MemberData(nameof(NotAtRest))]
@@ -259,7 +332,7 @@ public sealed class PaymentRecoveryTests(PostgresFixture fixture)
         {
             case "paid": await h.EmitAsync(h.Observation(op, "Succeeded"), ct); break;
             case "failed": await h.EmitAsync(h.Observation(op, "Failed"), ct); break;
-            case "unjudged fact" or "leased" or "due" or "reason":
+            case "unjudged fact" or "leased" or "due" or "due this moment" or "reason":
                 if (state == "unjudged fact") { await h.ObserveAsync(h.Observation(op, "Processing"), ct); }
                 await h.InOrg(async () =>
                 {
@@ -267,6 +340,8 @@ public sealed class PaymentRecoveryTests(PostgresFixture fixture)
                     var later = h.Clock.GetUtcNow().UtcDateTime + PaymentEngine.OutcomeOverdueAfter + TimeSpan.FromHours(2);
                     if (state == "leased") { row.LeaseUntil = later; }
                     if (state == "due") { row.DueAt = h.Clock.GetUtcNow().UtcDateTime; }
+                    // Due at exactly the moment it is looked at, after the clock moves below.
+                    if (state == "due this moment") { row.DueAt = later - TimeSpan.FromHours(1); }
                     if (state == "reason") { row.Reason = "technical_failure"; }
                     // Stored and not yet judged, with nothing else in the way: only the count says so.
                     if (state == "unjudged fact") { row.DueAt = DateTime.SpecifyKind(DateTime.MaxValue, DateTimeKind.Utc); }

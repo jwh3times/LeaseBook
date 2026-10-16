@@ -248,5 +248,10 @@ public sealed class PaymentReturnTests(PostgresFixture fixture)
         PaymentEngine.ReturnEvidenceRefusal(op, [Fact("Return", gross: 102m)]).ShouldBe("return_partial_unsupported");
         PaymentEngine.ReturnEvidenceRefusal(op, [Fact("Return", net: 99.99m)]).ShouldBe("return_partial_unsupported");
         PaymentEngine.ReturnEvidenceRefusal(op, [Fact("Return", complete: false)]).ShouldBe("return_partial_unsupported");
+        // Each of the whole: the same evidence reported again, once not complete, does not pass.
+        PaymentEngine.ReturnEvidenceRefusal(op, [Fact("Return"), Fact("Return", complete: false)]).ShouldBe("return_partial_unsupported");
+        // Each figure on its own.
+        PaymentEngine.ReturnEvidenceRefusal(op, [Fact("Return", gross: 102m, net: 100m)]).ShouldBe("return_partial_unsupported");
+        PaymentEngine.ReturnEvidenceRefusal(op, [Fact("Return", fee: 1m, net: 100m)]).ShouldBe("return_partial_unsupported");
     }
 }
