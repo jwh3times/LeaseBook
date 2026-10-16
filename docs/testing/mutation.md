@@ -3,7 +3,7 @@
 - **Audience:** Contributors, reviewers and maintainers
 - **Status:** Living method and measurement record
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-14
+- **Last reviewed:** 2026-10-16
 
 Mutation testing asks whether the tests would notice the code being wrong. A tool changes the code
 one small edit at a time, such as `>` to `>=`, `+` to `-`, or a call removed, and reruns the tests
@@ -179,6 +179,33 @@ reported stale, when its own line changes. A changed line is a reason to look ag
 
 `node --test scripts/mutation.test.mjs` checks that the file is well formed: every module present,
 each gate a boolean, every entry complete with a reason.
+
+### A lock or a race
+
+A mutant that removes an advisory lock survives every test that runs one thing at a time.
+`LeaseBook.Tests.Payments` kills these with races. `PaymentsHarness.RaceAsync` works in four steps:
+
+1. It runs the first call on a connection of its own and keeps that transaction open.
+2. It starts the second call on another connection.
+3. It waits until the second has finished, or Postgres shows it waiting on a lock it has not been
+   granted.
+4. Only then does it commit the first.
+
+With the lock in place, the second call waits and reads what the first committed. Without it, the
+second runs on the state from before the first, and the test's assertion on the outcome fails.
+Nothing sleeps while waiting for the other call, so every run gives the same result.
+
+Changing a lock name's text is equivalent only when one place builds that name, so that every caller
+gets the same change. Several Payments lock names are written out in more than one place. Emptying
+one copy then gives two callers different locks for the same thing, and a race test kills it.
+
+### A guard against a state no code makes
+
+Some guards refuse a state no code path can produce. One example is a payment fixture whose bank or
+account changed after payments were made under it: the app role cannot update `payment_fixtures`,
+and an organization has one fixture. These guards still get a test, which should go red when the
+guard is removed. The test reaches the state the only way it can arise, by editing the row as the
+migrator (`PaymentsHarness.RebindAsync`).
 
 ## The gate
 
@@ -368,3 +395,19 @@ local run killed, one survived here and one timed out.
 the 17 static mutants are ignored and one more is killed: `op.DueAt > Now` made `>=` in
 `PaymentEngine.ClaimAsync`, which survived the whole run while it shared a process with mutated
 static fields, and fails a test when made by hand.
+
+## Survivors worked through
+
+Area by area, each in its own change. A module's gate comes on in the change that explains or
+kills its last unexplained survivor.
+
+| Area                                                         | Killed by new tests | Recorded as equivalent | Result, measured locally                                       |
+| ------------------------------------------------------------ | ------------------: | ---------------------: | -------------------------------------------------------------- |
+| Payments engines (`PaymentEngine.cs`, `SettlementEngine.cs`) |                 130 |                      8 | 99.1%: 841 killed, 8 survived, all explained, none not covered |
+
+The engines' 138 undetected mutants, taken from the hosted run on 2026-10-15, are all accounted
+for. `LeaseBook.Tests.Payments` grew from 164 tests to 273, among them 22 races (see
+[A lock or a race](#a-lock-or-a-race)) and the fixture-binding guards (see
+[A guard against a state no code makes](#a-guard-against-a-state-no-code-makes)). The rest of
+Payments, the refund checks, the MICR line and the `Features/` handlers, still has no fast tests,
+so its gate stays off.

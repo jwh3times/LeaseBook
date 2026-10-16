@@ -31,10 +31,12 @@ namespace LeaseBook.Tests.Payments.Support;
 internal sealed class PaymentsHarness : IAsyncDisposable
 {
     private readonly ServiceProvider _accounting;
+    private readonly PostgresFixture _fixture;
 
-    private PaymentsHarness(OrgScope scope, ServiceProvider accounting, FixtureBinding binding, Guid userId,
+    private PaymentsHarness(PostgresFixture fixture, OrgScope scope, ServiceProvider accounting, FixtureBinding binding, Guid userId,
         Guid ownerId, IReadOnlyList<Guid> tenants)
     {
+        _fixture = fixture;
         Scope = scope;
         _accounting = accounting;
         Binding = binding;
@@ -85,11 +87,7 @@ internal sealed class PaymentsHarness : IAsyncDisposable
             Mode = mode,
         };
 
-        var services = new ServiceCollection().AddAccountingModule();
-        services.AddSingleton<DbContext>(scope.Db);
-        services.AddSingleton<IOrgContext>(scope.Tenant);
-        services.AddSingleton<IActorContext>(scope.Actor);
-        var accounting = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = false });
+        var accounting = AccountingOver(scope.Db, scope.Tenant, scope.Actor);
 
         await scope.RunAsync(() => accounting.GetRequiredService<IChartOfAccounts>().ProvisionAsync(
             [new BankAccountSpec(bankId, "Operating Trust", BankPurpose.Trust)], ct), ct);
@@ -110,7 +108,110 @@ internal sealed class PaymentsHarness : IAsyncDisposable
         }, ct);
         scope.Db.ChangeTracker.Clear();
 
-        return new PaymentsHarness(scope, accounting, binding, userId, ownerId, tenantIds);
+        return new PaymentsHarness(fixture, scope, accounting, binding, userId, ownerId, tenantIds);
+    }
+
+    // Only the Accounting module, over one context: what the recording ledger posts its stand-in entries through.
+    internal static ServiceProvider AccountingOver(DbContext db, IOrgContext org, IActorContext actor)
+    {
+        var services = new ServiceCollection().AddAccountingModule();
+        services.AddSingleton(db);
+        services.AddSingleton(org);
+        services.AddSingleton(actor);
+        return services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = false });
+    }
+
+    /// <summary>
+    /// A second connection to this organization, with engines of its own over it and the same clock
+    /// and stand-ins, for running two pieces of work at once (see <see cref="RaceAsync"/>).
+    /// </summary>
+    public Lane Lane() => new(_fixture, Scope.OrgId, Binding.BankId, OwnerId, Clock, Eligibility, FeeRules);
+
+    /// <summary>
+    /// Runs <paramref name="first"/> to the end of its work on one connection and holds its
+    /// transaction open; starts <paramref name="second"/> on another; waits until the second has
+    /// either finished or is waiting on a lock held against it; and only then commits the first.
+    /// <para>
+    /// That makes the interleaving the same every time, whichever way the code goes. Where the
+    /// second takes a lock the first holds, it waits there and reads what the first committed. Where
+    /// it takes none, it reads the state as it was before the first, and goes on either to finish
+    /// on that or to wait at a row or key the first wrote, which it then writes over or collides
+    /// with. Neither is decided by timing: nothing sleeps for the other to get anywhere.
+    /// </para>
+    /// </summary>
+    public async Task<Race<T1, T2>> RaceAsync<T1, T2>(Func<Lane, Task<T1>> first, Func<Lane, Task<T2>> second, CancellationToken ct)
+    {
+        await using var a = Lane();
+        await using var b = Lane();
+        var held = a.Hold(first, ct);
+        var firstResult = await held.Done;
+        var running = b.RunAsync(second, ct);
+        await WaitingOrDoneAsync(b, running, ct);
+        held.Commit();
+        await held.Ended();
+        var (secondResult, error) = await Lanes.OutcomeOf(running);
+        Scope.Db.ChangeTracker.Clear();
+        return new(firstResult, secondResult, error, a.Ledger, b.Ledger);
+    }
+
+    /// <summary>
+    /// Waits until the lane's unit of work has finished or its backend is waiting on a lock it has
+    /// not been granted: an advisory lock, a row another transaction wrote, or a key another
+    /// transaction inserted. Returns true for waiting. Polls the database; never waits on time alone.
+    /// </summary>
+    public async Task<bool> WaitingOrDoneAsync(Lane lane, Task running, CancellationToken ct)
+    {
+        await using var monitor = await _fixture.OpenAppConnectionAsync(ct);
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        while (!running.IsCompleted)
+        {
+            if (lane.Pid != 0)
+            {
+                await using var waiting = new NpgsqlCommand("SELECT EXISTS (SELECT 1 FROM pg_locks WHERE pid = @pid AND NOT granted)", monitor);
+                waiting.Parameters.AddWithValue("pid", lane.Pid);
+                if ((bool)(await waiting.ExecuteScalarAsync(ct))!) { return true; }
+            }
+            if (clock.Elapsed > TimeSpan.FromSeconds(30))
+            { throw new TimeoutException("The second unit of work neither finished nor waited on a lock within 30 seconds."); }
+            await Task.WhenAny(running, Task.Delay(5, ct));
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Points the organization's fixture at another account, or at a new bank, by editing the row as
+    /// the migrator, and returns the binding that now matches it. Every row made before keeps the
+    /// account and bank it was made under. The generation cannot change: every payment and payout
+    /// holds a key to it, and an organization has one fixture.
+    /// <para>
+    /// No code path can change a fixture row: <c>PaymentFixtureBootstrap.SeedAsync</c> writes one per
+    /// organization, and <c>RevokeAppendOnly</c> takes UPDATE from the app role. Only a hand edit
+    /// reaches this state, and the tests that use it pin the engines' defensive guards against it.
+    /// </para>
+    /// </summary>
+    public async Task<FixtureBinding> RebindAsync(CancellationToken ct, string? account = null, bool newBank = false)
+    {
+        var bankId = newBank ? UuidV7.NewId() : Binding.BankId;
+        await using var conn = new NpgsqlConnection(_fixture.MigratorConnectionString);
+        await conn.OpenAsync(ct);
+        await using var tx = await conn.BeginTransactionAsync(ct);
+        await RlsProbe.SetOrgAsync(conn, tx, Scope.OrgId, ct);
+        if (newBank)
+        {
+            await InsertAsync(conn, tx, ct,
+                "INSERT INTO bank_accounts (id, org_id, name, purpose, created_at) VALUES (@id, @org, 'Second Trust', 'trust', now())",
+                bankId, Scope.OrgId);
+        }
+        await using (var update = new NpgsqlCommand(
+            "UPDATE payment_fixtures SET bank_id = @bank, account = @account WHERE id = @id", conn, tx))
+        {
+            update.Parameters.AddWithValue("bank", bankId);
+            update.Parameters.AddWithValue("account", account ?? Binding.Account);
+            update.Parameters.AddWithValue("id", Binding.Generation);
+            if (await update.ExecuteNonQueryAsync(ct) != 1) { throw new InvalidOperationException("The fixture was not rebound."); }
+        }
+        await tx.CommitAsync(ct);
+        return Binding with { BankId = bankId, Account = account ?? Binding.Account };
     }
 
     /// <summary>
@@ -271,10 +372,14 @@ internal sealed class PaymentsHarness : IAsyncDisposable
     }
 }
 
-/// <summary>A clock the test moves. Starts at the real time, so rows stamped by the database agree with it.</summary>
+/// <summary>
+/// A clock the test moves. Starts at the real time, so rows stamped by the database agree with it,
+/// in whole microseconds, which is what the database keeps: a time read back from a row is then
+/// exactly the time the clock gave, and a test can stand on a boundary instead of a tick beside it.
+/// </summary>
 internal sealed class ManualClock : TimeProvider
 {
-    private DateTimeOffset _now = DateTimeOffset.UtcNow;
+    private DateTimeOffset _now = new(DateTimeOffset.UtcNow.Ticks / 10 * 10, TimeSpan.Zero);
 
     public override DateTimeOffset GetUtcNow() => _now;
 

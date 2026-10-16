@@ -60,6 +60,23 @@ public sealed class PaymentSubmissionTests(PostgresFixture fixture)
     }
 
     [Fact]
+    public async Task A_replay_finds_its_payment_whatever_scale_the_amount_and_the_fee_are_written_in()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var h = await PaymentsHarness.CreateAsync(fixture, ct);
+        h.FeeRules.Fee = 2.5m;
+        var key = UuidV7.NewId();
+        Task<PaymentOperation> Submit(decimal amount, decimal fee) =>
+            h.InOrg(() => h.Payments.SubmitAsync(h.Binding, h.Tenants[0], h.UserId, key, amount, "USD", PaymentMethods.Card, fee, ct), ct);
+
+        var first = await Submit(100m, 2.5m);
+
+        // The same money, written with more or fewer places: the same request.
+        (await Submit(100.00m, 2.5m)).Id.ShouldBe(first.Id);
+        (await Submit(100m, 2.500m)).Id.ShouldBe(first.Id);
+    }
+
+    [Fact]
     public async Task The_same_request_under_another_key_is_another_payment()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -140,6 +157,13 @@ public sealed class PaymentSubmissionTests(PostgresFixture fixture)
         await using var h = await PaymentsHarness.CreateAsync(fixture, ct);
 
         await Should.ThrowAsync<PaymentUnavailableException>(() => h.Payments.RequireFixtureAsync(h.Binding, ct));
-        await Should.ThrowAsync<InvalidOperationException>(() => h.Payments.LockAsync("anything", ct));
+        // A programming fault, which reaches the host's log of unhandled exceptions with its message.
+        (await Should.ThrowAsync<InvalidOperationException>(() => h.Payments.LockAsync("anything", ct)))
+            .Message.ShouldBe("Payment work requires an organization transaction.");
+        // A transaction with no organization in it is no better.
+        await using (await h.Scope.Db.Database.BeginTransactionAsync(ct))
+        {
+            await Should.ThrowAsync<InvalidOperationException>(() => h.Payments.LockAsync("anything", ct));
+        }
     }
 }

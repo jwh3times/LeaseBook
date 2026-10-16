@@ -1,3 +1,4 @@
+using System.Text.Json;
 using LeaseBook.Modules.Payments.Domain;
 using LeaseBook.Modules.Payments.Processing;
 using LeaseBook.SharedKernel;
@@ -274,7 +275,9 @@ public sealed class SettlementHeldPayoutTests(PostgresFixture fixture)
 
     public static TheoryData<string> MalformedPayouts() =>
         ["a colon in the reference", "a local time", "an unknown state", "a fraction of a cent", "a line of a fraction of a cent",
-         "a line named twice", "a long reference"];
+         "a line named twice", "a long reference", "a line with no reference", "a line with no kind",
+         "a line with a long processor reference", "a line in a two-letter currency", "a line whose gross is a fraction of a cent",
+         "a line whose net is a fraction of a cent"];
 
     [Theory]
     [MemberData(nameof(MalformedPayouts))]
@@ -293,12 +296,78 @@ public sealed class SettlementHeldPayoutTests(PostgresFixture fixture)
             "a fraction of a cent" => payout with { Amount = 100.005m },
             "a line of a fraction of a cent" => payout with { Items = [line with { Fee = 0.001m }] },
             "a line named twice" => payout with { Items = [line, line] },
+            "a line with no reference" => payout with { Items = [line with { Item = "" }] },
+            "a line with no kind" => payout with { Items = [line with { Kind = " " }] },
+            "a line with a long processor reference" => payout with { Items = [line with { ProviderId = new string('p', 101) }] },
+            "a line in a two-letter currency" => payout with { Items = [line with { Currency = "US" }] },
+            "a line whose gross is a fraction of a cent" => payout with { Items = [line with { Gross = 100.001m }] },
+            "a line whose net is a fraction of a cent" => payout with { Items = [line with { Net = 100.001m }] },
             _ => payout with { PayoutId = new string('p', 101) },
         };
 
         (await h.InOrg(() => h.Settlements.ReceivePayoutAsync(h.Binding, payout, ct), ct)).ShouldBeNull();
 
         (await h.InOrg(() => h.Scope.Db.Set<PaymentSettlement>().CountAsync(ct), ct)).ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task A_processor_payout_as_large_and_as_long_as_its_columns_allow_is_stored()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var h = await PaymentsHarness.CreateAsync(fixture, ct);
+        var line = new ProcessorSettlementItem(new string('i', 60), new string('k', 20), new string('p', 100),
+            999_999_999_999.99m, 0m, 999_999_999_999.99m, "USD");
+
+        var id = await h.InOrg(() => h.Settlements.ReceivePayoutAsync(h.Binding,
+            h.ProcessorPayout(new string('o', 100), 999_999_999_999.99m, line), ct), ct);
+
+        id.ShouldNotBeNull();
+        (await h.ReadSettlementAsync(id.Value, ct)).ProcessorAmount.ShouldBe(999_999_999_999.99m);
+    }
+
+    [Fact]
+    public async Task A_processor_payout_is_fingerprinted_by_what_it_says_with_its_lines_in_order_of_reference()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var h = await PaymentsHarness.CreateAsync(fixture, ct);
+        var second = new ProcessorSettlementItem("2", "Payment", "prov_b", 200m, 0m, 200m, "USD");
+        var first = new ProcessorSettlementItem("1", "Payment", "prov_a", 100m, 0m, 100m, "USD");
+        var payout = h.ProcessorPayout("po_1", 300m, second, first);
+
+        var id = await ReceivePayoutAsync(h, payout, ct);
+
+        // Stored, and compared with every later notice of the payout, perhaps by a later release.
+        (await h.ReadSettlementAsync(id, ct)).Fingerprint.ShouldBe(PaymentEngine.Hash(JsonSerializer.Serialize(new
+        {
+            payout.PayoutId,
+            payout.Account,
+            payout.Mode,
+            payout.Generation,
+            payout.PayoutType,
+            payout.Amount,
+            payout.Currency,
+            payout.BankId,
+            Items = new[] { first, second },
+        })));
+    }
+
+    [Fact]
+    public async Task A_payout_awaiting_its_bank_whose_cause_for_review_has_gone_waits_for_the_bank_again_when_an_administrator_checks_it()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var h = await PaymentsHarness.CreateAsync(fixture, ct);
+        // Not yet accepted: no payment holds the reference its line names.
+        var op = await h.InOrg(() => h.Payments.SubmitAsync(h.Binding, h.Tenants[0], h.UserId, UuidV7.NewId(), 100m, "USD",
+            PaymentMethods.Ach, 0m, ct), ct);
+        var id = await ReceivePayoutAsync(h, h.ProcessorPayout("po_1", 100m, Line("1", "Payment", op, 100m, 0m, 100m)), ct);
+        (await EvaluateAsync(h, id, ct))!.Reason.ShouldBe("settlement_incomplete");
+        (await h.JudgeAsync(op.Id, ct, accept: ProviderOf(op))).ShouldBeTrue();
+
+        (await EvaluateAsync(h, id, ct, UuidV7.NewId()))!.Status.ShouldBe("AwaitingBank");
+
+        var payout = await h.ReadSettlementAsync(id, ct);
+        (payout.Status, payout.Reason).ShouldBe(("AwaitingBank", (string?)null));
+        h.Ledger.Settlements.ShouldBeEmpty();
     }
 
     [Fact]

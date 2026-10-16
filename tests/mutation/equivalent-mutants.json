@@ -5,6 +5,56 @@
   },
   "payments": {
     "gate": false,
-    "equivalents": []
+    "equivalents": [
+      {
+        "file": "src/LeaseBook.Modules.Payments/Processing/PaymentEngine.cs",
+        "mutator": "String mutation",
+        "original": "return db.Database.ExecuteSqlAsync($\"SELECT pg_advisory_xact_lock(hashtextextended({org.OrgId + \":payment:\" + key}, 0))\", ct);",
+        "replacement": "\"\"",
+        "reason": "Every payment lock name is built here, so emptying the separator renames every lock alike and two calls that shared a lock still share it. The organization id in front is a fixed-length GUID, so a name still stands for one organization and one key, and none can equal another module's lock text, which begins with 'lb:', 'portal-' or 'leasebook:' and never with a hex digit."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Payments/Processing/PaymentEngine.cs",
+        "mutator": "String mutation",
+        "original": "await LockAsync(\"request:\" + userId + \":\" + key, ct);",
+        "replacement": "\"\"",
+        "reason": "Matches both literals on the line. Only SubmitAsync builds this name, so either emptied renames it for every submission alike. '<user>:<key>' and 'request:<user><key>' still name one user and key, both being fixed-length GUIDs, and neither can equal another payment lock: 'event:', 'reference:', 'settlement:', 'settlement-id:' and 'provider:' names start with letters a GUID never has there, and an operation's lock is a bare 36-character GUID."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Payments/Processing/PaymentEngine.cs",
+        "mutator": "Conditional (false) mutation",
+        "original": "var count = op.ProviderId is null ? 0 : await db.Set<PaymentObservation>().CountAsync(x => x.ProviderId == op.ProviderId, ct);",
+        "replacement": "(false?0 :await db.Set<PaymentObservation>().CountAsync(x => x.ProviderId == op.ProviderId, ct))",
+        "reason": "With no reference the mutant counts the observations whose reference is null instead of answering 0. payment_observations.provider_id is NOT NULL, so that count is always 0."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Payments/Processing/PaymentEngine.cs",
+        "mutator": "String mutation",
+        "original": "{ throw new IOException(\"The simulated provider outcome is uncertain.\"); }",
+        "replacement": "\"\"",
+        "reason": "Nothing reads this message. CompleteAsync's only caller, PaymentRunner.ProcessAsync, catches every exception, maps it by type to a reason (technical_failure for this one), records that with FailAsync and logs the reason, never the exception or its message. No other code or test reads it."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Payments/Processing/PaymentEngine.cs",
+        "mutator": "Conditional (true) mutation",
+        "original": "var consistent = facts.All(x => x.Kind is not (\"Refund\" or \"Dispute\")) && (posted.SettlementId is not null",
+        "replacement": "(true?returns.Length <= 1\n:answered is not null && returns.All(x => x == (answered.EvidenceId, answered.BankDate, answered.Gross)))",
+        "reason": "The other branch is taken only for a return posted from a single notice. PostReturnAsync records that notice as the effect's ObservationId (a check constraint requires one when SettlementId is null), and it is a Return under the same reference, so it is among the facts read here: answered is never null and its (evidence, date, gross) is one of the distinct returns. Every return agreeing with it is then the same test as there being at most one distinct return."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Payments/Processing/SettlementEngine.cs",
+        "mutator": "Logical mutation",
+        "original": "var providerIds = items.Where(x => x.Kind != SettlementItemKinds.Fee && x.ProviderId != \"\").Select(x => x.ProviderId)",
+        "replacement": "x.Kind != SettlementItemKinds.Fee || x.ProviderId != \"\"",
+        "reason": "The mutant adds a fee line's reference, and a non-fee line's empty reference, to the set. A fee line never looks up a payment, in Check or in posting, and no payment has an empty reference (CompleteAsync refuses a blank one), so the extra references add only locks and rows nobody reads. Those locks come in the same order as the rest, references before payments, so they can make another caller wait but cannot change a result or close a cycle."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Payments/Processing/SettlementEngine.cs",
+        "mutator": "String mutation",
+        "original": ".Where(x => x.Kind == \"Return\" && operationIds.Contains(x.OperationId))",
+        "replacement": "\"\"",
+        "reason": "With it no payment counts as returned, and the status test beside it in Check refuses every payment that has a posted return anyway. Posting a return sets Returned in the same transaction. Afterwards CompleteAsync leaves such a payment Returned, or in review under evidence_after_return, conflicting_evidence or unsupported_settlement, never Settled and never under a return_ reason. FailAsync and RetryAsync leave it alone because it has a receipt, and closing a review makes it ReviewClosed. Only the two engines write a payment's status."
+      }
+    ]
   }
 }
