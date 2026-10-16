@@ -304,7 +304,9 @@ one run to the next. A status change on one of these does not mean the code or t
   `InvariantPropertyTests.Random_valid_sequences_keep_the_invariants_and_converge_after_settlement`
   produce one. Made by hand, the mutant failed one test run in three.
 
-Both are survivors to fix with a test that reaches the case every time. Add a mutant here when a
+The first scheduled run, on 2026-10-16, gave the same statuses as the run before it except that
+both of these survived where both had been killed. Both are survivors to fix with a test that
+reaches the case every time. Add a mutant here when a
 summary shows a status change that the code does not explain.
 
 ## Cost
@@ -350,11 +352,19 @@ default timeout ratio took longer (see [Timeouts](#timeouts)):
 | First split run (146 timeouts, all in part 1) | 3:58:31 | 2:00:56 | 1:29:04  |
 | After ignoring static mutants (120 timeouts)  | 3:32:17 | 3:22:11 | 1:32:39  |
 | At `timeout-ratio` 4 (no timeouts)            | 2:25:12 | 3:17:11 | 1:02:57  |
+| First scheduled run, 2026-10-16               | 2:16:08 | 1:49:22 | 1:10:37  |
 
 The same mutants took 2:00:56 in part 2 of one run and 3:17:11 in another, with no timeouts in
 either, so a hosted runner's speed varies by half again from one run to the next. Each part has a
-300-minute timeout and Payments 180. Re-measure after the first scheduled runs, and move a
-directory from part 2 to part 1 if part 2 keeps taking longest.
+300-minute timeout and Payments 180. Part 2 took longest in one of the two runs without timeouts
+and finished first in the other, so neither part has a directory moved. Move one from part 2 to
+part 1 if part 2 keeps taking longest.
+
+GitHub starts a scheduled run when a runner is free, not at the minute the cron names. The first
+scheduled mutation run started at 04:35, more than four hours after 00:17, and in the same days the
+06:23 Coverage (e2e) run started between 11:44 and 14:24. Every scheduled workflow here starts late
+by about the same amount, so the mutation run still finished before that day's coverage run began,
+and an earlier slot would not change that.
 
 ## Baseline
 
@@ -404,10 +414,25 @@ kills its last unexplained survivor.
 | Area                                                         | Killed by new tests | Recorded as equivalent | Result, measured locally                                       |
 | ------------------------------------------------------------ | ------------------: | ---------------------: | -------------------------------------------------------------- |
 | Payments engines (`PaymentEngine.cs`, `SettlementEngine.cs`) |                 130 |                      8 | 99.1%: 841 killed, 8 survived, all explained, none not covered |
+| Payments refund checks and MICR line                         |                 258 |                      8 | 97.0%: 258 killed, 8 survived, all explained, none not covered |
 
 The engines' 138 undetected mutants, taken from the hosted run on 2026-10-15, are all accounted
 for. `LeaseBook.Tests.Payments` grew from 164 tests to 273, among them 22 races (see
 [A lock or a race](#a-lock-or-a-race)) and the fixture-binding guards (see
-[A guard against a state no code makes](#a-guard-against-a-state-no-code-makes)). The rest of
-Payments, the refund checks, the MICR line and the `Features/` handlers, still has no fast tests,
-so its gate stays off.
+[A guard against a state no code makes](#a-guard-against-a-state-no-code-makes)).
+
+The refund checks and the MICR line (`Domain/MicrLine.cs`, `Domain/RefundCheckRecords.cs` and
+`Features/RefundChecks/`) had 266 undetected mutants in the first scheduled run, on 2026-10-16,
+nearly all not covered because only the integration suite tested them. The pure MICR tests moved
+from the integration suite to `LeaseBook.Tests.Payments`, and new tests there run the refund-check
+commands and queries through the real dispatcher and validators, with the host's
+`RefundCheckLedgerAdapter` and Accounting behind them. The suite grew from 273 tests to 407 and
+runs in about 30 seconds. Of the eight equivalents, six are `= ""` defaults on `RefundCheck` that
+every constructor overwrites, one negates a check-digit sum whose multiple-of-ten test is the same
+either way, and one is the first `NumberTaken` throw in `IssueRefundCheck`, whose case the unique
+index and the backstop below refuse the same way. That entry's text also matches the backstop's own
+throw, which a race in `RefundCheckConcurrencyTests` kills; if that test ever stops killing it, the
+entry would hide it.
+
+The rest of Payments, the payment and settlement handlers under `Features/` and the records in
+`Domain/`, still has no fast tests, so its gate stays off.

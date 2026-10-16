@@ -3,6 +3,7 @@ using LeaseBook.Modules.Payments.Contracts;
 using LeaseBook.Modules.Payments.Domain;
 using LeaseBook.Modules.Payments.Processing;
 using LeaseBook.SharedKernel;
+using LeaseBook.SharedKernel.Cqrs;
 using LeaseBook.SharedKernel.Tenancy;
 using LeaseBook.Tests.Common;
 using LeaseBook.Web.Persistence;
@@ -21,6 +22,7 @@ namespace LeaseBook.Tests.Payments.Support;
 internal sealed class Lane : IAsyncDisposable
 {
     private readonly ServiceProvider _accounting;
+    private readonly Lazy<ServiceProvider> _refundChecks;
     private readonly OrgScopedExecutor _executor;
     private readonly Guid _orgId;
     private int _pid;
@@ -34,12 +36,25 @@ internal sealed class Lane : IAsyncDisposable
         Db = fixture.CreateContext(fixture.AppConnectionString, org, actor);
         _executor = new OrgScopedExecutor(Db, org, actor);
         _accounting = PaymentsHarness.AccountingOver(Db, org, actor);
+        _refundChecks = new(() => RefundCheckHarness.ServicesOver(Db, org, actor, clock));
         Ledger = new RecordingLedger(_accounting.GetRequiredService<IAccountingEvents>(), ownerId, bankId);
         Payments = new PaymentEngine(Db, org, clock, Ledger, eligibility, feeRules);
         Settlements = new SettlementEngine(Db, clock, Payments, Ledger);
     }
 
+    /// <summary>A lane for refund-check work, which uses none of the payment engines' stand-ins.</summary>
+    public Lane(PostgresFixture fixture, Guid orgId, TimeProvider clock)
+        : this(fixture, orgId, Guid.Empty, Guid.Empty, clock, new StubEligibility(), new StubFeeRules())
+    {
+    }
+
     public AppDbContext Db { get; }
+
+    /// <summary>
+    /// The refund-check commands and queries over this lane's connection, with the real host ledger
+    /// adapter and Accounting behind them (see <see cref="RefundCheckHarness.ServicesOver"/>).
+    /// </summary>
+    public ISender Sender => _refundChecks.Value.GetRequiredService<ISender>();
 
     public PaymentEngine Payments { get; }
 
@@ -115,6 +130,7 @@ internal sealed class Lane : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        if (_refundChecks.IsValueCreated) { await _refundChecks.Value.DisposeAsync(); }
         await _accounting.DisposeAsync();
         await Db.DisposeAsync();
     }
@@ -158,5 +174,29 @@ internal static class Lanes
     {
         try { await task; return null; }
         catch (Exception e) { return e; }
+    }
+
+    /// <summary>
+    /// Waits until the lane's unit of work has finished or its backend is waiting on a lock it has
+    /// not been granted: an advisory lock, a row another transaction wrote, or a key another
+    /// transaction inserted. Returns true for waiting. Polls the database; never waits on time alone.
+    /// </summary>
+    public static async Task<bool> WaitingOrDoneAsync(PostgresFixture fixture, Lane lane, Task running, CancellationToken ct)
+    {
+        await using var monitor = await fixture.OpenAppConnectionAsync(ct);
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        while (!running.IsCompleted)
+        {
+            if (lane.Pid != 0)
+            {
+                await using var waiting = new NpgsqlCommand("SELECT EXISTS (SELECT 1 FROM pg_locks WHERE pid = @pid AND NOT granted)", monitor);
+                waiting.Parameters.AddWithValue("pid", lane.Pid);
+                if ((bool)(await waiting.ExecuteScalarAsync(ct))!) { return true; }
+            }
+            if (clock.Elapsed > TimeSpan.FromSeconds(30))
+            { throw new TimeoutException("The second unit of work neither finished nor waited on a lock within 30 seconds."); }
+            await Task.WhenAny(running, Task.Delay(5, ct));
+        }
+        return false;
     }
 }

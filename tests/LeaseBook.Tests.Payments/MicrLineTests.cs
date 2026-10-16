@@ -1,7 +1,7 @@
 using LeaseBook.Modules.Payments.Domain;
 using Shouldly;
 
-namespace LeaseBook.Tests.Integration;
+namespace LeaseBook.Tests.Payments;
 
 /// <summary>
 /// #474 part 2: which E-13B character prints in which MICR position. Positions count from the right
@@ -72,10 +72,45 @@ public sealed class MicrLineTests
             new string(' ', 13)); // 13..1
     }
 
+    [Fact]
+    public void The_characters_are_listed_from_the_right_edge()
+    {
+        // The renderer draws each character at its position, so the list must start at position 14, the
+        // On-Us field's last character, and end with the Auxiliary On-Us field's opening symbol at 51.
+        var characters = MicrLine.Compose("111000012", "123456789U", 1043).Characters.ToList();
+
+        characters.Select(c => c.Position).ShouldBe(characters.Select(c => c.Position).Order());
+        characters[0].ShouldBe((14, 'U'));
+        characters[^1].ShouldBe((51, 'U'));
+        characters.Count.ShouldBe(10 + 11 + 6);
+    }
+
+    [Fact]
+    public void Printing_a_line_shows_how_long_it_is_and_never_its_numbers()
+    {
+        var line = MicrLine.Compose("111000012", "123456789U", 1043);
+
+        line.ToString().ShouldBe("MicrLine { Positions = 51 }");
+    }
+
     [Theory]
-    [InlineData("111000013", "123456789U", 1043)] // routing check digit wrong
-    [InlineData("111000012", "1234A", 1043)]      // not an E-13B character
-    [InlineData("111000012", "123456789U", 0)]    // no check number
-    public void Anything_the_rules_refuse_cannot_be_composed(string routing, string onUs, int checkNumber) =>
-        Should.Throw<ArgumentException>(() => MicrLine.Compose(routing, onUs, checkNumber));
+    [InlineData("111000013", "123456789U", 1043, "routingNumber", "The routing number is not a valid ABA routing number.")]
+    [InlineData("111000012", "1234A", 1043, "onUsField", "The On-Us field holds characters the MICR font cannot print.")]
+    [InlineData("111000012", "123456789U", 0, "checkNumber", "A check number is required.")]
+    [InlineData("111000012", "123456789U", -1043, "checkNumber", "A check number is required.")]
+    public void Anything_the_rules_refuse_cannot_be_composed(string routing, string onUs, int checkNumber, string param,
+        string reason)
+    {
+        // The message is what the host logs when a print fails, so it names the field that was wrong.
+        var refused = Should.Throw<ArgumentException>(() => MicrLine.Compose(routing, onUs, checkNumber));
+
+        refused.ParamName.ShouldBe(param);
+        refused.Message.ShouldStartWith(reason);
+    }
+
+    [Theory]
+    [InlineData("111000013", "123456789U", "routingNumber")]
+    [InlineData("111000012", "12U-", "onUsField")]
+    public void A_specimen_is_held_to_the_same_rules(string routing, string onUs, string param) =>
+        Should.Throw<ArgumentException>(() => MicrLine.Specimen(routing, onUs)).ParamName.ShouldBe(param);
 }

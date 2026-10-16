@@ -54,6 +54,62 @@
         "original": ".Where(x => x.Kind == \"Return\" && operationIds.Contains(x.OperationId))",
         "replacement": "\"\"",
         "reason": "With it no payment counts as returned, and the status test beside it in Check refuses every payment that has a posted return anyway. Posting a return sets Returned in the same transaction. Afterwards CompleteAsync leaves such a payment Returned, or in review under evidence_after_return, conflicting_evidence or unsupported_settlement, never Settled and never under a return_ reason. FailAsync and RetryAsync leave it alone because it has a receipt, and closing a review makes it ReviewClosed. Only the two engines write a payment's status."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Payments/Domain/RefundCheckRecords.cs",
+        "mutator": "String mutation",
+        "original": "public string Source { get; set; } = \"\";",
+        "replacement": "\"Stryker was here!\"",
+        "reason": "The default is always overwritten before anything reads it. A RefundCheck is made in two places only: IssueRefundCheckHandler, whose initializer sets Source with every other field, and EF Core, which sets it from a NOT NULL column. No code reads Source on any other instance, so the default reaches no row, view or log."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Payments/Domain/RefundCheckRecords.cs",
+        "mutator": "String mutation",
+        "original": "public string PayeeName { get; set; } = \"\";",
+        "replacement": "\"Stryker was here!\"",
+        "reason": "The default is always overwritten before anything reads it. A RefundCheck is made in two places only: IssueRefundCheckHandler, whose initializer sets PayeeName with every other field, and EF Core, which sets it from a NOT NULL column. No code reads PayeeName on any other instance, so the default reaches no row, view or log."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Payments/Domain/RefundCheckRecords.cs",
+        "mutator": "String mutation",
+        "original": "public string AddressLine1 { get; set; } = \"\";",
+        "replacement": "\"Stryker was here!\"",
+        "reason": "The default is always overwritten before anything reads it. A RefundCheck is made in two places only: IssueRefundCheckHandler, whose initializer sets AddressLine1 with every other field, and EF Core, which sets it from a NOT NULL column. No code reads AddressLine1 on any other instance, so the default reaches no row, view or log."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Payments/Domain/RefundCheckRecords.cs",
+        "mutator": "String mutation",
+        "original": "public string City { get; set; } = \"\";",
+        "replacement": "\"Stryker was here!\"",
+        "reason": "The default is always overwritten before anything reads it. A RefundCheck is made in two places only: IssueRefundCheckHandler, whose initializer sets City with every other field, and EF Core, which sets it from a NOT NULL column. No code reads City on any other instance, so the default reaches no row, view or log."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Payments/Domain/RefundCheckRecords.cs",
+        "mutator": "String mutation",
+        "original": "public string State { get; set; } = \"\";",
+        "replacement": "\"Stryker was here!\"",
+        "reason": "The default is always overwritten before anything reads it. A RefundCheck is made in two places only: IssueRefundCheckHandler, whose initializer sets State with every other field, and EF Core, which sets it from a NOT NULL column. No code reads State on any other instance, so the default reaches no row, view or log."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Payments/Domain/RefundCheckRecords.cs",
+        "mutator": "String mutation",
+        "original": "public string PostalCode { get; set; } = \"\";",
+        "replacement": "\"Stryker was here!\"",
+        "reason": "The default is always overwritten before anything reads it. A RefundCheck is made in two places only: IssueRefundCheckHandler, whose initializer sets PostalCode with every other field, and EF Core, which sets it from a NOT NULL column. No code reads PostalCode on any other instance, so the default reaches no row, view or log."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Payments/Domain/MicrLine.cs",
+        "mutator": "AddAssignmentExpression to SubtractAssignmentExpression mutation",
+        "original": "sum += (value[i] - '0') * weights[i];",
+        "replacement": "sum -= (value[i] - '0') * weights[i]",
+        "reason": "Subtracting each weighted digit gives the negated sum, and a whole number is a multiple of ten exactly when its negation is (in C#, -30 % 10 is 0 and -27 % 10 is -7, never 0), so the check digit test answers the same for every input. The sum is read nowhere else."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Payments/Features/RefundChecks/IssueRefundCheck.cs",
+        "mutator": "Statement mutation",
+        "original": "throw RefundCheckConflictException.NumberTaken();",
+        "replacement": ";",
+        "reason": "Without this throw, a number already used on the bank goes on to SaveChanges, where the unique index on (org_id, bank_account_id, check_number) refuses the insert and the catch below throws the same NumberTaken, with the same code and message, in the same transaction, which rolls back the posted refund as before. The only difference is one insert the database rejects. The text also matches the catch's own throw, which is not equivalent: RefundCheckConcurrencyTests reaches it with a rival row held uncommitted, and kills its removal."
       }
     ]
   }

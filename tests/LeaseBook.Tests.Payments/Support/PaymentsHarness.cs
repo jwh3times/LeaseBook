@@ -154,29 +154,9 @@ internal sealed class PaymentsHarness : IAsyncDisposable
         return new(firstResult, secondResult, error, a.Ledger, b.Ledger);
     }
 
-    /// <summary>
-    /// Waits until the lane's unit of work has finished or its backend is waiting on a lock it has
-    /// not been granted: an advisory lock, a row another transaction wrote, or a key another
-    /// transaction inserted. Returns true for waiting. Polls the database; never waits on time alone.
-    /// </summary>
-    public async Task<bool> WaitingOrDoneAsync(Lane lane, Task running, CancellationToken ct)
-    {
-        await using var monitor = await _fixture.OpenAppConnectionAsync(ct);
-        var clock = System.Diagnostics.Stopwatch.StartNew();
-        while (!running.IsCompleted)
-        {
-            if (lane.Pid != 0)
-            {
-                await using var waiting = new NpgsqlCommand("SELECT EXISTS (SELECT 1 FROM pg_locks WHERE pid = @pid AND NOT granted)", monitor);
-                waiting.Parameters.AddWithValue("pid", lane.Pid);
-                if ((bool)(await waiting.ExecuteScalarAsync(ct))!) { return true; }
-            }
-            if (clock.Elapsed > TimeSpan.FromSeconds(30))
-            { throw new TimeoutException("The second unit of work neither finished nor waited on a lock within 30 seconds."); }
-            await Task.WhenAny(running, Task.Delay(5, ct));
-        }
-        return false;
-    }
+    /// <inheritdoc cref="Lanes.WaitingOrDoneAsync"/>
+    public Task<bool> WaitingOrDoneAsync(Lane lane, Task running, CancellationToken ct) =>
+        Lanes.WaitingOrDoneAsync(_fixture, lane, running, ct);
 
     /// <summary>
     /// Points the organization's fixture at another account, or at a new bank, by editing the row as
