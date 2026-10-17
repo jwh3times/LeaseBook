@@ -8,8 +8,10 @@ using LeaseBook.Modules.Accounting.Features.Posting;
 using LeaseBook.Modules.Accounting.Features.Posting.Events;
 using LeaseBook.Modules.Accounting.Posting;
 using LeaseBook.SharedKernel;
+using LeaseBook.Tests.Accounting.Support;
 using LeaseBook.Tests.Common;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Shouldly;
 using static LeaseBook.Tests.Accounting.Support.AccountingTestHarness;
 
@@ -69,6 +71,14 @@ public sealed class PostPaymentSettlementTests(PostgresFixture fixture)
             var bankLines = await scope.Db.Set<JournalLine>().AsNoTracking()
                 .Where(l => ids.Contains(l.EntryId) && l.AccountClass == AccountClass.TrustBank).ToListAsync(ct);
             bankLines.Sum(l => (l.Debit?.Amount ?? 0m) - (l.Credit?.Amount ?? 0m)).ShouldBe(1742.90m);
+            // Each fee difference says which way it went on the owner-facing line, and which item it was for
+            // on the staff-only note.
+            entries.Where(e => e.EventType == "ProcessorFeeDifference").OrderBy(e => e.SourceRef)
+                .Select(e => (e.SourceRef, e.EventSubtype, e.Description, e.InternalNote)).ShouldBe(
+                [
+                    ("payout:po_1:2:fee", "Shortfall", "Processor fee shortfall", "Payout po_1, item 2."),
+                    ("payout:po_1:3:fee", "Surplus", "Processor fee surplus", "Payout po_1, item 3."),
+                ]);
         }, ct);
         await AssertClean(scope, ct);
     }
@@ -95,7 +105,7 @@ public sealed class PostPaymentSettlementTests(PostgresFixture fixture)
         await scope.RunAsync(async () =>
         {
             var reversal = await scope.Db.Set<JournalEntry>().AsNoTracking().SingleAsync(e => e.ReversesEntryId == receipt, ct);
-            (reversal.EntryDate, reversal.SourceRef).ShouldBe((later, "payout:po_2:2"));
+            (reversal.EntryDate, reversal.SourceRef, reversal.InternalNote).ShouldBe((later, "payout:po_2:2", "Returned in payout po_2."));
         }, ct);
         await AssertClean(scope, ct);
     }
@@ -210,6 +220,92 @@ public sealed class PostPaymentSettlementTests(PostgresFixture fixture)
         result.Posted.ShouldBeTrue(result.Refusal);
         await AssertBooks(scope, bank: 502.50m, ownerEquity: 500m, heldFees: 2.50m, ct);
         await AssertClean(scope, ct);
+    }
+
+    [Fact]
+    public async Task A_refusal_leaves_the_caller_tracking_exactly_what_it_tracked_before()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var scope = await NewScope(ct);
+        await Charge(scope, _tenantA, 1000m, ct);
+
+        await scope.RunAsync(async () =>
+        {
+            // Something of the caller's own, tracked before the batch begins.
+            var callers = await scope.Db.Set<JournalEntry>().SingleAsync(ct);
+            var before = scope.Db.ChangeTracker.Entries().Select(e => e.Entity).ToList();
+
+            // The receipt posts, and is tracked, before the shortfall behind it is refused.
+            var result = await Handler(scope).Handle(new PostPaymentSettlement(scope.TrustBankId, BankDate, "po_1",
+                [Receipt("1", _tenantA, 500m, "card", feeDifference: 7.50m)]), ct);
+
+            result.Refusal.ShouldBe("pm_fees_insufficient");
+            scope.Db.ChangeTracker.Entries().Select(e => e.Entity).ShouldBe(before);
+            scope.Db.Entry(callers).State.ShouldBe(EntityState.Unchanged);
+        }, ct);
+    }
+
+    [Fact]
+    public async Task A_posted_payout_releases_its_savepoint_and_leaves_none_in_the_callers_transaction()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var scope = await NewScope(ct);
+        await Charge(scope, _tenantA, 1000m, ct);
+
+        await scope.RunAsync(async () =>
+        {
+            var result = await Handler(scope).Handle(
+                new PostPaymentSettlement(scope.TrustBankId, BankDate, "po_1", [Receipt("1", _tenantA, 500m, "card")]), ct);
+            result.Posted.ShouldBeTrue(result.Refusal);
+
+            // A probe of its own, so that the failed release below leaves the transaction usable.
+            await scope.Db.Database.ExecuteSqlRawAsync("SAVEPOINT probe", ct);
+            var gone = await Should.ThrowAsync<PostgresException>(
+                () => scope.Db.Database.ExecuteSqlRawAsync("RELEASE SAVEPOINT payment_settlement", ct));
+            gone.SqlState.ShouldBe(PostgresErrorCodes.InvalidSavepointSpecification);
+            await scope.Db.Database.ExecuteSqlRawAsync("ROLLBACK TO SAVEPOINT probe", ct);
+        }, ct);
+
+        await AssertBooks(scope, bank: 500m, ownerEquity: 500m, heldFees: 0m, ct);
+    }
+
+    [Fact]
+    public async Task A_payout_takes_the_posting_lock_before_it_writes_so_a_second_delivery_waits_and_is_refused_as_a_duplicate()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var scope = await NewScope(ct);
+        await Charge(scope, _tenantA, 1000m, ct);
+        var receipt = (await Settle(scope, "po_0", BankDate, [Receipt("1", _tenantA, 600m, "ach")], ct)).Postings.Single().EntryId;
+        // A return with a surplus beside it: the surplus posts first, through a template that takes no lock
+        // of its own, so only the batch's lock keeps it from being written before the batch waits.
+        var command = new PostPaymentSettlement(scope.TrustBankId, BankDate, "po_1", [new SettlementReturn("1", receipt, -0.40m)]);
+        var leases = new Leases(new Dictionary<Guid, TenantPostingDimensions>());
+
+        // The first delivery already holds the lock when the second arrives, and posts once the second is
+        // waiting. Had the second written its surplus before waiting, the first would wait on that row
+        // while holding the lock the second waits on.
+        var run = await Lanes.UnderHeldLockAsync(fixture, scope,
+            lane => lane.Sender(leases).Send(command, ct),
+            lane => lane.Sender(leases).Send(command, ct), ct);
+
+        run.SecondWaited.ShouldBeTrue();
+        run.FirstError.ShouldBeNull();
+        run.SecondError.ShouldBeNull();
+        run.First!.Postings.Select(p => (p.Item, p.Kind)).ShouldBe([("1", "FeeDifference"), ("1", "Return")]);
+        (run.Second!.Posted, run.Second.Refusal, run.Second.RefusedItem).ShouldBe((false, "duplicate_source_ref", "1"));
+        await AssertBooks(scope, bank: 0.40m, ownerEquity: 0m, heldFees: 0.40m, ct);
+    }
+
+    [Fact]
+    public async Task A_payout_posts_only_inside_the_callers_organization_transaction()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var scope = await NewScope(ct);
+
+        var refused = await Should.ThrowAsync<InvalidOperationException>(() => Handler(scope).Handle(
+            new PostPaymentSettlement(scope.TrustBankId, BankDate, "po_1", [Receipt("1", _tenantA, 500m, "card")]), ct));
+
+        refused.Message.ShouldBe("A payment settlement posts inside the caller's organization transaction.");
     }
 
     private Task<OrgScope> NewScope(CancellationToken ct) => ProvisionedScopeAsync(

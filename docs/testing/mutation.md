@@ -438,6 +438,7 @@ kills its last unexplained survivor.
 | Payments refund checks and MICR line                         |                 258 |                      8 | 97.0%: 258 killed, 8 survived, all explained, none not covered |
 | The rest of Payments                                         |                 190 |                     33 | 87.1%: 219 killed, 4 timed out, 33 undetected, all explained   |
 | Accounting posting core (`Posting/`, `Features/Posting/`)    |                  92 |                      1 | 99.6%: 280 killed, 1 survived, explained, none not covered     |
+| Accounting ledger posting (`Features/LedgerPosting/`)        |                 109 |                      3 | 98.5%: 199 killed, 3 survived, explained, none not covered     |
 
 The engines' 138 undetected mutants, taken from the hosted run on 2026-10-15, are all accounted
 for. `LeaseBook.Tests.Payments` grew from 164 tests to 273, among them 22 races (see
@@ -484,3 +485,23 @@ posting lock and four on the unique-index backstop. `Support/Lanes.cs` there is 
 copy of the race helper. The suite grew from 211 tests to 262 and runs in about 41 seconds. The one
 equivalent reads a line's amount as `Credit ?? Debit` instead of `Debit ?? Credit`, where the check
 before it has already refused a line with both or neither.
+
+The ledger-posting commands, `Features/LedgerPosting/`, had 112 undetected mutants in the first
+scheduled run, the same 112 when this work began: 78 survived and 34 were not covered. Their tests
+were in the integration suite, or called a handler directly, so no validator ran under Stryker, and
+no default description, lock or ownership transfer was checked. New tests in
+`LeaseBook.Tests.Accounting` send the commands through the real dispatcher, with the module's own
+services and validators behind it and stand-ins only for the tenant's posting dimensions and the
+clock (`Support/AccountingSender.cs`). They pin each validator rule on its own field, the event
+each charge kind posts and the description each command falls back to, the bank a prepayment is
+applied from, a plain void refusing a refund check, the deposit transfer on a property sale, and
+what a payout leaves in the caller's transaction and change tracker after a refusal and after a
+posting. Four races cover the locks: the holding-bank read in `ApplyPrepayment`, the balances
+`ReturnTenantPayment` guards, the positions `TransferPropertyDeposits` moves, and the payout's own
+lock in `PostPaymentSettlement`. That last one needs a different interleaving from the other races,
+so `Support/Lanes.cs` gained `UnderHeldLockAsync`: the second delivery of a payout has to wait for
+the lock before it writes anything, or the first deadlocks against the surplus row it wrote. The
+suite grew from 262 tests to 350 and runs in about 42 seconds. Of the three equivalents, one makes
+`> 0m` into `>= 0m` on a fee difference that is never zero where it is read, and two turn `Sum` into
+`Max` over a receipt's prepayment and owner-equity credits, of which the `PaymentReceived` template
+writes at most one each.
