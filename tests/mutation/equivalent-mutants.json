@@ -1,7 +1,15 @@
 {
   "accounting": {
     "gate": false,
-    "equivalents": []
+    "equivalents": [
+      {
+        "file": "src/LeaseBook.Modules.Accounting/Posting/PostingService.cs",
+        "mutator": "Null coalescing mutation (left to right)",
+        "original": "var amount = (line.Debit ?? line.Credit)!.Value;",
+        "replacement": "line.Credit?? line.Debit",
+        "reason": "Reached only past the hasDebit == hasCredit check, which throws unless exactly one of Debit and Credit is set, so one is null and the other is not, and either order of ?? yields the one that is set. amount is read only by the positive-amount check below it and that check's exception."
+      }
+    ]
   },
   "payments": {
     "gate": true,

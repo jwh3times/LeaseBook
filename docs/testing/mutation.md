@@ -3,7 +3,7 @@
 - **Audience:** Contributors, reviewers and maintainers
 - **Status:** Living method and measurement record
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-16
+- **Last reviewed:** 2026-10-17
 
 Mutation testing asks whether the tests would notice the code being wrong. A tool changes the code
 one small edit at a time, such as `>` to `>=`, `+` to `-`, or a call removed, and reruns the tests
@@ -437,6 +437,7 @@ kills its last unexplained survivor.
 | Payments engines (`PaymentEngine.cs`, `SettlementEngine.cs`) |                 130 |                      8 | 99.1%: 841 killed, 8 survived, all explained, none not covered |
 | Payments refund checks and MICR line                         |                 258 |                      8 | 97.0%: 258 killed, 8 survived, all explained, none not covered |
 | The rest of Payments                                         |                 190 |                     33 | 87.1%: 219 killed, 4 timed out, 33 undetected, all explained   |
+| Accounting posting core (`Posting/`, `Features/Posting/`)    |                  92 |                      1 | 99.6%: 280 killed, 1 survived, explained, none not covered     |
 
 The engines' 138 undetected mutants, taken from the hosted run on 2026-10-15, are all accounted
 for. `LeaseBook.Tests.Payments` grew from 164 tests to 273, among them 22 races (see
@@ -472,3 +473,14 @@ entry names every line it covers, all equivalent.
 With that, a whole local run of Payments scored **96.4%**: 1,318 killed, 47 survived, 4 timed out
 and 2 not covered, with 121 compile errors and 186 ignored. All 49 undetected mutants are explained
 and no entry is stale, so the Payments gate is on.
+
+Accounting comes next, area by area, and its gate comes on with its last area. The posting core,
+`Posting/` and `Features/Posting/`, had 93 undetected mutants in the first scheduled run, the same
+93 when this work began. New tests in `LeaseBook.Tests.Accounting` kill 92 of them: the late-fee
+assessment guards, the reasons and messages a posting is refused with, which lines the
+reconciliation lock bars, every template's event type and the limits on refunds, fee sweeps and
+vendor payments, and thirteen races in `PostingConcurrencyTests`, one for each event that takes the
+posting lock and four on the unique-index backstop. `Support/Lanes.cs` there is that project's
+copy of the race helper. The suite grew from 211 tests to 262 and runs in about 41 seconds. The one
+equivalent reads a line's amount as `Credit ?? Debit` instead of `Debit ?? Credit`, where the check
+before it has already refused a line with both or neither.
