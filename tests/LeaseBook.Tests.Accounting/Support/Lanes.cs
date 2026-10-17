@@ -1,6 +1,8 @@
+using LeaseBook.Modules.Accounting.Contracts;
 using LeaseBook.Modules.Accounting.Features.Posting;
 using LeaseBook.Modules.Accounting.Periods;
 using LeaseBook.Modules.Accounting.Posting;
+using LeaseBook.SharedKernel.Cqrs;
 using LeaseBook.SharedKernel.Tenancy;
 using LeaseBook.Tests.Common;
 using LeaseBook.Web.Persistence;
@@ -39,6 +41,12 @@ internal sealed class Lane : IAsyncDisposable
     public AccountingEventService Events => new(Db, Posting, new PostingLock(Db, _org));
 
     public ReversalService Reversal => new(Db, _org, Posting);
+
+    /// <summary>The organization's posting lock, taken on this lane's connection.</summary>
+    public PostingLock Lock => new(Db, _org);
+
+    /// <summary>The real dispatcher over this lane's connection (<see cref="AccountingSender"/>).</summary>
+    public ISender Sender(ITenantPostingDimensions dimensions) => AccountingSender.Create(Db, _org, _actor, dimensions);
 
     /// <summary>The backend this lane's current unit of work runs on; zero before it has begun.</summary>
     public int Pid => Volatile.Read(ref _pid);
@@ -105,6 +113,10 @@ internal sealed class HeldWork<T>(Task<T> done, Task run, TaskCompletionSource r
 /// <summary>What became of two units of work run by <see cref="Lanes.RaceAsync{T1, T2}"/>.</summary>
 internal sealed record Race<T1, T2>(T1 First, T2? Second, Exception? SecondError);
 
+/// <summary>What became of two units of work run by <see cref="Lanes.UnderHeldLockAsync{T1, T2}"/>.</summary>
+internal sealed record Interleaving<T1, T2>(
+    bool SecondWaited, T1? First, Exception? FirstError, T2? Second, Exception? SecondError);
+
 internal static class Lanes
 {
     /// <summary>
@@ -145,6 +157,67 @@ internal static class Lanes
 
         scope.Db.ChangeTracker.Clear();
         return new(firstResult, secondResult, error);
+    }
+
+    /// <summary>
+    /// Takes the organization's posting lock on one connection; starts <paramref name="second"/> on
+    /// another; waits until the second has either finished or is waiting on a lock; and only then runs
+    /// <paramref name="first"/>, on the connection that already holds the lock, and commits it.
+    /// <para>
+    /// Where <see cref="RaceAsync{T1, T2}"/> shows what the second reads, this shows what it writes
+    /// before it waits: anything it has written by then, the first meets while holding the lock the
+    /// second is waiting on. Both units of work are awaited to the end, whatever becomes of either, so
+    /// neither connection is closed under work still running on it.
+    /// </para>
+    /// </summary>
+    public static async Task<Interleaving<T1, T2>> UnderHeldLockAsync<T1, T2>(
+        PostgresFixture fixture, OrgScope scope, Func<Lane, Task<T1>> first, Func<Lane, Task<T2>> second,
+        CancellationToken ct)
+    {
+        await using var a = new Lane(fixture, scope.OrgId);
+        await using var b = new Lane(fixture, scope.OrgId);
+        var locked = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var go = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var firstRun = a.RunAsync(async lane =>
+        {
+            await lane.Lock.AcquireAsync(ct);
+            locked.TrySetResult();
+            await go.Task;
+            return await first(lane);
+        }, ct);
+
+        Task<T2>? secondRun = null;
+        var waited = false;
+        try
+        {
+            await Task.WhenAny(locked.Task, firstRun);
+            if (locked.Task.IsCompleted)
+            {
+                secondRun = b.RunAsync(second, ct);
+                waited = await WaitingOrDoneAsync(fixture, b, secondRun, ct);
+            }
+        }
+        finally
+        {
+            go.TrySetResult();
+        }
+
+        var (firstResult, firstError) = await OutcomeAsync(firstRun);
+        var (secondResult, secondError) = secondRun is null ? (default, null) : await OutcomeAsync(secondRun);
+        scope.Db.ChangeTracker.Clear();
+        return new(waited, firstResult, firstError, secondResult, secondError);
+    }
+
+    private static async Task<(T? Result, Exception? Error)> OutcomeAsync<T>(Task<T> run)
+    {
+        try
+        {
+            return (await run, null);
+        }
+        catch (Exception e)
+        {
+            return (default, e);
+        }
     }
 
     /// <summary>
