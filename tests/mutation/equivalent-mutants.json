@@ -8,6 +8,27 @@
         "original": "var amount = (line.Debit ?? line.Credit)!.Value;",
         "replacement": "line.Credit?? line.Debit",
         "reason": "Reached only past the hasDebit == hasCredit check, which throws unless exactly one of Debit and Credit is set, so one is null and the other is not, and either order of ?? yields the one that is set. amount is read only by the positive-amount check below it and that check's exception."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Accounting/Features/LedgerPosting/PostPaymentSettlement.cs",
+        "mutator": "Equality mutation",
+        "original": "var shortfall = line.FeeDifference > 0m;",
+        "replacement": "line.FeeDifference >= 0m",
+        "reason": "PostFeeDifferenceAsync is called only from the two loops in Handle, which pass it the lines with FeeDifference < 0m and the lines with FeeDifference > 0m. A line with a fee difference of zero never reaches it, and for every other value > 0m and >= 0m agree."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Accounting/Features/LedgerPosting/ReturnTenantPayment.cs",
+        "mutator": "Linq method mutation (Sum() to Max())",
+        "original": "if (floor < prepaid.Sum(l => l.Credit!.Value.Amount))",
+        "replacement": "prepaid.Max",
+        "reason": "The receipt is an entry whose event type is PaymentReceived, and only the PaymentReceived template in AccountingEventService posts that event type (IPostingService is internal, visible outside the module only to the two test projects, and the template has written that event type since the commit that created it). The template writes at most one tenant_prepayments credit line, so each (tenant, bank) group here holds one line, and Max and Sum of one amount are the same."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Accounting/Features/LedgerPosting/ReturnTenantPayment.cs",
+        "mutator": "Linq method mutation (Sum() to Max())",
+        "original": "var returned = equity.Sum(l => l.Credit!.Value.Amount);",
+        "replacement": "equity.Max",
+        "reason": "As for the prepayment sum above: only the PaymentReceived template posts a PaymentReceived entry, and it writes at most one owner-equity credit line, so each (owner, bank) group here holds one line, and Max and Sum of one amount are the same."
       }
     ]
   },
