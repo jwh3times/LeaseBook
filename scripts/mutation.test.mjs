@@ -150,7 +150,7 @@ describe("parseArgs", () => {
     );
     assert.throws(() => parseArgs(["payments", "--fast"]), /Unknown option/);
     assert.throws(
-      () => parseArgs(["payments", "--part", "1"]),
+      () => parseArgs(["all", "--part", "1"]),
       /not split into parts/,
     );
     assert.throws(() => parseArgs(["accounting", "--part", "3"]), /1 or 2/);
@@ -178,6 +178,7 @@ describe("parts of a split module", () => {
 
   it("takes a part of a module that is split", () => {
     assert.equal(parseArgs(["accounting", "--part", "2"]).part, 2);
+    assert.equal(parseArgs(["payments", "--part", "1"]).part, 1);
   });
 
   it("mutates the named directories in part 1, without what the config excludes", () => {
@@ -199,19 +200,21 @@ describe("parts of a split module", () => {
     ]);
   });
 
-  it("splits Accounting into directories its committed config still mutates", () => {
-    const config = configMutate("accounting");
-    assert.ok(config.includes("**/*.cs"));
-    assert.ok(MODULES.accounting.firstPart.length > 0);
-    for (const directory of MODULES.accounting.firstPart) {
-      assert.ok(
-        !config.some(
-          (glob) => glob.startsWith("!") && glob.includes(directory),
-        ),
-        `${directory} is excluded by the config, so part 1 would mutate nothing there`,
-      );
-    }
-  });
+  for (const key of ["accounting", "payments"]) {
+    it(`splits ${key} into directories its committed config still mutates`, () => {
+      const config = configMutate(key);
+      assert.ok(config.includes("**/*.cs"));
+      assert.ok(MODULES[key].firstPart.length > 0);
+      for (const directory of MODULES[key].firstPart) {
+        assert.ok(
+          !config.some(
+            (glob) => glob.startsWith("!") && glob.includes(directory),
+          ),
+          `${directory} is excluded by the config, so part 1 would mutate nothing there`,
+        );
+      }
+    });
+  }
 });
 
 describe("text helpers", () => {

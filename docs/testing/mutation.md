@@ -30,12 +30,16 @@ has a fast test project of its own and is never mutated against the integration 
 the host. Both test projects run against a Postgres container, so Docker must be running.
 
 `LeaseBook.Tests.Payments` exists for this. Its tests drive `PaymentEngine` and `SettlementEngine`
-directly, as the app role on the real schema, with no host. The three ports the engines call are
-stand-ins the test controls: the ledger records what Payments asked to post, and eligibility and the
-fee rules answer what the test says. What the ledger does with a request belongs to Accounting and is
-tested in `LeaseBook.Tests.Accounting`. The Payments tests pin the decision Payments made: what it
-asked to post, what it sent to a person and with which reason, and how each payment and payout moved
-from one state to the next. The payment tests in `LeaseBook.Tests.Integration` stay where they are.
+directly, and the module's commands and queries through the real dispatcher and validators, as the
+app role on the real schema, with no host. The three ports the payment code calls are stand-ins the
+test controls: the ledger records what Payments asked to post, and eligibility and the fee rules
+answer what the test says. What the ledger does with a request belongs to Accounting and is tested in
+`LeaseBook.Tests.Accounting`. The Payments tests pin the decision Payments made: what it asked to
+post, what it sent to a person and with which reason, how each payment and payout moved from one
+state to the next, and what the lists show. The refund-check tests are the exception: they run the
+host's `RefundCheckLedgerAdapter` over the real Accounting module, so the posting guards a refund
+relies on run too. The pure tests of Payments code, such as the MICR line and the convenience fee,
+moved here from `LeaseBook.Tests.Integration`; its HTTP and host tests stay there.
 
 Each configuration mutates every source file of its module except these:
 
@@ -52,13 +56,14 @@ mutated only when it has one.
 
 The nightly run is [`.github/workflows/mutation.yml`](../../.github/workflows/mutation.yml), at 00:17
 UTC and on manual dispatch, where a module can be chosen. It never runs on a pull request. It runs
-three jobs in parallel: Payments, and Accounting in two parts. A whole Accounting run comes too near
-GitHub's six-hour limit for a hosted job (see [Cost](#cost)), and a job that times out reports
-nothing. Part 1 mutates the directories `scripts/mutation.mjs` names in `firstPart`, and part 2 the
-rest of what the configuration mutates, so a directory added later falls into part 2 and is never
-left out. Each job writes the summary to its job summary and uploads `mutation-<run>` (`payments`,
-`accounting-1` or `accounting-2`), which holds the summary, the HTML report
-(`reports/mutation-report.html`) and the JSON report the summary was read from.
+four jobs in parallel, each module in two parts. A whole run of either module comes too near a
+hosted job's time limit (see [Cost](#cost)), and a job that times out reports nothing. Part 1
+mutates the directories `scripts/mutation.mjs` names in `firstPart`, `Processing` for Payments and
+five directories for Accounting, and part 2 the rest of what the configuration mutates, so a
+directory added later falls into part 2 and is never left out. Each job writes the summary to its
+job summary and uploads `mutation-<run>` (`accounting-1`, `accounting-2`, `payments-1` or
+`payments-2`), which holds the summary, the HTML report (`reports/mutation-report.html`) and the
+JSON report the summary was read from.
 
 ## Run one module locally
 
@@ -84,11 +89,12 @@ node scripts/mutation.mjs payments --concurrency 4 --mutate '**/Processing/Settl
 A `--mutate` given on the command line replaces the configuration's list instead of adding to it, so
 the exclusions above no longer apply. Name only the files you mean.
 
-To run one of Accounting's two parts, as the nightly job does, which writes to
-`StrykerOutput/accounting-<part>/`:
+To run one of a module's two parts, as the nightly jobs do, which writes to
+`StrykerOutput/<module>-<part>/`:
 
 ```bash
 node scripts/mutation.mjs accounting --part 1 --concurrency 4
+node scripts/mutation.mjs payments --part 2 --concurrency 4
 ```
 
 `--part` builds the list itself from the configuration's, so the exclusions still apply, and it
@@ -211,12 +217,15 @@ migrator (`PaymentsHarness.RebindAsync`).
 
 Each module has a gate in the same file, `"gate": false` or `"gate": true`.
 
-- **Off**, as both ship: the run reports and passes, whatever survived.
+- **Off**: the run reports and passes, whatever survived. Accounting's gate is off.
 - **On**: the run fails when the module has an undetected mutant, survived or not covered, that the
-  equivalents list does not explain.
+  equivalents list does not explain. Payments' gate is on, since every Payments mutant was killed or
+  explained on 2026-10-16.
 
 Turn a module's gate on in the change that explains or kills its last unexplained survivor. From then
-on, a change that leaves an edit unnoticed shows up as a red nightly run.
+on, a change that leaves an edit unnoticed shows up as a red nightly run: write the test, or record
+the mutant as equivalent with its reason, in the same change that made it. A split module's gate
+applies to each part on its own, so either part's job can go red.
 
 The run also fails, gate or no gate, when Stryker fails or writes no report. The summary then says
 the module was not measured.
@@ -286,7 +295,10 @@ stuck while one worked. A mutant in part 2 of the second run took 102 seconds pe
 average. Made by hand, one of them, a validator rule removed in `RecordBankAdjustment.cs`, survived
 as the whole run said. So both configurations set `timeout-ratio` to 4, which leaves room for a
 run four times as slow as the initial one. A mutant that really loops forever now costs about four
-test runs before it is stopped; no run so far has had more than one.
+test runs before it is stopped. Payments has four that time out, all in `ConvenienceFee.cs`: three
+remove the refusal of a fee rule that cannot be grossed up, so its loop never ends, and the fourth
+fails three tests in under a second when made by hand, so it timed out sharing a process with one of
+the others. A timeout counts as detected either way.
 
 The first run at ratio 4, also on 2026-10-15, timed out no Accounting mutant. Each of the 120 the
 run before had timed out took the status the whole run gave it, 95 survived and 25 killed, and
@@ -360,6 +372,15 @@ either, so a hosted runner's speed varies by half again from one run to the next
 and finished first in the other, so neither part has a directory moved. Move one from part 2 to
 part 1 if part 2 keeps taking longest.
 
+Payments ran as one job until every mutant had a test. Then a whole local run tested 1,369 mutants
+in 2:22:06, 6.2 s each, against 3.4 s for 928 mutants on 2026-10-14: more mutants are covered, and
+each test process runs 520 tests instead of 164. Hosted runners took 1.2 to 1.75 times as long as
+local runs for Payments, which puts a whole hosted run between 2:50 and 4:10, past the 180 minutes
+its job had. So Payments runs in two parts too, each with 300 minutes: part 1 is `Processing/`, the
+two engines, 864 of those mutants, and part 2 the other 505. The first hosted run of the two parts, on
+2026-10-16, took 2:26:04 for part 1 and 1:50:03 for part 2, and its statuses matched the local run
+mutant for mutant: 1,318 killed, 47 survived, 4 timed out and 2 not covered, all explained.
+
 GitHub starts a scheduled run when a runner is free, not at the minute the cron names. The first
 scheduled mutation run started at 04:35, more than four hours after 00:17, and in the same days the
 06:23 Coverage (e2e) run started between 11:44 and 14:24. Every scheduled workflow here starts late
@@ -415,6 +436,7 @@ kills its last unexplained survivor.
 | ------------------------------------------------------------ | ------------------: | ---------------------: | -------------------------------------------------------------- |
 | Payments engines (`PaymentEngine.cs`, `SettlementEngine.cs`) |                 130 |                      8 | 99.1%: 841 killed, 8 survived, all explained, none not covered |
 | Payments refund checks and MICR line                         |                 258 |                      8 | 97.0%: 258 killed, 8 survived, all explained, none not covered |
+| The rest of Payments                                         |                 190 |                     33 | 87.1%: 219 killed, 4 timed out, 33 undetected, all explained   |
 
 The engines' 138 undetected mutants, taken from the hosted run on 2026-10-15, are all accounted
 for. `LeaseBook.Tests.Payments` grew from 164 tests to 273, among them 22 races (see
@@ -434,5 +456,19 @@ index and the backstop below refuse the same way. That entry's text also matches
 throw, which a race in `RefundCheckConcurrencyTests` kills; if that test ever stops killing it, the
 entry would hide it.
 
-The rest of Payments, the payment and settlement handlers under `Features/` and the records in
-`Domain/`, still has no fast tests, so its gate stays off.
+The rest of Payments, the payment and settlement handlers and queries under `Features/`, the records
+and the convenience fee in `Domain/`, and `Processing/IPaymentProcessor.cs`, had 223 undetected
+mutants in the first scheduled run, and the same 223 when this work began. New tests in
+`LeaseBook.Tests.Payments` dispatch the commands and queries through the real dispatcher, over the
+same stand-in ports as the engine tests, and the convenience-fee tests moved there from the
+integration suite with CsCheck. The suite grew from 407 tests to 520 and runs in about 34 seconds.
+Of the 33 mutants left, 26 entries explain them: 17 entries cover 24 entity defaults, such as `= ""`
+and `"USD"`, that every place making the row overwrites; four turn `Single` into `SingleOrDefault`
+on a row the engine has just returned in the same transaction; and the other five are in the
+lookups that join payments to their references, where the mutant changes which rows are read but
+never what is shown. Some entity defaults read the same on two or three lines, and each such
+entry names every line it covers, all equivalent.
+
+With that, a whole local run of Payments scored **96.4%**: 1,318 killed, 47 survived, 4 timed out
+and 2 not covered, with 121 compile errors and 186 ignored. All 49 undetected mutants are explained
+and no entry is stale, so the Payments gate is on.

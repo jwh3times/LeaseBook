@@ -1,4 +1,5 @@
 using LeaseBook.Modules.Payments.Domain;
+using LeaseBook.Modules.Payments.Features;
 using LeaseBook.Modules.Payments.Processing;
 using LeaseBook.SharedKernel;
 using LeaseBook.Tests.Common;
@@ -165,5 +166,54 @@ public sealed class PaymentSubmissionTests(PostgresFixture fixture)
         {
             await Should.ThrowAsync<InvalidOperationException>(() => h.Payments.LockAsync("anything", ct));
         }
+    }
+
+    [Fact]
+    public async Task A_quote_names_the_method_the_amount_for_the_ledger_the_fee_on_top_and_the_total_charged()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var h = await PaymentsHarness.CreateAsync(fixture, ct);
+        h.FeeRules.Fee = 2.50m;
+
+        var quote = await h.QueryAsync(new GetPaymentQuote(h.Binding, 100m, PaymentMethods.Card), ct);
+
+        quote.ShouldBe(new PaymentQuoteView(PaymentMethods.Card, 100m, 2.50m, 102.50m));
+        // An amount no payment could be made for is refused before any rule is read.
+        await Should.ThrowAsync<FluentValidation.ValidationException>(() =>
+            h.QueryAsync(new GetPaymentQuote(h.Binding, 0m, PaymentMethods.Card), ct));
+    }
+
+    [Fact]
+    public async Task A_submission_answers_with_the_tenants_view_of_the_payment_it_requested()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var h = await PaymentsHarness.CreateAsync(fixture, ct);
+        h.FeeRules.Fee = 2.50m;
+
+        var view = await h.SendAsync(new SubmitPayment(h.Binding, h.Tenants[0], h.UserId, UuidV7.NewId(), 100m, "USD",
+            PaymentMethods.Card, 2.50m), ct);
+
+        var stored = await h.ReadAsync(view.Id, ct);
+        (view.Status, view.Amount, view.QuotedFee, view.ChargedAmount, view.Method, view.Currency)
+            .ShouldBe(("Requested", 100m, 2.50m, 102.50m, PaymentMethods.Card, "USD"));
+        (view.ReceiptRecorded, view.CanRetry, view.Reason, view.EvidenceReference)
+            .ShouldBe((false, false, (string?)null, (string?)null));
+        // The database keeps whole microseconds of the time the request was stored.
+        view.CreatedAt.ShouldBe(stored.CreatedAt, TimeSpan.FromMilliseconds(1));
+        (stored.TenantId, stored.UserId).ShouldBe((h.Tenants[0], h.UserId));
+    }
+
+    [Fact]
+    public async Task A_submission_outside_the_rules_is_refused_before_anything_is_stored_or_asked()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var h = await PaymentsHarness.CreateAsync(fixture, ct);
+
+        var refused = await Should.ThrowAsync<FluentValidation.ValidationException>(() => h.SendAsync(new SubmitPayment(h.Binding,
+            h.Tenants[0], h.UserId, UuidV7.NewId(), 100m, "EUR"), ct));
+
+        refused.Errors.ShouldHaveSingleItem().PropertyName.ShouldBe("Currency");
+        (await h.InOrg(() => h.Scope.Db.Set<PaymentOperation>().CountAsync(ct), ct)).ShouldBe(0);
+        h.Eligibility.Asked.ShouldBeEmpty();
     }
 }

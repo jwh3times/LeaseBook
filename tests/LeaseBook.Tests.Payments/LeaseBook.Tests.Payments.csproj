@@ -10,6 +10,7 @@
     <PackageReference Include="xunit.v3.mtp-v2" />
     <PackageReference Include="Microsoft.Testing.Extensions.CodeCoverage" />
     <PackageReference Include="Shouldly" />
+    <PackageReference Include="CsCheck" />
     <!-- Container-backed (Testcontainers via Tests.Common): the engines take advisory locks and read
          under RLS, so they run against the real schema, as the app role, with no host booted. -->
     <PackageReference Include="Testcontainers.PostgreSql" />

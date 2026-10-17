@@ -3,6 +3,7 @@ using LeaseBook.Modules.Accounting.Contracts;
 using LeaseBook.Modules.Payments.Domain;
 using LeaseBook.Modules.Payments.Processing;
 using LeaseBook.SharedKernel;
+using LeaseBook.SharedKernel.Cqrs;
 using LeaseBook.SharedKernel.Tenancy;
 using LeaseBook.Tests.Common;
 using LeaseBook.Web.Auth;
@@ -27,10 +28,17 @@ namespace LeaseBook.Tests.Payments.Support;
 /// <see cref="IAccountingEvents"/>, resolved from a container holding only the Accounting module over
 /// this scope's context. No journal row is written by hand.
 /// </para>
+/// <para>
+/// The payment and payout commands and queries under <c>Features/</c> are dispatched through the real
+/// pipeline (validation, then the handler) by <see cref="Sender"/>, over these same engines, so a
+/// staff list or a review action is answered by the code the host runs, with the same stand-ins
+/// behind it.
+/// </para>
 /// </summary>
 internal sealed class PaymentsHarness : IAsyncDisposable
 {
     private readonly ServiceProvider _accounting;
+    private readonly ServiceProvider _features;
     private readonly PostgresFixture _fixture;
 
     private PaymentsHarness(PostgresFixture fixture, OrgScope scope, ServiceProvider accounting, FixtureBinding binding, Guid userId,
@@ -46,6 +54,7 @@ internal sealed class PaymentsHarness : IAsyncDisposable
         Ledger = new RecordingLedger(accounting.GetRequiredService<IAccountingEvents>(), ownerId, binding.BankId);
         Payments = new PaymentEngine(scope.Db, scope.Tenant, Clock, Ledger, Eligibility, FeeRules);
         Settlements = new SettlementEngine(scope.Db, Clock, Payments, Ledger);
+        _features = FeaturesOver(scope.Db, scope.Tenant, scope.Actor, Clock, Payments, Settlements);
     }
 
     public OrgScope Scope { get; }
@@ -71,6 +80,9 @@ internal sealed class PaymentsHarness : IAsyncDisposable
     public PaymentEngine Payments { get; }
 
     public SettlementEngine Settlements { get; }
+
+    /// <summary>The dispatcher over <see cref="Scope"/>'s context. Outside <see cref="InOrg{T}"/> it has no organization.</summary>
+    public ISender Sender => _features.GetRequiredService<ISender>();
 
     /// <summary>The processor's reference the tests give an operation when it is accepted.</summary>
     public static string ProviderOf(PaymentOperation op) => "prov_" + op.Id.ToString("N");
@@ -118,6 +130,25 @@ internal sealed class PaymentsHarness : IAsyncDisposable
         services.AddSingleton(db);
         services.AddSingleton(org);
         services.AddSingleton(actor);
+        return services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = false });
+    }
+
+    /// <summary>
+    /// Every handler and validator of Payments behind the real dispatcher, over one context and the
+    /// engines given, as the host composes them for a request.
+    /// </summary>
+    internal static ServiceProvider FeaturesOver(DbContext db, IOrgContext org, IActorContext actor, TimeProvider clock,
+        PaymentEngine payments, SettlementEngine settlements)
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddLeaseBookCqrs(typeof(LeaseBook.Modules.Payments.ModuleMarker).Assembly);
+        services.AddSingleton(db);
+        services.AddSingleton(org);
+        services.AddSingleton(actor);
+        services.AddSingleton(clock);
+        services.AddSingleton(payments);
+        services.AddSingleton(settlements);
         return services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = false });
     }
 
@@ -215,6 +246,12 @@ internal sealed class PaymentsHarness : IAsyncDisposable
 
     public Task InOrg(Func<Task> work, CancellationToken ct) => InOrg(async () => { await work(); return true; }, ct);
 
+    /// <summary>Sends a command through <see cref="Sender"/> in one organization transaction, as a request does.</summary>
+    public Task<T> SendAsync<T>(ICommand<T> command, CancellationToken ct) => InOrg(() => Sender.Send(command, ct), ct);
+
+    /// <summary>Runs a query through <see cref="Sender"/> in one organization transaction, as a request does.</summary>
+    public Task<T> QueryAsync<T>(IQuery<T> query, CancellationToken ct) => InOrg(() => Sender.Query(query, ct), ct);
+
     /// <summary>Submits a payment and has the processor accept it, as the worker does: claim, then complete.</summary>
     public async Task<PaymentOperation> AcceptedAsync(decimal amount, CancellationToken ct, int tenant = 0,
         string method = PaymentMethods.Ach, decimal fee = 0m)
@@ -253,6 +290,53 @@ internal sealed class PaymentsHarness : IAsyncDisposable
             .SingleAsync(x => x.ProviderId == observation.ProviderId, ct), ct)).Id;
         await JudgeAsync(id, ct);
     }
+
+    /// <summary>
+    /// Sets when a payment or a payout was stored. The context stamps a new row with the wall clock as
+    /// it saves, so two rows are never stored at one instant; a test that means to stand on a tie, or
+    /// on an age, sets the time here, as the app role, which may update both tables.
+    /// </summary>
+    public Task RestampAsync<T>(Guid id, DateTime createdAt, CancellationToken ct) where T : class => InOrg(async () =>
+    {
+        var row = await Scope.Db.Set<T>().SingleAsync(x => EF.Property<Guid>(x, "Id") == id, ct);
+        Scope.Db.Entry(row).Property("CreatedAt").CurrentValue = createdAt;
+        await Scope.Db.SaveChangesAsync(ct);
+    }, ct);
+
+    /// <summary>
+    /// Stores a processor's observation as <see cref="PaymentEngine.ReceiveAsync"/> stores a new one,
+    /// field for field, but stored at <paramref name="storedAt"/>. Observations are append-only for the
+    /// app role, so a stored time a test stands on is given when the row is written, never after.
+    /// Nothing is judged and no payment is woken: this is for reads of what is held.
+    /// </summary>
+    public Task<PaymentObservation> StoreObservationAsync(ProcessorObservation o, DateTime storedAt, CancellationToken ct) => InOrg(async () =>
+    {
+        var row = new PaymentObservation
+        {
+            Id = UuidV7.NewId(),
+            EventId = o.EventId,
+            ProviderId = o.ProviderId,
+            Generation = o.Generation,
+            Account = o.Account,
+            Mode = o.Mode,
+            Kind = o.Kind,
+            Gross = o.Gross,
+            Fee = o.Fee,
+            Net = o.Net,
+            Currency = o.Currency,
+            BankId = o.BankId,
+            BankDate = o.BankDate,
+            EvidenceId = o.EvidenceId,
+            PayoutId = o.PayoutId,
+            Complete = o.Complete,
+            ObservedAt = o.ObservedAt,
+            CreatedAt = storedAt,
+            Fingerprint = PaymentEngine.Hash(System.Text.Json.JsonSerializer.Serialize(o)),
+        };
+        Scope.Db.Add(row);
+        await Scope.Db.SaveChangesAsync(ct);
+        return row;
+    }, ct);
 
     public Task<PaymentOperation> ReadAsync(Guid id, CancellationToken ct) =>
         InOrg(() => Scope.Db.Set<PaymentOperation>().AsNoTracking().SingleAsync(x => x.Id == id, ct), ct);
@@ -309,10 +393,11 @@ internal sealed class PaymentsHarness : IAsyncDisposable
         return (await InOrg(() => Settlements.EvaluateAsync(Binding, id, confirmedBy, ct), ct))!;
     }
 
-    public ValueTask DisposeAsync()
+    public async ValueTask DisposeAsync()
     {
-        _accounting.Dispose();
-        return Scope.DisposeAsync();
+        await _features.DisposeAsync();
+        await _accounting.DisposeAsync();
+        await Scope.DisposeAsync();
     }
 
     // The directory rows the payment tables and the stand-in entries have foreign keys to, written as
