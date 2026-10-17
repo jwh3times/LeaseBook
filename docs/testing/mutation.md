@@ -377,7 +377,9 @@ in 2:22:06, 6.2 s each, against 3.4 s for 928 mutants on 2026-10-14: more mutant
 each test process runs 520 tests instead of 164. Hosted runners took 1.2 to 1.75 times as long as
 local runs for Payments, which puts a whole hosted run between 2:50 and 4:10, past the 180 minutes
 its job had. So Payments runs in two parts too, each with 300 minutes: part 1 is `Processing/`, the
-two engines, 864 of those mutants, and part 2 the other 505.
+two engines, 864 of those mutants, and part 2 the other 505. The first hosted run of the two parts, on
+2026-10-16, took 2:26:04 for part 1 and 1:50:03 for part 2, and its statuses matched the local run
+mutant for mutant: 1,318 killed, 47 survived, 4 timed out and 2 not covered, all explained.
 
 GitHub starts a scheduled run when a runner is free, not at the minute the cron names. The first
 scheduled mutation run started at 04:35, more than four hours after 00:17, and in the same days the
