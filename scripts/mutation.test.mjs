@@ -393,6 +393,38 @@ describe("summarise", () => {
     }
   });
 
+  it("explains a mutant by the whole span it replaces, as well as by the line it starts on", () => {
+    // A block removal over the class body: its first line alone is a bare "{".
+    const block = mutant(
+      9,
+      "Survived",
+      3,
+      1,
+      2,
+      "Block removal mutation",
+      "{}",
+    );
+    block.location.end.line = 7;
+    const blockEntry = (original) =>
+      equivalent({
+        mutator: "Block removal mutation",
+        original,
+        replacement: "{}",
+      });
+    const [undetected] = summarise(report([block])).undetected;
+    assert.equal(matches(blockEntry("{"), undetected), true);
+    assert.equal(
+      matches(
+        blockEntry(
+          "{ public static bool Clean(decimal fee, decimal quoted) => fee == quoted; public static decimal Short(decimal a, decimal b) => a - b; }",
+        ),
+        undetected,
+      ),
+      true,
+    );
+    assert.equal(matches(blockEntry("{ return ids; }"), undetected), false);
+  });
+
   it("calls an entry stale when it matches nothing in a file the run mutated, and skips other files", () => {
     const killed = mutant(
       1,
