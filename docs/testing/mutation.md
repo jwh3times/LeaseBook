@@ -174,7 +174,10 @@ shows the shape only, and claims nothing about that mutant:
 - `file` is the path from the repository root.
 - `mutator` is the mutator name exactly as the summary shows it.
 - `original` is the whole source line the mutant starts on, as it reads in the file. Whitespace runs
-  count as one space and the ends are trimmed, so indentation does not matter.
+  count as one space and the ends are trimmed, so indentation does not matter. Where that line alone
+  would name many mutants, such as a bare `{` that starts every block in the file, `original` can
+  instead be the whole span the mutant replaces, as the summary table's original column shows it,
+  joined onto one line.
 - `replacement` is the replacement text as the HTML report shows it, in full. The summary table
   shortens long replacements, so copy it from the report.
 - `reason` is required.
@@ -439,6 +442,7 @@ kills its last unexplained survivor.
 | The rest of Payments                                         |                 190 |                     33 | 87.1%: 219 killed, 4 timed out, 33 undetected, all explained   |
 | Accounting posting core (`Posting/`, `Features/Posting/`)    |                  92 |                      1 | 99.6%: 280 killed, 1 survived, explained, none not covered     |
 | Accounting ledger posting (`Features/LedgerPosting/`)        |                 109 |                      3 | 98.5%: 199 killed, 3 survived, explained, none not covered     |
+| Accounting refund checks, banking and reconciliation         |                 108 |                      4 | 97.7%: 173 killed, 4 survived, all explained, none not covered |
 
 The engines' 138 undetected mutants, taken from the hosted run on 2026-10-15, are all accounted
 for. `LeaseBook.Tests.Payments` grew from 164 tests to 273, among them 22 races (see
@@ -505,3 +509,30 @@ suite grew from 262 tests to 350 and runs in about 42 seconds. Of the three equi
 `> 0m` into `>= 0m` on a fee difference that is never zero where it is read, and two turn `Sum` into
 `Max` over a receipt's prepayment and owner-equity credits, of which the `PaymentReceived` template
 writes at most one each.
+
+The refund checks, the register's bank commands and reconciliation, `Features/Refunds/`,
+`Features/Banking/` and `Features/Reconciliation/`, had 122 undetected mutants in the first
+scheduled run. The ledger-posting tests killed ten of them in the shared refund helpers, which
+`ApplyPrepayment` and `VoidEntry` call, so 112 were left when this work began: 33 survived and 79
+were not covered. Only the integration suite sent the refund-check commands, and the reconciliation
+and clearing tests here called handlers directly, so no validator ran and the voids, statuses,
+history order and refusals went unchecked. New tests in `LeaseBook.Tests.Accounting` send the
+commands and queries through the real dispatcher. `RefundCheckTests` pins each validator rule and
+batch limit, the bucket a check draws on and the text it posts, the refundable balances offered,
+with a prepayment bucket capped at the tenant's total, the status each check reports and the entries
+left out of it, and the guarded void: what it accepts, refuses, posts and clears.
+`BankingCommandTests` pins a bank adjustment's rules and the event and default description of each
+kind, and the guards on clearing. `ReconciliationTests` gained the start rules, the refused state
+changes, the snapshot's period, a finalize with no declared actor, and the history's order and
+filter. An empty batch is sent over a disposed context, so only the short circuit that answers it
+without a query passes. Two races cover the locks: the bucket read in `PostRefundCheck`, and the
+void's own lock, without which a second void meets the first one's claim on the bank line and is
+refused as a cleared check rather than answered as already voided. Every mutant in
+`PostRefundCheck`'s handler is a compile error, because one of them leaves `chosen` unassigned and
+safe mode then drops the whole method, so that race and the bucket tests pin behavior this run
+cannot measure. The suite grew from 350 tests to 406 and runs in about 44 seconds. Of the four
+equivalents, one removes an early return in `ApplyClearances` whose fall-through returns the same
+distinct ids, one turns `Single` into `SingleOrDefault` on an aggregate that always returns one row,
+and two are in `GetRefundCheckStatuses`: a null guard in a projection EF translates to SQL, where
+the left-joined column is already null, and an `||` that reads every reversal in the organization
+although only the requested entries' reversals are looked up.

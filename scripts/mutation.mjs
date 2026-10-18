@@ -201,13 +201,17 @@ export function spanOf(lines, location) {
 /**
  * Whether an equivalents entry explains a mutant. Matched on content and never on Stryker's mutant
  * id or line number, which both shift whenever the file changes: the file, the mutator, the trimmed
- * text of the line the mutant starts on, and the replacement.
+ * text of the line the mutant starts on, and the replacement. The entry's text may instead be the
+ * whole span the mutant replaces, for a mutant whose first line alone, such as a bare `{`, would
+ * name every block in the file.
  */
 export function matches(entry, mutant) {
+  const original = normalise(entry.original);
   return (
     entry.file === mutant.file &&
     entry.mutator === mutant.mutator &&
-    normalise(entry.original) === normalise(mutant.line) &&
+    (original === normalise(mutant.line) ||
+      original === normalise(mutant.original)) &&
     normalise(entry.replacement) === normalise(mutant.replacement)
   );
 }

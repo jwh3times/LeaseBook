@@ -29,6 +29,34 @@
         "original": "var returned = equity.Sum(l => l.Credit!.Value.Amount);",
         "replacement": "equity.Max",
         "reason": "As for the prepayment sum above: only the PaymentReceived template posts a PaymentReceived entry, and it writes at most one owner-equity credit line, so each (owner, bank) group here holds one line, and Max and Sum of one amount are the same."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Accounting/Features/Banking/ApplyClearances.cs",
+        "mutator": "Block removal mutation",
+        "original": "{ return ids; }",
+        "replacement": "{}",
+        "reason": "The early `return ids;` in WithWholePayoutsAsync when the batch touches no payout. Without it the method copies ids into a set, adds nothing in the empty loop and returns the set's elements, which are the same ids: Handle has already made them distinct, so the set drops none, and Handle uses the array only as `= ANY(...)` in its clearing SQL, where order does not matter. The entry names the block's whole span, since its first line, a bare `{`, would match every block removal in this file."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Accounting/Features/Reconciliation/ReconciliationShared.cs",
+        "mutator": "Linq method mutation (Single() to SingleOrDefault())",
+        "original": "(await db.Database.SqlQuery<decimal>(",
+        "replacement": "(await db.Database.SqlQuery<decimal>( $\"\"\" SELECT COALESCE(SUM(COALESCE(jl.debit, 0) - COALESCE(jl.credit, 0)) FILTER (WHERE COALESCE(s.status, 'uncleared') IN ('cleared', 'reconciled')), 0) AS \"Value\" FROM journal_lines jl LEFT JOIN bank_line_status s ON s.journal_line_id = jl.id WHERE jl.bank_account_id = {bankAccountId} AND jl.account_class IN ('trust_bank', 'pm_operating_bank') AND jl.basis IN ('cash', 'both') \"\"\").ToListAsync(ct)).SingleOrDefault",
+        "reason": "The cleared-balance query is an aggregate with no GROUP BY, which Postgres answers with exactly one row whatever the WHERE clause and RLS leave to sum, the outer COALESCE turning an empty sum into 0. Single and SingleOrDefault differ only for no row or more than one."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Accounting/Features/Refunds/GetRefundCheckStatuses.cs",
+        "mutator": "Conditional (false) mutation",
+        "original": "select new { line.EntryId, Status = state == null ? (BankLineStatus?)null : state.Status })",
+        "replacement": "(false?(BankLineStatus?)null :state.Status )",
+        "reason": "The projection is translated to SQL and never run in memory: EF reads state.Status as the left-joined bank_line_status.status column, which is NULL for a line with no status row, into the BankLineStatus? the conditional is typed as. The bare member access therefore reads null exactly where the guard does, and the stored status everywhere else. RefundCheckTests asks for an outstanding check with no status row and gets \"outstanding\" under the mutant as well."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Accounting/Features/Refunds/GetRefundCheckStatuses.cs",
+        "mutator": "Logical mutation",
+        "original": ".Where(e => e.ReversesEntryId != null && ids.Contains(e.ReversesEntryId.Value))",
+        "replacement": "e.ReversesEntryId != null || ids.Contains(e.ReversesEntryId.Value)",
+        "reason": "Every row the second operand admits, the first admits too, so the mutant reads every reversal in the organization rather than those of the requested entries. The extra rows are never looked up: the result is built from the requested refund checks' lines, and the map is read only by their entry ids, which find the same reversal either way. Nor can they make ToDictionaryAsync fail on a repeated key: the unique index ix_journal_entries_org_id_reverses_entry_id allows one reversal per entry in an organization, and RLS confines the read to one organization."
       }
     ]
   },
