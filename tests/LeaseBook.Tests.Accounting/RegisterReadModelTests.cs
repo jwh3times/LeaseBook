@@ -80,10 +80,39 @@ public sealed class RegisterReadModelTests(PostgresFixture fixture)
         withdrawals.Rows.Count.ShouldBe(1); // 8200
         withdrawals.Rows[0].Withdrawal.ShouldBe(8200m);
 
-        var firstPage = await Query(scope, new GetBankRegisterHandler(scope.Db),
-            new GetBankRegister(scope.TrustBankId, Page: 1, PageSize: 2), ct);
+        var firstPage = await Query(scope, new GetBankRegister(scope.TrustBankId, Page: 1, PageSize: 2), ct);
         firstPage.Rows.Count.ShouldBe(2);
         firstPage.Total.ShouldBe(3); // window count spans the whole filtered set, not the page
+
+        // Newest first, so the second page of two holds only the oldest line, the 10000 contribution.
+        var secondPage = await Query(scope, new GetBankRegister(scope.TrustBankId, Page: 2, PageSize: 2), ct);
+        secondPage.Rows.Select(r => r.Deposit).ShouldBe([10000m]);
+        secondPage.Total.ShouldBe(3);
+        firstPage.Rows.Select(r => (r.Deposit, r.Withdrawal)).ShouldBe([(null, 8200m), (1450m, null)]);
+    }
+
+    [Fact]
+    public async Task Register_search_matches_the_trimmed_text_and_a_blank_search_matches_everything()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var scope = await ProvisionedScopeAsync(
+            fixture, ct, owners: [_owner], tenants: [_tenant], properties: [_property]);
+
+        await PostScenarioAsync(scope, ct);
+
+        // Untrimmed, " DRAW " would need the spaces around it; trimmed it matches "draw" alone.
+        var found = await Query(scope, new GetBankRegister(scope.TrustBankId, Search: " DRAW "), ct);
+        found.Rows.Select(r => (r.Description, r.Withdrawal)).ShouldBe([("draw", (decimal?)8200m)]);
+        found.Total.ShouldBe(1);
+        found.Totals.DepositsInView.ShouldBe(0m);
+        found.Totals.WithdrawalsInView.ShouldBe(8200m);
+        found.Totals.Book.ShouldBe(3250m); // the balance strip ignores the view filters
+
+        foreach (var blank in new[] { null, "", "   " })
+        {
+            var all = await Query(scope, new GetBankRegister(scope.TrustBankId, Search: blank), ct);
+            all.Total.ShouldBe(3, $"search '{blank}'");
+        }
     }
 
     [Fact]
@@ -133,6 +162,9 @@ public sealed class RegisterReadModelTests(PostgresFixture fixture)
                 VALUES ({match.Id}, {scope.OrgId}, {statusText}, now(), now(), now())
                 """, ct);
         }, ct);
+
+    private static Task<RegisterResponse> Query(OrgScope scope, GetBankRegister query, CancellationToken ct) =>
+        Query(scope, new GetBankRegisterHandler(scope.Db), query, ct);
 
     private static async Task<TResult> Query<TQuery, TResult>(
         OrgScope scope, IQueryHandler<TQuery, TResult> handler, TQuery query, CancellationToken ct)

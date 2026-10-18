@@ -177,6 +177,77 @@ public sealed class DelinquencyAllocationTests(PostgresFixture fixture)
     }
 
     [Fact]
+    public async Task Aging_buckets_a_charge_due_today_as_current_and_one_thirty_days_late_as_one_to_thirty()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (tenantId, otherTenantId) = (UuidV7.NewId(), UuidV7.NewId());
+        var propertyId = UuidV7.NewId();
+        var ownerId = UuidV7.NewId();
+        await using var scope = await AccountingTestHarness.ProvisionedScopeAsync(
+            fixture, ct, owners: [ownerId], tenants: [tenantId, otherTenantId], properties: [propertyId]);
+        var asOf = new DateOnly(2026, 3, 3);
+
+        DelinquencyResponse result = null!;
+        await scope.RunAsync(async () =>
+        {
+            var events = AccountingTestHarness.Events(scope);
+            // 30 days before the report date: the last day of 1–30.
+            await events.PostAsync(new RentCharged(
+                tenantId, propertyId, ownerId, null, new Money(200m), new DateOnly(2026, 2, 1), "February rent"), ct);
+            // Due on the report date: age 0, still current.
+            await events.PostAsync(new RentCharged(
+                tenantId, propertyId, ownerId, null, new Money(100m), asOf, "Parking"), ct);
+            // Charged before the report date but not due until after it.
+            await events.PostAsync(new RentCharged(
+                tenantId, propertyId, ownerId, null, new Money(40m), new DateOnly(2026, 3, 1), "Storage",
+                DueDate: new DateOnly(2026, 3, 10)), ct);
+            await events.PostAsync(new RentCharged(
+                otherTenantId, propertyId, ownerId, null, new Money(70m), new DateOnly(2026, 2, 15), "February rent"), ct);
+
+            result = await new GetDelinquencyAgingHandler(scope.Db).Handle(new GetDelinquencyAging(asOf), ct);
+        }, ct);
+
+        // One row per tenant, in tenant-id order.
+        result.Rows.Select(r => r.TenantId).ShouldBe(new[] { tenantId, otherTenantId }.Order());
+        result.Rows.Single(r => r.TenantId == tenantId)
+            .ShouldBe(new DelinquencyRow(tenantId, 140m, 200m, 0m, 0m, 0m, 340m, 0m, 30));
+        result.Rows.Single(r => r.TenantId == otherTenantId)
+            .ShouldBe(new DelinquencyRow(otherTenantId, 0m, 70m, 0m, 0m, 0m, 70m, 0m, 16));
+    }
+
+    [Fact]
+    public async Task Rent_obligations_are_the_open_rent_charges_named_and_nothing_else()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var tenantId = UuidV7.NewId();
+        var propertyId = UuidV7.NewId();
+        var ownerId = UuidV7.NewId();
+        await using var scope = await AccountingTestHarness.ProvisionedScopeAsync(
+            fixture, ct, owners: [ownerId], tenants: [tenantId], properties: [propertyId]);
+
+        RentObligationEntriesResponse result = null!;
+        Guid named = default;
+        await scope.RunAsync(async () =>
+        {
+            var events = AccountingTestHarness.Events(scope);
+            named = await events.PostAsync(new RentCharged(
+                tenantId, propertyId, ownerId, null, new Money(100m), new DateOnly(2026, 1, 1), "January rent", "rent:a"), ct);
+            // Open rent that was not asked for.
+            await events.PostAsync(new RentCharged(
+                tenantId, propertyId, ownerId, null, new Money(100m), new DateOnly(2026, 1, 1), "January rent", "rent:b"), ct);
+            // Asked for and open, but a fee rather than rent.
+            await events.PostAsync(new FeeCharged(
+                tenantId, propertyId, ownerId, null, new Money(25m), new DateOnly(2026, 1, 6), FeeKind.Late,
+                "Late fee", "fee:a"), ct);
+
+            result = await new GetRentObligationEntriesHandler(scope.Db).Handle(
+                new GetRentObligationEntries(["rent:a", "fee:a"], new DateOnly(2026, 1, 10)), ct);
+        }, ct);
+
+        result.Rows.ShouldBe([new RentObligationEntryRow(named, "rent:a", tenantId)]);
+    }
+
+    [Fact]
     public async Task General_credit_beyond_open_charges_is_unapplied_not_negative_aging()
     {
         var ct = TestContext.Current.CancellationToken;

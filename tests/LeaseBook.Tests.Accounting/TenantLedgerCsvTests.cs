@@ -58,4 +58,8 @@ public sealed class TenantLedgerCsvTests
         csv.ShouldContain("'=HYPERLINK");  // the staff-only note is free text too (#468)
         csv.ShouldNotContain(",=HYPERLINK");
     }
+
+    [Fact]
+    public void Write_refuses_a_missing_ledger_by_name() =>
+        Should.Throw<ArgumentNullException>(() => TenantLedgerCsv.Write(null!)).ParamName.ShouldBe("ledger");
 }
