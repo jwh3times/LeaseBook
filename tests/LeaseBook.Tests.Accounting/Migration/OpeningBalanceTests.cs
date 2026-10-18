@@ -46,4 +46,28 @@ public sealed class OpeningBalanceTests(PostgresFixture fixture)
         lines.ShouldContain(l => l.Code == AccountCodes.OwnerEquity && l.Credit == 13_665.50m && l.OwnerId == owner);
         lines.ShouldContain(l => l.Code == AccountCodes.MigrationClearing && l.Debit == 13_665.50m);
     }
+
+    [Theory]
+    [InlineData("Carried from the seller's ledger", "Carried from the seller's ledger")]
+    [InlineData(null, "Opening balance")]
+    public async Task Opening_position_is_stamped_as_an_opening_balance_described_by_its_memo(string? memo, string description)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var owner = UuidV7.NewId();
+        await using var scope = await AccountingTestHarness.ProvisionedScopeAsync(fixture, ct, owners: [owner]);
+        var balanceForward = (IBalanceForward)AccountingTestHarness.Events(scope);
+
+        JournalEntry? entry = null;
+        await scope.RunAsync(async () =>
+        {
+            var id = await balanceForward.PostOpeningPositionAsync(new OpeningPositionRequest(
+                AccountCodes.OwnerEquity, Debit: null, Credit: new Money(500m), EntryBasis.Both,
+                new DateOnly(2026, 6, 30), "opening:owner-equity=" + owner,
+                OwnerId: owner, BankAccountId: scope.TrustBankId, Memo: memo), ct);
+            entry = await scope.Db.Set<JournalEntry>().AsNoTracking().SingleAsync(e => e.Id == id, ct);
+        }, ct);
+
+        (entry!.EventType, entry.Description, entry.SourceRef)
+            .ShouldBe(("OpeningBalance", (string?)description, "opening:owner-equity=" + owner));
+    }
 }

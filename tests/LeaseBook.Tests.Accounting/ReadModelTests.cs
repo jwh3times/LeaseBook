@@ -111,6 +111,44 @@ public sealed class ReadModelTests(PostgresFixture fixture)
             "the June payment counts when cash was received; the owner contribution does not");
     }
 
+    [Fact]
+    public async Task Tenant_ledger_names_each_category_and_leaves_the_security_deposit_to_its_register()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var scope = await ProvisionedScopeAsync(
+            fixture, ct, owners: [Owner], tenants: [Tenant], properties: [Property]);
+
+        await scope.RunAsync(async () =>
+        {
+            var events = Events(scope);
+            await events.PostAsync(new RentCharged(Tenant, Property, Owner, null, new Money(1000m), Feb(1), "rent"), ct);
+            await events.PostAsync(new FeeCharged(Tenant, Property, Owner, null, new Money(25m), Feb(2), FeeKind.Other, "key"), ct);
+            await events.PostAsync(new FeeCharged(Tenant, Property, Owner, null, new Money(50m), Feb(3), FeeKind.Late, "late"), ct);
+            await events.PostAsync(new FeeCharged(
+                Tenant, Property, Owner, null, new Money(85m), Feb(4), FeeKind.MaintenanceRecharge, "repair"), ct);
+            await events.PostAsync(new CreditIssued(Tenant, Property, Owner, new Money(10m), Feb(5), "goodwill"), ct);
+            await events.PostAsync(new PaymentReceived(
+                Tenant, Property, Owner, new Money(1150m), Feb(6), PaymentMethod.Ach, scope.TrustBankId, "pay"), ct);
+            await events.PostAsync(new PrepaymentReceived(
+                Tenant, Property, Owner, new Money(300m), Feb(7), scope.TrustBankId, "March early"), ct);
+            await events.PostAsync(new DepositCollected(Tenant, Property, Owner, new Money(500m), Feb(8), scope.DepositBankId, "deposit"), ct);
+        }, ct);
+
+        var ledger = await Query(scope, new GetTenantLedgerHandler(scope.Db), new GetTenantLedger(Tenant), ct);
+
+        ledger.Rows.Select(r => (r.Category, r.Charge, r.Payment, r.Balance)).ShouldBe(
+        [
+            ("Rent", 1000m, 0m, 1000m),
+            ("Fee", 25m, 0m, 1025m),
+            ("Late Fee", 50m, 0m, 1075m),
+            ("Maintenance", 85m, 0m, 1160m),
+            ("Credit", 0m, 10m, 1150m),
+            ("Payment", 0m, 1150m, 0m),
+            ("Prepayment", 0m, 300m, -300m),
+        ]);
+        ledger.Balance.ShouldBe(-300m);
+    }
+
     private async Task PostScenarioAsync(OrgScope scope, CancellationToken ct)
     {
         await scope.RunAsync(async () =>

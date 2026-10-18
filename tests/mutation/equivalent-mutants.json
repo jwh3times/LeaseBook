@@ -1,10 +1,130 @@
 {
   "accounting": {
     "gate": false,
-    "equivalents": []
+    "equivalents": [
+      {
+        "file": "src/LeaseBook.Modules.Accounting/Posting/PostingService.cs",
+        "mutator": "Null coalescing mutation (left to right)",
+        "original": "var amount = (line.Debit ?? line.Credit)!.Value;",
+        "replacement": "line.Credit?? line.Debit",
+        "reason": "Reached only past the hasDebit == hasCredit check, which throws unless exactly one of Debit and Credit is set, so one is null and the other is not, and either order of ?? yields the one that is set. amount is read only by the positive-amount check below it and that check's exception."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Accounting/Features/LedgerPosting/PostPaymentSettlement.cs",
+        "mutator": "Equality mutation",
+        "original": "var shortfall = line.FeeDifference > 0m;",
+        "replacement": "line.FeeDifference >= 0m",
+        "reason": "PostFeeDifferenceAsync is called only from the two loops in Handle, which pass it the lines with FeeDifference < 0m and the lines with FeeDifference > 0m. A line with a fee difference of zero never reaches it, and for every other value > 0m and >= 0m agree."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Accounting/Features/LedgerPosting/ReturnTenantPayment.cs",
+        "mutator": "Linq method mutation (Sum() to Max())",
+        "original": "if (floor < prepaid.Sum(l => l.Credit!.Value.Amount))",
+        "replacement": "prepaid.Max",
+        "reason": "The receipt is an entry whose event type is PaymentReceived, and only the PaymentReceived template in AccountingEventService posts that event type (IPostingService is internal, visible outside the module only to the two test projects, and the template has written that event type since the commit that created it). The template writes at most one tenant_prepayments credit line, so each (tenant, bank) group here holds one line, and Max and Sum of one amount are the same."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Accounting/Features/LedgerPosting/ReturnTenantPayment.cs",
+        "mutator": "Linq method mutation (Sum() to Max())",
+        "original": "var returned = equity.Sum(l => l.Credit!.Value.Amount);",
+        "replacement": "equity.Max",
+        "reason": "As for the prepayment sum above: only the PaymentReceived template posts a PaymentReceived entry, and it writes at most one owner-equity credit line, so each (owner, bank) group here holds one line, and Max and Sum of one amount are the same."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Accounting/Features/Banking/ApplyClearances.cs",
+        "mutator": "Block removal mutation",
+        "original": "{ return ids; }",
+        "replacement": "{}",
+        "reason": "The early `return ids;` in WithWholePayoutsAsync when the batch touches no payout. Without it the method copies ids into a set, adds nothing in the empty loop and returns the set's elements, which are the same ids: Handle has already made them distinct, so the set drops none, and Handle uses the array only as `= ANY(...)` in its clearing SQL, where order does not matter. The entry names the block's whole span, since its first line, a bare `{`, would match every block removal in this file."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Accounting/Features/Reconciliation/ReconciliationShared.cs",
+        "mutator": "Linq method mutation (Single() to SingleOrDefault())",
+        "original": "(await db.Database.SqlQuery<decimal>(",
+        "replacement": "(await db.Database.SqlQuery<decimal>( $\"\"\" SELECT COALESCE(SUM(COALESCE(jl.debit, 0) - COALESCE(jl.credit, 0)) FILTER (WHERE COALESCE(s.status, 'uncleared') IN ('cleared', 'reconciled')), 0) AS \"Value\" FROM journal_lines jl LEFT JOIN bank_line_status s ON s.journal_line_id = jl.id WHERE jl.bank_account_id = {bankAccountId} AND jl.account_class IN ('trust_bank', 'pm_operating_bank') AND jl.basis IN ('cash', 'both') \"\"\").ToListAsync(ct)).SingleOrDefault",
+        "reason": "The cleared-balance query is an aggregate with no GROUP BY, which Postgres answers with exactly one row whatever the WHERE clause and RLS leave to sum, the outer COALESCE turning an empty sum into 0. Single and SingleOrDefault differ only for no row or more than one."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Accounting/Features/Refunds/GetRefundCheckStatuses.cs",
+        "mutator": "Conditional (false) mutation",
+        "original": "select new { line.EntryId, Status = state == null ? (BankLineStatus?)null : state.Status })",
+        "replacement": "(false?(BankLineStatus?)null :state.Status )",
+        "reason": "The projection is translated to SQL and never run in memory: EF reads state.Status as the left-joined bank_line_status.status column, which is NULL for a line with no status row, into the BankLineStatus? the conditional is typed as. The bare member access therefore reads null exactly where the guard does, and the stored status everywhere else. RefundCheckTests asks for an outstanding check with no status row and gets \"outstanding\" under the mutant as well."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Accounting/Features/Refunds/GetRefundCheckStatuses.cs",
+        "mutator": "Logical mutation",
+        "original": ".Where(e => e.ReversesEntryId != null && ids.Contains(e.ReversesEntryId.Value))",
+        "replacement": "e.ReversesEntryId != null || ids.Contains(e.ReversesEntryId.Value)",
+        "reason": "Every row the second operand admits, the first admits too, so the mutant reads every reversal in the organization rather than those of the requested entries. The extra rows are never looked up: the result is built from the requested refund checks' lines, and the map is read only by their entry ids, which find the same reversal either way. Nor can they make ToDictionaryAsync fail on a repeated key: the unique index ix_journal_entries_org_id_reverses_entry_id allows one reversal per entry in an organization, and RLS confines the read to one organization."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Accounting/Features/Ledgers/GetBankRegister.cs",
+        "mutator": "Linq method mutation (Single() to SingleOrDefault())",
+        "original": "var totals = (await db.Database.SqlQuery<RegisterTotalsSqlRow>(",
+        "replacement": "(await db.Database.SqlQuery<RegisterTotalsSqlRow>( $\"\"\" SELECT COALESCE(SUM(COALESCE(jl.debit, 0) - COALESCE(jl.credit, 0)), 0) AS book, COALESCE(SUM(COALESCE(jl.debit, 0) - COALESCE(jl.credit, 0)) FILTER (WHERE COALESCE(s.status, 'uncleared') IN ('cleared', 'reconciled')), 0) AS cleared, COUNT(*) FILTER (WHERE COALESCE(s.status, 'uncleared') = 'uncleared')::int AS uncleared_count FROM journal_lines jl LEFT JOIN bank_line_status s ON s.journal_line_id = jl.id WHERE jl.bank_account_id = {query.BankAccountId} AND jl.account_class IN ('trust_bank', 'pm_operating_bank') AND jl.basis IN ('cash', 'both') \"\"\").ToListAsync(ct)).SingleOrDefault",
+        "reason": "The account-totals query is an aggregate with no GROUP BY, which Postgres answers with exactly one row whatever the WHERE clause and RLS leave to sum (an empty set gives the COALESCE zeros and a count of 0). Single and SingleOrDefault differ only for no row or more than one."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Accounting/Features/Ledgers/GetDelinquencyAging.cs",
+        "mutator": "Equality mutation",
+        "original": "if (ageDays > oldestAgeDays) oldestAgeDays = ageDays;",
+        "replacement": "ageDays >= oldestAgeDays",
+        "reason": "The two differ only when ageDays equals oldestAgeDays, and then the assignment writes the value the variable already holds. Nothing else happens in the branch."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Accounting/Features/Ledgers/GetTenantLedger.cs",
+        "mutator": "String mutation",
+        "original": "\"DepositCollected\" => \"Security Deposit\",",
+        "replacement": "\"\"",
+        "reason": "Covers both mutants on the line, the event type emptied and the label emptied. The ledger reads only tenant_receivable and tenant_prepayments lines, and the one place that writes the DepositCollected event type, PostDepositCollectedAsync in AccountingEventService (every PostEntryRequest in src/ names a literal event type or EventTypes.EntryVoided, and IPostingService is internal, visible outside the module only to the two test projects), posts a trust-bank debit and a security_deposits_held credit, so no ledger row is ever a DepositCollected entry, and a void of one is an EntryVoided row on the same accounts. No entry has the event type \"\" either, so the emptied pattern matches nothing the original arm did not, and the emptied label is never returned."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Accounting/Features/Ledgers/GetTenantPaymentsReceived.cs",
+        "mutator": "Conditional (true) mutation",
+        "original": "return rows.Count > 0 ? rows[0] : 0m;",
+        "replacement": "(true?rows[0] :0m)",
+        "reason": "The query is an aggregate with no GROUP BY, so Postgres returns exactly one row, its COALESCE making an empty sum 0. rows.Count is always 1, and the condition is always true."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Accounting/Features/Ledgers/GetTenantPaymentsReceived.cs",
+        "mutator": "Equality mutation",
+        "original": "return rows.Count > 0 ? rows[0] : 0m;",
+        "replacement": "rows.Count >= 0",
+        "reason": "As for the conditional above: the aggregate always returns exactly one row, so rows.Count is 1 and > 0 and >= 0 agree."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Accounting/Features/Ledgers/ReceivableAllocationReader.cs",
+        "mutator": "Linq method mutation (First() to FirstOrDefault())",
+        "original": ".ToDictionary(group => group.Key, group => group.First().UnappliedCredit);",
+        "replacement": "group.FirstOrDefault",
+        "reason": "GroupBy yields only groups with at least one element, so First and FirstOrDefault return the same row and FirstOrDefault never reaches its default."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Accounting/Features/Statements/GetProspectiveOwnerEquityLines.cs",
+        "mutator": "Linq method mutation (Single() to SingleOrDefault())",
+        "original": "var line = entry.Lines.Single(line => line.AccountCode == AccountCodes.OwnerEquity);",
+        "replacement": "entry.Lines.SingleOrDefault",
+        "reason": "entry comes from RunEventEntryBuilder.Build, which throws for any event other than its four templates (RentCharged, FeeCharged, ManagementFeeAssessed, OwnerDisbursed), and each of those writes exactly one owner_equity line. Single and SingleOrDefault differ only for no match or more than one."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Accounting/Features/Statements/GetProspectiveOwnerEquityLines.cs",
+        "mutator": "String mutation",
+        "original": "line.OwnerId ?? throw new InvalidOperationException(\"A run event's owner-equity line must name an owner.\"),",
+        "replacement": "\"\"",
+        "reason": "The message of a throw that cannot run: each of RunEventEntryBuilder's four templates sets its owner_equity line's OwnerId from the event's OwnerId, a non-nullable Guid on all four records, so line.OwnerId is never null."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Accounting/Features/Statements/GetProspectiveOwnerEquityLines.cs",
+        "mutator": "String mutation",
+        "original": "EntryBasis.Cash => \"cash\",",
+        "replacement": "\"\"",
+        "reason": "BasisName is called only on the owner_equity line of a RunEventEntryBuilder template, and those are accrual (RentCharged, FeeCharged) or both (ManagementFeeAssessed, OwnerDisbursed), never cash, so this arm never runs."
+      }
+    ]
   },
   "payments": {
-    "gate": false,
+    "gate": true,
     "equivalents": [
       {
         "file": "src/LeaseBook.Modules.Payments/Processing/PaymentEngine.cs",
@@ -54,6 +174,244 @@
         "original": ".Where(x => x.Kind == \"Return\" && operationIds.Contains(x.OperationId))",
         "replacement": "\"\"",
         "reason": "With it no payment counts as returned, and the status test beside it in Check refuses every payment that has a posted return anyway. Posting a return sets Returned in the same transaction. Afterwards CompleteAsync leaves such a payment Returned, or in review under evidence_after_return, conflicting_evidence or unsupported_settlement, never Settled and never under a return_ reason. FailAsync and RetryAsync leave it alone because it has a receipt, and closing a review makes it ReviewClosed. Only the two engines write a payment's status."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Payments/Domain/RefundCheckRecords.cs",
+        "mutator": "String mutation",
+        "original": "public string Source { get; set; } = \"\";",
+        "replacement": "\"Stryker was here!\"",
+        "reason": "The default is always overwritten before anything reads it. A RefundCheck is made in two places only: IssueRefundCheckHandler, whose initializer sets Source with every other field, and EF Core, which sets it from a NOT NULL column. No code reads Source on any other instance, so the default reaches no row, view or log."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Payments/Domain/RefundCheckRecords.cs",
+        "mutator": "String mutation",
+        "original": "public string PayeeName { get; set; } = \"\";",
+        "replacement": "\"Stryker was here!\"",
+        "reason": "The default is always overwritten before anything reads it. A RefundCheck is made in two places only: IssueRefundCheckHandler, whose initializer sets PayeeName with every other field, and EF Core, which sets it from a NOT NULL column. No code reads PayeeName on any other instance, so the default reaches no row, view or log."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Payments/Domain/RefundCheckRecords.cs",
+        "mutator": "String mutation",
+        "original": "public string AddressLine1 { get; set; } = \"\";",
+        "replacement": "\"Stryker was here!\"",
+        "reason": "The default is always overwritten before anything reads it. A RefundCheck is made in two places only: IssueRefundCheckHandler, whose initializer sets AddressLine1 with every other field, and EF Core, which sets it from a NOT NULL column. No code reads AddressLine1 on any other instance, so the default reaches no row, view or log."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Payments/Domain/RefundCheckRecords.cs",
+        "mutator": "String mutation",
+        "original": "public string City { get; set; } = \"\";",
+        "replacement": "\"Stryker was here!\"",
+        "reason": "The default is always overwritten before anything reads it. A RefundCheck is made in two places only: IssueRefundCheckHandler, whose initializer sets City with every other field, and EF Core, which sets it from a NOT NULL column. No code reads City on any other instance, so the default reaches no row, view or log."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Payments/Domain/RefundCheckRecords.cs",
+        "mutator": "String mutation",
+        "original": "public string State { get; set; } = \"\";",
+        "replacement": "\"Stryker was here!\"",
+        "reason": "The default is always overwritten before anything reads it. A RefundCheck is made in two places only: IssueRefundCheckHandler, whose initializer sets State with every other field, and EF Core, which sets it from a NOT NULL column. No code reads State on any other instance, so the default reaches no row, view or log."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Payments/Domain/RefundCheckRecords.cs",
+        "mutator": "String mutation",
+        "original": "public string PostalCode { get; set; } = \"\";",
+        "replacement": "\"Stryker was here!\"",
+        "reason": "The default is always overwritten before anything reads it. A RefundCheck is made in two places only: IssueRefundCheckHandler, whose initializer sets PostalCode with every other field, and EF Core, which sets it from a NOT NULL column. No code reads PostalCode on any other instance, so the default reaches no row, view or log."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Payments/Domain/MicrLine.cs",
+        "mutator": "AddAssignmentExpression to SubtractAssignmentExpression mutation",
+        "original": "sum += (value[i] - '0') * weights[i];",
+        "replacement": "sum -= (value[i] - '0') * weights[i]",
+        "reason": "Subtracting each weighted digit gives the negated sum, and a whole number is a multiple of ten exactly when its negation is (in C#, -30 % 10 is 0 and -27 % 10 is -7, never 0), so the check digit test answers the same for every input. The sum is read nowhere else."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Payments/Features/RefundChecks/IssueRefundCheck.cs",
+        "mutator": "Statement mutation",
+        "original": "throw RefundCheckConflictException.NumberTaken();",
+        "replacement": ";",
+        "reason": "Without this throw, a number already used on the bank goes on to SaveChanges, where the unique index on (org_id, bank_account_id, check_number) refuses the insert and the catch below throws the same NumberTaken, with the same code and message, in the same transaction, which rolls back the posted refund as before. The only difference is one insert the database rejects. The text also matches the catch's own throw, which is not equivalent: RefundCheckConcurrencyTests reaches it with a rival row held uncommitted, and kills its removal."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Payments/Domain/PaymentRecords.cs",
+        "mutator": "String mutation",
+        "original": "public string Account { get; set; } = \"\";",
+        "replacement": "\"Stryker was here!\"",
+        "reason": "Matches three lines, each a default that is always overwritten before anything reads it. PaymentFixture.Account is set by PaymentFixtureBootstrap.SeedAsync, the only code that makes a fixture; PaymentOperation.Account by PaymentEngine.SubmitAsync, the only code that makes a payment; PaymentObservation.Account by PaymentEngine.ReceiveAsync, the only code that stores a notice. Each initializer sets it with the other fields. EF Core sets it from a NOT NULL column on every row it reads. No code reads it on any other instance, so the default reaches no row, view or log."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Payments/Domain/PaymentRecords.cs",
+        "mutator": "String mutation",
+        "original": "public string Currency { get; set; } = \"USD\";",
+        "replacement": "\"\"",
+        "reason": "Matches two lines, each a default that is always overwritten before anything reads it: PaymentOperation.Currency, which PaymentEngine.SubmitAsync sets from the request (the only code that makes a payment), and PaymentObservation.Currency, which PaymentEngine.ReceiveAsync sets from the notice (the only code that stores one). EF Core sets it from a NOT NULL column on every row it reads. No code reads it on any other instance, so the default reaches no row, view or log."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Payments/Domain/PaymentRecords.cs",
+        "mutator": "String mutation",
+        "original": "public string Fingerprint { get; set; } = \"\";",
+        "replacement": "\"Stryker was here!\"",
+        "reason": "Matches three lines, each a default that is always overwritten before anything reads it: PaymentOperation.Fingerprint, set by PaymentEngine.SubmitAsync; PaymentObservation.Fingerprint, set by PaymentEngine.ReceiveAsync; and SimulatedCollection.Fingerprint, set by the host's SimulatedProcessor when it records a collection. Each is the only code that makes its row. EF Core sets it from a NOT NULL column on every row it reads. No code reads it on any other instance, so the default reaches no row, view or log."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Payments/Domain/PaymentRecords.cs",
+        "mutator": "String mutation",
+        "original": "public string EventId { get; set; } = \"\";",
+        "replacement": "\"Stryker was here!\"",
+        "reason": "PaymentObservation.EventId is always overwritten before anything reads it: PaymentEngine.ReceiveAsync, the only code that stores a notice, sets it with every other field. EF Core sets it from a NOT NULL column on every row it reads. No code reads it on any other instance, so the default reaches no row, view or log."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Payments/Domain/PaymentRecords.cs",
+        "mutator": "String mutation",
+        "original": "public string ProviderId { get; set; } = \"\";",
+        "replacement": "\"Stryker was here!\"",
+        "reason": "Matches two lines, each a default that is always overwritten before anything reads it: PaymentObservation.ProviderId, set by PaymentEngine.ReceiveAsync, the only code that stores a notice, and SimulatedCollection.ProviderId, set by the host's SimulatedProcessor, the only code that records a collection. EF Core sets it from a NOT NULL column on every row it reads. No code reads it on any other instance, so the default reaches no row, view or log."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Payments/Domain/PaymentRecords.cs",
+        "mutator": "String mutation",
+        "original": "public string Mode { get; set; } = \"Simulation\";",
+        "replacement": "\"\"",
+        "reason": "PaymentObservation.Mode is always overwritten before anything reads it: PaymentEngine.ReceiveAsync, the only code that stores a notice, sets it from the notice, which it has already held to the binding's mode. EF Core sets it from a NOT NULL column on every row it reads. No code reads it on any other instance, so the default reaches no row, view or log."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Payments/Domain/PaymentRecords.cs",
+        "mutator": "String mutation",
+        "original": "public string Kind { get; set; } = \"\";",
+        "replacement": "\"Stryker was here!\"",
+        "reason": "PaymentObservation.Kind is always overwritten before anything reads it: PaymentEngine.ReceiveAsync, the only code that stores a notice, sets it to the notice's kind or to the conflict kind. EF Core sets it from a NOT NULL column on every row it reads. No code reads it on any other instance, so the default reaches no row, view or log."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Payments/Domain/PaymentRecords.cs",
+        "mutator": "String mutation",
+        "original": "public string EvidenceId { get; set; } = \"\";",
+        "replacement": "\"Stryker was here!\"",
+        "reason": "PaymentObservation.EvidenceId is always overwritten before anything reads it: PaymentEngine.ReceiveAsync, the only code that stores a notice, sets it with every other field, an empty string included when the notice carries no evidence. EF Core sets it from a NOT NULL column on every row it reads. No code reads it on any other instance, so the default reaches no row, view or log."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Payments/Domain/PaymentRecords.cs",
+        "mutator": "String mutation",
+        "original": "public string PayoutId { get; set; } = \"\";",
+        "replacement": "\"Stryker was here!\"",
+        "reason": "PaymentObservation.PayoutId is always overwritten before anything reads it: PaymentEngine.ReceiveAsync, the only code that stores a notice, sets it with every other field. EF Core sets it from a NOT NULL column on every row it reads. No code reads it on any other instance, so the default reaches no row, view or log."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Payments/Domain/SettlementRecords.cs",
+        "mutator": "String mutation",
+        "original": "public string Account { get; set; } = \"\";",
+        "replacement": "\"Stryker was here!\"",
+        "reason": "PaymentSettlement.Account is always overwritten before anything reads it. A payout is made in two places only, SettlementEngine.ReceiveAsync and SettlementEngine.ReceivePayoutAsync, and both set it from the evidence with every other field. EF Core sets it from a NOT NULL column on every row it reads. No code reads it on any other instance, so the default reaches no row, view or log."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Payments/Domain/SettlementRecords.cs",
+        "mutator": "String mutation",
+        "original": "public string Mode { get; set; } = \"Simulation\";",
+        "replacement": "\"\"",
+        "reason": "PaymentSettlement.Mode is always overwritten before anything reads it. A payout is made in two places only, SettlementEngine.ReceiveAsync and SettlementEngine.ReceivePayoutAsync, and both set it from the evidence, which they have already held to the binding's mode. The column's own default of Simulation is never used either, since EF always sends the value. EF Core sets it from a NOT NULL column on every row it reads. No code reads it on any other instance, so the default reaches no row, view or log."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Payments/Domain/SettlementRecords.cs",
+        "mutator": "String mutation",
+        "original": "public string PayoutId { get; set; } = \"\";",
+        "replacement": "\"Stryker was here!\"",
+        "reason": "PaymentSettlement.PayoutId is always overwritten before anything reads it. A payout is made in two places only, SettlementEngine.ReceiveAsync and SettlementEngine.ReceivePayoutAsync, and both set it from the evidence with every other field. EF Core sets it from a NOT NULL column on every row it reads. No code reads it on any other instance, so the default reaches no row, view or log."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Payments/Domain/SettlementRecords.cs",
+        "mutator": "String mutation",
+        "original": "public string Currency { get; set; } = \"USD\";",
+        "replacement": "\"\"",
+        "reason": "Matches two lines, each a default that is always overwritten before anything reads it. PaymentSettlement.Currency is set by both places that make a payout, SettlementEngine.ReceiveAsync and SettlementEngine.ReceivePayoutAsync; PaymentSettlementItem.Currency by SettlementEngine.AddAsync, the only code that makes a line, from the processor's line. EF Core sets it from a NOT NULL column on every row it reads. No code reads it on any other instance, so the default reaches no row, view or log."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Payments/Domain/SettlementRecords.cs",
+        "mutator": "String mutation",
+        "original": "public string Fingerprint { get; set; } = \"\";",
+        "replacement": "\"Stryker was here!\"",
+        "reason": "PaymentSettlement.Fingerprint is always overwritten before anything reads it. A payout is made in two places only, SettlementEngine.ReceiveAsync and SettlementEngine.ReceivePayoutAsync, and both set it with every other field. EF Core sets it from a NOT NULL column on every row it reads. No code reads it on any other instance, so the default reaches no row, view or log."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Payments/Domain/SettlementRecords.cs",
+        "mutator": "String mutation",
+        "original": "public string Item { get; set; } = \"\";",
+        "replacement": "\"Stryker was here!\"",
+        "reason": "PaymentSettlementItem.Item is always overwritten before anything reads it: SettlementEngine.AddAsync, the only code that makes a line, sets it from the processor's line with every other field. EF Core sets it from a NOT NULL column on every row it reads. No code reads it on any other instance, so the default reaches no row, view or log."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Payments/Domain/SettlementRecords.cs",
+        "mutator": "String mutation",
+        "original": "public string Kind { get; set; } = \"\";",
+        "replacement": "\"Stryker was here!\"",
+        "reason": "PaymentSettlementItem.Kind is always overwritten before anything reads it: SettlementEngine.AddAsync, the only code that makes a line, sets it from the processor's line with every other field. EF Core sets it from a NOT NULL column on every row it reads. No code reads it on any other instance, so the default reaches no row, view or log."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Payments/Domain/SettlementRecords.cs",
+        "mutator": "String mutation",
+        "original": "public string ProviderId { get; set; } = \"\";",
+        "replacement": "\"Stryker was here!\"",
+        "reason": "PaymentSettlementItem.ProviderId is always overwritten before anything reads it: SettlementEngine.AddAsync, the only code that makes a line, sets it from the processor's line, an empty string included for a standalone fee. EF Core sets it from a NOT NULL column on every row it reads. No code reads it on any other instance, so the default reaches no row, view or log."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Payments/Features/GetPayments.cs",
+        "mutator": "Linq method mutation (First() to FirstOrDefault())",
+        "original": "x => x.OrderByDescending(e => e.CreatedAt).First().EvidenceId);",
+        "replacement": "x.OrderByDescending(e => e.CreatedAt).FirstOrDefault",
+        "reason": "The sequence is one group of a GroupBy, and a group is never empty, so First and FirstOrDefault return the same element. The case where they differ, no element, cannot reach this line."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Payments/Features/GetPayments.cs",
+        "mutator": "Conditional (false) mutation",
+        "original": "List<PaymentObservation> held = awaiting.Length == 0 ? [] : await db.Set<PaymentObservation>().AsNoTracking()",
+        "replacement": "(false?[] :await db.Set<PaymentObservation>().AsNoTracking()\n            .Where(x => awaiting.Contains(x.ProviderId)).ToListAsync(ct))",
+        "reason": "With no payment awaiting a return decision the mutant runs the query instead of answering an empty list, and the query filters on an empty set of references, so it returns no rows: the same empty list, at the cost of one round trip. The other mutants of this line, which skip the query when payments are awaiting, are killed by PaymentListTests."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Payments/Features/GetPayments.cs",
+        "mutator": "Conditional (false) mutation",
+        "original": "x.ProviderId is null ? [] : [.. facts[x.ProviderId]])).ToArray();",
+        "replacement": "(false?[] :[.. facts[x.ProviderId]])",
+        "reason": "For a payment with no processor reference the mutant reads facts[null] instead of using an empty list. An ILookup built by ToLookup accepts a null key and answers an empty sequence for a key it does not hold, and no observation has a null reference (payment_observations.provider_id is NOT NULL), so the facts are empty either way. They would not be read anyway: ReturnAwaitsDecision is false for a payment with no reference, and CanPostReturn reads the facts only after it."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Payments/Features/ReviewPayment.cs",
+        "mutator": "Linq method mutation (Single() to SingleOrDefault())",
+        "original": "return new((await sender.Query(new GetPayments(null, c.Id), ct)).Single(), decision.Refusal);",
+        "replacement": "(await sender.Query(new GetPayments(null, c.Id), ct)).SingleOrDefault",
+        "reason": "Reached only after PaymentEngine.PostReturnAsync found the payment by id in this same transaction and returned it, so GetPayments filtered by that id, with no tenant filter, returns exactly that one row. Single and SingleOrDefault differ only for no row or more than one."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Payments/Features/ReviewPayment.cs",
+        "mutator": "Linq method mutation (Single() to SingleOrDefault())",
+        "original": "return new((await sender.Query(new GetPayments(null, c.Id), ct)).Single());",
+        "replacement": "(await sender.Query(new GetPayments(null, c.Id), ct)).SingleOrDefault",
+        "reason": "Reached only after PaymentEngine.CloseReviewAsync found the payment by id in this same transaction and returned it, so GetPayments filtered by that id, with no tenant filter, returns exactly that one row. Single and SingleOrDefault differ only for no row or more than one."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Payments/Features/Settlements.cs",
+        "mutator": "Linq method mutation (Single() to SingleOrDefault())",
+        "original": "return new((await sender.Query(new GetSettlements(c.Id), ct)).Single(),",
+        "replacement": "(await sender.Query(new GetSettlements(c.Id), ct)).SingleOrDefault",
+        "reason": "Reached only after SettlementEngine.EvaluateAsync found the payout by id in this same transaction and returned it, so GetSettlements filtered by that id returns exactly that one row. Single and SingleOrDefault differ only for no row or more than one."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Payments/Features/Settlements.cs",
+        "mutator": "Linq method mutation (Single() to SingleOrDefault())",
+        "original": "return new((await sender.Query(new GetSettlements(c.Id), ct)).Single());",
+        "replacement": "(await sender.Query(new GetSettlements(c.Id), ct)).SingleOrDefault",
+        "reason": "Reached only after SettlementEngine.CloseAsync found the payout by id in this same transaction and returned it, so GetSettlements filtered by that id returns exactly that one row. Single and SingleOrDefault differ only for no row or more than one."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Payments/Features/Settlements.cs",
+        "mutator": "String mutation",
+        "original": "var providerIds = items.Select(x => x.ProviderId).Where(x => x != \"\").Distinct().ToArray();",
+        "replacement": "\"Stryker was here!\"",
+        "reason": "The mutant keeps a standalone fee's empty reference in the set and drops a reference equal to the mutant's text. No payment has an empty reference (PaymentEngine.CompleteAsync refuses a blank one before storing it), so the empty one finds no payment, as a fee line finds none now. No processor reference can be the mutant's text: the simulator's are sim_ followed by hex, and Stripe's are underscore-separated identifiers, none with a space or an exclamation mark. The other mutant of this line, which keeps only empty references, is killed by SettlementListTests."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Payments/Features/Settlements.cs",
+        "mutator": "Logical mutation",
+        "original": ".Where(x => x.ProviderId != null && providerIds.Contains(x.ProviderId))",
+        "replacement": "x.ProviderId != null || providerIds.Contains(x.ProviderId)",
+        "reason": "The mutant reads every payment of the organization that has a reference instead of only those the payouts' lines name, and each line still looks up its own reference, so every PaymentId is the same. The extra rows could only matter by giving the dictionary a duplicate key, and an organization's references are unique: the unique index is (org_id, account, provider_id), and every payment carries its organization's one fixture account, since SubmitAsync stores it only after RequireFixtureAsync matched it, an organization has one fixture, and the app role cannot update payment_fixtures. The other mutant of this line is killed by SettlementListTests."
       }
     ]
   }

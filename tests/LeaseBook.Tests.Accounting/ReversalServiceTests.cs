@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using LeaseBook.Modules.Accounting.Contracts;
 using LeaseBook.Modules.Accounting.Domain;
 using LeaseBook.SharedKernel;
@@ -103,6 +104,62 @@ public sealed class ReversalServiceTests(PostgresFixture fixture)
             await Should.ThrowAsync<PeriodClosedException>(() =>
                 AccountingTestHarness.Reversal(scope).ReverseAsync(id, "void", new DateOnly(2026, 3, 15), ct));
         }, ct);
+    }
+
+    [Fact]
+    public async Task Reversing_outside_an_organization_context_is_refused_before_it_reads_anything()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var scope = await AccountingTestHarness.ProvisionedScopeAsync(fixture, ct);
+
+        var ex = await Should.ThrowAsync<InvalidOperationException>(() =>
+            AccountingTestHarness.Reversal(scope).ReverseAsync(UuidV7.NewId(), "void", new DateOnly(2026, 3, 1), ct));
+
+        ex.Message.ShouldBe("ReverseAsync requires an ambient organization context.");
+    }
+
+    [Fact]
+    public async Task Retrying_a_void_under_its_own_source_ref_is_answered_as_already_reversed()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var scope = await AccountingTestHarness.ProvisionedScopeAsync(
+            fixture, ct, owners: [_ownerId], tenants: [_tenantId], properties: [_propertyId]);
+
+        Guid id = default;
+        await scope.RunAsync(async () =>
+        {
+            id = await AccountingTestHarness.Posting(scope).PostAsync(Rent("r5"), ct);
+            await AccountingTestHarness.Reversal(scope).ReverseAsync(id, "void", new DateOnly(2026, 3, 1), "void:r5", ct);
+        }, ct);
+
+        // The caller that voided under a reference retries it: the entry is already reversed, which is the
+        // answer it acts on, and the reference it reused is not the problem.
+        var ex = await Should.ThrowAsync<AlreadyReversedException>(() => scope.RunAsync(() =>
+            AccountingTestHarness.Reversal(scope).ReverseAsync(id, "void", new DateOnly(2026, 3, 1), "void:r5", ct), ct));
+
+        (ex.EntryId, ex.Reason).ShouldBe((id, AlreadyReversedReason.AlreadyReversed));
+    }
+
+    [Fact]
+    public async Task Reversing_records_an_entry_voided_event_linking_the_two_entries()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var scope = await AccountingTestHarness.ProvisionedScopeAsync(
+            fixture, ct, owners: [_ownerId], tenants: [_tenantId], properties: [_propertyId]);
+        Guid originalId = default;
+        await scope.RunAsync(async () => originalId = await AccountingTestHarness.Posting(scope).PostAsync(Rent("r6"), ct), ct);
+
+        using var trace = new Activity("reversal-test").Start();
+        Guid reversalId = default;
+        await scope.RunAsync(async () => reversalId = await AccountingTestHarness.Reversal(scope)
+            .ReverseAsync(originalId, "void", new DateOnly(2026, 3, 1), ct), ct);
+
+        var voided = trace.Events.Where(e => e.Name == "accounting.entry_voided").ShouldHaveSingleItem();
+        voided.Tags.ToDictionary(t => t.Key, t => t.Value).ShouldBe(new Dictionary<string, object?>
+        {
+            ["entry_id"] = reversalId,
+            ["reverses_entry_id"] = originalId,
+        });
     }
 
     private PostEntryRequest Rent(string? sourceRef) => new(

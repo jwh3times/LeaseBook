@@ -5,6 +5,7 @@ using LeaseBook.Modules.Accounting.Features.LedgerPosting;
 using LeaseBook.Modules.Accounting.Features.Posting.Events;
 using LeaseBook.Modules.Accounting.Posting;
 using LeaseBook.SharedKernel;
+using LeaseBook.Tests.Accounting.Support;
 using LeaseBook.Tests.Common;
 using Microsoft.EntityFrameworkCore;
 using Shouldly;
@@ -133,6 +134,39 @@ public sealed class ReturnTenantPaymentTests(PostgresFixture fixture)
             () => Return(scope, receipt, ReceiptDate.AddDays(-1), ct));
 
         error.Code.ShouldBe("return_precedes_receipt");
+        await AssertNothingReversed(scope, ct);
+    }
+
+    [Fact]
+    public async Task A_return_dated_the_day_of_its_receipt_is_mirrored()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var scope = await NewScope(ct);
+        await Charge(scope, 600m, ct);
+        var receipt = await Post(scope, Receipt(scope, 600m), ct);
+
+        var reversal = await Return(scope, receipt, ReceiptDate, ct);
+
+        await scope.RunAsync(async () =>
+            (await scope.Db.Set<JournalEntry>().AsNoTracking().SingleAsync(e => e.Id == reversal, ct))
+                .EntryDate.ShouldBe(ReceiptDate), ct);
+    }
+
+    [Fact]
+    public async Task The_balances_are_read_under_the_posting_lock_so_a_racing_disbursement_blocks_the_return()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var scope = await NewScope(ct);
+        await Charge(scope, 600m, ct);
+        var receipt = await Post(scope, Receipt(scope, 600m), ct);
+
+        // The first pays the owner the 600 the receipt brought; read before that commits, it is still there.
+        var race = await Lanes.RaceAsync(fixture, scope,
+            lane => lane.Events.PostAsync(new OwnerDisbursed(_owner, new Money(600m), ReceiptDate, scope.TrustBankId, "draw"), ct),
+            lane => lane.Sender(new Leases(new Dictionary<Guid, TenantPostingDimensions>()))
+                .Send(new ReturnTenantPayment(receipt, ReturnDate, "return:1", "bank return"), ct), ct);
+
+        race.SecondError.ShouldBeOfType<PaymentReturnBlockedException>().Code.ShouldBe("return_owner_funds_disbursed");
         await AssertNothingReversed(scope, ct);
     }
 

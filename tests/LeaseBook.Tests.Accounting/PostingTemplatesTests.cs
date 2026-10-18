@@ -1,9 +1,11 @@
 using LeaseBook.Modules.Accounting.Contracts;
 using LeaseBook.Modules.Accounting.Domain;
+using LeaseBook.Modules.Accounting.Features.Posting;
 using LeaseBook.Modules.Accounting.Features.Posting.Events;
 using LeaseBook.SharedKernel;
 using LeaseBook.Tests.Accounting.Support;
 using LeaseBook.Tests.Common;
+using Microsoft.EntityFrameworkCore;
 using Shouldly;
 using static LeaseBook.Tests.Accounting.Support.AccountingTestHarness;
 
@@ -22,6 +24,7 @@ public sealed class PostingTemplatesTests(PostgresFixture fixture)
     private readonly Guid Property = UuidV7.NewId();
     private readonly Guid Unit = UuidV7.NewId();
     private readonly Guid Tenant = UuidV7.NewId();
+    private readonly Guid Buyer = UuidV7.NewId();
 
     // Bank account codes embed the per-org bank id (ADR-013), so they are resolved from the scope.
     private static string TrustBank(OrgScope scope) => AccountCodes.TrustBank(scope.TrustBankId);
@@ -316,6 +319,243 @@ public sealed class PostingTemplatesTests(PostgresFixture fixture)
         await Should.ThrowAsync<PeriodClosedException>(() => scope.RunAsync(() =>
             Events(scope).PostAsync(new RentCharged(
                 Tenant, Property, Owner, Unit, new Money(1450m), Feb(1), "into closed period"), ct), ct));
+    }
+
+    [Fact]
+    public async Task Each_template_stamps_its_entry_with_the_event_type_and_subtype_the_journal_keys_on()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var scope = await ProvisionedScopeAsync(
+            fixture, ct, owners: [Owner, Buyer], tenants: [Tenant], properties: [Property], units: [Unit]);
+
+        // Stored in the append-only journal and read back by every ledger, statement and report by name.
+        (AccountingEvent Event, string Type, string? Subtype)[] cases =
+        [
+            (new DepositCollected(Tenant, Property, Owner, new Money(1000m), Feb(1), scope.DepositBankId, "deposit"),
+                "DepositCollected", null),
+            (new PrepaymentReceived(Tenant, Property, Owner, new Money(300m), Feb(1), scope.TrustBankId, "prepay"),
+                "PrepaymentReceived", null),
+            (new DepositResponsibilityTransferred(Property, Owner, Buyer, Feb(2),
+                [new DepositResponsibilityTransferPosition(Tenant, scope.DepositBankId, new Money(1000m))], "sale"),
+                "DepositResponsibilityTransferred", null),
+            (new InterestEarned(new Money(40m), Feb(3), scope.TrustBankId, "interest"), "InterestEarned", null),
+            (new BankFeeCharged(new Money(5m), Feb(3), scope.TrustBankId, "service charge"), "BankFeeCharged", null),
+            (new TrustTransfer(new Money(10m), Feb(4), scope.TrustBankId, scope.DepositBankId, "move held fees"),
+                "TrustTransfer", null),
+            (new PMFeesSwept(new Money(20m), Feb(5), scope.TrustBankId, scope.OperatingBankId, "sweep"), "PMFeesSwept", null),
+            (new RefundIssued(Tenant, new Money(100m), Feb(6), scope.TrustBankId, RefundSource.Prepayments, "refund"),
+                "RefundIssued", "prepayments"),
+            (new RefundIssued(Tenant, new Money(100m), Feb(6), scope.DepositBankId, RefundSource.Deposits, "refund",
+                PropertyId: Property, OwnerId: Buyer), "RefundIssued", "deposits"),
+            (Fee(FeeKind.Late), "FeeCharged", "late"),
+            (Fee(FeeKind.MaintenanceRecharge), "FeeCharged", "maintenance-recharge"),
+            (Fee(FeeKind.Other), "FeeCharged", "other"),
+            (Payment(scope, PaymentMethod.Ach), "PaymentReceived", "ACH"),
+            (Payment(scope, PaymentMethod.Card), "PaymentReceived", "Card"),
+            (Payment(scope, PaymentMethod.Check), "PaymentReceived", "Check"),
+            (Payment(scope, PaymentMethod.Cash), "PaymentReceived", "Cash"),
+        ];
+
+        foreach (var (businessEvent, type, subtype) in cases)
+        {
+            var entry = await ReadEntryAsync(scope, await PostAsync(scope, businessEvent, ct), ct);
+            (entry.EventType, entry.EventSubtype).ShouldBe((type, subtype), businessEvent.GetType().Name);
+        }
+    }
+
+    [Fact]
+    public async Task BalanceForward_stamps_its_entry_as_a_balance_forward()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var scope = await ProvisionedScopeAsync(fixture, ct, owners: [Owner]);
+
+        Guid id = default;
+        await scope.RunAsync(async () => id = await Events(scope).PostAsync(new BalanceForwardRequest(
+            Feb(1),
+            [
+                new BalanceForwardLine(TrustBank(scope), new Money(5000m), null, BankAccountId: scope.TrustBankId),
+                new BalanceForwardLine(
+                    AccountCodes.OwnerEquity, null, new Money(5000m), OwnerId: Owner, BankAccountId: scope.TrustBankId),
+            ],
+            "cutover", "bf:2026-02"), ct), ct);
+
+        var entry = await ReadEntryAsync(scope, id, ct);
+        (entry.EventType, entry.EventSubtype, entry.Description, entry.SourceRef)
+            .ShouldBe(("BalanceForward", (string?)null, "cutover", "bf:2026-02"));
+    }
+
+    [Fact]
+    public async Task VendorPaid_draws_owner_equity_and_the_bank_and_names_the_payee()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var scope = await ProvisionedScopeAsync(fixture, ct, owners: [Owner], properties: [Property]);
+        await PostAsync(scope, new OwnerContribution(Owner, Property, new Money(1000m), Feb(1), scope.TrustBankId, "seed"), ct);
+
+        var id = await PostAsync(scope, new VendorPaid(
+            Owner, Property, new Money(240m), Feb(10), scope.TrustBankId, "Acme Plumbing", "kitchen leak", "bill:77"), ct);
+
+        (await ReadLinesAsync(scope, id, ct)).ShouldBe(
+        [
+            new(AccountCodes.OwnerEquity, 240m, null, EntryBasis.Both, null, Owner, Property, null, scope.TrustBankId),
+            new(TrustBank(scope), null, 240m, EntryBasis.Both, null, null, null, null, scope.TrustBankId),
+        ], ignoreOrder: true);
+        var entry = await ReadEntryAsync(scope, id, ct);
+        (entry.EventType, entry.Description, entry.SourceRef)
+            .ShouldBe(("VendorPaid", "Vendor payment to Acme Plumbing — kitchen leak", "bill:77"));
+    }
+
+    [Fact]
+    public async Task VendorPaid_below_the_reserve_floor_is_rejected()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var scope = await ProvisionedScopeAsync(fixture, ct, owners: [Owner], properties: [Property]);
+        await PostAsync(scope, new OwnerContribution(Owner, Property, new Money(1000m), Feb(1), scope.TrustBankId, "seed"), ct);
+
+        var ex = await Should.ThrowAsync<ReserveFloorException>(() => PostAsync(scope, new VendorPaid(
+            Owner, Property, new Money(900m), Feb(10), scope.TrustBankId, "Acme Plumbing", "repair",
+            Reserve: new Money(500m)), ct));
+
+        // 1000 - 900 = 100 < 500.
+        (ex.Amount, ex.Equity, ex.Reserve, ex.OwnerId).ShouldBe((900m, 1000m, 500m, Owner));
+    }
+
+    [Fact]
+    public async Task A_deposit_refund_releases_the_collecting_bucket_and_a_prepayment_refund_stays_owner_null()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var scope = await ProvisionedScopeAsync(
+            fixture, ct, owners: [Owner], tenants: [Tenant], properties: [Property]);
+        await PostAsync(scope, new DepositCollected(Tenant, Property, Owner, new Money(1000m), Feb(1), scope.DepositBankId, "deposit"), ct);
+        await PostAsync(scope, new PrepaymentReceived(Tenant, Property, Owner, new Money(300m), Feb(1), scope.TrustBankId, "prepay"), ct);
+
+        var deposit = await PostAsync(scope, new RefundIssued(
+            Tenant, new Money(1000m), Feb(20), scope.DepositBankId, RefundSource.Deposits, "deposit back",
+            PropertyId: Property, OwnerId: Owner), ct);
+        // Prepayments are collected with no owner, so a caller's property and owner are not carried onto the release.
+        var prepayment = await PostAsync(scope, new RefundIssued(
+            Tenant, new Money(300m), Feb(20), scope.TrustBankId, RefundSource.Prepayments, "prepayment back",
+            PropertyId: Property, OwnerId: Owner), ct);
+
+        (await ReadLinesAsync(scope, deposit, ct)).ShouldBe(
+        [
+            new(AccountCodes.SecurityDepositsHeld, 1000m, null, EntryBasis.Both, Tenant, Owner, Property, null, scope.DepositBankId),
+            new(DepositBank(scope), null, 1000m, EntryBasis.Both, null, null, null, null, scope.DepositBankId),
+        ], ignoreOrder: true);
+        (await ReadLinesAsync(scope, prepayment, ct)).ShouldBe(
+        [
+            new(AccountCodes.TenantPrepayments, 300m, null, EntryBasis.Both, Tenant, null, null, null, scope.TrustBankId),
+            new(TrustBank(scope), null, 300m, EntryBasis.Both, null, null, null, null, scope.TrustBankId),
+        ], ignoreOrder: true);
+    }
+
+    [Fact]
+    public async Task A_refund_over_the_held_liability_is_rejected()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var scope = await ProvisionedScopeAsync(fixture, ct, owners: [Owner], tenants: [Tenant], properties: [Property]);
+        await PostAsync(scope, new PrepaymentReceived(Tenant, Property, Owner, new Money(300m), Feb(1), scope.TrustBankId, "prepay"), ct);
+
+        var ex = await Should.ThrowAsync<InsufficientLiabilityException>(() => PostAsync(scope, new RefundIssued(
+            Tenant, new Money(500m), Feb(20), scope.TrustBankId, RefundSource.Prepayments, "too much"), ct));
+
+        (ex.Kind, ex.Requested, ex.Held, ex.TenantId).ShouldBe((LiabilityKind.Refund, 500m, 300m, (Guid?)Tenant));
+    }
+
+    [Fact]
+    public async Task A_prepayment_refund_is_bounded_by_the_tenants_total_as_well_as_its_bank()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var scope = await ProvisionedScopeAsync(fixture, ct, owners: [Owner], tenants: [Tenant], properties: [Property]);
+        await scope.RunAsync(async () =>
+        {
+            await Events(scope).PostAsync(new PrepaymentReceived(
+                Tenant, Property, Owner, new Money(400m), Feb(1), scope.DepositBankId, "prepay"), ct);
+
+            // The pre-#475 application shape (see InvariantTests): it debited the bank its caller named, so the
+            // deposit bank still shows 400 held and the trust bank -400, and the tenant holds nothing in all.
+            await Posting(scope).PostAsync(new PostEntryRequest(
+                Feb(10), "PrepaymentApplied", null, "Historical cross-bank application", "bad-apply",
+                [
+                    new PostLineRequest(AccountCodes.TenantPrepayments, new Money(400m), null, EntryBasis.Both,
+                        TenantId: Tenant, BankAccountId: scope.TrustBankId),
+                    new PostLineRequest(AccountCodes.TenantReceivable, null, new Money(400m), EntryBasis.Accrual,
+                        PropertyId: Property, OwnerId: Owner, TenantId: Tenant),
+                    new PostLineRequest(AccountCodes.OwnerEquity, null, new Money(400m), EntryBasis.Cash,
+                        PropertyId: Property, OwnerId: Owner, BankAccountId: scope.TrustBankId),
+                ]), ct);
+        }, ct);
+
+        // The deposit bank's bucket alone would allow it (#473).
+        var ex = await Should.ThrowAsync<InsufficientLiabilityException>(() => PostAsync(scope, new RefundIssued(
+            Tenant, new Money(400m), Feb(20), scope.DepositBankId, RefundSource.Prepayments, "refund"), ct));
+
+        (ex.Kind, ex.Requested, ex.Held).ShouldBe((LiabilityKind.Refund, 400m, 0m));
+    }
+
+    [Fact]
+    public async Task PMFeesSwept_over_the_held_fees_is_rejected()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var scope = await ProvisionedScopeAsync(fixture, ct, owners: [Owner], properties: [Property]);
+        await PostAsync(scope, new ManagementFeeAssessed(Owner, Property, new Money(290m), May(27), scope.TrustBankId, "fee"), ct);
+
+        var ex = await Should.ThrowAsync<InsufficientLiabilityException>(() => PostAsync(scope,
+            new PMFeesSwept(new Money(300m), May(27), scope.TrustBankId, scope.OperatingBankId, "sweep"), ct));
+
+        (ex.Kind, ex.Requested, ex.Held, ex.TenantId).ShouldBe((LiabilityKind.FeeSweep, 300m, 290m, (Guid?)null));
+    }
+
+    [Fact]
+    public async Task Posting_without_an_event_or_request_is_refused_by_name()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var scope = await ProvisionedScopeAsync(fixture, ct);
+        var service = Events(scope);
+
+        var noEvent = await Should.ThrowAsync<ArgumentNullException>(() => service.PostAsync((AccountingEvent)null!, ct));
+        var noForward = await Should.ThrowAsync<ArgumentNullException>(() => service.PostAsync((BalanceForwardRequest)null!, ct));
+        var noOpening = await Should.ThrowAsync<ArgumentNullException>(() => service.PostOpeningPositionAsync(null!, ct));
+
+        (noEvent.ParamName, noForward.ParamName, noOpening.ParamName).ShouldBe(("businessEvent", "request", "req"));
+    }
+
+    [Fact]
+    public async Task An_event_with_no_posting_template_is_refused_by_name()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var scope = await ProvisionedScopeAsync(fixture, ct);
+
+        var ex = await Should.ThrowAsync<ArgumentOutOfRangeException>(() => Events(scope).PostAsync(new UnheardOfEvent(), ct));
+
+        (ex.ParamName, ex.ActualValue).ShouldBe(("businessEvent", (object?)nameof(UnheardOfEvent)));
+        ex.Message.ShouldStartWith("No posting template for this event.");
+    }
+
+    [Fact]
+    public void A_bulk_run_refuses_an_event_it_has_no_template_for()
+    {
+        var sweep = new PMFeesSwept(new Money(20m), Feb(5), UuidV7.NewId(), UuidV7.NewId(), "sweep");
+
+        var ex = Should.Throw<ArgumentException>(() => RunEventEntryBuilder.Build(sweep));
+
+        ex.ParamName.ShouldBe("businessEvent");
+        ex.Message.ShouldBe("PMFeesSwept is not a supported bulk-run accounting event. (Parameter 'businessEvent')");
+    }
+
+    private sealed record UnheardOfEvent : AccountingEvent;
+
+    private FeeCharged Fee(FeeKind kind) =>
+        new(Tenant, Property, Owner, Unit, new Money(25m), Feb(7), kind, "fee");
+
+    private PaymentReceived Payment(OrgScope scope, PaymentMethod method) =>
+        new(Tenant, Property, Owner, new Money(10m), Feb(8), method, scope.TrustBankId, "payment");
+
+    private static async Task<JournalEntry> ReadEntryAsync(OrgScope scope, Guid id, CancellationToken ct)
+    {
+        JournalEntry entry = null!;
+        await scope.RunAsync(async () =>
+            entry = await scope.Db.Set<JournalEntry>().AsNoTracking().SingleAsync(e => e.Id == id, ct), ct);
+        return entry;
     }
 
     private static async Task<Guid> PostAsync(OrgScope scope, AccountingEvent businessEvent, CancellationToken ct)

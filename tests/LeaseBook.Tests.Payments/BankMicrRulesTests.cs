@@ -2,7 +2,7 @@ using LeaseBook.Modules.Payments.Domain;
 using LeaseBook.Modules.Payments.Features.RefundChecks;
 using Shouldly;
 
-namespace LeaseBook.Tests.Integration;
+namespace LeaseBook.Tests.Payments;
 
 /// <summary>
 /// #474's pure rules for a bank account's MICR numbers. The valid routing numbers are real ones printed on
@@ -25,6 +25,7 @@ public sealed class BankMicrRulesTests
     [InlineData("1110000120")] // too long
     [InlineData("11100001a")] // not a digit
     [InlineData("000000000")] // sums to zero, names no institution
+    [InlineData("11100001F")] // a letter whose character code happens to satisfy the check digit
     public void Anything_else_fails(string routing) =>
         MicrLine.IsValidRoutingNumber(routing).ShouldBeFalse();
 
@@ -52,6 +53,13 @@ public sealed class BankMicrRulesTests
             text.ShouldNotContain("123456789");
             text.ShouldContain("blank"); // still useful in a log line
         }
+
+        // Whether each number was sent is still shown, and everything that is not a number in full.
+        command.ToString().ShouldBe(
+            $"SaveBankMicrDetails {{ BankAccountId = {command.BankAccountId}, StockKind = blank, " +
+            "RoutingNumber = [redacted], OnUsAccountNumber = [redacted], MicrOffsetXPoints = 1, MicrOffsetYPoints = 2 }");
+        (command with { RoutingNumber = null }).ToString().ShouldContain("RoutingNumber = null, OnUsAccountNumber = [redacted]");
+        (command with { OnUsAccountNumber = null }).ToString().ShouldContain("RoutingNumber = [redacted], OnUsAccountNumber = null");
     }
 
     [Fact]
@@ -67,5 +75,14 @@ public sealed class BankMicrRulesTests
             text.ShouldNotContain("111000012");
             text.ShouldNotContain("123456789");
         }
+
+        print.Numbers.ToString().ShouldBe("BankMicrNumbers { RoutingNumber = [redacted], OnUsField = [redacted] }");
     }
+
+    [Theory]
+    [InlineData(null, "null")]
+    [InlineData("111000012", "[redacted]")]
+    [InlineData("", "[redacted]")]
+    public void A_redacted_number_says_only_whether_it_was_sent(string? value, string shown) =>
+        BankMicr.Redacted(value).ShouldBe(shown);
 }
