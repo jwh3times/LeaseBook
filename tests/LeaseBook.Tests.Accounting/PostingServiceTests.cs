@@ -24,6 +24,17 @@ public sealed class PostingServiceTests(PostgresFixture fixture)
     private readonly Guid _tenantId = UuidV7.NewId();
 
     [Fact]
+    public void An_entry_refuses_a_missing_line()
+    {
+        var entry = JournalEntry.Create(
+            new DateOnly(2026, 2, 1), "RentCharged", null, null, null, null,
+            Actor.System("test-harness"), new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc));
+
+        Should.Throw<ArgumentNullException>(() => entry.AddLine(null!)).ParamName.ShouldBe("line");
+        entry.Lines.ShouldBeEmpty();
+    }
+
+    [Fact]
     public async Task Posting_a_balanced_entry_persists_lines_with_denormalized_class_and_audits_them()
     {
         var ct = TestContext.Current.CancellationToken;

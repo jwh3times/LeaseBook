@@ -120,6 +120,83 @@
         "original": "EntryBasis.Cash => \"cash\",",
         "replacement": "\"\"",
         "reason": "BasisName is called only on the owner_equity line of a RunEventEntryBuilder template, and those are accrual (RentCharged, FeeCharged) or both (ManagementFeeAssessed, OwnerDisbursed), never cash, so this arm never runs."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Accounting/Domain/Account.cs",
+        "mutator": "Block removal mutation",
+        "original": "{ // EF materialization + the parameter-bearing factory below are the only constructors. Code = null!; Name = null!; }",
+        "replacement": "{}",
+        "reason": "The body of the private parameterless constructor only assigns null to Code and Name, which already hold null, the default of a reference-type property, before the body runs. The ! only silences the nullable warning, so the object is the same with the body empty."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Accounting/Domain/JournalEntry.cs",
+        "mutator": "Block removal mutation",
+        "original": "{ // EF + the factory below. EventType = null!; }",
+        "replacement": "{}",
+        "reason": "As for Account: the private parameterless constructor only assigns null to EventType, which already holds null by default, so the object is the same with the body empty."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Accounting/Features/Migration/GetMigrationVerificationData.cs",
+        "mutator": "Conditional (true) mutation",
+        "original": "var clearingRow = clearing.Count > 0 ? clearing[0] : new ClearingRow(0m, 0m);",
+        "replacement": "(true?clearing[0] :new ClearingRow(0m, 0m))",
+        "reason": "The query is an aggregate with no GROUP BY, which returns exactly one row whatever the journal holds (COALESCE makes its value 0, never null, when no line matches), so clearing.Count is always 1 and the condition is true either way."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Accounting/Features/Migration/GetMigrationVerificationData.cs",
+        "mutator": "Equality mutation",
+        "original": "var clearingRow = clearing.Count > 0 ? clearing[0] : new ClearingRow(0m, 0m);",
+        "replacement": "clearing.Count >= 0",
+        "reason": "The query is an aggregate with no GROUP BY, which returns exactly one row whatever the journal holds (COALESCE makes its value 0, never null, when no line matches), so clearing.Count is always 1 and > 0 and >= 0 agree."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Accounting/Features/Migration/GetMigrationVerificationData.cs",
+        "mutator": "Conditional (true) mutation",
+        "original": "var ownerEquityTotal = equityRows.Count > 0 ? equityRows[0].Value : 0m;",
+        "replacement": "(true?equityRows[0].Value :0m)",
+        "reason": "The query is an aggregate with no GROUP BY, which returns exactly one row whatever the journal holds (COALESCE makes its value 0, never null, when no line matches), so equityRows.Count is always 1 and the condition is true either way."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Accounting/Features/Migration/GetMigrationVerificationData.cs",
+        "mutator": "Equality mutation",
+        "original": "var ownerEquityTotal = equityRows.Count > 0 ? equityRows[0].Value : 0m;",
+        "replacement": "equityRows.Count >= 0",
+        "reason": "The query is an aggregate with no GROUP BY, which returns exactly one row whatever the journal holds (COALESCE makes its value 0, never null, when no line matches), so equityRows.Count is always 1 and > 0 and >= 0 agree."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Accounting/Features/Migration/GetMigrationVerificationData.cs",
+        "mutator": "Conditional (true) mutation",
+        "original": "var depositTotal = depositRows.Count > 0 ? depositRows[0].Value : 0m;",
+        "replacement": "(true?depositRows[0].Value :0m)",
+        "reason": "The query is an aggregate with no GROUP BY, which returns exactly one row whatever the journal holds (COALESCE makes its value 0, never null, when no line matches), so depositRows.Count is always 1 and the condition is true either way."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Accounting/Features/Migration/GetMigrationVerificationData.cs",
+        "mutator": "Equality mutation",
+        "original": "var depositTotal = depositRows.Count > 0 ? depositRows[0].Value : 0m;",
+        "replacement": "depositRows.Count >= 0",
+        "reason": "The query is an aggregate with no GROUP BY, which returns exactly one row whatever the journal holds (COALESCE makes its value 0, never null, when no line matches), so depositRows.Count is always 1 and > 0 and >= 0 agree."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Accounting/Features/Migration/GetMigrationVerificationData.cs",
+        "mutator": "Conditional (true) mutation",
+        "original": "var heldTotal = heldRows.Count > 0 ? heldRows[0].Value : 0m;",
+        "replacement": "(true?heldRows[0].Value :0m)",
+        "reason": "The query is an aggregate with no GROUP BY, which returns exactly one row whatever the journal holds (COALESCE makes its value 0, never null, when no line matches), so heldRows.Count is always 1 and the condition is true either way."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Accounting/Features/Migration/GetMigrationVerificationData.cs",
+        "mutator": "Equality mutation",
+        "original": "var heldTotal = heldRows.Count > 0 ? heldRows[0].Value : 0m;",
+        "replacement": "heldRows.Count >= 0",
+        "reason": "The query is an aggregate with no GROUP BY, which returns exactly one row whatever the journal holds (COALESCE makes its value 0, never null, when no line matches), so heldRows.Count is always 1 and > 0 and >= 0 agree."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Accounting/Features/Migration/GetOpeningCutoverDate.cs",
+        "mutator": "Linq method mutation (OrderBy() to OrderByDescending())",
+        "original": "var dates = await db.Set<JournalEntry>()",
+        "replacement": "db.Set<JournalEntry>() .AsNoTracking() .Where(entry => entry.EventType == \"OpeningBalance\") .Select(entry => entry.EntryDate) .Distinct() .OrderByDescending",
+        "reason": "The order only decides which two distinct dates Take(2) keeps, and the handler reads no more than that: with none or one distinct date both orders give the same list, and with two or more both give two, which it refuses. So the response is the same either way."
       }
     ]
   },
