@@ -57,6 +57,69 @@
         "original": ".Where(e => e.ReversesEntryId != null && ids.Contains(e.ReversesEntryId.Value))",
         "replacement": "e.ReversesEntryId != null || ids.Contains(e.ReversesEntryId.Value)",
         "reason": "Every row the second operand admits, the first admits too, so the mutant reads every reversal in the organization rather than those of the requested entries. The extra rows are never looked up: the result is built from the requested refund checks' lines, and the map is read only by their entry ids, which find the same reversal either way. Nor can they make ToDictionaryAsync fail on a repeated key: the unique index ix_journal_entries_org_id_reverses_entry_id allows one reversal per entry in an organization, and RLS confines the read to one organization."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Accounting/Features/Ledgers/GetBankRegister.cs",
+        "mutator": "Linq method mutation (Single() to SingleOrDefault())",
+        "original": "var totals = (await db.Database.SqlQuery<RegisterTotalsSqlRow>(",
+        "replacement": "(await db.Database.SqlQuery<RegisterTotalsSqlRow>( $\"\"\" SELECT COALESCE(SUM(COALESCE(jl.debit, 0) - COALESCE(jl.credit, 0)), 0) AS book, COALESCE(SUM(COALESCE(jl.debit, 0) - COALESCE(jl.credit, 0)) FILTER (WHERE COALESCE(s.status, 'uncleared') IN ('cleared', 'reconciled')), 0) AS cleared, COUNT(*) FILTER (WHERE COALESCE(s.status, 'uncleared') = 'uncleared')::int AS uncleared_count FROM journal_lines jl LEFT JOIN bank_line_status s ON s.journal_line_id = jl.id WHERE jl.bank_account_id = {query.BankAccountId} AND jl.account_class IN ('trust_bank', 'pm_operating_bank') AND jl.basis IN ('cash', 'both') \"\"\").ToListAsync(ct)).SingleOrDefault",
+        "reason": "The account-totals query is an aggregate with no GROUP BY, which Postgres answers with exactly one row whatever the WHERE clause and RLS leave to sum (an empty set gives the COALESCE zeros and a count of 0). Single and SingleOrDefault differ only for no row or more than one."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Accounting/Features/Ledgers/GetDelinquencyAging.cs",
+        "mutator": "Equality mutation",
+        "original": "if (ageDays > oldestAgeDays) oldestAgeDays = ageDays;",
+        "replacement": "ageDays >= oldestAgeDays",
+        "reason": "The two differ only when ageDays equals oldestAgeDays, and then the assignment writes the value the variable already holds. Nothing else happens in the branch."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Accounting/Features/Ledgers/GetTenantLedger.cs",
+        "mutator": "String mutation",
+        "original": "\"DepositCollected\" => \"Security Deposit\",",
+        "replacement": "\"\"",
+        "reason": "Covers both mutants on the line, the event type emptied and the label emptied. The ledger reads only tenant_receivable and tenant_prepayments lines, and the one place that writes the DepositCollected event type, PostDepositCollectedAsync in AccountingEventService (every PostEntryRequest in src/ names a literal event type or EventTypes.EntryVoided, and IPostingService is internal, visible outside the module only to the two test projects), posts a trust-bank debit and a security_deposits_held credit, so no ledger row is ever a DepositCollected entry, and a void of one is an EntryVoided row on the same accounts. No entry has the event type \"\" either, so the emptied pattern matches nothing the original arm did not, and the emptied label is never returned."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Accounting/Features/Ledgers/GetTenantPaymentsReceived.cs",
+        "mutator": "Conditional (true) mutation",
+        "original": "return rows.Count > 0 ? rows[0] : 0m;",
+        "replacement": "(true?rows[0] :0m)",
+        "reason": "The query is an aggregate with no GROUP BY, so Postgres returns exactly one row, its COALESCE making an empty sum 0. rows.Count is always 1, and the condition is always true."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Accounting/Features/Ledgers/GetTenantPaymentsReceived.cs",
+        "mutator": "Equality mutation",
+        "original": "return rows.Count > 0 ? rows[0] : 0m;",
+        "replacement": "rows.Count >= 0",
+        "reason": "As for the conditional above: the aggregate always returns exactly one row, so rows.Count is 1 and > 0 and >= 0 agree."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Accounting/Features/Ledgers/ReceivableAllocationReader.cs",
+        "mutator": "Linq method mutation (First() to FirstOrDefault())",
+        "original": ".ToDictionary(group => group.Key, group => group.First().UnappliedCredit);",
+        "replacement": "group.FirstOrDefault",
+        "reason": "GroupBy yields only groups with at least one element, so First and FirstOrDefault return the same row and FirstOrDefault never reaches its default."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Accounting/Features/Statements/GetProspectiveOwnerEquityLines.cs",
+        "mutator": "Linq method mutation (Single() to SingleOrDefault())",
+        "original": "var line = entry.Lines.Single(line => line.AccountCode == AccountCodes.OwnerEquity);",
+        "replacement": "entry.Lines.SingleOrDefault",
+        "reason": "entry comes from RunEventEntryBuilder.Build, which throws for any event other than its four templates (RentCharged, FeeCharged, ManagementFeeAssessed, OwnerDisbursed), and each of those writes exactly one owner_equity line. Single and SingleOrDefault differ only for no match or more than one."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Accounting/Features/Statements/GetProspectiveOwnerEquityLines.cs",
+        "mutator": "String mutation",
+        "original": "line.OwnerId ?? throw new InvalidOperationException(\"A run event's owner-equity line must name an owner.\"),",
+        "replacement": "\"\"",
+        "reason": "The message of a throw that cannot run: each of RunEventEntryBuilder's four templates sets its owner_equity line's OwnerId from the event's OwnerId, a non-nullable Guid on all four records, so line.OwnerId is never null."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Accounting/Features/Statements/GetProspectiveOwnerEquityLines.cs",
+        "mutator": "String mutation",
+        "original": "EntryBasis.Cash => \"cash\",",
+        "replacement": "\"\"",
+        "reason": "BasisName is called only on the owner_equity line of a RunEventEntryBuilder template, and those are accrual (RentCharged, FeeCharged) or both (ManagementFeeAssessed, OwnerDisbursed), never cash, so this arm never runs."
       }
     ]
   },

@@ -26,8 +26,23 @@ public sealed class StatementSectionMapTests
         StatementSectionMap.Section(eventType).ShouldBe(expected);
 
     [Fact]
-    public void Throws_on_an_unmapped_event_so_the_tie_out_stays_structural() =>
-        Should.Throw<UncategorizedEventException>(() => StatementSectionMap.Section("SomeNewEvent"));
+    public void Throws_on_an_unmapped_event_so_the_tie_out_stays_structural()
+    {
+        var thrown = Should.Throw<UncategorizedEventException>(() => StatementSectionMap.Section("SomeNewEvent"));
+
+        thrown.EventType.ShouldBe("SomeNewEvent");
+        thrown.Message.ShouldBe("This statement contains an entry type that cannot be categorized yet.");
+    }
+
+    [Theory]
+    [InlineData(StatementSectionKey.Income, "Income — rent collected")]
+    [InlineData(StatementSectionKey.OperatingExpenses, "Operating expenses")]
+    [InlineData(StatementSectionKey.AppliedDepositsCredits, "Applied deposits & credits")]
+    [InlineData(StatementSectionKey.Contributions, "Owner contributions")]
+    [InlineData(StatementSectionKey.Disbursement, "Owner disbursement")]
+    [InlineData(StatementSectionKey.Beginning, "")] // computed, never a titled section
+    public void Titles_each_section(StatementSectionKey key, string title) =>
+        StatementSectionMap.Title(key).ShouldBe(title);
 }
 
 [Collection(nameof(DatabaseCollection))]

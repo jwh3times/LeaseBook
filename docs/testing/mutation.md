@@ -3,7 +3,7 @@
 - **Audience:** Contributors, reviewers and maintainers
 - **Status:** Living method and measurement record
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-17
+- **Last reviewed:** 2026-10-18
 
 Mutation testing asks whether the tests would notice the code being wrong. A tool changes the code
 one small edit at a time, such as `>` to `>=`, `+` to `-`, or a call removed, and reruns the tests
@@ -314,15 +314,12 @@ one run to the next. A status change on one of these does not mean the code or t
 
 - **`AccountingPeriods.cs`, the lost-race path of opening a period.** It runs only when two
   requests race to create the same month, which a concurrency test does not always arrange.
-- **`GetOwnerLedger.cs`, `rows.Count > 0` made `>= 0`.** Only an owner ledger with no rows tells
-  them apart, and only the random sequences of
-  `InvariantPropertyTests.Random_valid_sequences_keep_the_invariants_and_converge_after_settlement`
-  produce one. Made by hand, the mutant failed one test run in three.
 
 The first scheduled run, on 2026-10-16, gave the same statuses as the run before it except that
-both of these survived where both had been killed. Both are survivors to fix with a test that
-reaches the case every time. Add a mutant here when a
-summary shows a status change that the code does not explain.
+this one survived where it had been killed, as did an owner-ledger mutant that a test now reaches
+every time (see [Survivors worked through](#survivors-worked-through)). It is a survivor to fix with
+a test that reaches the case every time. Add a mutant here when a summary shows a status change that
+the code does not explain.
 
 ## Cost
 
@@ -443,6 +440,7 @@ kills its last unexplained survivor.
 | Accounting posting core (`Posting/`, `Features/Posting/`)    |                  92 |                      1 | 99.6%: 280 killed, 1 survived, explained, none not covered     |
 | Accounting ledger posting (`Features/LedgerPosting/`)        |                 109 |                      3 | 98.5%: 199 killed, 3 survived, explained, none not covered     |
 | Accounting refund checks, banking and reconciliation         |                 108 |                      4 | 97.7%: 173 killed, 4 survived, all explained, none not covered |
+| Accounting ledgers and statements                            |                  56 |                     10 | 95.1%: 195 killed, 7 survived and 3 not covered, all explained |
 
 The engines' 138 undetected mutants, taken from the hosted run on 2026-10-15, are all accounted
 for. `LeaseBook.Tests.Payments` grew from 164 tests to 273, among them 22 races (see
@@ -536,3 +534,28 @@ distinct ids, one turns `Single` into `SingleOrDefault` on an aggregate that alw
 and two are in `GetRefundCheckStatuses`: a null guard in a projection EF translates to SQL, where
 the left-joined column is already null, and an `||` that reads every reversal in the organization
 although only the requested entries' reversals are looked up.
+
+The ledger and statement reads, `Features/Ledgers/` and `Features/Statements/`, had 66 undetected
+mutants in the first scheduled run, the same 66 when this work began: 46 survived and 20 were not
+covered. Their tests called the handlers directly or read the demo seed, so no validator ran, and
+nothing reached an owner ledger with no rows, a charge due on the report date or exactly 30 days
+late, the register's second page or its search, or most section titles. The owner ledger with no
+rows was one of the two [chance results](#chance-results), reached only when a random sequence made
+one. New tests in `LeaseBook.Tests.Accounting` send the queries through the real dispatcher.
+`LedgerQueryTests` pins each validator rule, the owner ledger and owner balances on each basis with
+the management fee's PM-income credit reaching neither, an owner ledger with no rows, which
+`An_owner_ledger_with_no_rows_has_a_zero_balance` now reaches every run, the internal-note and
+source-ref lookups and their empty short circuits, and the subtype in the period-charge guard.
+`OwnerStatementQueryTests` pins the statement's validator rules, its sections in render order with
+their titles on both bases, and the flag that a credit was recognised on application, which a cash
+statement leaves off. The aging, rent-obligation, register, tenant-ledger, section-map and CSV
+tests gained the cases above. The suite grew from 406 tests to 443 and runs in about 45 seconds.
+Of the ten equivalents, in nine entries, three read an aggregate with no `GROUP BY`, which always
+returns one row: the register's totals taken with `SingleOrDefault`, and the payments-received
+count check made `>= 0` or `true`. Two take an `OrDefault` form where a match is certain, a
+non-empty group in `ReceivableAllocationReader` and the one owner-equity line of a run-event
+template. One makes the oldest age's `>` into `>=`, where an equal age assigns the value already
+held. Two empty the tenant ledger's `DepositCollected` arm, which no ledger row reaches because that
+event posts only to the bank and the deposit liability. The last two are in
+`GetProspectiveOwnerEquityLines`, the message of a missing-owner throw and the `cash` basis name,
+neither of which any of the four run-event templates can reach.
