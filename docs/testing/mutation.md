@@ -56,14 +56,15 @@ mutated only when it has one.
 
 The nightly run is [`.github/workflows/mutation.yml`](../../.github/workflows/mutation.yml), at 00:17
 UTC and on manual dispatch, where a module can be chosen. It never runs on a pull request. It runs
-four jobs in parallel, each module in two parts. A whole run of either module comes too near a
-hosted job's time limit (see [Cost](#cost)), and a job that times out reports nothing. Part 1
-mutates the directories `scripts/mutation.mjs` names in `firstPart`, `Processing` for Payments and
-three directories for Accounting, and part 2 the rest of what the configuration mutates, so a
-directory added later falls into part 2 and is never left out. Each job writes the summary to its
-job summary and uploads `mutation-<run>` (`accounting-1`, `accounting-2`, `payments-1` or
-`payments-2`), which holds the summary, the HTML report (`reports/mutation-report.html`) and the
-JSON report the summary was read from.
+six jobs in parallel: Accounting in four parts and Payments in two. A whole run of either module
+comes too near a hosted job's time limit (see [Cost](#cost)), and a job that times out reports
+nothing. Each part but the last mutates the directories `scripts/mutation.mjs` names in `parts`,
+`Processing` for Payments' part 1 and two or three directories for each of Accounting's first three.
+The last part mutates the rest of what the configuration mutates, so a directory added later falls
+into it and is never left out. Each job writes the summary to its job summary and uploads
+`mutation-<run>` (`accounting-1` to `accounting-4`, `payments-1` or `payments-2`), which holds the
+summary, the HTML report (`reports/mutation-report.html`) and the JSON report the summary was read
+from.
 
 ## Run one module locally
 
@@ -89,7 +90,7 @@ node scripts/mutation.mjs payments --concurrency 4 --mutate '**/Processing/Settl
 A `--mutate` given on the command line replaces the configuration's list instead of adding to it, so
 the exclusions above no longer apply. Name only the files you mean.
 
-To run one of a module's two parts, as the nightly jobs do, which writes to
+To run one of a module's parts, as the nightly jobs do, which writes to
 `StrykerOutput/<module>-<part>/`:
 
 ```bash
@@ -380,7 +381,17 @@ By 2026-10-18 the test project had grown from 211 tests to 482, and part 1 had b
 The hosted run of both parts that day, on the branch that finished Accounting, took 4:22:21 for
 part 1, 494 mutants tested at 32 seconds of wall time each, and 3:00:08 for part 2, 619 mutants at
 17 seconds each. That left part 1 38 minutes inside its timeout, so `Features/Banking/` and
-`Features/Reconciliation/`, 95 of part 1's mutants, moved to part 2.
+`Features/Reconciliation/`, 95 of part 1's mutants, moved to part 2. The next hosted run, on
+2026-10-19, took 2:32:16 for part 1, 399 mutants, and cancelled part 2 at its 300-minute timeout,
+714 mutants in, with no report.
+
+Every mutant reruns the whole test project (see [Known limits](#known-limits)), so a mutant costs
+about what the suite does, and the suite had more than doubled. At 17 to 32 seconds each,
+Accounting's 1,113 tested mutants need between five and ten hours, more than two 300-minute jobs
+can hold. So Accounting runs in four parts, sized by the mutants each directory had tested on
+2026-10-18: `LedgerPosting`, `Banking` and `Reconciliation` (297); `Posting/` and
+`Features/Posting/` (281); `Ledgers`, `Refunds` and `Statements` (284); and the rest (251). At the
+slowest rate seen, each should take about two and a half hours.
 
 Payments ran as one job until every mutant had a test. Then a whole local run tested 1,369 mutants
 in 2:22:06, 6.2 s each, against 3.4 s for 928 mutants on 2026-10-14: more mutants are covered, and
@@ -603,7 +614,7 @@ return one row, each with its count check made `>= 0` or `true`. One reverses th
 `GetOpeningCutoverDate` takes two of, which cannot change its answer, and two empty the EF
 constructors of `Account` and `JournalEntry`, which only assign null to properties already null.
 
-With that, the hosted run of both Accounting parts on 2026-10-18 scored **98.4%** in part 1, 488
+With that, the hosted run of Accounting's two parts on 2026-10-18 scored **98.4%** in part 1, 488
 killed, 6 survived and 2 not covered, and **96.6%** in part 2, 599 killed, 20 survived and 1 not
 covered. All 29 undetected mutants are explained by the 28 Accounting entries, and no entry is
 stale, so the Accounting gate is on.

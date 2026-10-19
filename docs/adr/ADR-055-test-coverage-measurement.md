@@ -153,9 +153,10 @@ and Accounting's on 2026-10-18, each once every mutant in its module was killed 
 apart from Stryker failing.
 
 **It runs nightly and never on a pull request**, in `mutation.yml`, as parallel jobs so that no run
-holds up another. Each module is two jobs, each mutating part of the module: Accounting's first
-whole run on a hosted runner took 296 minutes, against GitHub's 360-minute limit for a job, and a job
-that times out reports nothing. Payments ran as one job until every mutant had a test, when a whole
+holds up another. Each module is several jobs, each mutating part of the module, four for
+Accounting and two for Payments: Accounting's first whole run on a hosted runner took 296 minutes,
+against GitHub's 360-minute limit for a job, and a job that times out reports nothing. By 2026-10-18
+its suite had more than doubled, and every mutant reruns the whole suite, so two parts no longer fit. Payments ran as one job until every mutant had a test, when a whole
 run grew to 142 minutes locally, too near the limit at hosted speeds. The method, the measured run times, what counts as an equivalent
 mutant and how to run one module locally are in [`docs/testing/mutation.md`](../testing/mutation.md).
 

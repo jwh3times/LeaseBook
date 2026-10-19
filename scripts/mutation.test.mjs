@@ -18,6 +18,7 @@ import {
   matches,
   normalise,
   parseArgs,
+  partCount,
   partGlobs,
   readEquivalents,
   renderModule,
@@ -153,7 +154,18 @@ describe("parseArgs", () => {
       () => parseArgs(["all", "--part", "1"]),
       /not split into parts/,
     );
-    assert.throws(() => parseArgs(["accounting", "--part", "3"]), /1 or 2/);
+    assert.throws(
+      () => parseArgs(["payments", "--part", "3"]),
+      /from 1 to 2 for payments/,
+    );
+    assert.throws(
+      () => parseArgs(["accounting", "--part", "0"]),
+      /from 1 to 4 for accounting/,
+    );
+    assert.throws(
+      () => parseArgs(["accounting", "--part", "1.5"]),
+      /whole number/,
+    );
     assert.throws(
       () => parseArgs(["accounting", "--part", "1", "--mutate", "a"]),
       /no --mutate/,
@@ -176,27 +188,40 @@ describe("parseArgs", () => {
 describe("parts of a split module", () => {
   const CONFIG = ["**/*.cs", "!**/obj/**", "!**/Endpoints/**/*.cs"];
 
+  const PARTS = [["Features/Posting", "Ledgers"], ["Banking"]];
+
   it("takes a part of a module that is split", () => {
-    assert.equal(parseArgs(["accounting", "--part", "2"]).part, 2);
+    assert.equal(parseArgs(["accounting", "--part", "4"]).part, 4);
     assert.equal(parseArgs(["payments", "--part", "1"]).part, 1);
   });
 
-  it("mutates the named directories in part 1, without what the config excludes", () => {
-    assert.deepEqual(partGlobs(CONFIG, ["Features/Posting", "Ledgers"], 1), [
+  it("counts one part per named group and one for the rest", () => {
+    assert.equal(partCount("accounting"), 4);
+    assert.equal(partCount("payments"), 2);
+  });
+
+  it("mutates a named part's directories, without what the config excludes", () => {
+    assert.deepEqual(partGlobs(CONFIG, PARTS, 1), [
       "**/Features/Posting/**/*.cs",
       "**/Ledgers/**/*.cs",
       "!**/obj/**",
       "!**/Endpoints/**/*.cs",
     ]);
+    assert.deepEqual(partGlobs(CONFIG, PARTS, 2), [
+      "**/Banking/**/*.cs",
+      "!**/obj/**",
+      "!**/Endpoints/**/*.cs",
+    ]);
   });
 
-  it("mutates everything else the config does in part 2", () => {
-    assert.deepEqual(partGlobs(CONFIG, ["Features/Posting", "Ledgers"], 2), [
+  it("mutates everything else the config does in the last part", () => {
+    assert.deepEqual(partGlobs(CONFIG, PARTS, 3), [
       "**/*.cs",
       "!**/obj/**",
       "!**/Endpoints/**/*.cs",
       "!**/Features/Posting/**/*.cs",
       "!**/Ledgers/**/*.cs",
+      "!**/Banking/**/*.cs",
     ]);
   });
 
@@ -204,14 +229,35 @@ describe("parts of a split module", () => {
     it(`splits ${key} into directories its committed config still mutates`, () => {
       const config = configMutate(key);
       assert.ok(config.includes("**/*.cs"));
-      assert.ok(MODULES[key].firstPart.length > 0);
-      for (const directory of MODULES[key].firstPart) {
-        assert.ok(
-          !config.some(
-            (glob) => glob.startsWith("!") && glob.includes(directory),
-          ),
-          `${directory} is excluded by the config, so part 1 would mutate nothing there`,
-        );
+      assert.ok(MODULES[key].parts.length > 0);
+      for (const directories of MODULES[key].parts) {
+        assert.ok(directories.length > 0);
+        for (const directory of directories) {
+          assert.ok(
+            !config.some(
+              (glob) => glob.startsWith("!") && glob.includes(directory),
+            ),
+            `${directory} is excluded by the config, so its part would mutate nothing there`,
+          );
+        }
+      }
+    });
+
+    it(`names no ${key} directory in two parts`, () => {
+      // A directory's glob also matches any directory below another of the same name, so a name in
+      // one part that ends another part's name would mutate those files twice.
+      const named = MODULES[key].parts.flatMap((directories, part) =>
+        directories.map((directory) => ({ directory, part })),
+      );
+      for (const a of named) {
+        for (const b of named) {
+          if (a.part === b.part) continue;
+          assert.ok(
+            a.directory !== b.directory &&
+              !a.directory.endsWith(`/${b.directory}`),
+            `${a.directory} (part ${a.part + 1}) overlaps ${b.directory} (part ${b.part + 1})`,
+          );
+        }
       }
     });
   }
@@ -661,7 +707,7 @@ describe("running Stryker", () => {
     const repo = fakeRepo();
     const calls = [];
     const logged = [];
-    const code = run(["accounting", "--part", "2"], {
+    const code = run(["accounting", "--part", "4"], {
       spawn: spawner(calls),
       log: (text) => logged.push(text),
       repo,
@@ -670,14 +716,14 @@ describe("running Stryker", () => {
     const { args } = calls[0];
     assert.equal(
       args[args.indexOf("--output") + 1],
-      path.join(repo, "StrykerOutput", "accounting-2"),
+      path.join(repo, "StrykerOutput", "accounting-4"),
     );
     const globs = args.filter((_, i) => args[i - 1] === "--mutate");
     assert.deepEqual(
       globs,
-      partGlobs(["**/*.cs", "!**/obj/**"], MODULES.accounting.firstPart, 2),
+      partGlobs(["**/*.cs", "!**/obj/**"], MODULES.accounting.parts, 4),
     );
-    assert.match(logged[0], /Mutation testing: Accounting, part 2 of 2/);
+    assert.match(logged[0], /Mutation testing: Accounting, part 4 of 4/);
   });
 
   it("removes an old report before running, so it cannot pass for a new one", () => {
