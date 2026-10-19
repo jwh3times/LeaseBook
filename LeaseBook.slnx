@@ -22,6 +22,7 @@
     <Project Path="tests/LeaseBook.Tests.Operations/LeaseBook.Tests.Operations.csproj" />
     <Project Path="tests/LeaseBook.Tests.Payments/LeaseBook.Tests.Payments.csproj" />
     <Project Path="tests/LeaseBook.Tests.SharedKernel/LeaseBook.Tests.SharedKernel.csproj" />
+    <Project Path="tests/LeaseBook.Tests.Tenancy/LeaseBook.Tests.Tenancy.csproj" />
     <Project Path="tests/LeaseBook.Tests.Web/LeaseBook.Tests.Web.csproj" />
   </Folder>
 </Solution>

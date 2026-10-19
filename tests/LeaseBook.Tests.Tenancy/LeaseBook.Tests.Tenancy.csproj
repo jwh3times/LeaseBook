@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="xunit.v3.mtp-v2" />
+    <PackageReference Include="Microsoft.Testing.Extensions.CodeCoverage" />
+    <PackageReference Include="Shouldly" />
+    <!-- Container-backed (Testcontainers via Tests.Common): the executors set transaction-local
+         context that row-level security reads, so they run against the real schema, as the app
+         role, with no host booted. -->
+    <PackageReference Include="Testcontainers.PostgreSql" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="EFCore.NamingConventions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The two projects Stryker mutates against this one, one configuration each (ADR-055
+         addendum, docs/testing/mutation.md): the organization-isolation runtime code under
+         SharedKernel/Tenancy and Web/Tenancy. It is tested here directly, with no host, so a mutant
+         reruns these tests and not the integration suite, which boots the host. -->
+    <ProjectReference Include="..\..\src\LeaseBook.SharedKernel\LeaseBook.SharedKernel.csproj" />
+    <ProjectReference Include="..\..\src\LeaseBook.Web\LeaseBook.Web.csproj" />
+    <ProjectReference Include="..\LeaseBook.Tests.Common\LeaseBook.Tests.Common.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>

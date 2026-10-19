@@ -120,7 +120,9 @@ Reopen when any of these happens:
 ## Addendum — mutation testing with Stryker.NET (2026-10-14)
 
 Coverage says which lines ran, not whether a test would notice them being wrong. Issue #547 asks that
-question of the two modules where a wrong answer is a fiduciary error, Accounting and Payments.
+question of the two modules where a wrong answer is a fiduciary error, Accounting and Payments, and
+since 2026-10-19 of the organization-isolation runtime code, where a wrong answer shows one
+organization's rows to another (see **The scope widened** below).
 
 **The tool is Stryker.NET 5.0.0**, pinned as the `dotnet-stryker` local tool in
 `.config/dotnet-tools.json`. It runs with its Microsoft Testing Platform runner
@@ -144,31 +146,56 @@ suite, which boots the host: Accounting against `LeaseBook.Tests.Accounting`, an
 over the real schema, with the ledger, eligibility and fee-rule ports replaced by stand-ins the test
 controls.
 
-**Report, then fail.** While a module has unexplained survivors, its nightly run only reports. Once a
-module is clean, an unexplained survivor fails its run. A survivor is explained when it matches an
+**The scope widened on 2026-10-19.** Once both modules were clean, the measurement widened to the
+organization-isolation runtime code, which sets and carries the organization context:
+`src/LeaseBook.SharedKernel/Tenancy/` (`OrgScopedExecutor`, `TransactionalUnitOfWork`, `Actor`,
+`Persona` and the request-scoped contexts) and `src/LeaseBook.Web/Tenancy/`
+(`OrgContextMiddleware`, `PersonaResolver`, `PlatformScopedExecutor` and `NullOrgContext`), without
+the audit row entity and its EF mapping there. `Persistence/Rls.cs` and the Capabilities module stay
+out.
+
+Stryker mutates one source project per run, so the isolation code is two modules of the runner,
+`tenancy-kernel` and `tenancy-web`, each with a configuration of its own in the one test project
+they share, `LeaseBook.Tests.Tenancy`, which was added for this. Its tests drive the executors, the
+unit of work, the resolver and the middleware directly, as the app role over a real Postgres
+container, with no host: they read back the settings each unit of work set, on the same server
+session after it ended, and what row-level security then admits. The tests of `Actor` and
+`PersonaResolver` moved there from two pure test projects so that Stryker runs them. Both gates came
+on in the change that added them: every mutant of either module was killed or explained in its
+first run.
+
+**Report, then fail.** While a module has unexplained survivors, its nightly run only reports. Once
+a module is clean, an unexplained survivor fails its run. A survivor is explained when it matches an
 entry in the committed equivalents list, `tests/mutation/equivalent-mutants.json`, and every entry
-carries its reason. The same file holds each module's gate. Both gates shipped off. Payments' came on on 2026-10-16
-and Accounting's on 2026-10-18, each once every mutant in its module was killed or explained. Stryker's own
-`break` threshold is 0 in both configurations, so no score fails a run; the gate is the only failure
-apart from Stryker failing.
+carries its reason. The same file holds each module's gate. Both gates shipped off. Payments' came
+on on 2026-10-16 and Accounting's on 2026-10-18, each once every mutant in its module was killed or
+explained. The two tenancy modules' gates came on with them on 2026-10-19. Stryker's own `break`
+threshold is 0 in every configuration, so no score fails a run; the gate is the only failure apart
+from Stryker failing.
 
 **It runs nightly and never on a pull request**, in `mutation.yml`, as parallel jobs so that no run
-holds up another. Each module is several jobs, each mutating part of the module, four for
-Accounting and two for Payments: Accounting's first whole run on a hosted runner took 296 minutes,
-against GitHub's 360-minute limit for a job, and a job that times out reports nothing. By 2026-10-18
-its suite had more than doubled, and every mutant reruns the whole suite, so two parts no longer fit. Payments ran as one job until every mutant had a test, when a whole
-run grew to 142 minutes locally, too near the limit at hosted speeds. The method, the measured run times, what counts as an equivalent
-mutant and how to run one module locally are in [`docs/testing/mutation.md`](../testing/mutation.md).
+holds up another. Accounting and Payments are several jobs each, each mutating part of the module,
+four for Accounting and two for Payments: Accounting's first whole run on a hosted runner took 296
+minutes, against GitHub's 360-minute limit for a job, and a job that times out reports nothing. By
+2026-10-18 its suite had more than doubled, and every mutant reruns the whole suite, so two parts no
+longer fit. Payments ran as one job until every mutant had a test, when a whole run grew to 142
+minutes locally, too near the limit at hosted speeds. Each tenancy module is one job, since a whole
+run of either took under three minutes locally. The method, the measured run times, what counts as
+an equivalent mutant and how to run one module locally are in
+[`docs/testing/mutation.md`](../testing/mutation.md).
 
 Consequences:
 
-- One more pinned development tool, and one more test project in the `Backend` job of every pull
-  request.
+- One more pinned development tool, and two more test projects in the `Backend` job of every pull
+  request, `LeaseBook.Tests.Payments` and `LeaseBook.Tests.Tenancy`.
 - When a mutant fails to compile in a way Stryker cannot pin to that mutant, Stryker's safe mode
   marks every mutant in the method as a compile error, and the method goes unmeasured. Today that
   is `PaymentEngine.PostReturnAsync`, where a pattern variable is assigned in one operand of `||`,
-  and two Accounting methods, which `docs/testing/mutation.md` names. The summary counts their
-  mutants, and a later step can rewrite the code or accept the gap.
+  two Accounting methods, which `docs/testing/mutation.md` names, and
+  `OrgContextMiddleware.InvokeAsync`, where an `out` variable is assigned in one operand of `||` in
+  the same way. The summary counts their mutants, and a later step can rewrite the code or accept
+  the gap. The middleware's 18 were each made by hand on 2026-10-19 instead: six do not compile, and
+  the tests fail on each of the other twelve.
 - The runner reuses a test process for more than one mutant, and a static field's initializer runs
   once per process, so a mutant inside one either never takes effect or stays in effect for every
   later mutant in that process. Both were confirmed by hand on 2026-10-15. Each static field whose
@@ -184,5 +211,5 @@ Consequences:
   survivors, one area at a time.
 
 Reopen this addendum when Stryker's MTP runner leaves preview or learns to select tests per mutant,
-when one job's nightly run comes near GitHub's six-hour job limit even after a split, or when both
-modules are clean and the measurement widens to the organization-isolation code, as #547 plans.
+when one job's nightly run comes near GitHub's six-hour job limit even after a split, or when the
+measurement widens again, for example to `Persistence/Rls.cs` or the Capabilities module.

@@ -97,7 +97,7 @@ jobs:
           path: TestResults/*.trx
           if-no-files-found: error
           retention-days: 7
-      # One report from the ten per-project files, grouped by assembly. ReportGenerator merges them;
+      # One report from the eleven per-project files, grouped by assembly. ReportGenerator merges them;
       # `coverage-summary.mjs` turns its JSON summary into the per-module table and fails if a
       # product assembly is missing from it, so a filter that stops matching cannot pass as a figure.
       # Runs only after green tests: figures from a failing run describe a run nobody wants.

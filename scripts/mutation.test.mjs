@@ -11,7 +11,9 @@ import path from "node:path";
 import { afterEach, describe, it } from "node:test";
 import {
   CELL_LIMIT,
+  DEFAULT_CONFIG_FILE,
   EQUIVALENTS_FILE,
+  configFileOf,
   configMutate,
   MODULES,
   fails,
@@ -30,6 +32,19 @@ import {
   strykerArgs,
   summarise,
 } from "./mutation.mjs";
+
+/** Every module with its gate off and no entries: the smallest equivalents file the runner accepts. */
+function ungated(overrides = {}) {
+  return {
+    ...Object.fromEntries(
+      Object.keys(MODULES).map((key) => [
+        key,
+        { gate: false, equivalents: [] },
+      ]),
+    ),
+    ...overrides,
+  };
+}
 
 const scratch = [];
 function directory() {
@@ -155,6 +170,10 @@ describe("parseArgs", () => {
       /not split into parts/,
     );
     assert.throws(
+      () => parseArgs(["tenancy-web", "--part", "1"]),
+      /tenancy-web is not split into parts/,
+    );
+    assert.throws(
       () => parseArgs(["payments", "--part", "3"]),
       /from 1 to 2 for payments/,
     );
@@ -182,6 +201,67 @@ describe("parseArgs", () => {
       () => parseArgs(["payments", "--report", "r.json", "--concurrency", "2"]),
       /runs nothing/,
     );
+  });
+});
+
+describe("modules and their Stryker configs", () => {
+  const PROJECTS = {
+    accounting: "LeaseBook.Modules.Accounting.csproj",
+    payments: "LeaseBook.Modules.Payments.csproj",
+    "tenancy-kernel": "LeaseBook.SharedKernel.csproj",
+    "tenancy-web": "LeaseBook.Web.csproj",
+  };
+
+  it("mutates these modules and names each one in the module error", () => {
+    assert.deepEqual(Object.keys(MODULES).sort(), Object.keys(PROJECTS).sort());
+    assert.throws(
+      () => parseArgs(["banking"]),
+      /Name a module: accounting, payments, tenancy-kernel, tenancy-web, all\./,
+    );
+    assert.equal(parseArgs(["tenancy-kernel"]).module, "tenancy-kernel");
+    assert.equal(parseArgs(["tenancy-web"]).module, "tenancy-web");
+  });
+
+  for (const [key, project] of Object.entries(PROJECTS)) {
+    it(`finds ${key}'s committed config, which mutates ${project}`, () => {
+      const file = path.join(MODULES[key].testProject, configFileOf(key));
+      const config = JSON.parse(readFileSync(file, "utf8"))["stryker-config"];
+      assert.equal(config.project, project);
+      assert.equal(config["test-runner"], "mtp");
+      assert.equal(config["coverage-analysis"], "all");
+      assert.equal(config["timeout-ratio"], 4);
+      assert.equal(config.thresholds.break, 0);
+      assert.deepEqual(configMutate(key), config.mutate);
+    });
+  }
+
+  it("gives the two tenancy modules one test project and a config each", () => {
+    const kernel = MODULES["tenancy-kernel"];
+    const web = MODULES["tenancy-web"];
+    assert.equal(kernel.testProject, "tests/LeaseBook.Tests.Tenancy");
+    assert.equal(web.testProject, kernel.testProject);
+    assert.equal(configFileOf("tenancy-kernel"), "stryker-config.kernel.json");
+    assert.equal(configFileOf("tenancy-web"), "stryker-config.web.json");
+    assert.equal(kernel.parts, undefined);
+    assert.equal(web.parts, undefined);
+  });
+
+  it("mutates only the Tenancy directory of each tenancy project, without the EF entity and its mapping", () => {
+    assert.deepEqual(configMutate("tenancy-kernel"), [
+      "**/Tenancy/**/*.cs",
+      "!**/obj/**",
+    ]);
+    assert.deepEqual(configMutate("tenancy-web"), [
+      "**/Tenancy/**/*.cs",
+      "!**/obj/**",
+      "!**/Tenancy/AuditEvent.cs",
+      "!**/Tenancy/AuditEventConfiguration.cs",
+    ]);
+  });
+
+  it("uses stryker-config.json for a module that names no config", () => {
+    assert.equal(configFileOf("accounting"), DEFAULT_CONFIG_FILE);
+    assert.equal(configFileOf("payments"), "stryker-config.json");
   });
 });
 
@@ -577,10 +657,8 @@ describe("readEquivalents", () => {
     writeFileSync(file, JSON.stringify(document));
     return file;
   }
-  const valid = () => ({
-    accounting: { gate: false, equivalents: [] },
-    payments: { gate: true, equivalents: [equivalent()] },
-  });
+  const valid = () =>
+    ungated({ payments: { gate: true, equivalents: [equivalent()] } });
 
   it("reads a gate and a list per module", () => {
     assert.equal(readEquivalents(write(valid())).payments.gate, true);
@@ -590,6 +668,9 @@ describe("readEquivalents", () => {
     const missing = valid();
     delete missing.accounting;
     assert.throws(() => readEquivalents(write(missing)), /no "accounting"/);
+    const noTenancy = valid();
+    delete noTenancy["tenancy-web"];
+    assert.throws(() => readEquivalents(write(noTenancy)), /no "tenancy-web"/);
     assert.throws(
       () =>
         readEquivalents(
@@ -629,23 +710,18 @@ describe("readEquivalents", () => {
 describe("running Stryker", () => {
   function fakeRepo() {
     const repo = directory();
-    for (const { testProject } of Object.values(MODULES)) {
+    for (const key of Object.keys(MODULES)) {
+      const { testProject } = MODULES[key];
       mkdirSync(path.join(repo, testProject), { recursive: true });
       writeFileSync(
-        path.join(repo, testProject, "stryker-config.json"),
+        path.join(repo, testProject, configFileOf(key)),
         JSON.stringify({
-          "stryker-config": { mutate: ["**/*.cs", "!**/obj/**"] },
+          "stryker-config": { mutate: [`**/${key}/*.cs`, "!**/obj/**"] },
         }),
       );
     }
     mkdirSync(path.join(repo, "tests", "mutation"), { recursive: true });
-    writeFileSync(
-      path.join(repo, EQUIVALENTS_FILE),
-      JSON.stringify({
-        accounting: { gate: false, equivalents: [] },
-        payments: { gate: false, equivalents: [] },
-      }),
-    );
+    writeFileSync(path.join(repo, EQUIVALENTS_FILE), JSON.stringify(ungated()));
     return repo;
   }
 
@@ -673,6 +749,8 @@ describe("running Stryker", () => {
       strykerArgs("/out", { concurrency: 2, mutate: ["a", "b"] }),
       [
         "stryker",
+        "--config-file",
+        "stryker-config.json",
         "--output",
         "/out",
         "--concurrency",
@@ -701,6 +779,60 @@ describe("running Stryker", () => {
       calls[0].cwd,
       path.join(repo, "tests/LeaseBook.Tests.Payments"),
     );
+    const { args } = calls[0];
+    assert.equal(
+      args[args.indexOf("--config-file") + 1],
+      "stryker-config.json",
+    );
+  });
+
+  it("runs each tenancy module from the shared test project with its own config and output", () => {
+    const repo = fakeRepo();
+    const calls = [];
+    for (const key of ["tenancy-kernel", "tenancy-web"]) {
+      const file = runStryker(key, { mutate: [] }, spawner(calls), repo);
+      assert.equal(
+        file,
+        path.join(
+          repo,
+          "StrykerOutput",
+          key,
+          "reports",
+          "mutation-report.json",
+        ),
+      );
+    }
+    assert.deepEqual(
+      calls.map(({ args, cwd }) => ({
+        cwd,
+        config: args[args.indexOf("--config-file") + 1],
+        output: args[args.indexOf("--output") + 1],
+      })),
+      [
+        {
+          cwd: path.join(repo, "tests/LeaseBook.Tests.Tenancy"),
+          config: "stryker-config.kernel.json",
+          output: path.join(repo, "StrykerOutput", "tenancy-kernel"),
+        },
+        {
+          cwd: path.join(repo, "tests/LeaseBook.Tests.Tenancy"),
+          config: "stryker-config.web.json",
+          output: path.join(repo, "StrykerOutput", "tenancy-web"),
+        },
+      ],
+    );
+  });
+
+  it("reads a part's globs from the module's own config file", () => {
+    const repo = fakeRepo();
+    assert.deepEqual(configMutate("tenancy-web", repo), [
+      "**/tenancy-web/*.cs",
+      "!**/obj/**",
+    ]);
+    assert.deepEqual(configMutate("tenancy-kernel", repo), [
+      "**/tenancy-kernel/*.cs",
+      "!**/obj/**",
+    ]);
   });
 
   it("runs a part with its own globs and output, and names it in the summary", () => {
@@ -721,7 +853,11 @@ describe("running Stryker", () => {
     const globs = args.filter((_, i) => args[i - 1] === "--mutate");
     assert.deepEqual(
       globs,
-      partGlobs(["**/*.cs", "!**/obj/**"], MODULES.accounting.parts, 4),
+      partGlobs(
+        ["**/accounting/*.cs", "!**/obj/**"],
+        MODULES.accounting.parts,
+        4,
+      ),
     );
     assert.match(logged[0], /Mutation testing: Accounting, part 4 of 4/);
   });
@@ -756,7 +892,7 @@ describe("running Stryker", () => {
     );
   });
 
-  it("reports both modules and exits 0 with every gate off", () => {
+  it("reports every module and exits 0 with every gate off", () => {
     const repo = fakeRepo();
     const calls = [];
     const logged = [];
@@ -767,10 +903,10 @@ describe("running Stryker", () => {
       repo,
     });
     assert.equal(code, 0);
-    assert.equal(calls.length, 2);
+    assert.equal(calls.length, 4);
     assert.match(
       logged[0],
-      /Mutation testing: Accounting[\s\S]*Mutation testing: Payments/,
+      /Mutation testing: Accounting[\s\S]*Mutation testing: Payments[\s\S]*Mutation testing: Tenancy \(SharedKernel\)[\s\S]*Mutation testing: Tenancy \(Web\)/,
     );
     assert.equal(readFileSync(outMd, "utf8"), `${logged[0]}\n`);
   });
@@ -780,10 +916,7 @@ describe("running Stryker", () => {
     const gated = (equivalents) => {
       writeFileSync(
         path.join(repo, EQUIVALENTS_FILE),
-        JSON.stringify({
-          accounting: { gate: false, equivalents: [] },
-          payments: { gate: true, equivalents },
-        }),
+        JSON.stringify(ungated({ payments: { gate: true, equivalents } })),
       );
       return run(["payments"], { spawn: spawner([]), log: () => {}, repo });
     };
