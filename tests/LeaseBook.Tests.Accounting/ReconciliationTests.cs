@@ -279,6 +279,37 @@ public sealed class ReconciliationTests(PostgresFixture fixture)
         (await QueryAsync(scope, new GetReconciliationReport(UuidV7.NewId()), ct)).ShouldBeNull();
     }
 
+    /// <summary>
+    /// The aggregate's own guards, below the handlers' state checks: a finalized reconciliation takes
+    /// no new statement balance and no second finalize, and only a finalized one can be reopened.
+    /// </summary>
+    [Fact]
+    public void A_finalized_reconciliation_refuses_changes_until_reopened()
+    {
+        var reconciliation = BankReconciliation.Start(UuidV7.NewId(), 2026, 2, new Money(1000m));
+        var at = new DateTime(2026, 3, 2, 9, 0, 0, DateTimeKind.Utc);
+
+        Should.Throw<InvalidOperationException>(() => reconciliation.Reopen("not finalized yet")).Message
+            .ShouldBe("Only a finalized reconciliation can be reopened.");
+        reconciliation.Status.ShouldBe(ReconciliationStatus.InProgress);
+
+        reconciliation.SetStatementBalance(new Money(900m));
+        reconciliation.Finalize(null, "{\"snapshot\":1}", at);
+
+        var finalized = $"Reconciliation {reconciliation.Id} is already finalized; unlock it first.";
+        Should.Throw<InvalidOperationException>(() => reconciliation.SetStatementBalance(new Money(1m))).Message
+            .ShouldBe(finalized);
+        Should.Throw<InvalidOperationException>(() => reconciliation.Finalize(UuidV7.NewId(), "{}", at.AddDays(1))).Message
+            .ShouldBe(finalized);
+        (reconciliation.StatementEndingBalance, reconciliation.ReportSnapshot, reconciliation.FinalizedAt, reconciliation.FinalizedBy)
+            .ShouldBe((new Money(900m), "{\"snapshot\":1}", (DateTime?)at, (Guid?)null));
+
+        reconciliation.Reopen("statement corrected");
+        reconciliation.SetStatementBalance(new Money(950m));
+        reconciliation.StatementEndingBalance.ShouldBe(new Money(950m));
+        (reconciliation.Status, reconciliation.ReopenReason).ShouldBe((ReconciliationStatus.Reopened, "statement corrected"));
+    }
+
     private static readonly Leases NoLeases = new(new Dictionary<Guid, TenantPostingDimensions>());
 
     private static (Func<ISender, Task>, string[], string?) Case<T>(ICommand<T> command, string property, string? message = null) =>

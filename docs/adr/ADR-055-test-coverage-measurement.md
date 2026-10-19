@@ -147,15 +147,16 @@ controls.
 **Report, then fail.** While a module has unexplained survivors, its nightly run only reports. Once a
 module is clean, an unexplained survivor fails its run. A survivor is explained when it matches an
 entry in the committed equivalents list, `tests/mutation/equivalent-mutants.json`, and every entry
-carries its reason. The same file holds each module's gate. Both gates shipped off; Payments' came on on 2026-10-16,
-once every Payments mutant was killed or explained. Stryker's own
+carries its reason. The same file holds each module's gate. Both gates shipped off. Payments' came on on 2026-10-16
+and Accounting's on 2026-10-18, each once every mutant in its module was killed or explained. Stryker's own
 `break` threshold is 0 in both configurations, so no score fails a run; the gate is the only failure
 apart from Stryker failing.
 
 **It runs nightly and never on a pull request**, in `mutation.yml`, as parallel jobs so that no run
-holds up another. Each module is two jobs, each mutating part of the module: Accounting's first
-whole run on a hosted runner took 296 minutes, against GitHub's 360-minute limit for a job, and a job
-that times out reports nothing. Payments ran as one job until every mutant had a test, when a whole
+holds up another. Each module is several jobs, each mutating part of the module, four for
+Accounting and two for Payments: Accounting's first whole run on a hosted runner took 296 minutes,
+against GitHub's 360-minute limit for a job, and a job that times out reports nothing. By 2026-10-18
+its suite had more than doubled, and every mutant reruns the whole suite, so two parts no longer fit. Payments ran as one job until every mutant had a test, when a whole
 run grew to 142 minutes locally, too near the limit at hosted speeds. The method, the measured run times, what counts as an equivalent
 mutant and how to run one module locally are in [`docs/testing/mutation.md`](../testing/mutation.md).
 

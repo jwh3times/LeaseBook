@@ -8,8 +8,7 @@ name: Mutation (nightly)
 #
 # Report, then fail. A module's gate in that file is off while it has unexplained survivors, and the
 # job then only reports. Once a module is clean its gate is turned on, and from then an unexplained
-# survivor fails its job. Payments' gate is on and Accounting's off. The job also fails when Stryker
-# itself fails.
+# survivor fails its job. Both modules' gates are on. The job also fails when Stryker itself fails.
 #
 # It never runs on pull requests: a full run of Accounting takes hours. Each module is mutated
 # against its own test project, which needs Docker for its Postgres container (Testcontainers), as
@@ -42,19 +41,20 @@ jobs:
     name: Mutation (${{ matrix.job.name }})
     runs-on: ubuntu-latest
     strategy:
-      # Each module runs as two jobs, all four in parallel, so no run holds up another and a failure
-      # in one does not cancel the rest. A scheduled run has no input and runs all four.
+      # Each module runs as several jobs, Accounting four and Payments two, all six in parallel, so
+      # no run holds up another and a failure in one does not cancel the rest. A scheduled run has
+      # no input and runs all six.
       #
-      # Accounting is split because a whole run took 296 min on a hosted runner, against GitHub's
-      # 360-minute limit for a job, and a job that times out reports nothing. Payments is split
-      # because, once every mutant had a test, a whole run took 142 min locally, and hosted runners
-      # have been 1.2 to 1.75 times slower. Part 1 mutates the directories scripts/mutation.mjs
-      # names and part 2 the rest of the module. Each part gets 300 min: an Accounting part once took
-      # four hours, when mutants in static initializers made 146 others time out, before those
-      # mutants were disabled (docs/testing/mutation.md).
+      # A job that times out reports nothing, against GitHub's 360-minute limit for a job. Every
+      # mutant reruns the module's whole test project, and by 2026-10-18 an Accounting mutant took 17
+      # to 32 seconds on a hosted runner, so two Accounting parts no longer fit: one ran past 300 min.
+      # Payments is split because, once every mutant had a test, a whole run took 142 min locally,
+      # and hosted runners have been 1.2 to 1.75 times slower. Each part but the last mutates the
+      # directories scripts/mutation.mjs names, and the last part the rest of the module. Each part
+      # gets 300 min (docs/testing/mutation.md).
       fail-fast: false
       matrix:
-        job: ${{ fromJSON(inputs.module == 'accounting' && '[{"name":"accounting, part 1","args":"accounting --part 1","out":"accounting-1","timeout":300},{"name":"accounting, part 2","args":"accounting --part 2","out":"accounting-2","timeout":300}]' || inputs.module == 'payments' && '[{"name":"payments, part 1","args":"payments --part 1","out":"payments-1","timeout":300},{"name":"payments, part 2","args":"payments --part 2","out":"payments-2","timeout":300}]' || '[{"name":"accounting, part 1","args":"accounting --part 1","out":"accounting-1","timeout":300},{"name":"accounting, part 2","args":"accounting --part 2","out":"accounting-2","timeout":300},{"name":"payments, part 1","args":"payments --part 1","out":"payments-1","timeout":300},{"name":"payments, part 2","args":"payments --part 2","out":"payments-2","timeout":300}]') }}
+        job: ${{ fromJSON(inputs.module == 'accounting' && '[{"name":"accounting, part 1","args":"accounting --part 1","out":"accounting-1","timeout":300},{"name":"accounting, part 2","args":"accounting --part 2","out":"accounting-2","timeout":300},{"name":"accounting, part 3","args":"accounting --part 3","out":"accounting-3","timeout":300},{"name":"accounting, part 4","args":"accounting --part 4","out":"accounting-4","timeout":300}]' || inputs.module == 'payments' && '[{"name":"payments, part 1","args":"payments --part 1","out":"payments-1","timeout":300},{"name":"payments, part 2","args":"payments --part 2","out":"payments-2","timeout":300}]' || '[{"name":"accounting, part 1","args":"accounting --part 1","out":"accounting-1","timeout":300},{"name":"accounting, part 2","args":"accounting --part 2","out":"accounting-2","timeout":300},{"name":"accounting, part 3","args":"accounting --part 3","out":"accounting-3","timeout":300},{"name":"accounting, part 4","args":"accounting --part 4","out":"accounting-4","timeout":300},{"name":"payments, part 1","args":"payments --part 1","out":"payments-1","timeout":300},{"name":"payments, part 2","args":"payments --part 2","out":"payments-2","timeout":300}]') }}
     timeout-minutes: ${{ matrix.job.timeout }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

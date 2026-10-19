@@ -56,14 +56,15 @@ mutated only when it has one.
 
 The nightly run is [`.github/workflows/mutation.yml`](../../.github/workflows/mutation.yml), at 00:17
 UTC and on manual dispatch, where a module can be chosen. It never runs on a pull request. It runs
-four jobs in parallel, each module in two parts. A whole run of either module comes too near a
-hosted job's time limit (see [Cost](#cost)), and a job that times out reports nothing. Part 1
-mutates the directories `scripts/mutation.mjs` names in `firstPart`, `Processing` for Payments and
-five directories for Accounting, and part 2 the rest of what the configuration mutates, so a
-directory added later falls into part 2 and is never left out. Each job writes the summary to its
-job summary and uploads `mutation-<run>` (`accounting-1`, `accounting-2`, `payments-1` or
-`payments-2`), which holds the summary, the HTML report (`reports/mutation-report.html`) and the
-JSON report the summary was read from.
+six jobs in parallel: Accounting in four parts and Payments in two. A whole run of either module
+comes too near a hosted job's time limit (see [Cost](#cost)), and a job that times out reports
+nothing. Each part but the last mutates the directories `scripts/mutation.mjs` names in `parts`,
+`Processing` for Payments' part 1 and two or three directories for each of Accounting's first three.
+The last part mutates the rest of what the configuration mutates, so a directory added later falls
+into it and is never left out. Each job writes the summary to its job summary and uploads
+`mutation-<run>` (`accounting-1` to `accounting-4`, `payments-1` or `payments-2`), which holds the
+summary, the HTML report (`reports/mutation-report.html`) and the JSON report the summary was read
+from.
 
 ## Run one module locally
 
@@ -89,7 +90,7 @@ node scripts/mutation.mjs payments --concurrency 4 --mutate '**/Processing/Settl
 A `--mutate` given on the command line replaces the configuration's list instead of adding to it, so
 the exclusions above no longer apply. Name only the files you mean.
 
-To run one of a module's two parts, as the nightly jobs do, which writes to
+To run one of a module's parts, as the nightly jobs do, which writes to
 `StrykerOutput/<module>-<part>/`:
 
 ```bash
@@ -220,10 +221,10 @@ migrator (`PaymentsHarness.RebindAsync`).
 
 Each module has a gate in the same file, `"gate": false` or `"gate": true`.
 
-- **Off**: the run reports and passes, whatever survived. Accounting's gate is off.
+- **Off**: the run reports and passes, whatever survived. No module's gate is off now.
 - **On**: the run fails when the module has an undetected mutant, survived or not covered, that the
   equivalents list does not explain. Payments' gate is on, since every Payments mutant was killed or
-  explained on 2026-10-16.
+  explained on 2026-10-16, and Accounting's, since every Accounting mutant was on 2026-10-18.
 
 Turn a module's gate on in the change that explains or kills its last unexplained survivor. From then
 on, a change that leaves an edit unnoticed shows up as a red nightly run: write the test, or record
@@ -250,8 +251,8 @@ the module was not measured.
 - **Static initializers are not mutated.** See below.
 - **A busy runner can time a mutant out.** Both configurations set `timeout-ratio` to 4. See
   [Timeouts](#timeouts).
-- **A few mutants are reached only by chance**, so their status can change between runs of the
-  same code. See [Chance results](#chance-results).
+- **A mutant reached only by chance can change status between runs of the same code.** None is
+  known now. See [Chance results](#chance-results).
 
 ### Static initializers
 
@@ -309,17 +310,21 @@ Payments matched the run before mutant for mutant.
 
 ### Chance results
 
-A few mutants are reached only by chance, so the same code can give them different statuses from
-one run to the next. A status change on one of these does not mean the code or the tests changed.
+A mutant that tests reach only by chance, such as a path that runs only when two requests happen to
+race, can take different statuses from one run of the same code to the next. A status change on one
+of these does not mean the code or the tests changed.
 
-- **`AccountingPeriods.cs`, the lost-race path of opening a period.** It runs only when two
-  requests race to create the same month, which a concurrency test does not always arrange.
+None is known now. There were two. One was the owner ledger with no rows, reached only when a random
+sequence made one. The other was the lost-race path of opening an accounting period in
+`AccountingPeriods.cs`, which ran only when a concurrency test happened to interleave its two
+requests that way. The first scheduled run, on 2026-10-16, gave the same statuses as the run before
+it except for those two. Tests now reach both every run (see
+[Survivors worked through](#survivors-worked-through)).
 
-The first scheduled run, on 2026-10-16, gave the same statuses as the run before it except that
-this one survived where it had been killed, as did an owner-ledger mutant that a test now reaches
-every time (see [Survivors worked through](#survivors-worked-through)). It is a survivor to fix with
-a test that reaches the case every time. Add a mutant here when a summary shows a status change that
-the code does not explain.
+When a summary shows a status change that the code does not explain, list the mutant here, then fix
+it with a test that reaches its case every run: a fixed input where a random one only sometimes
+reaches it, or a race (see [A lock or a race](#a-lock-or-a-race)) where two calls were left to the
+scheduler.
 
 ## Cost
 
@@ -371,6 +376,24 @@ either, so a hosted runner's speed varies by half again from one run to the next
 300-minute timeout and Payments 180. Part 2 took longest in one of the two runs without timeouts
 and finished first in the other, so neither part has a directory moved. Move one from part 2 to
 part 1 if part 2 keeps taking longest.
+
+By 2026-10-18 the test project had grown from 211 tests to 482, and part 1 had become the slow one.
+The hosted run of both parts that day, on the branch that finished Accounting, took 4:22:21 for
+part 1, 494 mutants tested at 32 seconds of wall time each, and 3:00:08 for part 2, 619 mutants at
+17 seconds each. That left part 1 38 minutes inside its timeout, so `Features/Banking/` and
+`Features/Reconciliation/`, 95 of part 1's mutants, moved to part 2. The next hosted run, on
+2026-10-19, took 2:32:16 for part 1, 399 mutants, and cancelled part 2 at its 300-minute timeout,
+714 mutants in, with no report.
+
+Every mutant reruns the whole test project (see [Known limits](#known-limits)), so a mutant costs
+about what the suite does, and the suite had more than doubled. At 17 to 32 seconds each,
+Accounting's 1,113 tested mutants need between five and ten hours, more than two 300-minute jobs
+can hold. So Accounting runs in four parts, sized by the mutants each directory had tested on
+2026-10-18: `LedgerPosting`, `Banking` and `Reconciliation` (297); `Posting/` and
+`Features/Posting/` (281); `Ledgers`, `Refunds` and `Statements` (284); and the rest (251). At the
+slowest rate seen, each should take about two and a half hours. The first hosted run of the four
+parts, on 2026-10-19 with the gate on, took 2:41:34, 2:26:16, 2:41:09 and 2:09:17, and every
+undetected mutant in each part was explained.
 
 Payments ran as one job until every mutant had a test. Then a whole local run tested 1,369 mutants
 in 2:22:06, 6.2 s each, against 3.4 s for 928 mutants on 2026-10-14: more mutants are covered, and
@@ -432,15 +455,16 @@ static fields, and fails a test when made by hand.
 Area by area, each in its own change. A module's gate comes on in the change that explains or
 kills its last unexplained survivor.
 
-| Area                                                         | Killed by new tests | Recorded as equivalent | Result, measured locally                                       |
-| ------------------------------------------------------------ | ------------------: | ---------------------: | -------------------------------------------------------------- |
-| Payments engines (`PaymentEngine.cs`, `SettlementEngine.cs`) |                 130 |                      8 | 99.1%: 841 killed, 8 survived, all explained, none not covered |
-| Payments refund checks and MICR line                         |                 258 |                      8 | 97.0%: 258 killed, 8 survived, all explained, none not covered |
-| The rest of Payments                                         |                 190 |                     33 | 87.1%: 219 killed, 4 timed out, 33 undetected, all explained   |
-| Accounting posting core (`Posting/`, `Features/Posting/`)    |                  92 |                      1 | 99.6%: 280 killed, 1 survived, explained, none not covered     |
-| Accounting ledger posting (`Features/LedgerPosting/`)        |                 109 |                      3 | 98.5%: 199 killed, 3 survived, explained, none not covered     |
-| Accounting refund checks, banking and reconciliation         |                 108 |                      4 | 97.7%: 173 killed, 4 survived, all explained, none not covered |
-| Accounting ledgers and statements                            |                  56 |                     10 | 95.1%: 195 killed, 7 survived and 3 not covered, all explained |
+| Area                                                         | Killed by new tests | Recorded as equivalent | Result, measured locally                                        |
+| ------------------------------------------------------------ | ------------------: | ---------------------: | --------------------------------------------------------------- |
+| Payments engines (`PaymentEngine.cs`, `SettlementEngine.cs`) |                 130 |                      8 | 99.1%: 841 killed, 8 survived, all explained, none not covered  |
+| Payments refund checks and MICR line                         |                 258 |                      8 | 97.0%: 258 killed, 8 survived, all explained, none not covered  |
+| The rest of Payments                                         |                 190 |                     33 | 87.1%: 219 killed, 4 timed out, 33 undetected, all explained    |
+| Accounting posting core (`Posting/`, `Features/Posting/`)    |                  92 |                      1 | 99.6%: 280 killed, 1 survived, explained, none not covered      |
+| Accounting ledger posting (`Features/LedgerPosting/`)        |                 109 |                      3 | 98.5%: 199 killed, 3 survived, explained, none not covered      |
+| Accounting refund checks, banking and reconciliation         |                 108 |                      4 | 97.7%: 173 killed, 4 survived, all explained, none not covered  |
+| Accounting ledgers and statements                            |                  56 |                     10 | 95.1%: 195 killed, 7 survived and 3 not covered, all explained  |
+| The rest of Accounting                                       |                 140 |                     11 | 95.6%: 240 killed, 11 survived, all explained, none not covered |
 
 The engines' 138 undetected mutants, taken from the hosted run on 2026-10-15, are all accounted
 for. `LeaseBook.Tests.Payments` grew from 164 tests to 273, among them 22 races (see
@@ -477,7 +501,7 @@ With that, a whole local run of Payments scored **96.4%**: 1,318 killed, 47 surv
 and 2 not covered, with 121 compile errors and 186 ignored. All 49 undetected mutants are explained
 and no entry is stale, so the Payments gate is on.
 
-Accounting comes next, area by area, and its gate comes on with its last area. The posting core,
+Accounting came next, area by area, and its gate came on with its last area. The posting core,
 `Posting/` and `Features/Posting/`, had 93 undetected mutants in the first scheduled run, the same
 93 when this work began. New tests in `LeaseBook.Tests.Accounting` kill 92 of them: the late-fee
 assessment guards, the reasons and messages a posting is refused with, which lines the
@@ -559,3 +583,40 @@ held. Two empty the tenant ledger's `DepositCollected` arm, which no ledger row 
 event posts only to the bank and the deposit liability. The last two are in
 `GetProspectiveOwnerEquityLines`, the message of a missing-owner throw and the `cash` basis name,
 neither of which any of the four run-event templates can reach.
+
+The rest of Accounting, everything outside `Posting/` and the six `Features/` directories above, had
+152 undetected mutants in the latest scheduled run and 151 when this work began: 119 survived and 32
+were not covered. That is the domain exceptions and account codes in `Contracts/`, the invariant
+sweep in `Diagnostics/`, the enum converters, `Features/Migration/`, the chart of accounts, the
+domain types and the period service. The exception tests looked only for an id or a code leaking
+into a message, never at the code or the message itself. The sweep was run on clean data or one
+check at a time, so nothing checked which checks the whole sweep runs or what a violation says, and
+three of them, I2, I3 and I8, never reported a row. The migration reads ran only inside the
+scenario seed, which fails only when a mutant breaks the import outright. The opening-period race was the other
+[chance result](#chance-results). New tests in `LeaseBook.Tests.Accounting` close each gap.
+`DomainExceptionMessageTests` pins every exception's code and message on every branch, including a
+discriminator value no enum member names, and fails when a new exception is missing from its table.
+`InvariantTests` plants one breach of each swept invariant in an organization and asserts the id
+and detail of every violation the sweep reports. No public path writes those rows, and the schema
+refuses one of them, a PM-income line with an owner, so they are written as the migrator in one
+transaction that lifts that CHECK constraint and is rolled back once the sweep has read them; nothing
+is committed. `MigrationQueryTests` sends the verification and cutover-date queries through the real
+dispatcher, `AccountingEnumConverterTests` maps every enum value to its text and back, and
+`ChartOfAccountsTests` pins each account's code and name as text. `AccountingPeriodsTests` now runs
+its race with `Lanes.RaceAsync`, so the second request loses the insert every run and
+`The_request_that_loses_the_race_to_open_a_month_returns_the_winners_period` checks that it reads back
+the winner, not a period that shares only the year or the month. The re-read has no `ORDER BY`, so
+the `||` mutant dies because the decoy periods come before the winner in both insertion and index
+order, and Postgres returns one of them first; SQL does not promise that order, so if that mutant
+ever survives, look here first. It also covers the same month in another year, a read that writes
+nothing, a failed save that is not a lost race, and a close that is saved. The suite grew from 443
+tests to 482 and runs in about 44 seconds. Of the eleven equivalents, eight are in
+`GetMigrationVerificationData`, whose four aggregates have no `GROUP BY` and so always
+return one row, each with its count check made `>= 0` or `true`. One reverses the order of the dates
+`GetOpeningCutoverDate` takes two of, which cannot change its answer, and two empty the EF
+constructors of `Account` and `JournalEntry`, which only assign null to properties already null.
+
+With that, the hosted run of Accounting's two parts on 2026-10-18 scored **98.4%** in part 1, 488
+killed, 6 survived and 2 not covered, and **96.6%** in part 2, 599 killed, 20 survived and 1 not
+covered. All 29 undetected mutants are explained by the 28 Accounting entries, and no entry is
+stale, so the Accounting gate is on.

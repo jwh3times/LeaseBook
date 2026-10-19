@@ -11,7 +11,7 @@
  *
  *   node scripts/mutation.mjs <accounting|payments|all> [--concurrency <n>] [--mutate <glob>]...
  *                             [--out-md <file>]
- *   node scripts/mutation.mjs <accounting|payments> --part <1|2> [--concurrency <n>] [--out-md <file>]
+ *   node scripts/mutation.mjs <accounting|payments> --part <n> [--concurrency <n>] [--out-md <file>]
  *   node scripts/mutation.mjs <accounting|payments> --report <mutation-report.json> [--out-md <file>]
  *
  * The first form runs Stryker from the module's test project, where its `stryker-config.json` is,
@@ -20,9 +20,9 @@
  * to it, so it names the files to mutate: docs/testing/mutation.md has examples. The second form reads
  * a report a run already wrote and runs nothing.
  *
- * `--part` runs half of a module that is split in two: part 1 mutates the directories its entry in
- * MODULES names, and part 2 everything else the config file mutates. CI runs both modules that way,
- * one job per part, because a whole run of either comes too near a hosted job's time limit.
+ * `--part` runs one part of a split module: each part but the last mutates the directories its entry
+ * in MODULES names, and the last part everything else the config file mutates. CI runs both modules
+ * that way, one job per part, because a whole run of either comes too near a hosted job's time limit.
  *
  * The markdown summary goes to standard output, and also to `--out-md` when given. CI appends it to
  * the job summary.
@@ -51,16 +51,15 @@ export const MODULES = {
   accounting: {
     name: "Accounting",
     testProject: "tests/LeaseBook.Tests.Accounting",
-    // Split in two for CI: a whole run took 296 minutes on a hosted runner, against GitHub's 360-minute
-    // limit for a job (docs/testing/mutation.md). Part 1 is these directories, which held 468 of the
-    // 956 mutants that run tested; part 2 is the rest of the module, so a directory added later falls
-    // into part 2 and is never left out.
-    firstPart: [
-      "Features/LedgerPosting",
-      "Features/Posting",
-      "Features/Statements",
-      "Features/Banking",
-      "Features/Reconciliation",
+    // Split in four for CI: every mutant reruns the whole test project, and by 2026-10-18 a tested
+    // mutant took 17 to 32 seconds on a hosted runner, so two parts no longer fit GitHub's limit for
+    // a job (docs/testing/mutation.md). Parts 1 to 3 are these directories, each about a quarter of
+    // the 1,113 mutants tested then; part 4 is the rest of the module, so a directory added later
+    // falls into part 4 and is never left out.
+    parts: [
+      ["Features/LedgerPosting", "Features/Banking", "Features/Reconciliation"],
+      ["Posting", "Features/Posting"],
+      ["Features/Ledgers", "Features/Refunds", "Features/Statements"],
     ],
   },
   payments: {
@@ -69,7 +68,7 @@ export const MODULES = {
     // Split in two for CI: once every mutant had a test, a whole run took 142 minutes locally, which
     // a hosted runner, 1.2 to 1.75 times slower, could stretch past four hours. Part 1 is the two
     // engines, 864 of the 1,369 mutants that run tested; part 2 is the rest of the module.
-    firstPart: ["Processing"],
+    parts: [["Processing"]],
   },
 };
 
@@ -118,9 +117,7 @@ export function parseArgs(argv) {
         options.mutate.push(value());
         break;
       case "--part": {
-        const part = Number(value());
-        if (part !== 1 && part !== 2) throw new Error("--part is 1 or 2.");
-        options.part = part;
+        options.part = Number(value());
         break;
       }
       case "--report":
@@ -145,11 +142,20 @@ export function parseArgs(argv) {
   if (options.report !== undefined && options.module === "all") {
     throw new Error("--report reads one module's report; name the module.");
   }
-  if (
-    options.part !== undefined &&
-    MODULES[options.module]?.firstPart === undefined
-  ) {
-    throw new Error(`${options.module} is not split into parts.`);
+  if (options.part !== undefined) {
+    if (MODULES[options.module]?.parts === undefined) {
+      throw new Error(`${options.module} is not split into parts.`);
+    }
+    const count = partCount(options.module);
+    if (
+      !Number.isInteger(options.part) ||
+      options.part < 1 ||
+      options.part > count
+    ) {
+      throw new Error(
+        `--part is a whole number from 1 to ${count} for ${options.module}.`,
+      );
+    }
   }
   if (options.part !== undefined && options.mutate.length > 0) {
     throw new Error("--part chooses what to mutate, so it takes no --mutate.");
@@ -408,20 +414,27 @@ export function readEquivalents(file = path.join(REPO, EQUIVALENTS_FILE)) {
   return document;
 }
 
+/** How many parts a split module runs in: one per named group of directories, and the rest. */
+export function partCount(key) {
+  return MODULES[key].parts.length + 1;
+}
+
 /**
- * The `mutate` list for one part of a split module, from the config file's list. Part 1 mutates the
- * named directories, still without anything the config excludes; part 2 is the config's list with
- * those directories excluded. Together they mutate what the config alone does.
+ * The `mutate` list for one part of a split module, from the config file's list. Each part but the
+ * last mutates its named directories, still without anything the config excludes; the last part is
+ * the config's list with every named directory excluded. Together they mutate what the config alone
+ * does.
  */
-export function partGlobs(configMutate, firstPart, part) {
-  const directories = firstPart.map((directory) => `**/${directory}/**/*.cs`);
-  if (part === 1) {
+export function partGlobs(configMutate, parts, part) {
+  const globs = (directories) =>
+    directories.map((directory) => `**/${directory}/**/*.cs`);
+  if (part <= parts.length) {
     return [
-      ...directories,
+      ...globs(parts[part - 1]),
       ...configMutate.filter((glob) => glob.startsWith("!")),
     ];
   }
-  return [...configMutate, ...directories.map((glob) => `!${glob}`)];
+  return [...configMutate, ...globs(parts.flat()).map((glob) => `!${glob}`)];
 }
 
 /** The `mutate` list in a module's stryker-config.json. */
@@ -465,11 +478,7 @@ export function runStryker(key, options, spawn = defaultSpawn, repo = REPO) {
   const mutate =
     options.part === undefined
       ? options.mutate
-      : partGlobs(
-          configMutate(key, repo),
-          MODULES[key].firstPart,
-          options.part,
-        );
+      : partGlobs(configMutate(key, repo), MODULES[key].parts, options.part);
   const status = spawn(
     "dotnet",
     strykerArgs(output, { ...options, mutate }),
@@ -511,7 +520,7 @@ export function run(
     const name =
       options.part === undefined
         ? MODULES[key].name
-        : `${MODULES[key].name}, part ${options.part} of 2`;
+        : `${MODULES[key].name}, part ${options.part} of ${partCount(key)}`;
     const { gate, equivalents } = document[key];
     let summary;
     try {

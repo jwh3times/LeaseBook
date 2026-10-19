@@ -86,6 +86,55 @@ public sealed class ChartOfAccountsTests(PostgresFixture fixture)
         bCodes.ShouldNotContain(AccountCodes.TrustBank(OperatingTrust.BankAccountId)); // A's bank invisible to B
     }
 
+    [Fact]
+    public async Task Each_account_is_named_and_keyed_as_the_template_spells_it()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var scope = await OrgScope.CreateAsync(fixture, ct);
+
+        await ProvisionAsync(scope, [OperatingTrust, ManagementOperating], ct);
+
+        // The codes are stable keys other modules and the read-model SQL spell out, so they are pinned
+        // as text here, not through the helpers that build them.
+        (await ReadAccountsAsync(scope, ct)).Select(a => (a.Code, a.Name)).ShouldBe(
+            [
+                ("tenant_receivable", "Tenant Receivable"),
+                ("owner_equity", "Owner Equity"),
+                ("security_deposits_held", "Security Deposits Held"),
+                ("tenant_prepayments", "Tenant Prepayments"),
+                ("pm_income", "PM Income"),
+                ("migration_clearing", "Migration Clearing"),
+                ($"trust_bank:{OperatingTrust.BankAccountId}", "Operating Trust"),
+                ($"pm_operating_bank:{ManagementOperating.BankAccountId}", "Management Operating"),
+            ],
+            ignoreOrder: true);
+    }
+
+    [Fact]
+    public async Task Provisioning_an_organization_that_has_every_account_writes_nothing()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var scope = await OrgScope.CreateAsync(fixture, ct);
+        await ProvisionAsync(scope, [OperatingTrust], ct);
+
+        var saves = 0;
+        scope.Db.SavingChanges += (_, _) => saves++;
+        await ProvisionAsync(scope, [OperatingTrust], ct);
+
+        saves.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task Provisioning_needs_a_bank_list()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var scope = await OrgScope.CreateAsync(fixture, ct);
+
+        var refusal = await Should.ThrowAsync<ArgumentNullException>(() => ProvisionAsync(scope, null!, ct));
+        refusal.ParamName.ShouldBe("banks");
+        (await ReadAccountsAsync(scope, ct)).ShouldBeEmpty();
+    }
+
     private static Task ProvisionAsync(OrgScope scope, IReadOnlyList<BankAccountSpec> banks, CancellationToken ct) =>
         scope.RunAsync(() => new ChartOfAccounts(scope.Db).ProvisionAsync(banks, ct), ct);
 
