@@ -8,8 +8,7 @@ name: Mutation (nightly)
 #
 # Report, then fail. A module's gate in that file is off while it has unexplained survivors, and the
 # job then only reports. Once a module is clean its gate is turned on, and from then an unexplained
-# survivor fails its job. Payments' gate is on and Accounting's off. The job also fails when Stryker
-# itself fails.
+# survivor fails its job. Both modules' gates are on. The job also fails when Stryker itself fails.
 #
 # It never runs on pull requests: a full run of Accounting takes hours. Each module is mutated
 # against its own test project, which needs Docker for its Postgres container (Testcontainers), as

@@ -59,7 +59,7 @@ UTC and on manual dispatch, where a module can be chosen. It never runs on a pul
 four jobs in parallel, each module in two parts. A whole run of either module comes too near a
 hosted job's time limit (see [Cost](#cost)), and a job that times out reports nothing. Part 1
 mutates the directories `scripts/mutation.mjs` names in `firstPart`, `Processing` for Payments and
-five directories for Accounting, and part 2 the rest of what the configuration mutates, so a
+three directories for Accounting, and part 2 the rest of what the configuration mutates, so a
 directory added later falls into part 2 and is never left out. Each job writes the summary to its
 job summary and uploads `mutation-<run>` (`accounting-1`, `accounting-2`, `payments-1` or
 `payments-2`), which holds the summary, the HTML report (`reports/mutation-report.html`) and the
@@ -220,10 +220,10 @@ migrator (`PaymentsHarness.RebindAsync`).
 
 Each module has a gate in the same file, `"gate": false` or `"gate": true`.
 
-- **Off**: the run reports and passes, whatever survived. Accounting's gate is off.
+- **Off**: the run reports and passes, whatever survived. No module's gate is off now.
 - **On**: the run fails when the module has an undetected mutant, survived or not covered, that the
   equivalents list does not explain. Payments' gate is on, since every Payments mutant was killed or
-  explained on 2026-10-16.
+  explained on 2026-10-16, and Accounting's, since every Accounting mutant was on 2026-10-18.
 
 Turn a module's gate on in the change that explains or kills its last unexplained survivor. From then
 on, a change that leaves an edit unnoticed shows up as a red nightly run: write the test, or record
@@ -376,6 +376,12 @@ either, so a hosted runner's speed varies by half again from one run to the next
 and finished first in the other, so neither part has a directory moved. Move one from part 2 to
 part 1 if part 2 keeps taking longest.
 
+By 2026-10-18 the test project had grown from 211 tests to 482, and part 1 had become the slow one.
+The hosted run of both parts that day, on the branch that finished Accounting, took 4:22:21 for
+part 1, 494 mutants tested at 32 seconds of wall time each, and 3:00:08 for part 2, 619 mutants at
+17 seconds each. That left part 1 38 minutes inside its timeout, so `Features/Banking/` and
+`Features/Reconciliation/`, 95 of part 1's mutants, moved to part 2.
+
 Payments ran as one job until every mutant had a test. Then a whole local run tested 1,369 mutants
 in 2:22:06, 6.2 s each, against 3.4 s for 928 mutants on 2026-10-14: more mutants are covered, and
 each test process runs 520 tests instead of 164. Hosted runners took 1.2 to 1.75 times as long as
@@ -482,7 +488,7 @@ With that, a whole local run of Payments scored **96.4%**: 1,318 killed, 47 surv
 and 2 not covered, with 121 compile errors and 186 ignored. All 49 undetected mutants are explained
 and no entry is stale, so the Payments gate is on.
 
-Accounting comes next, area by area, and its gate comes on with its last area. The posting core,
+Accounting came next, area by area, and its gate came on with its last area. The posting core,
 `Posting/` and `Features/Posting/`, had 93 undetected mutants in the first scheduled run, the same
 93 when this work began. New tests in `LeaseBook.Tests.Accounting` kill 92 of them: the late-fee
 assessment guards, the reasons and messages a posting is refused with, which lines the
@@ -596,3 +602,8 @@ tests to 482 and runs in about 44 seconds. Of the eleven equivalents, eight are 
 return one row, each with its count check made `>= 0` or `true`. One reverses the order of the dates
 `GetOpeningCutoverDate` takes two of, which cannot change its answer, and two empty the EF
 constructors of `Account` and `JournalEntry`, which only assign null to properties already null.
+
+With that, the hosted run of both Accounting parts on 2026-10-18 scored **98.4%** in part 1, 488
+killed, 6 survived and 2 not covered, and **96.6%** in part 2, 599 killed, 20 survived and 1 not
+covered. All 29 undetected mutants are explained by the 28 Accounting entries, and no entry is
+stale, so the Accounting gate is on.

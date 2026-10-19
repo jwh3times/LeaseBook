@@ -147,8 +147,8 @@ controls.
 **Report, then fail.** While a module has unexplained survivors, its nightly run only reports. Once a
 module is clean, an unexplained survivor fails its run. A survivor is explained when it matches an
 entry in the committed equivalents list, `tests/mutation/equivalent-mutants.json`, and every entry
-carries its reason. The same file holds each module's gate. Both gates shipped off; Payments' came on on 2026-10-16,
-once every Payments mutant was killed or explained. Stryker's own
+carries its reason. The same file holds each module's gate. Both gates shipped off. Payments' came on on 2026-10-16
+and Accounting's on 2026-10-18, each once every mutant in its module was killed or explained. Stryker's own
 `break` threshold is 0 in both configurations, so no score fails a run; the gate is the only failure
 apart from Stryker failing.
 

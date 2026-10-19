@@ -1,6 +1,6 @@
 {
   "accounting": {
-    "gate": false,
+    "gate": true,
     "equivalents": [
       {
         "file": "src/LeaseBook.Modules.Accounting/Posting/PostingService.cs",

@@ -52,15 +52,13 @@ export const MODULES = {
     name: "Accounting",
     testProject: "tests/LeaseBook.Tests.Accounting",
     // Split in two for CI: a whole run took 296 minutes on a hosted runner, against GitHub's 360-minute
-    // limit for a job (docs/testing/mutation.md). Part 1 is these directories, which held 468 of the
-    // 956 mutants that run tested; part 2 is the rest of the module, so a directory added later falls
-    // into part 2 and is never left out.
+    // limit for a job (docs/testing/mutation.md). Part 1 is these directories; part 2 is the rest of
+    // the module, so a directory added later falls into part 2 and is never left out. Banking and
+    // Reconciliation moved to part 2 on 2026-10-18, when part 1 took 4:22 to part 2's 3:00.
     firstPart: [
       "Features/LedgerPosting",
       "Features/Posting",
       "Features/Statements",
-      "Features/Banking",
-      "Features/Reconciliation",
     ],
   },
   payments: {
