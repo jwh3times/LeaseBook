@@ -191,11 +191,11 @@ Consequences:
 - When a mutant fails to compile in a way Stryker cannot pin to that mutant, Stryker's safe mode
   marks every mutant in the method as a compile error, and the method goes unmeasured. Today that
   is `PaymentEngine.PostReturnAsync`, where a pattern variable is assigned in one operand of `||`,
-  two Accounting methods, which `docs/testing/mutation.md` names, and
-  `OrgContextMiddleware.InvokeAsync`, where an `out` variable is assigned in one operand of `||` in
-  the same way. The summary counts their mutants, and a later step can rewrite the code or accept
-  the gap. The middleware's 18 were each made by hand on 2026-10-19 instead: six do not compile, and
-  the tests fail on each of the other twelve.
+  and two Accounting methods, which `docs/testing/mutation.md` names. The summary counts their
+  mutants, and a later step can rewrite the code or accept the gap.
+  `OrgContextMiddleware.InvokeAsync` had the same gap, from an `out` variable assigned in one operand
+  of `||`, and its 18 mutants were first made by hand. On 2026-10-19 each `TryParse` in it became a
+  statement of its own, with no change in behavior, and Stryker now tests it.
 - The runner reuses a test process for more than one mutant, and a static field's initializer runs
   once per process, so a mutant inside one either never takes effect or stays in effect for every
   later mutant in that process. Both were confirmed by hand on 2026-10-15. Each static field whose
