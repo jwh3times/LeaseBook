@@ -440,7 +440,12 @@ can hold. So Accounting runs in four parts, sized by the mutants each directory 
 `Features/Posting/` (281); `Ledgers`, `Refunds` and `Statements` (284); and the rest (251). At the
 slowest rate seen, each should take about two and a half hours. The first hosted run of the four
 parts, on 2026-10-19 with the gate on, took 2:41:34, 2:26:16, 2:41:09 and 2:09:17, and every
-undetected mutant in each part was explained.
+undetected mutant in each part was explained. The first scheduled run of all eight jobs, on
+2026-10-20 at `35d56d7` with every gate on, took 1:28:14, 1:23:18, 1:29:28 and 1:14:17 for the four
+Accounting parts, 1:53:29 and 1:46:14 for the two Payments parts, and under four minutes for each
+tenancy module, again with every undetected mutant explained. Accounting's parts and tests were the
+same as the day before, and took a little over half as long, so a hosted runner's speed can vary
+nearly twofold from one run to the next. The parts are sized for the slow end.
 
 Payments ran as one job until every mutant had a test. Then a whole local run tested 1,369 mutants
 in 2:22:06, 6.2 s each, against 3.4 s for 928 mutants on 2026-10-14: more mutants are covered, and
