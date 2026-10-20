@@ -28,6 +28,7 @@ public sealed class ApiFactory(
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Development");
+        QuietConsole(builder);
 
         foreach (var (key, value) in settings ?? new Dictionary<string, string?>())
         {
@@ -53,5 +54,20 @@ public sealed class ApiFactory(
                 .UseNpgsql(appConnectionString, npgsql => npgsql.SetPostgresVersion(18, 0))
                 .UseSnakeCaseNamingConvention());
         });
+    }
+
+    /// <summary>
+    /// Raises the console provider's level to Warning for a booted test host (#548). At Information
+    /// the host logs every SQL command, about 1 GB of standard output over the integration suite, and
+    /// <c>dotnet test</c> holds a test process's whole output in one string, which .NET caps near
+    /// 1.07 billion characters: past it the CLI throws <c>OutOfMemoryException</c> and exits 1 with
+    /// every test green. Only the console provider is filtered. The log level itself is unchanged, so a
+    /// test that adds its own provider to capture log events still sees them. It is applied before a
+    /// test's own settings, which can still override it.
+    /// </summary>
+    public static void QuietConsole(IWebHostBuilder builder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        builder.UseSetting("Logging:Console:LogLevel:Default", "Warning");
     }
 }
