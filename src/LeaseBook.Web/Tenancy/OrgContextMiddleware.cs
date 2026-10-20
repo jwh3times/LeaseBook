@@ -27,8 +27,10 @@ public sealed class OrgContextMiddleware(RequestDelegate next)
 
     public async Task InvokeAsync(HttpContext context, OrgScopedExecutor executor)
     {
-        var orgClaim = context.User.FindFirst(OrgIdClaim)?.Value;
-        if (context.User.Identity?.IsAuthenticated != true || !Guid.TryParse(orgClaim, out var orgId))
+        // Each TryParse is its own statement rather than an operand of || or &&, so mutation testing
+        // can flip those operators without leaving the out variable unassigned (ADR-055 addendum).
+        var hasOrgId = Guid.TryParse(context.User.FindFirst(OrgIdClaim)?.Value, out var orgId);
+        if (context.User.Identity?.IsAuthenticated != true || !hasOrgId)
         {
             // No resolved org → no transaction → no app.org_id → RLS matches nothing.
             await next(context);
@@ -39,8 +41,8 @@ public sealed class OrgContextMiddleware(RequestDelegate next)
         // An authenticated principal whose id will not parse (or parses as empty) is named rather
         // than left anonymous. The stamped value is null either way, exactly as before; what changes
         // is that the odd case says what it is instead of looking like every other unattributed write.
-        var actor = Guid.TryParse(context.User.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var userId)
-            && userId != Guid.Empty
+        var hasUserId = Guid.TryParse(context.User.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var userId);
+        var actor = hasUserId && userId != Guid.Empty
                 ? Actor.User(userId)
                 : Actor.System("principal-without-user-id");
 

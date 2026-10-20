@@ -285,11 +285,9 @@ the module was not measured.
   mutant, it removes every mutation in the method and marks them as compile errors. In Payments this
   happens to `PaymentEngine.PostReturnAsync`, whose condition assigns a pattern variable in one
   operand of `||`. In Accounting it happens to the validator in `GetOwnerEquityLines.cs` and to the
-  handler in `PostRefundCheck.cs`. In the Web host's isolation code it happens to
-  `OrgContextMiddleware.InvokeAsync`, whose first condition assigns `orgId` in one operand of `||`
-  in the same way, so all 18 of its mutants are compile errors (see
-  [Survivors worked through](#survivors-worked-through) for how they were checked by hand). Their
-  mutants are counted as compile errors, not tested. Stryker also marks a mutant as a compile error
+  handler in `PostRefundCheck.cs`. Their mutants are counted as compile errors, not tested.
+  `OrgContextMiddleware.InvokeAsync` had the same gap until its two `TryParse` calls became
+  statements of their own (see [Survivors worked through](#survivors-worked-through)). Stryker also marks a mutant as a compile error
   when another mutant of the same expression does not compile: in `PersonaResolver` it marks
   `roles.Count == 0` and `roles.Count == 1` made `!=`, beside a `Count` to `Sum` mutant there.
 - **Per-process cost.** Each test process starts its own Postgres container and applies the
@@ -459,12 +457,13 @@ scheduled mutation run started at 04:35, more than four hours after 00:17, and i
 by about the same amount, so the mutation run still finished before that day's coverage run began,
 and an earlier slot would not change that.
 
-The isolation code, measured locally on 2026-10-19 at concurrency 4, each module whole:
+The isolation code, measured locally on 2026-10-19 at concurrency 4, each module whole (Web after
+the middleware change):
 
 | Run                    | Tests | Mutants created | Mutants tested | Time | Wall time per tested mutant |
 | ---------------------- | ----: | --------------: | -------------: | ---- | --------------------------: |
 | Tenancy (SharedKernel) |   149 |             244 |             81 | 2:27 |                       1.3 s |
-| Tenancy (Web)          |   149 |          13,846 |             17 | 2:31 |                       2.1 s |
+| Tenancy (Web)          |   149 |          13,846 |             33 | 2:51 |                       1.3 s |
 
 Stryker creates every mutant of the project before it applies the `mutate` list, and the Web project
 is the whole host, so most of a Tenancy (Web) run is creating and compiling mutants it then leaves
@@ -526,7 +525,7 @@ kills its last unexplained survivor.
 | Accounting refund checks, banking and reconciliation           |                 108 |                      4 | 97.7%: 173 killed, 4 survived, all explained, none not covered            |
 | Accounting ledgers and statements                              |                  56 |                     10 | 95.1%: 195 killed, 7 survived and 3 not covered, all explained            |
 | The rest of Accounting                                         |                 140 |                     11 | 95.6%: 240 killed, 11 survived, all explained, none not covered           |
-| Organization-isolation code (`Tenancy/`, SharedKernel and Web) |                  96 |                      2 | SharedKernel 100%: 81 killed; Web 88.2%: 15 killed, 2 survived, explained |
+| Organization-isolation code (`Tenancy/`, SharedKernel and Web) |                  96 |                      2 | SharedKernel 100%: 81 killed; Web 93.9%: 31 killed, 2 survived, explained |
 
 The engines' 138 undetected mutants, taken from the hosted run on 2026-10-15, are all accounted
 for. `LeaseBook.Tests.Payments` grew from 164 tests to 273, among them 22 races (see
@@ -704,13 +703,14 @@ made `All` in the unknown-role check, where the only sets it lets through, an un
 known one, are refused by the two checks below it all the same; and `Single` made `SingleOrDefault`
 where the set holds exactly one role.
 
-Safe mode removed every mutant of `OrgContextMiddleware.InvokeAsync` (see
-[Known limits](#known-limits)), so Stryker tested none of its 18. Each was made by hand instead.
-Six do not compile on their own: the two that change the `||` whose second operand assigns `orgId`,
-the removal of the block that condition guards or of that block's `return`, and the two that
-replace the condition that assigns `userId`. Each of the other twelve fails tests in
-`OrgContextMiddlewareTests`. The method stays unmeasured until its code changes: a first condition
-in which no operand of `||` assigns `orgId` would let Stryker test it.
+In the first runs safe mode removed every mutant of `OrgContextMiddleware.InvokeAsync` (see
+[Known limits](#known-limits)), because its first condition assigned `orgId` with `out var` in one
+operand of `||`, and its actor condition assigned `userId` the same way in one operand of `&&`.
+Each of the 18 was made by hand instead: six did not compile on their own, and each of the other
+twelve failed tests in `OrgContextMiddlewareTests`. A follow-up change, also on 2026-10-19, made
+each `TryParse` a statement of its own, with no change in behavior. Stryker then tested 16 of the
+method's mutants and killed all 16; the other 2, removals of blocks another mutant already covers,
+it ignores. That took `tenancy-web` from 88.2%, 15 killed, to 93.9%, 31 killed.
 
 With that, neither tenancy module has an unexplained undetected mutant or a stale entry, so both
 gates are on.
