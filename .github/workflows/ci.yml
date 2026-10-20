@@ -80,15 +80,6 @@ jobs:
           dotnet test -c Release --no-build --report-xunit-trx --results-directory TestResults
           --coverage --coverage-output-format cobertura
           --coverage-settings "$GITHUB_WORKSPACE/tests/coverage.settings.xml"
-        env:
-          # The test host logs every SQL command to the console at Information: about 1 GB over the
-          # integration suite. `dotnet test` holds a test process's whole output in one string, and
-          # .NET caps a string near 1.07 billion characters, so the run sat just under a limit past
-          # which the CLI throws OutOfMemoryException with every test green. Collection slows the
-          # suite enough to add polling queries and cross it. This filters the console provider only:
-          # the log level itself is unchanged, so a test that captures log events still sees them.
-          # Issue #548 moves this into the test host and removes it from here.
-          Logging__Console__LogLevel__Default: Warning
       - name: Upload backend test results
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

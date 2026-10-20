@@ -356,6 +356,7 @@ public sealed class RoleSeedingReadinessTests(PostgresFixture fixture)
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseEnvironment("Development");
+            ApiFactory.QuietConsole(builder);
 
             builder.ConfigureServices(services =>
             {

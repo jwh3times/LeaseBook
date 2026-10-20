@@ -141,7 +141,7 @@ Docker must be running, as for any test run. From the repository root:
 dotnet tool restore
 dotnet build -c Release
 rm -rf TestResults
-Logging__Console__LogLevel__Default=Warning dotnet test -c Release --no-build \
+dotnet test -c Release --no-build \
   --results-directory TestResults \
   --coverage --coverage-output-format cobertura \
   --coverage-settings "$PWD/tests/coverage.settings.xml"
@@ -151,12 +151,10 @@ node scripts/coverage-summary.mjs dotnet --summary TestResults/coverage/Summary.
   --title ".NET suite coverage by module"
 ```
 
-In PowerShell, set the variable first with `$env:Logging__Console__LogLevel__Default = 'Warning'`
-and write the settings path as `"$PWD/tests/coverage.settings.xml"`.
+In PowerShell, write the settings path as `"$PWD/tests/coverage.settings.xml"`.
 
 - Delete `TestResults` first. Each run adds files with new names, and the report merges every
   Cobertura file it finds there.
-- Keep the logging variable. See [Console logging and the test run](#console-logging-and-the-test-run).
 - Open `TestResults/coverage/index.html` for the report. `TestResults/coverage/Cobertura.xml` is the
   merged file.
 
@@ -493,10 +491,13 @@ Without collection the run stayed just under the limit. With it, the suite runs 
 polling code logs more queries, and the first measured run crossed the limit: 2,223 tests passed and
 the command exited 1.
 
-The `Backend` job therefore sets `Logging__Console__LogLevel__Default=Warning` for the test step.
-That filters the console provider only. The log level itself is unchanged, so a test that captures
-log events through its own provider still receives them. With the filter, the same run passes and
-the largest process in the run peaks at about 2.7 GB of memory where it had peaked at 4.2 GB.
-
-Use the same variable when collecting locally. A plain `dotnet test` without collection still passes
-without it, but it is that close to the limit.
+So the test host raises the console provider's level to Warning: `ApiFactory.QuietConsole` in
+`tests/LeaseBook.Tests.Common/ApiFactory.cs`, which both of the suite's web application factories
+call. That filters the console provider only. The log level itself is unchanged, so a test that
+captures log events through its own provider still receives them, and a test's own settings can
+override the filter.
+Local runs and CI behave the same, and no variable is needed. On 2026-10-20 the integration test
+process, run on its own, wrote 716,181 bytes to standard output, against 791,554,472 before the
+filter, with all 1,615 tests passing both times. What it still writes is the warnings and errors
+tests provoke on purpose. With the filter the largest process in a collecting run peaked at about
+2.7 GB of memory, where it had peaked at 4.2 GB.
