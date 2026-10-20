@@ -9,20 +9,26 @@
  *
  * Usage:
  *
- *   node scripts/mutation.mjs <accounting|payments|all> [--concurrency <n>] [--mutate <glob>]...
- *                             [--out-md <file>]
+ *   node scripts/mutation.mjs <module|all> [--concurrency <n>] [--mutate <glob>]... [--out-md <file>]
  *   node scripts/mutation.mjs <accounting|payments> --part <n> [--concurrency <n>] [--out-md <file>]
- *   node scripts/mutation.mjs <accounting|payments> --report <mutation-report.json> [--out-md <file>]
+ *   node scripts/mutation.mjs <module> --report <mutation-report.json> [--out-md <file>]
  *
- * The first form runs Stryker from the module's test project, where its `stryker-config.json` is,
- * writing to `StrykerOutput/<module>/`, then reads the JSON report. `--concurrency` and `--mutate`
- * pass through to Stryker. A `--mutate` given here replaces the config file's list rather than adding
- * to it, so it names the files to mutate: docs/testing/mutation.md has examples. The second form reads
- * a report a run already wrote and runs nothing.
+ * A module is a key of MODULES: accounting, payments, tenancy-kernel or tenancy-web. The two tenancy
+ * keys are the organization-isolation runtime code, `Tenancy/` in SharedKernel and in the Web host,
+ * each mutated against the one test project they share, `LeaseBook.Tests.Tenancy`, with a Stryker
+ * configuration of its own there, because Stryker mutates one source project per run.
+ *
+ * The first two forms run Stryker from the module's test project with the module's configuration
+ * file (`stryker-config.json` unless MODULES names another), writing to `StrykerOutput/<module>/`
+ * (`<module>-<part>/` for a part), then read the JSON report. `--concurrency` and `--mutate` pass through to Stryker. A `--mutate` given
+ * here replaces the config file's list rather than adding to it, so it names the files to mutate:
+ * docs/testing/mutation.md has examples. The third form reads a report a run already wrote and runs
+ * nothing.
  *
  * `--part` runs one part of a split module: each part but the last mutates the directories its entry
- * in MODULES names, and the last part everything else the config file mutates. CI runs both modules
- * that way, one job per part, because a whole run of either comes too near a hosted job's time limit.
+ * in MODULES names, and the last part everything else the config file mutates. CI runs Accounting
+ * and Payments that way, one job per part, because a whole run of either comes too near a hosted
+ * job's time limit. The tenancy keys are small enough to run whole.
  *
  * The markdown summary goes to standard output, and also to `--out-md` when given. CI appends it to
  * the job summary.
@@ -46,7 +52,11 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-/** The modules mutated, each against its own fast test project, where its Stryker config lives. */
+/**
+ * The modules mutated, each against a fast test project, where its Stryker config lives. `configFile`
+ * names that config inside the test project, `stryker-config.json` when it is left out; two modules
+ * that share a test project each name their own.
+ */
 export const MODULES = {
   accounting: {
     name: "Accounting",
@@ -70,7 +80,24 @@ export const MODULES = {
     // engines, 864 of the 1,369 mutants that run tested; part 2 is the rest of the module.
     parts: [["Processing"]],
   },
+  "tenancy-kernel": {
+    name: "Tenancy (SharedKernel)",
+    testProject: "tests/LeaseBook.Tests.Tenancy",
+    configFile: "stryker-config.kernel.json",
+  },
+  "tenancy-web": {
+    name: "Tenancy (Web)",
+    testProject: "tests/LeaseBook.Tests.Tenancy",
+    configFile: "stryker-config.web.json",
+  },
 };
+
+export const DEFAULT_CONFIG_FILE = "stryker-config.json";
+
+/** The file name of a module's Stryker config, inside its test project. */
+export function configFileOf(key) {
+  return MODULES[key].configFile ?? DEFAULT_CONFIG_FILE;
+}
 
 export const EQUIVALENTS_FILE = "tests/mutation/equivalent-mutants.json";
 
@@ -437,9 +464,9 @@ export function partGlobs(configMutate, parts, part) {
   return [...configMutate, ...globs(parts.flat()).map((glob) => `!${glob}`)];
 }
 
-/** The `mutate` list in a module's stryker-config.json. */
+/** The `mutate` list in a module's Stryker config. */
 export function configMutate(key, repo = REPO) {
-  const file = path.join(repo, MODULES[key].testProject, "stryker-config.json");
+  const file = path.join(repo, MODULES[key].testProject, configFileOf(key));
   const mutate = JSON.parse(readFileSync(file, "utf8"))["stryker-config"]
     ?.mutate;
   if (!Array.isArray(mutate) || mutate.length === 0) {
@@ -453,9 +480,12 @@ export function runName(key, part) {
   return part === undefined ? key : `${key}-${part}`;
 }
 
-/** The arguments Stryker is run with, from the module's test project directory. */
-export function strykerArgs(output, options) {
-  const args = ["stryker", "--output", output];
+/**
+ * The arguments Stryker is run with, from the module's test project directory. The config file is
+ * always named, so a module never runs with another module's config by default.
+ */
+export function strykerArgs(output, options, configFile = DEFAULT_CONFIG_FILE) {
+  const args = ["stryker", "--config-file", configFile, "--output", output];
   if (options.concurrency !== undefined) {
     args.push("--concurrency", String(options.concurrency));
   }
@@ -481,7 +511,7 @@ export function runStryker(key, options, spawn = defaultSpawn, repo = REPO) {
       : partGlobs(configMutate(key, repo), MODULES[key].parts, options.part);
   const status = spawn(
     "dotnet",
-    strykerArgs(output, { ...options, mutate }),
+    strykerArgs(output, { ...options, mutate }, configFileOf(key)),
     path.join(repo, MODULES[key].testProject),
   );
   if (status !== 0) {

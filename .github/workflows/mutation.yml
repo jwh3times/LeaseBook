@@ -1,18 +1,23 @@
 name: Mutation (nightly)
 
-# Mutation testing on the two modules where a wrong answer is a fiduciary error (ADR-055 addendum,
-# docs/testing/mutation.md). Stryker.NET changes the module's code one small edit at a time and
-# reruns the module's fast test project against each edit. An edit no test notices survived, and is
-# listed in the job summary: either a gap in the tests or an edit that changes nothing observable,
-# which is recorded with its reason in tests/mutation/equivalent-mutants.json.
+# Mutation testing on the two modules where a wrong answer is a fiduciary error, and on the
+# organization-isolation runtime code, where one is a leak between organizations (ADR-055 addendum,
+# docs/testing/mutation.md). Stryker.NET changes the code one small edit at a time and reruns a
+# fast test project against each edit. An edit no test notices survived, and is listed in the job
+# summary: either a gap in the tests or an edit that changes nothing observable, which is recorded
+# with its reason in tests/mutation/equivalent-mutants.json.
+#
+# Four modules, each a key of scripts/mutation.mjs: accounting, payments, and the isolation code,
+# which is two keys because Stryker mutates one source project per run. tenancy-kernel is
+# SharedKernel's Tenancy/ and tenancy-web the Web host's Tenancy/, both mutated against
+# tests/LeaseBook.Tests.Tenancy, each with its own Stryker configuration there.
 #
 # Report, then fail. A module's gate in that file is off while it has unexplained survivors, and the
 # job then only reports. Once a module is clean its gate is turned on, and from then an unexplained
-# survivor fails its job. Both modules' gates are on. The job also fails when Stryker itself fails.
+# survivor fails its job. Every module's gate is on. The job also fails when Stryker itself fails.
 #
-# It never runs on pull requests: a full run of Accounting takes hours. Each module is mutated
-# against its own test project, which needs Docker for its Postgres container (Testcontainers), as
-# the Backend job of ci.yml does.
+# It never runs on pull requests: a full run of Accounting takes hours. Each test project needs
+# Docker for its Postgres container (Testcontainers), as the Backend job of ci.yml does.
 on:
   schedule:
     # Nightly at 00:17 UTC, off the top of the hour, when scheduled workflows queue longest. GitHub
@@ -22,10 +27,10 @@ on:
   workflow_dispatch:
     inputs:
       module:
-        description: Which module to mutate
+        description: Which module to mutate (tenancy runs both tenancy keys)
         type: choice
-        options: [both, accounting, payments]
-        default: both
+        options: [all, accounting, payments, tenancy]
+        default: all
 
 permissions:
   contents: read
@@ -41,9 +46,9 @@ jobs:
     name: Mutation (${{ matrix.job.name }})
     runs-on: ubuntu-latest
     strategy:
-      # Each module runs as several jobs, Accounting four and Payments two, all six in parallel, so
-      # no run holds up another and a failure in one does not cancel the rest. A scheduled run has
-      # no input and runs all six.
+      # Accounting runs as four jobs, Payments as two and the isolation code as one per key, all
+      # eight in parallel, so no run holds up another and a failure in one does not cancel the rest.
+      # A scheduled run has no input and runs all eight.
       #
       # A job that times out reports nothing, against GitHub's 360-minute limit for a job. Every
       # mutant reruns the module's whole test project, and by 2026-10-18 an Accounting mutant took 17
@@ -51,10 +56,11 @@ jobs:
       # Payments is split because, once every mutant had a test, a whole run took 142 min locally,
       # and hosted runners have been 1.2 to 1.75 times slower. Each part but the last mutates the
       # directories scripts/mutation.mjs names, and the last part the rest of the module. Each part
-      # gets 300 min (docs/testing/mutation.md).
+      # gets 300 min (docs/testing/mutation.md). Each tenancy key ran whole in under three minutes
+      # locally on 2026-10-19, so it is not split, and 120 min is far more than it needs.
       fail-fast: false
       matrix:
-        job: ${{ fromJSON(inputs.module == 'accounting' && '[{"name":"accounting, part 1","args":"accounting --part 1","out":"accounting-1","timeout":300},{"name":"accounting, part 2","args":"accounting --part 2","out":"accounting-2","timeout":300},{"name":"accounting, part 3","args":"accounting --part 3","out":"accounting-3","timeout":300},{"name":"accounting, part 4","args":"accounting --part 4","out":"accounting-4","timeout":300}]' || inputs.module == 'payments' && '[{"name":"payments, part 1","args":"payments --part 1","out":"payments-1","timeout":300},{"name":"payments, part 2","args":"payments --part 2","out":"payments-2","timeout":300}]' || '[{"name":"accounting, part 1","args":"accounting --part 1","out":"accounting-1","timeout":300},{"name":"accounting, part 2","args":"accounting --part 2","out":"accounting-2","timeout":300},{"name":"accounting, part 3","args":"accounting --part 3","out":"accounting-3","timeout":300},{"name":"accounting, part 4","args":"accounting --part 4","out":"accounting-4","timeout":300},{"name":"payments, part 1","args":"payments --part 1","out":"payments-1","timeout":300},{"name":"payments, part 2","args":"payments --part 2","out":"payments-2","timeout":300}]') }}
+        job: ${{ fromJSON(inputs.module == 'accounting' && '[{"name":"accounting, part 1","args":"accounting --part 1","out":"accounting-1","timeout":300},{"name":"accounting, part 2","args":"accounting --part 2","out":"accounting-2","timeout":300},{"name":"accounting, part 3","args":"accounting --part 3","out":"accounting-3","timeout":300},{"name":"accounting, part 4","args":"accounting --part 4","out":"accounting-4","timeout":300}]' || inputs.module == 'payments' && '[{"name":"payments, part 1","args":"payments --part 1","out":"payments-1","timeout":300},{"name":"payments, part 2","args":"payments --part 2","out":"payments-2","timeout":300}]' || inputs.module == 'tenancy' && '[{"name":"tenancy, SharedKernel","args":"tenancy-kernel","out":"tenancy-kernel","timeout":120},{"name":"tenancy, Web","args":"tenancy-web","out":"tenancy-web","timeout":120}]' || '[{"name":"accounting, part 1","args":"accounting --part 1","out":"accounting-1","timeout":300},{"name":"accounting, part 2","args":"accounting --part 2","out":"accounting-2","timeout":300},{"name":"accounting, part 3","args":"accounting --part 3","out":"accounting-3","timeout":300},{"name":"accounting, part 4","args":"accounting --part 4","out":"accounting-4","timeout":300},{"name":"payments, part 1","args":"payments --part 1","out":"payments-1","timeout":300},{"name":"payments, part 2","args":"payments --part 2","out":"payments-2","timeout":300},{"name":"tenancy, SharedKernel","args":"tenancy-kernel","out":"tenancy-kernel","timeout":120},{"name":"tenancy, Web","args":"tenancy-web","out":"tenancy-web","timeout":120}]') }}
     timeout-minutes: ${{ matrix.job.timeout }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -63,7 +69,7 @@ jobs:
           dotnet-version: '10.0.x'
       # Restores dotnet-stryker with the other local tools (.config/dotnet-tools.json).
       - run: dotnet tool restore
-      # Runs Stryker from the module's test project with its stryker-config.json and writes the
+      # Runs Stryker from the module's test project with the module's config file and writes the
       # summary. Node is the runner image's own; the script uses nothing newer than Node 20. The
       # exit code is the gate: non-zero only when Stryker failed, or when the module's gate is on and
       # a survivor is unexplained.
@@ -78,6 +84,8 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
+          # mutation-accounting-1 to -4, mutation-payments-1 and -2, mutation-tenancy-kernel and
+          # mutation-tenancy-web.
           name: mutation-${{ matrix.job.out }}
           # reports/mutation-report.html is the report to open; mutation-report.json is what the
           # summary was read from.

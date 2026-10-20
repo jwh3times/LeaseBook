@@ -3,7 +3,7 @@
 - **Audience:** Contributors, reviewers and maintainers
 - **Status:** Living measurement record
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-14
+- **Last reviewed:** 2026-10-19
 
 LeaseBook measures what its test suites exercise: which lines and branches of each module ran, and
 which API routes the browser tests called. This page records how that is measured, how to run each
@@ -51,7 +51,7 @@ Each run writes a table to the job summary and uploads the full report as an art
 
 Every test project references `Microsoft.Testing.Extensions.CodeCoverage`, which adds the
 `coverage` options to the test executables. With them, each project writes a Cobertura file of the
-product code it ran. ReportGenerator merges the ten files into one report grouped by assembly.
+product code it ran. ReportGenerator merges the eleven files into one report grouped by assembly.
 
 [`tests/coverage.settings.xml`](../../tests/coverage.settings.xml) decides what is counted:
 

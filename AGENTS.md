@@ -157,11 +157,11 @@ the configs it cites in sync when a port changes.
   `--coverage --coverage-output-format cobertura --coverage-settings tests/coverage.settings.xml --results-directory TestResults`
   to the test command, then build the report with `dotnet reportgenerator`
   (`docs/testing/coverage.md` owns the commands, the method and the baseline figures)
-- Mutation testing on Accounting or Payments (an unexplained survivor fails a module's nightly job once its gate is on; ADR-055 addendum):
-  `node scripts/mutation.mjs payments --concurrency 4` (or `accounting`, or `all`; add
-  `--mutate '<glob>'` to mutate part of a module, or `--part <n>` for one of the parts of a
-  module the nightly jobs run; both modules' gates are on) (`docs/testing/mutation.md` owns the commands, the equivalents list
-  and the gate)
+- Mutation testing on Accounting, Payments or the organization-isolation code (an unexplained survivor fails a module's nightly job once its gate is on; ADR-055 addendum):
+  `node scripts/mutation.mjs payments --concurrency 4` (or `accounting`, `tenancy-kernel`,
+  `tenancy-web`, or `all`; add `--mutate '<glob>'` to mutate part of a module, or `--part <n>` for
+  one of the parts of Accounting or Payments the nightly jobs run; every module's gate is on)
+  (`docs/testing/mutation.md` owns the commands, the equivalents list and the gate)
 
 ### Database (run from repo root)
 

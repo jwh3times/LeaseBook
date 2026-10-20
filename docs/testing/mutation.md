@@ -3,7 +3,7 @@
 - **Audience:** Contributors, reviewers and maintainers
 - **Status:** Living method and measurement record
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-18
+- **Last reviewed:** 2026-10-19
 
 Mutation testing asks whether the tests would notice the code being wrong. A tool changes the code
 one small edit at a time, such as `>` to `>=`, `+` to `-`, or a call removed, and reruns the tests
@@ -11,23 +11,32 @@ against each edit. Each edited copy is a mutant. A mutant some test fails on is 
 every test still passes on survived: either the tests have a gap there, or the edit changes nothing
 anyone could observe.
 
-It runs nightly on the two modules where a wrong answer is a fiduciary error, Accounting and Payments.
-This page records how it runs, how to run it locally, how to read its summary, and what to do about
-a survivor. The [ADR-055 addendum](../adr/ADR-055-test-coverage-measurement.md#addendum--mutation-testing-with-strykernet-2026-10-14)
+It runs nightly on the two modules where a wrong answer is a fiduciary error, Accounting and
+Payments, and on the organization-isolation runtime code, where a wrong answer shows one
+organization's rows to another. This page records how it runs, how to run it locally, how to read
+its summary, and what to do about a survivor. The
+[ADR-055 addendum](../adr/ADR-055-test-coverage-measurement.md#addendum--mutation-testing-with-strykernet-2026-10-14)
 records the tool and why. [Test coverage](coverage.md) is the other half: it finds code no test runs,
 and this finds code the tests run without checking.
 
 ## What runs
 
-| Module     | Test project it is mutated against | Stryker configuration                                  |
-| ---------- | ---------------------------------- | ------------------------------------------------------ |
-| Accounting | `tests/LeaseBook.Tests.Accounting` | `tests/LeaseBook.Tests.Accounting/stryker-config.json` |
-| Payments   | `tests/LeaseBook.Tests.Payments`   | `tests/LeaseBook.Tests.Payments/stryker-config.json`   |
+| Module (key)                              | Test project it is mutated against | Stryker configuration, in the test project |
+| ----------------------------------------- | ---------------------------------- | ------------------------------------------ |
+| Accounting (`accounting`)                 | `tests/LeaseBook.Tests.Accounting` | `stryker-config.json`                      |
+| Payments (`payments`)                     | `tests/LeaseBook.Tests.Payments`   | `stryker-config.json`                      |
+| Tenancy (SharedKernel) (`tenancy-kernel`) | `tests/LeaseBook.Tests.Tenancy`    | `stryker-config.kernel.json`               |
+| Tenancy (Web) (`tenancy-web`)             | `tests/LeaseBook.Tests.Tenancy`    | `stryker-config.web.json`                  |
 
 The tool is Stryker.NET with its Microsoft Testing Platform runner, pinned as the `dotnet-stryker`
 local tool. That runner reruns the whole test project for every mutant a test covers, so each module
-has a fast test project of its own and is never mutated against the integration suite, which boots
-the host. Both test projects run against a Postgres container, so Docker must be running.
+has a fast test project and is never mutated against the integration suite, which boots the host.
+Every one of these test projects runs against a Postgres container, so Docker must be running.
+
+The organization-isolation code is two modules because Stryker mutates one source project per run:
+`tenancy-kernel` is `src/LeaseBook.SharedKernel/Tenancy/` and `tenancy-web` is
+`src/LeaseBook.Web/Tenancy/`. They share a test project, each with a configuration of its own there,
+and `scripts/mutation.mjs` passes Stryker the module's file with `--config-file`.
 
 `LeaseBook.Tests.Payments` exists for this. Its tests drive `PaymentEngine` and `SettlementEngine`
 directly, and the module's commands and queries through the real dispatcher and validators, as the
@@ -41,7 +50,18 @@ host's `RefundCheckLedgerAdapter` over the real Accounting module, so the postin
 relies on run too. The pure tests of Payments code, such as the MICR line and the convenience fee,
 moved here from `LeaseBook.Tests.Integration`; its HTTP and host tests stay there.
 
-Each configuration mutates every source file of its module except these:
+`LeaseBook.Tests.Tenancy` exists for the isolation code. Its tests drive `OrgScopedExecutor`,
+`TransactionalUnitOfWork`, `PlatformScopedExecutor`, `OrgContextMiddleware` and `PersonaResolver`
+directly, as the app role on the real schema, with no host. Each executor test holds one
+connection open for the whole test, outside the pool (`Support/TenancyDb.cs`), so a setting read
+back after a unit of work is read on the same server session that set it, and an EF transaction
+interceptor records each begin, commit and explicit rollback. The middleware tests build an `HttpContext` by hand. The tests
+read the settings with `current_setting(…, true)` and set none themselves: where a test needs a
+context the code under test does not set, it uses `RlsProbe`, the one test-side setter the
+architecture tests allow. The tests of `Actor` and `PersonaResolver` moved here from
+`LeaseBook.Tests.SharedKernel` and `LeaseBook.Tests.Web`, so that Stryker runs them.
+
+The Accounting and Payments configurations mutate every source file of the module except these:
 
 | Excluded                                                            | Why                                                                                                                                                                                                                                                                                                                            |
 | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -51,20 +71,32 @@ Each configuration mutates every source file of its module except these:
 | `AccountingModuleServiceCollectionExtensions.cs`, `ModuleMarker.cs` | Service registration and an empty marker type. The host booting is what tests registration.                                                                                                                                                                                                                                    |
 | Anything under `obj/`                                               | Generated code.                                                                                                                                                                                                                                                                                                                |
 
-Stryker still lists an excluded file in its report, with no mutants. The summary counts a file as
-mutated only when it has one.
+The two tenancy configurations mutate only the `Tenancy/` directory of their project: the executors,
+the unit of work, the request-scoped contexts, the actor, the persona and its resolver, and the
+middleware. `tenancy-web` also leaves out `Tenancy/AuditEvent.cs` and
+`Tenancy/AuditEventConfiguration.cs`, the audit row and its EF mapping: the mapping for the reason
+in the first row above, and the row because `AppDbContext`'s audit pass writes it, which this
+project does not test. `Persistence/Rls.cs`, which writes the policies at migration time, and the
+Capabilities module are not mutated.
 
-The nightly run is [`.github/workflows/mutation.yml`](../../.github/workflows/mutation.yml), at 00:17
-UTC and on manual dispatch, where a module can be chosen. It never runs on a pull request. It runs
-six jobs in parallel: Accounting in four parts and Payments in two. A whole run of either module
+Stryker still lists an excluded file in its report, usually with no mutants. Some excluded files it
+lists with mutants it marks ignored, removed by the mutate filter, and safe mode (see
+[Known limits](#known-limits)) can mark a method in one as compile errors. The summary counts a file
+as mutated when it has any mutant, and counts those mutants with the rest. In the tenancy summaries
+that is `Money.cs`, with 26 ignored, and `Program.cs`, with 155 ignored and 9 compile errors.
+
+The nightly run is [`.github/workflows/mutation.yml`](../../.github/workflows/mutation.yml), at
+00:17 UTC and on manual dispatch, where `accounting`, `payments`, `tenancy` (both tenancy modules)
+or `all` can be chosen. It never runs on a pull request. It runs eight jobs in parallel: Accounting
+in four parts, Payments in two, and each tenancy module whole. A whole run of Accounting or Payments
 comes too near a hosted job's time limit (see [Cost](#cost)), and a job that times out reports
 nothing. Each part but the last mutates the directories `scripts/mutation.mjs` names in `parts`,
 `Processing` for Payments' part 1 and two or three directories for each of Accounting's first three.
 The last part mutates the rest of what the configuration mutates, so a directory added later falls
 into it and is never left out. Each job writes the summary to its job summary and uploads
-`mutation-<run>` (`accounting-1` to `accounting-4`, `payments-1` or `payments-2`), which holds the
-summary, the HTML report (`reports/mutation-report.html`) and the JSON report the summary was read
-from.
+`mutation-<run>` (`accounting-1` to `accounting-4`, `payments-1`, `payments-2`, `tenancy-kernel` or
+`tenancy-web`), which holds the summary, the HTML report (`reports/mutation-report.html`) and the
+JSON report the summary was read from.
 
 ## Run one module locally
 
@@ -75,9 +107,16 @@ dotnet tool restore
 node scripts/mutation.mjs payments --concurrency 4
 ```
 
-`accounting` and `all` work the same way. The runner runs Stryker from the module's test project,
-writes everything under `StrykerOutput/<module>/` (open `reports/mutation-report.html`), and prints
-the summary. `--out-md <file>` also writes the summary to a file.
+`accounting`, `tenancy-kernel`, `tenancy-web` and `all`, which runs the four one after another, work
+the same way. The runner runs Stryker from the module's test project with the module's
+configuration, writes everything under `StrykerOutput/<module>/` (open
+`reports/mutation-report.html`), and prints the summary. `--out-md <file>` also writes the summary
+to a file. Each tenancy module takes under three minutes:
+
+```bash
+node scripts/mutation.mjs tenancy-kernel --concurrency 4
+node scripts/mutation.mjs tenancy-web --concurrency 4
+```
 
 A whole module takes a long time, Accounting most of all; see [Cost](#cost). To mutate part of a
 module, name the files with `--mutate`:
@@ -99,7 +138,7 @@ node scripts/mutation.mjs payments --part 2 --concurrency 4
 ```
 
 `--part` builds the list itself from the configuration's, so the exclusions still apply, and it
-takes no `--mutate`.
+takes no `--mutate`. The tenancy modules are not split and take no `--part`.
 
 To render the summary again from a report a run already wrote, without running anything:
 
@@ -224,7 +263,8 @@ Each module has a gate in the same file, `"gate": false` or `"gate": true`.
 - **Off**: the run reports and passes, whatever survived. No module's gate is off now.
 - **On**: the run fails when the module has an undetected mutant, survived or not covered, that the
   equivalents list does not explain. Payments' gate is on, since every Payments mutant was killed or
-  explained on 2026-10-16, and Accounting's, since every Accounting mutant was on 2026-10-18.
+  explained on 2026-10-16, Accounting's, since every Accounting mutant was on 2026-10-18, and both
+  tenancy modules', since every mutant in each was on 2026-10-19, in their first runs.
 
 Turn a module's gate on in the change that explains or kills its last unexplained survivor. From then
 on, a change that leaves an edit unnoticed shows up as a red nightly run: write the test, or record
@@ -238,18 +278,24 @@ the module was not measured.
 
 - **One coverage pass, then every covered mutant reruns the whole test project.** The Microsoft
   Testing Platform runner cannot run a subset of a test project or map tests to mutants. Per-test
-  coverage capture would cost one test session per test and gain nothing, so both configurations
-  set `coverage-analysis` to `all`: the initial test run finds which mutants no test reaches, and
+  coverage capture would cost one test session per test and gain nothing, so every configuration
+  sets `coverage-analysis` to `all`: the initial test run finds which mutants no test reaches, and
   those are not run.
 - **Safe mode.** When a mutant makes the file fail to compile in a way Stryker cannot pin to that
   mutant, it removes every mutation in the method and marks them as compile errors. In Payments this
   happens to `PaymentEngine.PostReturnAsync`, whose condition assigns a pattern variable in one
   operand of `||`. In Accounting it happens to the validator in `GetOwnerEquityLines.cs` and to the
-  handler in `PostRefundCheck.cs`. Their mutants are counted as compile errors, not tested.
+  handler in `PostRefundCheck.cs`. In the Web host's isolation code it happens to
+  `OrgContextMiddleware.InvokeAsync`, whose first condition assigns `orgId` in one operand of `||`
+  in the same way, so all 18 of its mutants are compile errors (see
+  [Survivors worked through](#survivors-worked-through) for how they were checked by hand). Their
+  mutants are counted as compile errors, not tested. Stryker also marks a mutant as a compile error
+  when another mutant of the same expression does not compile: in `PersonaResolver` it marks
+  `roles.Count == 0` and `roles.Count == 1` made `!=`, beside a `Count` to `Sum` mutant there.
 - **Per-process cost.** Each test process starts its own Postgres container and applies the
   migrations.
 - **Static initializers are not mutated.** See below.
-- **A busy runner can time a mutant out.** Both configurations set `timeout-ratio` to 4. See
+- **A busy runner can time a mutant out.** Every configuration sets `timeout-ratio` to 4. See
   [Timeouts](#timeouts).
 - **A mutant reached only by chance can change status between runs of the same code.** None is
   known now. See [Chance results](#chance-results).
@@ -283,6 +329,9 @@ arrays in `AccountingEnumConverters.cs`) and 17 in Payments (`RetrySeconds`, `Ev
 summary lists a mutant inside a new static initializer, add the comment there too; a test-only
 change cannot make that mutant's result trustworthy.
 
+The isolation code has two static initializers, and Stryker mutates neither at the `Standard`
+level: `Actor`'s process-name `Regex` and `NullOrgContext.Instance`. They carry no comment.
+
 ### Timeouts
 
 Stryker stops a mutant's test run once it takes longer than `timeout-ratio` times the initial test
@@ -297,7 +346,7 @@ At the default ratio, the two Accounting halves on 2026-10-15 timed out 146 muta
 They came early in each half, three timeouts to one result, as if three of the four processes were
 stuck while one worked. A mutant in part 2 of the second run took 102 seconds per process on
 average. Made by hand, one of them, a validator rule removed in `RecordBankAdjustment.cs`, survived
-as the whole run said. So both configurations set `timeout-ratio` to 4, which leaves room for a
+as the whole run said. So the configurations set `timeout-ratio` to 4, which leaves room for a
 run four times as slow as the initial one. A mutant that really loops forever now costs about four
 test runs before it is stopped. Payments has four that time out, all in `ConvenienceFee.cs`: three
 remove the refusal of a fee rule that cannot be grossed up, so its loop never ends, and the fourth
@@ -410,6 +459,18 @@ scheduled mutation run started at 04:35, more than four hours after 00:17, and i
 by about the same amount, so the mutation run still finished before that day's coverage run began,
 and an earlier slot would not change that.
 
+The isolation code, measured locally on 2026-10-19 at concurrency 4, each module whole:
+
+| Run                    | Tests | Mutants created | Mutants tested | Time | Wall time per tested mutant |
+| ---------------------- | ----: | --------------: | -------------: | ---- | --------------------------: |
+| Tenancy (SharedKernel) |   149 |             244 |             81 | 2:27 |                       1.3 s |
+| Tenancy (Web)          |   149 |          13,846 |             17 | 2:31 |                       2.1 s |
+
+Stryker creates every mutant of the project before it applies the `mutate` list, and the Web project
+is the whole host, so most of a Tenancy (Web) run is creating and compiling mutants it then leaves
+out. The test project itself runs in about 14 seconds. Each tenancy job has 120 minutes; at 1.75
+times the local time, the slowest hosted rate seen for Payments, either needs under five.
+
 ## Baseline
 
 Measured on 2026-10-14, with an empty equivalents list.
@@ -455,16 +516,17 @@ static fields, and fails a test when made by hand.
 Area by area, each in its own change. A module's gate comes on in the change that explains or
 kills its last unexplained survivor.
 
-| Area                                                         | Killed by new tests | Recorded as equivalent | Result, measured locally                                        |
-| ------------------------------------------------------------ | ------------------: | ---------------------: | --------------------------------------------------------------- |
-| Payments engines (`PaymentEngine.cs`, `SettlementEngine.cs`) |                 130 |                      8 | 99.1%: 841 killed, 8 survived, all explained, none not covered  |
-| Payments refund checks and MICR line                         |                 258 |                      8 | 97.0%: 258 killed, 8 survived, all explained, none not covered  |
-| The rest of Payments                                         |                 190 |                     33 | 87.1%: 219 killed, 4 timed out, 33 undetected, all explained    |
-| Accounting posting core (`Posting/`, `Features/Posting/`)    |                  92 |                      1 | 99.6%: 280 killed, 1 survived, explained, none not covered      |
-| Accounting ledger posting (`Features/LedgerPosting/`)        |                 109 |                      3 | 98.5%: 199 killed, 3 survived, explained, none not covered      |
-| Accounting refund checks, banking and reconciliation         |                 108 |                      4 | 97.7%: 173 killed, 4 survived, all explained, none not covered  |
-| Accounting ledgers and statements                            |                  56 |                     10 | 95.1%: 195 killed, 7 survived and 3 not covered, all explained  |
-| The rest of Accounting                                       |                 140 |                     11 | 95.6%: 240 killed, 11 survived, all explained, none not covered |
+| Area                                                           | Killed by new tests | Recorded as equivalent | Result, measured locally                                                  |
+| -------------------------------------------------------------- | ------------------: | ---------------------: | ------------------------------------------------------------------------- |
+| Payments engines (`PaymentEngine.cs`, `SettlementEngine.cs`)   |                 130 |                      8 | 99.1%: 841 killed, 8 survived, all explained, none not covered            |
+| Payments refund checks and MICR line                           |                 258 |                      8 | 97.0%: 258 killed, 8 survived, all explained, none not covered            |
+| The rest of Payments                                           |                 190 |                     33 | 87.1%: 219 killed, 4 timed out, 33 undetected, all explained              |
+| Accounting posting core (`Posting/`, `Features/Posting/`)      |                  92 |                      1 | 99.6%: 280 killed, 1 survived, explained, none not covered                |
+| Accounting ledger posting (`Features/LedgerPosting/`)          |                 109 |                      3 | 98.5%: 199 killed, 3 survived, explained, none not covered                |
+| Accounting refund checks, banking and reconciliation           |                 108 |                      4 | 97.7%: 173 killed, 4 survived, all explained, none not covered            |
+| Accounting ledgers and statements                              |                  56 |                     10 | 95.1%: 195 killed, 7 survived and 3 not covered, all explained            |
+| The rest of Accounting                                         |                 140 |                     11 | 95.6%: 240 killed, 11 survived, all explained, none not covered           |
+| Organization-isolation code (`Tenancy/`, SharedKernel and Web) |                  96 |                      2 | SharedKernel 100%: 81 killed; Web 88.2%: 15 killed, 2 survived, explained |
 
 The engines' 138 undetected mutants, taken from the hosted run on 2026-10-15, are all accounted
 for. `LeaseBook.Tests.Payments` grew from 164 tests to 273, among them 22 races (see
@@ -620,3 +682,35 @@ With that, the hosted run of Accounting's two parts on 2026-10-18 scored **98.4%
 killed, 6 survived and 2 not covered, and **96.6%** in part 2, 599 killed, 20 survived and 1 not
 covered. All 29 undetected mutants are explained by the 28 Accounting entries, and no entry is
 stale, so the Accounting gate is on.
+
+The organization-isolation runtime code came next, as the two tenancy modules in one change. Stryker
+had not run on it before, and the tests were written before its first run, so there is no separate
+baseline: the first runs, on 2026-10-19, killed every mutant of `tenancy-kernel` and all but two of
+`tenancy-web`, and a second run gave the same statuses. `LeaseBook.Tests.Tenancy` has 149 tests and
+runs in about 14 seconds. `OrgScopedExecutorTests` pins the three settings read back inside the unit
+of work for each persona and both kinds of actor; an empty user, not a missing one, for a system
+actor on a session that never had one; nothing left on the same server session after a commit or a
+failure; the commit and the explicit rollback; the request-scoped contexts inside the unit of work,
+and what they held before it once it ends; each refusal and its message, before any transaction
+opens; and what row-level security then admits, which is the organization's own rows, and on
+`audit_events` none at all under `none` or a portal persona. `TransactionalUnitOfWorkTests` pins
+the order of begin, configure, work and commit, the explicit rollback when configure or the work
+throws, the refusal to nest and its message, and each argument check by name.
+`PlatformScopedExecutorTests` shows the platform escape open only inside its own transaction, both
+by reading it back and by a `feature_flags` write that lands inside it and is refused after it.
+`OrgContextMiddlewareTests` covers each way a request runs with no transaction, and the actor and
+persona of each principal that runs with one. The two equivalents are in `PersonaResolver`: `Any`
+made `All` in the unknown-role check, where the only sets it lets through, an unknown role beside a
+known one, are refused by the two checks below it all the same; and `Single` made `SingleOrDefault`
+where the set holds exactly one role.
+
+Safe mode removed every mutant of `OrgContextMiddleware.InvokeAsync` (see
+[Known limits](#known-limits)), so Stryker tested none of its 18. Each was made by hand instead.
+Six do not compile on their own: the two that change the `||` whose second operand assigns `orgId`,
+the removal of the block that condition guards or of that block's `return`, and the two that
+replace the condition that assigns `userId`. Each of the other twelve fails tests in
+`OrgContextMiddlewareTests`. The method stays unmeasured until its code changes: a first condition
+in which no operand of `||` assigns `orgId` would let Stryker test it.
+
+With that, neither tenancy module has an unexplained undetected mutant or a stale entry, so both
+gates are on.

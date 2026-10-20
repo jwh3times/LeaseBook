@@ -491,5 +491,28 @@
         "reason": "The mutant reads every payment of the organization that has a reference instead of only those the payouts' lines name, and each line still looks up its own reference, so every PaymentId is the same. The extra rows could only matter by giving the dictionary a duplicate key, and an organization's references are unique: the unique index is (org_id, account, provider_id), and every payment carries its organization's one fixture account, since SubmitAsync stores it only after RequireFixtureAsync matched it, an organization has one fixture, and the app role cannot update payment_fixtures. The other mutant of this line is killed by SettlementListTests."
       }
     ]
+  },
+  "tenancy-kernel": {
+    "gate": true,
+    "equivalents": []
+  },
+  "tenancy-web": {
+    "gate": true,
+    "equivalents": [
+      {
+        "file": "src/LeaseBook.Web/Tenancy/PersonaResolver.cs",
+        "mutator": "Linq method mutation (Any() to All())",
+        "original": "if (roles.Count == 0 || roles.Any(role => !Roles.All.Contains(role, StringComparer.Ordinal)))",
+        "replacement": "roles.All",
+        "reason": "The two differ only for a role set holding both a role outside Roles.All and one inside it, which Any refuses here and All lets through. Such a set has at least two roles, so the staff check below fails on the unknown role, which is neither PMAdmin nor PMStaff, and the single-role check fails on the count, and the method returns Persona.None, the answer Any gave. A set of unknown roles only is refused by both."
+      },
+      {
+        "file": "src/LeaseBook.Web/Tenancy/PersonaResolver.cs",
+        "mutator": "Linq method mutation (Single() to SingleOrDefault())",
+        "original": "return roles.Single() switch",
+        "replacement": "roles.SingleOrDefault",
+        "reason": "Reached only inside if (roles.Count == 1), so the set holds exactly one role, and Single and SingleOrDefault both return it."
+      }
+    ]
   }
 }
