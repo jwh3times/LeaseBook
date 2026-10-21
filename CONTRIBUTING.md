@@ -24,7 +24,7 @@ Quick check that your environment is good:
 
 ```bash
 dotnet build LeaseBook.slnx -c Debug     # 0 warnings, 0 errors
-dotnet test LeaseBook.slnx                # Docker must be running
+dotnet test --solution LeaseBook.slnx     # Docker must be running
 cd web && npm install && npm run typecheck && npm run test
 ```
 
@@ -34,10 +34,10 @@ packages are retained. MTP filters replace the former VSTest `FullyQualifiedName
 
 ```bash
 # Class-level equivalent of: --filter "FullyQualifiedName~OrgIsolationTests"
-dotnet test tests/LeaseBook.Tests.Integration/LeaseBook.Tests.Integration.csproj --filter-class '*OrgIsolationTests'
+dotnet test --project tests/LeaseBook.Tests.Integration/LeaseBook.Tests.Integration.csproj --filter-class '*OrgIsolationTests'
 
 # One method
-dotnet test tests/LeaseBook.Tests.Integration/LeaseBook.Tests.Integration.csproj --filter-method '*Reads_under_an_org_context_see_only_that_orgs_rows'
+dotnet test --project tests/LeaseBook.Tests.Integration/LeaseBook.Tests.Integration.csproj --filter-method '*Reads_under_an_org_context_see_only_that_orgs_rows'
 ```
 
 ---
@@ -168,7 +168,7 @@ bar before it merges (the pull-request template's checklist expands on it):
 
 Before requesting review, confirm:
 
-- [ ] `dotnet build LeaseBook.slnx -c Debug` is clean (0/0) and `dotnet test LeaseBook.slnx` is green.
+- [ ] `dotnet build LeaseBook.slnx -c Debug` is clean (0/0) and `dotnet test --solution LeaseBook.slnx` is green.
 - [ ] `dotnet format --verify-no-changes --exclude src/LeaseBook.Web/Migrations` reports no changes.
 - [ ] Web `npm run lint`, `npm run typecheck`, `npm run test`, and `npm run build` are green (if the SPA changed).
 - [ ] `npm run docs:check` from `web/` is green when public documentation or its tooling changed.

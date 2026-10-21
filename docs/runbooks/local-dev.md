@@ -326,7 +326,7 @@ through the real engine. Its iteration count is the `LEASEBOOK_PROPERTY_ITER` en
 (default 20); CI and pre-merge runs raise it (e.g. `100`) for deeper coverage:
 
 ```powershell
-$env:LEASEBOOK_PROPERTY_ITER = "100"; dotnet test tests/LeaseBook.Tests.Accounting/LeaseBook.Tests.Accounting.csproj
+$env:LEASEBOOK_PROPERTY_ITER = "100"; dotnet test --project tests/LeaseBook.Tests.Accounting/LeaseBook.Tests.Accounting.csproj
 ```
 
 The accounting suite, `LeaseBook.Tests.Payments` and `LeaseBook.Tests.Tenancy` are also what
