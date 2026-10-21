@@ -180,6 +180,11 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Fixed
 
+- **A bank fee or interest adjustment that names a destination account is refused.** Only a transfer
+  moves money to a second account, and the destination on a fee or interest was silently dropped. A
+  transfer with no destination now says "A transfer requires a destination bank account." in every
+  case, instead of a generic field message when the destination was missing.
+
 - **A payout that failed after it posted no longer reads "nothing posted".** The Payouts list now
   says "posted, nothing reversed" for a payout in review or closed that had posted.
 

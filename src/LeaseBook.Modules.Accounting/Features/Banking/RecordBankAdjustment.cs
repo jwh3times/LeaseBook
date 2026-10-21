@@ -35,13 +35,20 @@ public sealed class RecordBankAdjustmentValidator : AbstractValidator<RecordBank
             .WithMessage($"Kind must be one of: {string.Join(", ", Kinds)}.");
         LedgerPostingMaps.RuleForAmount(this, x => x.Amount);
 
-        // A transfer needs a distinct destination account; the other kinds must not carry one.
+        // A transfer needs a distinct destination account; the other kinds must not carry one, since
+        // their handler would drop it. WithMessage covers only the validator before it, so the
+        // missing-destination message is attached to both NotNull and NotEqual (#611).
         When(x => string.Equals(x.Kind, "transfer", StringComparison.OrdinalIgnoreCase), () =>
         {
-            RuleFor(x => x.ToBankAccountId).NotNull().NotEqual(Guid.Empty)
-                .WithMessage("A transfer requires a destination bank account.");
+            RuleFor(x => x.ToBankAccountId)
+                .NotNull().WithMessage("A transfer requires a destination bank account.")
+                .NotEqual(Guid.Empty).WithMessage("A transfer requires a destination bank account.");
             RuleFor(x => x.ToBankAccountId).NotEqual(x => x.BankAccountId)
                 .WithMessage("A transfer's source and destination must differ.");
+        }).Otherwise(() =>
+        {
+            RuleFor(x => x.ToBankAccountId).Null()
+                .WithMessage("Only a transfer names a destination bank account.");
         });
     }
 }
