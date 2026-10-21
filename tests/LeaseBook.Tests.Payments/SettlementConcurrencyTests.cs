@@ -187,8 +187,8 @@ public sealed class SettlementConcurrencyTests(PostgresFixture fixture)
         (await h.WaitingOrDoneAsync(checker, checking, ct)).ShouldBeTrue();
         held.Commit();
 
-        (await Lanes.ErrorOf(held.Ended())).ShouldBeNull();
-        var (payout, error) = await Lanes.OutcomeOf(checking);
+        (await OrgLanes.ErrorOf(held.Ended())).ShouldBeNull();
+        var (payout, error) = await OrgLanes.OutcomeOf(checking);
         error.ShouldBeNull();
         payout!.Status.ShouldBe("Posted");
     }
