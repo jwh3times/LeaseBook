@@ -9,7 +9,7 @@ const defaultRoot = path.resolve(path.dirname(scriptPath), "..");
 const metadataFields = ["Audience", "Status", "Owner", "Last reviewed"];
 const commandFingerprints = [
   "dotnet build LeaseBook.slnx",
-  "dotnet test LeaseBook.slnx",
+  "dotnet test --solution LeaseBook.slnx",
   "npm run typecheck",
   "check-invariants --org demo",
 ];
