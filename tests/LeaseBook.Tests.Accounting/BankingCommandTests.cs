@@ -34,7 +34,7 @@ public sealed class BankingCommandTests(PostgresFixture fixture)
     private static readonly Guid Other = UuidV7.NewId();
     private const string AmountMessage = "Amount must be a positive value with at most 2 decimal places.";
     private const string NoDestination = "A transfer requires a destination bank account.";
-    private const string NullDestination = "'To Bank Account Id' must not be empty.";
+    private const string NotATransfer = "Only a transfer names a destination bank account.";
 
     private static readonly RecordBankAdjustment Fee = new("fee", 25m, Feb5, Some, null, null, "adj:1");
     private static readonly RecordBankAdjustment Transfer = new("transfer", 25m, Feb5, Some, Other, null, "adj:1");
@@ -45,13 +45,17 @@ public sealed class BankingCommandTests(PostgresFixture fixture)
         ["SourceRef"] = (Fee with { SourceRef = "" }, ["SourceRef"], null),
         ["Kind"] = (Fee with { Kind = "wire" }, ["Kind"], "Kind must be one of: fee, interest, transfer."),
         ["Amount"] = (Fee with { Amount = 0m }, ["Amount"], AmountMessage),
-        // The rule's message is attached to its NotEqual, so a missing destination gets NotNull's own.
-        ["Transfer.ToBankAccountId.Null"] = (Transfer with { ToBankAccountId = null }, ["ToBankAccountId"], NullDestination),
+        ["Transfer.ToBankAccountId.Null"] = (Transfer with { ToBankAccountId = null }, ["ToBankAccountId"], NoDestination),
         ["Transfer.ToBankAccountId.Upper"] = (
-            Transfer with { Kind = "TRANSFER", ToBankAccountId = null }, ["ToBankAccountId"], NullDestination),
+            Transfer with { Kind = "TRANSFER", ToBankAccountId = null }, ["ToBankAccountId"], NoDestination),
         ["Transfer.ToBankAccountId.Empty"] = (Transfer with { ToBankAccountId = Guid.Empty }, ["ToBankAccountId"], NoDestination),
         ["Transfer.ToBankAccountId.Same"] = (Transfer with { ToBankAccountId = Some }, ["ToBankAccountId"],
             "A transfer's source and destination must differ."),
+        // The handler would drop a destination on any other kind, so the validator refuses it.
+        ["Fee.ToBankAccountId"] = (Fee with { ToBankAccountId = Other }, ["ToBankAccountId"], NotATransfer),
+        ["Interest.ToBankAccountId"] = (
+            Fee with { Kind = "Interest", ToBankAccountId = Other }, ["ToBankAccountId"], NotATransfer),
+        ["Fee.ToBankAccountId.Empty"] = (Fee with { ToBankAccountId = Guid.Empty }, ["ToBankAccountId"], NotATransfer),
     };
 
     public static TheoryData<string> Refusals() => new(Cases.Keys);
@@ -102,10 +106,12 @@ public sealed class BankingCommandTests(PostgresFixture fixture)
         await scope.RunAsync(() => Events(scope).PostAsync(
             new InterestEarned(new Money(500m), Feb5, scope.TrustBankId, "seed", "seed:1"), ct), ct);
 
+        // Only a transfer names a destination; the validator refuses one on the other kinds.
+        Guid? to = eventType == "TrustTransfer" ? scope.OperatingBankId : null;
         var plain = await SendAsync(scope, new RecordBankAdjustment(
-            kind, 25m, Feb5, scope.TrustBankId, scope.OperatingBankId, null, $"adj:{kind}", "staff only"), ct);
+            kind, 25m, Feb5, scope.TrustBankId, to, null, $"adj:{kind}", "staff only"), ct);
         var named = await SendAsync(scope, new RecordBankAdjustment(
-            kind, 10m, Feb5, scope.TrustBankId, scope.OperatingBankId, "Statement line text", $"adj:{kind}:named"), ct);
+            kind, 10m, Feb5, scope.TrustBankId, to, "Statement line text", $"adj:{kind}:named"), ct);
 
         var entry = await EntryAsync(scope, plain.EntryId, ct);
         (entry.EventType, entry.Description, entry.SourceRef, entry.InternalNote, entry.EntryDate)
