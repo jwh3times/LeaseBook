@@ -53,16 +53,16 @@ jobs:
           # if the page or its #FontException anchor rots, Monday's run fails. The pattern names
           # the one URL, not the host, so a new gnu.org link is checked everywhere.
           #
-          # refusing: three links in docs/research/micr-e13b-refund-checks.md that a runner is
+          # refusing: four links in docs/research/micr-e13b-refund-checks.md that a runner is
           # sometimes refused, in branches that did not touch the file (#540). The ABA routing
           # number policy PDF answered 403 on PRs #508 and #537 and on main at dde90cf; the two
-          # Internet Archive copies of GnuMICR answered 503 on main at e641a6d and on PR #597.
-          # Each passed on a re-run minutes later, and every Monday sweep has checked all three and
-          # passed. Retries cannot cure either: lychee retries a 5xx three times (the 3 s wait
+          # Internet Archive copies of GnuMICR answered 503 on main at e641a6d and on PR #597; the
+          # Federal Reserve's X9.37 standards reference PDF answered 403 on PR #610. Each passed on
+          # a re-run minutes later, and every Monday sweep has checked them and passed. Retries cannot cure either: lychee retries a 5xx three times (the 3 s wait
           # below) and the archive's overload outlasted them, and it does not retry a 403 at all.
           # So, like the FSF page, each is checked by the weekly sweep and not on every PR and
-          # push. Each pattern names its one URL, anchored at both ends, so a new aba.com or
-          # web.archive.org link is checked everywhere.
+          # push. Each pattern names its one URL, anchored at both ends, so a new link on any of
+          # those hosts is checked everywhere.
           if [[ "$GITHUB_EVENT_NAME" == "schedule" ]]; then
             echo 'compare=^$' >> "$GITHUB_OUTPUT"
             echo 'release=^$' >> "$GITHUB_OUTPUT"
@@ -73,6 +73,7 @@ jobs:
             refusing='^https://www\.aba\.com/-/media/documents/reference-and-guides/routingnumberpolicy\.pdf$'
             refusing+='|^https://web\.archive\.org/web/20030411213628/http://sandeen\.net:80/GnuMICR/$'
             refusing+='|^https://web\.archive\.org/web/20070106015053/http://sandeen\.net:80/GnuMICR/download/GnuMICR-0\.30\.tar\.gz$'
+            refusing+='|^https://www\.frbservices\.org/binaries/content/assets/crsocms/financial-services/check/setup/frb-x937-standards-reference\.pdf$'
             echo "refusing=$refusing" >> "$GITHUB_OUTPUT"
             echo "compare=^https://github\\.com/jwh3times/LeaseBook/compare/v${version}\\.\\.\\.HEAD$" >> "$GITHUB_OUTPUT"
             echo "release=^https://github\\.com/jwh3times/LeaseBook/releases/tag/v${version}$" >> "$GITHUB_OUTPUT"
