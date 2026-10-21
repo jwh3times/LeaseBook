@@ -73,13 +73,6 @@
         "reason": "The two differ only when ageDays equals oldestAgeDays, and then the assignment writes the value the variable already holds. Nothing else happens in the branch."
       },
       {
-        "file": "src/LeaseBook.Modules.Accounting/Features/Ledgers/GetTenantLedger.cs",
-        "mutator": "String mutation",
-        "original": "\"DepositCollected\" => \"Security Deposit\",",
-        "replacement": "\"\"",
-        "reason": "Covers both mutants on the line, the event type emptied and the label emptied. The ledger reads only tenant_receivable and tenant_prepayments lines, and the one place that writes the DepositCollected event type, PostDepositCollectedAsync in AccountingEventService (every PostEntryRequest in src/ names a literal event type or EventTypes.EntryVoided, and IPostingService is internal, visible outside the module only to the two test projects), posts a trust-bank debit and a security_deposits_held credit, so no ledger row is ever a DepositCollected entry, and a void of one is an EntryVoided row on the same accounts. No entry has the event type \"\" either, so the emptied pattern matches nothing the original arm did not, and the emptied label is never returned."
-      },
-      {
         "file": "src/LeaseBook.Modules.Accounting/Features/Ledgers/GetTenantPaymentsReceived.cs",
         "mutator": "Conditional (true) mutation",
         "original": "return rows.Count > 0 ? rows[0] : 0m;",

@@ -47,6 +47,8 @@ internal sealed class GetProspectiveOwnerEquityLinesHandler
         var entry = RunEventEntryBuilder.Build(businessEvent);
         var line = entry.Lines.Single(line => line.AccountCode == AccountCodes.OwnerEquity);
 
+        // A guard, not a path (#612): each RunEventEntryBuilder template names the owner on its
+        // owner-equity line. It stays so a template that ever breaks that fails loudly.
         return new ProspectiveOwnerEquityLine(
             line.OwnerId ?? throw new InvalidOperationException("A run event's owner-equity line must name an owner."),
             line.PropertyId,
@@ -55,6 +57,8 @@ internal sealed class GetProspectiveOwnerEquityLinesHandler
             (line.Credit?.Amount ?? 0m) - (line.Debit?.Amount ?? 0m));
     }
 
+    // The cash arm is unreachable today, since no run-event template writes a cash-only owner-equity
+    // line; it stays so the switch names every basis rather than throwing for one (#612).
     private static string BasisName(EntryBasis basis) => basis switch
     {
         EntryBasis.Cash => "cash",

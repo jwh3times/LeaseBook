@@ -3,7 +3,7 @@
 - **Audience:** Contributors, reviewers and maintainers
 - **Status:** Living method and measurement record
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-19
+- **Last reviewed:** 2026-10-21
 
 Mutation testing asks whether the tests would notice the code being wrong. A tool changes the code
 one small edit at a time, such as `>` to `>=`, `+` to `-`, or a call removed, and reruns the tests
@@ -648,7 +648,9 @@ template. One makes the oldest age's `>` into `>=`, where an equal age assigns t
 held. Two empty the tenant ledger's `DepositCollected` arm, which no ledger row reaches because that
 event posts only to the bank and the deposit liability. The last two are in
 `GetProspectiveOwnerEquityLines`, the message of a missing-owner throw and the `cash` basis name,
-neither of which any of the four run-event templates can reach.
+neither of which any of the four run-event templates can reach. Later (#612) the `DepositCollected`
+arm was removed with its entry, since it mapped a row the ledger never has. The throw and the `cash`
+arm stay as guards, each with a comment saying so, and keep their entries.
 
 The rest of Accounting, everything outside `Posting/` and the six `Features/` directories above, had
 152 undetected mutants in the latest scheduled run and 151 when this work began: 119 survived and 32
