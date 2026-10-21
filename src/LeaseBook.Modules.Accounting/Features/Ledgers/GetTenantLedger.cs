@@ -72,7 +72,8 @@ internal sealed class GetTenantLedgerHandler(DbContext db) : IQueryHandler<GetTe
         return new TenantLedgerResponse(query.TenantId, balance, entries);
     }
 
-    // §C.6 category derivation.
+    // §C.6 category derivation. A DepositCollected entry has no tenant_receivable or
+    // tenant_prepayments line, so it never reaches this ledger and has no arm here (#612).
     private static string Category(string eventType, string? subtype) => eventType switch
     {
         "RentCharged" => "Rent",
@@ -81,7 +82,6 @@ internal sealed class GetTenantLedgerHandler(DbContext db) : IQueryHandler<GetTe
         "FeeCharged" => "Fee",
         "CreditIssued" => "Credit",
         "PaymentReceived" => "Payment",
-        "DepositCollected" => "Security Deposit",
         "PrepaymentReceived" => "Prepayment",
         _ => eventType,
     };
