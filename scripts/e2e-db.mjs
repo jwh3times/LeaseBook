@@ -345,8 +345,12 @@ async function main(argv) {
   }
   const connection = reset({ rebuild: args.rebuild });
   if (args.command === "reset") {
+    // The connection string holds the app role's password, so it is not printed, development
+    // password or not: the copy is named, and the string it differs from.
     console.log(
-      `\n${COPY} is ready. Point a host or an e2e run at it with\n  ConnectionStrings__Default="${connection}"`,
+      `\n${COPY} is ready. To point a host or an e2e run at it, set ConnectionStrings__Default to the ` +
+        `development connection string in src/LeaseBook.Web/appsettings.Development.json with ` +
+        `Database=${COPY}.`,
     );
     return 0;
   }

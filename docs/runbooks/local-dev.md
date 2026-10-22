@@ -414,12 +414,13 @@ host on the copy. The development database `leasebook` is not touched, so nothin
 After changing code a seeder runs through, such as a posting template, rebuild it by hand:
 
 ```bash
-node scripts/e2e-db.mjs reset --rebuild   # from the repo root; prints the copy's connection string
+node scripts/e2e-db.mjs reset --rebuild   # from the repo root
 node scripts/e2e-db.mjs drop              # remove both databases
 ```
 
 `reset` on its own recreates the copy without running anything, for pointing a host or
-`npm run e2e:coverage` at it through `ConnectionStrings__Default`.
+`npm run e2e:coverage` at it: set `ConnectionStrings__Default` to the connection string in
+`src/LeaseBook.Web/appsettings.Development.json` with `Database=leasebook_e2e`.
 
 To run on the development database instead, with `npm run e2e`, it needs the `demo`, `cutover`, and
 `portal` fixtures (the a11y spec checks `/onboarding` on the cutover org, the tenant portal with a

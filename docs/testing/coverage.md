@@ -180,8 +180,8 @@ The database is the one `npm run e2e` uses, seeded the same way (demo, cutover, 
 see the [local-development runbook](../runbooks/local-dev.md)). The suite changes that database, so start
 from a fresh seed, and stop any host or dev server already running: the coverage run starts its own
 host under the collector and will not reuse one. For a fresh seed, `node scripts/e2e-db.mjs reset`
-recreates the `leasebook_e2e` copy and prints its connection string; set `ConnectionStrings__Default`
-to it for the run. From `web/`:
+recreates the `leasebook_e2e` copy; for the run, set `ConnectionStrings__Default` to the development
+connection string with `Database=leasebook_e2e`. From `web/`:
 
 ```bash
 npm run e2e:coverage                              # the main pass
