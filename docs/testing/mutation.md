@@ -232,7 +232,8 @@ each gate a boolean, every entry complete with a reason.
 ### A lock or a race
 
 A mutant that removes an advisory lock survives every test that runs one thing at a time.
-`LeaseBook.Tests.Payments` kills these with races. `PaymentsHarness.RaceAsync` works in four steps:
+`LeaseBook.Tests.Payments` and `LeaseBook.Tests.Accounting` kill these with races. Both run them
+through `OrgLanes.RaceAsync` in `LeaseBook.Tests.Common` (`OrgLane.cs`), which works in four steps:
 
 1. It runs the first call on a connection of its own and keeps that transaction open.
 2. It starts the second call on another connection.
@@ -573,8 +574,8 @@ Accounting came next, area by area, and its gate came on with its last area. The
 assessment guards, the reasons and messages a posting is refused with, which lines the
 reconciliation lock bars, every template's event type and the limits on refunds, fee sweeps and
 vendor payments, and thirteen races in `PostingConcurrencyTests`, one for each event that takes the
-posting lock and four on the unique-index backstop. `Support/Lanes.cs` there is that project's
-copy of the race helper. The suite grew from 211 tests to 262 and runs in about 41 seconds. The one
+posting lock and four on the unique-index backstop. The race helper began as a copy in
+`Support/Lanes.cs` there, and both projects now share it from `LeaseBook.Tests.Common`. The suite grew from 211 tests to 262 and runs in about 41 seconds. The one
 equivalent reads a line's amount as `Credit ?? Debit` instead of `Debit ?? Credit`, where the check
 before it has already refused a line with both or neither.
 

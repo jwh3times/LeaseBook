@@ -158,36 +158,19 @@ internal sealed class PaymentsHarness : IAsyncDisposable
     /// </summary>
     public Lane Lane() => new(_fixture, Scope.OrgId, Binding.BankId, OwnerId, Clock, Eligibility, FeeRules);
 
-    /// <summary>
-    /// Runs <paramref name="first"/> to the end of its work on one connection and holds its
-    /// transaction open; starts <paramref name="second"/> on another; waits until the second has
-    /// either finished or is waiting on a lock held against it; and only then commits the first.
-    /// <para>
-    /// That makes the interleaving the same every time, whichever way the code goes. Where the
-    /// second takes a lock the first holds, it waits there and reads what the first committed. Where
-    /// it takes none, it reads the state as it was before the first, and goes on either to finish
-    /// on that or to wait at a row or key the first wrote, which it then writes over or collides
-    /// with. Neither is decided by timing: nothing sleeps for the other to get anywhere.
-    /// </para>
-    /// </summary>
+    /// <summary>Runs the two units of work as <see cref="OrgLanes.RaceAsync"/> does, on two new lanes.</summary>
     public async Task<Race<T1, T2>> RaceAsync<T1, T2>(Func<Lane, Task<T1>> first, Func<Lane, Task<T2>> second, CancellationToken ct)
     {
         await using var a = Lane();
         await using var b = Lane();
-        var held = a.Hold(first, ct);
-        var firstResult = await held.Done;
-        var running = b.RunAsync(second, ct);
-        await WaitingOrDoneAsync(b, running, ct);
-        held.Commit();
-        await held.Ended();
-        var (secondResult, error) = await Lanes.OutcomeOf(running);
+        var (firstResult, secondResult, error) = await OrgLanes.RaceAsync(_fixture, a, b, first, second, ct);
         Scope.Db.ChangeTracker.Clear();
         return new(firstResult, secondResult, error, a.Ledger, b.Ledger);
     }
 
-    /// <inheritdoc cref="Lanes.WaitingOrDoneAsync"/>
+    /// <inheritdoc cref="OrgLanes.WaitingOrDoneAsync"/>
     public Task<bool> WaitingOrDoneAsync(Lane lane, Task running, CancellationToken ct) =>
-        Lanes.WaitingOrDoneAsync(_fixture, lane, running, ct);
+        OrgLanes.WaitingOrDoneAsync(_fixture, lane, running, ct);
 
     /// <summary>
     /// Points the organization's fixture at another account, or at a new bank, by editing the row as

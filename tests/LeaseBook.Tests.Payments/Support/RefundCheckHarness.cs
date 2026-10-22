@@ -173,22 +173,12 @@ internal sealed class RefundCheckHarness : IAsyncDisposable
 
     public Lane Lane() => new(_fixture, Scope.OrgId, Clock);
 
-    /// <summary>
-    /// Runs <paramref name="first"/> on one connection and holds its transaction open; starts
-    /// <paramref name="second"/> on another; waits until the second has finished or is waiting on a
-    /// lock; and only then commits the first. See <see cref="PaymentsHarness.RaceAsync{T1, T2}"/>.
-    /// </summary>
+    /// <summary>Runs the two units of work as <see cref="OrgLanes.RaceAsync"/> does, on two new lanes.</summary>
     public async Task<Race<T1, T2>> RaceAsync<T1, T2>(Func<Lane, Task<T1>> first, Func<Lane, Task<T2>> second, CancellationToken ct)
     {
         await using var a = Lane();
         await using var b = Lane();
-        var held = a.Hold(first, ct);
-        var firstResult = await held.Done;
-        var running = b.RunAsync(second, ct);
-        await Lanes.WaitingOrDoneAsync(_fixture, b, running, ct);
-        held.Commit();
-        await held.Ended();
-        var (secondResult, error) = await Lanes.OutcomeOf(running);
+        var (firstResult, secondResult, error) = await OrgLanes.RaceAsync(_fixture, a, b, first, second, ct);
         Scope.Db.ChangeTracker.Clear();
         return new(firstResult, secondResult, error, a.Ledger, b.Ledger);
     }

@@ -264,8 +264,8 @@ public sealed class PaymentConcurrencyTests(PostgresFixture fixture)
         (await h.WaitingOrDoneAsync(b, named, ct)).ShouldBeTrue();
         held.Commit();
 
-        (await Lanes.ErrorOf(held.Ended())).ShouldBeNull();
-        (await Lanes.ErrorOf(named)).ShouldBeNull();
+        (await OrgLanes.ErrorOf(held.Ended())).ShouldBeNull();
+        (await OrgLanes.ErrorOf(named)).ShouldBeNull();
         (await h.ReadObservationsAsync(ct)).Count.ShouldBe(3);
     }
 }

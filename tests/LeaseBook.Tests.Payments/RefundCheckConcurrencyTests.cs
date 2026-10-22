@@ -103,11 +103,11 @@ public sealed class RefundCheckConcurrencyTests(PostgresFixture fixture)
         await using var issuer = h.Lane();
         var issuing = issuer.RunAsync(lane => lane.Sender.Send(h.Issue(1043), ct), ct);
         // The issue has posted its refund and stands at the index, waiting on the held row's key.
-        (await Lanes.WaitingOrDoneAsync(fixture, issuer, issuing, ct)).ShouldBeTrue();
+        (await OrgLanes.WaitingOrDoneAsync(fixture, issuer, issuing, ct)).ShouldBeTrue();
         held.Commit();
         await held.Ended();
 
-        var (_, error) = await Lanes.OutcomeOf(issuing);
+        var (_, error) = await OrgLanes.OutcomeOf(issuing);
         error.ShouldBeOfType<RefundCheckConflictException>().Code.ShouldBe("check_number_taken");
         (await h.QueryAsync(new GetRefundCheckOptions(h.Tenants[0]), ct)).Funds
             .Single(f => f.Source == "deposit").Held.ShouldBe(1450m);
