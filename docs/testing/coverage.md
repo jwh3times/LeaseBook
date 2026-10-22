@@ -3,7 +3,7 @@
 - **Audience:** Contributors, reviewers and maintainers
 - **Status:** Living measurement record
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-19
+- **Last reviewed:** 2026-10-22
 
 LeaseBook measures what its test suites exercise: which lines and branches of each module ran, and
 which API routes the browser tests called. This page records how that is measured, how to run each
@@ -179,7 +179,9 @@ Open `web/coverage/unit/index.html` for the report.
 The database is the one `npm run e2e` uses, seeded the same way (demo, cutover, portal and scenario;
 see the [local-development runbook](../runbooks/local-dev.md)). The suite changes that database, so start
 from a fresh seed, and stop any host or dev server already running: the coverage run starts its own
-host under the collector and will not reuse one. From `web/`:
+host under the collector and will not reuse one. For a fresh seed, `node scripts/e2e-db.mjs reset`
+recreates the `leasebook_e2e` copy; for the run, set `ConnectionStrings__Default` to the development
+connection string with `Database=leasebook_e2e`. From `web/`:
 
 ```bash
 npm run e2e:coverage                              # the main pass

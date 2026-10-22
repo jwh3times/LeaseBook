@@ -159,6 +159,12 @@ jobs:
       - name: Test the coverage summary, route inventory, e2e coverage and mutation scripts
         working-directory: ${{ github.workspace }}
         run: node --test scripts/coverage-summary.test.mjs scripts/route-inventory.test.mjs scripts/e2e-coverage.test.mjs scripts/scenario-catalogue.test.mjs scripts/mutation.test.mjs
+      # The local fresh-database command (#575): which databases it may touch, the template's
+      # fingerprint and when it rebuilds, and the environment its dotnet steps get. CI seeds a new
+      # database for every run and never runs the command itself.
+      - name: Test the e2e database script
+        working-directory: ${{ github.workspace }}
+        run: node --test scripts/e2e-db.test.mjs
       # The scenario catalogue's static check (ADR-056, docs/testing/scenarios.md), the part that
       # needs no API contract: every journal event type in the product source has a scenario or a
       # recorded exemption, every catalogue id has a tagged Playwright test and every test a known
