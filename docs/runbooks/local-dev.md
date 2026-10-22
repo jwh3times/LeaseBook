@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living runbook; canonical development command reference
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-19
+- **Last reviewed:** 2026-10-22
 
 ## Prerequisites
 
@@ -396,11 +396,36 @@ Chromium browser once:
 npx playwright install chromium
 ```
 
-The suite requires the `demo`, `cutover`, and `portal` fixtures (the a11y spec checks
-`/onboarding` on the cutover org, the tenant portal with a resident login, and the owner portal with
-an owner login). Seed `scenario` beside them, as CI does: it is the organization new money scenarios
-drive ([End-to-end scenarios](../testing/scenarios.md)), and no spec written before the catalogue
-uses it yet:
+The suite changes the database it runs on: it signs the cutover organization off, reconciles and
+locks a month, clears a register line, moves an owner's figures and runs rent. A second run on the
+same database fails on all of that. So run it on a fresh copy each time, from `web/`, with no host
+already running on `:5080`:
+
+```bash
+npm run e2e:fresh                    # full suite, on a fresh copy
+npm run e2e:fresh -- a11y.spec.ts    # Playwright arguments go after --
+```
+
+`npm run e2e:fresh` runs `scripts/e2e-db.mjs`. It builds `leasebook_e2e_template` once, migrated and
+seeded with `demo`, `cutover`, `portal` and `scenario` as CI seeds them, in about 40 seconds. Before
+each run it recreates `leasebook_e2e` from that template in a few seconds, and Playwright starts its
+host on the copy. The development database `leasebook` is not touched, so nothing here needs
+`reset-db`. The template rebuilds itself when a migration, a seeder or the bootstrap SQL changes.
+After changing code a seeder runs through, such as a posting template, rebuild it by hand:
+
+```bash
+node scripts/e2e-db.mjs reset --rebuild   # from the repo root; prints the copy's connection string
+node scripts/e2e-db.mjs drop              # remove both databases
+```
+
+`reset` on its own recreates the copy without running anything, for pointing a host or
+`npm run e2e:coverage` at it through `ConnectionStrings__Default`.
+
+To run on the development database instead, with `npm run e2e`, it needs the `demo`, `cutover`, and
+`portal` fixtures (the a11y spec checks `/onboarding` on the cutover org, the tenant portal with a
+resident login, and the owner portal with an owner login). Seed `scenario` beside them, as CI does:
+it is the organization new money scenarios drive ([End-to-end scenarios](../testing/scenarios.md)),
+and no spec written before the catalogue uses it yet. That works once per seed:
 
 ```powershell
 $env:ASPNETCORE_ENVIRONMENT = "Development"

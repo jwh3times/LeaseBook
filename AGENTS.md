@@ -198,6 +198,8 @@ Run `dotnet tool restore` once for `dotnet-ef`.
 - Single test: `npm run test -- src/design/formatMoney.test.ts`
 - Regenerate API client (emits the contract itself; no running host or database): `npm run api:generate`
 - e2e, against a seeded host: `npm run e2e`
+- e2e on a fresh copy of a seeded template database, leaving the dev database alone (stop a running
+  host first; the suite changes the data it runs on, so a second plain run fails): `npm run e2e:fresh`
 - e2e accessibility gate only: `npm run e2e -- a11y.spec.ts`
 - Unit tests with coverage (report in `web/coverage/unit/`): `npm run test:coverage`
 - e2e with host and browser coverage plus the route inventory, against the same seeded database as
