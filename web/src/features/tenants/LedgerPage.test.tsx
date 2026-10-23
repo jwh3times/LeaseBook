@@ -142,9 +142,10 @@ function renderLedger(initialEntry: InitialEntry = '/tenants/t1') {
 }
 
 beforeAll(() => {
-  // @tanstack/react-virtual measures the scroll element via offsetWidth/offsetHeight and ResizeObserver
-  // borderBoxSize — jsdom reports 0 and ships no observer. Give the element a real size and an observer
-  // that fires once so the virtualizer computes a visible window and renders the (small) test datasets.
+  // @tanstack/react-virtual measures the scroll element via clientWidth/clientHeight (offsetWidth/
+  // offsetHeight and ResizeObserver borderBoxSize in releases before 3.14.21) — jsdom reports 0 and
+  // ships no observer. Give the element a real size and an observer that fires once so the virtualizer
+  // computes a visible window and renders the (small) test datasets.
   globalThis.ResizeObserver = class {
     private readonly cb: ResizeObserverCallback;
     constructor(cb: ResizeObserverCallback) {
@@ -166,6 +167,14 @@ beforeAll(() => {
     get: () => 800,
   });
   Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
+    configurable: true,
+    get: () => 600,
+  });
+  Object.defineProperty(Element.prototype, 'clientWidth', {
+    configurable: true,
+    get: () => 800,
+  });
+  Object.defineProperty(Element.prototype, 'clientHeight', {
     configurable: true,
     get: () => 600,
   });

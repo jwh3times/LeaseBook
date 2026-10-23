@@ -138,12 +138,12 @@ export function OnboardingChecklist({
             aria-current={isActive ? 'step' : undefined}
             aria-label={`Step ${stepNumber}: ${step.label} — ${step.ariaStatus}`}
           >
-            {/* Interactive wrapper — button for clickable steps, plain div for nav links */}
+            {/* Interactive wrapper — button for clickable steps, plain div for nav links. Its name is
+                its visible text (WCAG 2.5.3 Label in Name); the list carries the step position. */}
             <button
               type="button"
               className="ob-step-btn"
               onClick={() => handleStepClick(i, step.id)}
-              aria-label={`Go to step ${stepNumber}: ${step.label}`}
             >
               <StepIcon
                 done={step.done}
