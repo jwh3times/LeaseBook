@@ -180,6 +180,11 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Fixed
 
+- **An onboarding step's accessible name now matches what it shows.** Each step button in the
+  onboarding checklist was announced as "Go to step N: <label>", which left out the description shown
+  under the current step (WCAG 2.5.3 Label in Name). The button is now named by its visible text, and
+  the list still gives the step's position.
+
 - **A bank fee or interest adjustment that names a destination account is refused.** Only a transfer
   moves money to a second account, and the destination on a fee or interest was silently dropped. A
   transfer with no destination now says "A transfer requires a destination bank account." in every
