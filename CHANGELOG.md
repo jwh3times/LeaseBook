@@ -193,6 +193,22 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 - **A payout that failed after it posted no longer reads "nothing posted".** The Payouts list now
   says "posted, nothing reversed" for a payout in review or closed that had posted.
 
+- **Post payout is no longer offered for a payout the processor's own lines rule out.** A payout held
+  as an unsupported settlement, such as one carrying a refund, offered **Post payout**, and the server
+  refused it every time. It can now only be closed.
+
+- **A payout carrying a payment and its own return gets one reason, whichever line comes first.** It
+  went to review as conflicting evidence or as an unsupported settlement depending on the order of its
+  lines. It is now conflicting evidence when the payment already has a receipt and an unsupported
+  settlement otherwise, and neither offers **Post payout**.
+
+- **A processor's payment reference is read only within its own account.** The payment engine and
+  the staff payment and payout lists matched a reference across every processor account in the
+  organization, so the same reference under two accounts could wake, judge or show the wrong payment,
+  and could break the payout list. A notice in one payment mode is also no longer dropped as a
+  duplicate of another mode's notice with the same event id. Payments exist only in the development
+  payment fixture.
+
 - **Post return is offered only when it can be posted.** Staff were offered **Post return** on a
   refund, a card dispute, a partial return and conflicting evidence, and the server then refused it.
 

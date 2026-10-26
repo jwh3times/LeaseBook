@@ -3,7 +3,7 @@
 - **Audience:** Implementers and reviewers of issues #456 and #513
 - **Status:** Implemented contract for both non-live payment modes: the payment simulation (#456) and the Stripe sandbox (#513, ADR-054 proposed). Live payments remain unapproved
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-13
+- **Last reviewed:** 2026-10-26
 
 ## Evidence and boundary
 
@@ -466,9 +466,9 @@ The staff API's payout view carries `processorAmount` and `failedAt`, and its `b
 becomes, so a payout in review or closed with a `postedAt` posted and was not reversed, and one
 without it posted nothing. `canPost` is true only for a payout in review, or one whose check never
 finished, that has bank evidence, has not failed and is not held as `conflicting_evidence`,
-`payout_failed` or `bank_amount_mismatch`. `canClose` is true for any payout that is not posted or
-closed, one waiting for its bank included. The Payouts list shows a held payout as "Waiting for the
-bank" with the processor's amount and no bank amount or date. The
+`unsupported_settlement`, `payout_failed` or `bank_amount_mismatch`. `canClose` is true for any
+payout that is not posted or closed, one waiting for its bank included. The Payouts list shows a held
+payout as "Waiting for the bank" with the processor's amount and no bank amount or date. The
 [fee and settlement specification](fee-and-settlement-spec.md#payout-statuses-and-what-staff-read)
 has every status, line kind and reason as staff read them.
 
@@ -591,9 +591,11 @@ select context. A forged signature or stale timestamp returns generic HTTP 400. 
 unknown account/mode/type is ignored with generic HTTP 204 and bounded, redacted diagnostic counting;
 it cannot create a binding. For a known account but not-yet-mapped object, persist a parked inbox
 record under that org and retry association after dispatch recovery. Only trusted Lookup evidence
-can establish the missing object mapping. Unmapped observations older than ten minutes appear in
-the staff review count and in the staff list at `GET /api/payments/unmatched`, newest first and at
-most 100. The list is read-only and shows only the received time, kind, amount, provider reference and
+can establish the missing object mapping. An observation is unmapped while no payment under the
+same account carries its provider reference: a reference is unique per account, not per
+organization, and every lookup by reference is made within the account. Unmapped observations older
+than ten minutes appear in the staff review count and in the staff list at
+`GET /api/payments/unmatched`, newest first and at most 100. The list is read-only and shows only the received time, kind, amount, provider reference and
 age; it never returns the payload, signature, account, bank, bank evidence or payout identifier.
 They remain durable and can associate after dispatch recovery, after which they leave the list. Do not adopt
 caller metadata. Wrong destination, currency or amount is retained for review without posting.
