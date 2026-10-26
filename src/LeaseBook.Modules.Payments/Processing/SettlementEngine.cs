@@ -490,7 +490,9 @@ public sealed class SettlementEngine(DbContext db, TimeProvider clock, PaymentEn
             || items.Any(x => x.Currency != "USD" || x.Kind is not (SettlementItemKinds.Payment
                 or SettlementItemKinds.Return or SettlementItemKinds.Fee)))
         { return "unsupported_settlement"; }
-        if (items.Count == 0) { return "settlement_incomplete"; }
+        // A payout with no lines names nothing to post, and never will: lines arrive with the payout,
+        // and other lines under its id are other evidence, kept out (#630).
+        if (items.Count == 0) { return "unsupported_settlement"; }
         // One line per payment and kind: a payout that names a payment twice contradicts itself.
         if (items.Where(x => x.Kind != SettlementItemKinds.Fee).GroupBy(x => (x.ProviderId, x.Kind)).Any(g => g.Count() > 1))
         { return "conflicting_evidence"; }
@@ -515,9 +517,11 @@ public sealed class SettlementEngine(DbContext db, TimeProvider clock, PaymentEn
                 lines.Add(new(item.Item, item.Kind, null, 0m, "", null, item.Fee));
                 continue;
             }
-            if (!operations.TryGetValue(item.ProviderId, out var operation)
-                || operation.BankId != settlement.BankId || operation.Generation != settlement.Generation)
-            { return "settlement_incomplete"; }
+            // A payment nobody here knows yet may still be accepted; the payout can be posted then.
+            if (!operations.TryGetValue(item.ProviderId, out var operation)) { return "settlement_incomplete"; }
+            // One made for another bank never becomes this payout's: the payout contradicts it (#630).
+            if (operation.BankId != settlement.BankId || operation.Generation != settlement.Generation)
+            { return "conflicting_evidence"; }
             var facts = said[item.ProviderId];
 
             if (item.Kind == SettlementItemKinds.Payment)

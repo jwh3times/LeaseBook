@@ -85,9 +85,9 @@ export function tenantReviewNote(payment: Pick<PaymentView, 'receiptRecorded'>):
  */
 const PAYOUT_REASONS: Record<string, string> = {
   settlement_incomplete:
-    'A line of this payout names a payment LeaseBook cannot identify, so nothing was posted. Close the review after correcting the ledger, or wait for corrected evidence.',
+    'A line of this payout names a payment LeaseBook does not know yet, or returns one with no receipt yet, so nothing was posted. Post it again once that payment is recorded, or close the review after correcting the ledger.',
   settlement_untied:
-    'The lines of this payout do not add up to the bank amount, or a charge differs from the payment, so nothing was posted. Close the review after correcting the ledger, or wait for corrected evidence.',
+    'The lines of this payout do not add up to the bank amount, or a charge differs from the payment, so nothing was posted. Correct the ledger, then close the review.',
   unsupported_settlement:
     'This payout contains something LeaseBook does not post, such as a refund, a dispute, a partial return or a reserve. Correct the ledger, then close the review.',
   settlement_requires_confirmation:
