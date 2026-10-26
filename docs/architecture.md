@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living architecture guide
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-11
+- **Last reviewed:** 2026-10-26
 
 This is the canonical public map of the system **as implemented**. It explains how the pieces fit
 together and links the decisions that shaped them without reproducing every invariant. Accepted
@@ -87,7 +87,7 @@ what a processor still holds about a fixture's payments and payouts since a give
 worker asks at most every five minutes for each fixture, whether or not a payment is waiting on its
 outcome, so an event that was never delivered is read from Stripe's event list as a delivered one is. A payment
 still without an outcome after seven days goes to review under either processor, as does one
-reported both failed and succeeded. A host also maps only its own processor's anonymous callback routes, outside `/api`:
+reported both failed and succeeded, or one still waiting on a payout that is closed with nothing posted. A host also maps only its own processor's anonymous callback routes, outside `/api`:
 the simulator's two under `/callbacks/payments/simulation` in a Simulation host, and
 `POST /callbacks/payments/stripe` in a StripeSandbox host, which has its own rate limit and is not
 part of the published API contract. Reading a dispute or a paid payout asks Stripe; when Stripe

@@ -209,6 +209,13 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   duplicate of another mode's notice with the same event id. Payments exist only in the development
   payment fixture.
 
+- **Closing a payout that posted nothing sends its payments to staff review.** Its payments stayed
+  "on its way to the bank" for good, in the tenant's portal and in funds in transit, though the payout
+  would never bring them. Each one still waiting now goes to review under the reason `payout_closed`,
+  and the tenant reads that their property manager is checking it. A later bank credit for it no
+  longer posts a receipt by itself; a person decides it. Payments exist only in the development
+  payment fixture.
+
 - **Post return is offered only when it can be posted.** Staff were offered **Post return** on a
   refund, a card dispute, a partial return and conflicting evidence, and the server then refused it.
 
