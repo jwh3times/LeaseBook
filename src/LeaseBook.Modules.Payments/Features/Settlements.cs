@@ -47,22 +47,26 @@ internal sealed class GetSettlementsHandler(DbContext db) : IQueryHandler<GetSet
         var ids = rows.Select(x => x.Id).ToArray();
         var items = await db.Set<PaymentSettlementItem>().AsNoTracking().Where(x => ids.Contains(x.SettlementId)).ToListAsync(ct);
         var providerIds = items.Select(x => x.ProviderId).Where(x => x != "").Distinct().ToArray();
+        // A reference is unique per account, not per organization, so a line names the payment with
+        // its reference under the payout's own account (ADR-054).
         var payments = await db.Set<PaymentOperation>().AsNoTracking()
             .Where(x => x.ProviderId != null && providerIds.Contains(x.ProviderId))
-            .ToDictionaryAsync(x => x.ProviderId!, x => x.Id, ct);
+            .ToDictionaryAsync(x => (x.Account, x.ProviderId!), x => x.Id, ct);
         return rows.Select(x => new SettlementView(x.Id, x.PayoutId, x.Banked ? x.BankDate : null, x.Banked ? x.BankAmount : null, x.Status, x.Reason,
             x.ReasonItem, x.CreatedAt, x.PostedAt, x.ReviewNote, x.ReviewClosedAt,
             // Conflicting evidence cannot be posted whatever a person decides; it can only be closed.
             // Nor can a payout the processor says failed, one the bank received another amount for,
-            // or one no bank has spoken for. A payout still marked received is one whose check never
-            // finished: it has both ways out.
+            // one holding something this model does not post, or one no bank has spoken for. Each
+            // follows from what the payout and its payments say, and asking again cannot change it.
+            // A payout still marked received is one whose check never finished: it has both ways out.
             CanPost: x.Status is SettlementStatuses.NeedsReview or SettlementStatuses.Received && x.Banked && x.FailedAt is null
-                && x.Reason is not ("conflicting_evidence" or SettlementReasons.PayoutFailed or SettlementReasons.BankAmountMismatch),
+                && x.Reason is not ("conflicting_evidence" or "unsupported_settlement" or SettlementReasons.PayoutFailed
+                    or SettlementReasons.BankAmountMismatch),
             // One waiting for the bank can be closed too: the evidence may never come.
             CanClose: x.Status is SettlementStatuses.NeedsReview or SettlementStatuses.Received or SettlementStatuses.AwaitingBank,
             items.Where(i => i.SettlementId == x.Id).OrderBy(i => i.Item, StringComparer.Ordinal)
                 .Select(i => new SettlementItemView(i.Item, i.Kind,
-                    payments.TryGetValue(i.ProviderId, out var paymentId) ? paymentId : null,
+                    payments.TryGetValue((x.Account, i.ProviderId), out var paymentId) ? paymentId : null,
                     i.Gross, i.Fee, i.Net, i.EntryId, i.FeeEntryId)).ToArray(),
             x.ProcessorAmount, x.FailedAt)).ToArray();
     }

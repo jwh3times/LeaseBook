@@ -454,6 +454,17 @@ public sealed class SettlementEngine(DbContext db, TimeProvider clock, PaymentEn
         // One line per payment and kind: a payout that names a payment twice contradicts itself.
         if (items.Where(x => x.Kind != SettlementItemKinds.Fee).GroupBy(x => (x.ProviderId, x.Kind)).Any(g => g.Count() > 1))
         { return "conflicting_evidence"; }
+        // A payment and that payment's return in one payout (ADR-054, Known limits). A return posts
+        // only against a receipt an earlier payout made, so one whose payment has no receipt yet is
+        // something this model does not post; one whose payment has a receipt is paid a second time
+        // here. Decided for the payout as a whole, before any line: each line alone is refused for
+        // its own reason, and which came first would follow the order of the lines' names.
+        // So is a pair whose payment this payout cannot identify: the two lines can never both pass,
+        // the payment line wanting no receipt and the return line one, whatever becomes of it.
+        var paired = items.Where(x => x.Kind == SettlementItemKinds.Return).Select(x => x.ProviderId)
+            .Intersect(items.Where(x => x.Kind == SettlementItemKinds.Payment).Select(x => x.ProviderId)).ToArray();
+        if (paired.Any(x => operations.TryGetValue(x, out var paid) && paid.JournalId is not null)) { return "conflicting_evidence"; }
+        if (paired.Length > 0) { return "unsupported_settlement"; }
 
         foreach (var item in items)
         {

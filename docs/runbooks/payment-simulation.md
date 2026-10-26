@@ -3,7 +3,7 @@
 - **Audience:** Developers and test operators
 - **Status:** Implemented, non-live only
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-14
+- **Last reviewed:** 2026-10-26
 
 The simulator exercises the real Payments and Accounting path. It has no provider network client
 and cannot move real money. Production and Staging reject Simulation; live/provider configuration
@@ -114,7 +114,8 @@ what the tenant paid toward their ledger and takes the difference from, or adds 
 fees held in the trust bank; a shortfall needs fees held there. A payout that contains a return waits
 for an administrator. Sign in as `admin-a@payments.test` and open **Operations**: the **Payouts**
 list shows each payout, its status, why it waits and its lines. **Post payout** posts a waiting payout
-whole, or reports the reason it cannot; **Close review…** records a note and posts nothing. Other
+whole, or reports the reason it cannot, and is not offered for a payout that could never post;
+**Close review…** records a note and posts nothing. Other
 staff see the same list without the actions.
 
 To see a payout reconcile, open **Banking**, import a statement whose one line is the payout's bank
@@ -559,8 +560,9 @@ the processor's payout amount and, for a failed payout, when Stripe said it fail
 A payment in review for a bank's return of an ACH debit is best left open until the payout that
 carries the return has been dealt with. The return posts only as a line of that payout, and a payout
 refuses a return for a payment whose review was closed. A payout that holds both a payment and that
-same payment's return cannot post at all; [ADR-054](../adr/ADR-054-stripe-sandbox-adapter.md#known-limits)
-lists this with the other known limits.
+same payment's return cannot post at all. It goes to review as `unsupported_settlement` and can only
+be closed; [ADR-054](../adr/ADR-054-stripe-sandbox-adapter.md#known-limits) lists this with the other
+known limits.
 
 #### A payout that fails
 

@@ -3,7 +3,7 @@
 - **Audience:** Implementers and reviewers of processor fees and payouts (issues #498, #500 and #513)
 - **Status:** Accepted for the payment simulation and built there. The Stripe sandbox mode (ADR-054, proposed) holds and posts payouts through the same model. Its provisional assumptions are unverified and live payments remain unapproved
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-11
+- **Last reviewed:** 2026-10-26
 
 ## Evidence and boundary
 
@@ -114,6 +114,13 @@ A batch is one unit of work. It posts completely or not at all.
    the whole charge. A processor fee with no payment beside it is a shortfall and does not, by itself,
    need a person. Unsupported content is judged first, before identifying and tying: a payout of an
    unsupported type with no lines at all is `unsupported_settlement`, not `settlement_incomplete`.
+
+   A payout that holds both a payment and that payment's own return is decided as a whole, before
+   any line is checked. A return posts only against a receipt an earlier payout made, so when the
+   payment has a receipt the payout pays it a second time and is `conflicting_evidence`; otherwise,
+   whether or not the payment is one this payout can identify, it is `unsupported_settlement`. Checked line by line instead, each of the two lines
+   is refused for its own reason, and the payout's reason would follow the order of the lines' names
+   ([ADR-054](../adr/ADR-054-stripe-sandbox-adapter.md#known-limits)).
 
 5. **Post.** Under the posting lock, post every item's lines and record one effect per item. A
    refused guard — the shortfall guard, any ADR-052 return guard, a locked period — rolls the whole
@@ -283,7 +290,13 @@ Closing a batch with a note posts nothing, as closing a payment review does toda
 its bank can be closed the same way. `bank_evidence_missing` is not a stored reason: it is the answer
 to an administrator who posts a payout no bank has spoken for, and the payout stays as it was.
 `unsupported_settlement` also covers a line a processor's adapter stores for a person to read and
-nothing posts: a refund, a card dispute, a failed debit taken back, or a line it does not recognise.
+nothing posts: a refund, a card dispute, a failed debit taken back, or a line it does not recognise,
+and a payment beside its own return.
+
+The **Post payout** action is never offered for a payout no bank has spoken for, nor for
+`conflicting_evidence`, `unsupported_settlement`, `bank_amount_mismatch` or `payout_failed`: each
+follows from what the payout and its payments say, so posting would be refused every time, and the
+way out is to close it.
 
 ## Payout statuses and what staff read
 

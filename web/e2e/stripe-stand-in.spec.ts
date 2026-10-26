@@ -782,8 +782,8 @@ test('a bank amount that differs from the processor’s net posts nothing, and a
  * listed for it. The stand-in serves it as recorded, on the fixture's account and under a payout id
  * of its own for this run. Its lines name the payments of three earlier fixture generations and
  * none of this one's, and two of them are failed bank debits, which nothing posts. So it goes to a
- * person the moment it arrives, bank evidence equal to the net releases nothing, and an
- * administrator who posts it is refused.
+ * person the moment it arrives, bank evidence equal to the net releases nothing, and no administrator
+ * is offered to post it: it can only be closed.
  */
 test('the recorded payout arrives with its fifteen lines, goes to staff review, and cannot be posted @scenario:stripe-stand-in-recorded-payout', async ({
   browser,
@@ -856,18 +856,10 @@ test('the recorded payout arrives with its fifteen lines, goes to staff review, 
   await expect(held).toContainText(`$1,470.60 at the bank on ${today}`);
   await expect(held.getByText('Needs review — nothing posted', { exact: true })).toBeVisible();
 
-  // With bank evidence an administrator may ask for it to be posted, and is refused.
-  const refused = admin.waitForResponse(
-    (r) =>
-      /\/api\/payments\/settlements\/[^/]+\/post$/.test(r.url()) && r.request().method() === 'POST',
-  );
-  await held.getByRole('button', { name: `Post payout ${payout.id}` }).focus();
-  await admin.keyboard.press('Enter');
-  expect((await refused).status()).toBe(409);
-  await expect(held.getByRole('alert')).toContainText(
-    'This payout contains something LeaseBook does not post',
-  );
-  await expect(held.getByText('Needs review — nothing posted', { exact: true })).toBeVisible();
+  // Bank evidence does not make it postable: what it holds is something LeaseBook never posts, so
+  // it can still only be closed.
+  await expect(held.getByRole('button', { name: `Post payout ${payout.id}` })).toHaveCount(0);
+  await expect(held.getByRole('button')).toHaveCount(1);
   await expect(kind('Not on the ledger')).toHaveCount(15);
   await scanStaff(admin);
 
@@ -890,9 +882,10 @@ test('the recorded payout arrives with its fifteen lines, goes to staff review, 
  * payment and that payment's return cannot post"). Stripe's ACH dispute test method disputes a
  * debit minutes after it succeeds, so in a sandbox the debit and its return usually reach the same
  * payout. This test asserts what should then happen: bank evidence equal to the net lets the payout
- * post, with the receipt and its reversal. Today the payment line is refused because a return is
- * stored for the payment, and the return line because the payment has no receipt to reverse, so
- * the payout cannot post and the test fails where it states that outcome.
+ * post, with the receipt and its reversal. Today a return posts only against a receipt an earlier
+ * payout made, so the payout goes to review as holding something LeaseBook does not post
+ * (`unsupported_settlement`), is offered no Post action, and the test fails where it states that
+ * outcome.
  *
  * How to tell that failure from any other. Everything up to `test.fail()` is setup and is held to
  * pass: the test is marked as expected to fail only once the setup and today's refusal have been
@@ -953,12 +946,12 @@ test('a payout that holds an ACH debit and that debit’s return posts both when
   await expect(kind('Processor fee')).toHaveCount(1);
   await expect(held).toContainText('Processor’s payout amount: $104.03');
 
-  // Today, the known limit. Whichever of its two lines is checked first is refused: the payment
-  // because a return is stored for it, or the return because no receipt exists to reverse. If this
-  // step fails, the limit may have been fixed; see the comment above.
+  // Today, the known limit. The payout holds a payment and that payment's return, which this model
+  // does not post, so it goes to review for that whichever of its lines comes first, and can only be
+  // closed. If this step fails, the limit may have been fixed; see the comment above.
   await test.step('today: the payout goes to review and cannot post (ADR-054 known limit)', async () => {
     await expect(held.getByText('Needs review — nothing posted', { exact: true })).toBeVisible();
-    await expect(held).toContainText(/Reason: (conflicting_evidence|settlement_incomplete)/);
+    await expect(held).toContainText('Reason: unsupported_settlement');
     await expect(kind('Not on the ledger')).toHaveCount(4);
   });
   await scanStaff(admin);

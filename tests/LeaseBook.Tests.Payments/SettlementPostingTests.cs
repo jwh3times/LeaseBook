@@ -1,6 +1,7 @@
 using System.Text.Json;
 using LeaseBook.Modules.Payments.Contracts;
 using LeaseBook.Modules.Payments.Domain;
+using LeaseBook.Modules.Payments.Features;
 using LeaseBook.Modules.Payments.Processing;
 using LeaseBook.SharedKernel;
 using LeaseBook.Tests.Common;
@@ -351,6 +352,92 @@ public sealed class SettlementPostingTests(PostgresFixture fixture)
 
         (payout.Status, payout.Reason).ShouldBe(("NeedsReview", reason));
         h.Ledger.Settlements.Count.ShouldBe(postedBefore);
+    }
+
+    public static TheoryData<string, string, string> PaymentAndItsReturn()
+    {
+        var data = new TheoryData<string, string, string>();
+        foreach (var first in new[] { "payment", "return" })
+        {
+            data.Add("returned before the payout", first, "unsupported_settlement");
+            data.Add("no return notice yet", first, "unsupported_settlement");
+            data.Add("receipted by an earlier payout", first, "conflicting_evidence");
+        }
+        return data;
+    }
+
+    // ADR-054, Known limits: a payout that holds both a payment and that payment's return cannot post.
+    // Each line alone is refused for a reason of its own, so the reason is the payout's, whichever
+    // line comes first, and it is one an administrator can only close.
+    [Theory]
+    [MemberData(nameof(PaymentAndItsReturn))]
+    public async Task A_payout_holding_a_payment_and_its_return_says_one_reason_whichever_line_comes_first(
+        string story, string first, string reason)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var h = await PaymentsHarness.CreateAsync(fixture, ct);
+        var returned = await h.AcceptedAsync(600m, ct, fee: 6m);
+        var kept = await h.AcceptedAsync(100m, ct, tenant: 1);
+        switch (story)
+        {
+            case "returned before the payout":
+                await h.EmitAsync(h.Observation(returned, "Return"), ct);
+                (await h.ReadAsync(returned.Id, ct)).Reason.ShouldBe("return_requires_review");
+                break;
+            case "receipted by an earlier payout":
+                await h.SettleAsync(h.Payout("po_1", 600m, Line("1", "Payment", returned, 606m, 6m, 600m)), ct);
+                break;
+        }
+        var (paymentItem, returnItem) = first == "payment" ? ("1", "2") : ("2", "1");
+        var postedBefore = h.Ledger.Settlements.Count;
+
+        var payout = await h.SettleAsync(h.Payout("po_2", 100m,
+            Line(paymentItem, "Payment", returned, 606m, 6m, 600m),
+            Line(returnItem, "Return", returned, 606m, 6m, -600m),
+            Line("3", "Payment", kept, 100m, 0m, 100m)), ct);
+
+        (payout.Status, payout.Reason).ShouldBe(("NeedsReview", reason));
+        var view = (await h.QueryAsync(new GetSettlements(payout.Id), ct)).ShouldHaveSingleItem();
+        (view.CanPost, view.CanClose).ShouldBe((false, true));
+        // An administrator who asks anyway is refused, as a conflict before any check or on the same
+        // reason after one, and nothing posts.
+        Task<PaymentSettlement?> Ask() => h.InOrg(() => h.Settlements.EvaluateAsync(h.Binding, payout.Id, UuidV7.NewId(), ct), ct);
+        if (reason == "conflicting_evidence") { await Should.ThrowAsync<PaymentConflictException>(Ask); }
+        else
+        {
+            var asked = await Ask();
+            (asked!.Status, asked.Reason).ShouldBe(("NeedsReview", reason));
+        }
+        h.Ledger.Settlements.Count.ShouldBe(postedBefore);
+        (await h.ReadAsync(kept.Id, ct)).Status.ShouldBe("Processing");
+    }
+
+    // A pair whose payment the payout cannot identify can never post either, so it is decided as a
+    // whole too, and offers no Post: the payment line wants no receipt and the return line one.
+    [Theory]
+    [InlineData("a payment nobody knows")]
+    [InlineData("a payment on another bank")]
+    public async Task A_payment_and_its_return_that_the_payout_cannot_identify_is_unsupported(string story)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var h = await PaymentsHarness.CreateAsync(fixture, ct);
+        var op = await h.AcceptedAsync(600m, ct, fee: 6m);
+        var binding = h.Binding;
+        var payment = Line("1", "Payment", op, 606m, 6m, 600m);
+        var back = Line("2", "Return", op, 606m, 6m, -600m);
+        if (story == "a payment nobody knows")
+        {
+            (payment, back) = (payment with { ProviderId = "prov_unknown" }, back with { ProviderId = "prov_unknown" });
+        }
+        else { binding = await h.RebindAsync(ct, newBank: true); }
+        var evidence = h.Payout("po_1", 0m, payment, back) with { BankId = binding.BankId };
+
+        var id = (await h.InOrg(() => h.Settlements.ReceiveAsync(binding, evidence, ct), ct))!.Value;
+        var payout = await h.InOrg(() => h.Settlements.EvaluateAsync(binding, id, null, ct), ct);
+
+        (payout!.Status, payout.Reason).ShouldBe(("NeedsReview", "unsupported_settlement"));
+        (await h.QueryAsync(new GetSettlements(id), ct)).ShouldHaveSingleItem().CanPost.ShouldBeFalse();
+        h.Ledger.Settlements.ShouldBeEmpty();
     }
 
     [Fact]
