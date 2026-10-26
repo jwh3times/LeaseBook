@@ -692,7 +692,7 @@
     },
     {
       "id": "stripe-stand-in-failed-payout",
-      "workflow": "Stripe says two payouts failed, one waiting for the bank and one already posted; both go to staff review with nothing reversed, and an administrator closes each",
+      "workflow": "Stripe says two payouts failed, one waiting for the bank and one already posted; both go to staff review with nothing reversed, and an administrator closes each, after which the payment of the payout that never posted is with staff and the tenant is told a person is checking it",
       "area": "Payments",
       "spec": "stripe-stand-in.spec.ts",
       "org": "stand-in payment fixture",
@@ -702,7 +702,7 @@
     },
     {
       "id": "stripe-stand-in-bank-amount-differs",
-      "workflow": "The bank receives a cent less than Stripe's net; the payout goes to review, the right amount afterwards is refused as conflicting, and an administrator closes the payout by keyboard",
+      "workflow": "The bank receives a cent less than Stripe's net; the payout goes to review, the right amount afterwards is refused as conflicting, and an administrator closes the payout by keyboard, which sends its payment to staff review",
       "area": "Payments",
       "spec": "stripe-stand-in.spec.ts",
       "org": "stand-in payment fixture",

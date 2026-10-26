@@ -89,7 +89,8 @@ this one, for current progress.
   yet been shown against a real sandbox. The payment lists report the host's mode, and a sandbox
   host's screens say "Test payment — no real money moves" and show a held payout as "Waiting for the
   bank". ADR-054 lists the adapter's known limits. In either payment mode, a payment with no outcome after seven
-  days goes to staff review, and so does one reported both failed and succeeded.
+  days goes to staff review, and so does one reported both failed and succeeded, or one still waiting
+  on a payout that is closed with nothing posted.
 
 The `private/` directory is gitignored by the public repository and is a separately versioned
 confidential checkout for authorized maintainers. Its repository locator and bootstrap details live

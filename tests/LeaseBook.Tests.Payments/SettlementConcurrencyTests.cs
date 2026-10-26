@@ -193,6 +193,77 @@ public sealed class SettlementConcurrencyTests(PostgresFixture fixture)
         payout!.Status.ShouldBe("Posted");
     }
 
+    // Closing a payout sends its waiting payments to a person (#581), locking them as a post does, in
+    // order of id, with the payout between a caller's first lock and its second.
+    [Fact]
+    public async Task Closing_a_payout_takes_its_payments_locks_in_the_promised_order()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var h = await PaymentsHarness.CreateAsync(fixture, ct);
+        var a = await h.AcceptedAsync(100m, ct);
+        var b = await h.AcceptedAsync(200m, ct, tenant: 1);
+        var id = (await h.SettleAsync(h.Payout("po_1", 299m,
+            Line("1", "Payment", a, 100m, 0m, 100m), Line("2", "Payment", b, 200m, 0m, 200m)), ct)).Id;
+        var names = new[] { a.Id, b.Id }.Order().Select(x => x.ToString()).ToArray();
+        await using var caller = h.Lane();
+        await using var closer = h.Lane();
+
+        var held = caller.Hold(lane => Done(lane.Payments.LockAsync(names[0], ct)), ct, then: lane => lane.Payments.LockAsync(names[1], ct));
+        await held.Done;
+        var closing = closer.RunAsync(lane => lane.Settlements.CloseAsync(h.Binding, id, h.UserId, "Bank short.", ct), ct);
+        (await h.WaitingOrDoneAsync(closer, closing, ct)).ShouldBeTrue();
+        held.Commit();
+
+        (await OrgLanes.ErrorOf(held.Ended())).ShouldBeNull();
+        var (payout, error) = await OrgLanes.OutcomeOf(closing);
+        error.ShouldBeNull();
+        payout!.Status.ShouldBe("Closed");
+        foreach (var op in new[] { a, b }) { (await h.ReadAsync(op.Id, ct)).Reason.ShouldBe("payout_closed"); }
+    }
+
+    // An attempt the worker had in flight when the payout closed ends after it, and changes nothing:
+    // the close took the payment from it under the payment's lock.
+    [Fact]
+    public async Task An_attempt_that_ends_while_its_payout_closes_leaves_the_payment_with_a_person()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var h = await PaymentsHarness.CreateAsync(fixture, ct);
+        var op = await h.AcceptedAsync(100m, ct);
+        var id = (await h.SettleAsync(h.Payout("po_1", 99m, Line("1", "Payment", op, 100m, 0m, 100m)), ct)).Id;
+        await h.ObserveAsync(h.Observation(op, "Processing"), ct);
+        var lease = (await h.InOrg(() => h.Payments.ClaimAsync(h.Binding, op.Id, ct), ct))!.LeaseClaimId!.Value;
+
+        var race = await h.RaceAsync(
+            lane => lane.Settlements.CloseAsync(h.Binding, id, h.UserId, "Bank short.", ct),
+            lane => Done(lane.Payments.FailAsync(h.Binding, op.Id, lease, "technical_failure", ct)), ct);
+
+        race.SecondError.ShouldBeNull();
+        var held = await h.ReadAsync(op.Id, ct);
+        (held.Status, held.Reason, held.LeaseClaimId).ShouldBe(("NeedsReview", "payout_closed", (Guid?)null));
+    }
+
+    // A payment the worker sent to review while the payout closed is read again under its lock, and
+    // keeps the reason it was given.
+    [Fact]
+    public async Task A_payment_sent_to_a_person_while_its_payout_closes_keeps_its_own_reason()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var h = await PaymentsHarness.CreateAsync(fixture, ct);
+        var op = await h.AcceptedAsync(100m, ct);
+        var id = (await h.SettleAsync(h.Payout("po_1", 99m, Line("1", "Payment", op, 100m, 0m, 100m)), ct)).Id;
+        await h.ObserveAsync(h.Observation(op, "Processing"), ct);
+        var lease = (await h.InOrg(() => h.Payments.ClaimAsync(h.Binding, op.Id, ct), ct))!.LeaseClaimId!.Value;
+
+        var race = await h.RaceAsync(
+            lane => Done(lane.Payments.FailAsync(h.Binding, op.Id, lease, "processor_rejected", ct)),
+            lane => lane.Settlements.CloseAsync(h.Binding, id, h.UserId, "Bank short.", ct), ct);
+
+        race.SecondError.ShouldBeNull();
+        race.Second!.Status.ShouldBe("Closed");
+        var held = await h.ReadAsync(op.Id, ct);
+        (held.Status, held.Reason).ShouldBe(("NeedsReview", "processor_rejected"));
+    }
+
     [Fact]
     public async Task A_payout_is_not_posted_past_a_failure_being_stored_for_one_of_its_payments()
     {

@@ -358,10 +358,50 @@ public sealed class SettlementEngine(DbContext db, TimeProvider clock, PaymentEn
         { throw new PaymentUnavailableException(); }
         if (settlement.Status == SettlementStatuses.Closed) { return settlement; }
         if (settlement.Status == SettlementStatuses.Posted) { throw new PaymentConflictException(); }
+        await ReleaseAsync(settlement, ct);
         settlement.Status = SettlementStatuses.Closed; settlement.ReviewNote = note;
         settlement.ReviewClosedAt = Now; settlement.ReviewClosedBy = userId;
         await db.SaveChangesAsync(ct);
         return settlement;
+    }
+
+    // A payout closed with nothing posted will never carry its payments to the bank (#581, ADR-053
+    // addendum). Each one still waiting for it, with no receipt, goes to a person under a reason of its
+    // own: left in processing it would read as in transit for ever. No later payout is expected to
+    // carry it, since a processor returns a failed payout's funds as one balance line, not as the charges.
+    // A payout that posted, and failed afterwards, receipted every payment it carried, so none waits.
+    // Only payments on this payout's account and bank; a line naming another one's is not this payout's
+    // to move. (An organization has one fixture, so a payment's generation is the payout's.)
+    // Each payment is locked, in the order a payout's post locks them, and read again under its lock.
+    // Its reference is not locked: nothing here waits on one, and a fact stored meanwhile wakes the
+    // payment once this commits, as it wakes any payment in review.
+    private async Task ReleaseAsync(PaymentSettlement settlement, CancellationToken ct)
+    {
+        var references = await db.Set<PaymentSettlementItem>().AsNoTracking()
+            .Where(x => x.SettlementId == settlement.Id && x.Kind == SettlementItemKinds.Payment)
+            .Select(x => x.ProviderId).ToListAsync(ct);
+        var operations = await db.Set<PaymentOperation>()
+            .Where(x => x.Account == settlement.Account && x.BankId == settlement.BankId && references.Contains(x.ProviderId!))
+            .OrderBy(x => x.Id).ToListAsync(ct);
+        foreach (var operation in operations)
+        {
+            await payments.LockAsync(operation.Id.ToString(), ct);
+            await db.Entry(operation).ReloadAsync(ct);
+            // A payment in processing has no receipt: one posts only as it settles. Nor has one in review
+            // for a technical failure, whose only way out, a retry, would put it back in processing.
+            if (!(operation.Status == "Processing" || (operation.Status == "NeedsReview" && operation.Reason == "technical_failure")))
+            { continue; }
+            operation.Status = "NeedsReview"; operation.Reason = "payout_closed";
+            // Taken from the worker: whatever an attempt in flight ends in, its lease no longer matches,
+            // so it changes nothing here. A payment in review is claimed only for a fact it has not
+            // judged, so one left due with none would be found by the worker and never claimed. It
+            // rests instead, as a judged payment does; one with a fact to judge stays due, and its
+            // reason keeps it with a person whatever the judgement finds, short of a failure.
+            operation.LeaseUntil = null; operation.LeaseClaimId = null;
+            if (await db.Set<PaymentObservation>().CountAsync(x => x.Account == operation.Account
+                    && x.ProviderId == operation.ProviderId, ct) == operation.ProcessedCount)
+            { operation.DueAt = DateTime.SpecifyKind(DateTime.MaxValue, DateTimeKind.Utc); operation.Attempts = 0; }
+        }
     }
 
     private async Task<PaymentSettlement> HoldAsync(PaymentSettlement settlement, string reason, string? item, CancellationToken ct)

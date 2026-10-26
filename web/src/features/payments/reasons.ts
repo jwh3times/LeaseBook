@@ -40,6 +40,8 @@ export const REASONS: Record<string, string> = {
     'The evidence conflicts. Review the operation before taking further action.',
   outcome_overdue:
     'The processor reported no outcome for this payment within seven days. Nothing was posted. Check the payment with the processor, then close the review.',
+  payout_closed:
+    'The payout carrying this payment was closed with nothing posted, so it will not bring this payment to the bank. Nothing was posted. Check with the processor where the money went, then close the review.',
   accounting_rejected: 'Accounting rejected the receipt. Review the operation and ledger.',
   fixture_unavailable:
     'The fixture binding is unavailable. Ask the fixture operator to check its configuration.',

@@ -5,6 +5,7 @@ using LeaseBook.Modules.Payments.Processing;
 using LeaseBook.SharedKernel;
 using LeaseBook.Tests.Common;
 using LeaseBook.Tests.Payments.Support;
+using Microsoft.EntityFrameworkCore;
 using Shouldly;
 using static LeaseBook.Tests.Payments.Support.PaymentsHarness;
 
@@ -137,5 +138,170 @@ public sealed class SettlementReviewTests(PostgresFixture fixture)
 
         refused.Errors.ShouldHaveSingleItem().ErrorMessage.ShouldBe("Enter a note explaining how this was resolved.");
         (await h.ReadSettlementAsync(untied.Id, ct)).Status.ShouldBe("NeedsReview");
+    }
+
+    // #581, ADR-053 addendum: a payout closed with nothing posted will never bring its payments to the bank.
+    [Fact]
+    public async Task Closing_a_payout_sends_each_payment_still_waiting_for_it_to_a_person_and_out_of_transit()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var h = await PaymentsHarness.CreateAsync(fixture, ct);
+        var paid = await h.AcceptedAsync(100m, ct);
+        await h.EmitAsync(h.Observation(paid, "Succeeded"), ct);
+        var debit = await h.AcceptedAsync(50m, ct, tenant: 1);
+        var receipted = await h.AcceptedAsync(30m, ct);
+        (await h.SettleAsync(h.Payout("po_paid", 30m, Line("1", "Payment", receipted, 30m, 0m, 30m)), ct)).Status.ShouldBe("Posted");
+        var elsewhere = await h.AcceptedAsync(20m, ct);
+        await h.EmitAsync(h.Observation(elsewhere, "Succeeded"), ct);
+        // Out of retries: in review, and its only way out, a retry, would put it back in processing.
+        var stalled = await h.AcceptedAsync(40m, ct);
+        for (var i = 0; i <= PaymentEngine.RetrySeconds.Length; i++) { await FailOnceAsync(h, stalled, "technical_failure", ct); }
+        (await h.ReadAsync(stalled.Id, ct)).Status.ShouldBe("NeedsReview");
+        var rejected = await h.AcceptedAsync(60m, ct);
+        await FailOnceAsync(h, rejected, "processor_rejected", ct);
+        // Waiting for some other payout to receipt it, and only returned in this one.
+        var pending = await h.AcceptedAsync(70m, ct);
+        var held = await h.SettleAsync(h.Payout("po_1", 119m, Line("1", "Payment", paid, 100m, 0m, 100m),
+            Line("2", "Payment", debit, 50m, 0m, 50m), Line("3", "Return", receipted, 30m, 0m, -30m),
+            Line("4", "Payment", stalled, 40m, 0m, 40m), Line("5", "Payment", rejected, 60m, 0m, 60m),
+            Line("6", "Return", pending, 70m, 0m, -70m)), ct);
+        held.Status.ShouldBe("NeedsReview");
+        (await h.QueryAsync(new GetFundsInTransit(), ct)).Sum(x => x.Amount).ShouldBe(120m);
+        var receipts = h.Ledger.Receipts.Count;
+
+        await h.SendAsync(new CloseSettlementReview(h.Binding, held.Id, h.UserId, "The processor paid it out again."), ct);
+
+        foreach (var op in new[] { paid, debit, stalled })
+        {
+            var now = await h.ReadAsync(op.Id, ct);
+            (now.Status, now.Reason, now.JournalId).ShouldBe(("NeedsReview", "payout_closed", (Guid?)null));
+        }
+        // A payment the payout only returned, and a payment it never carried, are left as they were.
+        (await h.ReadAsync(receipted.Id, ct)).Status.ShouldBe("Settled");
+        var untouched = await h.ReadAsync(elsewhere.Id, ct);
+        (untouched.Status, untouched.Reason).ShouldBe(("Processing", (string?)null));
+        var awaiting = await h.ReadAsync(pending.Id, ct);
+        (awaiting.Status, awaiting.Reason).ShouldBe(("Processing", (string?)null));
+        // One in review for a reason of its own stays under it.
+        var reviewed = await h.ReadAsync(rejected.Id, ct);
+        (reviewed.Status, reviewed.Reason).ShouldBe(("NeedsReview", "processor_rejected"));
+        (await h.QueryAsync(new GetFundsInTransit(), ct)).ShouldHaveSingleItem().Amount.ShouldBe(20m);
+        h.Ledger.Receipts.Count.ShouldBe(receipts);
+        var staff = (await h.QueryAsync(new GetPayments(null, paid.Id), ct)).ShouldHaveSingleItem();
+        (staff.Status, staff.Reason, staff.CanCloseReview, staff.CanRetry).ShouldBe(("NeedsReview", "payout_closed", true, false));
+        var tenant = (await h.QueryAsync(new GetPayments(h.Tenants[1]), ct)).ShouldHaveSingleItem();
+        (tenant.Status, tenant.ReceiptRecorded).ShouldBe(("NeedsReview", false));
+    }
+
+    [Fact]
+    public async Task A_payment_a_closed_payout_sent_to_a_person_stays_there_short_of_a_failure()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var h = await PaymentsHarness.CreateAsync(fixture, ct);
+        var credited = await h.AcceptedAsync(100m, ct);
+        var failed = await h.AcceptedAsync(50m, ct);
+        var held = await h.SettleAsync(h.Payout("po_1", 149m, Line("1", "Payment", credited, 100m, 0m, 100m),
+            Line("2", "Payment", failed, 50m, 0m, 50m)), ct);
+        await h.SendAsync(new CloseSettlementReview(h.Binding, held.Id, h.UserId, "Bank short."), ct);
+
+        // A clean bank credit would post a waiting payment's receipt by itself. This one has a person.
+        await h.EmitAsync(h.Observation(credited, "BankCredit"), ct);
+        await h.EmitAsync(h.Observation(failed, "Failed"), ct);
+
+        var kept = await h.ReadAsync(credited.Id, ct);
+        (kept.Status, kept.Reason, kept.JournalId).ShouldBe(("NeedsReview", "payout_closed", (Guid?)null));
+        h.Ledger.Receipts.ShouldBeEmpty();
+        var ended = await h.ReadAsync(failed.Id, ct);
+        (ended.Status, ended.Reason).ShouldBe(("Failed", "collection_failed"));
+        // Nor does a later payout carry it to the bank behind the person's back.
+        (await h.SettleAsync(h.Payout("po_2", 100m, Line("1", "Payment", credited, 100m, 0m, 100m)), ct)).Reason
+            .ShouldBe("conflicting_evidence");
+        (await h.SendAsync(new ClosePaymentReview(h.Binding, credited.Id, h.UserId, "Paid out again; receipted by hand."), ct))!
+            .Payment.Status.ShouldBe("ReviewClosed");
+    }
+
+    [Theory]
+    [InlineData("another account")]
+    [InlineData("another bank")]
+    public async Task Closing_a_payout_moves_no_payment_it_does_not_answer_for(string story)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var h = await PaymentsHarness.CreateAsync(fixture, ct);
+        var op = await h.AcceptedAsync(100m, ct);
+        var binding = story == "another account" ? await h.RebindAsync(ct, account: "acct_two") : await h.RebindAsync(ct, newBank: true);
+        var evidence = h.Payout("po_1", 100m, Line("1", "Payment", op, 100m, 0m, 100m)) with
+        { Account = binding.Account, BankId = binding.BankId };
+        var id = (await h.InOrg(() => h.Settlements.ReceiveAsync(binding, evidence, ct), ct))!.Value;
+        (await h.InOrg(() => h.Settlements.EvaluateAsync(binding, id, null, ct), ct))!.Reason.ShouldBe("settlement_incomplete");
+
+        (await h.InOrg(() => h.Settlements.CloseAsync(binding, id, h.UserId, "Not ours.", ct), ct))!.Status.ShouldBe("Closed");
+
+        var kept = await h.ReadAsync(op.Id, ct);
+        (kept.Status, kept.Reason).ShouldBe(("Processing", (string?)null));
+    }
+
+    /// <summary>
+    /// A payment sent to a person is taken from the worker, and rests unless it has a fact to judge: a
+    /// payment in review is claimed only for a fact it has not judged, so one left due with none would
+    /// be found by the worker at every poll and never claimed. An attempt in flight changes nothing.
+    /// </summary>
+    [Theory]
+    [InlineData("a retry falls due with nothing to judge", true)]
+    [InlineData("a retry not yet due", true)]
+    [InlineData("the worker holds it and completes", true)]
+    [InlineData("the worker holds it and fails", true)]
+    [InlineData("a fact to judge", false)]
+    [InlineData("the worker holds it to judge a fact", false)]
+    public async Task A_payment_a_closed_payout_sent_to_a_person_is_taken_from_the_worker_and_rests_unless_it_has_a_fact_to_judge(
+        string story, bool rests)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var h = await PaymentsHarness.CreateAsync(fixture, ct);
+        var op = await h.AcceptedAsync(100m, ct);
+        // What is said of another payment in the account is not this one's to judge.
+        await h.EmitAsync(h.Observation(await h.AcceptedAsync(10m, ct, tenant: 1), "Succeeded"), ct);
+        var held = await h.SettleAsync(h.Payout("po_1", 99m, Line("1", "Payment", op, 100m, 0m, 100m)), ct);
+        // A technical failure on the way: the payment is due again in a second.
+        await FailOnceAsync(h, op, "technical_failure", ct);
+        if (story != "a retry not yet due") { h.Clock.Advance(TimeSpan.FromSeconds(PaymentEngine.RetrySeconds[0])); }
+        if (story.Contains("a fact", StringComparison.Ordinal)) { await h.ObserveAsync(h.Observation(op, "Succeeded"), ct); }
+        var lease = story.StartsWith("the worker holds it", StringComparison.Ordinal)
+            ? (await h.InOrg(() => h.Payments.ClaimAsync(h.Binding, op.Id, ct), ct))!.LeaseClaimId : null;
+        var before = await h.ReadAsync(op.Id, ct);
+
+        await h.SendAsync(new CloseSettlementReview(h.Binding, held.Id, h.UserId, "Bank short."), ct);
+
+        var after = await h.ReadAsync(op.Id, ct);
+        (after.Status, after.Reason, after.LeaseClaimId, after.LeaseUntil).ShouldBe(("NeedsReview", "payout_closed", (Guid?)null, (DateTime?)null));
+        (after.DueAt, after.Attempts).ShouldBe(rests ? (Resting, 0) : (before.DueAt, before.Attempts));
+        // The attempt that was in flight ends, and changes nothing.
+        if (story == "the worker holds it and completes")
+        {
+            await h.InOrg(() => h.Payments.CompleteAsync(h.Binding, op.Id, lease!.Value, new ProcessorResult("Accepted", ProviderOf(op)), ct), ct);
+        }
+        if (story == "the worker holds it and fails")
+        {
+            await h.InOrg(() => h.Payments.FailAsync(h.Binding, op.Id, lease!.Value, "technical_failure", ct), ct);
+        }
+        (await h.ReadAsync(op.Id, ct)).DueAt.ShouldBe(after.DueAt);
+        // The worker takes what is left to judge, and the payment stays with the person, at rest.
+        (await h.JudgeAsync(op.Id, ct)).ShouldBe(!rests);
+        var judged = await h.ReadAsync(op.Id, ct);
+        (judged.Status, judged.Reason, judged.JournalId, judged.DueAt).ShouldBe(("NeedsReview", "payout_closed", (Guid?)null, Resting));
+    }
+
+    private static readonly DateTime Resting = DateTime.SpecifyKind(DateTime.MaxValue, DateTimeKind.Utc);
+
+    // One attempt that ends in a failure with this reason, as the worker's would: due now, claimed, failed.
+    private static async Task FailOnceAsync(PaymentsHarness h, PaymentOperation op, string reason, CancellationToken ct)
+    {
+        await h.InOrg(async () =>
+        {
+            var row = await h.Scope.Db.Set<PaymentOperation>().SingleAsync(x => x.Id == op.Id, ct);
+            row.DueAt = h.Clock.GetUtcNow().UtcDateTime;
+            await h.Scope.Db.SaveChangesAsync(ct);
+        }, ct);
+        var claim = await h.InOrg(() => h.Payments.ClaimAsync(h.Binding, op.Id, ct), ct);
+        await h.InOrg(() => h.Payments.FailAsync(h.Binding, op.Id, claim!.LeaseClaimId!.Value, reason, ct), ct);
     }
 }

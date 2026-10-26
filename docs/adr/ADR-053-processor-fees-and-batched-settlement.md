@@ -94,3 +94,37 @@ than USD are outside the model. Evidence of any of them sends the batch to revie
 Revisit before implementing a live processor adapter; if any assumption above is corrected; before
 recognizing a payment ahead of bank evidence; before any fee is charged to an owner; and before
 posting any return in a batch without a person.
+
+## Addendum — a payout closed with nothing posted sends its payments to review (2026-10-26)
+
+This ADR made a payout post whole or not at all, and let an administrator close one that cannot post.
+It did not say what became of the payments such a payout carried. They stayed waiting for bank
+evidence that payout would never bring, so each kept reading as funds in transit, to staff and to
+the tenant, with no end.
+
+**Closing a payout that never posted sends each payment it carries that is still waiting, with no
+receipt, to staff review under the reason `payout_closed`.** A person then decides it, as for any
+other review: by checking with the processor where the money went, correcting the ledger by hand if
+it arrived some other way, and closing the review with a note. Nothing posts. The payment leaves
+funds in transit and the late-fee caution, and the tenant reads that a person is checking it.
+
+**The review holds until a person closes it.** A later fact is still judged: a failure ends the
+payment as a failure, and a return, refund, dispute or conflict replaces the reason with its own.
+Anything else leaves it with the person. In particular a clean bank credit no longer posts its
+receipt by itself, and a later payout that carries the payment is held as `conflicting_evidence`,
+since a payout settles only a payment still waiting for it.
+
+**A later payout carrying the payment is not expected.** After a failed payout, Stripe credits the
+connected balance with one balance line for the payout's funds, not with the original charges, so no
+second payout names them. Leaving the payments waiting for one would leave them in transit for good.
+
+A payment in review for a technical failure goes too: its only way out, a retry, would put it back
+in processing. A payment the payout only returns has its receipt already and is untouched, as is a payment on
+another processor account or bank, which the payout does not answer for. A payout that posted
+receipted every payment it carried, so closing one after it failed moves none.
+
+## Revisit trigger (addendum)
+
+Revisit if a processor is found to pay out a failed payout's charges again by name, so that a later
+payout could carry them to the bank, or if staff find a person's review is the wrong default for a
+payout closed while it still waited for its bank.

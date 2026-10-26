@@ -927,7 +927,8 @@ public sealed partial class StripeSandboxHostTests
         if (when == "after its review was closed") { await Close(h, (await Stored(h, Payout, ct)).Payout.Id, ct); }
         var entries = await h.JournalEntries(ct);
         var status = (await h.Operation(payment.Id, ct)).Status;
-        status.ShouldBe(when == "after it has posted" ? "Settled" : "Processing");
+        // A payout closed with nothing posted has sent its payment to a person (#581).
+        status.ShouldBe(when switch { "after it has posted" => "Settled", "after its review was closed" => "NeedsReview", _ => "Processing" });
         var failed = StripeSandboxProcessorTests.FailedPayout(paid);
         var asked = sandbox.LineRequests.Count;
 
@@ -966,7 +967,11 @@ public sealed partial class StripeSandboxHostTests
         (await h.Deliver(StripeSandboxProcessorTests.FailedPayout(paid, "evt_built_payout_failed_again"), ct)).Status.ShouldBe(HttpStatusCode.NoContent);
         (await Stored(h, Payout, ct)).Payout.Status.ShouldBe("Closed");
         (await h.JournalEntries(ct)).ShouldBe(entries);
-        (await h.Operation(payment.Id, ct)).Status.ShouldBe(status);
+        // Closing it sends a payment it carried and never posted to a person. A payout stored without
+        // lines carried none, and one that posted had receipted its payment.
+        var closed = await h.Operation(payment.Id, ct);
+        (closed.Status, closed.Reason).ShouldBe(when is "while it waits for the bank" or "after its review was closed"
+            ? ("NeedsReview", "payout_closed") : (status, (string?)null));
     }
 
     // Stripe promises no order and delivers more than once; the sweep finds what a delivery also
