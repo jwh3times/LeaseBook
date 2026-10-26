@@ -679,10 +679,26 @@ test('a payout that fails goes to staff review whether or not it had posted, and
   await expect(two.getByRole('row').nth(1)).toContainText('On the ledger');
   await expect(one.getByRole('button')).toHaveCount(0);
   await expect(two.getByRole('button')).toHaveCount(0);
+  // The payout that posted nothing will never bring its payment to the bank, so a person has it now.
+  await readAgain(admin);
+  const stranded = staffPayment(admin, first.id);
+  await expect(stranded).toContainText('Test payment needs review — no receipt recorded');
+  await expect(stranded).toContainText('Reason: payout_closed');
+  await expect(stranded).toContainText(
+    'The payout carrying this payment was closed with nothing posted, so it will not bring this payment to the bank.',
+  );
+  await expect(stranded.getByRole('button', { name: 'Close review…' })).toBeVisible();
   await scanStaff(admin);
   await staff.close();
 
-  await expect(first.mine).toContainText('on its way to the bank, not yet on your ledger');
+  // The tenant is told a person is checking it, and no longer that it is on its way.
+  await expect(first.mine).toContainText('Test payment needs review — no receipt recorded');
+  await expect(first.mine).toContainText(
+    'This payment is waiting for your property manager to check it. Nothing has been recorded on your ledger.',
+  );
+  await expect(first.mine).not.toContainText('on its way to the bank');
+  await expect(first.mine).not.toContainText('payout_closed');
+  await expect(second.mine.getByText('Test payment recorded', { exact: true })).toBeVisible();
   expect(await balance(page)).toBe(cents(owed - 60));
 
   await nothingUnexpected();
@@ -767,10 +783,17 @@ test('a bank amount that differs from the processor’s net posts nothing, and a
   // Focus lands on the payout's name, so a keyboard user stays on the payout they closed.
   await expect(held.getByText(`Payout ${payout.id}`, { exact: true })).toBeFocused();
   await scanStaff(admin);
+  await readAgain(admin);
+  await expect(staffPayment(admin, payment.id)).toContainText('Reason: payout_closed');
   await staff.close();
 
-  // Nothing posted: the payment is still in transit, and the tenant owes what they owed.
-  await expect(payment.mine).toContainText('on its way to the bank, not yet on your ledger');
+  // Nothing posted, and the payout will not bring the payment to the bank: a person has it, and the
+  // tenant owes what they owed.
+  await expect(payment.mine).toContainText('Test payment needs review — no receipt recorded');
+  await expect(payment.mine).toContainText(
+    'This payment is waiting for your property manager to check it. Nothing has been recorded on your ledger.',
+  );
+  await expect(payment.mine).not.toContainText('on its way to the bank');
   expect(await balance(page)).toBe(owed);
   await expect(receipts(page, '$100.00')).toHaveCount(receiptsBefore);
 

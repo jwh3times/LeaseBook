@@ -550,7 +550,9 @@ behind.
 #### In review
 
 An administrator can close a payout in review or one still waiting for its bank, with
-a note. Posting one that no bank has spoken for is answered with HTTP 409 and `bank_evidence_missing`.
+a note. Closing one that never posted sends each of its payments still on its way to the bank to
+staff review as `payout_closed`: check with Stripe where the money went, then close each payment's
+review. The tenant's screen says a person is checking it. Posting one that no bank has spoken for is answered with HTTP 409 and `bank_evidence_missing`.
 A payout in review is checked again only when an administrator posts it: the paid event arriving
 again, by redelivery or in a sweep, changes nothing. The **Payouts** list says in words why a payout
 waits, `bank_amount_mismatch` and `payout_failed` included, and names each line's kind: **Card

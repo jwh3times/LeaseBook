@@ -287,7 +287,15 @@ As built:
 | `technical_failure`                | Checking or posting did not finish.                                   | Post to try again, or close                |
 
 Closing a batch with a note posts nothing, as closing a payment review does today. A payout held for
-its bank can be closed the same way. `bank_evidence_missing` is not a stored reason: it is the answer
+its bank can be closed the same way. A closed payout that never posted will never bring its payments
+to the bank, so closing it also sends each payment it carries that is still processing, with no
+receipt, to staff review as `payout_closed` ([ADR-053 addendum](../adr/ADR-053-processor-fees-and-batched-settlement.md#addendum--a-payout-closed-with-nothing-posted-sends-its-payments-to-review-2026-10-26)).
+Such a payment leaves funds in transit, and the tenant reads that a person is checking it. A later
+fact is still judged, and a failure still ends the payment; anything else, a clean bank credit
+included, leaves it with the person. A payment in review for a technical failure goes too, since its only
+way out, a retry, would put it back in processing. A payment the payout only returns, one on another
+account or bank, and one already settled, failed or in review for another reason are left as they
+were. `bank_evidence_missing` is not a stored reason: it is the answer
 to an administrator who posts a payout no bank has spoken for, and the payout stays as it was.
 `unsupported_settlement` also covers a line a processor's adapter stores for a person to read and
 nothing posts: a refund, a card dispute, a failed debit taken back, or a line it does not recognise,
