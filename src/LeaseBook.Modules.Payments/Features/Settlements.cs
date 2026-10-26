@@ -56,12 +56,14 @@ internal sealed class GetSettlementsHandler(DbContext db) : IQueryHandler<GetSet
             x.ReasonItem, x.CreatedAt, x.PostedAt, x.ReviewNote, x.ReviewClosedAt,
             // Conflicting evidence cannot be posted whatever a person decides; it can only be closed.
             // Nor can a payout the processor says failed, one the bank received another amount for,
-            // one holding something this model does not post, or one no bank has spoken for. Each
-            // follows from what the payout and its payments say, and asking again cannot change it.
+            // one holding something this model does not post, one whose figures do not tie, or one no
+            // bank has spoken for. Each follows from what the payout and its payments say, none of
+            // which changes, and asking again cannot change it (#630). A payout whose payment is not
+            // yet known, or whose return waits on a receipt, can: that is settlement_incomplete.
             // A payout still marked received is one whose check never finished: it has both ways out.
             CanPost: x.Status is SettlementStatuses.NeedsReview or SettlementStatuses.Received && x.Banked && x.FailedAt is null
-                && x.Reason is not ("conflicting_evidence" or "unsupported_settlement" or SettlementReasons.PayoutFailed
-                    or SettlementReasons.BankAmountMismatch),
+                && x.Reason is not ("conflicting_evidence" or "unsupported_settlement" or "settlement_untied"
+                    or SettlementReasons.PayoutFailed or SettlementReasons.BankAmountMismatch),
             // One waiting for the bank can be closed too: the evidence may never come.
             CanClose: x.Status is SettlementStatuses.NeedsReview or SettlementStatuses.Received or SettlementStatuses.AwaitingBank,
             items.Where(i => i.SettlementId == x.Id).OrderBy(i => i.Item, StringComparer.Ordinal)
@@ -79,7 +81,7 @@ public sealed record SettlementReviewResult(SettlementView Settlement, string? R
     public static string Describe(string refusal) => refusal switch
     {
         "settlement_incomplete" =>
-            "A line of this payout names a payment LeaseBook cannot identify, so nothing was posted.",
+            "A line of this payout names a payment LeaseBook does not know yet, or returns one with no receipt yet, so nothing was posted.",
         "settlement_untied" =>
             "The lines of this payout do not add up to the bank amount, or a charge differs from the payment, so nothing was posted.",
         "unsupported_settlement" =>

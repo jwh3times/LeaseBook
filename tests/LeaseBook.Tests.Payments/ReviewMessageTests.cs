@@ -34,7 +34,7 @@ public sealed class ReviewMessageTests
 
     public static TheoryData<string, string> PayoutRefusals => new()
     {
-        { "settlement_incomplete", "A line of this payout names a payment LeaseBook cannot identify, so nothing was posted." },
+        { "settlement_incomplete", "A line of this payout names a payment LeaseBook does not know yet, or returns one with no receipt yet, so nothing was posted." },
         { "settlement_untied",
             "The lines of this payout do not add up to the bank amount, or a charge differs from the payment, so nothing was posted." },
         { "unsupported_settlement",

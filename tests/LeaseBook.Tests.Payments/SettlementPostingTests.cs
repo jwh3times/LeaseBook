@@ -112,7 +112,7 @@ public sealed class SettlementPostingTests(PostgresFixture fixture)
         { "a fee line that is not all fee", "settlement_untied" },
         { "a fee line of nothing", "settlement_untied" },
         { "a payment nobody knows", "settlement_incomplete" },
-        { "no lines", "settlement_incomplete" },
+        { "no lines", "unsupported_settlement" },
         { "a refund", "unsupported_settlement" },
         { "an instant payout", "unsupported_settlement" },
         { "a payout in another currency", "unsupported_settlement" },

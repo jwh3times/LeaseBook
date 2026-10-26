@@ -478,10 +478,10 @@ public sealed partial class SimulatedPaymentTests
         await h.Settle(evidence, ct);
         (await List(admin, ct)).Single().Reason.ShouldBe("settlement_untied");
 
-        // Re-stamped and reordered: the same payout, so still merely untied and still postable.
+        // Re-stamped and reordered: the same payout, so still untied, and still not offered to post (#630).
         await h.Settle(evidence with { ObservedAt = evidence.ObservedAt.AddHours(3), Items = [.. evidence.Items.Reverse()] }, ct);
         var payout = (await List(admin, ct)).Single();
-        (payout.Reason, payout.CanPost).ShouldBe(("settlement_untied", true));
+        (payout.Reason, payout.CanPost).ShouldBe(("settlement_untied", false));
 
         // Closed stays closed when different content arrives for it.
         (await admin.PostAsJsonAsync($"{Settlements}/{payout.Id}/close", new ClosePaymentReviewBody("Wrong amount."), ct))

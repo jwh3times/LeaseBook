@@ -101,7 +101,10 @@ same guard.
 A batch is one unit of work. It posts completely or not at all.
 
 1. **Identify.** Every item in the processor's reconciliation for the payout maps to exactly one
-   payment in this organization, in USD, for this trust bank. Otherwise: `settlement_incomplete`.
+   payment in this organization, in USD, for this trust bank. Otherwise: `settlement_incomplete`
+   while the payment may still become known, `conflicting_evidence` for a payment made for another
+   trust bank, and `unsupported_settlement` for a payout with no lines at all. Neither of the last
+   two can change.
 2. **Tie.** The items' net amounts sum to the bank evidence amount to the cent, and each item's
    charged amount equals the payment's stored charged amount. Otherwise: `settlement_untied`.
 3. **Check for unsupported content.** A reserve, a hold, an instant or manual payout, a partial
@@ -112,8 +115,7 @@ A batch is one unit of work. It posts completely or not at all.
    As built, a refund or a dispute is not a line the batch can post at all. It is caught at step 3 as
    `unsupported_settlement`, in line with ADR-052, which posts neither. So is a return of less than
    the whole charge. A processor fee with no payment beside it is a shortfall and does not, by itself,
-   need a person. Unsupported content is judged first, before identifying and tying: a payout of an
-   unsupported type with no lines at all is `unsupported_settlement`, not `settlement_incomplete`.
+   need a person. Unsupported content is judged first, before identifying and tying.
 
    A payout that holds both a payment and that payment's own return is decided as a whole, before
    any line is checked. A return posts only against a receipt an earlier payout made, so when the
@@ -273,8 +275,8 @@ As built:
 
 | Reason                             | Meaning                                                               | Way out                                    |
 | ---------------------------------- | --------------------------------------------------------------------- | ------------------------------------------ |
-| `settlement_incomplete`            | An item maps to no payment, or a return names one never receipted.    | More evidence, or close with a note        |
-| `settlement_untied`                | Items do not sum to the bank amount, or a charged amount differs.     | Corrected evidence, or close with a note   |
+| `settlement_incomplete`            | An item maps to no payment yet, or a return names one not receipted.  | Post once it is recorded, or close         |
+| `settlement_untied`                | Items do not sum to the bank amount, or a charged amount differs.     | Close with a note after correcting by hand |
 | `unsupported_settlement`           | A reserve, hold, instant or manual payout, partial refund, non-USD.   | Close with a note after correcting by hand |
 | `bank_amount_mismatch`             | The bank received another amount than the processor says it paid.     | Close with a note                          |
 | `payout_failed`                    | The processor says the payout failed. Nothing is reversed for it.     | Close with a note after correcting by hand |
@@ -302,9 +304,11 @@ nothing posts: a refund, a card dispute, a failed debit taken back, or a line it
 and a payment beside its own return.
 
 The **Post payout** action is never offered for a payout no bank has spoken for, nor for
-`conflicting_evidence`, `unsupported_settlement`, `bank_amount_mismatch` or `payout_failed`: each
-follows from what the payout and its payments say, so posting would be refused every time, and the
-way out is to close it.
+`conflicting_evidence`, `unsupported_settlement`, `settlement_untied`, `bank_amount_mismatch` or
+`payout_failed`: each follows from what the payout and its payments say, none of which changes, so
+posting would be refused every time, and the way out is to close it. Other evidence under the same
+payout is kept out, so a payout whose figures do not tie never comes to tie. `settlement_incomplete`
+still offers it: a payment not yet recorded may be, and a return may find its receipt.
 
 ## Payout statuses and what staff read
 

@@ -520,7 +520,12 @@ lines is checked first: `unsupported_settlement`, or `conflicting_evidence` when
 has a receipt. Before, it read `conflicting_evidence` or `settlement_incomplete` depending on the
 lines' names, and the second offered a Post that was then refused. Every lookup of a processor
 reference in the payment engine and the staff lists is now made within its account, as the schema
-and the payout check already were. No decision changes, and the known limit stands.
+and the payout check already were. Nor is **Post payout** offered for `settlement_untied`: every
+figure that check reads is fixed, and other evidence under the payout's id is kept out. A payout with
+no lines now reads `unsupported_settlement`, and a line naming a payment made for another bank or
+generation reads `conflicting_evidence`; both read `settlement_incomplete` before. That reason now
+covers only what may still change, a payment not known here yet or a return whose payment has no
+receipt yet, and keeps its Post action. No decision changes, and the known limit stands.
 
 The provisional assumptions of ADR-053 stay open. This ADR verifies none of them, and nothing here
 is approval to move real money.

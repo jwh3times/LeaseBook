@@ -197,6 +197,12 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   as an unsupported settlement, such as one carrying a refund, offered **Post payout**, and the server
   refused it every time. It can now only be closed.
 
+- **Post payout is offered only for a payout a later post could still settle.** A payout whose lines
+  do not tie to the bank amount, one with no lines, and one naming a payment made for another bank
+  offered **Post payout**, though nothing about them can change and every post was refused. The
+  first now reads as untied and can only be closed; the other two read as unsupported and as
+  conflicting evidence. A payout naming a payment not yet recorded still offers it.
+
 - **A payout carrying a payment and its own return gets one reason, whichever line comes first.** It
   went to review as conflicting evidence or as an unsupported settlement depending on the order of its
   lines. It is now conflicting evidence when the payment already has a receipt and an unsupported

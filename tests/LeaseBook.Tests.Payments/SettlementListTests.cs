@@ -17,8 +17,8 @@ namespace LeaseBook.Tests.Payments;
 [Collection(nameof(DatabaseCollection))]
 public sealed class SettlementListTests(PostgresFixture fixture)
 {
-    private sealed record Payouts(Guid Posted, Guid Received, Guid Untied, Guid Conflicting, Guid Unsupported, Guid Mismatch,
-        Guid Failed, Guid Awaiting, Guid HeldUnbanked, Guid Closed, PaymentOperation PostedPayment);
+    private sealed record Payouts(Guid Posted, Guid Received, Guid Untied, Guid Incomplete, Guid Conflicting, Guid Unsupported,
+        Guid Mismatch, Guid Failed, Guid Awaiting, Guid HeldUnbanked, Guid Closed, PaymentOperation PostedPayment);
 
     private static ProcessorSettlementItem Unknown(string item, decimal amount) =>
         new(item, SettlementItemKinds.Payment, "prov_nobody", amount, 0m, amount, "USD");
@@ -35,6 +35,9 @@ public sealed class SettlementListTests(PostgresFixture fixture)
         var received = (await h.InOrg(() => h.Settlements.ReceiveAsync(h.Binding, h.Payout("po_received", 7m, Unknown("1", 7m)), ct), ct))!.Value;
 
         var untied = await h.SettleAsync(h.Payout("po_untied", 49m, Line("1", "Payment", await h.AcceptedAsync(50m, ct), 50m, 0m, 50m)), ct);
+
+        // With the bank's word, and a payment nobody here knows yet: it may be, and the payout post then.
+        var incomplete = await h.SettleAsync(h.Payout("po_incomplete", 3m, Unknown("1", 3m)), ct);
 
         var contradicted = await h.AcceptedAsync(30m, ct);
         var conflicting = await h.SettleAsync(h.Payout("po_conflict", 29m, Line("1", "Payment", contradicted, 30m, 0m, 30m)), ct);
@@ -61,7 +64,7 @@ public sealed class SettlementListTests(PostgresFixture fixture)
         var closed = await h.SettleAsync(h.Payout("po_closed", 1m, Line("1", "Payment", await h.AcceptedAsync(2m, ct), 2m, 0m, 2m)), ct);
         await h.InOrg(() => h.Settlements.CloseAsync(h.Binding, closed.Id, h.UserId, "Processor confirmed it was a test.", ct), ct);
 
-        return new(posted.Id, received, untied.Id, conflicting.Id, unsupported.Id, mismatch, failed, awaiting, heldUnbanked, closed.Id, paid);
+        return new(posted.Id, received, untied.Id, incomplete.Id, conflicting.Id, unsupported.Id, mismatch, failed, awaiting, heldUnbanked, closed.Id, paid);
     }
 
     private static (string Status, string? Reason, bool CanPost, bool CanClose, DateOnly? BankDate, decimal? BankAmount) Shown(SettlementView view) =>
@@ -77,14 +80,16 @@ public sealed class SettlementListTests(PostgresFixture fixture)
 
         var list = (await h.QueryAsync(new GetSettlements(), ct)).ToDictionary(x => x.Id);
 
-        list.Count.ShouldBe(10);
+        list.Count.ShouldBe(11);
         Shown(list[p.Posted]).ShouldBe(("Posted", null, false, false, today, 99.50m));
         // A check that never finished has both ways out.
         Shown(list[p.Received]).ShouldBe(("Received", null, true, true, today, 7m));
-        Shown(list[p.Untied]).ShouldBe(("NeedsReview", "settlement_untied", true, true, today, 49m));
-        // Conflicting evidence, something this model does not post, a bank that received another
-        // amount, a failed payout and one no bank has spoken for cannot post whatever a person
-        // decides; each can only be closed.
+        // A payment not yet known may become known, so that payout can be posted again.
+        Shown(list[p.Incomplete]).ShouldBe(("NeedsReview", "settlement_incomplete", true, true, today, 3m));
+        // Figures that do not tie, conflicting evidence, something this model does not post, a bank
+        // that received another amount, a failed payout and one no bank has spoken for cannot post
+        // whatever a person decides; each can only be closed (#630).
+        Shown(list[p.Untied]).ShouldBe(("NeedsReview", "settlement_untied", false, true, today, 49m));
         Shown(list[p.Conflicting]).ShouldBe(("NeedsReview", "conflicting_evidence", false, true, today, 29m));
         Shown(list[p.Unsupported]).ShouldBe(("NeedsReview", "unsupported_settlement", false, true, today, -40m));
         Shown(list[p.Mismatch]).ShouldBe(("NeedsReview", SettlementReasons.BankAmountMismatch, false, true, today, 19m));

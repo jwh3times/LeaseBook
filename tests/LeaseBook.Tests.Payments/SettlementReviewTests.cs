@@ -65,7 +65,7 @@ public sealed class SettlementReviewTests(PostgresFixture fixture)
 
         stillUntied!.Refusal.ShouldBe("settlement_untied");
         (stillUntied.Settlement.Status, stillUntied.Settlement.Reason, stillUntied.Settlement.CanPost, stillUntied.Settlement.CanClose)
-            .ShouldBe(("NeedsReview", "settlement_untied", true, true));
+            .ShouldBe(("NeedsReview", "settlement_untied", false, true));
         stillLocked!.Refusal.ShouldBe("settlement_period_locked");
         stillLocked.Settlement.PostedAt.ShouldBeNull();
     }
@@ -232,7 +232,9 @@ public sealed class SettlementReviewTests(PostgresFixture fixture)
         var evidence = h.Payout("po_1", 100m, Line("1", "Payment", op, 100m, 0m, 100m)) with
         { Account = binding.Account, BankId = binding.BankId };
         var id = (await h.InOrg(() => h.Settlements.ReceiveAsync(binding, evidence, ct), ct))!.Value;
-        (await h.InOrg(() => h.Settlements.EvaluateAsync(binding, id, null, ct), ct))!.Reason.ShouldBe("settlement_incomplete");
+        // Under another account the payment is not known here; one made for another bank contradicts the payout (#630).
+        (await h.InOrg(() => h.Settlements.EvaluateAsync(binding, id, null, ct), ct))!.Reason
+            .ShouldBe(story == "another account" ? "settlement_incomplete" : "conflicting_evidence");
 
         (await h.InOrg(() => h.Settlements.CloseAsync(binding, id, h.UserId, "Not ours.", ct), ct))!.Status.ShouldBe("Closed");
 
@@ -303,5 +305,24 @@ public sealed class SettlementReviewTests(PostgresFixture fixture)
         }, ct);
         var claim = await h.InOrg(() => h.Payments.ClaimAsync(h.Binding, op.Id, ct), ct);
         await h.InOrg(() => h.Payments.FailAsync(h.Binding, op.Id, claim!.LeaseClaimId!.Value, reason, ct), ct);
+    }
+
+    // #630: a payment made for another bank never becomes this payout's, so the payout contradicts it
+    // and can only be closed. One nobody here knows yet may still be accepted, and is offered again.
+    [Fact]
+    public async Task A_payout_naming_a_payment_made_for_another_bank_contradicts_it_and_is_not_offered_to_post()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var h = await PaymentsHarness.CreateAsync(fixture, ct);
+        var op = await h.AcceptedAsync(100m, ct);
+        var binding = await h.RebindAsync(ct, newBank: true);
+        var evidence = h.Payout("po_1", 100m, Line("1", "Payment", op, 100m, 0m, 100m)) with { BankId = binding.BankId };
+        var id = (await h.InOrg(() => h.Settlements.ReceiveAsync(binding, evidence, ct), ct))!.Value;
+
+        (await h.InOrg(() => h.Settlements.EvaluateAsync(binding, id, null, ct), ct))!.Reason.ShouldBe("conflicting_evidence");
+
+        var view = (await h.QueryAsync(new GetSettlements(id), ct)).ShouldHaveSingleItem();
+        (view.Status, view.Reason, view.CanPost, view.CanClose).ShouldBe(("NeedsReview", "conflicting_evidence", false, true));
+        (await h.ReadAsync(op.Id, ct)).Status.ShouldBe("Processing");
     }
 }

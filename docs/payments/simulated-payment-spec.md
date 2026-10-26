@@ -471,7 +471,7 @@ The staff API's payout view carries `processorAmount` and `failedAt`, and its `b
 becomes, so a payout in review or closed with a `postedAt` posted and was not reversed, and one
 without it posted nothing. `canPost` is true only for a payout in review, or one whose check never
 finished, that has bank evidence, has not failed and is not held as `conflicting_evidence`,
-`unsupported_settlement`, `payout_failed` or `bank_amount_mismatch`. `canClose` is true for any
+`unsupported_settlement`, `settlement_untied`, `payout_failed` or `bank_amount_mismatch`. `canClose` is true for any
 payout that is not posted or closed, one waiting for its bank included. The Payouts list shows a held
 payout as "Waiting for the bank" with the processor's amount and no bank amount or date. The
 [fee and settlement specification](fee-and-settlement-spec.md#payout-statuses-and-what-staff-read)
