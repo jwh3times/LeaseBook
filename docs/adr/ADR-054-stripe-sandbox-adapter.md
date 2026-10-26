@@ -513,6 +513,15 @@ a payout that holds only this fixture's payments, and the fee on each charge. Wh
 says of a real sandbox stands: a payout that posts has still not been shown against one. No decision
 changes, and this ADR stays Proposed.
 
+**Implementation note, 2026-10-26 (a payout that can only be closed).** The staff list no longer
+offers **Post payout** for an `unsupported_settlement` payout, which posting refused every time. A
+payout holding a payment and that payment's return now goes to review for one reason whichever of its
+lines is checked first: `unsupported_settlement`, or `conflicting_evidence` when the payment already
+has a receipt. Before, it read `conflicting_evidence` or `settlement_incomplete` depending on the
+lines' names, and the second offered a Post that was then refused. Every lookup of a processor
+reference in the payment engine and the staff lists is now made within its account, as the schema
+and the payout check already were. No decision changes, and the known limit stands.
+
 The provisional assumptions of ADR-053 stay open. This ADR verifies none of them, and nothing here
 is approval to move real money.
 
@@ -556,11 +565,11 @@ says "to revisit", this list is where the item now lives.
   `payment_failure_refund`, which is stored as a kind nothing posts. Whether its two lines should net
   to the failure fee, so that the rest of the payout can post, is an open question and not a
   decision.
-- **A payout that holds both a payment and that payment's return cannot post.** The payment line is
-  refused because a return is stored for the payment, and the return line because the payment has no
-  receipt to reverse. Stripe's ACH dispute test method disputes a payment minutes after it succeeds,
-  so in a sandbox the two usually reach the same payout, as they did in the one payout recorded. A
-  return posts only for a payment an earlier payout receipted.
+- **A payout that holds both a payment and that payment's return cannot post.** A return posts only
+  against a receipt an earlier payout made. Such a payout goes to review as `unsupported_settlement`,
+  decided for the payout as a whole so that its reason does not follow the order of its lines, and is
+  offered no Post action. Stripe's ACH dispute test method disputes a payment minutes after it succeeds,
+  so in a sandbox the two usually reach the same payout, as they did in the one payout recorded.
 - **Closing a payment's review for an ACH return, before the payout that carries the return arrives,
   stops that payout from posting.** The payout then contradicts a closed review and can only be
   closed. The staff text in the sandbox says to leave such a review open.

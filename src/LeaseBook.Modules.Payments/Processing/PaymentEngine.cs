@@ -126,7 +126,8 @@ public sealed class PaymentEngine(DbContext db, IOrgContext org, TimeProvider cl
         await LockAsync("reference:" + providerId, ct);
         // Preserve the original event. Authenticated reuse with altered content is separate evidence.
         var eventId = existing is null ? observation.EventId : "conflict:" + fingerprint;
-        if (await db.Set<PaymentObservation>().AnyAsync(x => x.EventId == eventId && x.Account == binding.Account, ct)) { return; }
+        if (await db.Set<PaymentObservation>().AnyAsync(x => x.EventId == eventId && x.Account == binding.Account
+            && x.Mode == binding.Mode, ct)) { return; }
         db.Add(new PaymentObservation
         {
             Id = UuidV7.NewId(),
@@ -149,7 +150,9 @@ public sealed class PaymentEngine(DbContext db, IOrgContext org, TimeProvider cl
             Fingerprint = fingerprint,
         });
         await db.SaveChangesAsync(ct);
-        var operationId = await db.Set<PaymentOperation>().Where(x => x.ProviderId == providerId)
+        // A reference is unique per account (the unique index on org, account and provider id), not
+        // per organization. Every lookup by reference here is made within the account.
+        var operationId = await db.Set<PaymentOperation>().Where(x => x.Account == binding.Account && x.ProviderId == providerId)
             .Select(x => (Guid?)x.Id).SingleOrDefaultAsync(ct);
         if (operationId is { } id)
         {
@@ -167,7 +170,8 @@ public sealed class PaymentEngine(DbContext db, IOrgContext org, TimeProvider cl
         var op = await db.Set<PaymentOperation>().SingleOrDefaultAsync(x => x.Id == id, ct);
         if (op is null || op.DueAt > Now || op.LeaseUntil > Now) { return null; }
         MatchBinding(op, binding);
-        var count = op.ProviderId is null ? 0 : await db.Set<PaymentObservation>().CountAsync(x => x.ProviderId == op.ProviderId, ct);
+        var count = op.ProviderId is null ? 0 : await db.Set<PaymentObservation>()
+            .CountAsync(x => x.Account == op.Account && x.ProviderId == op.ProviderId, ct);
         if (op.Status is "Settled" or "Failed" or "NeedsReview" or "Returned" or "ReviewClosed"
             && count == op.ProcessedCount) { return null; }
         op.LeaseClaimId = UuidV7.NewId(); op.LeaseUntil = Now.AddSeconds(30); op.LastAttemptAt = Now;
@@ -190,7 +194,8 @@ public sealed class PaymentEngine(DbContext db, IOrgContext org, TimeProvider cl
         { throw new IOException("The simulated provider outcome is uncertain."); }
         if (op.ProviderId is not null && op.ProviderId != provider.ProviderId) { throw new PaymentConflictException(); }
         op.ProviderId = provider.ProviderId;
-        var facts = await db.Set<PaymentObservation>().AsNoTracking().Where(x => x.ProviderId == op.ProviderId).ToListAsync(ct);
+        var facts = await db.Set<PaymentObservation>().AsNoTracking()
+            .Where(x => x.Account == op.Account && x.ProviderId == op.ProviderId).ToListAsync(ct);
         var effects = await db.Set<PaymentEffect>().AsNoTracking().Where(x => x.OperationId == op.Id).ToListAsync(ct);
         // A payout batch may have receipted this payment with a fee difference, which is what a batch is
         // for. Single-payment credit evidence for it is then the same money seen again, not a settlement
@@ -320,7 +325,8 @@ public sealed class PaymentEngine(DbContext db, IOrgContext org, TimeProvider cl
         if (op.Status == "Returned") { return new(op, null); }
         if (!ReturnAwaitsDecision(op) || op.JournalId is not { } receiptId) { throw new PaymentConflictException(); }
 
-        var facts = await db.Set<PaymentObservation>().AsNoTracking().Where(x => x.ProviderId == op.ProviderId).ToListAsync(ct);
+        var facts = await db.Set<PaymentObservation>().AsNoTracking()
+            .Where(x => x.Account == op.Account && x.ProviderId == op.ProviderId).ToListAsync(ct);
         var refusal = ReturnEvidenceRefusal(op, facts);
         if (refusal is null)
         {
@@ -401,7 +407,8 @@ public sealed class PaymentEngine(DbContext db, IOrgContext org, TimeProvider cl
         // way to a person, and one marked here would stay due with nobody to claim it.
         if (op.LeaseUntil > Now || op.DueAt <= Now || op.Reason is not null) { return false; }
         if (op.CreatedAt > Now - OutcomeOverdueAfter) { return false; }
-        if (await db.Set<PaymentObservation>().CountAsync(x => x.ProviderId == reference, ct) != op.ProcessedCount) { return false; }
+        if (await db.Set<PaymentObservation>().CountAsync(x => x.Account == op.Account && x.ProviderId == reference, ct)
+            != op.ProcessedCount) { return false; }
         op.Status = "NeedsReview"; op.Reason = "outcome_overdue";
         await db.SaveChangesAsync(ct);
         return true;

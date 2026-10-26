@@ -60,12 +60,14 @@ internal sealed class GetPaymentsHandler(DbContext db) : IQueryHandler<GetPaymen
         if (q.Id is { } id) { query = query.Where(x => x.Id == id); }
         var rows = await query.OrderByDescending(x => x.CreatedAt).ThenByDescending(x => x.Id).Take(100).ToListAsync(ct);
         var providerIds = rows.Where(x => x.ProviderId is not null).Select(x => x.ProviderId!).ToArray();
+        // What is held for a payment is what is held under its reference within its own account, as
+        // the engine reads it: a reference is unique per account, not per organization.
         var evidence = await db.Set<PaymentObservation>().AsNoTracking()
             .Where(x => providerIds.Contains(x.ProviderId) && x.EvidenceId != "")
-            .Select(x => new { x.ProviderId, x.EvidenceId, x.CreatedAt }).ToListAsync(ct);
-        var references = evidence.GroupBy(x => x.ProviderId).ToDictionary(x => x.Key,
+            .Select(x => new { x.Account, x.ProviderId, x.EvidenceId, x.CreatedAt }).ToListAsync(ct);
+        var references = evidence.GroupBy(x => (x.Account, x.ProviderId)).ToDictionary(x => x.Key,
             x => x.OrderByDescending(e => e.CreatedAt).First().EvidenceId);
-        string? Evidence(PaymentOperation x) => x.ProviderId is null ? null : references.GetValueOrDefault(x.ProviderId);
+        string? Evidence(PaymentOperation x) => x.ProviderId is null ? null : references.GetValueOrDefault((x.Account, x.ProviderId));
         if (q.TenantId is not null) { return rows.Select(x => PaymentView.From(x, Evidence(x))).ToArray(); }
         var ids = rows.Select(x => x.Id).ToArray();
         var returned = await db.Set<PaymentEffect>().AsNoTracking()
@@ -76,16 +78,16 @@ internal sealed class GetPaymentsHandler(DbContext db) : IQueryHandler<GetPaymen
         var awaiting = rows.Where(PaymentEngine.ReturnAwaitsDecision).Select(x => x.ProviderId!).ToArray();
         List<PaymentObservation> held = awaiting.Length == 0 ? [] : await db.Set<PaymentObservation>().AsNoTracking()
             .Where(x => awaiting.Contains(x.ProviderId)).ToListAsync(ct);
-        var facts = held.ToLookup(x => x.ProviderId);
+        var facts = held.ToLookup(x => (x.Account, x.ProviderId));
         return rows.Select(x => PaymentView.ForStaff(x, Evidence(x),
             returned.TryGetValue(x.Id, out var entryId) ? entryId : null,
-            x.ProviderId is null ? [] : [.. facts[x.ProviderId]])).ToArray();
+            x.ProviderId is null ? [] : [.. facts[(x.Account, x.ProviderId)]])).ToArray();
     }
 }
 
 /// <summary>
 /// The observations no payment answers for: stored more than ten minutes ago with a provider reference
-/// no operation carries. One definition, so the staff count and the staff list cannot disagree.
+/// no operation under the same account carries. One definition, so the staff count and the staff list cannot disagree.
 /// </summary>
 internal static class UnmatchedPaymentObservations
 {
@@ -95,7 +97,7 @@ internal static class UnmatchedPaymentObservations
     {
         var threshold = now.AddMinutes(-10);
         return db.Set<PaymentObservation>().AsNoTracking().Where(x => x.CreatedAt < threshold
-            && !db.Set<PaymentOperation>().Any(o => o.ProviderId == x.ProviderId));
+            && !db.Set<PaymentOperation>().Any(o => o.Account == x.Account && o.ProviderId == x.ProviderId));
     }
 }
 

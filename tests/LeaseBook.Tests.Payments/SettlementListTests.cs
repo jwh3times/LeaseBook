@@ -17,8 +17,8 @@ namespace LeaseBook.Tests.Payments;
 [Collection(nameof(DatabaseCollection))]
 public sealed class SettlementListTests(PostgresFixture fixture)
 {
-    private sealed record Payouts(Guid Posted, Guid Received, Guid Untied, Guid Conflicting, Guid Mismatch, Guid Failed,
-        Guid Awaiting, Guid HeldUnbanked, Guid Closed, PaymentOperation PostedPayment);
+    private sealed record Payouts(Guid Posted, Guid Received, Guid Untied, Guid Conflicting, Guid Unsupported, Guid Mismatch,
+        Guid Failed, Guid Awaiting, Guid HeldUnbanked, Guid Closed, PaymentOperation PostedPayment);
 
     private static ProcessorSettlementItem Unknown(string item, decimal amount) =>
         new(item, SettlementItemKinds.Payment, "prov_nobody", amount, 0m, amount, "USD");
@@ -40,6 +40,10 @@ public sealed class SettlementListTests(PostgresFixture fixture)
         var conflicting = await h.SettleAsync(h.Payout("po_conflict", 29m, Line("1", "Payment", contradicted, 30m, 0m, 30m)), ct);
         await h.InOrg(() => h.Settlements.ReceiveAsync(h.Binding, h.Payout("po_conflict", 30m, Line("1", "Payment", contradicted, 30m, 0m, 30m)), ct), ct);
 
+        // A refund in a payout, with the bank's word for it: something this model never posts.
+        var refunded = await h.AcceptedAsync(40m, ct);
+        var unsupported = await h.SettleAsync(h.Payout("po_refund", -40m, Line("1", "Refund", refunded, 40m, 0m, -40m)), ct);
+
         var mismatch = await HeldAsync(h, h.ProcessorPayout("po_mismatch", 20m, Line("1", "Payment", await h.AcceptedAsync(20m, ct), 20m, 0m, 20m)), ct);
         await h.InOrg(() => h.Settlements.ReceiveBankEvidenceAsync(h.Binding, h.Bank("po_mismatch", 19m), ct), ct);
         await h.InOrg(() => h.Settlements.EvaluateAsync(h.Binding, mismatch, null, ct), ct);
@@ -57,7 +61,7 @@ public sealed class SettlementListTests(PostgresFixture fixture)
         var closed = await h.SettleAsync(h.Payout("po_closed", 1m, Line("1", "Payment", await h.AcceptedAsync(2m, ct), 2m, 0m, 2m)), ct);
         await h.InOrg(() => h.Settlements.CloseAsync(h.Binding, closed.Id, h.UserId, "Processor confirmed it was a test.", ct), ct);
 
-        return new(posted.Id, received, untied.Id, conflicting.Id, mismatch, failed, awaiting, heldUnbanked, closed.Id, paid);
+        return new(posted.Id, received, untied.Id, conflicting.Id, unsupported.Id, mismatch, failed, awaiting, heldUnbanked, closed.Id, paid);
     }
 
     private static (string Status, string? Reason, bool CanPost, bool CanClose, DateOnly? BankDate, decimal? BankAmount) Shown(SettlementView view) =>
@@ -73,14 +77,16 @@ public sealed class SettlementListTests(PostgresFixture fixture)
 
         var list = (await h.QueryAsync(new GetSettlements(), ct)).ToDictionary(x => x.Id);
 
-        list.Count.ShouldBe(9);
+        list.Count.ShouldBe(10);
         Shown(list[p.Posted]).ShouldBe(("Posted", null, false, false, today, 99.50m));
         // A check that never finished has both ways out.
         Shown(list[p.Received]).ShouldBe(("Received", null, true, true, today, 7m));
         Shown(list[p.Untied]).ShouldBe(("NeedsReview", "settlement_untied", true, true, today, 49m));
-        // Conflicting evidence, a bank that received another amount, a failed payout and one no bank
-        // has spoken for cannot post whatever a person decides; each can only be closed.
+        // Conflicting evidence, something this model does not post, a bank that received another
+        // amount, a failed payout and one no bank has spoken for cannot post whatever a person
+        // decides; each can only be closed.
         Shown(list[p.Conflicting]).ShouldBe(("NeedsReview", "conflicting_evidence", false, true, today, 29m));
+        Shown(list[p.Unsupported]).ShouldBe(("NeedsReview", "unsupported_settlement", false, true, today, -40m));
         Shown(list[p.Mismatch]).ShouldBe(("NeedsReview", SettlementReasons.BankAmountMismatch, false, true, today, 19m));
         Shown(list[p.Failed]).ShouldBe(("NeedsReview", SettlementReasons.PayoutFailed, false, true, null, null));
         Shown(list[p.Awaiting]).ShouldBe(("AwaitingBank", null, false, true, null, null));

@@ -712,17 +712,13 @@
     },
     {
       "id": "stripe-stand-in-recorded-payout",
-      "workflow": "The one payout a sandbox has made arrives as recorded with its fifteen lines; it goes to review, bank evidence releases nothing, an administrator's post is refused, and the review is closed",
+      "workflow": "The one payout a sandbox has made arrives as recorded with its fifteen lines; it goes to review, bank evidence releases nothing and offers no post, and the review is closed",
       "area": "Payments",
       "spec": "stripe-stand-in.spec.ts",
       "org": "stand-in payment fixture",
       "pass": "stand-in",
       "events": [],
-      "routes": [
-        "GET /api/payments/settlements",
-        "POST /api/payments/settlements/{id}/post",
-        "POST /api/payments/settlements/{id}/close"
-      ]
+      "routes": ["GET /api/payments/settlements", "POST /api/payments/settlements/{id}/close"]
     },
     {
       "id": "stripe-stand-in-payment-and-return-in-one-payout",
@@ -731,7 +727,7 @@
       "spec": "stripe-stand-in.spec.ts",
       "org": "stand-in payment fixture",
       "pass": "stand-in",
-      "expectedFailure": "ADR-054 known limit: a payout that holds both a payment and that payment's return cannot post. Today it goes to review; the test fails where it asserts that the payout posts.",
+      "expectedFailure": "ADR-054 known limit: a payout that holds both a payment and that payment's return cannot post. Today it goes to review as unsupported_settlement and can only be closed; the test fails where it asserts that the payout posts.",
       "events": [],
       "routes": ["PUT /api/settings/payment-fees", "GET /api/payments/settlements"]
     },

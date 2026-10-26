@@ -1,4 +1,5 @@
 using LeaseBook.Modules.Payments.Domain;
+using LeaseBook.Modules.Payments.Features;
 using LeaseBook.Modules.Payments.Processing;
 using LeaseBook.SharedKernel;
 using LeaseBook.Tests.Common;
@@ -346,6 +347,137 @@ public sealed class FixtureBindingTests(PostgresFixture fixture)
 
         (payout!.Status, payout.Reason).ShouldBe(("Posted", (string?)null));
         h.Ledger.Settlements.ShouldHaveSingleItem().Lines.ShouldBe([new("1", "Payment", h.Tenants[1], 100m, PaymentMethods.Ach, null, 0m)]);
+    }
+
+    // What the worker does under the given binding: claims the payment and completes it with the
+    // reference it already holds.
+    private static async Task JudgeUnderAsync(PaymentsHarness h, FixtureBinding binding, PaymentOperation op, CancellationToken ct)
+    {
+        h.Clock.Advance(TimeSpan.FromSeconds(1));
+        var lease = (await h.InOrg(() => h.Payments.ClaimAsync(binding, op.Id, ct), ct))!.LeaseClaimId!.Value;
+        await h.InOrg(() => h.Payments.CompleteAsync(binding, op.Id, lease, new ProcessorResult("Accepted", op.ProviderId!), ct), ct);
+    }
+
+    // A notice about the rebound account's payment, which holds the earlier account's reference.
+    private static ProcessorObservation Under(PaymentsHarness h, PaymentOperation op, string kind) =>
+        h.Observation(op, kind) with { ProviderId = op.ProviderId!, Account = Rebound };
+
+    [Fact]
+    public async Task A_notice_wakes_the_payment_with_its_reference_under_its_own_account_only()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var h = await PaymentsHarness.CreateAsync(fixture, ct);
+        var earlier = await h.AcceptedAsync(100m, ct);
+        var rebound = await h.RebindAsync(ct, account: Rebound);
+        var op = await AcceptedUnderAsync(h, rebound, ProviderOf(earlier), ct);
+
+        await h.InOrg(() => h.Payments.ReceiveAsync(rebound, Under(h, op, "Processing"), ct), ct);
+
+        (await h.ReadAsync(op.Id, ct)).DueAt.ShouldBe(h.Clock.GetUtcNow().UtcDateTime, TimeSpan.FromMilliseconds(1));
+        (await h.ReadAsync(earlier.Id, ct)).DueAt.ShouldBe(DateTime.MaxValue, TimeSpan.FromSeconds(1));
+    }
+
+    [Fact]
+    public async Task A_notice_under_another_mode_is_its_own_though_this_account_used_its_event_id()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var h = await PaymentsHarness.CreateAsync(fixture, ct);
+        var op = await h.AcceptedAsync(100m, ct);
+        var progress = h.Observation(op, "Processing");
+        await h.ObserveAsync(progress, ct);
+        var sandbox = h.Binding with { Mode = PaymentModes.StripeSandbox };
+
+        await h.InOrg(() => h.Payments.ReceiveAsync(sandbox, progress with { Mode = PaymentModes.StripeSandbox, Kind = "Succeeded" }, ct), ct);
+
+        (await h.ReadObservationsAsync(ct)).Select(x => (x.EventId, x.Mode, x.Kind)).ShouldBe([
+            (progress.EventId, h.Binding.Mode, "Processing"),
+            (progress.EventId, PaymentModes.StripeSandbox, "Succeeded"),
+        ], ignoreOrder: true);
+    }
+
+    [Fact]
+    public async Task A_payment_is_judged_and_aged_by_what_was_said_under_its_own_account_only()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var h = await PaymentsHarness.CreateAsync(fixture, ct);
+        var earlier = await h.AcceptedAsync(100m, ct);
+        await h.ObserveAsync(h.Observation(earlier, "Failed"), ct);
+        var rebound = await h.RebindAsync(ct, account: Rebound);
+
+        // The earlier account's payment failed. This one, accepted under the same reference, did not.
+        var op = await AcceptedUnderAsync(h, rebound, ProviderOf(earlier), ct);
+
+        (op.Status, op.Reason, op.ProcessedCount).ShouldBe(("Processing", (string?)null, 0));
+        h.Clock.Advance(PaymentEngine.OutcomeOverdueAfter + TimeSpan.FromHours(1));
+        (await h.InOrg(() => h.Payments.MarkOverdueAsync(rebound, op.Id, ct), ct)).ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task A_payment_at_rest_is_not_claimed_again_for_what_was_said_under_another_account()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var h = await PaymentsHarness.CreateAsync(fixture, ct);
+        var earlier = await h.AcceptedAsync(100m, ct);
+        var rebound = await h.RebindAsync(ct, account: Rebound);
+        var op = await AcceptedUnderAsync(h, rebound, ProviderOf(earlier), ct);
+        await h.InOrg(() => h.Payments.ReceiveAsync(rebound, Under(h, op, "Failed"), ct), ct);
+        await JudgeUnderAsync(h, rebound, op, ct);
+        (await h.ReadAsync(op.Id, ct)).Status.ShouldBe("Failed");
+        // The earlier account speaks of its own payment under the same reference.
+        var original = await h.RebindAsync(ct, account: h.Binding.Account);
+        await h.InOrg(() => h.Payments.ReceiveAsync(original, h.Observation(earlier, "Processing", "earlier-progress"), ct), ct);
+        await h.RebindAsync(ct, account: Rebound);
+        // Due for some other cause: everything said of this payment has been judged, so nothing claims it.
+        await h.InOrg(async () =>
+        {
+            var row = await h.Scope.Db.Set<PaymentOperation>().SingleAsync(x => x.Id == op.Id, ct);
+            row.DueAt = h.Clock.GetUtcNow().UtcDateTime;
+            await h.Scope.Db.SaveChangesAsync(ct);
+        }, ct);
+
+        (await h.InOrg(() => h.Payments.ClaimAsync(rebound, op.Id, ct), ct)).ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task A_return_is_decided_and_shown_on_what_was_said_under_the_payments_own_account()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var h = await PaymentsHarness.CreateAsync(fixture, ct);
+        var earlier = await h.AcceptedAsync(100m, ct);
+        var rebound = await h.RebindAsync(ct, account: Rebound);
+        var op = await AcceptedUnderAsync(h, rebound, ProviderOf(earlier), ct);
+        var evidence = h.Payout("po_1", 100m, Line("1", "Payment", earlier, 100m, 0m, 100m)) with { Account = Rebound };
+        var payout = (await h.InOrg(() => h.Settlements.ReceiveAsync(rebound, evidence, ct), ct))!.Value;
+        await h.InOrg(() => h.Settlements.EvaluateAsync(rebound, payout, null, ct), ct);
+        await h.InOrg(() => h.Payments.ReceiveAsync(rebound, Under(h, op, "Return"), ct), ct);
+        await JudgeUnderAsync(h, rebound, op, ct);
+        (await h.ReadAsync(op.Id, ct)).Reason.ShouldBe("return_requires_review");
+        // A refund said of the earlier account's payment, the newest evidence under the reference.
+        var original = await h.RebindAsync(ct, account: h.Binding.Account);
+        await h.InOrg(() => h.Payments.ReceiveAsync(original, h.Observation(earlier, "Refund", "earlier-refund"), ct), ct);
+        await h.RebindAsync(ct, account: Rebound);
+
+        // The payout's line names this account's payment.
+        (await h.QueryAsync(new GetSettlements(payout), ct)).ShouldHaveSingleItem().Items.ShouldHaveSingleItem()
+            .PaymentId.ShouldBe(op.Id);
+        var view = (await h.QueryAsync(new GetPayments(null, op.Id), ct)).ShouldHaveSingleItem();
+        (view.CanPostReturn, view.EvidenceReference).ShouldBe((true, "evidence-" + op.Id.ToString("N")));
+        var decision = await h.InOrg(() => h.Payments.PostReturnAsync(rebound, op.Id, ct), ct);
+        (decision!.Refusal, decision.Operation.Status).ShouldBe(((string?)null, "Returned"));
+    }
+
+    [Fact]
+    public async Task A_notice_is_unmatched_when_only_another_accounts_payment_has_its_reference()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var h = await PaymentsHarness.CreateAsync(fixture, ct);
+        var earlier = await h.AcceptedAsync(100m, ct);
+        await h.RebindAsync(ct, account: Rebound);
+
+        await h.StoreObservationAsync(h.Observation(earlier, "Succeeded") with { Account = Rebound },
+            h.Clock.GetUtcNow().UtcDateTime.AddMinutes(-30), ct);
+
+        (await h.QueryAsync(new GetUnmatchedPaymentObservations(), ct)).ShouldBe(1);
     }
 
     public static TheoryData<string> PayoutBindings() => ["mode", "account"];

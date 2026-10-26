@@ -213,8 +213,8 @@
       {
         "file": "src/LeaseBook.Modules.Payments/Processing/PaymentEngine.cs",
         "mutator": "Conditional (false) mutation",
-        "original": "var count = op.ProviderId is null ? 0 : await db.Set<PaymentObservation>().CountAsync(x => x.ProviderId == op.ProviderId, ct);",
-        "replacement": "(false?0 :await db.Set<PaymentObservation>().CountAsync(x => x.ProviderId == op.ProviderId, ct))",
+        "original": "var count = op.ProviderId is null ? 0 : await db.Set<PaymentObservation>()",
+        "replacement": "(false?0 :await db.Set<PaymentObservation>()\n            .CountAsync(x => x.Account == op.Account && x.ProviderId == op.ProviderId, ct))",
         "reason": "With no reference the mutant counts the observations whose reference is null instead of answering 0. payment_observations.provider_id is NOT NULL, so that count is always 0."
       },
       {
@@ -437,9 +437,16 @@
       {
         "file": "src/LeaseBook.Modules.Payments/Features/GetPayments.cs",
         "mutator": "Conditional (false) mutation",
-        "original": "x.ProviderId is null ? [] : [.. facts[x.ProviderId]])).ToArray();",
-        "replacement": "(false?[] :[.. facts[x.ProviderId]])",
-        "reason": "For a payment with no processor reference the mutant reads facts[null] instead of using an empty list. An ILookup built by ToLookup accepts a null key and answers an empty sequence for a key it does not hold, and no observation has a null reference (payment_observations.provider_id is NOT NULL), so the facts are empty either way. They would not be read anyway: ReturnAwaitsDecision is false for a payment with no reference, and CanPostReturn reads the facts only after it."
+        "original": "string? Evidence(PaymentOperation x) => x.ProviderId is null ? null : references.GetValueOrDefault((x.Account, x.ProviderId));",
+        "replacement": "(false?null :references.GetValueOrDefault((x.Account, x.ProviderId)))",
+        "reason": "For a payment with no processor reference the mutant looks up (account, null) instead of answering null. A tuple key with a null member is a valid dictionary key, so the lookup does not throw, and no observation has a null reference (payment_observations.provider_id is NOT NULL), so no key in the dictionary has one: GetValueOrDefault answers null either way."
+      },
+      {
+        "file": "src/LeaseBook.Modules.Payments/Features/GetPayments.cs",
+        "mutator": "Conditional (false) mutation",
+        "original": "x.ProviderId is null ? [] : [.. facts[(x.Account, x.ProviderId)]])).ToArray();",
+        "replacement": "(false?[] :[.. facts[(x.Account, x.ProviderId)]])",
+        "reason": "For a payment with no processor reference the mutant reads the facts under (account, null) instead of using an empty list. An ILookup built by ToLookup answers an empty sequence for a key it does not hold, and no observation has a null reference (payment_observations.provider_id is NOT NULL), so the facts are empty either way. They would not be read anyway: ReturnAwaitsDecision is false for a payment with no reference, and CanPostReturn reads the facts only after it."
       },
       {
         "file": "src/LeaseBook.Modules.Payments/Features/ReviewPayment.cs",
@@ -481,7 +488,7 @@
         "mutator": "Logical mutation",
         "original": ".Where(x => x.ProviderId != null && providerIds.Contains(x.ProviderId))",
         "replacement": "x.ProviderId != null || providerIds.Contains(x.ProviderId)",
-        "reason": "The mutant reads every payment of the organization that has a reference instead of only those the payouts' lines name, and each line still looks up its own reference, so every PaymentId is the same. The extra rows could only matter by giving the dictionary a duplicate key, and an organization's references are unique: the unique index is (org_id, account, provider_id), and every payment carries its organization's one fixture account, since SubmitAsync stores it only after RequireFixtureAsync matched it, an organization has one fixture, and the app role cannot update payment_fixtures. The other mutant of this line is killed by SettlementListTests."
+        "reason": "The mutant reads every payment of the organization that has a reference instead of only those the payouts' lines name, and each line still looks up its own (account, reference), so every PaymentId is the same. The extra rows cannot give the dictionary a duplicate key: it is keyed on (account, reference), which the unique index on payment_operations (org_id, account, provider_id) makes unique within the organization. The other mutant of this line is killed by SettlementListTests."
       }
     ]
   },
