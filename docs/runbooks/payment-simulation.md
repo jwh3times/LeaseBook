@@ -465,10 +465,12 @@ payout of the probe's charges or of an earlier fixture is stored too.
 | Anything else                                             | Unknown                                               | No. The whole payout goes to review         |
 | The payout's own line                                     | Not a line: it is Stripe's net for the payout         | Not applicable                              |
 
-A payout is checked once when it arrives, without the bank. One that could never post goes to review
-then, as `unsupported_settlement` for a line in the last four rows or for an instant payout,
+A payout is checked once when it arrives, without the bank. One that cannot post as it stands goes
+to review then, as `unsupported_settlement` for a line in the last four rows or for an instant payout,
 `settlement_incomplete` for a line whose charge is not a payment of this fixture generation, and so
-on. A manual payout is stored without lines, is not asked about, and goes to review as unsupported.
+on. Of these, only `settlement_incomplete` is offered **Post payout** once the bank has spoken,
+because a payment not known yet may still be recorded. A charge from the probe, or from a generation
+a reset replaced, never will be: close that payout instead. A manual payout is stored without lines, is not asked about, and goes to review as unsupported.
 Any other payout waits for the bank.
 
 #### Say what the bank received
