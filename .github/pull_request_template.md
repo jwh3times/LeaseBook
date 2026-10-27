@@ -1,8 +1,14 @@
+Closes #
+
+<!-- Keep the issue link as the body's first line: `Closes #N` when this PR finishes the issue,
+`Part of #N` when it is one slice of a larger one, or `Flow waived by the user: <reason>`. Delete it
+for a dependency bump, a docs-only change or release prep. See docs/agents/dev-flow.md. -->
+
 # Pull request
 
 ## What & why
 
-<!-- A sentence or two. Link the issue this closes (`Closes #N`). -->
+<!-- A sentence or two. -->
 
 ## Definition of Done (CONTRIBUTING.md)
 

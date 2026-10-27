@@ -44,8 +44,10 @@ dotnet test --project tests/LeaseBook.Tests.Integration/LeaseBook.Tests.Integrat
 
 ## Workflow
 
-1. **Open an issue first** for anything beyond a small fix, so the approach can be discussed before you
-   invest time. For non-trivial design decisions, expect to record an ADR (see below).
+1. **Open an issue first** for any code change, small fixes included, so the approach can be discussed
+   before you invest time. Docs-only changes and dependency bumps need none
+   ([exemptions](docs/agents/dev-flow.md#exemptions)). For non-trivial design decisions, expect to
+   record an ADR (see below).
 2. **Branch** off `main` as `<type>/<issue#>-<slug>` (e.g. `feat/464-owner-portal`,
    `fix/611-adjustment-destination`). Keep branches focused — one logical change per pull request.
 3. **Commit** in logical, self-contained steps with clear messages: a concise imperative subject line and
