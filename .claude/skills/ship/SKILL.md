@@ -230,8 +230,12 @@ gh pr list --head <branch> --state open --json number,url
 ```
 
 - **No PR** → `gh pr create --base main` with a title and a body derived from the changelog entries
-  you added or cut.
-- **PR exists** → `gh pr edit <number>` to refresh the body. Do not open a second PR.
+  you added or cut. The body's first line is the issue link from step 3b — `Closes #N`, `Part of #N`,
+  or `Flow waived by the user: <reason>` — per
+  [`docs/agents/dev-flow.md`](../../../docs/agents/dev-flow.md#linking-work-to-its-issue). Other
+  exempt changes and private issues carry no link line.
+- **PR exists** → `gh pr edit <number>` to refresh the body, keeping that first line. Do not open a
+  second PR.
 
 **Never merge the PR. Never push to `main`.**
 
