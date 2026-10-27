@@ -34,9 +34,9 @@ Docs and agent config — exempt from the gate:
 - docs tooling config: `cspell.json`, `.markdownlint-cli2.jsonc`
 
 Code — gated — is everything else: `src/`, `tests/`, `web/`, `scripts/`, `infra/`, `seed/`,
-`.github/` workflows and templates, `.config/`, and the root build and runtime files (`Dockerfile`,
-`docker-compose.yml`, `Directory.Build.props`, `Directory.Packages.props`, `global.json`,
-`LeaseBook.slnx`, `package.json`, `VERSION`). A change that touches both is code.
+`.github/` workflows, issue forms and `dependabot.yml`, `.config/`, and the root build and runtime
+files (`Dockerfile`, `docker-compose.yml`, `Directory.Build.props`, `Directory.Packages.props`,
+`global.json`, `LeaseBook.slnx`, `package.json`, `VERSION`). A change that touches both is code.
 
 ## Routing
 
@@ -92,5 +92,5 @@ These changes need no ready issue:
 - **Private issues:** the branch is `<type>/<slug>` and the PR body names no issue. Close the private
   issue by hand after the merge ([issue-tracker.md](issue-tracker.md#which-tracker)).
 
-`/ship` warns when a PR body carries no closing keyword. Outside the exemptions, that warning means
+`/ship` warns when a PR body opens with no issue link. Outside the exemptions, that warning means
 the link above is missing.
