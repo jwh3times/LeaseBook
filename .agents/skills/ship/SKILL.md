@@ -34,7 +34,9 @@ This skill stops at "PR open". The repo tags and releases on merge; it does not 
 ### 1. Preconditions — stop if any fail
 
 - **Not on `main`.** `main` is protected. If on `main`, stop and offer to branch
-  (`git checkout -b <type>/<topic>`, e.g. `feat/owner-statement-pdf`).
+  (`git checkout -b <type>/<issue#>-<slug>`, e.g. `feat/464-owner-portal`; exempt work and private
+  issues drop the number, per
+  [`docs/agents/dev-flow.md`](../../../docs/agents/dev-flow.md#linking-work-to-its-issue)).
 - **Clean working tree.** Run `git status --porcelain`. If anything is uncommitted, stop and
   ask whether to commit it — do not commit silently. (This also makes the `git add -A` in
   step 6 safe: the only changes left will be this skill's own release-preparation edits.)
@@ -113,9 +115,11 @@ gh issue list --state open --limit 100 --json number,title --jq '.[] | "\(.numbe
 
 **Warn** — never block — when:
 
-- the PR body carries no closing keyword (`Fixes #NN`, `Closes #NN`) **and** the change is not a
-  dependency bump, a docs-only edit, or otherwise `skip-changelog`-shaped. Work that closes no issue
-  is work nobody filed;
+- the PR body opens with no issue link (`Closes #NN`, `Fixes #NN`, `Part of #NN`, or
+  `Flow waived by the user: <reason>`) **and** the change is not one of the
+  [`dev-flow.md` exemptions](../../../docs/agents/dev-flow.md#exemptions) — a dependency bump, docs
+  and agent config only, or release prep — or work on a private-tracker issue, whose PR names no
+  issue. Work that closes no issue is work nobody filed;
 - the issue it closes is **not on the project board**, or is on it with `Track` / `Gate` unset —
   `gh project item-list 3 --owner jwh3times --format json`;
 - the branch closes an issue on the **private** tracker. That reference must not appear in a public
@@ -229,8 +233,12 @@ gh pr list --head <branch> --state open --json number,url
 ```
 
 - **No PR** → `gh pr create --base main` with a title and a body derived from the changelog entries
-  you added or cut.
-- **PR exists** → `gh pr edit <number>` to refresh the body. Do not open a second PR.
+  you added or cut. The body's first line is the issue link from step 3b — `Closes #N`, `Part of #N`,
+  or `Flow waived by the user: <reason>` — per
+  [`docs/agents/dev-flow.md`](../../../docs/agents/dev-flow.md#linking-work-to-its-issue). Other
+  exempt changes and private issues carry no link line.
+- **PR exists** → `gh pr edit <number>` to refresh the body, keeping that first line. Do not open a
+  second PR.
 
 **Never merge the PR. Never push to `main`.**
 

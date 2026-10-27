@@ -44,14 +44,19 @@ dotnet test --project tests/LeaseBook.Tests.Integration/LeaseBook.Tests.Integrat
 
 ## Workflow
 
-1. **Open an issue first** for anything beyond a small fix, so the approach can be discussed before you
-   invest time. For non-trivial design decisions, expect to record an ADR (see below).
-2. **Branch** off `main` (e.g. `feature/owner-statements`, `fix/ledger-running-balance`). Keep branches
-   focused — one logical change per pull request.
+1. **Open an issue first** for any code change, small fixes included, so the approach can be discussed
+   before you invest time. Docs-only changes and dependency bumps need none
+   ([exemptions](docs/agents/dev-flow.md#exemptions)). For non-trivial design decisions, expect to
+   record an ADR (see below).
+2. **Branch** off `main` as `<type>/<issue#>-<slug>` (e.g. `feat/464-owner-portal`,
+   `fix/611-adjustment-destination`). Keep branches focused — one logical change per pull request.
 3. **Commit** in logical, self-contained steps with clear messages: a concise imperative subject line and
    a body explaining the _why_, not just the _what_.
-4. **Open a pull request** against `main`. Fill in what changed and how you verified it. CI must be green
-   and the PR reviewed before merge.
+4. **Open a pull request** against `main`. Open the body with `Closes #N`, or `Part of #N` when the
+   PR is one slice of a larger issue — a number in the title alone does not link the issue. Fill in
+   what changed and how you verified it. CI must be green and the PR reviewed before merge. The full
+   linking rules, and the changes that need no issue, are in
+   [`docs/agents/dev-flow.md`](docs/agents/dev-flow.md#linking-work-to-its-issue).
 
 ---
 

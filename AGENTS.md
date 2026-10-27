@@ -271,6 +271,24 @@ the relevant docs in the same change.
 
 ## Agent skills
 
+### Development flow
+
+The engineering skill flow is the binding development process. Every code change starts from a
+**ready issue**: a `ready-for-agent` issue carrying a `/to-spec` spec, a `/to-tickets` ticket or a
+`/triage` agent brief, or a bug issue worked through `/diagnosing-bugs`. With none, stop before the
+first edit to code and route the user. Reading code, running tests and answering questions need no
+issue.
+
+The flow skills — `/wayfinder`, `/grill-with-docs`, `/to-spec`, `/to-tickets`, `/implement`,
+`/triage` — stay user-invoked (`disable-model-invocation: true`); the human starts every phase. At a
+phase boundary, name the next command, say in one line why, and wait. Inside a phase, use `/tdd`,
+`/code-review`, `/diagnosing-bugs`, `/domain-modeling`, `/codebase-design`, `/prototype` and
+`/research` whenever they fit.
+
+Exempt: dependency bumps, changes touching only docs and agent config, release-prep commits, and an
+explicit user waiver recorded in the PR body as `Flow waived by the user: <reason>`. What counts as
+code, routing, exemptions and branch/PR linking: [`docs/agents/dev-flow.md`](docs/agents/dev-flow.md).
+
 ### Issue tracker
 
 Route engineering work by **whether the text is safe in public git history**; required human

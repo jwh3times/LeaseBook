@@ -99,6 +99,7 @@ docs/research/stripe-connect-payment-lifecycle.md — dated provider evidence fo
 CODE_OF_CONDUCT.md            — community standards
 SECURITY.md                   — vulnerability reporting; NEVER add finding detail here
 SUPPORT.md                    — where to ask for help
+docs/agents/dev-flow.md       — development-flow gate, routing, exemptions and linking
 docs/agents/domain.md         — domain-docs layout convention
 docs/agents/issue-tracker.md  — GitHub Issues conventions
 docs/agents/triage-labels.md  — the five canonical triage labels
