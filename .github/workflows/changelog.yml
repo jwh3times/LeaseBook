@@ -117,7 +117,9 @@ jobs:
               /^## \[/ && capture   { exit }
               capture               { print }
             ' <<<"$head_changelog")"
-            release_entry="$(grep -E '^- ' <<<"$release_body" | grep -Fvx -- '- _Nothing yet._' || true)"
+            # An entry is a bullet. The empty-Unreleased placeholder (`No unreleased changes.`) is a
+            # bare line, so a cut of an empty section has no entry; a bulleted copy is ignored too.
+            release_entry="$(grep -E '^- ' <<<"$release_body" | grep -Fvx -- '- No unreleased changes.' || true)"
 
             # Here-strings keep grep from closing a printf producer early under pipefail. A valid
             # match near the top of a long changelog must not turn into a broken-pipe failure.

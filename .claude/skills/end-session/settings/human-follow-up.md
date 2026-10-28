@@ -35,6 +35,7 @@ finds today's values.
   page (e.g. the destination repository's wiki, index `human-todo`), plus whether pushing to it is
   pre-authorized (`push without asking` or `ask before pushing`).
 - **Discover:** as above. A wiki's Git remote is `https://github.com/<owner>/<name>.wiki.git`.
+  Propose the index `human-todo`, linked from `Home`, for a wiki that has none.
 
 ## Procedure
 
@@ -63,8 +64,10 @@ line in a final message is not a follow-up.
 5. **Instructions.** Publish numbered steps on the wiki: access needed, exact commands or verified
    UI navigation, expected results, how to verify completion, and recovery where relevant. Mark
    uncertainty about a UI instead of inventing clicks. Link the issue and source work, and index the
-   page from the wiki's index page. Preserve other pages and concurrent edits when pushing; a local
-   wiki commit without a successful push is not publication.
+   page from the wiki's index page. Name a new page `<Topic>-<YYYY-MM-DD>`
+   (`Rotate-Stripe-Keys-2026-10-28`); never rename an existing one, since issues link to it.
+   Preserve other pages and concurrent edits when pushing; a local wiki commit without a successful
+   push is not publication.
 6. **Verify.** Read back the issue, label, board fields, and wiki page, and check the links run both
    ways. Close a follow-up only on evidence the action was done (or a decision it no longer
    applies), never because the implementation merged, recording the outcome without deleting

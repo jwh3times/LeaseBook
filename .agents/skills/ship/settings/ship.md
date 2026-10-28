@@ -10,15 +10,19 @@ setting below is a `##` heading in that file.
 - **Value:** bulleted list, one per check: the folder it runs from, the command, and optionally
   `only when <paths> changed` and the command that fixes a failure (e.g. `web/`: `npm run lint`;
   repo root: `npm run sync:agents:check`, fixed by `npm run sync:agents`, committing both sides).
-  The list covers every required status check that can run locally, so a push that would fail one
-  is refused here instead of on the PR. Entries run in order: formatters before the
-  generated-config check, which mirrors formatted sources. The changelog's own check is
-  `Changelog check` in `releases.md`, not an entry here.
+  The list holds the static gates of every required status check — formatters, linters, type
+  checks, generated-config checks, the repository's own lint scripts — and each unit suite that
+  finishes in about two minutes, run `only when` the paths it covers changed. Suites that need more
+  (a service, a browser, a test matrix, a longer run) stay in CI: name them after the list as
+  CI-only. So a push that would fail a fast gate is refused here instead of on the PR. Entries run
+  in order: formatters before the generated-config check, which mirrors formatted sources. The
+  changelog's own check is `Changelog check` in `releases.md`, not an entry here.
 - **Discover:** the branch's required checks (`gh api repos/<owner>/<name>/rules/branches/main`
   for rulesets, else `gh api repos/<owner>/<name>/branches/main/protection --jq
   '.required_status_checks.contexts'`), each traced to the workflow job that reports it and the
   commands that job runs; then the formatters, linters and builds in the manifests and CI
-  workflows. Name any required check that cannot run locally when proposing the list.
+  workflows. Time each unit suite once to place it. Name any required check that cannot run
+  locally when proposing the list.
 
 ## Issue link
 

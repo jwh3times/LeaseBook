@@ -50,7 +50,8 @@ function listFiles(root, dir) {
     if (entry.isDirectory()) results.push(...listFiles(root, rel));
     else if (entry.isFile()) results.push(rel);
   }
-  return results.sort();
+  // An explicit code-unit comparator: the default order, which type-aware linters require spelled out.
+  return results.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 }
 
 // True when `rel` (POSIX, repo-relative) will exist once the generator has run. A path inside a

@@ -20,6 +20,9 @@ A value is one of:
 - **`discover: <how>`** — found at run time instead of written down, for a locator the repository
   keeps out of its public files. Follow the instruction each run.
 
+A definition with a **Default** line has a value every repository shares unless it says otherwise.
+Its heading is written only to override the default; a missing heading means the default.
+
 A **hook** is a `## Hook: <name>` heading with a numbered list of steps. The skill names its hooks
 and the file each lives in, and runs the steps at that point. A missing hook means no extra steps;
 hooks are never asked for.
@@ -28,8 +31,9 @@ hooks are never asked for.
 
 1. Read `docs/agents/<topic>.md` for every topic the skill names.
 2. Take each setting whose definition lists this skill under **Read by**, and find its heading. A
-   present heading is the value; use it as written.
-3. If any are missing (or a whole file is):
+   present heading is the value; use it as written. A missing heading whose definition has a
+   **Default** takes the default: it is never asked for.
+3. If any others are missing (or a whole file is):
    - **When the user can answer** — scan the repository as each definition's **Discover** line
      says, then propose every missing value in one message, each with the evidence behind it.
      Apply the user's corrections and write the settings: a new file gets a `# <Topic>` title and
