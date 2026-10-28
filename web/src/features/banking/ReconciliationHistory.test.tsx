@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { server } from '@/test/mocks/server';
 import { ReconciliationHistory } from './ReconciliationHistory';
 
@@ -92,5 +92,40 @@ describe('ReconciliationHistory body when the read failed', () => {
 
     expect(await screen.findByText(/^1 reconciliation/)).toBeInTheDocument();
     expect(screen.queryByRole('alert')).toBeNull();
+  });
+});
+
+describe('ReconciliationHistory finalized date', () => {
+  const originalTz = process.env.TZ;
+  beforeAll(() => {
+    process.env.TZ = 'America/New_York';
+  });
+  afterAll(() => {
+    process.env.TZ = originalTz;
+  });
+
+  it('shows the date the viewer finalized it on, not the UTC date', async () => {
+    // 9 pm Eastern on 12 October is already 13 October in UTC.
+    server.use(
+      http.get('/api/accounting/reconciliations', () =>
+        HttpResponse.json({
+          rows: [
+            {
+              id: 'rec1',
+              status: 'finalized',
+              bankAccountId: 'acct1',
+              year: 2026,
+              month: 9,
+              statementEndingBalance: 12000,
+              finalizedAt: '2026-10-13T01:00:00Z',
+              hasReport: false,
+            },
+          ],
+        }),
+      ),
+    );
+    renderHistory();
+
+    expect(await screen.findByText('Finalized 2026-10-12')).toBeInTheDocument();
   });
 });

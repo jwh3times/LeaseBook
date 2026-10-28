@@ -18,6 +18,7 @@ import { ErrorAction } from '@/components/ErrorAction';
 import { QueryErrorState } from '@/components/QueryErrorState';
 import { Badge, Button, Card, Input, Money, Select } from '@/design';
 import { useSession } from '@/features/auth/useSession';
+import { localDate } from '@/lib/dates';
 import { PayoutBatches } from './PayoutBatches';
 import { paymentReason, tenantReviewNote } from './reasons';
 import { UnmatchedObservations } from './UnmatchedObservations';
@@ -30,7 +31,7 @@ function description(payment: PaymentView, words: Wording) {
       return status.requested;
     case 'Processing':
       return payment.paidAt
-        ? `Paid on ${payment.paidAt.slice(0, 10)} — on its way to the bank, not yet on your ledger`
+        ? `Paid on ${localDate(payment.paidAt)} — on its way to the bank, not yet on your ledger`
         : status.processing;
     case 'Failed':
       return status.failed;
