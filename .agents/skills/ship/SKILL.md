@@ -167,10 +167,10 @@ range="$(git merge-base origin/main HEAD)..HEAD"
 
 Tell it what changed and why, that it was invoked by `ship` on an unmerged branch, and that this
 skill writes the changelog and the `Version file`. It leaves its edits uncommitted and returns the
-human actions it found for step 6, and any wiki search it owes after the merge (the `Follow-up
-wiki`, or a `Doc map` item in a wiki).
-Companion edits are committed there as its own repository, never in this one: with `Companion
-commit policy` `commit` or `ship`, commit and push them; with `ask`, show the diff and ask first.
+human actions it found for step 6, and any wiki search it owes after the merge (the
+`Follow-up wiki`, or a `Doc map` item in a wiki).
+Companion edits are committed there as its own repository, never in this one: with
+`Companion commit policy` `commit` or `ship`, commit and push them; with `ask`, show the diff and ask first.
 Run its **Before committing** checks either way.
 
 ## 6. Human follow-ups
@@ -198,8 +198,8 @@ A section listed there is this branch's from an earlier `ship`: rewrite it in pl
 second. Entries this branch added to `Unreleased` are rewritten the same way.
 
 - **`per-merge`** — insert `## [<target>] - <date>` directly below `## [Unreleased]`, holding this
-  branch's entries plus anything accumulated in `Unreleased`; reset `Unreleased` to the `Unreleased
-  placeholder`. When the branch's section names an older version because another PR merged first,
+  branch's entries plus anything accumulated in `Unreleased`; reset `Unreleased` to the
+  `Unreleased placeholder`. When the branch's section names an older version because another PR merged first,
   **renumber that section** to the target. Then merge `origin/main`: their section sits in the same
   place, so resolve `CHANGELOG.md` keeping both, newest version first, and go back to step 3 — their
   merge minted a tag, so the target moved again.

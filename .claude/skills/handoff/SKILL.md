@@ -143,8 +143,8 @@ end-session.
 
 - The document's path, and the map entry now pointing at it (`previous` → `current`).
 - end-session's own report.
-- Step 1's audit run again, last, so it survives a long close-out: the `⚠ Work not merged to
-  main` list as it now stands, or "Nothing unmerged — the other machine can start from
+- Step 1's audit run again, last, so it survives a long close-out: the
+  `⚠ Work not merged to main` list as it now stands, or "Nothing unmerged — the other machine can start from
   `origin/main`."
 - The reminder: run the `lets-go` skill in this repository on the other machine. A synced folder
   delivers the document within a minute or so; on the CLI mirror it is in the cloud already.

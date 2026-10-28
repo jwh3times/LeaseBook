@@ -76,8 +76,8 @@ git stash list
 Run the `Workspace status command` too. Then compare with the document's **Where you are** and
 **Unmerged work**:
 
-- **Uncommitted changes or stashes here** — report them under `⚠ Work not merged to main on this
-  machine` and ask the user how to proceed. Never discard, stash, or commit them, and never switch
+- **Uncommitted changes or stashes here** — report them under
+  `⚠ Work not merged to main on this machine` and ask the user how to proceed. Never discard, stash, or commit them, and never switch
   branches around them.
 - **Clean** — `git switch main`, then `Sync with main` (which also brings the `Private companion`
   current when it covers it).
