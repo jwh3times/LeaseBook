@@ -239,11 +239,14 @@ unless a higher-level invariant in this file conflicts.
 directly; both are generated and hand-editing either is overwritten on the next sync. After changing
 an agent or a skill, run `node scripts/sync-agents.mjs` (or `npm run sync:agents`) and commit the
 result. CI runs the script's `node:test` suite and regenerates with `--check`, failing the build if a
-committed mirror is stale. `scripts/sync-agents.mjs` and its test are shared verbatim across
-repositories — don't edit them here (they already pass `docs:format` as written); change the
-canonical copy and re-copy it. Run `npm run format` (from `web/`) **before** the sync, not after —
-formatting the generated copy instead of the authored source just re-drifts it on the next pass.
-Never reintroduce symlinks under `.claude/skills/` (the sync script reports and removes them): this
+committed mirror is stale. The same job runs `scripts/lint-agent-neutrality.mjs` and its test
+(`npm run lint:agents` from the root), which reject agent and skill sources that read wrongly from
+their mirrored copies: a bare `$0`–`$9` in a `SKILL.md`, a relative link that breaks under
+`.claude/skills/`. `scripts/sync-agents.mjs`, `scripts/lint-agent-neutrality.mjs` and their tests
+are shared verbatim across repositories — don't edit them here; change the canonical copy in
+`jwh3times/skills` and re-copy it. Run `npm run docs:format` (from `web/`) **before** the sync, not
+after — formatting the generated copy instead of the authored source just re-drifts it on the next
+pass. Never reintroduce symlinks under `.claude/skills/` (the sync script reports and removes them): this
 repo's `core.symlinks` is `false`, so git would silently duplicate every file inside a symlinked
 directory into the repository instead of recording a link (verify with `git config core.symlinks` and
 `git add -n <path>` — a multi-file listing instead of one entry means this has happened).
@@ -256,18 +259,16 @@ directory into the repository instead of recording a link (verify with `git conf
 | Accounting posting logic, journal entries, trust equation changes       | `.claude/agents/trust-accounting.md`     |
 | Reviewing a diff for correctness bugs before merging                    | `.claude/agents/code-reviewer.md`        |
 | Azure infra, Bicep, deploy workflows, Key Vault, managed identity, PITR | `.claude/agents/azure-infrastructure.md` |
-| Documentation drift after source changes                                | `.claude/agents/docs-updater.md`         |
 
 Cross-cutting rules, module boundaries, organization-isolation model, and trust-accounting invariants in this file
 apply to all work. If a domain guidance file conflicts with these invariants, the invariant wins.
 
-The `/ship` skill detects documentation drift: it invokes the `docs-updater` agent for the docs it owns
-and warns when a branch closes no issue, or closes one that is missing from the project board or on it
-with `Track`/`Gate` unset. It is authored at `.agents/skills/ship/` and mirrored to
-`.claude/skills/ship/` for Claude Code, like every other skill. It remains session-scoped either way —
-no harness is guaranteed to run it, and CI does not. When source changes affect docs, ports, ADR-worthy
-decisions, user workflows, commands, or business events, check documentation drift manually and update
-the relevant docs in the same change.
+Documentation drift is the `docs-updater` skill's job (see "Shared skills" under "Agent skills"),
+not a guidance file's. The `/ship` skill runs it scoped to the branch's diff, and warns when a PR
+opens with no issue link, or links one that is missing from the project board or on it with
+`Track`/`Gate` unset. Both are session-scoped — no harness is guaranteed to run them, and CI does
+not. When source changes affect docs, ports, ADR-worthy decisions, user workflows, commands, or
+business events, check documentation drift and update the relevant docs in the same change.
 
 ## Agent skills
 
@@ -288,6 +289,20 @@ phase boundary, name the next command, say in one line why, and wait. Inside a p
 Exempt: dependency bumps, changes touching only docs and agent config, release-prep commits, and an
 explicit user waiver recorded in the PR body as `Flow waived by the user: <reason>`. What counts as
 code, routing, exemptions and branch/PR linking: [`docs/agents/dev-flow.md`](docs/agents/dev-flow.md).
+
+### Shared skills
+
+`ship`, `end-session`, `handoff`, `lets-go` and `docs-updater` are installed from the public
+`jwh3times/skills` repository (recorded in `skills-lock.json`), identical in every repository that
+installs them. What is particular to LeaseBook is in their settings files under `docs/agents/`:
+`workspace.md`, `issue-tracker.md` (its settings sections), `human-follow-up.md`, `docs.md` (the
+`Doc map` of every canonical document, which `npm run docs:check` requires), `releases.md`, `ship.md`
+and `handoffs.md`. Each skill's `settings/` folder defines what it reads.
+
+Never edit the installed copies: a reinstall overwrites them. A LeaseBook behavior goes into a
+setting; a fix goes upstream. To update them, re-run
+`npx skills add jwh3times/skills -s end-session -s handoff -s lets-go -s ship -s docs-updater -a codex --copy -y`,
+then `npm run sync:agents`; never `npx skills update`.
 
 ### Issue tracker
 
@@ -311,27 +326,30 @@ state live, so a parent stays current with nobody maintaining it.
 
 See [`docs/agents/issue-tracker.md`](docs/agents/issue-tracker.md) and `gh` CLI usage there.
 
-Before reporting agent work complete, execute the
-[required human-action handoff](docs/agents/issue-tracker.md#required-human-action-handoff): create
+Before reporting agent work complete, execute the required human-action handoff
+([`docs/agents/human-follow-up.md`](docs/agents/human-follow-up.md)): create
 or update private follow-up issues, add them to project 3 with labels and Track/Gate, and publish
 linked step-by-step private wiki procedures indexed by `human-todo`. Verify publication and report
 both links. If access prevents publication, report the handoff as incomplete with its blocker.
 
 **Deployment exception:** LeaseBook is not publicly deployed. Consolidate all deployment-related
 authoring and operator follow-ups in the single private public-distribution issue and its linked
-wiki page, as specified in the handoff guide. Add to those artifacts instead of creating separate
-deployment board items or wiki pages. Defer execution until public distribution is elected; close
-the consolidated item only on distribution and completed deployment acceptance.
+wiki page, as `docs/agents/human-follow-up.md` specifies. Add to those artifacts instead of
+creating separate deployment board items or wiki pages. Defer execution until public distribution is
+elected; close the consolidated item only on distribution and completed deployment acceptance.
 
 ### Machine handoff
 
-Switching machines uses `/handoff` (writes a handoff doc to the Proton Drive `Handoffs` folder,
-registers it in `handoff_map.json` through the skill's own `handoff-map.mjs`, then runs
-`/end-session`) and `/lets-go` on the other machine (resumes from that active handoff and clears its
-entry). The script finds the folder under `~/Proton Drive/<account>/My files/Documents/Handoffs`;
-set `HANDOFFS_DIR` where it is mounted elsewhere. On a machine with no Proton Drive desktop client
-(Fedora), `HANDOFFS_DIR` is a local mirror and both skills pull and push it through the
-`proton-drive` CLI against the cloud folder `/my-files/Documents/Handoffs`.
+Switching machines uses `/handoff` (writes a handoff doc to the `Handoffs` folder, marks it active
+in `handoff_map.json` through `node .agents/skills/handoff/handoff-map.mjs`, then runs
+`/end-session`) and `/lets-go` on the other machine (resumes from that active handoff and claims it).
+This `/handoff` is the machine handoff; the portable-file handoff the vendored `ask-matt` skill
+describes is a different one. How the folder reaches a machine is that machine's config, not this
+repository's: `~/.config/handoffs/config` sets `HANDOFFS_TRANSPORT` (`folder` for a synced folder
+such as the Proton Drive desktop client's, `proton-cli` for a local mirror pulled and pushed through
+the `proton-drive` CLI), `HANDOFFS_DIR` and, for `proton-cli`, `HANDOFFS_REMOTE`. The skill proposes
+it on first run (`.agents/skills/handoff/machine-config.md`); an exported `HANDOFFS_DIR` still
+overrides it. What a LeaseBook handoff carries besides: `docs/agents/handoffs.md`.
 
 ### Triage labels
 
@@ -500,8 +518,8 @@ These flows are instrumented in telemetry; regressions fail the release checklis
 - Before Azure infra, Bicep, deploy workflow, Key Vault, managed identity, or PITR work, read
   `.claude/agents/azure-infrastructure.md`.
 - Before pre-merge review, read `.claude/agents/code-reviewer.md` and lead with findings.
-- When documentation accuracy is affected or in doubt, read `.claude/agents/docs-updater.md` and
-  update only the docs that actually drifted.
+- When documentation accuracy is affected or in doubt, run the `docs-updater` skill
+  (`.agents/skills/docs-updater/SKILL.md`) and update only the docs that actually drifted.
 
 ## Agent Operating Notes
 

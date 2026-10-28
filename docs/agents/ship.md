@@ -61,9 +61,10 @@ review. **CHANGELOG [Unreleased] updated** is the `Changelog check` in `releases
 1. When the linked issue is on the board with `Track` or `Gate` unset, warn (`Board fields` in
    `issue-tracker.md`; `gh project item-list 3 --owner jwh3times --format json --limit 500`).
 2. Every `docs/` Markdown file the branch or the working tree changes, except the ADR records,
-   `docs/adr/template.md` and the documents in `reviewDateExempt` (`scripts/check-docs.mjs`),
-   carries today's date in `- **Last reviewed:**`. The local `npm run docs:check` cannot see a
-   stale date until the change is committed; CI's can. Fix the date, then rerun `npm run docs:check`.
+   `docs/adr/template.md`, the documents in `reviewDateExempt` and the skill settings files in
+   `skillSettings` (both `scripts/check-docs.mjs`), carries today's date in
+   `- **Last reviewed:**`. The local `npm run docs:check` cannot see a stale date until the change
+   is committed; CI's can. Fix the date, then rerun `npm run docs:check`.
 3. An accounting-adjacent diff (`src/LeaseBook.Modules.Accounting/`, posting templates,
    `src/LeaseBook.Web/Migrations/`, `seed/`): report that the invariant, property-based and
    golden-file suites run only in CI here and were due during development (Definition of Done), and

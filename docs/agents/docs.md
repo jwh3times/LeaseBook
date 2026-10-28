@@ -7,12 +7,14 @@ Every committed Markdown document at the root, under `docs/`, under `infra/` or 
 opening with its path in backticks. `scripts/check-docs.mjs` fails `npm run docs:check` when one is
 missing: add the bullet in the change that adds the document. Editing a living document under
 `docs/` sets its `- **Last reviewed:**` to the day of the commit, except for the documents in that
-script's `reviewDateExempt`. Work state — what is done, next or blocked — is an issue, never a doc
-edit, and no plan file (`private/TODO.md`, `private/roadmap.md` or a successor) is recreated.
+script's `reviewDateExempt`; the skill settings files in its `skillSettings` (this one among them)
+are not living documents and carry no such line. Work state — what is done, next or blocked — is an
+issue, never a doc edit, and no plan file (`private/TODO.md`, `private/roadmap.md` or a successor)
+is recreated.
 
 - `AGENTS.md` — the cross-agent engineering contract: repository state, ground rules, commands,
-  domain guidance routing, agent skills (development flow, trackers, human follow-ups, machine
-  handoff), architecture, invariants, working conventions. **When:**
+  domain guidance routing, agent skills (development flow, shared skills, trackers, human follow-ups,
+  machine handoff), architecture, invariants, working conventions. **When:**
   - a milestone merges or the frontier changes: Repository State, after the merge only;
   - a command, port or script changes (`scripts/dev.ps1`, `web/package.json`, `package.json`, the
     verbs under `src/LeaseBook.Web/Cli/`): Commands;

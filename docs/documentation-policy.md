@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living policy
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-14
+- **Last reviewed:** 2026-10-28
 
 This policy keeps LeaseBook documentation public-safe, navigable, and maintainable. It applies to
 Markdown, runbooks, diagrams, planning artifacts, and documentation embedded in source or automation.
@@ -93,6 +93,12 @@ the document was still true. A document whose date tracks something other than a
 the compliance drafts wait on an external review, `blueprint.md` is a frozen baseline nobody refreshes
 — is listed in that script's `reviewDateExempt` set with its reason.
 
+The settings files the shared agent skills read — `workspace.md`, `issue-tracker.md`,
+`human-follow-up.md`, `docs.md`, `releases.md`, `ship.md` and `handoffs.md` under `docs/agents/` —
+are configuration, not living documents: the skills write them without this metadata, so the script
+(`skillSettings`) exempts them from both the metadata and the review-date rules. They are still held
+to the authority-claim rule and listed in the `Doc map`.
+
 ## Link And Path Rules
 
 - Public documentation must not link to `private/`, ignored artifacts, local absolute paths, or
@@ -111,7 +117,9 @@ npm run docs:check
 ```
 
 The command checks Prettier formatting, Markdown structure, spelling, lifecycle metadata, local and
-private-link boundaries, copied mutable commands, obsolete authority claims, and ADR index consistency.
+private-link boundaries, copied mutable commands, obsolete authority claims, ADR index consistency,
+and that every canonical document has an entry in the `Doc map` of `docs/agents/docs.md`, which the
+`docs-updater` skill audits from.
 The ordinary CI web job runs the same command on every pull request. The separate Lychee workflow
 checks external links and anchors on documentation changes and on its weekly schedule. A few URLs are
 checked by the weekly run only: the current release's own links, which do not exist until the merge,

@@ -131,6 +131,15 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Changed
 
+- **The agent workflow skills install from a shared repository.** `ship`, `end-session`,
+  `handoff`, `lets-go` and `docs-updater` now come from `jwh3times/skills` instead of being
+  maintained here; what they need to know about LeaseBook lives in settings files under
+  `docs/agents/`, which each skill proposes on its first run. The docs gate reads its list of
+  documents from the `Doc map` in `docs/agents/docs.md` and fails if the map is missing, and the
+  required human-action rules live in `docs/agents/human-follow-up.md`. `/handoff` and `/lets-go`
+  read how the Handoffs folder reaches each machine from `~/.config/handoffs/config`. CI also
+  rejects agent and skill sources that would read wrongly from their mirrored copies.
+
 - **A sandbox journal entry says it came from the Stripe sandbox.** A receipt posted from sandbox
   evidence is described as "Stripe sandbox tenant payment", and its reversal and return note follow.
   Nothing else in the posting differs from the simulation's, whose descriptions are unchanged.
