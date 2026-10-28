@@ -65,9 +65,10 @@ setting below is a `##` heading in that file.
 ## Unreleased placeholder
 
 - **Read by:** ship
-- **Value:** the line `Unreleased` holds when it is empty (`No unreleased changes.`,
-  `- _Nothing yet._`), or `empty` for a bare heading.
-- **Discover:** the current `CHANGELOG.md`, and the existing `ship` skill.
+- **Value:** the line `Unreleased` holds when it is empty, or `empty` for a bare heading.
+- **Default:** `No unreleased changes.`
+- **Discover:** the current `CHANGELOG.md`. Write the heading only when it differs from the
+  default.
 
 ## Changelog check
 
@@ -81,6 +82,12 @@ setting below is a `##` heading in that file.
 
 - **Read by:** ship
 - **Value:** the message for the commit that carries `ship`'s own edits, with `<version>` where the
-  version goes (e.g. `chore(release): prepare v<version>`), or `<summary>` for a short description
-  of the branch with `Scheme: none` (e.g. `docs: update docs for <summary>`).
-- **Discover:** the existing `ship` skill, and the subjects of recent release commits on `main`.
+  version goes, or `<summary>` for a short description of the branch.
+- **Default:** by `Scheme`:
+  - `per-merge` — `docs: update docs and changelog for v<version>`;
+  - `cut-on-line` — `docs: update docs and changelog` for a build, and
+    `chore(release): cut <version> — <headline>` for a cut, `<headline>` naming the release;
+  - `none` — `docs: update docs for <summary>`.
+- **Discover:** the subjects of recent commits on `main`. Write the heading only when the
+  repository's commit convention rules the default out (no type prefix, say), and name that
+  convention.

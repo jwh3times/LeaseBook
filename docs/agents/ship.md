@@ -20,6 +20,8 @@ and the .NET SDK from `global.json`; `npm run api:generate` also installs `web/c
 - repo root: `node scripts/scenario-catalogue.mjs check` (**Web**; needs `web/node_modules`)
 - `web/`, only when `web/` changed: `npm run lint`, then `npm run build` (**Web**; its `tsc -b` is
   the typecheck)
+- `web/`, only when `web/` changed: `npm run test:coverage` (**Web**'s unit suite, about 13
+  seconds)
 - repo root, only when `src/`, `tests/`, `Directory.*.props` or `LeaseBook.slnx` changed:
   `dotnet build -c Debug` (**Backend**); then, when `src/` changed, `dotnet tool restore` and
   `dotnet ef migrations has-pending-model-changes --project src/LeaseBook.Web --context AppDbContext --no-build --configuration Debug`
@@ -30,11 +32,11 @@ and the .NET SDK from `global.json`; `npm run api:generate` also installs `web/c
   from the repo root,
   `node scripts/scenario-catalogue.mjs check --no-tags --openapi src/LeaseBook.Web/obj/openapi/LeaseBook.Web.json`
 
-Left to CI: the backend and web unit suites (`dotnet test` needs Docker for Testcontainers),
-**Migrations apply to a blank DB**, **Load fixture seeds + pin holds**, **E2E (Playwright + a11y)**
-and **E2E (Stripe stand-in)** (Postgres and a seeded host), **Container build + full-stack smoke**,
-**Secret scan** (gitleaks is not installed here), and the ruleset's CodeQL, code-quality and Copilot
-review. **CHANGELOG [Unreleased] updated** is the `Changelog check` in `releases.md`.
+Left to CI: the backend tests (`dotnet test` needs Docker for Testcontainers), **Migrations apply to
+a blank DB**, **Load fixture seeds + pin holds**, **E2E (Playwright + a11y)** and **E2E (Stripe
+stand-in)** (Postgres and a seeded host), **Container build + full-stack smoke**, **Secret scan**
+(gitleaks is not installed here), and the ruleset's CodeQL, code-quality and Copilot review.
+**CHANGELOG [Unreleased] updated** is the `Changelog check` in `releases.md`.
 
 ## Issue link
 

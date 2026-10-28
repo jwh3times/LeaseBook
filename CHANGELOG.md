@@ -131,6 +131,12 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Changed
 
+- **An empty `Unreleased` section reads "No unreleased changes.", and `ship` runs the web unit
+  tests.** The shared skills now supply the empty-section line and the release commit messages as
+  defaults, so `docs/agents/releases.md` no longer sets them. The changelog check on a release cut
+  ignores the new line, as it ignored `_Nothing yet._`. Before it pushes a change under `web/`,
+  `ship` runs the web unit suite that the required **Web** check runs.
+
 - **The agent workflow skills install from a shared repository.** `ship`, `end-session`,
   `handoff`, `lets-go` and `docs-updater` now come from `jwh3times/skills` instead of being
   maintained here; what they need to know about LeaseBook lives in settings files under
