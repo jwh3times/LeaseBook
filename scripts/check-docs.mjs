@@ -93,10 +93,10 @@ export function missingMetadata(markdown) {
 }
 
 /**
- * Documents the docs-updater agent is expected to know about: every committed markdown at the repo
+ * Documents the docs-updater skill is expected to know about: every committed markdown at the repo
  * root, under `docs/`, under `infra/`, or in `.claude/agents/`. Individual ADR records are excluded
  * because the ADR-index rule below already reconciles them one by one, and listing 40+ of them in the
- * topology would bury the rest.
+ * Doc map would bury the rest.
  */
 export function canonicalDocs(files) {
   return files.filter((file) => {
@@ -122,35 +122,34 @@ export function canonicalDocs(files) {
 }
 
 /**
- * Canonical docs absent from the agent's topology block. An omission there is invisible in a way a
- * missing file is not: the agent simply never audits what it was not told exists. `diagnostics.md`
- * sat outside that block for months and every audit skipped it.
+ * Canonical docs absent from the Doc map. An omission there is invisible in a way a missing file is
+ * not: docs-updater simply never audits what it was not told exists. `diagnostics.md` sat outside
+ * the old topology block for months and every audit skipped it.
  */
 export function docsMissingFromTopology(topology, canonical) {
-  // Anchored to the start of a line, not a bare substring match. A prose mention of a path — this
-  // section's own intro names `docs/runbooks/diagnostics.md` as the cautionary example — would
-  // otherwise satisfy the rule for a document the list does not actually carry, which is how a gate
-  // becomes theatre. Only a real entry counts.
+  // Only a real entry counts: a top-level bullet that opens with the path in backticks. A prose
+  // mention of a path, or one inside an entry's nested "when" bullets, would otherwise satisfy the
+  // rule for a document the list does not actually carry, which is how a gate becomes theatre.
   const listed = new Set(
     topology
       .split(/\r?\n/)
-      .map((line) => line.trim().split(/\s/, 1)[0])
+      .map((line) => line.match(/^- `([^`]+)`/)?.[1])
       .filter(Boolean),
   );
 
   return canonical.filter((file) => !listed.has(file));
 }
 
-/** The topology block: everything between its heading and the next horizontal rule. */
-export function extractTopology(agentMarkdown) {
-  const start = agentMarkdown.indexOf("## Documentation topology");
+/** The Doc map: everything between its heading and the next `## ` heading. */
+export function extractTopology(settingsMarkdown) {
+  const start = settingsMarkdown.search(/^## Doc map$/m);
   if (start === -1) {
     return null;
   }
 
-  const rest = agentMarkdown.slice(start);
-  const offset = rest.search(/^---/m);
-  return offset === -1 ? rest : rest.slice(0, offset);
+  const body = settingsMarkdown.slice(start).replace(/^.*\r?\n/, "");
+  const offset = body.search(/^## /m);
+  return offset === -1 ? body : body.slice(0, offset);
 }
 
 /**
@@ -207,11 +206,31 @@ function listMarkdownFiles(root) {
   return result.split(/\r?\n/).map(normalizePath).filter(Boolean).sort();
 }
 
+/**
+ * The settings files the skills installed from jwh3times/skills read (`docs/agents/<topic>.md`).
+ * They are configuration, not living documents: a skill's first run appends settings to them and
+ * the docs-updater skill edits them, and neither knows this repository's lifecycle metadata or
+ * review-date rule, so holding them to it would fail CI a day after a correct edit. They are still
+ * authority documents (see `isAuthorityDoc`) and still covered by the Doc map.
+ */
+const skillSettings = new Set(
+  [
+    "workspace",
+    "issue-tracker",
+    "human-follow-up",
+    "docs",
+    "releases",
+    "ship",
+    "handoffs",
+  ].map((topic) => `docs/agents/${topic}.md`),
+);
+
 function isLivingDoc(file) {
   return (
     file.startsWith("docs/") &&
     !/^docs\/adr\/ADR-\d{3}-.+\.md$/.test(file) &&
-    file !== "docs/adr/template.md"
+    file !== "docs/adr/template.md" &&
+    !skillSettings.has(file)
   );
 }
 
@@ -231,6 +250,7 @@ function isLivingDoc(file) {
 function isAuthorityDoc(file) {
   return (
     isLivingDoc(file) ||
+    skillSettings.has(file) ||
     file === "AGENTS.md" ||
     file === "CLAUDE.md" ||
     file === "README.md" ||
@@ -373,31 +393,31 @@ export function validateRepository(root = defaultRoot, suppliedFiles) {
     }
   }
 
-  // ── Topology coverage (docs-updater must be told what exists) ──────────────
-  const agentFile = ".claude/agents/docs-updater.md";
-  const agentContent = contents.get(agentFile);
-  if (agentContent) {
-    const topology = extractTopology(agentContent);
-    if (topology === null) {
+  // ── Doc map coverage (docs-updater must be told what exists) ────────────────
+  // Fails closed: a missing settings file or heading is an error, never a skipped rule.
+  const mapFile = "docs/agents/docs.md";
+  const mapContent = contents.get(mapFile);
+  const topology =
+    mapContent === undefined ? null : extractTopology(mapContent);
+  if (topology === null) {
+    errors.push({
+      file: mapFile,
+      line: 1,
+      message: "The `## Doc map` setting is missing.",
+    });
+  } else {
+    for (const missing of docsMissingFromTopology(
+      topology,
+      canonicalDocs(files),
+    )) {
       errors.push({
-        file: agentFile,
+        file: mapFile,
         line: 1,
-        message: "Documentation topology section is missing.",
+        message:
+          `Canonical document is absent from the Doc map: ${missing}. ` +
+          "The docs-updater skill audits what the Doc map lists, so an omission here is a " +
+          "document nothing ever checks. Add a top-level bullet opening with its path.",
       });
-    } else {
-      for (const missing of docsMissingFromTopology(
-        topology,
-        canonicalDocs(files),
-      )) {
-        errors.push({
-          file: agentFile,
-          line: 1,
-          message:
-            `Canonical document is absent from the documentation topology: ${missing}. ` +
-            "The docs-updater agent audits what this block lists, so an omission here is a " +
-            "document nothing ever checks. Add a line for it.",
-        });
-      }
     }
   }
 

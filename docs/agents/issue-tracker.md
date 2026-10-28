@@ -56,69 +56,11 @@ Infer the repo from `git remote -v` — `gh` does this automatically when run in
 
 ## Required human-action handoff
 
-### Deployment consolidation
-
-LeaseBook is not publicly deployed. All deployment-related work is consolidated in the private
-issue titled **Public distribution: deployment and operational readiness**, on project 3, and its
-linked **Public-Distribution-Deployment** wiki page. Find the issue from the private checkout;
-keep its locator and links out of public artifacts.
-
-Append deployment authoring, provisioning, credentials, first-deploy verification, restore drills,
-account rollout, telemetry and alerting follow-ups to that issue and page. Do not create separate
-deployment issues, board items or wiki procedures. This exception overrides the per-action split
-below. The item is deferred until the maintainer elects public distribution and closes only when
-distribution and its required deployment evidence are complete; code merges and local tests do not
-close it. Preserve unfinished acceptance criteria when retiring older items as superseded.
-
-The issue owns checklist state and evidence; the wiki owns the ordered procedure. Independent
-product changes, external legal/customer decisions and recurring post-launch reviews retain their
-own trackers. Do not infer that the distribution trigger has fired from a deployment-related code
-change.
-
-### Other human actions
-
-**Private follow-up exception to the public default:** all required human actions arising from
-agent-completed work belong in private follow-up issues, even when the engineering change is public.
-The completing agent owns this handoff before reporting completion, including work completed without
-`/ship` or `/end-session`. This includes operator execution, access, deployment verification, customer
-input, legal review, product decisions, and account-holder enrollment or recovery. Complete authorized
-agent-executable work first; routine engineering is not a human follow-up.
-
-1. **Create or update a private follow-up issue for every independently completable human action.**
-   Search both trackers first. Reuse an existing private issue when it owns the same action; if a
-   public issue already exists, cite it from the private follow-up without copying its status or
-   creating a reverse public reference. State the originating change/PR, why a human is required,
-   responsible role (named assignee when known), prerequisites, ordered actions, and observable
-   acceptance evidence. Group steps only when they share an owner and completion event.
-2. **Add each follow-up to the shared LeaseBook project board (project 3).** This is the board for
-   both repositories, not a separate private-only project. Infer the private repository from its
-   checkout remote. Use `gh project item-add 3 --owner jwh3times --url <private-issue-url>` and set
-   `Track` and `Gate` from the board's current field options: operator work uses the operator track
-   and gate; customer/legal/external decisions use the external track and gate. Read field IDs
-   rather than hardcoding them. Apply `ready-for-human` to human-owned actions and `blocked-by-human`
-   to work that cannot complete until human action or evidence arrives; keep `operator` where
-   applicable. Remove conflicting `ready-for-agent` labels while blocked. Record dependencies where
-   supported without exposing private references on public surfaces.
-3. **Publish step-by-step instructions in the private repository wiki.** Create or update the
-   procedure and link it from `human-todo` and the wiki home. Include audience/owner, purpose,
-   prerequisites and required access, release/environment assumptions, numbered commands or exact
-   UI steps, expected results, verification evidence, and applicable failure/retry/rollback or
-   escalation instructions. Identify unverified live steps explicitly. Use secret placeholders
-   and approved secret sources; never publish credentials, recovery material, or tokens. A wizard
-   may assist execution but does not replace the wiki procedure.
-4. **Link and verify both artifacts.** The private issue links to the exact wiki procedure/section;
-   the wiki links back to its owning issue. Issues and board fields own work status; `human-todo`
-   is the procedure index, not a duplicate status tracker. Verify issue labels, board membership
-   and fields, published wiki content, and page/section links. Keep follow-ups open until the
-   required human evidence exists; a merged PR or local tests alone cannot close them.
-5. **Report the handoff.** Give the user the private issue and wiki URLs and identify remaining
-   human actions. If none exist, say so. If private tracker, board, or wiki access is unavailable,
-   prepare issue text and instructions in confidential local storage, report the exact publication
-   blocker and minimum access needed, and mark the handoff incomplete. Do not silently skip it or
-   substitute a public issue, transcript-only list, or local draft for verified publication.
-
-Keep private repository locators and private artifact URLs out of public repository files, commits,
-PR descriptions, and issues. The private follow-up may cite public engineering work.
+Every required human action left by agent-completed work — including the deployment consolidation
+into the private **Public distribution: deployment and operational readiness** issue — is recorded
+as [Human follow-up](human-follow-up.md) says: its destination, labels, board fields and private
+wiki, and the shared procedure the installed skills carry. The completing agent owns the handoff
+before it reports the work complete, including work finished without `/ship` or `/end-session`.
 
 ## Pull requests as a triage surface
 
@@ -152,3 +94,47 @@ Used by `/wayfinder`. The **map** is a single issue with **child** issues as tic
 - **Frontier query**: list the map's open children (`gh issue list --state open`, scoped to the map's sub-issues / task list), drop any with an open blocker (`issue_dependencies_summary.blocked_by > 0`, or an open issue in the `Blocked by` line) or an assignee; first in map order wins.
 - **Claim**: `gh issue edit <n> --add-assignee @me` — the session's first write.
 - **Resolve**: `gh issue comment <n> --body "<answer>"`, then `gh issue close <n>`. The map's task list reflects the closure on its own — **do not write the child's status into the map body**, which is what makes maps go stale.
+
+## Public repository
+
+jwh3times/LeaseBook
+
+## Private issue repository
+
+`discover: git -C private remote get-url origin` — the companion's tracker (see "Which tracker"
+above): confidential work — an unpatched security weakness, compliance and legal engagements,
+customer identity, pricing and strategy — and every required human follow-up. A confidential
+product decision carries `product-decision`. Never referenced from a public PR, commit or issue;
+its issues are closed by hand after the public merge.
+
+## Board
+
+jwh3times 3
+
+## Board fields
+
+- `Track`: `A - closed` / `B - operator` / `C - external` / `Discretionary` / `Deferred trigger`.
+  Engineering an agent can take is `Discretionary`; operator work `B - operator`; customer, legal
+  and other external decisions `C - external`; work waiting on a named trigger `Deferred trigger`
+  (with the `deferred-trigger` label). `A - closed` is the finished Track A sequence: never set it.
+- `Gate`: `None` / `Operator` / `External` / `Trigger-fired`, paired with `Track` (`Discretionary`
+  → `None`, `B - operator` → `Operator`, `C - external` → `External`, `Deferred trigger` →
+  `Trigger-fired`). An item is tracked only once both are set.
+- `Status`: `Todo` / `Done`, set by the board's own workflows (added → `Todo`, closed → `Done`);
+  `In Progress` is unused. Never set it by hand.
+- Blocked work has no field: the `blocked-by-human` label, or a native `blocked_by` dependency on
+  the blocking issue, records it (`triage-labels.md`).
+
+## New work
+
+issue — open work lives only in GitHub issues on the board; there are no draft items. Public by
+default, in the private tracker when the text is confidential; labelled from `triage-labels.md`
+(`needs-triage` unless it is fully specified), added to the board with `Track` and `Gate` set.
+
+## Security findings
+
+A private companion issue labelled `security` — never a public issue, PR, commit or document while
+the weakness is unpatched, and never exploitable detail in memory. A report from outside arrives
+through private vulnerability reporting (`SECURITY.md`) as a draft repository advisory, which stays
+its record; a residual risk accepted by decision keeps its `security` issue, closed `wontfix` or
+labelled `deferred-trigger`.

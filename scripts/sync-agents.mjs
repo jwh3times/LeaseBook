@@ -353,6 +353,18 @@ export function syncMirrors(root = defaultRoot, { check = false } = {}) {
   const mirrors = buildMirrors(root);
   const stale = [];
 
+  // Links go before anything is written: `npx skills update` links .claude/skills/<name> to
+  // .agents/skills/<name>, and a write through that link would land in the authored source.
+  if (!check) {
+    for (const dir of [agentTargetDir, skillTargetDir]) {
+      const strays = [];
+      listFiles(root, dir, { strays });
+      for (const stray of strays) {
+        rmSync(path.join(root, stray), { recursive: true, force: true });
+      }
+    }
+  }
+
   for (const [target, content] of mirrors) {
     const absolute = path.join(root, target);
     const exists = existsSync(absolute) && lstatSync(absolute).isFile();

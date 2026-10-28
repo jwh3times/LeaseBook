@@ -146,8 +146,9 @@ test("canonicalDocs excludes skills, ADR records, and .github", () => {
   ]);
 });
 
-test("docsMissingFromTopology reports a canonical doc the agent was never told about", () => {
-  const topology = "## Documentation topology\nAGENTS.md — the contract\n";
+test("docsMissingFromTopology reports a canonical doc the Doc map never lists", () => {
+  const topology =
+    "- `AGENTS.md` — the contract\n  - `docs/runbooks/diagnostics.md` when\n";
 
   assert.deepEqual(
     docsMissingFromTopology(topology, [
@@ -158,14 +159,28 @@ test("docsMissingFromTopology reports a canonical doc the agent was never told a
   );
 });
 
-test("extractTopology stops at the horizontal rule that ends the section", () => {
+test("extractTopology stops at the heading that ends the Doc map", () => {
   const markdown =
-    "# Agent\n\n## Documentation topology\n\nAGENTS.md\n\n---\n\n## Audit checklist\n";
+    "# Docs\n\n## Doc map\n\n- `AGENTS.md`\n\n## Drift probes\n\n- `README.md`\n";
   const topology = extractTopology(markdown);
 
   assert.ok(topology.includes("AGENTS.md"));
-  assert.ok(!topology.includes("Audit checklist"));
-  assert.equal(extractTopology("# Agent\n\nno topology here\n"), null);
+  assert.ok(!topology.includes("README.md"));
+  assert.equal(extractTopology("# Docs\n\nno Doc map here\n"), null);
+});
+
+test("a missing Doc map fails instead of skipping the coverage rule", (context) => {
+  const root = mkdtempSync(path.join(tmpdir(), "leasebook-docs-"));
+  context.after(() => rmSync(root, { recursive: true, force: true }));
+  writeFileSync(path.join(root, "AGENTS.md"), "# AGENTS\n");
+
+  const errors = validateRepository(root, ["AGENTS.md"]);
+  assert.equal(
+    errors.some((error) =>
+      error.message.includes("`## Doc map` setting is missing"),
+    ),
+    true,
+  );
 });
 
 test("reviewIsStale flags an edit after the review date but tolerates a one-day skew", () => {
@@ -237,5 +252,44 @@ test("generated skill mirrors do not double-report an authored claim", (context)
   assert.deepEqual(
     claims.map((error) => error.file),
     [authored],
+  );
+});
+
+test("skill settings files need no lifecycle metadata but are still scanned for authority claims", (context) => {
+  const root = mkdtempSync(path.join(tmpdir(), "leasebook-docs-"));
+  context.after(() => rmSync(root, { recursive: true, force: true }));
+  const settings = "docs/agents/releases.md";
+  const living = "docs/agents/dev-flow.md";
+  mkdirSync(path.join(root, "docs", "agents"), { recursive: true });
+  writeFileSync(
+    path.join(root, settings),
+    [
+      "# Releases",
+      "",
+      "## Scheme",
+      "",
+      "Detailed sequencing lives in `private/roadmap.md` and `private/TODO.md`, with `private/TODO.md` canonical where they disagree.",
+    ].join("\n"),
+  );
+  writeFileSync(
+    path.join(root, living),
+    ["# Development flow", "", "Prose."].join("\n"),
+  );
+
+  const errors = validateRepository(root, [settings, living]);
+  const metadataErrors = (file) =>
+    errors.filter(
+      (error) =>
+        error.file === file && error.message.includes("lifecycle metadata"),
+    );
+  assert.equal(metadataErrors(settings).length, 0);
+  assert.ok(metadataErrors(living).length > 0);
+  assert.equal(
+    errors.some(
+      (error) =>
+        error.file === settings &&
+        error.message.includes("obsolete canonical-authority claim"),
+    ),
+    true,
   );
 });
