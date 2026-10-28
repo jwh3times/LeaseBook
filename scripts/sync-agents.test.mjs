@@ -246,6 +246,23 @@ test("a stray symlink in a generated tree is reported, then removed without foll
   });
 });
 
+test("one sync replaces a skill directory linked to its authored source", () => {
+  withFixture((root) => {
+    // `npx skills update` re-installs without --copy, linking .claude/skills/<name> to the source.
+    mkdirSync(path.join(root, ".claude/skills"), { recursive: true });
+    const linked = path.join(root, ".claude/skills/demo");
+    symlinkSync(path.join(root, ".agents/skills/demo"), linked, "junction");
+
+    syncMirrors(root);
+    assert.ok(lstatSync(linked).isDirectory());
+    assert.deepEqual(syncMirrors(root, { check: true }).stale, []);
+    assert.equal(
+      read(root, ".agents/skills/demo/SKILL.md"),
+      "---\nname: demo\ndescription: A demo skill.\n---\n\nBody.",
+    );
+  });
+});
+
 test("a symlink in an authored tree is an error", () => {
   withFixture((root) => {
     const target = mkdtempSync(path.join(tmpdir(), "sync-agents-link-"));

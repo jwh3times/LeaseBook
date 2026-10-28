@@ -177,6 +177,9 @@ Before requesting review, confirm:
 - [ ] `dotnet format --verify-no-changes --exclude src/LeaseBook.Web/Migrations` reports no changes.
 - [ ] Web `npm run lint`, `npm run typecheck`, `npm run test`, and `npm run build` are green (if the SPA changed).
 - [ ] `npm run docs:check` from `web/` is green when public documentation or its tooling changed.
+- [ ] When `.claude/agents/` or `.agents/skills/` changed, the regenerated mirrors are committed
+      (`npm run sync:agents`), and `npm run sync:agents:check` and `npm run lint:agents` from the
+      repository root are green.
 - [ ] `CHANGELOG.md`'s `[Unreleased]` section records any user-visible change under `src/` or `web/src/`
       (CI's `CHANGELOG [Unreleased] updated` job enforces this; apply the `skip-changelog` label when a
       product-source change has no user-visible effect).
@@ -190,7 +193,8 @@ Before requesting review, confirm:
 
 CI runs the full backend test suite against real PostgreSQL and retains its MTP-generated TRX reports,
 applies the migrations to a blank database, seeds the performance fixture and checks its invariants,
-validates public documentation, type-checks and builds the web app, runs the Playwright e2e suite
+validates public documentation, checks that the generated agent and skill mirrors are current and
+their sources tool-neutral, type-checks and builds the web app, runs the Playwright e2e suite
 including the accessibility gate, compiles the Bicep templates and parameter files, builds the container
 image and boots the full stack, and scans for secrets on every push and pull request.
 

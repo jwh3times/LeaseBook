@@ -14,14 +14,8 @@ Everything above is the cross-agent contract. This section is the only Claude-sp
 
 - The specialist guidance files listed in **Domain Guidance Files** are executable subagents here, each
   named for its file basename — `dotnet-api`, `react-frontend`, `postgres-specialist`,
-  `trust-accounting`, `code-reviewer`, `azure-infrastructure`, `docs-updater`. Dispatch the one that
-  owns the domain rather than only reading its file.
-- The `/ship` skill runs the pre-push documentation-drift check: it invokes `docs-updater` for the
-  docs it owns, and warns when a branch closes no issue or closes one that is not on the project
-  board. Treat its report as a prompt to inspect the owning document, not as permission to update
-  every mentioned file.
-- Invoke `docs-updater` before a push or PR when source behavior, commands, ports, architecture,
-  business events, or user workflows changed.
-- Do not rely on these session-scoped checks as guarantees: they do not run in Codex, CI, Dependabot,
-  or manual editing sessions, so repository CI and the contributor checklist must carry the
-  enforceable guarantees.
+  `trust-accounting`, `code-reviewer`, `azure-infrastructure`. Dispatch the one that owns the domain
+  rather than only reading its file.
+- Skills, including `/ship` and `docs-updater`, are shared with Codex and described under
+  **Agent skills**; they are session-scoped, so repository CI and the contributor checklist carry
+  the enforceable guarantees.

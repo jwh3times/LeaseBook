@@ -6,3 +6,13 @@ node_modules
 src/api/generated
 playwright-report-payments
 playwright-report-stand-in
+
+# Installed from jwh3times/skills and copied verbatim from its canonical scripts: their bytes are the
+# source, so the root docs format check must not rewrite them.
+../.agents/skills/docs-updater/
+../.agents/skills/end-session/
+../.agents/skills/handoff/
+../.agents/skills/lets-go/
+../.agents/skills/ship/
+../scripts/lint-agent-neutrality.mjs
+../scripts/lint-agent-neutrality.test.mjs
