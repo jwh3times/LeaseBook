@@ -17,11 +17,11 @@ setting below is a `##` heading in that file.
   CI-only. So a push that would fail a fast gate is refused here instead of on the PR. Entries run
   in order: formatters before the generated-config check, which mirrors formatted sources. The
   changelog's own check is `Changelog check` in `releases.md`, not an entry here.
-- **Discover:** the branch's required checks (`gh api repos/<owner>/<name>/rules/branches/main`
-  for rulesets, else `gh api repos/<owner>/<name>/branches/main/protection --jq
-  '.required_status_checks.contexts'`), each traced to the workflow job that reports it and the
-  commands that job runs; then the formatters, linters and builds in the manifests and CI
-  workflows. Time each unit suite once to place it. Name any required check that cannot run
+- **Discover:** the branch's required checks — for rulesets
+  `gh api repos/<owner>/<name>/rules/branches/main`, else
+  `gh api repos/<owner>/<name>/branches/main/protection --jq '.required_status_checks.contexts'` —
+  each traced to the workflow job that reports it and the commands that job runs; then the
+  formatters, linters and builds in the manifests and CI workflows. Time each unit suite once to place it. Name any required check that cannot run
   locally when proposing the list.
 
 ## Issue link

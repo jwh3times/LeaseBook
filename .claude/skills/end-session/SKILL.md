@@ -190,8 +190,8 @@ prune gets the same check before `git push origin --delete`. Remove a finished w
 `git worktree remove <path>`, then `git worktree prune`.
 
 **Return to `main`** last, after the tidying below, unless the tree has uncommitted tracked changes
-or the user is continuing on this branch in this checkout. Run `git switch main`, then `Sync with
-main`, then `Hook: after sync` from `docs/agents/workspace.md`. If the sync refuses to
+or the user is continuing on this branch in this checkout. Run `git switch main`, then
+`Sync with main`, then `Hook: after sync` from `docs/agents/workspace.md`. If the sync refuses to
 fast-forward, local `main` has commits of its own: report it and leave `main` as it is.
 
 **Files.** Delete `Safe-to-remove paths`, and stray scratch files the session left in the tree, by

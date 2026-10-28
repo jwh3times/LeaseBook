@@ -10,8 +10,8 @@ it may be cleaned. Each setting below is a `##` heading in that file.
 - **Value:** `none`, or the companion's checkout path (normally `private/`, its own Git repository,
   ignored by this one) and its repository as a literal `owner/name` or a `discover:` value.
 - **Discover:** `private/.git` exists → `git -C private remote get-url origin`. Repositories that
-  keep the companion's name out of their public files use `discover: git -C private remote get-url
-  origin`.
+  keep the companion's name out of their public files use
+  `discover: git -C private remote get-url origin`.
 
 ## Workspace status command
 
