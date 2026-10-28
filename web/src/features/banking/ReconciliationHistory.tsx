@@ -1,5 +1,6 @@
 import { Badge, type BadgeTone, Button, Card, EmptyState, Money } from '@/design';
 import { QueryErrorState } from '@/components/QueryErrorState';
+import { localDate } from '@/lib/dates';
 import { num } from '@/lib/directory';
 import { downloadReconciliationReport, useReconciliationHistory } from './banking';
 
@@ -72,7 +73,7 @@ export function ReconciliationHistory({ bankAccountId }: { bankAccountId: string
                   {MONTHS[num(row.month) - 1] ?? row.month} {row.year}
                 </span>
                 <span className="t3 fs12">
-                  {row.finalizedAt ? `Finalized ${row.finalizedAt.slice(0, 10)}` : 'Not finalized'}
+                  {row.finalizedAt ? `Finalized ${localDate(row.finalizedAt)}` : 'Not finalized'}
                 </span>
               </div>
               <Money value={num(row.statementEndingBalance)} plain />

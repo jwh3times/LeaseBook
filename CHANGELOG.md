@@ -195,6 +195,11 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Fixed
 
+- **Reconciliation history and the payment panel show the viewer's date, not the UTC date.** A
+  reconciliation finalized at 9 pm Eastern on 12 October read "Finalized 2026-10-13", and a payment
+  paid in the evening read "Paid on" the next day. Both now show the date in the viewer's time zone,
+  in the same `YYYY-MM-DD` form as the ledgers.
+
 - **An onboarding step's accessible name now matches what it shows.** Each step button in the
   onboarding checklist was announced as "Go to step N: <label>", which left out the description shown
   under the current step (WCAG 2.5.3 Label in Name). The button is now named by its visible text, and
