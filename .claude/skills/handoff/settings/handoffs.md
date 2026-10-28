@@ -11,8 +11,8 @@ folder reaches a machine is that machine's config, not a repository setting (see
 - **Value:** this repository's key in `handoff_map.json`, as a literal (`ApexRacers`, `skills`).
   Keys are the user's project names and match case- and punctuation-insensitively; the key also
   names the handoff documents (`apexracers-handoff-2026-10-26.md`).
-- **Discover:** run `node .agents/skills/handoff/handoff-map.mjs get --key <origin repository
-  name>`. `inMap: true` means the map already has the key, and `key` is its spelling there. Else
+- **Discover:** run
+  `node .agents/skills/handoff/handoff-map.mjs get --key <origin repository name>`. `inMap: true` means the map already has the key, and `key` is its spelling there. Else
   look for a key the repository's old handoff skill or script used. Else propose the origin
   repository name.
 
