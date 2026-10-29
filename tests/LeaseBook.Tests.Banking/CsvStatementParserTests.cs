@@ -92,6 +92,94 @@ public sealed class CsvStatementParserTests
         result.Rows.ShouldHaveSingleItem().Amount.ShouldBe(40.00m);
     }
 
+    public static TheoryData<ColumnMap, string, string> MapsNamingAnAbsentColumn => new()
+    {
+        { new ColumnMap(Date: "Posted", Description: "Description", Amount: "Amount"), "Date", "Posted" },
+        { new ColumnMap(Date: "Date", Description: "Memo", Amount: "Amount"), "Description", "Memo" },
+        { new ColumnMap(Date: "Date", Description: "Description", Amount: "Value"), "Amount", "Value" },
+        { new ColumnMap(Date: "Date", Description: "Description", Debit: "Withdrawal", Credit: "Amount"), "Debit", "Withdrawal" },
+        { new ColumnMap(Date: "Date", Description: "Description", Debit: "Amount", Credit: "Deposit"), "Credit", "Deposit" },
+    };
+
+    [Theory]
+    [MemberData(nameof(MapsNamingAnAbsentColumn))]
+    public void Refuses_a_map_naming_a_column_the_file_does_not_have(ColumnMap map, string field, string absent)
+    {
+        // #645: an absent column used to read as an empty field, so a missing amount column imported every
+        // row at 0.00 with no error. The whole file is refused before any row is read.
+        const string csv =
+            "Date,Description,Amount\n" +
+            "2026-02-01,ACH DEPOSIT RENT,1500.00\n";
+
+        var result = _parser.Parse(csv, map);
+
+        result.MissingColumns.ShouldBe([new MissingColumn(field, absent)]);
+        result.Rows.ShouldBeEmpty();
+        result.Errors.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void Names_every_absent_column()
+    {
+        const string csv = "Date,Description,Amount\n2026-02-01,Rent,1500.00\n";
+
+        var result = _parser.Parse(csv, new ColumnMap(Date: "Posted", Description: "Memo", Debit: "Out", Credit: "In"));
+
+        result.MissingColumns.ShouldBe(
+        [
+            new MissingColumn("Date", "Posted"),
+            new MissingColumn("Description", "Memo"),
+            new MissingColumn("Debit", "Out"),
+            new MissingColumn("Credit", "In"),
+        ]);
+    }
+
+    [Fact]
+    public void A_blank_amount_beside_a_debit_and_credit_pair_maps_nothing()
+    {
+        const string csv = "Date,Description,Debit,Credit\n2026-02-01,Rent,,1500.00\n";
+
+        var result = _parser.Parse(csv, new ColumnMap(
+            Date: "Date", Description: "Description", Amount: "", Debit: "Debit", Credit: "Credit"));
+
+        result.MissingColumns.ShouldBeEmpty();
+        result.Rows.ShouldHaveSingleItem().Amount.ShouldBe(1500.00m);
+    }
+
+    [Fact]
+    public void A_header_that_differs_only_in_case_is_absent()
+    {
+        const string csv = "Date,Description,amount\n2026-02-01,Rent,1500.00\n";
+
+        var result = _parser.Parse(csv, new ColumnMap(Date: "Date", Description: "Description", Amount: "Amount"));
+
+        result.MissingColumns.ShouldBe([new MissingColumn("Amount", "Amount")]);
+        result.Rows.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void Matches_a_header_padded_with_spaces()
+    {
+        // The import wizard offers header names trimmed, so "Date, Description, Amount" maps as "Amount".
+        const string csv = "Date, Description, Amount\n2026-02-01,Rent,1500.00\n";
+
+        var result = _parser.Parse(csv, new ColumnMap(Date: "Date", Description: "Description", Amount: "Amount"));
+
+        result.MissingColumns.ShouldBeEmpty();
+        result.Rows.ShouldHaveSingleItem().Amount.ShouldBe(1500.00m);
+    }
+
+    [Fact]
+    public void Matches_a_mapped_name_padded_with_spaces()
+    {
+        const string csv = "Date,Description,Amount\n2026-02-01,Rent,1500.00\n";
+
+        var result = _parser.Parse(csv, new ColumnMap(Date: "Date", Description: "Description", Amount: " Amount "));
+
+        result.MissingColumns.ShouldBeEmpty();
+        result.Rows.ShouldHaveSingleItem().Amount.ShouldBe(1500.00m);
+    }
+
     [Fact]
     public void Reads_the_first_column_of_a_file_that_starts_with_a_byte_order_mark()
     {

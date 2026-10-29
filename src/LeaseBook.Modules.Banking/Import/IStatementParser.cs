@@ -20,8 +20,24 @@ public sealed record ParsedRow(int RowNumber, DateOnly Date, string Description,
 /// <summary>A row the parser could not read (1-based data-row index + reason). Reported, never fatal.</summary>
 public sealed record RowError(int RowNumber, string Message);
 
-/// <summary>The result of parsing one CSV: the rows it could read plus the rows it could not.</summary>
-public sealed record ParsedStatement(IReadOnlyList<ParsedRow> Rows, IReadOnlyList<RowError> Errors);
+/// <summary>
+/// A column the map names that the file's header row does not have: <see cref="Field"/> is the
+/// <see cref="ColumnMap"/> property (<c>Date</c>, <c>Amount</c>, …), <see cref="Name"/> the header it named.
+/// </summary>
+public sealed record MissingColumn(string Field, string Name);
+
+/// <summary>
+/// The result of parsing one CSV: the rows it could read plus the rows it could not. A non-empty
+/// <see cref="MissingColumns"/> means the map does not fit the file, and no row was read (#645).
+/// </summary>
+public sealed record ParsedStatement(
+    IReadOnlyList<ParsedRow> Rows, IReadOnlyList<RowError> Errors, IReadOnlyList<MissingColumn> MissingColumns)
+{
+    public ParsedStatement(IReadOnlyList<ParsedRow> rows, IReadOnlyList<RowError> errors)
+        : this(rows, errors, [])
+    {
+    }
+}
 
 /// <summary>
 /// The statement-parser seam. CSV is the only implementation this milestone (P66); OFX/QFX slots in later
