@@ -195,6 +195,14 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Fixed
 
+- **A bank statement import no longer reads a missing column as 0.00.** When a column mapping named
+  a column the file did not have, such as a saved mapping from another export of the same bank, every
+  row imported with an empty value, so a missing amount column brought in each line at 0.00 with no
+  error. The import is now refused before anything is stored, naming each missing column. The import
+  wizard fills a saved mapping only with the columns the file has, says which are missing, and offers
+  the preview once each is chosen from the file. A header that differs from the mapping only in
+  letter case counts as missing; spaces around a header do not.
+
 - **A migration import reports a badly quoted row instead of failing or guessing.** An onboarding
   CSV row with broken quoting, such as a stray quote inside a value, is now skipped and listed as a row
   error with its row number and what is wrong, and the rest of the file imports. Before, some such
