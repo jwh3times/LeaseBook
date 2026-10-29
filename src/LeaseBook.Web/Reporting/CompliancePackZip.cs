@@ -18,6 +18,15 @@ namespace LeaseBook.Web.Reporting;
 /// </summary>
 public static class CompliancePackZip
 {
+    // CsvHelper 34 rejects records of different lengths and no longer quotes a field for a leading or trailing
+    // space. This export mixes title, header and data rows, and keeps the quoting CsvHelper 33 gave it: a
+    // field with the separator, a quote or a line break, or one that starts or ends with a space.
+    private static readonly CsvWriterOptions Options = new()
+    {
+        ValidateFieldCount = false,
+        ShouldQuote = (field, _, _, _) => field.Length > 0 && (field[0] == ' ' || field[^1] == ' '),
+    };
+
     public const string CoverFile = "cover.pdf";
     public const string LedgerFile = "trust-account-ledger.csv";
     public const string DepositFile = "security-deposit-register.csv";
@@ -119,16 +128,16 @@ public static class CompliancePackZip
     private static byte[] Csv(string title, string[] columns, IEnumerable<IReadOnlyList<string>> rows)
     {
         using var writer = new StringWriter(CultureInfo.InvariantCulture);
-        using (var csv = new CsvWriter(writer, CultureInfo.InvariantCulture))
+        using (var csv = CsvWriter.Create(writer, Options, leaveOpen: true))
         {
             csv.WriteField(title);
-            csv.NextRecord();
+            csv.EndRecord();
             foreach (var col in columns)
             {
                 csv.WriteField(col);
             }
 
-            csv.NextRecord();
+            csv.EndRecord();
             foreach (var row in rows)
             {
                 foreach (var cell in row)
@@ -136,7 +145,7 @@ public static class CompliancePackZip
                     csv.WriteField(CsvFormulaGuard.Neutralize(cell));
                 }
 
-                csv.NextRecord();
+                csv.EndRecord();
             }
         }
 

@@ -78,4 +78,30 @@ public sealed class CsvStatementParserTests
         result.Errors.Count.ShouldBe(1);
         result.Errors[0].RowNumber.ShouldBe(2);
     }
+
+    [Fact]
+    public void A_stray_quote_in_a_description_does_not_cost_the_row()
+    {
+        const string csv =
+            "Date,Description,Amount\n" +
+            "2026-02-01,ACME 12\" PIPE CO,40.00\n";
+
+        var result = _parser.Parse(csv, new ColumnMap(Date: "Date", Description: "Description", Amount: "Amount"));
+
+        result.Errors.ShouldBeEmpty();
+        result.Rows.ShouldHaveSingleItem().Amount.ShouldBe(40.00m);
+    }
+
+    [Fact]
+    public void Reads_the_first_column_of_a_file_that_starts_with_a_byte_order_mark()
+    {
+        const string csv =
+            "\uFEFFDate,Description,Amount\n" +
+            "2026-02-01,ACH DEPOSIT RENT,1500.00\n";
+
+        var result = _parser.Parse(csv, new ColumnMap(Date: "Date", Description: "Description", Amount: "Amount"));
+
+        result.Errors.ShouldBeEmpty();
+        result.Rows.ShouldHaveSingleItem().Date.ShouldBe(new DateOnly(2026, 2, 1));
+    }
 }

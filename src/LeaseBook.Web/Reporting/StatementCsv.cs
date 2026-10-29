@@ -16,6 +16,14 @@ namespace LeaseBook.Web.Reporting;
 /// </summary>
 public static class StatementCsv
 {
+    // CsvHelper 34 no longer quotes a field for a leading or trailing space. This export keeps the quoting
+    // CsvHelper 33 gave it: a field with the separator, a quote or a line break, or one that starts or ends
+    // with a space.
+    private static readonly CsvWriterOptions Options = new()
+    {
+        ShouldQuote = (field, _, _, _) => field.Length > 0 && (field[0] == ' ' || field[^1] == ' '),
+    };
+
     // Column headers match the screen-owner.jsx columns visible on the PDF.
     private static readonly string[] Headers = ["Section", "Date", "Description", "Property", "Amount"];
 
@@ -31,7 +39,7 @@ public static class StatementCsv
         ArgumentNullException.ThrowIfNull(view);
 
         using var buffer = new StringWriter(CultureInfo.InvariantCulture);
-        using (var csv = new CsvWriter(buffer, CultureInfo.InvariantCulture))
+        using (var csv = CsvWriter.Create(buffer, Options, leaveOpen: true))
         {
             // Header row
             foreach (var h in Headers)
@@ -39,7 +47,7 @@ public static class StatementCsv
                 csv.WriteField(h);
             }
 
-            csv.NextRecord();
+            csv.EndRecord();
 
             // Summary header
             WriteRow(csv, "STATEMENT", "", $"Owner: {view.OwnerName}", "", "");
@@ -78,7 +86,7 @@ public static class StatementCsv
                 WriteRow(csv, "STATEMENT", "", "Beginning balance", "", FormatMoney(view.Beginning));
             }
 
-            csv.NextRecord();
+            BlankLine(csv, buffer);
 
             // Sections
             foreach (var section in view.Sections)
@@ -96,14 +104,14 @@ public static class StatementCsv
 
                 // Subtotal row for the section
                 WriteRow(csv, section.Title, "", $"Subtotal — {section.Title}", "", FormatMoney(section.Subtotal));
-                csv.NextRecord();
+                BlankLine(csv, buffer);
             }
 
             // Ending balance summary
             WriteRow(csv, "ENDING", "", "Ending balance", "", FormatMoney(view.Ending));
 
             // Fiduciary flags
-            csv.NextRecord();
+            BlankLine(csv, buffer);
             WriteRow(csv, "FIDUCIARY", "", "PM income excluded", "", view.Fiduciary.PmIncomeExcluded ? "true" : "false");
             WriteRow(csv, "FIDUCIARY", "", "Deposits recognized on application", "", view.Fiduciary.DepositsRecognizedOnApplication ? "true" : "false");
             WriteRow(csv, "FIDUCIARY", "", "Statement balanced", "", view.Fiduciary.Balanced ? "true" : "false");
@@ -123,7 +131,15 @@ public static class StatementCsv
         csv.WriteField(CsvFormulaGuard.Neutralize(desc));
         csv.WriteField(CsvFormulaGuard.Neutralize(property));
         csv.WriteField(CsvFormulaGuard.Neutralize(amount));
-        csv.NextRecord();
+        csv.EndRecord();
+    }
+
+    // An empty line between blocks. CsvHelper 34 refuses to end a record with no fields, so the writer is
+    // flushed and the line ending goes to the buffer itself, in the order the records were written.
+    private static void BlankLine(CsvWriter csv, StringWriter buffer)
+    {
+        csv.Flush();
+        buffer.Write("\r\n");
     }
 
     private static string FormatMoney(decimal value) =>

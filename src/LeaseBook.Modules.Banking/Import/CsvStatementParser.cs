@@ -1,6 +1,5 @@
 using System.Globalization;
 using CsvHelper;
-using CsvHelper.Configuration;
 
 namespace LeaseBook.Modules.Banking.Import;
 
@@ -23,19 +22,21 @@ public sealed class CsvStatementParser : IStatementParser
         var rows = new List<ParsedRow>();
         var errors = new List<RowError>();
 
-        var config = new CsvConfiguration(CultureInfo.InvariantCulture)
+        // CsvHelper 34 guesses the separator from the first lines unless one is named, and matches a header
+        // name ignoring case when there is no exact match. A statement is comma separated, and its columns are
+        // looked up exactly (see Field).
+        var options = new CsvReaderOptions
         {
-            HasHeaderRecord = true,
-            MissingFieldFound = null, // a mapped column absent on a row → null field, handled per-row
-            BadDataFound = null,
+            HasHeader = true,
+            Separator = ',',
+            MalformedData = CsvMalformedDataHandling.Recover, // a stray quote never aborts the import
         };
 
-        using var reader = new StringReader(content ?? string.Empty);
-        using var csv = new CsvReader(reader, config);
+        using var csv = CsvReader.Create(new StringReader(content ?? string.Empty), options);
 
-        if (!csv.Read() || !csv.ReadHeader())
+        if (csv.Headers.Count == 0)
         {
-            return new ParsedStatement(rows, errors); // empty or header-only file
+            return new ParsedStatement(rows, errors); // empty file
         }
 
         var rowNumber = 0;
@@ -44,18 +45,33 @@ public sealed class CsvStatementParser : IStatementParser
             rowNumber++;
             try
             {
-                var date = ParseDate(csv.GetField(map.Date), map.DateFormat);
-                var description = (csv.GetField(map.Description) ?? string.Empty).Trim();
+                var date = ParseDate(Field(csv, map.Date), map.DateFormat);
+                var description = (Field(csv, map.Description) ?? string.Empty).Trim();
                 var amount = ParseAmount(csv, map);
                 rows.Add(new ParsedRow(rowNumber, date, description, amount));
             }
-            catch (Exception ex) when (ex is FormatException or CsvHelperException or InvalidOperationException)
+            catch (Exception ex) when (ex is FormatException or InvalidOperationException)
             {
                 errors.Add(new RowError(rowNumber, ex.Message));
             }
         }
 
         return new ParsedStatement(rows, errors);
+    }
+
+    // The first column whose header is exactly the mapped name, or null when the header has none: a mapped
+    // column absent from the file reads like an empty field and is handled per row.
+    private static string? Field(CsvReader csv, string name)
+    {
+        for (var i = 0; i < csv.Headers.Count; i++)
+        {
+            if (string.Equals(csv.Headers[i], name, StringComparison.Ordinal))
+            {
+                return csv.GetString(i);
+            }
+        }
+
+        return null;
     }
 
     private static DateOnly ParseDate(string? raw, string? explicitFormat)
@@ -82,12 +98,12 @@ public sealed class CsvStatementParser : IStatementParser
     {
         if (map.Amount is not null)
         {
-            return ParseDecimal(csv.GetField(map.Amount));
+            return ParseDecimal(Field(csv, map.Amount));
         }
 
         // Customer-account convention: credit increases the balance (+), debit decreases it (−).
-        var credit = map.Credit is null ? 0m : ParseDecimal(csv.GetField(map.Credit));
-        var debit = map.Debit is null ? 0m : ParseDecimal(csv.GetField(map.Debit));
+        var credit = map.Credit is null ? 0m : ParseDecimal(Field(csv, map.Credit));
+        var debit = map.Debit is null ? 0m : ParseDecimal(Field(csv, map.Debit));
         return credit - debit;
     }
 

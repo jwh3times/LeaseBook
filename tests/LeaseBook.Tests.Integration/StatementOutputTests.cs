@@ -190,17 +190,16 @@ public sealed class StatementOutputTests(PostgresFixture fixture)
 
         // Round-trip parse: CsvHelper reads back what we wrote
         using var reader = new StringReader(csv);
-        using var csvReader = new CsvReader(reader, CultureInfo.InvariantCulture);
-        csvReader.Read(); // skip header row
-        csvReader.ReadHeader();
+        using var csvReader = CsvReader.Create(reader, new CsvReaderOptions { Separator = ',' });
+        // The first Read() reads the header row.
 
         var allRows = new List<string[]>();
         while (csvReader.Read())
         {
-            var row = new string[csvReader.Parser.Count];
-            for (var i = 0; i < csvReader.Parser.Count; i++)
+            var row = new string[csvReader.FieldCount];
+            for (var i = 0; i < csvReader.FieldCount; i++)
             {
-                row[i] = csvReader.GetField(i) ?? string.Empty;
+                row[i] = csvReader.GetString(i);
             }
 
             allRows.Add(row);
@@ -225,22 +224,20 @@ public sealed class StatementOutputTests(PostgresFixture fixture)
 
         // Parse and check that subtotal rows exist
         using var reader = new StringReader(csv);
-        using var csvReader = new CsvReader(reader, CultureInfo.InvariantCulture);
-        csvReader.Read();
-        csvReader.ReadHeader();
+        using var csvReader = CsvReader.Create(reader, new CsvReaderOptions { Separator = ',' });
 
         var subtotalRows = new List<string[]>();
         while (csvReader.Read())
         {
             // Subtotal rows have "Subtotal —" in Description column (index 2)
-            var desc = csvReader.GetField(2) ?? string.Empty;
+            var desc = csvReader.GetString(2);
             if (desc.StartsWith("Subtotal", StringComparison.OrdinalIgnoreCase))
             {
                 subtotalRows.Add(
                 [
-                    csvReader.GetField(0) ?? string.Empty, // Section
-                    csvReader.GetField(2) ?? string.Empty, // Description
-                    csvReader.GetField(4) ?? string.Empty, // Amount
+                    csvReader.GetString(0), // Section
+                    csvReader.GetString(2), // Description
+                    csvReader.GetString(4), // Amount
                 ]);
             }
         }
@@ -390,9 +387,8 @@ public sealed class StatementOutputTests(PostgresFixture fixture)
 
         var csv = await response.Content.ReadAsStringAsync(ct);
 
-        // Parse via CsvHelper — must have at least one data row beyond the descriptor header.
+        // Must have at least one data row beyond the descriptor header.
         using var reader = new StringReader(csv);
-        using var csvReader = new CsvReader(reader, CultureInfo.InvariantCulture);
 
         // Skip lines until we hit the column header row (contains "ownerId").
         string? line;
@@ -608,17 +604,15 @@ public sealed class StatementOutputTests(PostgresFixture fixture)
     private static List<string[]> ParseCsvRows(byte[] bytes)
     {
         using var reader = new StringReader(Encoding.UTF8.GetString(bytes));
-        using var csvReader = new CsvReader(reader, CultureInfo.InvariantCulture);
-        csvReader.Read();
-        csvReader.ReadHeader();
+        using var csvReader = CsvReader.Create(reader, new CsvReaderOptions { Separator = ',' });
 
         var rows = new List<string[]>();
         while (csvReader.Read())
         {
-            var row = new string[csvReader.Parser.Count];
-            for (var i = 0; i < csvReader.Parser.Count; i++)
+            var row = new string[csvReader.FieldCount];
+            for (var i = 0; i < csvReader.FieldCount; i++)
             {
-                row[i] = csvReader.GetField(i) ?? string.Empty;
+                row[i] = csvReader.GetString(i);
             }
 
             if (row.Length >= 5)
