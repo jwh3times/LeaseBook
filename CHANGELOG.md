@@ -195,6 +195,12 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Fixed
 
+- **A migration import reports a badly quoted row instead of failing or guessing.** An onboarding
+  CSV row with broken quoting, such as a stray quote inside a value, is now skipped and listed as a row
+  error with its row number and what is wrong, and the rest of the file imports. Before, some such
+  files failed the whole import with a server error, and others imported a value pieced together from
+  the broken quotes, so `"1"2` could read as 12.
+
 - **Reconciliation history and the payment panel show the viewer's date, not the UTC date.** A
   reconciliation finalized at 9 pm Eastern on 12 October read "Finalized 2026-10-13", and a payment
   paid in the evening read "Paid on" the next day. Both now show the date in the viewer's time zone,

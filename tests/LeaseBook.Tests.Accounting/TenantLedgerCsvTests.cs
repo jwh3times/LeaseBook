@@ -62,4 +62,22 @@ public sealed class TenantLedgerCsvTests
     [Fact]
     public void Write_refuses_a_missing_ledger_by_name() =>
         Should.Throw<ArgumentNullException>(() => TenantLedgerCsv.Write(null!)).ParamName.ShouldBe("ledger");
+
+    [Fact]
+    public void Write_quotes_a_value_that_starts_or_ends_with_a_space()
+    {
+        // A reader that trims unquoted values would otherwise lose the space; CsvHelper 33 quoted these by
+        // default and the export keeps doing so.
+        var ledger = new TenantLedgerResponse(
+            Guid.NewGuid(), 0m,
+            [
+                new TenantLedgerEntry(
+                    Guid.NewGuid(), new DateOnly(2026, 2, 1), "RentCharged", null, "Rent", " Feb rent ", "tab\tinside",
+                    1000m, 0m, 1000m, IsVoided: false, ReversesEntryId: null),
+            ]);
+
+        var lines = Encoding.UTF8.GetString(TenantLedgerCsv.Write(ledger)).Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
+
+        lines[1].ShouldBe("2026-02-01,Rent,\" Feb rent \",tab\tinside,1000.00,0.00,1000.00,Posted");
+    }
 }

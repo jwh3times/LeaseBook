@@ -13,19 +13,27 @@ namespace LeaseBook.Modules.Accounting.Features.Ledgers;
 /// </summary>
 public static class TenantLedgerCsv
 {
+    // CsvHelper 34 no longer quotes a field for a leading or trailing space. This export keeps the quoting
+    // CsvHelper 33 gave it: a field with the separator, a quote or a line break, or one that starts or ends
+    // with a space.
+    private static readonly CsvWriterOptions Options = new()
+    {
+        ShouldQuote = (field, _, _, _) => field.Length > 0 && (field[0] == ' ' || field[^1] == ' '),
+    };
+
     public static byte[] Write(TenantLedgerResponse ledger)
     {
         ArgumentNullException.ThrowIfNull(ledger);
 
         using var buffer = new StringWriter(CultureInfo.InvariantCulture);
-        using (var csv = new CsvWriter(buffer, CultureInfo.InvariantCulture))
+        using (var csv = CsvWriter.Create(buffer, Options, leaveOpen: true))
         {
             foreach (var header in new[] { "Date", "Category", "Description", "Internal note", "Charge", "Payment", "Balance", "Status" })
             {
                 csv.WriteField(header);
             }
 
-            csv.NextRecord();
+            csv.EndRecord();
 
             foreach (var row in ledger.Rows)
             {
@@ -40,7 +48,7 @@ public static class TenantLedgerCsv
                 csv.WriteField(row.Payment.ToString("0.00", CultureInfo.InvariantCulture));
                 csv.WriteField(row.Balance.ToString("0.00", CultureInfo.InvariantCulture));
                 csv.WriteField(CsvFormulaGuard.Neutralize(Status(row)));
-                csv.NextRecord();
+                csv.EndRecord();
             }
         }
 

@@ -16,6 +16,15 @@ namespace LeaseBook.Web.Audit;
 /// </summary>
 public static class AuditLogCsv
 {
+    // CsvHelper 34 rejects records of different lengths and no longer quotes a field for a leading or trailing
+    // space. This export mixes title, header and data rows, and keeps the quoting CsvHelper 33 gave it: a
+    // field with the separator, a quote or a line break, or one that starts or ends with a space.
+    private static readonly CsvWriterOptions Options = new()
+    {
+        ValidateFieldCount = false,
+        ShouldQuote = (field, _, _, _) => field.Length > 0 && (field[0] == ' ' || field[^1] == ' '),
+    };
+
     /// <summary>
     /// The most rows one export writes. An audit trail has no natural size, and a reviewer who asks for
     /// "everything" would otherwise stream the largest table in the database through a browser download.
@@ -26,17 +35,17 @@ public static class AuditLogCsv
     public static byte[] Write(IReadOnlyList<AuditLogRow> rows, int total)
     {
         using var writer = new StringWriter(CultureInfo.InvariantCulture);
-        using (var csv = new CsvWriter(writer, CultureInfo.InvariantCulture))
+        using (var csv = CsvWriter.Create(writer, Options, leaveOpen: true))
         {
             csv.WriteField(Title(rows.Count, total));
-            csv.NextRecord();
+            csv.EndRecord();
 
             foreach (var column in Columns)
             {
                 csv.WriteField(column);
             }
 
-            csv.NextRecord();
+            csv.EndRecord();
 
             foreach (var row in rows)
             {
@@ -45,7 +54,7 @@ public static class AuditLogCsv
                     csv.WriteField(CsvFormulaGuard.Neutralize(cell));
                 }
 
-                csv.NextRecord();
+                csv.EndRecord();
             }
         }
 

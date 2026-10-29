@@ -1,6 +1,4 @@
-using System.Globalization;
 using CsvHelper;
-using CsvHelper.Configuration;
 
 namespace LeaseBook.Migrator.Csv;
 
@@ -54,33 +52,45 @@ public static class CsvImporter
     {
         var rows = new List<TRow>();
         var errors = new List<RowError>();
+        var rowNumber = 0;
 
-        using var reader = new StreamReader(csv);
-        using var parser = new CsvReader(reader, new CsvConfiguration(CultureInfo.InvariantCulture)
+        // CsvHelper 34 guesses the separator from the first lines unless one is named (a one-column file whose
+        // values hold semicolons reads as semicolon separated), and trims tabs as well as spaces. An export is
+        // comma separated, and only spaces are trimmed. A row with malformed quoting is skipped and
+        // reported rather than read: recovering would piece a value together ("1"2 reads as 12), and no
+        // imported amount may come from a guess. The reader reports a skipped row while it reads, in file
+        // order, so it takes its own row number.
+        using var parser = CsvReader.Create(new StreamReader(csv), new CsvReaderOptions
         {
-            HasHeaderRecord = true,
-            MissingFieldFound = null,
-            TrimOptions = TrimOptions.Trim,
+            HasHeader = true,
+            Separator = ',',
+            TrimWhitespace = true,
+            WhitespaceCharacters = " ",
+            MalformedData = CsvMalformedDataHandling.Skip,
+            OnMalformedRecord = record =>
+            {
+                rowNumber++;
+                errors.Add(new RowError(rowNumber, "*", $"row skipped: {Malformed(record.Reason)}"));
+            },
         });
 
-        if (!parser.Read() || !parser.ReadHeader())
+        if (parser.Headers.Count == 0)
         {
             errors.Add(new RowError(0, "*", "file has no header row"));
             return new ImportResult<TRow>(rows, errors);
         }
 
-        var resolved = profile.Resolve(parser.HeaderRecord ?? [], out var missing);
+        var resolved = profile.Resolve(parser.Headers, out var missing);
         errors.AddRange(missing);
         if (missing.Count > 0)
             return new ImportResult<TRow>(rows, errors); // missing required columns; cannot process rows
 
-        var rowNumber = 0;
         while (parser.Read())
         {
             rowNumber++;
             var cells = resolved.ToDictionary(
                 kv => kv.Key,
-                kv => parser.GetField(kv.Value) ?? string.Empty,
+                kv => parser.GetString(kv.Value),
                 StringComparer.Ordinal);
 
             var ctx = new RowContext(cells, rowNumber, errors);
@@ -90,4 +100,12 @@ public static class CsvImporter
 
         return new ImportResult<TRow>(rows, errors);
     }
+
+    private static string Malformed(CsvMalformedReason reason) => reason switch
+    {
+        CsvMalformedReason.StrayQuote => "a quote inside an unquoted value",
+        CsvMalformedReason.TextAfterClosingQuote => "text after the closing quote of a value",
+        CsvMalformedReason.UnterminatedQuote => "a quoted value that is never closed",
+        _ => "malformed quoting",
+    };
 }
