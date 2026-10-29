@@ -1,4 +1,5 @@
 using FluentValidation;
+using FluentValidation.Results;
 using LeaseBook.Modules.Banking.Domain;
 using LeaseBook.Modules.Banking.Import;
 using LeaseBook.SharedKernel;
@@ -13,7 +14,8 @@ namespace LeaseBook.Modules.Banking.Features.Import;
 /// Imports a bank-statement CSV for one account (ADR-015): parses it against the column map, dedups against
 /// every prior line for that account (P67), and stores the new lines under one <see cref="StatementImport"/>.
 /// Idempotent on re-import — colliding lines are skipped and counted, never stored twice. The CSV arrives as
-/// text (the SPA reads the file client-side); parse errors are reported per row, never fatal.
+/// text (the SPA reads the file client-side); parse errors are reported per row, never fatal. The one
+/// file-level refusal is a column map naming a column the file lacks (a 400, nothing stored; #645).
 /// </summary>
 public sealed record ImportStatement(
     Guid BankAccountId, string Filename, string CsvContent, ColumnMap ColumnMap) : ICommand<ImportResult>;
@@ -51,6 +53,15 @@ internal sealed class ImportStatementHandler(
         _ = tenant.OrgId ?? throw new InvalidOperationException("ImportStatement requires an ambient organization context.");
 
         var parsed = parser.Parse(command.CsvContent, command.ColumnMap);
+
+        // A map the file does not fit is refused whole, before anything is stored (#645): one failure per
+        // absent column, keyed like the validator's own ColumnMap.* failures.
+        if (parsed.MissingColumns.Count > 0)
+        {
+            throw new ValidationException(parsed.MissingColumns.Select(c => new ValidationFailure(
+                $"{nameof(ImportStatement.ColumnMap)}.{c.Field}",
+                $"The file has no column named '{c.Name}'. Check the column mapping against the file's header row.")));
+        }
 
         // Dedup spans every prior import for this account (RLS scopes the read to the org).
         var existingHashes = await db.Set<StatementLine>()

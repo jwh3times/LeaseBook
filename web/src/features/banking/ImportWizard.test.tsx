@@ -76,6 +76,94 @@ describe('ImportWizard', () => {
     expect(screen.getByRole('button', { name: 'Preview matches' })).toBeEnabled();
   });
 
+  // #645: a saved mapping naming a column this file lacks used to be applied whole and submitted, and
+  // the server read the absent amount column as 0.00 on every row.
+  it('names the saved-mapping columns this file lacks and blocks the import until they are mapped', async () => {
+    let posted = false;
+    server.use(
+      http.get('/api/banking/banks/:id/mappings', () =>
+        HttpResponse.json({
+          mappings: [
+            {
+              id: 'm1',
+              name: 'Old bank export',
+              columnMap: { date: 'Date', description: 'Memo', amount: 'Value' },
+            },
+          ],
+        }),
+      ),
+      http.post('/api/banking/banks/:id/imports', () => {
+        posted = true;
+        return HttpResponse.json({
+          importId: 'imp1',
+          imported: 1,
+          skippedDuplicates: 0,
+          errors: [],
+        });
+      }),
+    );
+    renderWizard();
+    await userEvent.upload(
+      screen.getByLabelText('Statement CSV'),
+      new File([CSV], 'statement.csv', { type: 'text/csv' }),
+    );
+
+    await userEvent.selectOptions(await screen.findByLabelText('Saved mapping'), 'm1');
+
+    const notice = screen.getByRole('status', { name: 'Saved mapping does not fit this file' });
+    expect(notice).toHaveTextContent('Memo');
+    expect(notice).toHaveTextContent('Value');
+    expect(screen.getByLabelText('Date column')).toHaveValue('Date');
+    expect(screen.getByLabelText('Description column')).toHaveValue('');
+    expect(screen.getByLabelText('Amount column')).toHaveValue('');
+    const preview = screen.getByRole('button', { name: 'Preview matches' });
+    expect(preview).toBeDisabled();
+
+    await userEvent.selectOptions(screen.getByLabelText('Description column'), 'Description');
+    await userEvent.selectOptions(screen.getByLabelText('Amount column'), 'Amount');
+    expect(preview).toBeEnabled();
+    expect(
+      screen.queryByRole('status', { name: 'Saved mapping does not fit this file' }),
+    ).not.toBeInTheDocument();
+    expect(posted).toBe(false);
+  });
+
+  // One side of a debit/credit pair is enough for the map to be valid, so a saved pair whose debit
+  // column the file lacks must still block: sent with debit: null, every withdrawal imports as 0.00.
+  it('blocks a saved debit/credit mapping until the side this file lacks is mapped', async () => {
+    const PAIR_CSV = 'Date,Description,Withdrawal,In\n2026-02-01,Fee,25.00,\n';
+    server.use(
+      http.get('/api/banking/banks/:id/mappings', () =>
+        HttpResponse.json({
+          mappings: [
+            {
+              id: 'm2',
+              name: 'Pair export',
+              columnMap: { date: 'Date', description: 'Description', debit: 'Out', credit: 'In' },
+            },
+          ],
+        }),
+      ),
+    );
+    renderWizard();
+    await userEvent.upload(
+      screen.getByLabelText('Statement CSV'),
+      new File([PAIR_CSV], 'statement.csv', { type: 'text/csv' }),
+    );
+
+    await userEvent.selectOptions(await screen.findByLabelText('Saved mapping'), 'm2');
+
+    expect(
+      screen.getByRole('status', { name: 'Saved mapping does not fit this file' }),
+    ).toHaveTextContent('Out');
+    expect(screen.getByLabelText('Credit column')).toHaveValue('In');
+    const preview = screen.getByRole('button', { name: 'Preview matches' });
+    expect(preview).toBeDisabled();
+
+    await userEvent.selectOptions(screen.getByLabelText('Debit column'), 'Withdrawal');
+    expect(preview).toBeEnabled();
+  });
+
   it('uploads, maps columns, previews matches, and confirms — clearing the matched line', async () => {
     let importBody: { columnMap?: Record<string, unknown> } | undefined;
     let confirmBody: { decisions?: unknown[] } | undefined;

@@ -100,6 +100,43 @@ public sealed class StatementImportHttpTests(PostgresFixture fixture)
         confirm.UnmatchedLineIds.ShouldContain(row.StatementLineId);
     }
 
+    [Fact]
+    public async Task A_map_naming_a_column_the_file_lacks_is_refused_and_stores_nothing()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var setup = await SetupAsync(ct);
+        var client = await LoggedInClientAsync(setup, ct);
+        var url = $"/api/banking/banks/{setup.TrustBankId}/imports";
+
+        // #645: the file's amount column is "Value", so the mapped "Amount" is absent. It used to import the
+        // row at 0.00 and report no errors.
+        const string csv = "Date,Description,Value\n2026-02-01,Interest,100.00\n";
+
+        var refused = await client.PostAsJsonAsync(url,
+            new { filename = "statement.csv", csvContent = csv, columnMap = AmountColumnMap }, ct);
+
+        refused.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        var problem = await refused.Content.ReadFromJsonAsync<ValidationProblemBody>(ct);
+        problem.ShouldNotBeNull();
+        problem.Code.ShouldBe("validation_failed");
+        problem.CorrelationId.ShouldNotBeNullOrWhiteSpace();
+        problem.Errors.ShouldContainKey("ColumnMap.Amount");
+        problem.Errors["ColumnMap.Amount"].ShouldHaveSingleItem().ShouldContain("Amount");
+
+        // Nothing was stored: the same row under the right map imports as new, not as a duplicate.
+        var import = await PostOkAsync<ImportResult>(client, url, new
+        {
+            filename = "statement.csv",
+            csvContent = csv,
+            columnMap = new { date = "Date", description = "Description", amount = "Value" },
+        }, ct);
+        import.Imported.ShouldBe(1);
+        import.SkippedDuplicates.ShouldBe(0);
+    }
+
+    private sealed record ValidationProblemBody(
+        string? Code, string? CorrelationId, Dictionary<string, string[]> Errors);
+
     private sealed record Setup(Guid OrgId, string Email, Guid TrustBankId);
 
     private static string Key() => UuidV7.NewId().ToString();

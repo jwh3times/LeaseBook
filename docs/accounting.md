@@ -3,7 +3,7 @@
 - **Audience:** Contributors, operators, and reviewers
 - **Status:** Living accounting guide
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-05
+- **Last reviewed:** 2026-10-29
 
 This is the canonical public explanation of the shipped trust-accounting model, written so a
 property manager, bookkeeper, or attorney can evaluate it without reading C#. The Accounting module
@@ -380,7 +380,9 @@ reference begins `payout:{payout reference}:`. The Payments simulation calls it 
 auto-matched against uncleared register lines: an exact amount on a nearby date is a confident match that
 clears the line on confirm; an exact amount on a far date is a suggestion; no amount match offers to create a
 transaction. Re-importing the same statement is de-duplicated, never double-counted. Matching and clearing
-always run through the accounting engine — the importer never writes the journal directly.
+always run through the accounting engine — the importer never writes the journal directly. A mapping that
+names a column the file does not have is refused whole, naming each missing column, and nothing is stored;
+the wizard fills a saved mapping only with the columns the file has and asks for the rest.
 
 A processor payout is one deposit at the bank and several lines in the register: a receipt for each
 payment, and a line for each fee difference or return. Those lines are one group. A statement line
