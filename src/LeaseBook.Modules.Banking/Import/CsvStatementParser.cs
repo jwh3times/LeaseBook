@@ -7,7 +7,8 @@ namespace LeaseBook.Modules.Banking.Import;
 /// CSV implementation of <see cref="IStatementParser"/> (CsvHelper, P66 / ADR-015). Reads by the mapped
 /// header names, normalizes each row to a signed amount (single <c>Amount</c> column, or
 /// <c>Credit − Debit</c>), and tolerates per-row failures — an unreadable row is collected as a
-/// <see cref="RowError"/> with its 1-based data-row index, never aborting the import.
+/// <see cref="RowError"/> with its 1-based data-row index, never aborting the import. A map naming a column
+/// the header lacks is the one whole-file outcome: <see cref="ParsedStatement.MissingColumns"/>, no rows.
 /// </summary>
 public sealed class CsvStatementParser : IStatementParser
 {
@@ -39,6 +40,14 @@ public sealed class CsvStatementParser : IStatementParser
             return new ParsedStatement(rows, errors); // empty file
         }
 
+        // A mapped column the header lacks would read as an empty field on every row — a missing amount
+        // column imports each row at 0.00 — so a map that does not fit the file is refused whole (#645).
+        var missing = MissingColumns(csv, map);
+        if (missing.Count > 0)
+        {
+            return new ParsedStatement(rows, errors, missing);
+        }
+
         var rowNumber = 0;
         while (csv.Read())
         {
@@ -59,19 +68,45 @@ public sealed class CsvStatementParser : IStatementParser
         return new ParsedStatement(rows, errors);
     }
 
-    // The first column whose header is exactly the mapped name, or null when the header has none: a mapped
-    // column absent from the file reads like an empty field and is handled per row.
+    private static List<MissingColumn> MissingColumns(CsvReader csv, ColumnMap map)
+    {
+        (string Field, string? Name)[] mapped =
+        [
+            (nameof(ColumnMap.Date), map.Date),
+            (nameof(ColumnMap.Description), map.Description),
+            (nameof(ColumnMap.Amount), map.Amount),
+            (nameof(ColumnMap.Debit), map.Debit),
+            (nameof(ColumnMap.Credit), map.Credit),
+        ];
+
+        return mapped
+            .Where(m => IsMapped(m.Name) && IndexOf(csv, m.Name!) < 0)
+            .Select(m => new MissingColumn(m.Field, m.Name!))
+            .ToList();
+    }
+
+    // MissingColumns runs first, so a mapped column is always found; the null is for a reordering, not a case.
     private static string? Field(CsvReader csv, string name)
     {
+        var index = IndexOf(csv, name);
+        return index < 0 ? null : csv.GetString(index);
+    }
+
+    // The first column whose header is the mapped name. Case counts — a header differing only in case is
+    // absent, and the refusal names it — but surrounding spaces on either side do not: the import wizard
+    // offers header names trimmed, so "Date, Amount" maps as "Amount".
+    private static int IndexOf(CsvReader csv, string name)
+    {
+        var wanted = name.Trim();
         for (var i = 0; i < csv.Headers.Count; i++)
         {
-            if (string.Equals(csv.Headers[i], name, StringComparison.Ordinal))
+            if (string.Equals(csv.Headers[i].Trim(), wanted, StringComparison.Ordinal))
             {
-                return csv.GetString(i);
+                return i;
             }
         }
 
-        return null;
+        return -1;
     }
 
     private static DateOnly ParseDate(string? raw, string? explicitFormat)
@@ -94,16 +129,20 @@ public sealed class CsvStatementParser : IStatementParser
             : throw new FormatException($"date '{value}' is not in a recognized format.");
     }
 
+    // A blank name maps nothing, the same as an absent one: the validator accepts "amount": "" beside a
+    // debit/credit pair.
+    private static bool IsMapped(string? name) => !string.IsNullOrWhiteSpace(name);
+
     private static decimal ParseAmount(CsvReader csv, ColumnMap map)
     {
-        if (map.Amount is not null)
+        if (IsMapped(map.Amount))
         {
-            return ParseDecimal(Field(csv, map.Amount));
+            return ParseDecimal(Field(csv, map.Amount!));
         }
 
         // Customer-account convention: credit increases the balance (+), debit decreases it (−).
-        var credit = map.Credit is null ? 0m : ParseDecimal(Field(csv, map.Credit));
-        var debit = map.Debit is null ? 0m : ParseDecimal(Field(csv, map.Debit));
+        var credit = IsMapped(map.Credit) ? ParseDecimal(Field(csv, map.Credit!)) : 0m;
+        var debit = IsMapped(map.Debit) ? ParseDecimal(Field(csv, map.Debit!)) : 0m;
         return credit - debit;
     }
 

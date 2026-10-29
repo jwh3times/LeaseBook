@@ -33,6 +33,15 @@ const KIND_META: Record<string, { label: string; tone: BadgeTone }> = {
 
 const NONE = '';
 
+const MAP_FIELDS = ['date', 'description', 'amount', 'debit', 'credit'] as const;
+type MapField = (typeof MAP_FIELDS)[number];
+
+/** A saved mapping's column that the uploaded file's header row does not have. */
+interface MissingColumn {
+  field: MapField;
+  name: string;
+}
+
 function parseHeaders(csv: string): string[] {
   const firstLine = csv.split(/\r?\n/).find((line) => line.trim() !== '') ?? '';
   return firstLine.split(',').map((h) => h.trim().replace(/^"|"$/g, ''));
@@ -55,6 +64,7 @@ export function ImportWizard({ bankAccountId, onClose, onConfirmed }: ImportWiza
   const [debitCol, setDebitCol] = useState(NONE);
   const [creditCol, setCreditCol] = useState(NONE);
   const [useDebitCredit, setUseDebitCredit] = useState(false);
+  const [missingFromFile, setMissingFromFile] = useState<MissingColumn[]>([]);
 
   const [importId, setImportId] = useState('');
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
@@ -69,18 +79,50 @@ export function ImportWizard({ bankAccountId, onClose, onConfirmed }: ImportWiza
     setFilename(file.name);
     setCsv(text);
     setHeaders(parseHeaders(text));
+    setMissingFromFile([]);
     setError(null);
     setStep('map');
   };
 
+  // A saved mapping can name a column this file lacks (#645). Such a column is left unmapped and named
+  // in a notice, so the operator picks it from this file's header instead of submitting a map the
+  // server refuses.
   const applySaved = (mapping: ColumnMap) => {
-    setDateCol(mapping.date);
-    setDescCol(mapping.description);
-    setAmountCol(mapping.amount ?? NONE);
-    setDebitCol(mapping.debit ?? NONE);
-    setCreditCol(mapping.credit ?? NONE);
+    const inFile = (name: string | null | undefined) =>
+      name && headers.includes(name) ? name : NONE;
+    setDateCol(inFile(mapping.date));
+    setDescCol(inFile(mapping.description));
+    setAmountCol(inFile(mapping.amount));
+    setDebitCol(inFile(mapping.debit));
+    setCreditCol(inFile(mapping.credit));
     setUseDebitCredit(!mapping.amount && (!!mapping.debit || !!mapping.credit));
+    setMissingFromFile(
+      MAP_FIELDS.flatMap((field) => {
+        const name = mapping[field];
+        return name && !headers.includes(name) ? [{ field, name }] : [];
+      }),
+    );
   };
+
+  // A missing column stops blocking once the operator maps that field from this file. Only the fields
+  // the chosen layout sends count: one side of a debit/credit pair would otherwise satisfy `canMap`,
+  // and the other side would import as 0.00 on every row.
+  const chosen: Record<MapField, string> = {
+    date: dateCol,
+    description: descCol,
+    amount: amountCol,
+    debit: debitCol,
+    credit: creditCol,
+  };
+  const unresolved = missingFromFile.filter(
+    ({ field }) =>
+      chosen[field] === NONE &&
+      (field === 'amount'
+        ? !useDebitCredit
+        : field === 'debit' || field === 'credit'
+          ? useDebitCredit
+          : true),
+  );
 
   const columnMap = useMemo<ColumnMap>(
     () => ({
@@ -111,6 +153,7 @@ export function ImportWizard({ bankAccountId, onClose, onConfirmed }: ImportWiza
   });
 
   const canMap =
+    unresolved.length === 0 &&
     dateCol !== NONE &&
     descCol !== NONE &&
     (useDebitCredit ? debitCol !== NONE || creditCol !== NONE : amountCol !== NONE);
@@ -215,6 +258,13 @@ export function ImportWizard({ bankAccountId, onClose, onConfirmed }: ImportWiza
                   ))}
                 </Select>
               </label>
+            )}
+            {unresolved.length > 0 && (
+              <p role="status" aria-label="Saved mapping does not fit this file" className="fs12">
+                <Icon name="alert" size={14} /> This file has no column named{' '}
+                {unresolved.map(({ name }) => `“${name}”`).join(', ')}. Choose a column from this
+                file for {unresolved.length === 1 ? 'it' : 'each'} below.
+              </p>
             )}
             <p className="t3 fs12">{filename}</p>
             <div className="pf-map-grid">
