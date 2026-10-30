@@ -12,12 +12,6 @@ is one setting.
 `discover: git -C private remote get-url origin` — the locator stays out of public files
 (`AGENTS.md`). `private/README.md` indexes it.
 
-## Workspace status command
-
-`git status --short --branch`, then, when `private/.git` exists,
-`git -C private fetch -q --prune origin` and `git -C private status --short --branch` — the fetch
-makes the companion's ahead/behind counts current.
-
 ## Companion commit checks
 
 - Public first (`private/README.md`, "Two-repository workflow"): the public change is committed and
@@ -75,12 +69,7 @@ reported and skipped. `npm run sync:main -- --skip-private` updates only the pub
 
 `node scripts/sync-agents.mjs --check` (run inside the required **Web (lint + test + build)**
 check), regenerated with `npm run docs:format` from `web/` then `node scripts/sync-agents.mjs`,
-committing `.claude/skills/` and `.codex/agents/` — when agent sources changed (`.agents/skills/`,
-`.claude/agents/`).
-
-## Final portability check
-
-none
+committing `.claude/skills/` and `.codex/agents/` — always: it is quick, and it also catches an orphaned mirror.
 
 ## Hook: after sync
 

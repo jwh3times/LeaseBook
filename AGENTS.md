@@ -99,7 +99,7 @@ outside the public repository, and it may be absent in a public clone. It holds:
 - `private/planning/m{N}_retro.md`: per-milestone retrospectives — the durable record of how
   completed work actually went
 - `private/security-review-findings.md`, `private/architecture-review-findings.md`: historical
-  records of the review passes; new findings are issues, not appends
+  records of the review passes; new findings are draft repository advisories, not appends
 - `private/appfolio.md`: AppFolio export catalog (reference data)
 - `private/TODO.md`, `private/roadmap.md`: **removed 2026-09-04** — every item moved to GitHub
   Issues and the project board; read them in the private repository's git history if you need the
@@ -312,10 +312,11 @@ follow-ups always use the private tracker.
 - **Public** — `jwh3times/LeaseBook`. Anything a public PR closes: engineering work, bugs,
   architecture questions, deployment steps. This is the default.
 - **Private** — the private companion repository, whose locator is the `private/` checkout's own
-  git remote and stays out of this tree. Anything confidential: security positions that
-  describe an unpatched weakness, compliance and legal engagements, customer identity, pricing and
-  strategy. Also all required human follow-ups arising from agent-completed work, even when the
-  engineering change is public. These close on events in the world, not on merged PRs.
+  git remote and stays out of this tree. Anything confidential: an accepted security risk,
+  compliance and legal engagements, customer identity, pricing and strategy (an unpatched weakness
+  is a draft repository advisory instead). Also all required human follow-ups arising from
+  agent-completed work, even when the engineering change is public. These close on events in the
+  world, not on merged PRs.
 
 Never reference a private issue from a public PR, commit, or issue — the reference itself leaks its
 existence. Both trackers share one board (project 3).

@@ -85,8 +85,8 @@ too. A level the user asked for is still evaluated; when the evaluation differs,
 Record `Release level: <major|minor|build> — <one-sentence rationale>`. Steps 9 and 10 use that
 exact line.
 
-**Apply it.** The baseline is the higher of the newest `v*` tag (ignoring the `Skipped tags`
-**Ignore** patterns) and the `Version file` on `origin/main` (`git show "origin/main:<file>"`).
+**Apply it.** The baseline is the higher of the newest three-part `v*` tag (ignoring the
+`Skipped tags` **Ignore** patterns) and the `Version file` on `origin/main` (`git show "origin/main:<file>"`).
 
 - **Build** — the `Version file` stays at its `origin/main` value. Restore it if the branch moved it
   without release intent.

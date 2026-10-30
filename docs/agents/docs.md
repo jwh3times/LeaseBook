@@ -160,7 +160,7 @@ is recreated.
 - `private/planning/design-history/` — historical design specs and plans. `frozen`.
 - `private/planning/private-workspace-portability-plan.md` — historical. `frozen`.
 - `private/security-review-findings.md` — the earlier review passes (F1–F11). `append-only`: a
-  review write-up only; a new finding is a `security` issue.
+  review write-up only; a new finding is a draft repository advisory.
 - `private/architecture-review-findings.md` — architecture reviews and their dispositions.
   `append-only`, as above.
 - `private/appfolio.md` — the AppFolio export catalog. **When:** an import definition or its
