@@ -16,6 +16,28 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 No unreleased changes.
 
+## [0.27.0] - 2026-10-30
+
+### Added
+
+- **A property can be transferred to a new owner from its page.** The property page now offers
+  Transfer ownership: choose another owner and an effective date of today or earlier. Before
+  anything posts, the dialog says that the security deposits held for the property's tenants move
+  to the new owner and that the current owner's equity is not settled by the transfer. Once it is
+  recorded, the property names the new owner, each owner's deposits held change by what moved, and a
+  notice says whether any deposits moved. A future date is refused before anything is sent. A
+  backdated transfer that later deposit activity would contradict, a date no later than the
+  property's previous transfer, a closed period and a reconciled bank month are each refused in the
+  dialog with the reason, and nothing is recorded. Until now a sale could be recorded only by calling
+  the API.
+
+### Fixed
+
+- **A refused ownership transfer now says why.** The refusals for a transfer to the current owner,
+  to an owner that does not exist, dated no later than the previous transfer, reusing another
+  transfer's reference, or backdated across later deposit activity reached the client with no reason
+  in the response. Each now carries its message.
+
 ## [0.26.0] - 2026-10-30
 
 ### Added
@@ -1565,7 +1587,8 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.26.0...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.27.0...HEAD
+[0.27.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.27.0
 [0.26.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.26.0
 [0.25.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.25.0
 [0.24.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.24.0

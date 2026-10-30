@@ -1,4 +1,5 @@
 using FluentValidation;
+using FluentValidation.Results;
 using LeaseBook.Modules.Accounting.Contracts;
 using LeaseBook.Modules.Accounting.Domain;
 using LeaseBook.Modules.Accounting.Features.Posting.Events;
@@ -73,8 +74,14 @@ internal sealed class TransferPropertyDepositsHandler(
             """).SingleAsync(ct);
         if (hasLaterSellerActivity)
         {
+            // A failure, not a bare message: the 400 body carries only failures, and the transfer screen
+            // shows this reason inline (#555).
             throw new ValidationException(
-                "Later seller-attributed deposit activity must be reversed before recording this backdated ownership transfer.");
+            [
+                new ValidationFailure(
+                    "effectiveDate",
+                    "Later seller-attributed deposit activity must be reversed before recording this backdated ownership transfer."),
+            ]);
         }
 
         var positions = await db.Database.SqlQuery<HeldDepositPositionRow>(
