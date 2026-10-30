@@ -372,6 +372,15 @@
       ]
     },
     {
+      "id": "bank-reconciliation-unlock-and-refinalize",
+      "workflow": "As an administrator, unlock a finalized month with a reason, post into it, and finalize it again",
+      "area": "Banking",
+      "spec": "m4-banking.spec.ts",
+      "org": "demo",
+      "events": ["PaymentReceived", "EntryVoided"],
+      "routes": ["POST /api/accounting/reconciliations/{id}/unlock"]
+    },
+    {
       "id": "owner-statement-view-export-deliver",
       "workflow": "View an owner statement with its fiduciary checks, export it as PDF and CSV, and deliver it",
       "area": "Reporting",
@@ -860,12 +869,6 @@
         "reason": "baseline gap",
         "date": "2026-10-12",
         "issue": 553
-      },
-      {
-        "route": "POST /api/accounting/reconciliations/{id}/unlock",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 554
       },
       {
         "route": "PUT /api/directory/owners/{id}",

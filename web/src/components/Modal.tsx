@@ -8,6 +8,32 @@ interface ModalProps {
   footer?: ReactNode;
 }
 
+const FOCUSABLE =
+  'a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])';
+
+/**
+ * Keeps Tab inside the panel, so focus never reaches the page behind a dialog that declares itself
+ * modal (#554): it wraps at either end, and focus resting on the body (where a click on the panel's
+ * text leaves it) comes back in at the end Tab is moving toward.
+ */
+function trapTab(event: KeyboardEvent, panel: HTMLElement) {
+  const focusable = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE));
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (!first || !last) return;
+  const active = document.activeElement;
+  // Only focus resting on the body is reclaimed: focus in another dialog stacked above is that
+  // dialog's to keep.
+  const outside = active === null || active === document.body;
+  if (event.shiftKey && (outside || active === first)) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && (outside || active === last)) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+
 /** A focus-trapping modal: Escape and backdrop-click close it; the first field autofocuses. */
 export function Modal({ title, onClose, children, footer }: ModalProps) {
   const panelRef = useRef<HTMLDivElement>(null);
@@ -31,6 +57,7 @@ export function Modal({ title, onClose, children, footer }: ModalProps) {
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       if (event.key === 'Escape') onClose();
+      if (event.key === 'Tab' && panelRef.current) trapTab(event, panelRef.current);
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);

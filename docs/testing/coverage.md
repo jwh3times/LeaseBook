@@ -3,7 +3,7 @@
 - **Audience:** Contributors, reviewers and maintainers
 - **Status:** Living measurement record
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-22
+- **Last reviewed:** 2026-10-30
 
 LeaseBook measures what its test suites exercise: which lines and branches of each module ran, and
 which API routes the browser tests called. This page records how that is measured, how to run each
@@ -382,7 +382,8 @@ The 22 routes no test reached, by what they have in common:
 - **Accounting reads (4).** Owner balances, the owner ledger, deposits and the trust equation. No
   screen requests these routes; the screens that show the same figures get them from other routes.
   The catalogue records these four as permanent exemptions.
-- **Reconciliation (1).** Unlocking a reconciliation. No screen unlocks one.
+- **Reconciliation (1).** Unlocking a reconciliation. No screen unlocked one when this was measured;
+  the reconciliation history now does, and a browser test reaches the route (#554).
 - **Payments review (2).** Retrying a payment, and the unmatched list. Each has a control on the
   Operations page that a browser test cannot bring up. **Retry operation** is offered for a payment
   whose delivery or posting failed for a technical reason six times, with waits of 1, 5, 30, 120 and

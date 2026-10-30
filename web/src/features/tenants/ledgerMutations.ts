@@ -10,6 +10,7 @@ import {
   type PostResult,
 } from '@/api';
 import { toApiError, type ApiError } from '@/api';
+import { useSession } from '@/features/auth/useSession';
 
 export type { PostResult };
 
@@ -25,10 +26,20 @@ export function newSourceRef(): string {
 /**
  * Friendly copy for the M4 per-account reconciliation lock (`account_period_locked`, 409): a bank line
  * dated into a finalized account-month is rejected. Surfaced inline in the composer/apply/void the same
- * way `insufficient_receivable` is, so the user moves the date into the open month.
+ * way `insufficient_receivable` is, so the user moves the date into the open month. It offers only what
+ * the reader can do (#554): unlocking is a PMAdmin action on the reconciliation history, so staff are
+ * told to ask for it.
  */
-export const LOCKED_PERIOD_MESSAGE =
-  "This account's month is reconciled and locked — post into the open month, or unlock the reconciliation first.";
+export function lockedPeriodMessage(isAdmin: boolean): string {
+  return isAdmin
+    ? "This account's month is reconciled and locked — post into the open month, or unlock the month from its reconciliation history on Banking."
+    : "This account's month is reconciled and locked — post into the open month, or ask an administrator to unlock it.";
+}
+
+/** {@link lockedPeriodMessage} for the signed-in user; staff wording until the session is known. */
+export function useLockedPeriodMessage(): string {
+  return lockedPeriodMessage(useSession().data?.role === 'PMAdmin');
+}
 
 /** A normalized failure from a ledger post: the domain `code` (422/409), or a validation message (400). */
 export interface LedgerPostError extends ApiError {

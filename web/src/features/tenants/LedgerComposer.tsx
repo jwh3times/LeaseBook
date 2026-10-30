@@ -11,11 +11,11 @@ import {
   categoryNeedsBank,
   COMPOSER_CHARGE_CATEGORIES,
   type LedgerPostError,
-  LOCKED_PERIOD_MESSAGE,
   newSourceRef,
   PAYMENT_METHODS,
   type PostResult,
   submitLedgerEntry,
+  useLockedPeriodMessage,
 } from './ledgerMutations';
 
 export interface LedgerComposerProps {
@@ -64,6 +64,7 @@ export function LedgerComposer({
   owed,
   canAllowUnappliedCredit = false,
 }: LedgerComposerProps) {
+  const lockedMessage = useLockedPeriodMessage();
   const [mode, setMode] = useState<Mode | null>(initialMode ?? null);
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
@@ -142,9 +143,7 @@ export function LedgerComposer({
         return;
       }
       // The bank's month is reconciled (M4 lock): keep the composer open with the move-the-date hint.
-      setError(
-        post.code === 'account_period_locked' ? { ...post, message: LOCKED_PERIOD_MESSAGE } : post,
-      );
+      setError(post.code === 'account_period_locked' ? { ...post, message: lockedMessage } : post);
     },
   });
 

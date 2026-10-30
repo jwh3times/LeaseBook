@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -127,5 +127,158 @@ describe('ReconciliationHistory finalized date', () => {
     renderHistory();
 
     expect(await screen.findByText('Finalized 2026-10-12')).toBeInTheDocument();
+  });
+});
+
+describe('ReconciliationHistory unlock (#554)', () => {
+  const FINALIZED = {
+    id: 'rec-sep',
+    status: 'finalized',
+    bankAccountId: 'acct1',
+    year: 2026,
+    month: 9,
+    statementEndingBalance: 12000,
+    finalizedAt: '2026-10-01T15:00:00Z',
+    hasReport: true,
+  };
+  const REOPENED = { ...FINALIZED, id: 'rec-aug', month: 8, status: 'reopened' };
+
+  function signedInAs(role: 'PMAdmin' | 'PMStaff') {
+    return http.get('/api/auth/me', () => HttpResponse.json({ email: 'a@b.test', role }));
+  }
+
+  /** History that answers from `rows`, so a test can change what the next read returns. */
+  function historyOf(rows: () => unknown[]) {
+    return http.get('/api/accounting/reconciliations', () => HttpResponse.json({ rows: rows() }));
+  }
+
+  const unlockButton = () => screen.findByRole('button', { name: 'Unlock Sep 2026' });
+
+  it('offers an administrator Unlock on a finalized month only', async () => {
+    server.use(
+      signedInAs('PMAdmin'),
+      historyOf(() => [FINALIZED, REOPENED]),
+    );
+    renderHistory();
+
+    expect(await unlockButton()).toBeInTheDocument();
+    // A reopened month is already unlocked: nothing to offer.
+    expect(screen.queryByRole('button', { name: 'Unlock Aug 2026' })).toBeNull();
+  });
+
+  it('never offers staff an Unlock', async () => {
+    server.use(
+      signedInAs('PMStaff'),
+      historyOf(() => [FINALIZED]),
+    );
+    renderHistory();
+
+    await screen.findByText('Sep 2026');
+    expect(screen.queryByRole('button', { name: /^Unlock/ })).toBeNull();
+  });
+
+  it('requires a reason and sends nothing without one', async () => {
+    let sent = 0;
+    server.use(
+      signedInAs('PMAdmin'),
+      historyOf(() => [FINALIZED]),
+      http.post('/api/accounting/reconciliations/:id/unlock', () => {
+        sent += 1;
+        return HttpResponse.json({});
+      }),
+    );
+    renderHistory();
+
+    await userEvent.click(await unlockButton());
+    const dialog = screen.getByRole('dialog', { name: 'Unlock Sep 2026' });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Unlock month' }));
+
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('A reason is required');
+    expect(sent).toBe(0);
+  });
+
+  it('unlocks with the reason and shows the month reopened', async () => {
+    let status = 'finalized';
+    let body: unknown;
+    server.use(
+      signedInAs('PMAdmin'),
+      historyOf(() => [{ ...FINALIZED, status }]),
+      http.post('/api/accounting/reconciliations/:id/unlock', async ({ request, params }) => {
+        body = { id: params.id, ...((await request.json()) as object) };
+        status = 'reopened';
+        return HttpResponse.json({ ...FINALIZED, status, clearedBalance: 12000, difference: 0 });
+      }),
+    );
+    renderHistory();
+
+    await userEvent.click(await unlockButton());
+    // The reason field takes focus, and Enter confirms.
+    await userEvent.keyboard('Bank fee missing from the register{Enter}');
+
+    expect(await screen.findByText('Reopened')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Unlock Sep 2026' })).toBeNull();
+    expect(body).toMatchObject({ id: 'rec-sep', reason: 'Bank fee missing from the register' });
+  });
+
+  it('keeps the dialog open on a refusal the session no longer carries the role for (403)', async () => {
+    server.use(
+      signedInAs('PMAdmin'),
+      historyOf(() => [FINALIZED]),
+      http.post(
+        '/api/accounting/reconciliations/:id/unlock',
+        () => new HttpResponse(null, { status: 403 }),
+      ),
+    );
+    renderHistory();
+
+    await userEvent.click(await unlockButton());
+    await userEvent.keyboard('Correction{Enter}');
+
+    const dialog = screen.getByRole('dialog', { name: 'Unlock Sep 2026' });
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      'Only an administrator can unlock a reconciliation.',
+    );
+  });
+
+  it('keeps the dialog open and says why when the month is no longer finalized (409)', async () => {
+    server.use(
+      signedInAs('PMAdmin'),
+      historyOf(() => [FINALIZED]),
+      http.post('/api/accounting/reconciliations/:id/unlock', () =>
+        HttpResponse.json(
+          {
+            code: 'reconciliation_state',
+            detail: 'That reconciliation is not finalized — there is nothing to unlock.',
+          },
+          { status: 409 },
+        ),
+      ),
+    );
+    renderHistory();
+
+    await userEvent.click(await unlockButton());
+    await userEvent.keyboard('Correction{Enter}');
+
+    const dialog = screen.getByRole('dialog', { name: 'Unlock Sep 2026' });
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      'That reconciliation is not finalized — there is nothing to unlock.',
+    );
+  });
+
+  it('cancels on Escape and returns focus to Unlock', async () => {
+    server.use(
+      signedInAs('PMAdmin'),
+      historyOf(() => [FINALIZED]),
+    );
+    renderHistory();
+
+    const unlock = await unlockButton();
+    await userEvent.click(unlock);
+    expect(screen.getByRole('dialog', { name: 'Unlock Sep 2026' })).toBeInTheDocument();
+    await userEvent.keyboard('{Escape}');
+
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(unlock).toHaveFocus();
   });
 });
