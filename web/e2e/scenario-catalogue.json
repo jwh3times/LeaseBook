@@ -166,6 +166,15 @@
       ]
     },
     {
+      "id": "property-ownership-transfer",
+      "workflow": "Transfer a property to another owner, dated today or earlier with a future date refused, and see the held security deposits move to the buyer",
+      "area": "Directory",
+      "spec": "property-ownership-transfer.spec.ts",
+      "org": "scenario",
+      "events": ["DepositResponsibilityTransferred"],
+      "routes": ["POST /api/directory/properties/{id}/ownership-transfers"]
+    },
+    {
       "id": "directory-palette-jump",
       "workflow": "Jump to an owner, a property, a tenant and a unit from the command palette",
       "area": "Directory",
@@ -807,12 +816,6 @@
         "issue": 553
       },
       {
-        "event": "DepositResponsibilityTransferred",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 555
-      },
-      {
         "event": "InterestEarned",
         "reason": "baseline gap",
         "date": "2026-10-12",
@@ -881,12 +884,6 @@
         "reason": "baseline gap",
         "date": "2026-10-12",
         "issue": 558
-      },
-      {
-        "route": "POST /api/directory/properties/{id}/ownership-transfers",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 555
       },
       {
         "route": "GET /api/directory/units",

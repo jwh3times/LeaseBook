@@ -376,8 +376,10 @@ The 22 routes no test reached, by what they have in common:
 - **Directory records with no screen (8).** `PUT` for owners, properties, units and tenants, `GET`
   and `POST /api/directory/units`, `POST /api/directory/leases` and
   `POST /api/directory/properties/{id}/ownership-transfers`. The web client has a function for each
-  and no screen calls one. The screens create an owner, a property and a tenant, and edit only a
-  lease's late-fee terms. A property's units arrive with the property.
+  and no screen called one when this was measured. The screens create an owner, a property and a
+  tenant, and edit only a lease's late-fee terms. A property's units arrive with the property. The
+  property page now transfers a property to another owner, and a browser test reaches that route
+  (#555).
 - **Bank adjustments (1).** No screen records a bank fee, interest or a transfer between accounts.
 - **Accounting reads (4).** Owner balances, the owner ledger, deposits and the trust equation. No
   screen requests these routes; the screens that show the same figures get them from other routes.

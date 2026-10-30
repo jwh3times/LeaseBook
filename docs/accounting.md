@@ -137,7 +137,7 @@ different — it is money held against that tenant's own future rent, so it carr
 either direction, and a prepayment refund does not invent one.
 
 If the property is sold while a deposit remains held, the explicit ownership-transfer workflow
-posts `DepositResponsibilityTransferred`: one balanced entry debits the seller's held-deposit bucket and
+(**Transfer ownership** on the property page) posts `DepositResponsibilityTransferred`: one balanced entry debits the seller's held-deposit bucket and
 credits the buyer's bucket for each tenant and deposit bank as of the effective date. No cash moves,
 and the seller's owner equity does not move; a sale settlement is separate work. The handoff is
 rejected in a closed accounting period or a reconciled deposit-bank month. See

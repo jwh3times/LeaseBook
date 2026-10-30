@@ -73,6 +73,68 @@ public sealed class PropertyOwnershipTransferTests(PostgresFixture fixture)
         property.OwnerId.ShouldBe(buyerId);
     }
 
+    // #555: the transfer screen shows each refusal inline, so the 400 body must carry its reason, not
+    // only the status.
+    [Fact]
+    public async Task Each_refusal_reaches_the_client_with_its_reason()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var orgId = await NewOrgAsync(ct);
+        Guid sellerId = default;
+        Guid buyerId = default;
+        Guid propertyId = default;
+
+        await RunAsync(orgId, async (sender, _) =>
+        {
+            sellerId = await sender.Send(
+                new CreateOwner("Owner Alpha", null, null, null, 800, 0m), ct);
+            buyerId = await sender.Send(
+                new CreateOwner("Owner Beta", null, null, null, 800, 0m), ct);
+            propertyId = await sender.Send(
+                new CreateProperty(sellerId, "1 Refusal St", "Raleigh", "NC", null, null), ct);
+            var unitId = await sender.Send(
+                new CreateUnit(propertyId, "A", 1500m, "available"), ct);
+            var tenantId = await sender.Send(
+                new CreateTenant("Jasmine Carter", null, null, "current"), ct);
+            await sender.Send(new CreateLease(
+                tenantId, unitId, new DateOnly(2026, 1, 1), null,
+                1500m, 1500m, "active"), ct);
+            var deposits = await sender.Send(
+                new CreateBankAccount("Deposit Trust", null, null, "deposit"), ct);
+            await sender.Send(new CollectDeposit(
+                tenantId, 1500m, new DateOnly(2026, 2, 3), deposits.Id,
+                null, "deposit:refusal-reasons"), ct);
+        }, ct);
+
+        var client = await LoggedInClientAsync(orgId, ct);
+        async Task<string> RefusedAsync(Guid toOwnerId, DateOnly effectiveDate, string sourceRef)
+        {
+            var response = await client.PostAsJsonAsync(
+                $"/api/directory/properties/{propertyId}/ownership-transfers",
+                new { toOwnerId, effectiveDate, sourceRef },
+                ct);
+            response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+            return await response.Content.ReadAsStringAsync(ct);
+        }
+
+        (await RefusedAsync(sellerId, new DateOnly(2026, 2, 5), "property-sale:same-owner"))
+            .ShouldContain("The succeeding owner must differ from the current owner.");
+        (await RefusedAsync(buyerId, new DateOnly(2026, 2, 2), "property-sale:backdated"))
+            .ShouldContain(
+                "Later seller-attributed deposit activity must be reversed before recording this backdated ownership transfer.");
+
+        var recorded = await client.PostAsJsonAsync(
+            $"/api/directory/properties/{propertyId}/ownership-transfers",
+            new { toOwnerId = buyerId, effectiveDate = new DateOnly(2026, 2, 5), sourceRef = "property-sale:first" },
+            ct);
+        recorded.StatusCode.ShouldBe(HttpStatusCode.OK);
+        (await RefusedAsync(sellerId, new DateOnly(2026, 2, 5), "property-sale:same-day"))
+            .ShouldContain("A property ownership transfer must be effective after its preceding transfer.");
+
+        await RunAsync(orgId, async (_, services) =>
+            (await services.GetRequiredService<IInvariantChecks>().CheckCoreAsync(ct)).ShouldBeEmpty(), ct);
+    }
+
     [Fact]
     public async Task Transfer_is_rejected_when_an_affected_deposit_bank_month_is_reconciled()
     {

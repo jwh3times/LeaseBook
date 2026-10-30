@@ -228,7 +228,7 @@ not edit between the markers.
 <!-- scenario-catalogue:start -->
 <!-- prettier-ignore-start -->
 
-74 scenarios, 1 of them an expected failure that shows a known limit. 8 journal event types and 21 routes are exempt.
+75 scenarios, 1 of them an expected failure that shows a known limit. 7 journal event types and 20 routes are exempt.
 
 ### Scenarios
 
@@ -250,6 +250,7 @@ not edit between the markers.
 | `list-row-opens-detail` | Open a record from its list row in 2 interactions | Directory | `budgeted-flows.spec.ts` |  |  | `GET /api/directory/tenants`<br>`GET /api/directory/tenants/{id}` |
 | `settings-accounting-basis` | Change the accounting basis in settings and keep it across a reload | Settings | `budgeted-flows.spec.ts` |  |  | `GET /api/settings/org`<br>`PUT /api/settings/org` |
 | `directory-browse-records` | Browse owners, properties and tenants from list to detail and page with the quick-switcher | Directory | `directory-navigation.spec.ts` |  |  | `GET /api/directory/owners`<br>`GET /api/directory/owners/{id}`<br>`GET /api/directory/properties`<br>`GET /api/directory/properties/{id}`<br>`GET /api/directory/tenants`<br>`GET /api/directory/tenants/{id}` |
+| `property-ownership-transfer` | Transfer a property to another owner, dated today or earlier with a future date refused, and see the held security deposits move to the buyer | Directory | `property-ownership-transfer.spec.ts` | scenario | `DepositResponsibilityTransferred` | `POST /api/directory/properties/{id}/ownership-transfers` |
 | `directory-palette-jump` | Jump to an owner, a property, a tenant and a unit from the command palette | Directory | `directory-navigation.spec.ts` |  |  | `GET /api/search` |
 | `directory-create-owner` | Create an owner from the owner list by keyboard, with a fee over 100% refused, and see it on its page and in the list | Directory | `directory-records.spec.ts` |  |  | `POST /api/directory/owners` |
 | `directory-create-property` | Create a property for a new owner by keyboard, with a blank address refused, and see it on its page, in the list and under its owner | Directory | `directory-records.spec.ts` |  |  | `POST /api/directory/properties` |
@@ -320,7 +321,7 @@ not edit between the markers.
 | The control appears only after six failed attempts with waits of up to ten minutes, and the simulated processor accepts every payment. | 1 |
 | The control appears only for a notice held for ten minutes, which a test would have to wait out. | 1 |
 | The control appears only when delivery to the local test inbox failed, and no screen makes a delivery fail. | 1 |
-| baseline gap | 19 |
+| baseline gap | 17 |
 
 #### Journal event types with no scenario
 
@@ -328,7 +329,6 @@ not edit between the markers.
 | :-- | :-- | :-- | :-- |
 | `BalanceForward` | baseline gap | 2026-10-12 | #556 |
 | `BankFeeCharged` | baseline gap | 2026-10-12 | #553 |
-| `DepositResponsibilityTransferred` | baseline gap | 2026-10-12 | #555 |
 | `InterestEarned` | baseline gap | 2026-10-12 | #553 |
 | `OwnerContribution` | baseline gap | 2026-10-12 | #556 |
 | `PMFeesSwept` | baseline gap | 2026-10-12 | #556 |
@@ -346,7 +346,6 @@ not edit between the markers.
 | `POST /api/accounting/banks/{bankAccountId}/adjustments` | baseline gap | 2026-10-12 | #553 |
 | `PUT /api/directory/owners/{id}` | baseline gap | 2026-10-12 | #558 |
 | `PUT /api/directory/properties/{id}` | baseline gap | 2026-10-12 | #558 |
-| `POST /api/directory/properties/{id}/ownership-transfers` | baseline gap | 2026-10-12 | #555 |
 | `GET /api/directory/units` | baseline gap | 2026-10-12 | #558 |
 | `POST /api/directory/units` | baseline gap | 2026-10-12 | #558 |
 | `PUT /api/directory/units/{id}` | baseline gap | 2026-10-12 | #558 |

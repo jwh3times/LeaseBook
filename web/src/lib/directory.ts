@@ -8,6 +8,7 @@ import {
   getApiDirectoryTenantsById,
   postApiDirectoryOwners,
   postApiDirectoryProperties,
+  postApiDirectoryPropertiesByIdOwnershipTransfers,
   postApiDirectoryTenants,
   putApiDirectoryLeasesById,
   type CreateOwner,
@@ -20,8 +21,10 @@ import {
   type PagedResponseOfTenantListRow,
   type PropertyDetail,
   type PropertyListRow,
+  type PropertyOwnershipTransferResult,
   type TenantDetail,
   type TenantListRow,
+  type TransferPropertyOwnershipRequest,
   type UnitRow,
   type UpdateLease,
   unwrap,
@@ -32,6 +35,7 @@ export type {
   OwnerListRow,
   PropertyDetail,
   PropertyListRow,
+  PropertyOwnershipTransferResult,
   TenantDetail,
   TenantListRow,
   UnitRow,
@@ -161,5 +165,28 @@ export function useCreateProperty() {
       return unwrap(postApiDirectoryProperties({ body }), 'Failed to create the property');
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['properties'] }),
+  });
+}
+
+/**
+ * Records an effective-dated ownership transfer (ADR-036): the property's owner changes and every
+ * held security deposit moves to the buyer in one transaction. The owner reads refetch too, since
+ * each side's "Deposits held" and property list change with it.
+ */
+export function useTransferPropertyOwnership(propertyId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: TransferPropertyOwnershipRequest) =>
+      unwrap(
+        postApiDirectoryPropertiesByIdOwnershipTransfers({ path: { id: propertyId }, body }),
+        'Failed to transfer the property.',
+      ),
+    onSuccess: () =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: ['property', propertyId] }),
+        qc.invalidateQueries({ queryKey: ['properties'] }),
+        qc.invalidateQueries({ queryKey: ['owners'] }),
+        qc.invalidateQueries({ queryKey: ['owner'] }),
+      ]),
   });
 }
