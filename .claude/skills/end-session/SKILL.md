@@ -209,7 +209,7 @@ blanket deletes such as `git clean -x` would take them too, so delete only by pa
 
 - `Dev stack` — report what is running and ask before stopping it; a running database may be
   deliberate. Never run its **Never run** commands here.
-- `Generated-config check` — when it applies and reports drift, regenerate, and commit both sides.
+- `Generated-config check` — when it reports drift, regenerate, and commit both sides.
 - `Hook: end-session cleanup` from `docs/agents/workspace.md`.
 - `Final portability check`, last. Name the exact state of each repository rather than calling the
   checkout synchronized.

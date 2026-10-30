@@ -102,7 +102,7 @@ jwh3times/LeaseBook
 ## Private issue repository
 
 `discover: git -C private remote get-url origin` — the companion's tracker (see "Which tracker"
-above): confidential work — an unpatched security weakness, compliance and legal engagements,
+above): confidential work — compliance and legal engagements,
 customer identity, pricing and strategy — and every required human follow-up. A confidential
 product decision carries `product-decision`. Never referenced from a public PR, commit or issue;
 its issues are closed by hand after the public merge.
@@ -133,8 +133,8 @@ default, in the private tracker when the text is confidential; labelled from `tr
 
 ## Security findings
 
-A private companion issue labelled `security` — never a public issue, PR, commit or document while
-the weakness is unpatched, and never exploitable detail in memory. A report from outside arrives
-through private vulnerability reporting (`SECURITY.md`) as a draft repository advisory, which stays
-its record; a residual risk accepted by decision keeps its `security` issue, closed `wontfix` or
-labelled `deferred-trigger`.
+The default: a draft repository security advisory, never a public issue, PR, commit or document
+while the weakness is unpatched, and never exploitable detail in memory. A report from outside
+arrives through private vulnerability reporting (`SECURITY.md`) as one already. A residual risk
+accepted by decision is a private companion issue labelled `security` that cites the advisory
+without restating it, closed `wontfix` or labelled `deferred-trigger`.

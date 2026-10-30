@@ -17,6 +17,7 @@ repository keeps them there.
 - **Read by:** end-session, ship
 - **Value:** `none`, a literal `owner/name`, or a `discover:` value — the repository that holds
   issues too sensitive for the public tracker.
+- **Default:** the `Private companion`'s repository; `none` without a companion.
 - **Discover:** the companion's remote (`git -C private remote get-url origin`) and what
   `AGENTS.md` and existing skills say about private issues. A repository that keeps the name out of
   its public files uses `discover:`.
@@ -44,13 +45,18 @@ repository keeps them there.
 - **Value:** how work found during a session, and not yet committed to, is recorded: `issue` (an
   issue, labelled and added to the `Board`) or `draft item` (a draft item on the `Board`, which
   becomes an issue only when the work is committed to, by the rule the repository records).
+- **Default:** `issue`
 - **Discover:** `AGENTS.md`, the ADRs and this file's own sections, for a rule that keeps
-  uncommitted work as board drafts; `issue` when nothing says so.
+  uncommitted work as board drafts. Write the heading only for `draft item`.
 
 ## Security findings
 
 - **Read by:** docs-updater, end-session
-- **Value:** where a security finding is recorded before its fix ships — a draft repository
-  advisory (optionally with a draft board item), a private issue labelled `security`, a named
-  private document, or the process in `SECURITY.md`. Never a public issue.
-- **Discover:** `SECURITY.md`, `AGENTS.md`, and existing skills' security sections.
+- **Value:** where a security finding is recorded before its fix ships, and what may point at it.
+  Never a public issue.
+- **Default:** a draft repository security advisory on the `Public repository`. A board item or a
+  private follow-up issue may carry only a sanitized reference to it; no public issue, PR, commit,
+  wiki page or memory body holds its detail before the fix ships, and drafting it never authorizes
+  publishing it.
+- **Discover:** `SECURITY.md`, `AGENTS.md`, and existing skills' security sections. Write the
+  heading only for a rule the default lacks, such as where an accepted risk is recorded.

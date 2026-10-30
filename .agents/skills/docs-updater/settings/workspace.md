@@ -18,9 +18,11 @@ that file.
 
 - **Read by:** end-session, handoff, lets-go, ship
 - **Value:** commands that show the state of the checkout and, when there is one, the companion.
+- **Default:** `git status --short --branch` and `git worktree list`; with the `Private companion`
+  checked out, then `git -C <companion> fetch -q --prune origin` and
+  `git -C <companion> status --short --branch` (the fetch makes its ahead/behind counts current).
 - **Discover:** a repository script that reports both trees (`scripts/repository-status.mjs` and
-  the like). Otherwise propose `git status --short --branch` plus, with a companion,
-  `git -C private status --short --branch`.
+  the like). Write the heading only for such a script.
 
 ## Companion commit checks
 
@@ -37,8 +39,20 @@ that file.
 
 - **Read by:** end-session, handoff, lets-go
 - **Value:** the command that brings local `main` up to date, run from `main`.
-- **Discover:** a `sync:main` (or similar) script in `package.json`. Otherwise
-  `git pull --ff-only origin main`.
+- **Default:** `git pull --ff-only origin main`; with the `Private companion` checked out and clean,
+  then `git -C <companion> pull --ff-only`.
+- **Discover:** a `sync:main` (or similar) script in `package.json`. Write the heading only for
+  such a script.
+
+## Companion restore command
+
+- **Read by:** handoff, lets-go
+- **Value:** the command that restores the `Private companion` checkout on a machine without it, or
+  `none` when it is cloned by hand.
+- **Default:** `npm run bootstrap:private`
+- **Discover:** a `bootstrap:private` (or similar) script in `package.json`, and the docs that say
+  how a maintainer restores the companion. Write the heading only when it differs from the
+  default.
 
 ## Safe-to-remove paths
 
@@ -68,19 +82,22 @@ that file.
 ## Generated-config check
 
 - **Read by:** docs-updater, end-session
-- **Value:** the command that verifies generated agent config (normally
-  `node scripts/sync-agents.mjs --check`), the command that regenerates it (normally
-  `node scripts/sync-agents.mjs`), and when to run them: `always`, or `when agent sources changed`
-  (`.agents/skills/`, `.claude/agents/`).
-- **Discover:** `scripts/sync-agents.mjs`, a `sync:agents:check` script, and the CI workflow that
-  runs it.
+- **Value:** the command that verifies generated agent config and the command that regenerates it,
+  run every time: the check is quick, and it also catches an orphaned mirror.
+- **Default:** `node scripts/sync-agents.mjs --check`, regenerated with
+  `node scripts/sync-agents.mjs`.
+- **Discover:** `scripts/sync-agents.mjs` and the CI workflow that runs it. Write the heading only
+  when regenerating needs more, such as a formatter run first.
 
 ## Final portability check
 
 - **Read by:** end-session
 - **Value:** `none`, or a command run last that proves the checkout (and companion) are clean,
   tracked and pushed.
-- **Discover:** a `--check` mode in a repository status script. Otherwise `none`.
+- **Default:** `git status --porcelain` and `git log --branches --not --remotes --oneline`, here
+  and, with the `Private companion` checked out, in it: empty output is clean and pushed.
+- **Discover:** a `--check` mode in a repository status script. Write the heading only for such a
+  script.
 
 ## Procedure
 

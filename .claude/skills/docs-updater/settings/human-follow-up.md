@@ -11,13 +11,17 @@ finds today's values.
 - **Read by:** docs-updater, end-session, ship
 - **Value:** where each follow-up becomes trackable: issues in a repository (`owner/name`, or a
   `discover:` value), or a checkbox in one public tracking issue (`owner/name#n`).
-- **Discover:** the older files above, and existing skills' human follow-up sections.
+- **Default:** issues in the `Private issue repository`, or in the `Public repository` when that is
+  `none`.
+- **Discover:** the older files above, and existing skills' human follow-up sections. Write the
+  heading only when follow-ups go elsewhere, or carry a rule of their own.
 
 ## Follow-up label
 
 - **Read by:** docs-updater, end-session, ship
 - **Value:** the label a follow-up issue carries (`ready-for-human`, `human-action-required`, …),
   or `none` for a tracking-issue checkbox.
+- **Default:** `ready-for-human`; a conflicting `ready-for-agent` or `needs-triage` comes off.
 - **Discover:** as above, and the triage label vocabulary (`docs/agents/triage-labels.md`, or its
   section of `docs/agents/issue-tracker.md`).
 
@@ -26,7 +30,9 @@ finds today's values.
 - **Read by:** docs-updater, end-session, ship
 - **Value:** `none`, `same as Board` (the `Board` setting in `issue-tracker.md`), or a separate
   project as `<owner> <number>` or a `discover:` value, with the fields to set.
-- **Discover:** as above.
+- **Default:** `same as Board`, with the fields its `Board fields` describe.
+- **Discover:** as above. Write the heading only for another board, or for fields a follow-up sets
+  differently.
 
 ## Follow-up wiki
 
@@ -34,8 +40,11 @@ finds today's values.
 - **Value:** `none`, or the wiki that holds step-by-step instructions: its repository and index
   page (e.g. the destination repository's wiki, index `human-todo`), plus whether pushing to it is
   pre-authorized (`push without asking` or `ask before pushing`).
-- **Discover:** as above. A wiki's Git remote is `https://github.com/<owner>/<name>.wiki.git`.
-  Propose the index `human-todo`, linked from `Home`, for a wiki that has none.
+- **Default:** the destination repository's wiki, index page `human-todo` linked from `Home`, push
+  without asking, when that wiki exists (`git ls-remote https://github.com/<owner>/<name>.wiki.git`
+  succeeds; a wiki with no pages has no repository yet); otherwise `none`.
+- **Discover:** as above. Write the heading only when the wiki, its index page or the push rule
+  differs.
 
 ## Procedure
 

@@ -86,6 +86,8 @@ Run the `Workspace status command` too. Then compare with the document's **Where
   first, and stop for that item. The same holds for any local-only item the work depends on.
 - **The companion has diverged from its upstream** (commits on both sides) — stop and report it;
   never merge, rebase, reset or force-push the companion.
+- **The companion checkout is absent and the work needs it** — offer the
+  `Companion restore command`; never create the directory by hand.
 - **Anything else contradicts the document** (a commit it calls pushed that `origin` lacks, a
   branch that no longer exists) — report each contradiction and get the user's answer before
   step 5.
