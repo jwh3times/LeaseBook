@@ -358,9 +358,13 @@ lines marked cleared or reconciled; **uncleared** is the difference. Absence of 
 **difference reaches $0.00**, then **finalizes**. Finalize is rejected unless the difference is zero; on
 success it marks the ticked lines `reconciled`, stores an **immutable report snapshot**, and **locks that
 account for that month**. A later post carrying that bank account dated into a locked month is rejected
-(`account_period_locked`) and surfaced in the composer the way an over-application is. A `PMAdmin` can
-**unlock** a finalized month with a reason (written to the audit log); items stay reconciled until the month
-is finalized again. There is no bulk un-reconcile.
+(`account_period_locked`) and surfaced in the composer the way an over-application is, offering only what
+the reader can do: an administrator is pointed at the month's reconciliation history on Banking, and staff
+are told to ask an administrator. A `PMAdmin` can **unlock** a finalized month from its row in that history,
+giving a reason the audit log keeps with the acting user. The month then reads **Reopened**: postings dated
+into it land again until it is finalized again, and items stay reconciled meanwhile. Reconcile-in-place
+finalizes only the current month, so a reopened past month has no screen to finalize it again (#656). There
+is no bulk un-reconcile.
 
 **Bank-only adjustments.** Three posting templates cover the statement lines reconciliation needs that are
 not tenant/owner activity: `BankFeeCharged` (a service charge — a PM operating cost), `InterestEarned`

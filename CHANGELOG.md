@@ -14,7 +14,19 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ## [Unreleased]
 
+No unreleased changes.
+
+## [0.26.0] - 2026-10-30
+
 ### Added
+
+- **An administrator can unlock a reconciled month from its reconciliation history.** On Banking, a
+  finalized month in the reconciliation history now offers Unlock to an administrator, and never to
+  staff. Unlocking asks for a reason, which the audit log keeps with the administrator's name, and a
+  refusal is shown in the dialog without losing what was typed. The month then reads Reopened, and
+  postings dated into it land on that account again until it is finalized again. Reconcile-in-place
+  finalizes only the current month, so a past month that is unlocked cannot yet be finalized again
+  from a screen.
 
 - **A development host in Stripe sandbox mode can be pointed at a local stand-in for Stripe.** The
   new setting `Payments:Stripe:ApiBase` takes a loopback `http` address with a port and nothing else,
@@ -194,6 +206,15 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   credentials is refused. An existing fixture manifest is unaffected.
 
 ### Fixed
+
+- **The locked-month message offers only what its reader can do.** A posting dated into a reconciled
+  month was refused with advice to "unlock the reconciliation first", which no screen could do. An
+  administrator is now pointed to the reconciliation history on Banking, and staff are told to post
+  into the open month or ask an administrator to unlock it.
+
+- **Tab no longer leaves an open dialog.** The dialogs declared themselves modal, but Tab moved on to
+  the page behind them. In every dialog, Tab and Shift+Tab now wrap at either end, and focus left on
+  the page comes back into the dialog.
 
 - **A tenant credit can no longer exceed what the tenant owes, unless an administrator allows it.**
   A credit larger than the tenant's open charges left them owing less than nothing, with no money
@@ -1544,7 +1565,8 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.25.0...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.26.0...HEAD
+[0.26.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.26.0
 [0.25.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.25.0
 [0.24.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.24.0
 [0.23.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.23.0
