@@ -57,13 +57,18 @@ line in a final message is not a follow-up.
    options and the consequences of each. Write multi-line
    bodies to a temporary file and pass `--body-file`. Select the destination repository explicitly
    with `-R`, even from the public checkout. Apply the follow-up label, creating it if the
-   repository lacks it.
+   repository lacks it. A destination meant to be private (the `Private companion`, a
+   `Private issue repository`, or any `discover:` value) is checked before the first write of the
+   run: `gh repo view <repository> --json visibility --jq .visibility` must print `PRIVATE`, for
+   its wiki too; otherwise stop and publish nothing there.
 4. **Board.** Add the issue to the follow-up board and set its fields from current evidence:
    actionable, blocked by a named prerequisite, or parked until a conditional trigger. Look up
    field and option IDs; never assume them.
 5. **Instructions.** Publish numbered steps on the wiki: access needed, exact commands or verified
    UI navigation, expected results, how to verify completion, and recovery where relevant. Mark
-   uncertainty about a UI instead of inventing clicks. Link the issue and source work, and index the
+   uncertainty about a UI instead of inventing clicks. With `Follow-up wiki` `none`, the steps go
+   in the issue body instead, under `## Steps`, followed by `## Done when`. On a wiki, link the
+   issue and source work, and index the
    page from the wiki's index page. Name a new page `<Topic>-<YYYY-MM-DD>`
    (`Rotate-Stripe-Keys-2026-10-28`); never rename an existing one, since issues link to it.
    Preserve other pages and concurrent edits when pushing; a local wiki commit without a successful

@@ -26,7 +26,7 @@ setting below is a `##` heading in that file.
   no changelog section (a dependency bot's PR):
   - `backfill` — `ship` adds a dated section for it from the tagged merge;
   - `roll up` — its changes are folded into the next section written, and no section is invented
-    for it.
+    for it; `ship` finds the tags released after the newest section.
 
   May add a bulleted **Ignore** list of tag patterns that predate the changelog (e.g. `v1.0.0.x`).
 - **Discover:** the existing `ship` skill's backfill step, and tags with no section in
