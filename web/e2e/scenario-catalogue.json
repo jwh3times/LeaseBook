@@ -246,12 +246,15 @@
     },
     {
       "id": "ledger-issue-credit",
-      "workflow": "Issue a tenant a credit from the ledger composer by keyboard, and see the balance fall by the amount",
+      "workflow": "Charge a tenant, then issue a credit within what they owe from the ledger composer by keyboard, and see the balance fall by the amount",
       "area": "Accounting",
       "spec": "ledger-postings.spec.ts",
       "org": "scenario",
-      "events": ["CreditIssued"],
-      "routes": ["POST /api/accounting/tenants/{tenantId}/credits"]
+      "events": ["FeeCharged", "CreditIssued"],
+      "routes": [
+        "POST /api/accounting/tenants/{tenantId}/charges",
+        "POST /api/accounting/tenants/{tenantId}/credits"
+      ]
     },
     {
       "id": "ledger-collect-and-apply-held-funds",

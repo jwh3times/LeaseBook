@@ -50,7 +50,7 @@ function renderTenants() {
   // these navigation tests focused on routing.
   server.use(
     http.get('/api/accounting/tenants/:tenantId/ledger', ({ params }) =>
-      HttpResponse.json({ tenantId: params.tenantId, balance: 0, rows: [] }),
+      HttpResponse.json({ tenantId: params.tenantId, balance: 0, rows: [], owed: 0 }),
     ),
   );
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });

@@ -112,6 +112,64 @@ public sealed class LedgerHttpTests(PostgresFixture fixture)
     }
 
     [Fact]
+    public async Task A_credit_over_what_the_tenant_owes_is_refused_and_posts_nothing()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var setup = await SetupAsync(ct);
+        var client = await LoggedInClientAsync(setup, ct);
+        await PostOkAsync<PostResult>(client, $"/api/accounting/tenants/{setup.TenantId}/charges",
+            new { amount = 100m, date = Feb1, kind = "rent", sourceRef = Key() }, ct);
+
+        var over = await client.PostAsJsonAsync($"/api/accounting/tenants/{setup.TenantId}/credits",
+            new { amount = 100.01m, date = Feb3, reason = "goodwill", sourceRef = Key() }, ct);
+
+        over.StatusCode.ShouldBe(HttpStatusCode.Conflict, await over.Content.ReadAsStringAsync(ct));
+        (await over.Content.ReadFromJsonAsync<ProblemWithCode>(ct))!.Code.ShouldBe("insufficient_receivable");
+        (await GetAsync<TenantLedgerResponse>(client, $"/api/accounting/tenants/{setup.TenantId}/ledger", ct))
+            .Balance.ShouldBe(100m);
+    }
+
+    [Fact]
+    public async Task Staff_cannot_allow_an_unapplied_credit()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var setup = await SetupAsync(ct);
+        var client = await LoggedInClientAsync(setup, ct);
+        var charge = await PostOkAsync<PostResult>(client, $"/api/accounting/tenants/{setup.TenantId}/charges",
+            new { amount = 100m, date = Feb1, kind = "rent", sourceRef = Key() }, ct);
+
+        // The allowance is refused before anything is read or posted, even for a credit that would fit.
+        var response = await client.PostAsJsonAsync($"/api/accounting/tenants/{setup.TenantId}/credits",
+            new { amount = 85m, date = Feb3, reason = "goodwill", sourceRef = Key(), allowUnappliedCredit = true }, ct);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden, await response.Content.ReadAsStringAsync(ct));
+        var problem = (await response.Content.ReadFromJsonAsync<ProblemWithCode>(ct))!;
+        problem.Code.ShouldBe("unapplied_credit_requires_admin");
+        problem.CorrelationId.ShouldNotBeNullOrWhiteSpace();
+        (await GetAsync<TenantLedgerResponse>(client, $"/api/accounting/tenants/{setup.TenantId}/ledger", ct))
+            .Rows.ShouldHaveSingleItem().EntryId.ShouldBe(charge.EntryId);
+    }
+
+    [Fact]
+    public async Task An_administrator_can_allow_an_unapplied_credit()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var setup = await SetupAsync(ct, Roles.PMAdmin);
+        var client = await LoggedInClientAsync(setup, ct);
+
+        var credit = await PostOkAsync<PostResult>(client, $"/api/accounting/tenants/{setup.TenantId}/credits",
+            new { amount = 85m, date = Feb3, reason = "goodwill", sourceRef = Key(), allowUnappliedCredit = true }, ct);
+
+        var ledger = await GetAsync<TenantLedgerResponse>(client, $"/api/accounting/tenants/{setup.TenantId}/ledger", ct);
+        ledger.Balance.ShouldBe(-85m);
+        ledger.Rows.ShouldHaveSingleItem().EventSubtype.ShouldBe("unapplied");
+
+        // The marked entry's audit trail names the administrator who allowed it.
+        var audit = await GetAsync<EntryAuditResponse>(client, $"/api/accounting/entries/{credit.EntryId}/audit", ct);
+        audit.Rows.ShouldHaveSingleItem().ActorEmail.ShouldBe(setup.Email);
+    }
+
+    [Fact]
     public async Task A_validation_failure_maps_to_400()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -155,7 +213,7 @@ public sealed class LedgerHttpTests(PostgresFixture fixture)
 
     private static string Key() => UuidV7.NewId().ToString();
 
-    private async Task<Setup> SetupAsync(CancellationToken ct)
+    private async Task<Setup> SetupAsync(CancellationToken ct, string role = Roles.PMStaff)
     {
         var orgId = UuidV7.NewId();
         await using (var migratorDb = fixture.CreateContext(fixture.MigratorConnectionString))
@@ -178,7 +236,7 @@ public sealed class LedgerHttpTests(PostgresFixture fixture)
                 DisplayName = "Renée Calloway",
             };
             (await userManager.CreateAsync(user, Password)).Succeeded.ShouldBeTrue();
-            (await userManager.AddToRoleAsync(user, Roles.PMStaff)).Succeeded.ShouldBeTrue();
+            (await userManager.AddToRoleAsync(user, role)).Succeeded.ShouldBeTrue();
         }
 
         Guid tenantId = default, trustBankId = default, depositBankId = default;

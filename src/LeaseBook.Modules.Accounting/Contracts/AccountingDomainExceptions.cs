@@ -110,13 +110,14 @@ public enum ReceivableSource
 {
     Deposit,
     Prepayment,
+    Credit,
 }
 
 /// <summary>
-/// An application would exceed the tenant's open receivable (409, ADR-011 / P51). Unlike
-/// <c>PaymentReceived</c> (which auto-splits the excess to a prepayment), an application has no
-/// excess path, so over-applying would silently drive the receivable negative — the engine rejects
-/// instead and the composer asks the user to lower the amount.
+/// An application or a credit would exceed the tenant's open receivable (409, ADR-011 / P51, #652).
+/// Unlike <c>PaymentReceived</c> (which auto-splits the excess to a prepayment), neither has an excess
+/// path, so over-applying would silently drive the receivable negative — the engine rejects instead
+/// and the composer asks the user to lower the amount. A credit may pass it only when explicitly allowed.
 /// </summary>
 public sealed class InsufficientReceivableException(
     ReceivableSource source, decimal requested, decimal owed, Guid? tenantId = null)
@@ -134,10 +135,15 @@ public sealed class InsufficientReceivableException(
 
     public Guid? TenantId { get; } = tenantId;
 
-    private static string Describe(ReceivableSource source, decimal requested, decimal owed) =>
-        source == ReceivableSource.Deposit
-            ? $"Deposit application of {requested:0.00} exceeds the {owed:0.00} currently owed by this tenant."
-            : $"Prepayment application of {requested:0.00} exceeds the {owed:0.00} currently owed by this tenant.";
+    private static string Describe(ReceivableSource source, decimal requested, decimal owed) => source switch
+    {
+        ReceivableSource.Deposit =>
+            $"Deposit application of {requested:0.00} exceeds the {owed:0.00} currently owed by this tenant.",
+        ReceivableSource.Prepayment =>
+            $"Prepayment application of {requested:0.00} exceeds the {owed:0.00} currently owed by this tenant.",
+        _ => $"A credit of {requested:0.00} exceeds the {owed:0.00} currently owed by this tenant. " +
+             "Only an administrator can allow a larger credit.",
+    };
 }
 
 /// <summary>A disbursement would take owner equity below its reserve floor (409).</summary>

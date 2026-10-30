@@ -2,6 +2,7 @@ using LeaseBook.Modules.Accounting.Features.LedgerPosting;
 using LeaseBook.Modules.Accounting.Features.Ledgers;
 using LeaseBook.SharedKernel.Cqrs;
 using LeaseBook.SharedKernel.Endpoints;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -10,7 +11,8 @@ namespace LeaseBook.Modules.Accounting.Endpoints;
 
 /// <summary>
 /// The M3 ledger <b>write</b> surface (§C.1) — the first write endpoints in the product. Posting and
-/// void are <c>RequirePMStaff</c> (money entry is staff-level, P53); each lambda stays thin (bind →
+/// void are <c>RequirePMStaff</c> (money entry is staff-level, P53), except that only a PMAdmin may allow a
+/// credit larger than what the tenant owes (#652); each lambda stays thin (bind →
 /// dispatch the command → <c>TypedResults</c>). Owner/property/unit are never in the body — the command
 /// resolves them from the tenant's lease effective on the accounting date (P58). Domain rejections flow to the host's
 /// <c>AccountingExceptionHandler</c> (422/409, §C.5). The focused ledger CSV (P55) lives here too.
@@ -36,10 +38,14 @@ public sealed class LedgerPostingEndpoints : IEndpointModule
                     TypedResults.Ok(await sender.Send(body with { TenantId = tenantId }, ct)))
             .Produces<PostResult>();
 
+        // A credit above what the tenant owes posts only when allowed, and only an administrator may allow
+        // it (#652); the filter refuses before anything is read or posted.
         group.MapPost("/tenants/{tenantId:guid}/credits",
                 async (Guid tenantId, IssueCredit body, ISender sender, CancellationToken ct) =>
                     TypedResults.Ok(await sender.Send(body with { TenantId = tenantId }, ct)))
-            .Produces<PostResult>();
+            .AddEndpointFilter<UnappliedCreditAdminFilter>()
+            .Produces<PostResult>()
+            .ProducesProblem(StatusCodes.Status403Forbidden);
 
         group.MapPost("/tenants/{tenantId:guid}/deposits",
                 async (Guid tenantId, CollectDeposit body, ISender sender, CancellationToken ct) =>
@@ -74,5 +80,29 @@ public sealed class LedgerPostingEndpoints : IEndpointModule
                     return Results.File(TenantLedgerCsv.Write(ledger), "text/csv", $"tenant-{tenantId:N}-ledger.csv");
                 })
             .Produces(StatusCodes.Status200OK, contentType: "text/csv");
+    }
+}
+
+/// <summary>
+/// Refuses a credit that asks to be allowed past what the tenant owes unless the caller is a PMAdmin
+/// (403 <c>unapplied_credit_requires_admin</c>, #652). A credit that does not ask passes through, and the
+/// posting decides whether it fits.
+/// </summary>
+public sealed class UnappliedCreditAdminFilter(IAuthorizationService authorization) : IEndpointFilter
+{
+    public async ValueTask<object?> InvokeAsync(EndpointFilterInvocationContext context, EndpointFilterDelegate next)
+    {
+        var credit = context.Arguments.OfType<IssueCredit>().Single();
+        if (credit.AllowUnappliedCredit
+            && !(await authorization.AuthorizeAsync(context.HttpContext.User, "RequirePMAdmin")).Succeeded)
+        {
+            return ProblemResults.Problem(
+                context.HttpContext,
+                code: "unapplied_credit_requires_admin",
+                detail: "Only an administrator can allow a credit larger than what the tenant owes.",
+                status: StatusCodes.Status403Forbidden);
+        }
+
+        return await next(context);
     }
 }

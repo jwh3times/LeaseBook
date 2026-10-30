@@ -1,8 +1,12 @@
 using LeaseBook.Modules.Accounting.Contracts;
 using LeaseBook.Modules.Accounting.Diagnostics;
+using LeaseBook.Modules.Accounting.Domain;
+using LeaseBook.Modules.Accounting.Features.Ledgers;
+using LeaseBook.Modules.Accounting.Features.Posting;
 using LeaseBook.Modules.Accounting.Features.Posting.Events;
 using LeaseBook.SharedKernel;
 using LeaseBook.Tests.Common;
+using Microsoft.EntityFrameworkCore;
 using Shouldly;
 using static LeaseBook.Tests.Accounting.Support.AccountingTestHarness;
 
@@ -113,6 +117,137 @@ public sealed class ReceivableGuardTests(PostgresFixture fixture)
                 Tenant, Property, Owner, new Money(500m), D(28), scope.TrustBankId, "wrong bank"), ct), ct));
         refused.Held.ShouldBe(0m);
         (await CheckCoreAsync(scope, ct)).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Credit_up_to_the_receivable_posts_and_keeps_invariants()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var scope = await ScopeAsync(ct);
+
+        await PostAsync(scope, new RentCharged(Tenant, Property, Owner, Unit, new Money(1000m), D(1), "rent"), ct);
+        await PostAsync(scope, Credit(1000m), ct);
+
+        (await ReceivableAsync(scope, ct)).ShouldBe(0m);
+        (await CheckCoreAsync(scope, ct)).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Credit_one_cent_over_the_receivable_is_rejected_and_posts_nothing()
+    {
+        // #652: a credit has no excess path either, so one over the receivable would drive it negative
+        // with nothing held behind it.
+        var ct = TestContext.Current.CancellationToken;
+        await using var scope = await ScopeAsync(ct);
+
+        await PostAsync(scope, new RentCharged(Tenant, Property, Owner, Unit, new Money(1000m), D(1), "rent"), ct);
+
+        var refused = await Should.ThrowAsync<InsufficientReceivableException>(() => PostAsync(scope, Credit(1000.01m), ct));
+        (refused.Kind, refused.Requested, refused.Owed, refused.TenantId)
+            .ShouldBe((ReceivableSource.Credit, 1000.01m, 1000m, (Guid?)Tenant));
+        (await ReceivableAsync(scope, ct)).ShouldBe(1000m);
+    }
+
+    [Fact]
+    public async Task Credit_to_a_tenant_who_owes_nothing_is_rejected_and_posts_nothing()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var scope = await ScopeAsync(ct);
+
+        var refused = await Should.ThrowAsync<InsufficientReceivableException>(() => PostAsync(scope, Credit(0.01m), ct));
+        refused.Owed.ShouldBe(0m);
+        (await ReceivableAsync(scope, ct)).ShouldBe(0m);
+    }
+
+    [Fact]
+    public async Task Credit_against_a_receivable_already_below_zero_is_rejected_against_zero_owed()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var scope = await ScopeAsync(ct);
+
+        // An allowed unapplied credit leaves the tenant at −50; the next plain credit owes against 0, not −50.
+        await PostAsync(scope, Credit(50m, allowUnapplied: true), ct);
+
+        var refused = await Should.ThrowAsync<InsufficientReceivableException>(() => PostAsync(scope, Credit(0.01m), ct));
+        refused.Owed.ShouldBe(0m);
+        (await ReceivableAsync(scope, ct)).ShouldBe(-50m);
+    }
+
+    [Fact]
+    public async Task An_allowed_unapplied_credit_posts_past_the_receivable_and_says_so()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var scope = await ScopeAsync(ct);
+
+        await PostAsync(scope, new RentCharged(Tenant, Property, Owner, Unit, new Money(100m), D(1), "rent"), ct);
+        var entryId = await PostEntryAsync(scope, Credit(185m, allowUnapplied: true), ct);
+
+        (await ReceivableAsync(scope, ct)).ShouldBe(-85m);
+        (await CheckCoreAsync(scope, ct)).ShouldBeEmpty();
+        (await SubtypeAsync(scope, entryId, ct)).ShouldBe(CreditIssued.UnappliedSubtype);
+    }
+
+    [Fact]
+    public async Task An_allowance_a_credit_did_not_need_leaves_no_mark()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var scope = await ScopeAsync(ct);
+
+        await PostAsync(scope, new RentCharged(Tenant, Property, Owner, Unit, new Money(100m), D(1), "rent"), ct);
+        var entryId = await PostEntryAsync(scope, Credit(100m, allowUnapplied: true), ct);
+
+        (await SubtypeAsync(scope, entryId, ct)).ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task The_ledger_reports_what_a_credit_may_draw_on_not_the_net_balance()
+    {
+        // A held prepayment lowers the ledger balance but is not yet applied, so it does not lower what
+        // the tenant owes: the credit form must offer the receivable, which is what the guard reads.
+        var ct = TestContext.Current.CancellationToken;
+        await using var scope = await ScopeAsync(ct);
+
+        await PostAsync(scope, new RentCharged(Tenant, Property, Owner, Unit, new Money(1000m), D(1), "rent"), ct);
+        await PostAsync(scope, new PrepaymentReceived(Tenant, Property, Owner, new Money(400m), D(2), scope.TrustBankId, "pp"), ct);
+
+        var ledger = await LedgerAsync(scope, ct);
+        (ledger.Balance, ledger.Owed).ShouldBe((600m, 1000m));
+        await PostAsync(scope, Credit(1000m), ct);
+
+        await PostAsync(scope, Credit(50m, allowUnapplied: true), ct);
+        (await LedgerAsync(scope, ct)).Owed.ShouldBe(0m, "a receivable below zero leaves nothing owed, not a negative");
+    }
+
+    private async Task<TenantLedgerResponse> LedgerAsync(OrgScope scope, CancellationToken ct)
+    {
+        TenantLedgerResponse result = null!;
+        await scope.RunAsync(async () => result = await new GetTenantLedgerHandler(scope.Db).Handle(new GetTenantLedger(Tenant), ct), ct);
+        return result;
+    }
+
+    private CreditIssued Credit(decimal amount, bool allowUnapplied = false) =>
+        new(Tenant, Property, Owner, new Money(amount), D(10), "goodwill", AllowUnappliedCredit: allowUnapplied);
+
+    private async Task<decimal> ReceivableAsync(OrgScope scope, CancellationToken ct)
+    {
+        var result = 0m;
+        await scope.RunAsync(async () => result = await new BalanceReader(scope.Db).TenantReceivableAsync(Tenant, ct), ct);
+        return result;
+    }
+
+    private static async Task<Guid> PostEntryAsync(OrgScope scope, AccountingEvent businessEvent, CancellationToken ct)
+    {
+        var id = Guid.Empty;
+        await scope.RunAsync(async () => id = await Events(scope).PostAsync(businessEvent, ct), ct);
+        return id;
+    }
+
+    private static async Task<string?> SubtypeAsync(OrgScope scope, Guid entryId, CancellationToken ct)
+    {
+        string? result = null;
+        await scope.RunAsync(async () => result = await scope.Db.Set<JournalEntry>()
+            .Where(e => e.Id == entryId).Select(e => e.EventSubtype).SingleAsync(ct), ct);
+        return result;
     }
 
     private Task<OrgScope> ScopeAsync(CancellationToken ct) =>

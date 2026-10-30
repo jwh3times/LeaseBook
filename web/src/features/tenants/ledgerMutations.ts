@@ -70,6 +70,8 @@ export interface LedgerEntryInput {
   method: string; // ach | card | check | cash (payment)
   bankAccountId: string;
   sourceRef: string;
+  /** A credit only: post it past what the tenant owes. The server lets only an administrator (#652). */
+  allowUnappliedCredit?: boolean;
 }
 
 const CHARGE_KIND: Record<string, string> = {
@@ -175,6 +177,7 @@ export async function submitLedgerEntry(
             reason: description ?? 'Credit',
             internalNote,
             sourceRef,
+            allowUnappliedCredit: input.allowUnappliedCredit ?? false,
           },
         }),
       );

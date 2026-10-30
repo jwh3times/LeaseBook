@@ -431,3 +431,109 @@ describe('LedgerComposer description and internal note', () => {
     });
   });
 });
+
+describe('LedgerComposer — a credit larger than what the tenant owes (#652)', () => {
+  function creditHandler(bodies: Record<string, unknown>[]) {
+    return http.post('/api/accounting/tenants/:tenantId/credits', async ({ request }) => {
+      bodies.push((await request.json()) as Record<string, unknown>);
+      return HttpResponse.json({ entryId: 'cr1' });
+    });
+  }
+
+  async function openCredit(amount: string) {
+    await userEvent.selectOptions(await screen.findByLabelText('Charge type'), 'Credit');
+    await userEvent.type(screen.getByLabelText('Amount'), amount);
+  }
+
+  it('tells staff what the tenant owes and does not post a larger credit', async () => {
+    const bodies: Record<string, unknown>[] = [];
+    server.use(...baseHandlers(), creditHandler(bodies));
+    const { onPosted } = renderComposer({ initialMode: 'charge', owed: 100 });
+
+    await openCredit('150');
+    expect(screen.getByText(/Tenant owes/)).toHaveTextContent('Tenant owes $100.00');
+    expect(screen.getByRole('status', { name: 'Credit limit' })).toHaveTextContent(
+      'A credit can’t be more than the $100.00 the tenant owes. Only an administrator can allow a larger credit.',
+    );
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+    await userEvent.keyboard('{Enter}');
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('can’t be more than the $100.00');
+    expect(bodies).toHaveLength(0);
+    expect(onPosted).not.toHaveBeenCalled();
+  });
+
+  it('asks an administrator to confirm the excess, then posts it as allowed', async () => {
+    const bodies: Record<string, unknown>[] = [];
+    server.use(...baseHandlers(), creditHandler(bodies));
+    const { onPosted } = renderComposer({
+      initialMode: 'charge',
+      owed: 0,
+      canAllowUnappliedCredit: true,
+    });
+
+    await openCredit('85');
+    const allow = screen.getByRole('checkbox', {
+      name: 'Allow a credit $85.00 more than the tenant owes',
+    });
+    expect(screen.getByRole('status', { name: 'Credit limit' })).toHaveTextContent(
+      'The extra $85.00 leaves the tenant with a credit balance for money they don’t owe.',
+    );
+    await userEvent.click(screen.getByLabelText('Amount'));
+    await userEvent.keyboard('{Enter}');
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Confirm the larger credit to post it.',
+    );
+    expect(bodies).toHaveLength(0);
+
+    await userEvent.click(allow);
+    await userEvent.click(screen.getByLabelText('Amount'));
+    await userEvent.keyboard('{Enter}');
+
+    await vi.waitFor(() => expect(onPosted).toHaveBeenCalledWith('cr1'));
+    expect(bodies).toEqual([expect.objectContaining({ amount: 85, allowUnappliedCredit: true })]);
+  });
+
+  it('posts a credit within what is owed without the allowance', async () => {
+    const bodies: Record<string, unknown>[] = [];
+    server.use(...baseHandlers(), creditHandler(bodies));
+    const { onPosted } = renderComposer({
+      initialMode: 'charge',
+      owed: 100,
+      canAllowUnappliedCredit: true,
+    });
+
+    await openCredit('100');
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+    await userEvent.keyboard('{Enter}');
+
+    await vi.waitFor(() => expect(onPosted).toHaveBeenCalledWith('cr1'));
+    expect(bodies).toEqual([expect.objectContaining({ allowUnappliedCredit: false })]);
+  });
+
+  it('leaves the limit to the server while what is owed is unknown', async () => {
+    const bodies: Record<string, unknown>[] = [];
+    server.use(
+      ...baseHandlers(),
+      http.post('/api/accounting/tenants/:tenantId/credits', async ({ request }) => {
+        bodies.push((await request.json()) as Record<string, unknown>);
+        return HttpResponse.json(
+          {
+            code: 'insufficient_receivable',
+            detail: 'A credit of 150.00 exceeds the 100.00 currently owed by this tenant.',
+          },
+          { status: 409 },
+        );
+      }),
+    );
+    const { onPosted } = renderComposer({ initialMode: 'charge' });
+
+    await openCredit('150');
+    expect(screen.queryByText(/Tenant owes/)).not.toBeInTheDocument();
+    await userEvent.keyboard('{Enter}');
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('exceeds the 100.00 currently owed');
+    expect(bodies).toHaveLength(1);
+    expect(onPosted).not.toHaveBeenCalled();
+  });
+});
