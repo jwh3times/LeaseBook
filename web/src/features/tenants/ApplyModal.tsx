@@ -13,9 +13,9 @@ import {
   applyDeposit,
   applyPrepayment,
   type LedgerPostError,
-  LOCKED_PERIOD_MESSAGE,
   newSourceRef,
   type PostResult,
+  useLockedPeriodMessage,
 } from './ledgerMutations';
 
 type Kind = 'deposit' | 'prepayment';
@@ -38,6 +38,7 @@ const todayIso = () => new Date().toISOString().slice(0, 10);
  * renders an inline warning and keeps the modal open so the user lowers the amount.
  */
 export function ApplyModal({ tenantId, initialKind, onClose, onApplied }: ApplyModalProps) {
+  const lockedMessage = useLockedPeriodMessage();
   const [kind, setKind] = useState<Kind>(initialKind);
   const [amount, setAmount] = useState('');
   const [target, setTarget] = useState('against-charges');
@@ -106,7 +107,7 @@ export function ApplyModal({ tenantId, initialKind, onClose, onApplied }: ApplyM
         onApplied(err.existingEntryId);
       } else if (err.code === 'account_period_locked') {
         // The trust bank's month is reconciled (M4 lock): keep the modal open with the move-the-date hint.
-        setError({ ...err, message: LOCKED_PERIOD_MESSAGE });
+        setError({ ...err, message: lockedMessage });
       } else if (err.code === 'prepayment_bank_ambiguous') {
         // The server's message asks for the choice; the picker below supplies it.
         if (bankAmbiguous) void funds.refetch();

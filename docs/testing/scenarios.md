@@ -228,7 +228,7 @@ not edit between the markers.
 <!-- scenario-catalogue:start -->
 <!-- prettier-ignore-start -->
 
-73 scenarios, 1 of them an expected failure that shows a known limit. 8 journal event types and 22 routes are exempt.
+74 scenarios, 1 of them an expected failure that shows a known limit. 8 journal event types and 21 routes are exempt.
 
 ### Scenarios
 
@@ -269,6 +269,7 @@ not edit between the markers.
 | `ledger-void-reason-staff-only` | A void's reason stays off the owner statement and shows only as a staff annotation | Accounting | `m3-ledger.spec.ts` | demo | `PaymentReceived`<br>`EntryVoided` | `POST /api/accounting/entries/{entryId}/void`<br>`GET /api/statements/{ownerId}`<br>`GET /api/statements/{ownerId}/internal-notes` |
 | `bank-statement-import-and-match` | Import a bank CSV, auto-match and clear a register line, and skip duplicates on re-import | Banking | `m4-banking.spec.ts` |  |  | `POST /api/banking/banks/{bankAccountId}/imports`<br>`POST /api/banking/imports/{importId}/confirm`<br>`GET /api/banking/imports/{importId}/matches`<br>`GET /api/banking/banks/{bankAccountId}/mappings`<br>`GET /api/accounting/banks/{bankAccountId}/register` |
 | `bank-reconcile-finalize-and-lock` | Reconcile a trust account to $0.00, finalize, and see the locked month refuse a posting | Banking | `m4-banking.spec.ts` | demo | `PaymentReceived` | `GET /api/accounting/banks/balances`<br>`GET /api/accounting/reconciliations`<br>`POST /api/accounting/banks/clearances`<br>`POST /api/accounting/reconciliations`<br>`POST /api/accounting/reconciliations/{id}/finalize`<br>`POST /api/accounting/tenants/{tenantId}/payments` |
+| `bank-reconciliation-unlock-and-refinalize` | As an administrator, unlock a finalized month with a reason, post into it, and finalize it again | Banking | `m4-banking.spec.ts` | demo | `PaymentReceived`<br>`EntryVoided` | `POST /api/accounting/reconciliations/{id}/unlock` |
 | `owner-statement-view-export-deliver` | View an owner statement with its fiduciary checks, export it as PDF and CSV, and deliver it | Reporting | `m5-reports.spec.ts` |  |  | `GET /api/statements/{ownerId}`<br>`GET /api/statements/{ownerId}/internal-notes`<br>`GET /api/statements/{ownerId}/pdf`<br>`GET /api/statements/{ownerId}/csv`<br>`POST /api/statements/{ownerId}/deliver` |
 | `report-catalog-preview-and-export` | Open the report catalog, preview a report with filters, and export it as CSV | Reporting | `m5-reports.spec.ts` |  |  | `GET /api/reports`<br>`GET /api/reports/{id}/preview`<br>`GET /api/reports/{id}/csv` |
 | `month-cycle-rent-run` | Preview and confirm the monthly rent run | Operations | `m6-bulk-operations.spec.ts` | demo | `RentCharged` | `GET /api/operations/runs/{type}/preview`<br>`GET /api/operations/runs/{type}/preview/issued-coverage`<br>`POST /api/operations/runs/{type}/confirm` |
@@ -319,7 +320,7 @@ not edit between the markers.
 | The control appears only after six failed attempts with waits of up to ten minutes, and the simulated processor accepts every payment. | 1 |
 | The control appears only for a notice held for ten minutes, which a test would have to wait out. | 1 |
 | The control appears only when delivery to the local test inbox failed, and no screen makes a delivery fail. | 1 |
-| baseline gap | 20 |
+| baseline gap | 19 |
 
 #### Journal event types with no scenario
 
@@ -343,7 +344,6 @@ not edit between the markers.
 | `GET /api/accounting/deposits` | No screen requests it; the screens that show these figures get them from other routes. | 2026-10-12 |  |
 | `GET /api/accounting/trust-equation` | No screen requests it; the screens that show these figures get them from other routes. | 2026-10-12 |  |
 | `POST /api/accounting/banks/{bankAccountId}/adjustments` | baseline gap | 2026-10-12 | #553 |
-| `POST /api/accounting/reconciliations/{id}/unlock` | baseline gap | 2026-10-12 | #554 |
 | `PUT /api/directory/owners/{id}` | baseline gap | 2026-10-12 | #558 |
 | `PUT /api/directory/properties/{id}` | baseline gap | 2026-10-12 | #558 |
 | `POST /api/directory/properties/{id}/ownership-transfers` | baseline gap | 2026-10-12 | #555 |

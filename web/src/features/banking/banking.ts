@@ -11,6 +11,7 @@ import {
   postApiAccountingBanksClearances,
   postApiAccountingReconciliations,
   postApiAccountingReconciliationsByIdFinalize,
+  postApiAccountingReconciliationsByIdUnlock,
   postApiBankingBanksByBankAccountIdImports,
   postApiBankingBanksByBankAccountIdMappings,
   postApiBankingImportsByImportIdConfirm,
@@ -161,6 +162,23 @@ export async function finalizeReconciliation(id: string): Promise<Reconciliation
   return unwrap(
     postApiAccountingReconciliationsByIdFinalize({ path: { id } }),
     'Failed to finalize the reconciliation',
+  );
+}
+
+/**
+ * Reopens a finalized month (PMAdmin + reason, ADR-014 §4): postings dated into it land on the account
+ * again until it is finalized again. The route's policy answers a non-admin with a bare 403.
+ */
+export async function unlockReconciliation(
+  id: string,
+  reason: string,
+): Promise<ReconciliationView> {
+  return unwrap(
+    postApiAccountingReconciliationsByIdUnlock({
+      path: { id },
+      body: { reconciliationId: id, reason },
+    }),
+    'Failed to unlock the reconciliation',
   );
 }
 

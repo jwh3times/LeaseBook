@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { Modal } from './Modal';
@@ -52,5 +53,58 @@ describe('Modal', () => {
     );
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+// #554: Tab never leaves an open dialog for the page behind it, as aria-modal promises.
+describe('Modal focus trap', () => {
+  function renderWithFooter() {
+    render(
+      <>
+        <button type="button">Behind the dialog</button>
+        <Modal
+          title="Test modal"
+          onClose={() => {}}
+          footer={
+            <>
+              <button type="button">Cancel</button>
+              <button type="button">Confirm</button>
+            </>
+          }
+        >
+          <input aria-label="First field" />
+        </Modal>
+      </>,
+    );
+  }
+
+  it('wraps Tab from the last control back to the first', async () => {
+    renderWithFooter();
+    expect(screen.getByLabelText('First field')).toHaveFocus();
+
+    await userEvent.tab(); // Cancel
+    await userEvent.tab(); // Confirm
+    await userEvent.tab();
+
+    expect(screen.getByRole('button', { name: 'Close' })).toHaveFocus();
+  });
+
+  it('wraps Shift+Tab from the first control to the last', async () => {
+    renderWithFooter();
+    screen.getByRole('button', { name: 'Close' }).focus();
+
+    await userEvent.tab({ shift: true });
+
+    expect(screen.getByRole('button', { name: 'Confirm' })).toHaveFocus();
+  });
+
+  it('brings focus that left the panel back into it', async () => {
+    renderWithFooter();
+    // A click on the panel's text, or on the backdrop's edge, leaves focus on the body.
+    (document.activeElement as HTMLElement).blur();
+
+    await userEvent.tab();
+
+    expect(screen.getByRole('button', { name: 'Close' })).toHaveFocus();
   });
 });

@@ -6,7 +6,7 @@ import { ApiErrorNotice } from '@/components/ApiErrorNotice';
 import { AudienceHint } from '@/components/InternalNote';
 import { Modal } from '@/components/Modal';
 import { num } from '@/lib/directory';
-import { LOCKED_PERIOD_MESSAGE } from '@/features/tenants/ledgerMutations';
+import { useLockedPeriodMessage } from '@/features/tenants/ledgerMutations';
 import { type RefundCheckView, sourceLabel, voidRefundCheck } from './refundChecks';
 
 export interface VoidRefundCheckDialogProps {
@@ -29,6 +29,7 @@ export function VoidRefundCheckDialog({
   onVoided,
   onStale,
 }: VoidRefundCheckDialogProps) {
+  const lockedMessage = useLockedPeriodMessage();
   const fieldId = useId();
   const [reason, setReason] = useState('');
   const [error, setError] = useState<ApiError | null>(null);
@@ -48,7 +49,7 @@ export function VoidRefundCheckDialog({
           message: `Check #${number} has cleared the bank, so it can no longer be voided.`,
         });
       } else if (err.code === 'account_period_locked') {
-        setError({ ...err, message: LOCKED_PERIOD_MESSAGE });
+        setError({ ...err, message: lockedMessage });
       } else {
         setError(err);
       }
