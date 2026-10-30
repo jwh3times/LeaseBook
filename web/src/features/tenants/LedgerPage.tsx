@@ -13,6 +13,7 @@ import { num, useTenantDetail } from '@/lib/directory';
 import { readSpentInteractions } from '@/lib/telemetry';
 import { IssuedStatementNotice } from '@/components/IssuedStatementNotice';
 import { QueryErrorState } from '@/components/QueryErrorState';
+import { useSession } from '@/features/auth/useSession';
 import { PortalAccessPanel } from '@/features/portal/PortalAccessPanel';
 import { RefundCheckModal } from '@/features/refundChecks/RefundCheckModal';
 import {
@@ -71,6 +72,7 @@ export function LedgerPage() {
   const queryClient = useQueryClient();
   const detail = useTenantDetail(id);
   const ledger = useTenantLedger(id);
+  const { data: session } = useSession();
 
   const [lateFeeOpen, setLateFeeOpen] = useState(false);
   const [flashId, setFlashId] = useState<string | null>(null);
@@ -290,6 +292,8 @@ export function LedgerPage() {
         onPosted={handlePosted}
         initialMode={initialMode}
         initialInteractions={initialInteractions}
+        owed={ledger.isSuccess ? num(ledger.data.owed) : undefined}
+        canAllowUnappliedCredit={session?.role === 'PMAdmin'}
       />
 
       {/* Ledger */}

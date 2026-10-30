@@ -468,6 +468,7 @@ export type IssueCredit = {
     reason: string;
     sourceRef: string;
     internalNote?: null | string;
+    allowUnappliedCredit?: boolean;
 };
 
 export type IssueRefundCheckBody = {
@@ -1295,6 +1296,7 @@ export type TenantLedgerResponse = {
     tenantId: string;
     balance: number | string;
     rows: Array<TenantLedgerEntry>;
+    owed: number | string;
 };
 
 export type TenantListRow = {
@@ -1686,6 +1688,15 @@ export type PostApiAccountingTenantsByTenantIdCreditsData = {
     query?: never;
     url: '/api/accounting/tenants/{tenantId}/credits';
 };
+
+export type PostApiAccountingTenantsByTenantIdCreditsErrors = {
+    /**
+     * Forbidden
+     */
+    403: ProblemDetails;
+};
+
+export type PostApiAccountingTenantsByTenantIdCreditsError = PostApiAccountingTenantsByTenantIdCreditsErrors[keyof PostApiAccountingTenantsByTenantIdCreditsErrors];
 
 export type PostApiAccountingTenantsByTenantIdCreditsResponses = {
     /**

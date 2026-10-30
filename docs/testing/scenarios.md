@@ -3,7 +3,7 @@
 - **Audience:** Contributors, reviewers and maintainers
 - **Status:** Living catalogue and method
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-26
+- **Last reviewed:** 2026-10-30
 
 A scenario is one workflow a person carries out in the product, driven through a real browser by
 one or more Playwright tests. This page records how scenarios are catalogued, what CI checks about
@@ -259,7 +259,7 @@ not edit between the markers.
 | `keyboard-navigation-and-focus` | Move through the palette, close a dialog and see the focus ring by keyboard | Accessibility | `keyboard-only.spec.ts` |  |  |  |
 | `keyboard-reconcile-select-all` | Drive a reconciliation to a $0.00 difference by keyboard | Banking | `keyboard-only.spec.ts` |  |  | `GET /api/accounting/banks/{bankAccountId}/register`<br>`GET /api/accounting/reconciliations` |
 | `bank-account-deactivation-guard` | Deactivating a bank account with uncleared items is refused | Settings | `keyboard-only.spec.ts` |  |  | `GET /api/settings/banks`<br>`PUT /api/settings/banks/{id}/active` |
-| `ledger-issue-credit` | Issue a tenant a credit from the ledger composer by keyboard, and see the balance fall by the amount | Accounting | `ledger-postings.spec.ts` | scenario | `CreditIssued` | `POST /api/accounting/tenants/{tenantId}/credits` |
+| `ledger-issue-credit` | Charge a tenant, then issue a credit within what they owe from the ledger composer by keyboard, and see the balance fall by the amount | Accounting | `ledger-postings.spec.ts` | scenario | `FeeCharged`<br>`CreditIssued` | `POST /api/accounting/tenants/{tenantId}/charges`<br>`POST /api/accounting/tenants/{tenantId}/credits` |
 | `ledger-collect-and-apply-held-funds` | Collect a security deposit and a prepayment, then apply both against a charge, with an over-application refused | Accounting | `ledger-postings.spec.ts` | scenario | `DepositCollected`<br>`PrepaymentReceived`<br>`FeeCharged`<br>`DepositApplied`<br>`PrepaymentApplied` | `POST /api/accounting/tenants/{tenantId}/deposits`<br>`POST /api/accounting/tenants/{tenantId}/prepayments`<br>`POST /api/accounting/tenants/{tenantId}/charges`<br>`POST /api/accounting/tenants/{tenantId}/deposit-applications`<br>`POST /api/accounting/tenants/{tenantId}/prepayment-applications` |
 | `ledger-deposit-into-locked-month` | Collect a deposit dated into a reconciled month and get the lock refusal, with nothing posted | Accounting | `ledger-postings.spec.ts` |  |  | `POST /api/accounting/tenants/{tenantId}/deposits` |
 | `ledger-export-csv` | Export a tenant ledger as CSV and get the rows and the balance the screen shows | Accounting | `ledger-postings.spec.ts` |  |  | `GET /api/accounting/tenants/{tenantId}/ledger.csv` |

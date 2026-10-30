@@ -27,7 +27,7 @@ public sealed class TenantLedgerCsvTests
                 new TenantLedgerEntry(
                     Guid.NewGuid(), new DateOnly(2026, 2, 3), "PaymentReceived", "ACH", "Payment", null, null,
                     0m, 250m, -250m, IsVoided: false, ReversesEntryId: null),
-            ]);
+            ], Owed: 0m);
 
         var csv = Encoding.UTF8.GetString(TenantLedgerCsv.Write(ledger));
         var lines = csv.Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
@@ -49,7 +49,7 @@ public sealed class TenantLedgerCsvTests
                 new TenantLedgerEntry(
                     Guid.NewGuid(), new DateOnly(2026, 2, 1), "RentCharged", null, "Rent",
                     "=cmd|'/c calc'!A1", "=HYPERLINK(\"http://x\")", 1000m, 0m, 1000m, IsVoided: false, ReversesEntryId: null),
-            ]);
+            ], Owed: 0m);
 
         var csv = Encoding.UTF8.GetString(TenantLedgerCsv.Write(ledger));
 
@@ -74,7 +74,7 @@ public sealed class TenantLedgerCsvTests
                 new TenantLedgerEntry(
                     Guid.NewGuid(), new DateOnly(2026, 2, 1), "RentCharged", null, "Rent", " Feb rent ", "tab\tinside",
                     1000m, 0m, 1000m, IsVoided: false, ReversesEntryId: null),
-            ]);
+            ], Owed: 0m);
 
         var lines = Encoding.UTF8.GetString(TenantLedgerCsv.Write(ledger)).Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
 

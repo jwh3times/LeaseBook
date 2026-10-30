@@ -266,7 +266,7 @@ public sealed class DelinquencyAllocationTests(PostgresFixture fixture)
                 new DateOnly(2026, 1, 1), "January rent", "rent:january"), ct);
             await events.PostAsync(new CreditIssued(
                 tenantId, propertyId, ownerId, new Money(125m),
-                new DateOnly(2026, 1, 2), "General credit", "credit:january"), ct);
+                new DateOnly(2026, 1, 2), "General credit", "credit:january", AllowUnappliedCredit: true), ct);
 
             result = await new GetDelinquencyAgingHandler(scope.Db).Handle(
                 new GetDelinquencyAging(new DateOnly(2026, 2, 1)), ct);

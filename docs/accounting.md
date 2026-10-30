@@ -3,7 +3,7 @@
 - **Audience:** Contributors, operators, and reviewers
 - **Status:** Living accounting guide
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-29
+- **Last reviewed:** 2026-10-30
 
 This is the canonical public explanation of the shipped trust-accounting model, written so a
 property manager, bookkeeper, or attorney can evaluate it without reading C#. The Accounting module
@@ -257,6 +257,14 @@ excess into a prepayment. An _application_ has no such overflow, so applying a d
 (`insufficient_receivable`); the composer asks the user to lower the amount. Applying a deposit **to owner
 income** (damages) is deliberately _not_ capped — damages legitimately exceed any rent owed. This sits
 alongside the existing rule that an application can never exceed the deposit/prepayment actually held.
+
+**A credit is bounded the same way (ADR-011 addendum).** A goodwill credit moves no cash, so one larger
+than what the tenant owes would leave them owing less than nothing with no money held behind it. The
+engine refuses it (`insufficient_receivable`) unless the request sets `allowUnappliedCredit`, which only an
+administrator may do: anyone else is refused with a 403 (`unapplied_credit_requires_admin`). A credit
+that went past the receivable this way is marked `unapplied` on its entry. The tenant ledger read reports
+`owed`, the open receivable never below zero, and the credit form shows it and checks against it. It can
+be more than the ledger balance, because a held prepayment is not yet applied to anything.
 
 **Which bank a prepayment is applied from.** Applying a prepayment draws on the bank that **holds** it,
 as a refund does ([ADR-050](adr/ADR-050-refund-checks.md), addendum) — the liability release and the

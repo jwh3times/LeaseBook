@@ -91,7 +91,12 @@ function detailHandler(detail = DETAIL) {
 
 function ledgerHandler(rows: TenantLedgerEntry[] = ROWS) {
   return http.get('/api/accounting/tenants/:tenantId/ledger', () =>
-    HttpResponse.json({ tenantId: 't1', balance: rows.at(-1)?.balance ?? 0, rows }),
+    HttpResponse.json({
+      tenantId: 't1',
+      balance: rows.at(-1)?.balance ?? 0,
+      rows,
+      owed: Math.max(Number(rows.at(-1)?.balance ?? 0), 0),
+    }),
   );
 }
 
@@ -224,6 +229,46 @@ describe('LedgerPage', () => {
       expect(trackInteraction).toHaveBeenCalledWith('record-payment', 3, true),
     );
   });
+
+  // #652: the composer bounds a credit by the ledger read's `owed`, and offers the allowance only to
+  // an administrator. ROWS end at a zero balance, so any credit is larger than what is owed.
+  it.each([
+    ['PMAdmin', true],
+    ['PMStaff', false],
+  ])(
+    'passes what is owed and whether a %s may allow more to the composer',
+    async (role, allows) => {
+      server.use(
+        detailHandler(),
+        ledgerHandler(),
+        ...composerHandlers(),
+        http.get('/api/auth/me', () =>
+          HttpResponse.json({
+            userId: 'u1',
+            name: 'A',
+            email: null,
+            role,
+            orgId: 'o1',
+            orgName: null,
+          }),
+        ),
+      );
+      renderLedger();
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Add charge' }));
+      await userEvent.selectOptions(await screen.findByLabelText('Charge type'), 'Credit');
+      await userEvent.type(screen.getByLabelText('Amount'), '85');
+
+      await vi.waitFor(() =>
+        expect(screen.getByLabelText('Amount').closest('label')).toHaveTextContent(
+          'Tenant owes $0.00',
+        ),
+      );
+      await vi.waitFor(() =>
+        expect(screen.queryByRole('checkbox', { name: /Allow a credit/ }) !== null).toBe(allows),
+      );
+    },
+  );
 
   // A reload or a Back lands on the same history entry, state and all. Those cost the operator one
   // interaction, not the palette's two, so the seed must not apply a second time.
@@ -383,7 +428,7 @@ describe('LedgerPage', () => {
               { detail: 'The ledger projection is rebuilding.', correlationId: reference },
               { status: 503 },
             )
-          : HttpResponse.json({ tenantId: 't1', balance: 1500, rows: ROWS });
+          : HttpResponse.json({ tenantId: 't1', balance: 1500, rows: ROWS, owed: 1500 });
       }),
     );
     renderLedger();

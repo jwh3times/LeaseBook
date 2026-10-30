@@ -53,3 +53,32 @@ If a product flow ever needs to apply held funds beyond the open receivable on p
 an over-applied deposit into a prepayment), add an explicit target for that intent rather than relaxing
 this guard. Revisit if the receivable read under the advisory lock becomes a contention hotspot at scale
 (it is a single indexed aggregate today).
+
+## Addendum — a credit is bounded the same way, unless an administrator allows it (2026-10-29, #652)
+
+A goodwill credit (`CreditIssued`) has no excess path either: it moves no cash, so a credit above the
+open receivable left the tenant owing less than nothing with no money held behind it, and lowered the
+owner's accrued income by more than the tenant owed. The engine checked only that the amount was
+positive.
+
+- `CreditIssued` takes the posting lock, reads the tenant's receivable and refuses an amount above
+  `max(openReceivable, 0)` with `InsufficientReceivableException` (`ReceivableSource.Credit`, 409
+  `insufficient_receivable`). The guard sits in the posting, so every caller inherits it, including the
+  seeders that post the event directly.
+- An excess posts only with an explicit `AllowUnappliedCredit` flag, carried on `IssueCredit`, the event
+  and the request body. **Only a PMAdmin may set it**: the credits route refuses the flag from anyone else
+  with 403 `unapplied_credit_requires_admin` before anything is read. A credit the flag let past the
+  receivable posts with `event_subtype = 'unapplied'`, so the allowance stays visible on the entry and in
+  its audit row; a flag the credit did not need leaves no mark. The lines and amounts are unchanged.
+- The tenant ledger read reports `Owed`, the receivable never below zero, which the credit form shows and
+  checks against. It is not the ledger balance: a held prepayment lowers the balance without lowering what
+  a credit may draw on.
+- **Rejected:** converting the excess into a prepayment. A prepayment is a trust-equation term, so without
+  a bank debit the equation breaks, and with an owner-equity debit the credit becomes an owner-funded
+  payment to the tenant, a different event needing the owner's authority. **Rejected:** a hard cap with
+  no allowance. The demo dataset's 85.00 goodwill credit lands after February is paid in full, against
+  nothing owed; the demo seed now passes the flag, so no golden figure moves.
+- No absolute per-organization ceiling. If one is wanted, it belongs in `OrgSettings`.
+
+This narrows the Consequences above: a receivable now goes below zero only through the prepayment path or
+an administrator's explicitly allowed credit.

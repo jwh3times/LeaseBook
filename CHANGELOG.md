@@ -195,6 +195,15 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ### Fixed
 
+- **A tenant credit can no longer exceed what the tenant owes, unless an administrator allows it.**
+  A credit larger than the tenant's open charges left them owing less than nothing, with no money
+  held behind it, and anyone who could post to the ledger could issue one. A credit above what the
+  tenant owes is now refused and posts nothing, as an application of a deposit or a prepayment
+  already is. The ledger's credit form shows what the tenant owes, and staff see why a larger
+  credit can't post before they submit. An administrator can confirm the larger credit, and is told
+  it leaves the tenant a credit balance; the entry is marked as an allowed excess, and its audit
+  trail names who allowed it. No existing figure changes.
+
 - **A bank statement import no longer reads a missing column as 0.00.** When a column mapping named
   a column the file did not have, such as a saved mapping from another export of the same bank, every
   row imported with an empty value, so a missing amount column brought in each line at 0.00 with no

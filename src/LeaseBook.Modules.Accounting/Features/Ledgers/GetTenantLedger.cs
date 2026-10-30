@@ -1,4 +1,5 @@
 using FluentValidation;
+using LeaseBook.Modules.Accounting.Features.Posting;
 using LeaseBook.SharedKernel.Cqrs;
 using Microsoft.EntityFrameworkCore;
 
@@ -12,7 +13,13 @@ public sealed class GetTenantLedgerValidator : AbstractValidator<GetTenantLedger
     public GetTenantLedgerValidator() => RuleFor(q => q.TenantId).NotEmpty();
 }
 
-public sealed record TenantLedgerResponse(Guid TenantId, decimal Balance, IReadOnlyList<TenantLedgerEntry> Rows);
+/// <param name="Balance">What the tenant owes net of unapplied prepayments — the running balance of the last row.</param>
+/// <param name="Owed">
+/// The open receivable, never below zero: what a credit or an application against charges may draw on
+/// without an allowance (ADR-011, #652). It can exceed <paramref name="Balance"/> while a prepayment is held.
+/// </param>
+public sealed record TenantLedgerResponse(
+    Guid TenantId, decimal Balance, IReadOnlyList<TenantLedgerEntry> Rows, decimal Owed);
 
 /// <param name="Description">Owner-facing text — what the owner statement prints for this entry.</param>
 /// <param name="InternalNote">
@@ -69,7 +76,8 @@ internal sealed class GetTenantLedgerHandler(DbContext db) : IQueryHandler<GetTe
             .ToList();
 
         var balance = entries.Count > 0 ? entries[^1].Balance : 0m;
-        return new TenantLedgerResponse(query.TenantId, balance, entries);
+        var owed = await new BalanceReader(db).TenantOwedAsync(query.TenantId, ct);
+        return new TenantLedgerResponse(query.TenantId, balance, entries, owed);
     }
 
     // §C.6 category derivation. A DepositCollected entry has no tenant_receivable or
