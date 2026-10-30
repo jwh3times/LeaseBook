@@ -110,11 +110,17 @@ carries a different line was bumped on purpose: ask before replacing it.
   stays untagged after the workflow finished, ask the user. Then run `Next-version command`. It
   prints a bare SemVer and is the single source of truth: never compute the build number yourself.
 
-  Check whether another open PR already claims that version:
+  Check whether another open PR already claims that version. `gh pr diff` takes no path, so cut
+  the `CHANGELOG.md` part out of each diff:
 
   ```bash
-  gh pr list --state open --json number,headRefName --jq '.[] | "\(.number) \(.headRefName)"'
-  gh pr diff <number> -- CHANGELOG.md | grep '^+## \['
+  branch="$(git branch --show-current)"
+  gh pr list --state open --json number,headRefName --jq '.[] | "\(.number) \(.headRefName)"' |
+    while read -r number head; do
+      [ "$head" = "$branch" ] && continue
+      gh pr diff "$number" | sed -n '/^diff --git a\/CHANGELOG.md /,/^diff --git/p' |
+        grep '^+## \[' | sed "s/^/#$number /"
+    done
   ```
 
   If one does, name it in the report: whichever merges second renumbers on its next `ship`.
@@ -122,22 +128,33 @@ carries a different line was bumped on purpose: ask before replacing it.
   each merge or a maintainer tags a release, and another merge can land first. A confirmed major or
   minor's target is the new line from step 2.
 
-## 4. Backfill skipped tags (release)
+## 4. Skipped tags (release)
 
-Only with `Scheme: per-merge` and `Skipped tags: backfill`. List released versions with no section.
-Run it exactly; tags print as `v1.1.5` and sections as `1.1.5`, so comparing raw lists by eye
-reports every tag as missing:
+Only with `Scheme: per-merge` and `Skipped tags` `backfill` or `roll up`. A skipped tag is a merge
+that wrote no section — a dependency bot's PR, or one opened in the web UI. List them; run the
+commands exactly, since tags print as `v1.1.5` and sections as `1.1.5`, and comparing raw lists by
+eye reports every tag as missing.
 
-```bash
-comm -23 \
-  <(git tag -l 'v*' | sed -nE 's/^v([0-9]+\.[0-9]+\.[0-9]+)$/\1/p' | sort) \
-  <(sed -nE 's/^## \[([0-9]+\.[0-9]+\.[0-9]+)\].*/\1/p' CHANGELOG.md | sort)
-```
+- **`backfill`** — every released version with no section:
 
-Drop versions matching the **Ignore** patterns. Each one left is a merge that wrote no section — a
-dependency bot's PR, or one opened in the web UI. Add a dated section for it in place, newest
-first. With `version` set to each, read the tag; it is the merge commit, so the merged branch is its
-second parent:
+  ```bash
+  comm -23 \
+    <(git tag -l 'v*' | sed -nE 's/^v([0-9]+\.[0-9]+\.[0-9]+)$/\1/p' | sort) \
+    <(sed -nE 's/^## \[([0-9]+\.[0-9]+\.[0-9]+)\].*/\1/p' CHANGELOG.md | sort)
+  ```
+
+- **`roll up`** — only the versions released after the newest section on `origin/main`; older
+  ones were rolled into an earlier section:
+
+  ```bash
+  newest="$(git show origin/main:CHANGELOG.md |
+    sed -nE 's/^## \[([0-9]+\.[0-9]+\.[0-9]+)\].*/\1/p' | sort -V | tail -1)"
+  git tag -l 'v*' | sed -nE 's/^v([0-9]+\.[0-9]+\.[0-9]+)$/\1/p' | sort -V |
+    sed -n "/^${newest}\$/,\$p" | tail -n +2
+  ```
+
+Drop versions matching the **Ignore** patterns. With `version` set to each one left, read the tag;
+it is the merge commit, so the merged branch is its second parent:
 
 ```bash
 git log -1 --format='%cs' "v$version"                  # the section's date
@@ -151,8 +168,8 @@ Attribute to a bot only when the second parent's author is the bot: the merge co
 whoever clicked Merge. When `^2` does not exist (a squash or fast-forward), read the tag's own
 commit.
 
-With `Skipped tags: roll up`, invent no section per skipped tag; their changes join the next section
-written.
+- **`backfill`** — add a dated section for each version in place, newest first.
+- **`roll up`** — invent no section; step 7 writes their changes into this branch's section.
 
 ## 5. Refresh the docs
 
@@ -169,9 +186,8 @@ Tell it what changed and why, that it was invoked by `ship` on an unmerged branc
 skill writes the changelog and the `Version file`. It leaves its edits uncommitted and returns the
 human actions it found for step 6, and any wiki search it owes after the merge (the
 `Follow-up wiki`, or a `Doc map` item in a wiki).
-Companion edits are committed there as its own repository, never in this one: with
-`Companion commit policy` `commit` or `ship`, commit and push them; with `ask`, show the diff and ask first.
-Run its **Before committing** checks either way.
+Companion edits are committed there as its own repository, never in this one: run the
+`## Procedure` in `.agents/skills/ship/settings/workspace.md`.
 
 ## 6. Human follow-ups
 
@@ -198,7 +214,8 @@ A section listed there is this branch's from an earlier `ship`: rewrite it in pl
 second. Entries this branch added to `Unreleased` are rewritten the same way.
 
 - **`per-merge`** — insert `## [<target>] - <date>` directly below `## [Unreleased]`, holding this
-  branch's entries plus anything accumulated in `Unreleased`; reset `Unreleased` to the
+  branch's entries plus anything accumulated in `Unreleased` and, with `roll up`, the changes of
+  the tags step 4 listed; reset `Unreleased` to the
   `Unreleased placeholder`. When the branch's section names an older version because another PR merged first,
   **renumber that section** to the target. Then merge `origin/main`: their section sits in the same
   place, so resolve `CHANGELOG.md` keeping both, newest version first, and go back to step 3 — their
@@ -254,8 +271,10 @@ gh pr list --head "$(git branch --show-current)" --state open --json number,url
 
 Write the body to a temporary file and pass `--body-file`. Fill the repository's PR template
 (`.github/pull_request_template.md` or `PULL_REQUEST_TEMPLATE.md`) when there is one, from the
-changelog entries and the diff. Include the `Release level:` line from step 2 and, with `per-merge`,
-the version this merge will mint.
+changelog entries and the diff. Tick a checkbox only on evidence from the diff, the fast checks or
+`Hook: before PR`, and leave the rest unticked; where the template asks how the change was
+verified, name the fast checks actually run and the checks left to CI. Include the
+`Release level:` line from step 2 and, with `per-merge`, the version this merge will mint.
 
 **Issue link**, when the setting is not `none`. The body opens with the link line, in the slot the
 template leaves for it:

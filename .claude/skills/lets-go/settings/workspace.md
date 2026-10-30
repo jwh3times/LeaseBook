@@ -1,8 +1,9 @@
 <!-- Generated from settings/workspace.md in jwh3times/skills by scripts/build-settings.mjs; edit it there. -->
 # Topic: workspace
 
-`docs/agents/workspace.md` — the local checkout: its private companion, how it syncs, and what in
-it may be cleaned. Each setting below is a `##` heading in that file.
+`docs/agents/workspace.md` — the local checkout: its private companion and how changes there are
+committed, how it syncs, and what in it may be cleaned. Each setting below is a `##` heading in
+that file.
 
 ## Private companion
 
@@ -21,17 +22,16 @@ it may be cleaned. Each setting below is a `##` heading in that file.
   the like). Otherwise propose `git status --short --branch` plus, with a companion,
   `git -C private status --short --branch`.
 
-## Companion commit policy
+## Companion commit checks
 
 - **Read by:** end-session, ship
-- **Value:** one of
-  - `ask` — report the companion's diff and ask before committing;
-  - `commit` — commit and push inside the companion as its own repository, without asking;
-  - `ship` — leave companion changes for `/ship`.
-
-  May add a bulleted **Before committing** list of checks (a diff review, a value scan).
-- **Discover:** the repository's `AGENTS.md`, `private/README.md`, and existing skills for how
-  companion changes are committed today. Default to `ask`.
+- **Value:** `none`, or a bulleted list of checks this repository adds to the `## Procedure` below
+  before a companion commit: an index row to update, a docs check to run, records that must never
+  be staged, an order between the two repositories.
+- **Default:** `none`
+- **Discover:** the repository's `AGENTS.md`, `private/README.md`, and the **Before committing**
+  list under an older `Companion commit policy` heading. Keep only the checks the procedure lacks,
+  and write the heading only when one remains.
 
 ## Sync with main
 
@@ -81,3 +81,28 @@ it may be cleaned. Each setting below is a `##` heading in that file.
 - **Value:** `none`, or a command run last that proves the checkout (and companion) are clean,
   tracked and pushed.
 - **Discover:** a `--check` mode in a repository status script. Otherwise `none`.
+
+## Procedure
+
+Committing changes in the `Private companion`, which `end-session` and `ship` run whenever the
+session left changes there. It is the same in every repository: the agent asks first, and no
+setting commits companion work without the user's yes.
+
+1. **Inspect.** Work from the companion's own root: the outer repository's `git diff` cannot see
+   inside it. Stage only the files this work changed, and review
+   `git -C <companion> diff --cached` yourself. Companion content never enters the conversation,
+   or any outer-repository file, issue, PR or commit message: describe the change file by file,
+   and give the user the command to read the diff.
+2. **Check.** The staged content holds no credential value: no private-key header, token,
+   password, connection string, credential-bearing URL or `KEY=value` secret. A value-free
+   reference to the secret store (`op://…`) is fine; a resolved value is an incident: stop and say
+   so. Then run every `Companion commit checks` entry.
+3. **Ask** whether to commit and push. On a no, leave the changes uncommitted and report them.
+4. **Commit and push** as the companion's own commit, never alongside an outer-repository commit.
+   Before the push, `gh repo view <companion repository> --json visibility --jq .visibility` must
+   print `PRIVATE`; otherwise stop. Push with a plain `git -C <companion> push`; never force-push.
+5. **Verify.** Report the commit SHA, and check that the companion is neither ahead of nor behind
+   its upstream.
+
+A companion that has diverged from its upstream (commits on both sides) is never merged, rebased,
+reset or force-pushed by a skill: stop and report it.
