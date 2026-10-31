@@ -6,9 +6,10 @@ namespace LeaseBook.Modules.Banking.Import;
 /// <summary>
 /// CSV implementation of <see cref="IStatementParser"/> (CsvHelper, P66 / ADR-015). Reads by the mapped
 /// header names, normalizes each row to a signed amount (single <c>Amount</c> column, or
-/// <c>Credit − Debit</c>), and tolerates per-row failures — an unreadable row is collected as a
-/// <see cref="RowError"/> with its 1-based data-row index, never aborting the import. A map naming a column
-/// the header lacks is the one whole-file outcome: <see cref="ParsedStatement.MissingColumns"/>, no rows.
+/// <c>Credit − Debit</c>), and tolerates per-row failures — an unreadable row, or one with no amount, is
+/// collected as a <see cref="RowError"/> with its 1-based data-row index, never aborting the import. A map
+/// naming a column the header lacks is the one whole-file outcome: <see cref="ParsedStatement.MissingColumns"/>,
+/// no rows.
 /// </summary>
 public sealed class CsvStatementParser : IStatementParser
 {
@@ -133,7 +134,12 @@ public sealed class CsvStatementParser : IStatementParser
     // debit/credit pair.
     private static bool IsMapped(string? name) => !string.IsNullOrWhiteSpace(name);
 
-    private static decimal ParseAmount(CsvReader csv, ColumnMap map)
+    // A row with no amount is an error, never 0.00 (#650). The unused side of a debit/credit pair is not:
+    // the row's amount is on the other side.
+    private static decimal ParseAmount(CsvReader csv, ColumnMap map) =>
+        ReadAmount(csv, map) ?? throw new FormatException("amount is empty.");
+
+    private static decimal? ReadAmount(CsvReader csv, ColumnMap map)
     {
         if (IsMapped(map.Amount))
         {
@@ -141,17 +147,18 @@ public sealed class CsvStatementParser : IStatementParser
         }
 
         // Customer-account convention: credit increases the balance (+), debit decreases it (−).
-        var credit = IsMapped(map.Credit) ? ParseDecimal(Field(csv, map.Credit!)) : 0m;
-        var debit = IsMapped(map.Debit) ? ParseDecimal(Field(csv, map.Debit!)) : 0m;
-        return credit - debit;
+        var credit = IsMapped(map.Credit) ? ParseDecimal(Field(csv, map.Credit!)) : null;
+        var debit = IsMapped(map.Debit) ? ParseDecimal(Field(csv, map.Debit!)) : null;
+        return credit is null && debit is null ? null : (credit ?? 0m) - (debit ?? 0m);
     }
 
-    private static decimal ParseDecimal(string? raw)
+    // Null when the field holds no value: empty, blank, or past the end of a short row, which reads as empty.
+    private static decimal? ParseDecimal(string? raw)
     {
         var value = (raw ?? string.Empty).Trim();
         if (value.Length == 0)
         {
-            return 0m; // an empty money cell (e.g. the unused side of a debit/credit pair) is zero
+            return null;
         }
 
         if (!decimal.TryParse(value, NumberStyles.Number, CultureInfo.InvariantCulture, out var parsed))

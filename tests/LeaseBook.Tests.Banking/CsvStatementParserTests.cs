@@ -192,4 +192,79 @@ public sealed class CsvStatementParserTests
         result.Errors.ShouldBeEmpty();
         result.Rows.ShouldHaveSingleItem().Date.ShouldBe(new DateOnly(2026, 2, 1));
     }
+
+    [Fact]
+    public void Reports_a_row_too_short_to_reach_its_amount()
+    {
+        // #650: a field past the end of a short row read as empty, so the row was stored at 0.00 with no error.
+        const string csv =
+            "Date,Description,Amount\n" +
+            "2026-02-01,Good row,100.00\n" +
+            "2026-02-02,Rent\n" +
+            "2026-02-03,Another good,75.00\n";
+
+        var result = _parser.Parse(csv, new ColumnMap(Date: "Date", Description: "Description", Amount: "Amount"));
+
+        result.Rows.Select(r => r.Description).ShouldBe(["Good row", "Another good"]);
+        result.Errors.ShouldBe([new RowError(2, "amount is empty.")]);
+    }
+
+    [Theory]
+    [InlineData("2026-02-01,Rent,")]
+    [InlineData("2026-02-01,Rent,   ")]
+    public void Reports_a_row_whose_amount_is_blank(string row)
+    {
+        var result = _parser.Parse(
+            $"Date,Description,Amount\n{row}\n",
+            new ColumnMap(Date: "Date", Description: "Description", Amount: "Amount"));
+
+        result.Rows.ShouldBeEmpty();
+        result.Errors.ShouldBe([new RowError(1, "amount is empty.")]);
+    }
+
+    [Theory]
+    [InlineData("2026-02-01,Fee")]
+    [InlineData("2026-02-01,Fee,")]
+    [InlineData("2026-02-01,Fee,,")]
+    [InlineData("2026-02-01,Fee,  ,  ")]
+    public void Reports_a_row_with_neither_side_of_a_debit_and_credit_pair(string row)
+    {
+        var result = _parser.Parse(
+            $"Date,Description,Debit,Credit\n{row}\n",
+            new ColumnMap(Date: "Date", Description: "Description", Debit: "Debit", Credit: "Credit"));
+
+        result.Rows.ShouldBeEmpty();
+        result.Errors.ShouldBe([new RowError(1, "amount is empty.")]);
+    }
+
+    public static TheoryData<string, string, decimal> RowsCarryingOneSide => new()
+    {
+        { "Date,Description,Debit,Credit", "2026-02-01,Fee,25.00", -25.00m }, // a bank omits the empty trailing credit
+        { "Date,Description,Credit,Debit", "2026-02-01,Deposit,40.00", 40.00m }, // the same, the other way round
+        { "Date,Description,Debit,Credit", "2026-02-01,Interest,,1.25", 1.25m },
+        { "Date,Description,Debit,Credit", "2026-02-01,Stated zero,0.00,", 0.00m },
+    };
+
+    [Theory]
+    [MemberData(nameof(RowsCarryingOneSide))]
+    public void A_row_carrying_one_side_of_a_debit_and_credit_pair_has_an_amount(string header, string row, decimal expected)
+    {
+        var result = _parser.Parse(
+            $"{header}\n{row}\n",
+            new ColumnMap(Date: "Date", Description: "Description", Debit: "Debit", Credit: "Credit"));
+
+        result.Errors.ShouldBeEmpty();
+        result.Rows.ShouldHaveSingleItem().Amount.ShouldBe(expected);
+    }
+
+    [Fact]
+    public void A_stated_zero_amount_is_an_amount()
+    {
+        const string csv = "Date,Description,Amount\n2026-02-01,Stated zero,0.00\n";
+
+        var result = _parser.Parse(csv, new ColumnMap(Date: "Date", Description: "Description", Amount: "Amount"));
+
+        result.Errors.ShouldBeEmpty();
+        result.Rows.ShouldHaveSingleItem().Amount.ShouldBe(0.00m);
+    }
 }
