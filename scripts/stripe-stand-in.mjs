@@ -27,8 +27,8 @@
  *
  *   /v1/...        what the adapter asks Stripe
  *   /stand-in/...  what a test tells the stand-in to do: move a payment along a recorded timeline
- *                  (paid, disputed, refunded), form a payout from named payments, serve the one
- *                  recorded payout, fail a payout, and read what has happened
+ *                  (paid, disputed, refunded), form a payout from named payments, serve the
+ *                  payout recorded on 2026-10-09, fail a payout, and read what has happened
  *
  * docs/runbooks/payment-simulation.md owns the procedure, and says which answers are recorded
  * shapes with values substituted and which are built.
@@ -48,8 +48,8 @@ export const DEFAULT_ADDRESS = "http://127.0.0.1:4010";
 export const DEFAULT_CALLBACK =
   "http://127.0.0.1:5080/callbacks/payments/stripe";
 
-// The three recorded runs. Each numbers its synthetic identifiers from one, so an identifier means
-// something only beside the run it came from.
+// The three recorded runs it answers from. Each numbers its synthetic identifiers from one, so an
+// identifier means something only beside the run it came from.
 const CARD_RUN = "2026-10-08T21-56-17-265Z";
 const PAYOUT_RUN = "2026-10-09T18-44-03-363Z";
 const DISPUTE_RUN = "2026-10-09T18-45-07-940Z";
@@ -166,7 +166,7 @@ function loadRecorded(root) {
         delivered("006-webhook-connect.json"),
         delivered("007-webhook-connect.json"),
       ],
-      // The balance line of a card charge in the one recorded payout.
+      // The balance line of a card charge in the recorded payout.
       line: line("txn_synthetic000012"),
       // A card payment Stripe disputed: its two dispute events, and its charge as Stripe then held it.
       dispute: {
@@ -214,10 +214,10 @@ function loadRecorded(root) {
       ],
       final: body(CARD_RUN, "028-ach-final.json"),
       charge: body(CARD_RUN, "029-ach-charge.json"),
-      // The balance line of that same debit in the one recorded payout: $504.03, of which $4.03 kept.
+      // The balance line of that same debit in the recorded payout: $504.03, of which $4.03 kept.
       line: line("txn_synthetic000011"),
       // An ACH debit Stripe disputed after it succeeded: the three dispute events, the charge Stripe
-      // held for it, and the dispute's balance line in the one recorded payout.
+      // held for it, and the dispute's balance line in the recorded payout.
       dispute: {
         events: [
           delivered("058-webhook-connect.json"),
@@ -234,7 +234,7 @@ function loadRecorded(root) {
       url: lines.url,
     },
     payout: {
-      // The four events about the one recorded payout, in the order Stripe made them.
+      // The four events about the recorded payout, in the order Stripe made them.
       events: [
         payoutEvent("payout.created"),
         payoutEvent("payout.reconciliation_completed"),
@@ -627,7 +627,7 @@ export function createStandIn({
   function answer(method, path, query, headers, form) {
     if (headers["stripe-version"] !== API_VERSION)
       throw new Unknown(
-        `The payloads here were recorded at API version ${API_VERSION}, and the request named another.`,
+        `This stand-in answers for API version ${API_VERSION}, the version the adapter is pinned to, and the request named another.`,
         400,
       );
     const account = headers["stripe-account"];
@@ -1065,8 +1065,8 @@ export function createStandIn({
   }
 
   /**
-   * Holds the one payout a sandbox has really made, and sends its four events: $1,470.60, with the
-   * fourteen balance lines Stripe listed for it. Everything is as recorded but two things. The
+   * Holds the payout a sandbox really made on 2026-10-09, and sends its four events: $1,470.60, with
+   * the fourteen balance lines Stripe listed for it. Everything is as recorded but two things. The
    * connected account is the fixture's. And the payout's own id is new each time, because a
    * fixture's database is kept from one run to the next and a payout is known there by its id; the
    * lines keep their recorded ids, amounts and times, and name the payments of the three fixture

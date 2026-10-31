@@ -801,8 +801,8 @@ test('a bank amount that differs from the processor’s net posts nothing, and a
 });
 
 /**
- * The one payout a sandbox has really made: $1,470.60, with the fourteen balance lines Stripe
- * listed for it. The stand-in serves it as recorded, on the fixture's account and under a payout id
+ * The payout a sandbox really made on 2026-10-09: $1,470.60, with the fourteen balance lines
+ * Stripe listed for it. The stand-in serves it as recorded, on the fixture's account and under a payout id
  * of its own for this run. Its lines name the payments of three earlier fixture generations and
  * none of this one's, and two of them are failed bank debits, which nothing posts. So it goes to a
  * person the moment it arrives, bank evidence equal to the net releases nothing, and no administrator

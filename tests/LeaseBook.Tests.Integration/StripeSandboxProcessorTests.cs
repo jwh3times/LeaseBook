@@ -62,8 +62,9 @@ public sealed partial class StripeSandboxProcessorTests
         sent.Form["payment_method"].ShouldBe("pm_card_visa");
         sent.Headers["Stripe-Account"].ShouldBe(h.Binding.Account);
         sent.Headers["Idempotency-Key"].ShouldBe(CardOperation.ToString("D"));
-        // The version the payloads were recorded at. A library that moved it would be read against stale shapes.
-        sent.Headers["Stripe-Version"].ShouldBe("2026-09-30.endive");
+        // The version of the newest recording. A library that moved it would be read against stale shapes.
+        sent.Headers["Stripe-Version"].ShouldBe("2026-10-28.endive");
+        sent.Headers["Stripe-Version"].ShouldBe(StripeReplay.RecordedVersion("003-card-create.json", StripeReplay.PinnedVersionRun));
     }
 
     [Fact]
@@ -676,6 +677,8 @@ internal sealed class StripeReplay : HttpMessageHandler
     public const string RefundRun = "2026-10-09T18-44-03-363Z";
     /// <summary>The run that recorded a card dispute. Ids are synthetic for each run apart: the same id in two runs is two things.</summary>
     public const string CardDisputeRun = "2026-10-09T18-45-07-940Z";
+    /// <summary>The run at the API version the adapter is pinned to. The three above stay the suite's payloads; scripts/stripe-probe.test.mjs holds them to this one's fields.</summary>
+    public const string PinnedVersionRun = "2026-10-31T01-15-52-187Z";
     private static readonly Lazy<string> Directory = new(() =>
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
@@ -728,6 +731,9 @@ internal sealed class StripeReplay : HttpMessageHandler
     }
 
     public static JsonObject RecordedBody(string name, string run = Run) => File_(name, run)["body"]!.AsObject();
+
+    /// <summary>The API version Stripe said it answered a recorded exchange at.</summary>
+    public static string RecordedVersion(string name, string run = Run) => (string)File_(name, run)["stripeVersion"]!;
 
     /// <summary>One recorded delivery's event, as Stripe sent it. A copy, for a test to change.</summary>
     public static JsonObject Delivered(string name, string run = Run) => File_(name, run)["event"]!.AsObject();
