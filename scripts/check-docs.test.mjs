@@ -70,6 +70,7 @@ test("slugs headings the way GitHub does", () => {
   assert.equal(headingSlug("`vlab merge`: the Tool"), "vlab-merge-the-tool");
   assert.equal(headingSlug("[Guide](guide.md) & more"), "guide--more");
   assert.equal(headingSlug("snake_case _stays_"), "snake_case-stays");
+  assert.equal(headingSlug("Press <kbd>Enter</kbd> now"), "press-enter-now");
 });
 
 test("anchors number repeats, and include setext headings and explicit ids", () => {

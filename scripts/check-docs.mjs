@@ -82,15 +82,27 @@ export function lineTargets(line) {
   return targets.map((target) => target.replace(/^<|>$/g, ""));
 }
 
+// A slug is only compared, never rendered, and one pass already leaves no tag. It repeats because
+// CodeQL's multi-character sanitization query, a required check in the consumers, asks for that.
+function withoutHtmlTags(text) {
+  let current = text;
+  let previous;
+  do {
+    previous = current;
+    current = previous.replace(/<[^>]+>/g, "");
+  } while (current !== previous);
+  return current;
+}
+
 // The slug GitHub gives a heading: inline Markdown rendered away, lowercased, everything but letters,
 // digits, marks, spaces, hyphens and underscores removed, spaces to hyphens.
 export function headingSlug(heading) {
-  return heading
+  const markdownGone = heading
     .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
     .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
     .replace(/\[([^\]]*)\]\[[^\]]*\]/g, "$1")
-    .replace(/`([^`]*)`/g, "$1")
-    .replace(/<[^>]+>/g, "")
+    .replace(/`([^`]*)`/g, "$1");
+  return withoutHtmlTags(markdownGone)
     .replace(/(^|[^\p{L}\p{N}_])_([^_]+)_(?=[^\p{L}\p{N}_]|$)/gu, "$1$2")
     .trim()
     .toLowerCase()
