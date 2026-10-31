@@ -33,10 +33,11 @@ boundary** as a row error rather than silently rounded downstream (P28). Parsing
 bad date/amount is collected as a `RowError` (1-based data-row index + reason) and reported, never fatal.
 A row with no amount is such an error, never 0.00 (#650): a mapped `Amount` field that is empty, blank or
 past the end of a short row, or a `Debit`/`Credit` pair with neither side. A pair with one side has its
-amount there, and a stated `0.00` is an amount. The one file-level refusal is a column map that names a column the header row lacks: the import is
-refused with a 400 naming each absent column, before any row is read or stored. Headers match the map
-case-sensitively, ignoring surrounding spaces. An absent column used to read as an empty field, so a
-missing amount column imported every row at 0.00 with no error (#645).
+amount there, and a stated `0.00` is an amount. The one file-level refusal is a column map that names a
+column the header row lacks: the import is refused with a 400 naming each absent column, before any row
+is read or stored. Headers match the map case-sensitively, ignoring surrounding spaces. An absent column
+used to read as an empty field, so a missing amount column imported every row at 0.00 with no error
+(#645).
 
 ### 3. The CSV arrives as text in a JSON body, not multipart
 

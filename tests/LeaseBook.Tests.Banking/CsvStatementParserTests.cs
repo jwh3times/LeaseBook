@@ -237,12 +237,45 @@ public sealed class CsvStatementParserTests
         result.Errors.ShouldBe([new RowError(1, "amount is empty.")]);
     }
 
+    [Fact]
+    public void A_debit_and_credit_row_with_neither_side_does_not_cost_the_rows_around_it()
+    {
+        const string csv =
+            "Date,Description,Debit,Credit\n" +
+            "2026-02-01,Fee,25.00\n" +
+            "2026-02-02,Nothing\n" +
+            "2026-02-03,Interest,,1.25\n";
+
+        var result = _parser.Parse(csv, new ColumnMap(
+            Date: "Date", Description: "Description", Debit: "Debit", Credit: "Credit"));
+
+        result.Rows.Select(r => r.Amount).ShouldBe([-25.00m, 1.25m]);
+        result.Errors.ShouldBe([new RowError(2, "amount is empty.")]);
+    }
+
+    [Fact]
+    public void Reports_a_blank_row_when_only_one_side_of_the_pair_is_mapped()
+    {
+        // The validator admits a map with a debit column alone, and the column it maps is then the row's amount.
+        const string csv =
+            "Date,Description,Debit\n" +
+            "2026-02-01,Fee,25.00\n" +
+            "2026-02-02,Nothing,\n";
+
+        var result = _parser.Parse(csv, new ColumnMap(Date: "Date", Description: "Description", Debit: "Debit"));
+
+        result.Rows.ShouldHaveSingleItem().Amount.ShouldBe(-25.00m);
+        result.Errors.ShouldBe([new RowError(2, "amount is empty.")]);
+    }
+
     public static TheoryData<string, string, decimal> RowsCarryingOneSide => new()
     {
         { "Date,Description,Debit,Credit", "2026-02-01,Fee,25.00", -25.00m }, // a bank omits the empty trailing credit
         { "Date,Description,Credit,Debit", "2026-02-01,Deposit,40.00", 40.00m }, // the same, the other way round
         { "Date,Description,Debit,Credit", "2026-02-01,Interest,,1.25", 1.25m },
         { "Date,Description,Debit,Credit", "2026-02-01,Stated zero,0.00,", 0.00m },
+        { "Date,Description,Debit,Credit", "2026-02-01,Stated zero,,0.00", 0.00m },
+        { "Date,Description,Debit,Credit", "2026-02-01,Stated zero,0.00,0.00", 0.00m },
     };
 
     [Theory]
