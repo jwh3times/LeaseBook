@@ -7,7 +7,7 @@ namespace LeaseBook.Modules.Banking.Import;
 /// CSV implementation of <see cref="IStatementParser"/> (CsvHelper, P66 / ADR-015). Reads by the mapped
 /// header names, normalizes each row to a signed amount (single <c>Amount</c> column, or
 /// <c>Credit − Debit</c>), and tolerates per-row failures — an unreadable row, or one with no amount, is
-/// collected as a <see cref="RowError"/> with its 1-based data-row index, never aborting the import. A map
+/// collected as a <see cref="RowError"/> with the file line where it starts, never aborting the import. A map
 /// naming a column the header lacks is the one whole-file outcome: <see cref="ParsedStatement.MissingColumns"/>,
 /// no rows.
 /// </summary>
@@ -32,6 +32,7 @@ public sealed class CsvStatementParser : IStatementParser
             HasHeader = true,
             Separator = ',',
             MalformedData = CsvMalformedDataHandling.Recover, // a stray quote never aborts the import
+            TrackLineNumbers = true, // a row error names the line the operator finds in the file (#667)
         };
 
         using var csv = CsvReader.Create(new StringReader(content ?? string.Empty), options);
@@ -62,7 +63,7 @@ public sealed class CsvStatementParser : IStatementParser
             }
             catch (Exception ex) when (ex is FormatException or InvalidOperationException)
             {
-                errors.Add(new RowError(rowNumber, ex.Message));
+                errors.Add(new RowError((int)csv.LineNumber, ex.Message));
             }
         }
 

@@ -325,8 +325,10 @@ export function ImportWizard({ bankAccountId, onClose, onConfirmed }: ImportWiza
                 {num(importResult.imported) === 1 ? '' : 's'}
                 {num(importResult.skippedDuplicates) > 0 &&
                   ` · ${num(importResult.skippedDuplicates)} duplicate skipped`}
-                {importResult.errors.length > 0 && ` · ${importResult.errors.length} row error(s)`}
               </p>
+            )}
+            {importResult && importResult.errors.length > 0 && (
+              <RowErrors errors={importResult.errors} hasLines={preview.rows.length > 0} />
             )}
             <MatchGroup kind="matched" rows={preview.rows} />
             <MatchGroup kind="suggested" rows={preview.rows} />
@@ -379,6 +381,45 @@ function ColumnSelect({
         ))}
       </Select>
     </label>
+  );
+}
+
+/**
+ * The rows the server could not read (#667); nothing stores them, so this is the operator's one view of
+ * them. Confirming comes first because the imported lines are already stored: a corrected file skips them
+ * as duplicates, and the wizard offers only the new import's lines for confirming (#671).
+ */
+function RowErrors({ errors, hasLines }: { errors: ImportResult['errors']; hasLines: boolean }) {
+  return (
+    <div className="col gap6">
+      <p role="alert" className="row gap8 fs13">
+        <Icon name="alert" size={14} />
+        <span>
+          {errors.length === 1 ? '1 row was' : `${errors.length} rows were`} not imported.{' '}
+          {hasLines
+            ? 'Confirm the imported lines first, then import a corrected file. Rows already imported are skipped.'
+            : 'Correct the file and import it again.'}
+        </span>
+      </p>
+      <div className="pf-row-errors" role="region" aria-label="Rows not imported" tabIndex={0}>
+        <table className="pf-table">
+          <thead>
+            <tr>
+              <th className="num">Line</th>
+              <th>Reason</th>
+            </tr>
+          </thead>
+          <tbody>
+            {errors.map((rowError) => (
+              <tr key={rowError.lineNumber}>
+                <td className="num">{rowError.lineNumber}</td>
+                <td>{rowError.message}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }
 

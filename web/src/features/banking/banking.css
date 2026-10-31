@@ -160,6 +160,13 @@ html[data-theme='dark'] .pf-acct-tab {
   grid-template-columns: 1fr 1fr;
   gap: 12px;
 }
+.pf-row-errors {
+  max-height: 200px;
+  overflow-y: auto;
+}
+.pf-row-errors td {
+  overflow-wrap: anywhere; /* a reason can quote a long cell from the file */
+}
 .pf-match-group {
   margin-top: 14px;
 }
