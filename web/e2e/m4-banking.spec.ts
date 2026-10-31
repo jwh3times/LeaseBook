@@ -123,6 +123,45 @@ test.describe.serial('M4 banking', () => {
     await wizard.getByRole('button', { name: 'Cancel' }).click();
   });
 
+  test('offers the line of a cancelled import again when the file is uploaded again @scenario:bank-statement-import-and-match', async ({
+    page,
+  }) => {
+    await login(page);
+    await gotoBanking(page);
+
+    // Nothing in the register matches this amount, so confirming it clears nothing for the specs after this one.
+    const previewStatement = async () => {
+      await page.getByRole('button', { name: 'Import statement' }).click();
+      const dialog = page.getByRole('dialog', { name: 'Import bank statement' });
+      await dialog.getByLabel('Statement CSV').setInputFiles({
+        name: 'statement.csv',
+        mimeType: 'text/csv',
+        buffer: Buffer.from('Date,Description,Amount\n2026-06-20,Cancelled import line,-17.31\n'),
+      });
+      await mapAmountColumns(dialog);
+      await dialog.getByRole('button', { name: 'Preview matches' }).click();
+      return dialog;
+    };
+
+    const first = await previewStatement();
+    await expect(first.getByText('Imported 1 line', { exact: true })).toBeVisible();
+    await first.getByRole('button', { name: 'Cancel' }).click();
+
+    const second = await previewStatement();
+    await expect(
+      second.getByText('Imported 0 lines · 1 line from an earlier import not yet confirmed'),
+    ).toBeVisible();
+    await expect(second.getByRole('cell', { name: 'Cancelled import line' })).toBeVisible();
+    await second.getByRole('button', { name: /Confirm/ }).click();
+    await expect(second).toBeHidden();
+
+    // Decided now, so the same file adds nothing and offers nothing.
+    const third = await previewStatement();
+    await expect(third.getByText(/duplicate skipped/)).toBeVisible();
+    await expect(third.getByText('No statement lines to review.')).toBeVisible();
+    await third.getByRole('button', { name: 'Cancel' }).click();
+  });
+
   test('reconciles Operating Trust to $0.00, finalizes, and locks the month against new postings @scenario:bank-reconcile-finalize-and-lock', async ({
     page,
   }) => {

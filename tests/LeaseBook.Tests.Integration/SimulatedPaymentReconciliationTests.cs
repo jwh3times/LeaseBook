@@ -153,6 +153,38 @@ public sealed partial class SimulatedPaymentTests
         await h.InOrg(async sp => (await sp.GetRequiredService<AppDbContext>().Set<StatementMatch>().CountAsync(ct)).ShouldBe(0), ct);
     }
 
+    [Fact]
+    public async Task A_payout_line_a_reupload_brings_back_still_clears_the_whole_payout()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var h = await Setup(ct);
+        using var one = await h.Login(1, ct);
+        using var admin = await h.LoginAdmin(ct);
+        var first = await Pay(h, one, 600m, ct);
+        var second = await Pay(h, one, 400m, ct);
+        await h.Settle(h.Payout("po_1", 1000m,
+            h.Line("1", "Payment", first, 600m, 0m, 600m),
+            h.Line("2", "Payment", second, 400m, 0m, 400m)), ct);
+        var payoutLines = (await RegisterRows(admin, h, ct)).Where(r => r.PayoutReference == "po_1").ToList();
+        payoutLines.Count.ShouldBe(2);
+
+        var csv = $"Date,Description,Amount\n{payoutLines[0].Date:yyyy-MM-dd},PROCESSOR PAYOUT,1000.00\n";
+        var url = $"/api/banking/banks/{h.Binding.BankId}/imports";
+        var body = new { filename = "statement.csv", csvContent = csv, columnMap = StatementColumns };
+        (await PostJson<ImportResult>(admin, url, body, ct)).Imported.ShouldBe(1);
+
+        // The confirmation's group check reads the import's own lines, so the line must have joined this one.
+        var again = await PostJson<ImportResult>(admin, url, body, ct);
+        (again.Imported, again.BroughtBack, again.SkippedDuplicates).ShouldBe((0, 1, 0));
+        var row = (await admin.GetFromJsonAsync<MatchPreviewResponse>($"/api/banking/imports/{again.ImportId}/matches", ct))!.Rows.Single();
+        row.GroupRef.ShouldBe("po_1");
+
+        var confirmed = await PostJson<ConfirmMatchesResult>(admin, $"/api/banking/imports/{again.ImportId}/confirm",
+            new { decisions = new[] { new { statementLineId = row.StatementLineId, journalLineId = (Guid?)null, kind = "matched", groupRef = "po_1" } } }, ct);
+        confirmed.Cleared.ShouldBe(2);
+        (await RegisterRows(admin, h, ct)).Where(r => r.PayoutReference == "po_1").ShouldAllBe(r => r.Status == BankLineStatus.Cleared);
+    }
+
     private static async Task<IReadOnlyList<RegisterRow>> RegisterRows(HttpClient staff, Harness h, CancellationToken ct) =>
         (await staff.GetFromJsonAsync<RegisterResponse>($"/api/accounting/banks/{h.Binding.BankId}/register?pageSize=200", ct))!.Rows;
 

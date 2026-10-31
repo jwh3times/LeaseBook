@@ -225,6 +225,12 @@ An issued check whose bank line has not cleared. It is already out of the book b
 uncleared withdrawal in the register until the bank pays it.
 _Avoid_: pending check, open check
 
+**Undecided line**:
+A stored bank statement line with no recorded decision: nobody has confirmed it, even as unmatched. A
+later upload that repeats the line brings it back for review instead of skipping it as a duplicate
+(ADR-015).
+_Avoid_: pending line, unmatched line (a line confirmed as unmatched is decided)
+
 **Check stock**:
 The paper a bank account's checks print on, set per bank account. Pre-printed stock already carries the
 bank, the organization and the MICR line; on blank stock LeaseBook prints the whole check, MICR line

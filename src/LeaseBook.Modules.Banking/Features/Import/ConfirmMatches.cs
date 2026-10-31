@@ -21,6 +21,10 @@ namespace LeaseBook.Modules.Banking.Features.Import;
 /// lines must still sum to the statement line's amount, or nothing is recorded and nothing clears. A
 /// register line that belongs to a group is refused as a match of its own.
 /// </para>
+/// <para>
+/// Every decision must name an undecided line still in this import, or nothing is recorded and nothing
+/// clears (#671).
+/// </para>
 /// </summary>
 public sealed record ConfirmMatches(Guid ImportId, IReadOnlyList<MatchDecision> Decisions)
     : ICommand<ConfirmMatchesResult>;
@@ -57,6 +61,8 @@ internal sealed class ConfirmMatchesHandler(
 {
     public async Task<ConfirmMatchesResult> Handle(ConfirmMatches command, CancellationToken ct)
     {
+        await RefuseLinesNoLongerOnOfferAsync(command, ct);
+
         var groupLines = await GroupLinesAsync(command, ct);
 
         var toClear = command.Decisions
@@ -98,6 +104,34 @@ internal sealed class ConfirmMatchesHandler(
             .ToList();
 
         return new ConfirmMatchesResult(toClear.Count, command.Decisions.Count, unmatched);
+    }
+
+    // One statement line answers for one decision. A preview left open can name a line that a later import
+    // has since brought back, against a different register line, or that another confirmation has decided
+    // (#671). Either would let one line of the bank's statement clear a second register line.
+    private async Task RefuseLinesNoLongerOnOfferAsync(ConfirmMatches command, CancellationToken ct)
+    {
+        const string message = "A line in this preview was confirmed or brought into a later import after it was read. Import the file again to review what is left.";
+
+        var bankAccountId = await db.Set<StatementImport>()
+            .Where(i => i.Id == command.ImportId)
+            .Select(i => (Guid?)i.BankAccountId)
+            .FirstOrDefaultAsync(ct);
+        if (bankAccountId is null)
+        {
+            throw Refused(message);
+        }
+
+        await StatementImportLock.AcquireAsync(db, bankAccountId.Value, ct);
+
+        var lineIds = command.Decisions.Select(d => d.StatementLineId).Distinct().ToList();
+        var onOffer = await db.Set<StatementLine>()
+            .CountAsync(l => l.ImportId == command.ImportId && lineIds.Contains(l.Id), ct);
+        if (onOffer != lineIds.Count
+            || await db.Set<StatementMatch>().AnyAsync(m => lineIds.Contains(m.StatementLineId), ct))
+        {
+            throw Refused(message);
+        }
     }
 
     // Returns each named group's lines, after the server's own checks: the preview is advice, and the
