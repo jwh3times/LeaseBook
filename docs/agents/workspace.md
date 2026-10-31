@@ -35,7 +35,6 @@ reported and skipped. `npm run sync:main -- --skip-private` updates only the pub
   `web/test-results/`, `web/e2e-results/`
 - `web/coverage/` (unit and e2e coverage reports, ADR-055) and `StrykerOutput/` (mutation reports)
 - stray `*.tsbuildinfo`
-- scratch files the session left at the repository root, named one by one
 
 ## Never-remove paths
 
@@ -47,8 +46,7 @@ reported and skipped. `npm run sync:main -- --skip-private` updates only the pub
   the input to `node scripts/stripe-probe.mjs scrub`
 - `web/node_modules/`, `web/codegen/node_modules/` — `npm run docs:check` and
   `npm run api:generate` run from them
-- `.claude/settings.local.json`, `.claude/worktrees/` — removing a worktree is the user's decision;
-  it may hold unpushed commits
+- `.claude/settings.local.json`
 
 ## Dev stack
 

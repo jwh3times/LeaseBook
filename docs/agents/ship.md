@@ -61,7 +61,8 @@ stand-in)** (Postgres and a seeded host), **Container build + full-stack smoke**
 ## Hook: before PR
 
 1. When the linked issue is on the board with `Track` or `Gate` unset, warn (`Board fields` in
-   `issue-tracker.md`; `gh project item-list 3 --owner jwh3times --format json --limit 500`).
+   `issue-tracker.md`; `gh project item-list <number> --owner <owner> --format json --limit 500`,
+   with the `Board` setting's owner and number).
 2. Every `docs/` Markdown file the branch or the working tree changes, except the ADR records,
    `docs/adr/template.md`, the documents in `reviewDateExempt` and the skill settings files in
    `skillSettings` (both `scripts/check-docs.mjs`), carries today's date in
