@@ -46,5 +46,8 @@ they are checked against the code. Each setting below is a `##` heading in that 
 - **Read by:** docs-updater, end-session
 - **Value:** `none`, or commands that check the docs (a docs test, a formatter check, a companion
   docs gate), each with the folder it runs from.
+- **Default:** `node scripts/check-docs.mjs`, the canonical script from `jwh3times/skills`: local
+  links and anchors resolve, and the `Doc map` lists every document and no missing path.
 - **Discover:** `test:docs`- and `docs:check`-style scripts in `package.json`, docs checks in CI
-  workflows, scripts under `private/scripts/`, and what `.claude/agents/docs-updater.md` runs.
+  workflows, scripts under `private/scripts/`, and what `.claude/agents/docs-updater.md` runs. Write
+  the heading only when a repository adds checks of its own, listing the default first.

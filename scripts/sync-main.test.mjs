@@ -1,150 +1,272 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import os from "node:os";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterEach, describe, it } from "node:test";
+import test from "node:test";
+
 import {
+  DEFAULT_TARGET,
   describeResult,
+  isBranchCheckedOut,
   isDirty,
+  main,
   parseArgs,
-  syncRepository,
+  syncRepositories,
 } from "./sync-main.mjs";
 
-const scratch = [];
-
-function tempDir() {
-  const directory = mkdtempSync(path.join(os.tmpdir(), "leasebook-sync-main-"));
-  scratch.push(directory);
-  return directory;
-}
-
-afterEach(() => {
-  for (const directory of scratch.splice(0)) {
-    rmSync(directory, { recursive: true, force: true });
-  }
-});
-
 function git(root, ...args) {
-  return execFileSync("git", args, { cwd: root, encoding: "utf8" });
+  return execFileSync(
+    "git",
+    [
+      "-C",
+      root,
+      "-c",
+      "user.name=t",
+      "-c",
+      "user.email=t@example.com",
+      "-c",
+      "commit.gpgsign=false",
+      ...args,
+    ],
+    { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
+  ).trim();
 }
 
-function repoPair() {
-  const base = tempDir();
-  const origin = path.join(base, "origin.git");
-  const seed = path.join(base, "seed");
-  const clone = path.join(base, "clone");
-
-  git(base, "init", "--bare", "--initial-branch=main", origin);
-  git(base, "clone", origin, seed);
-  git(seed, "config", "user.email", "test@example.com");
-  git(seed, "config", "user.name", "Test");
-  writeFileSync(path.join(seed, "README.md"), "one\n");
-  git(seed, "add", ".");
-  git(seed, "commit", "-m", "one");
-  git(seed, "push", "origin", "main");
-  git(base, "clone", origin, clone);
-  git(clone, "config", "user.email", "test@example.com");
-  git(clone, "config", "user.name", "Test");
-
-  return { origin, clone };
+function commit(root, name) {
+  writeFileSync(path.join(root, name), `${name}\n`);
+  git(root, "add", "-A");
+  git(root, "commit", "-m", name);
 }
 
-function pushCommit(origin, message) {
-  const work = path.join(tempDir(), "work");
-  git(path.dirname(work), "clone", origin, work);
-  git(work, "config", "user.email", "test@example.com");
-  git(work, "config", "user.name", "Test");
-  writeFileSync(path.join(work, `${message}.txt`), `${message}\n`);
-  git(work, "add", ".");
-  git(work, "commit", "-m", message);
-  git(work, "push", "origin", "main");
+// A bare remote with one commit on main, and a helper that clones it.
+function withRemote(run) {
+  const dir = mkdtempSync(path.join(tmpdir(), "sync-main-"));
+  const originalLog = console.log;
+  console.log = () => {};
+  try {
+    const remote = path.join(dir, "remote.git");
+    mkdirSync(remote);
+    git(remote, "init", "--bare", "-b", "main");
+    const clone = (name) => {
+      const target = path.join(dir, name);
+      execFileSync("git", ["clone", "-q", remote, target], { stdio: "ignore" });
+      return target;
+    };
+    const publisher = clone("publisher");
+    git(publisher, "switch", "-c", "main");
+    commit(publisher, "seed");
+    git(publisher, "push", "-u", "origin", "main");
+    const publish = (name) => {
+      commit(publisher, name);
+      git(publisher, "push", "origin", "main");
+    };
+    return run({ dir, clone, publish });
+  } finally {
+    console.log = originalLog;
+    rmSync(dir, { recursive: true, force: true });
+  }
 }
 
-describe("parseArgs", () => {
-  it("defaults to syncing both repositories", () => {
-    assert.deepEqual(parseArgs([]), { syncPrivate: true });
-  });
+const publicRepository = (root) => ({ root, label: "public checkout", companion: false });
+const companion = (root) => ({ root, label: "private companion", companion: true });
 
-  it("can skip the private companion", () => {
-    assert.deepEqual(parseArgs(["--skip-private"]), { syncPrivate: false });
+test("parses the flags and rejects anything else", () => {
+  assert.deepEqual(parseArgs([]), { syncPrivate: true, target: DEFAULT_TARGET });
+  assert.deepEqual(parseArgs(["--skip-private", "--target", "../ops"]), {
+    syncPrivate: false,
+    target: "../ops",
   });
-
-  it("rejects unknown arguments", () => {
-    assert.throws(() => parseArgs(["--pull"]), /Unknown argument/u);
-  });
+  assert.throws(() => parseArgs(["--nope"]), /Unknown argument/);
+  assert.throws(() => parseArgs(["--target"]), /requires a value/);
 });
 
-describe("small helpers", () => {
-  it("treats only non-empty porcelain output as dirty", () => {
-    assert.equal(isDirty(""), false);
-    assert.equal(isDirty("\n"), false);
-    assert.equal(isDirty(" M README.md\n"), true);
-  });
-
-  it("prefixes a result with its outcome", () => {
-    assert.equal(
-      describeResult({ label: "private", status: "updated", detail: "done" }),
-      "+ private: done",
-    );
-  });
+test("reads Git's plumbing output", () => {
+  assert.equal(isDirty(""), false);
+  assert.equal(isDirty(" M a\n"), true);
+  assert.equal(isBranchCheckedOut("worktree /x\r\nbranch refs/heads/main\r\n"), true);
+  assert.equal(isBranchCheckedOut("branch refs/heads/mainline\n"), false);
+  assert.equal(
+    describeResult({ label: "x", status: "updated", detail: "moved" }),
+    "+ x: moved",
+  );
 });
 
-describe("syncRepository", () => {
-  it("skips a directory that is not a Git repository", () => {
-    const result = syncRepository(tempDir(), "companion");
-    assert.equal(result.status, "skipped");
-    assert.match(result.detail, /no Git repository/u);
-  });
-
-  it("fast-forwards main and reports the new commits", () => {
-    const { origin, clone } = repoPair();
-    pushCommit(origin, "two");
-
-    const result = syncRepository(clone, "clone");
-
+test("fast-forwards main and reports the commits", () => {
+  withRemote(({ clone, publish }) => {
+    const root = clone("work");
+    publish("next");
+    const [result] = syncRepositories([publicRepository(root)]);
     assert.equal(result.status, "updated");
-    assert.match(result.detail, /main now at/u);
-    assert.match(result.detail, /1 new commit\(s\)/u);
-    assert.equal(git(clone, "branch", "--show-current").trim(), "main");
+    assert.match(result.detail, /^main now at [0-9a-f]{7}, 1 new commit\(s\)$/);
+    assert.equal(git(root, "rev-parse", "HEAD"), git(root, "rev-parse", "origin/main"));
   });
+});
 
-  it("switches a clean feature checkout back to main", () => {
-    const { clone } = repoPair();
-    git(clone, "switch", "-c", "feature/thing");
-
-    const result = syncRepository(clone, "clone");
-
+test("reports a checkout already current", () => {
+  withRemote(({ clone }) => {
+    const [result] = syncRepositories([publicRepository(clone("work"))]);
     assert.equal(result.status, "current");
-    assert.match(result.detail, /was on feature\/thing/u);
-    assert.equal(git(clone, "branch", "--show-current").trim(), "main");
   });
+});
 
-  it("refuses uncommitted changes without switching branches", () => {
-    const { clone } = repoPair();
-    git(clone, "switch", "-c", "feature/thing");
-    writeFileSync(path.join(clone, "README.md"), "edited\n");
-
-    const result = syncRepository(clone, "clone");
-
-    assert.equal(result.status, "failed");
-    assert.match(result.detail, /uncommitted changes/u);
-    assert.equal(
-      git(clone, "branch", "--show-current").trim(),
-      "feature/thing",
-    );
+test("moves from another branch to main, and says so", () => {
+  withRemote(({ clone, publish }) => {
+    const root = clone("work");
+    git(root, "switch", "-c", "feature");
+    publish("next");
+    const [result] = syncRepositories([publicRepository(root)]);
+    assert.equal(result.status, "updated");
+    assert.match(result.detail, /\(was on feature\)$/);
+    assert.equal(git(root, "branch", "--show-current"), "main");
   });
+});
 
-  it("refuses a diverged main without creating a merge commit", () => {
-    const { origin, clone } = repoPair();
-    writeFileSync(path.join(clone, "local.txt"), "local\n");
-    git(clone, "add", ".");
-    git(clone, "commit", "-m", "local only");
-    pushCommit(origin, "remote only");
+test("creates a local main that is missing", () => {
+  withRemote(({ clone }) => {
+    const root = clone("work");
+    git(root, "switch", "-c", "feature");
+    git(root, "branch", "-D", "main");
+    const [result] = syncRepositories([publicRepository(root)]);
+    assert.notEqual(result.status, "failed");
+    assert.equal(git(root, "branch", "--show-current"), "main");
+  });
+});
 
-    const result = syncRepository(clone, "clone");
-
+test("refuses uncommitted changes, including untracked files, and does not fetch", () => {
+  withRemote(({ clone, publish }) => {
+    const root = clone("work");
+    const before = git(root, "rev-parse", "origin/main");
+    publish("next");
+    writeFileSync(path.join(root, "scratch.txt"), "work\n");
+    const [result] = syncRepositories([publicRepository(root)]);
     assert.equal(result.status, "failed");
-    assert.match(git(clone, "log", "--oneline", "-1"), /local only/u);
+    assert.match(result.detail, /uncommitted changes/);
+    assert.equal(git(root, "rev-parse", "origin/main"), before);
+  });
+});
+
+test("refuses a detached HEAD", () => {
+  withRemote(({ clone }) => {
+    const root = clone("work");
+    git(root, "switch", "--detach");
+    const [result] = syncRepositories([publicRepository(root)]);
+    assert.equal(result.status, "failed");
+    assert.match(result.detail, /detached HEAD/);
+  });
+});
+
+test("refuses a main that has diverged", () => {
+  withRemote(({ clone, publish }) => {
+    const root = clone("work");
+    commit(root, "local");
+    publish("next");
+    const [result] = syncRepositories([publicRepository(root)]);
+    assert.equal(result.status, "failed");
+    assert.match(result.detail, /^fast-forward from origin\/main failed: /);
+  });
+});
+
+test("moves nothing when either repository refuses", () => {
+  withRemote(({ clone, publish }) => {
+    const root = clone("work");
+    const private_ = clone("companion");
+    const before = git(root, "rev-parse", "HEAD");
+    publish("next");
+    writeFileSync(path.join(private_, "draft.txt"), "draft\n");
+    const results = syncRepositories([publicRepository(root), companion(private_)]);
+    assert.equal(results[0].status, "skipped");
+    assert.match(results[0].detail, /another repository refused/);
+    assert.equal(results[1].status, "failed");
+    assert.equal(git(root, "rev-parse", "HEAD"), before);
+  });
+});
+
+test("with main held by another worktree, fast-forwards a branch with no other commits", () => {
+  withRemote(({ dir, clone, publish }) => {
+    const root = clone("work");
+    const linked = path.join(dir, "linked");
+    git(root, "worktree", "add", "-q", "-b", "feature", linked);
+    publish("next");
+    const [result] = syncRepositories([publicRepository(linked)]);
+    assert.equal(result.status, "updated");
+    assert.match(result.detail, /^feature now at .*\(main is checked out elsewhere\)$/);
+    assert.equal(git(linked, "branch", "--show-current"), "feature");
+    assert.equal(git(linked, "rev-parse", "HEAD"), git(linked, "rev-parse", "origin/main"));
+  });
+});
+
+test("with main held by another worktree, refuses a branch with other commits", () => {
+  withRemote(({ dir, clone }) => {
+    const root = clone("work");
+    const linked = path.join(dir, "linked");
+    git(root, "worktree", "add", "-q", "-b", "feature", linked);
+    commit(linked, "work");
+    const [result] = syncRepositories([publicRepository(linked)]);
+    assert.equal(result.status, "failed");
+    assert.match(result.detail, /feature has other commits/);
+  });
+});
+
+test("companion results carry no revision, branch or raw Git error", () => {
+  withRemote(({ clone, publish }) => {
+    const root = clone("companion");
+    git(root, "switch", "-c", "secret-branch");
+    publish("next");
+    const [updated] = syncRepositories([companion(root)]);
+    assert.equal(updated.detail, "main fast-forwarded to origin/main");
+    const [current] = syncRepositories([companion(root)]);
+    assert.equal(current.detail, "main already matches origin/main");
+
+    commit(root, "local");
+    publish("later");
+    const [failure] = syncRepositories([companion(root)]);
+    assert.equal(failure.status, "failed");
+    assert.equal(failure.detail, "fast-forward from origin/main failed; inspect it locally");
+  });
+});
+
+test("refuses a companion that is a link or a linked worktree", () => {
+  withRemote(({ dir, clone }) => {
+    const root = clone("companion");
+    const linkPath = path.join(dir, "link");
+    symlinkSync(root, linkPath, "junction");
+    const [viaLink] = syncRepositories([companion(linkPath)]);
+    assert.equal(viaLink.status, "failed");
+    assert.match(viaLink.detail, /independent Git clone/);
+
+    const linked = path.join(dir, "linked");
+    git(root, "worktree", "add", "-q", "-b", "other", linked);
+    const [viaWorktree] = syncRepositories([companion(linked)]);
+    assert.equal(viaWorktree.status, "failed");
+    assert.match(viaWorktree.detail, /independent Git clone/);
+  });
+});
+
+test("main syncs the companion beside the checkout, or reports it missing", () => {
+  withRemote(({ dir, clone, publish }) => {
+    const root = clone("work");
+    assert.equal(main([], root), 0);
+
+    const companionRoot = clone("work/private");
+    git(root, "status");
+    writeFileSync(path.join(root, ".git", "info", "exclude"), "private/\n");
+    publish("next");
+    assert.equal(main([], root), 0);
+    assert.equal(git(companionRoot, "rev-parse", "HEAD"), git(root, "rev-parse", "HEAD"));
+
+    publish("later");
+    const before = git(companionRoot, "rev-parse", "HEAD");
+    assert.equal(main(["--skip-private"], root), 0);
+    assert.equal(git(companionRoot, "rev-parse", "HEAD"), before);
+    assert.ok(dir);
+  });
+});
+
+test("main returns a failure code when a repository refuses", () => {
+  withRemote(({ clone }) => {
+    const root = clone("work");
+    writeFileSync(path.join(root, "scratch.txt"), "work\n");
+    assert.equal(main(["--skip-private"], root), 1);
   });
 });

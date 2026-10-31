@@ -22,12 +22,6 @@ is one setting.
 - No recovery material or plaintext `.env` content is staged (the `op://` references in
   `private/config/*.env.op` are allowed).
 
-## Sync with main
-
-`npm run sync:main` — from the public root, fetches, switches to `main` and fast-forwards both the
-public checkout and `private/`, refusing a dirty tree or a non-fast-forward; a missing `private/` is
-reported and skipped. `npm run sync:main -- --skip-private` updates only the public checkout.
-
 ## Safe-to-remove paths
 
 - `TestResults/` at the root and under `tests/*/`; stray `*.trx` and `*.coverage`

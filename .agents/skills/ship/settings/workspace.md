@@ -39,10 +39,11 @@ that file.
 
 - **Read by:** end-session, handoff, lets-go
 - **Value:** the command that brings local `main` up to date, run from `main`.
-- **Default:** `git pull --ff-only origin main`; with the `Private companion` checked out and clean,
-  then `git -C <companion> pull --ff-only`.
-- **Discover:** a `sync:main` (or similar) script in `package.json`. Write the heading only for
-  such a script.
+- **Default:** `node scripts/sync-main.mjs` when `Private companion` is not `none`, the canonical
+  script from `jwh3times/skills`, which moves both repositories or neither; otherwise
+  `git pull --ff-only origin main`.
+- **Discover:** what the project's own version control needs. Write the heading only when neither
+  default fits (a repository that lands through another tool).
 
 ## Companion restore command
 

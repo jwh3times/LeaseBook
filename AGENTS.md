@@ -242,8 +242,9 @@ result. CI runs the script's `node:test` suite and regenerates with `--check`, f
 committed mirror is stale. The same job runs `scripts/lint-agent-neutrality.mjs` and its test
 (`npm run lint:agents` from the root), which reject agent and skill sources that read wrongly from
 their mirrored copies: a bare `$0`–`$9` in a `SKILL.md`, a relative link that breaks under
-`.claude/skills/`. `scripts/sync-agents.mjs`, `scripts/lint-agent-neutrality.mjs` and their tests
-are shared verbatim across repositories — don't edit them here; change the canonical copy in
+`.claude/skills/`. `scripts/sync-agents.mjs`, `lint-agent-neutrality.mjs`, `sync-main.mjs`,
+`next-version.mjs`, `check-changelog.mjs`, `check-docs.mjs` and their tests are shared verbatim
+across repositories — don't edit them here; change the canonical copy in
 `jwh3times/skills` and re-copy it. Run `npm run docs:format` (from `web/`) **before** the sync, not
 after — formatting the generated copy instead of the authored source just re-drifts it on the next
 pass. Never reintroduce symlinks under `.claude/skills/` (the sync script reports and removes them): this
