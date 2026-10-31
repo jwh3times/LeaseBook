@@ -1,9 +1,10 @@
 # Stripe sandbox probe
 
 - **Audience:** Maintainers who hold a Stripe sandbox
-- **Status:** Implemented tooling; first run recorded 2026-10-08, first payout recorded 2026-10-09
+- **Status:** Implemented tooling; first run recorded 2026-10-08, first payout recorded 2026-10-09,
+  latest run recorded 2026-10-31 at API version `2026-10-28.endive`
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-11
+- **Last reviewed:** 2026-10-30
 
 The probe asks a Stripe sandbox the questions the payment adapter depends on and records what Stripe
 sends. [ADR-054](../adr/ADR-054-stripe-sandbox-adapter.md) lists the questions. The probe is a
@@ -28,7 +29,9 @@ object Stripe marks as live.
     enough: without the setting a payment offers only card.
 - The Stripe CLI, version 1.53 or later, signed in to that same sandbox. The probe uses it only to
   receive webhook deliveries. Without it the probe still runs and says that deliveries were not
-  captured. Signed in to a different account, it delivers nothing, and the probe says so.
+  captured. Signed in to a different account, it delivers nothing, and the probe says so. Instead of
+  signing in, you can set `STRIPE_API_KEY` to the sandbox's secret key for the command alone; the run
+  of 2026-10-31 did, with CLI 1.55.6.
 - Node 26.
 - Two environment variables. Keep both out of the repository, issues and chat:
   - `STRIPE_SANDBOX_SECRET_KEY`: the sandbox's secret key (`sk_test_` or `rk_test_`). It must be
@@ -92,6 +95,9 @@ ones, the lines Stripe says each covers. It also records the events Stripe sent 
 for by type because a payout is made long after the run. It needs the same two environment variables.
 It makes no charge. It never creates a payout: which charges a payout covers has to come from Stripe.
 
+A `run` on an account that has already been paid out records those payouts itself, with their lines,
+at the version the probe asks for. Stripe.net's next version does not have to wait for a new payout.
+
 ## Commit the recorded payloads
 
 ```
@@ -118,6 +124,26 @@ Read the diff before committing it. Both checks know only what the run recorded 
 patterns describe, and a person is the check on the rest. Continuous integration runs the first
 check on every payload committed under `tests/fixtures/stripe/`. Recorded payloads live nowhere
 else.
+
+## Raise the pinned API version
+
+A new Stripe.net can move the API version the adapter sends: its changelog says so, and continuous
+integration goes red on the bump. The recording comes first, because the probe sends the version it
+is told to.
+
+1. Check that no payout of a [sandbox fixture run](payment-simulation.md#wait-for-stripes-payout) is
+   forming on the account. The probe's charges would land in it.
+2. On a branch, set `Stripe.net` in `Directory.Packages.props` and `API_VERSION` in
+   `scripts/stripe-probe.mjs`.
+3. Run the probe and scrub the run, as above, and read the result.
+4. In `StripeSandboxProcessorTests.cs`, point `PinnedVersionRun` at the new run and change the version
+   the first test expects. In `StripeSandboxPinnedVersionTests.cs`, change the file names, ids and
+   generation to the new run's.
+5. Run `node --test scripts/stripe-probe.test.mjs`. It fails if no committed run is at `API_VERSION`,
+   and it names every field an earlier run holds that the new one lost. A field lost is one the suite's
+   older payloads no longer show truthfully: read what the adapter does with it, and re-record those
+   payloads if it reads it.
+6. Delete the previous pinned run if nothing else names it, and record what changed in ADR-054.
 
 ## If something goes wrong
 

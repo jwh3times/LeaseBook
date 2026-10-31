@@ -627,7 +627,7 @@ export function createStandIn({
   function answer(method, path, query, headers, form) {
     if (headers["stripe-version"] !== API_VERSION)
       throw new Unknown(
-        `The payloads here were recorded at API version ${API_VERSION}, and the request named another.`,
+        `This stand-in answers for API version ${API_VERSION}, the version the adapter is pinned to, and the request named another.`,
         400,
       );
     const account = headers["stripe-account"];

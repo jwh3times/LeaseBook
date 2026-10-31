@@ -1,0 +1,33 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/v1/payment_intents",
+    "params": {
+      "amount": 51624,
+      "currency": "usd",
+      "payment_method": "pm_card_visa",
+      "automatic_payment_methods": {
+        "enabled": true,
+        "allow_redirects": "never"
+      },
+      "confirm": true,
+      "metadata": {
+        "leasebook_operation": "596e6c14-0bde-4b17-aa7b-1fbbe9bf05e4",
+        "leasebook_generation": "07a8a0f1-7d1b-4fca-9e50-43ff46d94ee5"
+      }
+    },
+    "platform": false,
+    "idempotencyKey": "596e6c14-0bde-4b17-aa7b-1fbbe9bf05e4"
+  },
+  "status": 400,
+  "requestId": "req_synthetic000024",
+  "stripeVersion": "2026-10-28.endive",
+  "elapsedMs": 90,
+  "body": {
+    "error": {
+      "message": "Keys for idempotent requests can only be used with the same parameters they were first used with. Try using a key other than '596e6c14-0bde-4b17-aa7b-1fbbe9bf05e4' if you meant to execute a different request.",
+      "request_log_url": "[scrubbed]",
+      "type": "idempotency_error"
+    }
+  }
+}

@@ -14,6 +14,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 import {
+  API_VERSION,
   FIXTURE_ROOT,
   SCENARIOS,
   assertTestKey,
@@ -24,8 +25,10 @@ import {
   main,
   parseArgs,
   realLiterals,
+  runAtVersion,
   saysLive,
   scrubRun,
+  shapesLost,
   timing,
   unsynthetic,
   verifySignature,
@@ -412,6 +415,65 @@ test("arguments are read strictly", () => {
 // The guard on what is committed. It reads every recorded payload in the repository.
 test("no committed Stripe fixture holds a real identifier, an address or a URL", () => {
   assert.deepEqual(fixtureOffenders(join(repository, FIXTURE_ROOT)), []);
+});
+
+// Raising the pinned version without a fresh probe run fails here, and so does keeping a replayed
+// payload whose fields the pinned version no longer shows.
+test("a committed run was recorded at the pinned API version, and the replayed runs hold nothing it lost", () => {
+  const root = join(repository, FIXTURE_ROOT);
+  const run = runAtVersion(root, API_VERSION);
+  assert.ok(run, `no run under ${FIXTURE_ROOT} was recorded at ${API_VERSION}`);
+  assert.deepEqual(shapesLost(root, run), []);
+});
+
+test("the guards on the pinned version fail on a version nobody recorded and on a lost field", () => {
+  const root = mkdtempSync(join(tmpdir(), "stripe-fixtures-"));
+  const record = (run, file, value) => {
+    mkdirSync(join(root, run), { recursive: true });
+    writeFileSync(join(root, run, file), JSON.stringify(value));
+  };
+  try {
+    const answer = (body, stripeVersion) => ({
+      status: 200,
+      stripeVersion,
+      body,
+    });
+    record("old", "001-card.json", answer({ a: 1, b: "x", c: null }, "v1"));
+    record(
+      "new",
+      "001-card.json",
+      answer({ a: 1, b: "x", c: "y", d: 2 }, "v2"),
+    );
+    assert.equal(runAtVersion(root, "v2"), "new");
+    assert.equal(runAtVersion(root, "v3"), null);
+    // A field added, and a null that became a value, are nothing lost.
+    assert.deepEqual(shapesLost(root, "new"), []);
+
+    record("new", "001-card.json", answer({ a: "1" }, "v2"));
+    assert.deepEqual(shapesLost(root, "new"), [
+      "old: card: a (number)",
+      "old: card: b (string)",
+    ]);
+
+    record("old", "002-balance.json", answer({ a: 1 }, "v1"));
+    assert.ok(
+      shapesLost(root, "new").includes(
+        "old: balance was not recorded at the pinned version",
+      ),
+    );
+    // An error is not the shape of what was asked for, and a run of mixed versions is at neither.
+    record("old", "003-refused.json", {
+      status: 400,
+      stripeVersion: "v2",
+      body: { e: 1 },
+    });
+    assert.equal(runAtVersion(root, "v2"), "new");
+    assert.ok(
+      !shapesLost(root, "new").some((line) => line.includes("refused")),
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("the guard on committed fixtures fails on one that holds something real", () => {
