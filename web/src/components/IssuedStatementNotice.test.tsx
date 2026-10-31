@@ -95,8 +95,12 @@ describe('IssuedStatementNotice', () => {
     respondWith([], () => (answered = true));
     const status = renderNotice({ entryIds: ['entry-1'] });
 
-    await vi.waitFor(() => expect(answered).toBe(true));
-    expect(status).toBeEmptyDOMElement();
+    expect(
+      screen.getByLabelText('Checking for issued statements affected by this entry'),
+    ).toBeVisible();
+    // The handler running only means the request arrived; the answer has rendered once this empties.
+    await vi.waitFor(() => expect(status).toBeEmptyDOMElement());
+    expect(answered).toBe(true);
   });
 
   it('says the check failed instead of staying silent', async () => {

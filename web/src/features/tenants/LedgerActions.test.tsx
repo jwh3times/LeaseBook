@@ -181,8 +181,8 @@ describe('ApplyModal', () => {
     await userEvent.type(screen.getByLabelText('Amount'), '300');
     await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
 
-    await vi.waitFor(() => expect(hit).toBe(true));
-    expect(onApplied).toHaveBeenCalledWith('pp1');
+    await vi.waitFor(() => expect(onApplied).toHaveBeenCalledWith('pp1'));
+    expect(hit).toBe(true);
   });
 });
 
