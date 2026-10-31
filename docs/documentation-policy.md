@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living policy
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-28
+- **Last reviewed:** 2026-10-31
 
 This policy keeps LeaseBook documentation public-safe, navigable, and maintainable. It applies to
 Markdown, runbooks, diagrams, planning artifacts, and documentation embedded in source or automation.
@@ -87,7 +87,7 @@ supersedes it.
 The date records when a review was **recorded**, so it cannot predate the commit that records it —
 writing the date down is itself an edit. Back-dating a review to the day it happened is therefore not
 possible, and not the point: what the field asserts is "someone confirmed this was accurate, and here
-is when they said so". `scripts/check-docs.mjs` fails a living document that was committed after its
+is when they said so". `scripts/check-docs-policy.mjs` fails a living document that was committed after its
 stated review date, which is what stops an edit from quietly outliving the last time anyone checked
 the document was still true. A document whose date tracks something other than an engineering edit —
 the compliance drafts wait on an external review, `blueprint.md` is a frozen baseline nobody refreshes
@@ -116,10 +116,11 @@ Run the complete local gate from `web/`:
 npm run docs:check
 ```
 
-The command checks Prettier formatting, Markdown structure, spelling, lifecycle metadata, local and
-private-link boundaries, copied mutable commands, obsolete authority claims, ADR index consistency,
-and that every canonical document has an entry in the `Doc map` of `docs/agents/docs.md`, which the
-`docs-updater` skill audits from.
+The command checks Prettier formatting, Markdown structure, spelling, lifecycle metadata, copied
+mutable commands, obsolete authority claims and ADR index consistency
+(`scripts/check-docs-policy.mjs`), then local and private-link boundaries and that every document
+has an entry in the `Doc map` of `docs/agents/docs.md`, which the `docs-updater` skill audits from
+(`scripts/check-docs.mjs`, shared with the other repositories that install these skills).
 The ordinary CI web job runs the same command on every pull request. The separate Lychee workflow
 checks external links and anchors on documentation changes and on its weekly schedule. A few URLs are
 checked by the weekly run only: the current release's own links, which do not exist until the merge,

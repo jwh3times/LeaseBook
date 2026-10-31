@@ -16,3 +16,11 @@ playwright-report-stand-in
 ../.agents/skills/ship/
 ../scripts/lint-agent-neutrality.mjs
 ../scripts/lint-agent-neutrality.test.mjs
+../scripts/sync-main.mjs
+../scripts/sync-main.test.mjs
+../scripts/next-version.mjs
+../scripts/next-version.test.mjs
+../scripts/check-changelog.mjs
+../scripts/check-changelog.test.mjs
+../scripts/check-docs.mjs
+../scripts/check-docs.test.mjs
