@@ -3,7 +3,7 @@
 - **Audience:** Developers and test operators
 - **Status:** Implemented, non-live only
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-26
+- **Last reviewed:** 2026-10-30
 
 The simulator exercises the real Payments and Accounting path. It has no provider network client
 and cannot move real money. Production and Staging reject Simulation; live/provider configuration
@@ -423,11 +423,11 @@ goes to review instead of posting. The same goes for a failing or disputed test 
 window. A payout holding only this generation's good payments is the one that posts.
 
 **How long.** Nobody here can say exactly. The connected account's schedule reads daily with a
-two-day delay. The one automatic payout recorded so far was created under three hours after the
+two-day delay. The first automatic payout recorded was created under three hours after the
 first charges, with the same day as its arrival date, and was marked paid five minutes after it was
 created. No second payout had been made two days after that. On 2026-10-14, the account's charges
 from 2026-10-08 and 2026-10-09 were still pending, with Stripe making them available on 2026-10-15
-and 2026-10-16: about seven days, not two. Expect to wait up to a week or more. No host runs in the meantime: the one `resume` starts asks Stripe for the last 29 days
+and 2026-10-16: about seven days, not two. Stripe's next two automatic payouts, recorded in the run of 2026-10-31, were created on those two days. Expect to wait up to a week or more. No host runs in the meantime: the one `resume` starts asks Stripe for the last 29 days
 of events and finds the payout. Running `resume` too early does no harm; it says there is no payout
 yet and keeps the copy.
 
@@ -714,7 +714,9 @@ Its answers come from the payloads recorded from a real sandbox under `tests/fix
 recorded payload is changed and none is added. A recorded shape is copied and given this run's
 values: identifiers, amounts, times, the connected account, and the two ids of LeaseBook's that a
 charge carries. Each recorded run numbers its synthetic identifiers from one, so the stand-in
-replaces an identifier only beside the run it came from.
+replaces an identifier only beside the run it came from. It reads the three runs of 2026-10-08 and
+2026-10-09, not the later run at the pinned API version, so an event it sends names
+`2026-09-30.endive`. "The recorded payout" below is the one of 2026-10-09.
 
 | The host asks, or Stripe sends                                | The stand-in's answer                                                                                         | Recorded or built                                                                                                                                                                                                               |
 | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -779,7 +781,7 @@ no route of Stripe's begins with, and takes the same key in `Authorization: Bear
 | `GET /stand-in/state`                                  | The accounts, payments and payouts it holds, the deliveries it sent with the host's answers, and the list of unexpected requests                                                                                                                       |
 | `POST /stand-in/payments/{payment reference}/timeline` | Body `{"timeline":"<name>"}`. Sends the recorded events of that timeline for the payment LeaseBook made under that reference, and answers with each delivery's HTTP status. The timelines are below                                                    |
 | `POST /stand-in/payouts`                               | Body `{"payments":["<payment reference>", …]}`, and `"returns"` with the same for the ACH returns it also carries. Forms one automatic payout from payments Stripe has said were paid, sends its four events, and answers with the payout's id and net |
-| `POST /stand-in/payouts/recorded`                      | Body `{"account":"acct_…"}`, the first fixture's account when left out. Holds the one recorded payout on that account under a new id, sends its four events, and answers with its id, net and number of lines                                          |
+| `POST /stand-in/payouts/recorded`                      | Body `{"account":"acct_…"}`, the first fixture's account when left out. Holds the recorded payout on that account under a new id, sends its four events, and answers with its id, net and number of lines                                              |
 | `POST /stand-in/payouts/{payout id}/fail`              | Sends `payout.failed` for a payout the stand-in holds, once                                                                                                                                                                                            |
 
 | Timeline                | Applies to                           | What Stripe is then said to have sent                                                          |
@@ -901,7 +903,7 @@ stand-in was asked nothing it does not know:
 - **A bank amount that differs from Stripe's net.** The payout goes to review as
   `bank_amount_mismatch` and cannot be posted. The right amount afterwards is refused and makes it
   `conflicting_evidence`. An administrator closes it from the keyboard.
-- **The one recorded payout**, with its fifteen lines. It goes to review as unsupported at once.
+- **The recorded payout**, with its fifteen lines. It goes to review as unsupported at once.
   Bank evidence equal to $1,470.60 releases nothing, an administrator who posts it is refused, and
   the review is closed.
 - **A payout that holds an ACH debit and that debit's return**, which is the known limit in

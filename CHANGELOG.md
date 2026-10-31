@@ -14,7 +14,12 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ## [Unreleased]
 
-No unreleased changes.
+### Changed
+
+- **The Stripe sandbox adapter now talks to Stripe at API version `2026-10-28.endive`.** Stripe.net
+  moved to 53.1.0 together with a fresh recording from a sandbox. Nothing the adapter reads changed.
+  The test suite now fails if the pinned version has no recording, or if an earlier recording holds
+  a field the newest one has lost. This affects only the development fixture.
 
 ## [0.27.0] - 2026-10-30
 

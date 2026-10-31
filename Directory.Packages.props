@@ -81,9 +81,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Stripe sandbox adapter (ADR-054). 53.0.0 pins API version 2026-09-30.endive, the version the
-         probe recorded its payloads at; raise it only together with a fresh probe run. Host-only. -->
-    <PackageVersion Include="Stripe.net" Version="53.0.0" />
+    <!-- Stripe sandbox adapter (ADR-054). 53.1.0 pins API version 2026-10-28.endive, the version the
+         probe last recorded at; raise it only together with a fresh probe run
+         (docs/runbooks/stripe-sandbox-probe.md). Host-only. -->
+    <PackageVersion Include="Stripe.net" Version="53.1.0" />
   </ItemGroup>
 
   <ItemGroup>

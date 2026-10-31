@@ -527,6 +527,27 @@ generation reads `conflicting_evidence`; both read `settlement_incomplete` befor
 covers only what may still change, a payment not known here yet or a return whose payment has no
 receipt yet, and keeps its Post action. No decision changes, and the known limit stands.
 
+**Implementation note, 2026-10-31 (API version `2026-10-28.endive`).** The adapter moved to Stripe.net
+53.1.0, which sends that version, together with a fresh probe run,
+`tests/fixtures/stripe/2026-10-31T01-15-52-187Z/`. Against the three earlier runs every kind of answer
+and event was still recorded, and nothing was lost or changed type. A dispute gained
+`submission_method` and, once closed, `intended_submission_method`, and a card dispute, recorded in a
+payout line for the first time, holds `case_type` and `network_reason_code`. The adapter reads none of them. A payout from
+2026-10-09, read again at the new version, came to the same lines.
+
+The run also recorded the first refund lines in a payout, three of them in the payout of 2026-10-16.
+They appear because refunds made on 2026-10-09 had by then been paid out, not because of the version.
+Each has type `refund` and its refund as the source, which names the payment, and the adapter reads
+them as `Refund` items, a kind nothing posts.
+
+One thing the earlier runs could not show: events fetched from
+`/v1/events` named `2026-09-30.endive` while deliveries of the same run named `2026-10-28.endive`. The
+adapter reads no event's version. No decision changes.
+
+The suite still replays the three earlier runs, whose references are pinned by hand throughout it, and
+the new run is read through the adapter by its own tests. `scripts/stripe-probe.test.mjs` fails if the
+pinned version has no recording, and if an earlier run holds a field the newest one has lost.
+
 The provisional assumptions of ADR-053 stay open. This ADR verifies none of them, and nothing here
 is approval to move real money.
 
@@ -621,12 +642,16 @@ says "to revisit", this list is where the item now lives.
   that holds only this fixture's good payments. Posting is proven in tests and against replayed
   payloads. The sandbox description of a journal entry has therefore not been seen there either. This
   ADR is not accepted until it has.
-- **Two payloads were built, not recorded.** A `payout.failed` event and a refund line in a payout,
-  because neither has occurred.
+- **One payload was built, not recorded.** A `payout.failed` event, because none has occurred. A
+  refund line in a payout was built too until the run of 2026-10-31 recorded three; tests that vary
+  one still start from a charge line.
 - **The screens were checked against a real sandbox through the API, not in a browser.**
 - **Not every outgoing header is pinned by a test.** A test pins the fields of a charge and the
   `Stripe-Account`, `Idempotency-Key` and `Stripe-Version` headers. The library's other headers, its
   user agent among them, are not asserted.
+- **Most tests replay payloads from an earlier API version.** They are held to the shape of the
+  recording at the pinned version by a test, but they do not carry the fields that version added. A
+  real host has not been run against a sandbox at `2026-10-28.endive`; only the probe has.
 - **Whether an event on the platform's own account is signed with the same secret is not shown.**
   None was delivered. The adapter drops an event that names no connected account.
 

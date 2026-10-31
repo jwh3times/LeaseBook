@@ -352,7 +352,7 @@ test("a request that is not one the adapter makes is refused and kept as unexpec
     const refused = await h.ask(method, url, { json: {} });
     assert.ok(refused.status >= 400, url);
   }
-  // Recorded at one API version, and answered at no other.
+  // Answered at the pinned API version and at no other.
   const other = await h.handle({
     method: "GET",
     url: "/v1/account",
@@ -390,9 +390,10 @@ test("the card timeline sends the four recorded events, signed, in the order Str
       false,
     );
     const event = sent.event;
+    // The version of the payload it is replayed from. The adapter reads no event's version.
     assert.deepEqual(
       [event.object, event.account, event.livemode, event.api_version],
-      ["event", ACCOUNT, false, API_VERSION],
+      ["event", ACCOUNT, false, "2026-09-30.endive"],
     );
     assert.ok(event.created <= h.clock.now);
     assert.deepEqual(event.data.object.metadata, {

@@ -733,7 +733,7 @@
     },
     {
       "id": "stripe-stand-in-recorded-payout",
-      "workflow": "The one payout a sandbox has made arrives as recorded with its fifteen lines; it goes to review, bank evidence releases nothing and offers no post, and the review is closed",
+      "workflow": "The payout a sandbox made on 2026-10-09 arrives as recorded with its fifteen lines; it goes to review, bank evidence releases nothing and offers no post, and the review is closed",
       "area": "Payments",
       "spec": "stripe-stand-in.spec.ts",
       "org": "stand-in payment fixture",

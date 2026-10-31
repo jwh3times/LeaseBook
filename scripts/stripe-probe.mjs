@@ -40,7 +40,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 /** The API version the adapter's library is pinned to, so recorded shapes match what it will parse. */
-export const API_VERSION = "2026-09-30.endive";
+export const API_VERSION = "2026-10-28.endive";
 export const FIXTURE_ROOT = join("tests", "fixtures", "stripe");
 const RAW_ROOT = "stripe-probe.local";
 const API = "https://api.stripe.com";
@@ -376,6 +376,94 @@ export function fixtureOffenders(directory) {
   return jsonFiles(directory).flatMap((file) =>
     unsynthetic(readFileSync(file, "utf8")).map((found) => `${file}: ${found}`),
   );
+}
+
+/** Every field a recorded answer or event holds, by what kind of answer or event it is. */
+function recordedShapes(run) {
+  const shapes = new Map();
+  const note = (kind, value) => {
+    if (!shapes.has(kind)) shapes.set(kind, new Map());
+    const fields = shapes.get(kind);
+    const walk = (node, path) => {
+      if (Array.isArray(node)) {
+        for (const item of node) walk(item, `${path}[]`);
+      } else if (node && typeof node === "object") {
+        for (const [key, item] of Object.entries(node)) {
+          walk(item, path ? `${path}.${key}` : key);
+        }
+      } else {
+        if (!fields.has(path)) fields.set(path, new Set());
+        fields.get(path).add(node === null ? "null" : typeof node);
+      }
+    };
+    walk(value, "");
+  };
+  for (const file of jsonFiles(run)) {
+    const recorded = JSON.parse(readFileSync(file, "utf8"));
+    if (recorded.event) note(`event ${recorded.event.type}`, recorded.event);
+    // An exchange Stripe refused or failed holds an error, not the shape of what was asked for.
+    else if (recorded.status >= 200 && recorded.status < 300) {
+      const kind = basename(file).replace(/^\d+-|\.json$/g, "");
+      if (kind.includes("events")) {
+        for (const event of recorded.body.data) {
+          note(`event ${event.type}`, event);
+        }
+      } else note(kind, recorded.body);
+    }
+  }
+  return shapes;
+}
+
+/**
+ * The run under a directory recorded at this API version, or null. Every exchange in it must say so:
+ * events carry their own version, so only the answer Stripe gave to the request counts here.
+ */
+export function runAtVersion(directory, version) {
+  const runs = readdirSync(directory).filter((run) =>
+    statSync(join(directory, run)).isDirectory(),
+  );
+  const at = runs.filter((run) => {
+    const said = jsonFiles(join(directory, run))
+      .map((file) => JSON.parse(readFileSync(file, "utf8")).stripeVersion)
+      .filter(Boolean);
+    return said.length > 0 && said.every((value) => value === version);
+  });
+  return at.at(-1) ?? null;
+}
+
+/**
+ * What an earlier recording holds that the recording at the pinned version does not, one line per
+ * finding. The suite replays earlier runs, and may only while this is empty: a field that has gone or
+ * changed type at the pinned version is one those payloads no longer show truthfully. A field the
+ * pinned version added is no finding, since nothing replayed could be reading it. A null says nothing
+ * about a field's type, on either side.
+ */
+export function shapesLost(directory, pinnedRun) {
+  const pinned = recordedShapes(join(directory, pinnedRun));
+  const lost = [];
+  for (const run of readdirSync(directory).sort()) {
+    if (run === pinnedRun || !statSync(join(directory, run)).isDirectory())
+      continue;
+    for (const [kind, fields] of recordedShapes(join(directory, run))) {
+      const now = pinned.get(kind);
+      if (!now) {
+        lost.push(`${run}: ${kind} was not recorded at the pinned version`);
+        continue;
+      }
+      for (const [field, types] of fields) {
+        const found = now.get(field);
+        const wanted = [...types].filter((type) => type !== "null");
+        if (
+          wanted.length &&
+          (!found ||
+            !(found.has("null") || wanted.some((type) => found.has(type))))
+        ) {
+          lost.push(`${run}: ${kind}: ${field} (${wanted.join("/")})`);
+        }
+      }
+    }
+  }
+  return lost;
 }
 
 /** Copies a run to the fixture directory, scrubbed. Throws, writing nothing, if anything real is left. */
