@@ -29,6 +29,13 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   import's row errors and is not stored, and the other rows still import. A row with one side of a
   debit/credit pair, and a stated `0.00`, import as before.
 
+- **A bank statement import now says which rows it left out and why.** Its preview used to show only
+  a count of row errors. It now lists each of those rows with the line it starts on in the file and
+  the reason, and says what to do next: confirm the imported lines, then import a corrected file, or,
+  with nothing to confirm, correct the file and import it again. In the import response, each error
+  now carries `lineNumber`, which counts the header and blank lines, in place of `rowNumber`, which
+  counted only data rows.
+
 ## [0.27.0] - 2026-10-30
 
 ### Added

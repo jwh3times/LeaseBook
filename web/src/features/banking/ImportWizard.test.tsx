@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { server } from '@/test/mocks/server';
+import type { ImportResult } from './banking';
 import { ImportWizard } from './ImportWizard';
 
 const CSV = 'Date,Description,Amount\n2026-02-01,Interest,100.00\n';
@@ -43,7 +44,151 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
+const EMPTY_PREVIEW = { rows: [], summary: { matched: 0, suggested: 0, unmatched: 0 } };
+
+/** Takes the wizard through upload and mapping to the preview of an import with these results. */
+async function previewImport(result: {
+  imported: number;
+  skippedDuplicates?: number;
+  errors: ImportResult['errors'];
+  preview: typeof PREVIEW | typeof EMPTY_PREVIEW;
+}) {
+  server.use(
+    http.get('/api/banking/banks/:id/mappings', () => HttpResponse.json({ mappings: [] })),
+    http.post('/api/banking/banks/:id/imports', () =>
+      HttpResponse.json({
+        importId: 'imp1',
+        imported: result.imported,
+        skippedDuplicates: result.skippedDuplicates ?? 0,
+        errors: result.errors,
+      }),
+    ),
+    http.get('/api/banking/imports/:id/matches', () => HttpResponse.json(result.preview)),
+  );
+  renderWizard();
+  await userEvent.upload(
+    screen.getByLabelText('Statement CSV'),
+    new File([CSV], 'statement.csv', { type: 'text/csv' }),
+  );
+  await screen.findByText(/no saved mappings yet/i);
+  await userEvent.selectOptions(screen.getByLabelText('Date column'), 'Date');
+  await userEvent.selectOptions(screen.getByLabelText('Description column'), 'Description');
+  await userEvent.selectOptions(screen.getByLabelText('Amount column'), 'Amount');
+  await userEvent.click(screen.getByRole('button', { name: 'Preview matches' }));
+  await screen.findByText(/^Imported/);
+}
+
 describe('ImportWizard', () => {
+  // #667: the preview used to say only "1 row error(s)", so the operator had to hunt for the row.
+  describe('rows that were not imported', () => {
+    it('lists each with its file line and reason, and says to confirm before importing a corrected file', async () => {
+      await previewImport({
+        imported: 1,
+        errors: [
+          { lineNumber: 3, message: 'amount is empty.' },
+          { lineNumber: 7, message: "date 'Total' is not in a recognized format." },
+        ],
+        preview: PREVIEW,
+      });
+
+      const notice = screen.getByRole('alert');
+      expect(notice).toHaveTextContent('2 rows were not imported.');
+      expect(notice).toHaveTextContent(
+        'Confirm the imported lines first, then import a corrected file. Rows already imported are skipped.',
+      );
+
+      const list = screen.getByRole('region', { name: 'Rows not imported' });
+      expect(
+        within(list)
+          .getAllByRole('columnheader')
+          .map((th) => th.textContent),
+      ).toEqual(['Line', 'Reason']);
+      expect(
+        within(list)
+          .getAllByRole('cell')
+          .map((td) => td.textContent),
+      ).toEqual(['3', 'amount is empty.', '7', "date 'Total' is not in a recognized format."]);
+
+      expect(screen.getByRole('button', { name: /confirm/i })).toBeEnabled();
+    });
+
+    it('lets the keyboard reach the list, which scrolls', async () => {
+      await previewImport({
+        imported: 1,
+        errors: [{ lineNumber: 3, message: 'amount is empty.' }],
+        preview: PREVIEW,
+      });
+
+      const list = screen.getByRole('region', { name: 'Rows not imported' });
+      await userEvent.tab(); // the dialog's close button
+      await userEvent.tab();
+      expect(list).toHaveFocus();
+    });
+
+    it('says to correct the file when the readable rows were all duplicates', async () => {
+      await previewImport({
+        imported: 0,
+        skippedDuplicates: 2,
+        errors: [{ lineNumber: 4, message: 'amount is empty.' }],
+        preview: EMPTY_PREVIEW,
+      });
+
+      expect(screen.getByRole('alert')).toHaveTextContent('Correct the file and import it again.');
+      expect(screen.getByRole('button', { name: /confirm/i })).toBeDisabled();
+    });
+
+    it('says one row in the singular', async () => {
+      await previewImport({
+        imported: 1,
+        errors: [{ lineNumber: 3, message: 'amount is empty.' }],
+        preview: PREVIEW,
+      });
+
+      expect(screen.getByRole('alert')).toHaveTextContent('1 row was not imported.');
+    });
+
+    it('says to correct the file when every row failed, with nothing to confirm', async () => {
+      await previewImport({
+        imported: 0,
+        errors: [{ lineNumber: 2, message: 'amount is empty.' }],
+        preview: EMPTY_PREVIEW,
+      });
+
+      const notice = screen.getByRole('alert');
+      expect(notice).toHaveTextContent('1 row was not imported.');
+      expect(notice).toHaveTextContent('Correct the file and import it again.');
+      expect(notice).not.toHaveTextContent(/confirm/i);
+      expect(
+        within(screen.getByRole('region', { name: 'Rows not imported' })).getByText(
+          'amount is empty.',
+        ),
+      ).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /confirm/i })).toBeDisabled();
+    });
+
+    it('shows a cell value quoted in a reason as literal text', async () => {
+      const reason = "date '<b>x</b>' is not in a recognized format.";
+      await previewImport({
+        imported: 1,
+        errors: [{ lineNumber: 2, message: reason }],
+        preview: PREVIEW,
+      });
+
+      const list = screen.getByRole('region', { name: 'Rows not imported' });
+      expect(within(list).getByText(reason)).toBeInTheDocument();
+      expect(list.querySelector('b')).toBeNull();
+    });
+
+    it('shows no list when every row was read', async () => {
+      await previewImport({ imported: 1, errors: [], preview: PREVIEW });
+
+      expect(screen.getByText('Imported 1 line')).toBeInTheDocument();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(screen.queryByRole('region', { name: 'Rows not imported' })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /confirm/i })).toBeEnabled();
+    });
+  });
+
   it('shows a confirmed empty saved-mapping result', async () => {
     server.use(
       http.get('/api/banking/banks/:id/mappings', () => HttpResponse.json({ mappings: [] })),
