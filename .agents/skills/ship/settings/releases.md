@@ -28,8 +28,9 @@ setting below is a `##` heading in that file.
   - `roll up` — its changes are folded into the next section written, and no section is invented
     for it; `ship` finds the tags released after the newest section.
 
-  May add a bulleted **Ignore** list of three-part tag patterns that predate the changelog (e.g.
-  `v0.1.*`). Four-part tags (`v1.0.0.x`) never need one: `ship` reads only three-part tags.
+  May add a bulleted **Ignore** list of three-part tag patterns that predate the changelog, each in
+  backticks with `*` as its only wildcard (e.g. `v0.1.*`). `scripts/check-changelog.mjs` reads the
+  same list. Four-part tags (`v1.0.0.x`) never need one: `ship` reads only three-part tags.
 - **Default:** `backfill` with `Scheme: per-merge`; otherwise `none`.
 - **Discover:** tags with no section in `CHANGELOG.md`. Write the heading only for `roll up` or an
   **Ignore** list.
@@ -38,7 +39,8 @@ setting below is a `##` heading in that file.
 
 - **Read by:** ship
 - **Value:** the file that holds the current release line (`package.json`, `web/package.json`,
-  `VERSION`), or `none` with `Scheme: none`.
+  `VERSION`) in backticks, or `none` with `Scheme: none`. `scripts/next-version.mjs` reads it from
+  here, so the tag workflow and the changelog check follow the same file.
 - **Default:** `none` with `Scheme: none`; otherwise `package.json`.
 - **Discover:** the file the tag workflow reads the line from. Write the heading only when it is
   another file.
@@ -73,8 +75,10 @@ setting below is a `##` heading in that file.
 - **Read by:** ship
 - **Value:** `per-merge` only; otherwise `none`. The command that prints the version the next
   merge will mint, as a bare SemVer — the same computation the tag workflow makes.
-- **Default:** `none` unless `Scheme: per-merge`, which has no default yet.
-- **Discover:** `scripts/next-version.*`, and what the tag workflow runs.
+- **Default:** `node scripts/next-version.mjs` with `Scheme: per-merge`, the canonical script from
+  `jwh3times/skills`; otherwise `none`.
+- **Discover:** `scripts/next-version.*`, and what the tag workflow runs. Write the heading only
+  when the project computes versions some other way.
 
 ## Unreleased placeholder
 
@@ -87,11 +91,16 @@ setting below is a `##` heading in that file.
 ## Changelog check
 
 - **Read by:** ship
-- **Value:** `none`, or the command that verifies the changelog names the version the merge will
-  mint (the local form of a changelog CI job), run after the changelog is written.
-- **Default:** `none` with `Scheme: none`; otherwise there is none.
-- **Discover:** changelog jobs in `.github/workflows/` and the scripts they run
-  (`scripts/verify-changelog-version.sh`, `scripts/check-changelog.mjs`).
+- **Value:** `none`, or the command that verifies the changelog for this merge (the local form of a
+  changelog CI job), run after the changelog is written.
+- **Default:** by `Scheme`, using the canonical script from `jwh3times/skills`:
+  - `per-merge` — `node scripts/check-changelog.mjs`;
+  - `cut-on-line` — there is none: the value names the paths whose changes need an entry,
+    `node scripts/check-changelog.mjs --source <path> [--source <path>]`;
+  - `none` — `none`.
+- **Discover:** changelog jobs in `.github/workflows/` and the scripts they run, and for
+  `cut-on-line` the folders that hold the product's source. Write the heading only for
+  `cut-on-line`, or when a repository adds a check of its own (`&&` it after the default).
 
 ## Release commit message
 

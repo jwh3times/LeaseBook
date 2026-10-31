@@ -1,550 +1,304 @@
+#!/usr/bin/env node
+// Checks the repository's Markdown against its files and its Doc map:
+//
+//  1. Every relative link and image in a document resolves to a tracked file or folder, in the file's
+//     exact case, inside the repository, and every fragment into a Markdown file names a heading or
+//     an explicit anchor. A target that is ignored (the companion, build output) is reported: it
+//     resolves on one machine and breaks on a clean clone.
+//  2. Every document is listed in the `Doc map` of `docs/agents/docs.md`, so docs-updater knows it
+//     exists, and every path the map lists still exists. An item covers a document by exact path, by
+//     folder, or by glob. Companion paths and URLs are not this repository's to check.
+//
+// Installed skills and their mirrors are out of scope: a reinstall overwrites them, and
+// `scripts/lint-agent-neutrality.mjs` checks their links.
+//
+//   node scripts/check-docs.mjs          # exit 1 and list every problem found
+//   node scripts/check-docs.mjs <root>   # check another checkout instead
+//
+// This repository holds the canonical copy (jwh3times/skills); every consumer carries it unchanged.
+
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
-const scriptPath = fileURLToPath(import.meta.url);
-const defaultRoot = path.resolve(path.dirname(scriptPath), "..");
+const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const DOC_MAP_FILE = "docs/agents/docs.md";
+const OUT_OF_SCOPE = [".agents/skills/", ".claude/skills/", ".codex/"];
 
-const metadataFields = ["Audience", "Status", "Owner", "Last reviewed"];
-const commandFingerprints = [
-  "dotnet build LeaseBook.slnx",
-  "dotnet test --solution LeaseBook.slnx",
-  "npm run typecheck",
-  "check-invariants --org demo",
-];
+const FENCE = /^ {0,3}(`{3,}|~{3,})(.*)$/;
+const ATX_HEADING = /^ {0,3}#{1,6}(?:[ \t]+(.*?))?(?:[ \t]+#+)?[ \t]*$/;
+const SETEXT_UNDERLINE = /^ {0,3}(=+|-+)[ \t]*$/;
+const NOT_A_SETEXT_TITLE = /^ {0,3}(?:[-*+>|]|\d+[.)])/;
+const HTML_ANCHOR = /<[a-zA-Z][^>]*\s(?:id|name)=["']([^"']+)["']/g;
+const LINE_FRAGMENT = /^L\d+(?:-L?\d+)?$/;
 
-function normalizePath(value) {
-  return value.replaceAll("\\", "/");
-}
-
-export function stripFencedCode(markdown) {
-  const output = [];
+// The file's lines with front matter and fenced code blanked, so positions stay true. A fence closes
+// only on the same character, at least as long, with nothing after it.
+export function visibleLines(markdown) {
+  const lines = markdown.split(/\r?\n/);
+  const visible = [...lines];
+  if (lines[0] === "---") {
+    const end = lines.indexOf("---", 1);
+    if (end > 0) visible.fill("", 0, end + 1);
+  }
   let fence = null;
-
-  for (const line of markdown.split(/\r?\n/)) {
-    const match = line.match(/^\s*(`{3,}|~{3,})/);
-    if (match) {
-      if (fence === null) {
-        fence = match[1][0];
-      } else if (match[1][0] === fence) {
-        fence = null;
+  for (let index = 0; index < lines.length; index += 1) {
+    if (visible[index] === "" && lines[index] !== "") continue;
+    const match = FENCE.exec(lines[index]);
+    if (fence === null) {
+      if (match) {
+        fence = match[1];
+        visible[index] = "";
       }
-      output.push("");
       continue;
     }
-
-    output.push(fence === null ? line : "");
-  }
-
-  return output.join("\n");
-}
-
-export function extractMarkdownLinks(markdown) {
-  const links = [];
-  const rendered = stripFencedCode(markdown);
-  const pattern = /\[[^\]]*\]\((?<target>[^)]+)\)/g;
-
-  for (const match of rendered.matchAll(pattern)) {
-    links.push({
-      target: match.groups.target.trim().replace(/^<|>$/g, ""),
-      line: rendered.slice(0, match.index).split("\n").length,
-    });
-  }
-
-  return links;
-}
-
-export function parseAdr(markdown) {
-  const heading = markdown.match(/^# ADR-(?<number>\d{3}): (?<title>.+)$/m);
-  const status = markdown.match(/^- \*\*Status:\*\* (?<value>.+)$/m);
-  const date = markdown.match(/^- \*\*Date:\*\* (?<value>\d{4}-\d{2}-\d{2})$/m);
-  // An ADR may be amended more than once, and the header then wraps: the second link sits on a
-  // continuation line, and prose naming the same ADRs follows the last one. Capture only the
-  // leading comma-separated run of links, across line breaks, so the index row can name every
-  // amender (the legend's `Accepted (amended by ADR-037, ADR-039)` form) instead of just the first.
-  const amendedBy = markdown.match(
-    /^- \*\*Amended by:\*\* (?<value>\[ADR-\d{3}\]\([^)]+\)(?:,\s+\[ADR-\d{3}\]\([^)]+\))*)/m,
-  );
-
-  if (!heading || !status || !date) {
-    return null;
-  }
-
-  const adr = {
-    number: heading.groups.number,
-    title: heading.groups.title.trim(),
-    status: status.groups.value.trim(),
-    date: date.groups.value,
-  };
-  if (amendedBy) {
-    // Read the link labels only; the target file name repeats the number.
-    adr.amendedBy = [...amendedBy.groups.value.matchAll(/\[(ADR-\d{3})\]/g)]
-      .map((match) => match[1])
-      .join(", ");
-  }
-  return adr;
-}
-
-export function missingMetadata(markdown) {
-  return metadataFields.filter(
-    (field) => !markdown.includes(`- **${field}:**`),
-  );
-}
-
-/**
- * Documents the docs-updater skill is expected to know about: every committed markdown at the repo
- * root, under `docs/`, under `infra/`, or in `.claude/agents/`. Individual ADR records are excluded
- * because the ADR-index rule below already reconciles them one by one, and listing 40+ of them in the
- * Doc map would bury the rest.
- */
-export function canonicalDocs(files) {
-  return files.filter((file) => {
+    visible[index] = "";
     if (
-      file.startsWith(".agents/") ||
-      file.startsWith(".claude/skills/") ||
-      file.startsWith(".github/")
+      match &&
+      match[1][0] === fence[0] &&
+      match[1].length >= fence.length &&
+      match[2].trim() === ""
     ) {
-      return false;
+      fence = null;
     }
+  }
+  return visible;
+}
 
-    if (/^docs\/adr\/ADR-\d{3}-.+\.md$/.test(file)) {
-      return false;
+function withoutInlineCode(line) {
+  return line.replace(/(`+)(?:(?!\1).)*?\1/g, (span) => " ".repeat(span.length));
+}
+
+// Every link and image target on a visible line, inline or a reference definition.
+export function lineTargets(line) {
+  const text = withoutInlineCode(line);
+  const targets = [];
+  for (const match of text.matchAll(/\]\(\s*(<[^>]+>|[^\s)]+)(?:\s+["'(][^)]*)?\)/g)) {
+    targets.push(match[1]);
+  }
+  const reference = /^ {0,3}\[[^\]]+\]:\s*(<[^>]+>|\S+)/.exec(text);
+  if (reference) targets.push(reference[1]);
+  return targets.map((target) => target.replace(/^<|>$/g, ""));
+}
+
+// The slug GitHub gives a heading: inline Markdown rendered away, lowercased, everything but letters,
+// digits, marks, spaces, hyphens and underscores removed, spaces to hyphens.
+export function headingSlug(heading) {
+  return heading
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/\[([^\]]*)\]\[[^\]]*\]/g, "$1")
+    .replace(/`([^`]*)`/g, "$1")
+    .replace(/<[^>]+>/g, "")
+    .replace(/(^|[^\p{L}\p{N}_])_([^_]+)_(?=[^\p{L}\p{N}_]|$)/gu, "$1$2")
+    .trim()
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\p{M} _-]/gu, "")
+    .replace(/ /g, "-");
+}
+
+// Every fragment a Markdown file answers to. A repeated slug is numbered -1, -2, ...
+export function anchorsOf(markdown) {
+  const anchors = new Set();
+  const seen = new Map();
+  const lines = visibleLines(markdown);
+  for (const [index, line] of lines.entries()) {
+    for (const match of line.matchAll(HTML_ANCHOR)) anchors.add(match[1]);
+
+    let heading = ATX_HEADING.exec(line)?.[1];
+    if (ATX_HEADING.test(line)) heading ??= "";
+    else if (
+      line.trim() &&
+      SETEXT_UNDERLINE.test(lines[index + 1] ?? "") &&
+      !SETEXT_UNDERLINE.test(line) &&
+      !NOT_A_SETEXT_TITLE.test(line)
+    ) {
+      heading = line.trim();
     }
+    if (heading === undefined) continue;
 
-    return (
-      file.startsWith("docs/") ||
-      file.startsWith("infra/") ||
-      file.startsWith(".claude/agents/") ||
-      !file.includes("/")
-    );
-  });
-}
-
-/**
- * Canonical docs absent from the Doc map. An omission there is invisible in a way a missing file is
- * not: docs-updater simply never audits what it was not told exists. `diagnostics.md` sat outside
- * the old topology block for months and every audit skipped it.
- */
-export function docsMissingFromTopology(topology, canonical) {
-  // Only a real entry counts: a top-level bullet that opens with the path in backticks. A prose
-  // mention of a path, or one inside an entry's nested "when" bullets, would otherwise satisfy the
-  // rule for a document the list does not actually carry, which is how a gate becomes theatre.
-  const listed = new Set(
-    topology
-      .split(/\r?\n/)
-      .map((line) => line.match(/^- `([^`]+)`/)?.[1])
-      .filter(Boolean),
-  );
-
-  return canonical.filter((file) => !listed.has(file));
-}
-
-/** The Doc map: everything between its heading and the next `## ` heading. */
-export function extractTopology(settingsMarkdown) {
-  const start = settingsMarkdown.search(/^## Doc map$/m);
-  if (start === -1) {
-    return null;
+    const slug = headingSlug(heading);
+    const count = seen.get(slug) ?? 0;
+    seen.set(slug, count + 1);
+    anchors.add(count === 0 ? slug : `${slug}-${count}`);
   }
-
-  const body = settingsMarkdown.slice(start).replace(/^.*\r?\n/, "");
-  const offset = body.search(/^## /m);
-  return offset === -1 ? body : body.slice(0, offset);
+  return anchors;
 }
 
-/**
- * True when a document was edited after the date it claims to have been reviewed.
- *
- * One day of tolerance, deliberately: a commit authored either side of midnight UTC would otherwise
- * fail a document whose author did review it. The gaps worth catching are weeks wide — this rule
- * exists because six living documents were edited between one and six weeks after their stated
- * review, two of which were describing behaviour that had since changed.
- */
-export function reviewIsStale(reviewedOn, lastCommitOn, toleranceDays = 1) {
-  if (!reviewedOn || !lastCommitOn) {
-    return false;
-  }
-
-  const day = 24 * 60 * 60 * 1000;
-  const drift = (Date.parse(lastCommitOn) - Date.parse(reviewedOn)) / day;
-  return Number.isFinite(drift) && drift > toleranceDays;
-}
-
-/**
- * Documents whose `Last reviewed` tracks something other than an engineering edit, so the rule above
- * does not apply. Both compliance drafts are dated by the EXTERNAL review that gates them; bumping
- * them because a link or a table cell changed would overstate their standing.
- */
-const reviewDateExempt = new Set([
-  "docs/compliance/data-handling.md",
-  "docs/compliance/privacy-notice-draft.md",
-  // A locked pre-M0 baseline that accepted ADRs supersede. The repository has deliberately decided
-  // NOT to refresh it for later changes — its `ITenantContext` mention survives #194 on purpose — so
-  // a review date tracking engineering edits would only ever nag toward the wrong action.
-  "docs/blueprint.md",
-]);
-
-function lastCommitDate(root, file) {
+function decode(value) {
   try {
-    const out = execFileSync("git", ["log", "-1", "--format=%cs", "--", file], {
-      cwd: root,
-      encoding: "utf8",
-    }).trim();
-    return out || null;
+    return decodeURIComponent(value);
   } catch {
     return null;
   }
 }
 
-function listMarkdownFiles(root) {
-  const result = execFileSync(
-    "git",
-    ["ls-files", "--cached", "--others", "--exclude-standard", "--", "*.md"],
-    { cwd: root, encoding: "utf8" },
-  );
+// Problems with one target in `file`, given the repository's files and folders (POSIX, exact case).
+function checkTarget(target, file, repository) {
+  if (/^[A-Za-z]:[\\/]/.test(target)) return `a local absolute path: ${target}`;
+  if (/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(target)) return null;
 
-  return result.split(/\r?\n/).map(normalizePath).filter(Boolean).sort();
-}
+  const hashAt = target.indexOf("#");
+  const rawPath = (hashAt === -1 ? target : target.slice(0, hashAt)).split("?", 1)[0];
+  const decodedPath = decode(rawPath);
+  const fragment = decode(hashAt === -1 ? "" : target.slice(hashAt + 1));
+  if (decodedPath === null || fragment === null) return `invalid URL encoding: ${target}`;
 
-/**
- * The settings files the skills installed from jwh3times/skills read (`docs/agents/<topic>.md`).
- * They are configuration, not living documents: a skill's first run appends settings to them and
- * the docs-updater skill edits them, and neither knows this repository's lifecycle metadata or
- * review-date rule, so holding them to it would fail CI a day after a correct edit. They are still
- * authority documents (see `isAuthorityDoc`) and still covered by the Doc map.
- */
-const skillSettings = new Set(
-  [
-    "workspace",
-    "issue-tracker",
-    "human-follow-up",
-    "docs",
-    "releases",
-    "ship",
-    "handoffs",
-  ].map((topic) => `docs/agents/${topic}.md`),
-);
+  const resolved = decodedPath
+    ? decodedPath.startsWith("/")
+      ? path.posix.normalize(decodedPath.slice(1))
+      : path.posix.normalize(path.posix.join(path.posix.dirname(file), decodedPath))
+    : file;
+  const clean = resolved.replace(/\/$/, "");
 
-function isLivingDoc(file) {
-  return (
-    file.startsWith("docs/") &&
-    !/^docs\/adr\/ADR-\d{3}-.+\.md$/.test(file) &&
-    file !== "docs/adr/template.md" &&
-    !skillSettings.has(file)
-  );
-}
-
-/**
- * Documents whose authority claims are load-bearing. Wider than `isLivingDoc` on purpose: the
- * root contract files and the agent/skill instructions are read as binding, so a stale
- * "X is canonical" line does the same damage there as it does under `docs/` — arguably more, since
- * an agent acts on it without a human reading the sentence.
- *
- * This scope is not hypothetical. `AGENTS.md` carried a live
- * "private/TODO.md ... canonical where they disagree" claim that the obsolete-claim patterns below
- * were written to catch, and the gate stayed green because AGENTS.md is not under `docs/`.
- *
- * Generated mirrors (`.claude/skills/`, `.codex/`) are excluded: they are byte-identical to the
- * authored sources already scanned, so including them would double-report one defect.
- */
-function isAuthorityDoc(file) {
-  return (
-    isLivingDoc(file) ||
-    skillSettings.has(file) ||
-    file === "AGENTS.md" ||
-    file === "CLAUDE.md" ||
-    file === "README.md" ||
-    file === "CONTRIBUTING.md" ||
-    file === "CONTEXT.md" ||
-    file.startsWith(".claude/agents/") ||
-    file.startsWith(".agents/skills/")
-  );
-}
-
-function commandCopyAllowed(file) {
-  return (
-    file === "AGENTS.md" ||
-    file === "CONTRIBUTING.md" ||
-    file === "docs/runbooks/local-dev.md" ||
-    file.startsWith(".claude/agents/") ||
-    // `.claude/skills/` is generated from the allow-listed `.agents/skills/` sources by
-    // scripts/sync-agents.mjs; neither tree is hand-edited to duplicate a canonical command.
-    file.startsWith(".claude/skills/") ||
-    file.startsWith(".agents/skills/") ||
-    file.startsWith("docs/adr/")
-  );
-}
-
-function lineOf(content, index) {
-  return content.slice(0, index).split(/\r?\n/).length;
-}
-
-export function validateRepository(root = defaultRoot, suppliedFiles) {
-  const files = suppliedFiles ?? listMarkdownFiles(root);
-  const errors = [];
-  const contents = new Map();
-
-  for (const file of files) {
-    const absolute = path.join(root, file);
-    if (!existsSync(absolute)) {
-      errors.push({
-        file,
-        line: 1,
-        message: "Document is listed but missing.",
-      });
-      continue;
-    }
-    contents.set(file, readFileSync(absolute, "utf8"));
+  if (clean === ".." || clean.startsWith("../")) return `escapes the repository: ${target}`;
+  if (clean === "." || clean === "") return null;
+  if (!repository.files.has(clean) && !repository.folders.has(clean)) {
+    return `no tracked file or folder: ${target}`;
   }
 
-  for (const [file, content] of contents) {
-    if (isLivingDoc(file)) {
-      for (const field of missingMetadata(content)) {
-        errors.push({
-          file,
-          line: 1,
-          message: `Living document is missing lifecycle metadata: ${field}.`,
-        });
-      }
-    }
+  if (!fragment || LINE_FRAGMENT.test(fragment)) return null;
+  if (!clean.toLowerCase().endsWith(".md") || !repository.files.has(clean)) return null;
+  const anchors = repository.anchors(clean);
+  if (anchors.has(fragment) || anchors.has(fragment.toLowerCase())) return null;
+  return `no heading or anchor '#${fragment}' in ${clean}: ${target}`;
+}
 
-    for (const { target, line } of extractMarkdownLinks(content)) {
-      if (/^(https?:\/\/|mailto:|#)/i.test(target)) {
-        continue;
-      }
+// The text under `## Doc map`, or null when it is absent.
+export function docMapBody(settings) {
+  const lines = settings.split(/\r?\n/);
+  const start = lines.findIndex((line) => line.trim() === "## Doc map");
+  if (start === -1) return null;
+  const end = lines.findIndex((line, index) => index > start && line.startsWith("## "));
+  return lines.slice(start + 1, end === -1 ? undefined : end).join("\n");
+}
 
-      let pathPart;
-      try {
-        pathPart = decodeURIComponent(target.split("#", 1)[0]);
-      } catch {
-        errors.push({
-          file,
-          line,
-          message: `Markdown target has invalid URL encoding: ${target}.`,
-        });
-        continue;
-      }
-      if (!pathPart) {
-        continue;
-      }
-
-      const normalizedTarget = normalizePath(pathPart);
-      if (/(^|\/)private(\/|$)/.test(normalizedTarget)) {
-        errors.push({
-          file,
-          line,
-          message: `Public document links to ignored/private content: ${target}.`,
-        });
-        continue;
-      }
-
-      if (path.isAbsolute(pathPart) || /^[A-Za-z]:[\\/]/.test(pathPart)) {
-        errors.push({
-          file,
-          line,
-          message: `Public document uses an absolute local path: ${target}.`,
-        });
-        continue;
-      }
-
-      const localTarget = path.resolve(root, path.dirname(file), pathPart);
-      if (!existsSync(localTarget)) {
-        errors.push({
-          file,
-          line,
-          message: `Local Markdown target does not exist: ${target}.`,
-        });
-      }
-    }
-
-    if (!commandCopyAllowed(file)) {
-      for (const command of commandFingerprints) {
-        const index = content.indexOf(command);
-        if (index >= 0) {
-          errors.push({
-            file,
-            line: lineOf(content, index),
-            message: `Mutable command duplicates the canonical runbook: ${command}.`,
-          });
-        }
-      }
+// The paths and globs each top-level item of the Doc map opens with: the run of backticked names at
+// its start. A nested bullet or a prose mention lists nothing, so it cannot satisfy coverage.
+export function docMapPaths(body) {
+  const items = [];
+  for (const line of body.split("\n")) {
+    if (/^[-*] /.test(line)) items.push(line.slice(2));
+    else if (/^\s*[-*] /.test(line)) items.push(null);
+    else if (line.trim() && items.length > 0 && items.at(-1) !== null) {
+      items[items.length - 1] += ` ${line.trim()}`;
     }
   }
-
-  const authorityText = [...contents]
-    .filter(([file]) => isAuthorityDoc(file))
-    .map(([file, content]) => ({ file, content: stripFencedCode(content) }));
-  const obsoleteClaims = [
-    /CLAUDE\.md.{0,80}(authoritative|binding|canonical)/gi,
-    /(authoritative|binding|canonical).{0,80}CLAUDE\.md/gi,
-    /private\/(TODO|roadmap)\.md.{0,80}(authoritative|binding|canonical)/gi,
-  ];
-
-  for (const { file, content } of authorityText) {
-    for (const pattern of obsoleteClaims) {
-      for (const match of content.matchAll(pattern)) {
-        errors.push({
-          file,
-          line: lineOf(content, match.index),
-          message:
-            "Authoritative document contains an obsolete canonical-authority claim.",
-        });
-      }
-    }
-  }
-
-  // ── Doc map coverage (docs-updater must be told what exists) ────────────────
-  // Fails closed: a missing settings file or heading is an error, never a skipped rule.
-  const mapFile = "docs/agents/docs.md";
-  const mapContent = contents.get(mapFile);
-  const topology =
-    mapContent === undefined ? null : extractTopology(mapContent);
-  if (topology === null) {
-    errors.push({
-      file: mapFile,
-      line: 1,
-      message: "The `## Doc map` setting is missing.",
+  return items
+    .filter((item) => item !== null)
+    .flatMap((item) => {
+      const opening = /^(?:(?:,\s*)?(?:and\s+)?`[^`\s]+`\s*)+/.exec(item)?.[0] ?? "";
+      return [...opening.matchAll(/`([^`]+)`/g)].map((match) => match[1]);
     });
-  } else {
-    for (const missing of docsMissingFromTopology(
-      topology,
-      canonicalDocs(files),
-    )) {
-      errors.push({
-        file: mapFile,
-        line: 1,
-        message:
-          `Canonical document is absent from the Doc map: ${missing}. ` +
-          "The docs-updater skill audits what the Doc map lists, so an omission here is a " +
-          "document nothing ever checks. Add a top-level bullet opening with its path.",
-      });
-    }
-  }
+}
 
-  // ── Review-date staleness (a doc edited after it was last reviewed) ─────────
-  for (const [file, content] of contents) {
-    if (!isLivingDoc(file) || reviewDateExempt.has(file)) {
-      continue;
-    }
-
-    const reviewed = content.match(
-      /- \*\*Last reviewed:\*\*\s*(\d{4}-\d{2}-\d{2})/,
-    );
-    if (!reviewed) {
-      continue; // absence is already reported by the metadata rule above
-    }
-
-    const committed = lastCommitDate(root, file);
-    if (reviewIsStale(reviewed[1], committed)) {
-      errors.push({
-        file,
-        line: lineOf(content, reviewed.index),
-        message:
-          `Document was edited on ${committed} but claims it was last reviewed on ${reviewed[1]}. ` +
-          "Re-read it against what changed, then bump the date — or add it to reviewDateExempt in " +
-          "scripts/check-docs.mjs if its review date tracks something other than an engineering edit.",
-      });
-    }
-  }
-
-  const adrFiles = files.filter((file) =>
-    /^docs\/adr\/ADR-\d{3}-.+\.md$/.test(file),
+function isCheckablePath(entry) {
+  return (
+    !/^[a-z][a-z0-9+.-]*:/i.test(entry) &&
+    entry !== "private" &&
+    !entry.startsWith("private/") &&
+    !entry.startsWith("../") &&
+    !entry.startsWith("~")
   );
-  const indexFile = "docs/adr/README.md";
-  const indexContent = contents.get(indexFile);
-  if (!indexContent) {
-    errors.push({ file: indexFile, line: 1, message: "ADR index is missing." });
-  } else {
-    const rows = new Map();
-    const rowPattern =
-      /^\|\s+\[(?<number>\d{3})\]\((?<file>[^)]+)\)\s+\|\s+(?<title>.*?)\s+\|\s+(?<status>.*?)\s+\|\s+(?<date>\d{4}-\d{2}-\d{2})\s+\|$/gm;
-    for (const row of indexContent.matchAll(rowPattern)) {
-      if (rows.has(row.groups.number)) {
-        errors.push({
-          file: indexFile,
-          line: lineOf(indexContent, row.index),
-          message: `ADR-${row.groups.number} appears more than once in the index.`,
-        });
-        continue;
-      }
-      rows.set(row.groups.number, {
-        number: row.groups.number,
-        file: row.groups.file.trim(),
-        title: row.groups.title.trim(),
-        status: row.groups.status.trim(),
-        date: row.groups.date,
-      });
-    }
-
-    for (const file of adrFiles) {
-      const adr = parseAdr(contents.get(file));
-      if (!adr) {
-        errors.push({
-          file,
-          line: 1,
-          message: "ADR must include a numbered heading, status, and ISO date.",
-        });
-        continue;
-      }
-
-      const row = rows.get(adr.number);
-      if (!row) {
-        errors.push({
-          file: indexFile,
-          line: 1,
-          message: `ADR-${adr.number} is missing from the index.`,
-        });
-        continue;
-      }
-
-      const expectedFile = path.basename(file);
-      const expectedStatus = adr.amendedBy
-        ? `${adr.status} (amended by ${adr.amendedBy})`
-        : adr.status;
-      for (const [field, actual, expected] of [
-        ["file", row.file, expectedFile],
-        ["title", row.title, adr.title],
-        ["status", row.status, expectedStatus],
-        ["date", row.date, adr.date],
-      ]) {
-        if (actual !== expected) {
-          errors.push({
-            file: indexFile,
-            line: 1,
-            message: `ADR-${adr.number} index ${field} is '${actual}', expected '${expected}'.`,
-          });
-        }
-      }
-    }
-
-    for (const number of rows.keys()) {
-      if (!adrFiles.some((file) => file.includes(`ADR-${number}-`))) {
-        errors.push({
-          file: indexFile,
-          line: 1,
-          message: `ADR-${number} is indexed but its file is missing.`,
-        });
-      }
-    }
-  }
-
-  return errors;
 }
 
-function printErrors(errors) {
-  for (const error of errors) {
-    console.error(`${error.file}:${error.line}: ${error.message}`);
-  }
+function globPattern(entry) {
+  const body = entry
+    .replace(/[.+^$()|\\]/g, "\\$&")
+    .replace(/\{([^}]*)\}/g, (_, options) => `(?:${options.split(",").join("|")})`)
+    .replace(/\*\*\/?|\*|\?/g, (token) =>
+      token === "?" ? "[^/]" : token === "*" ? "[^/]*" : token === "**" ? ".*" : "(?:.*/)?",
+    );
+  return new RegExp(`^${body}(?:/.*)?$`);
 }
 
-const isMain =
-  process.argv[1] && path.resolve(process.argv[1]) === path.resolve(scriptPath);
-if (isMain) {
-  const errors = validateRepository();
-  if (errors.length > 0) {
-    printErrors(errors);
-    process.exitCode = 1;
-  } else {
-    console.log("Documentation policy check passed.");
+export function entryMatcher(rawEntry) {
+  const entry = rawEntry.replace(/\/$/, "");
+  if (/[*?{]/.test(entry)) {
+    const pattern = globPattern(entry);
+    return (file) => pattern.test(file);
   }
+  return (file) => file === entry || file.startsWith(`${entry}/`);
+}
+
+export function validateRepository(root) {
+  const output = execFileSync(
+    "git",
+    ["-C", root, "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+    { encoding: "utf8", maxBuffer: 1 << 28 },
+  );
+  const files = new Set(
+    output.split("\0").filter((file) => file && existsSync(path.join(root, file))),
+  );
+  const folders = new Set();
+  for (const file of files) {
+    for (let parent = path.posix.dirname(file); parent !== "."; parent = path.posix.dirname(parent)) {
+      folders.add(parent);
+    }
+  }
+
+  const read = (file) => readFileSync(path.join(root, file), "utf8");
+  const anchorCache = new Map();
+  const repository = {
+    files,
+    folders,
+    anchors(file) {
+      if (!anchorCache.has(file)) anchorCache.set(file, anchorsOf(read(file)));
+      return anchorCache.get(file);
+    },
+  };
+
+  const documents = [...files]
+    .filter((file) => file.toLowerCase().endsWith(".md"))
+    .filter((file) => !OUT_OF_SCOPE.some((prefix) => file.startsWith(prefix)))
+    .sort();
+  const problems = [];
+  let links = 0;
+
+  for (const file of documents) {
+    for (const [index, line] of visibleLines(read(file)).entries()) {
+      for (const target of lineTargets(line)) {
+        links += 1;
+        const problem = checkTarget(target, file, repository);
+        if (problem) problems.push(`${file}:${index + 1}: link target has ${problem}`);
+      }
+    }
+  }
+
+  const body = files.has(DOC_MAP_FILE) ? docMapBody(read(DOC_MAP_FILE)) : null;
+  if (body === null) {
+    problems.push(`${DOC_MAP_FILE}:1: the \`## Doc map\` setting is missing`);
+  } else {
+    const entries = docMapPaths(body).filter(isCheckablePath);
+    const matchers = entries.map((entry) => ({ entry, matches: entryMatcher(entry) }));
+    for (const file of documents) {
+      if (!matchers.some(({ matches }) => matches(file))) {
+        problems.push(`${DOC_MAP_FILE}:1: the Doc map does not list ${file}`);
+      }
+    }
+    for (const { entry, matches } of matchers) {
+      if (![...files].some(matches)) {
+        problems.push(`${DOC_MAP_FILE}:1: the Doc map lists ${entry}, which matches no file`);
+      }
+    }
+  }
+
+  return { problems, documents: documents.length, links };
+}
+
+export function main(argv) {
+  const root = argv[0] ? path.resolve(argv[0]) : repositoryRoot;
+  const { problems, documents, links } = validateRepository(root);
+  for (const problem of problems) console.error(problem);
+  if (problems.length > 0) {
+    console.error(`${problems.length} docs problem(s) in ${root}.`);
+    return 1;
+  }
+  console.log(`Checked ${documents} documents and ${links} links in ${root}.`);
+  return 0;
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+  process.exitCode = main(process.argv.slice(2));
 }

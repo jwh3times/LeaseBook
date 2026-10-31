@@ -1,295 +1,207 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
 import {
-  canonicalDocs,
-  docsMissingFromTopology,
-  extractMarkdownLinks,
-  extractTopology,
-  missingMetadata,
-  parseAdr,
-  reviewIsStale,
-  stripFencedCode,
+  anchorsOf,
+  docMapBody,
+  docMapPaths,
+  entryMatcher,
+  headingSlug,
+  lineTargets,
   validateRepository,
+  visibleLines,
 } from "./check-docs.mjs";
 
-test("stripFencedCode excludes example links from policy checks", () => {
-  const markdown =
-    "[kept](docs/README.md)\n```markdown\n[ignored](private/TODO.md)\n```";
-  assert.equal(stripFencedCode(markdown).includes("private/TODO.md"), false);
-  assert.deepEqual(extractMarkdownLinks(markdown), [
-    { target: "docs/README.md", line: 1 },
-  ]);
-});
+const MAP = "# Docs\n\n## Doc map\n\n- `README.md`, `docs/**` — everything.\n";
 
-test("missingMetadata reports only absent lifecycle fields", () => {
-  const markdown = [
-    "- **Audience:** Contributors",
-    "- **Status:** Living guide",
-    "- **Owner:** Maintainers",
-  ].join("\n");
-  assert.deepEqual(missingMetadata(markdown), ["Last reviewed"]);
-});
+// A repository holding `files`, each tracked unless the path is under `ignored/`.
+function withRepository(files, run) {
+  const root = mkdtempSync(path.join(tmpdir(), "check-docs-"));
+  try {
+    execFileSync("git", ["-C", root, "init", "-q", "-b", "main"]);
+    for (const [rel, content] of Object.entries({
+      ".gitignore": "ignored/\n",
+      "docs/agents/docs.md": MAP,
+      ...files,
+    })) {
+      mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
+      writeFileSync(path.join(root, rel), content);
+    }
+    return run(root);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
 
-test("parseAdr returns index metadata from a valid ADR", () => {
-  const markdown = [
-    "# ADR-024: Documentation policy checks",
+const problemsIn = (files) => withRepository(files, (root) => validateRepository(root).problems);
+
+test("blanks fenced code and front matter, keeping line numbers", () => {
+  assert.deepEqual(visibleLines("---\ntitle: x\n---\na\n```\nb\n```\nc"), [
     "",
-    "- **Status:** Accepted",
-    "- **Date:** 2026-07-10",
-  ].join("\n");
-  assert.deepEqual(parseAdr(markdown), {
-    number: "024",
-    title: "Documentation policy checks",
-    status: "Accepted",
-    date: "2026-07-10",
-  });
-});
-
-test("parseAdr reads every amender from a wrapped Amended by line", () => {
-  const markdown = [
-    "# ADR-019: Bulk run engine and batch posting",
     "",
-    "- **Status:** Accepted",
-    "- **Date:** 2026-06-23",
-    "- **Amended by:** [ADR-028](ADR-028-platform-capability-model.md),",
-    "  [ADR-033](ADR-033-late-fee-eligibility.md). ADR-028 adds the capability",
-    "  snapshot; ADR-033 replaces the late-fee source-ref row.",
-  ].join("\n");
-  // Both amenders, in header order, and the trailing prose naming them again contributes nothing.
-  assert.equal(parseAdr(markdown).amendedBy, "ADR-028, ADR-033");
-});
-
-test("validateRepository rejects links to private content", (context) => {
-  const root = mkdtempSync(path.join(tmpdir(), "leasebook-docs-"));
-  context.after(() => rmSync(root, { recursive: true, force: true }));
-  mkdirSync(path.join(root, "docs", "adr"), { recursive: true });
-  writeFileSync(
-    path.join(root, "docs", "README.md"),
-    [
-      "# Docs",
-      "",
-      "- **Audience:** Contributors",
-      "- **Status:** Living index",
-      "- **Owner:** Maintainers",
-      "- **Last reviewed:** 2026-07-10",
-      "",
-      "[internal](../private/TODO.md)",
-    ].join("\n"),
-  );
-  writeFileSync(
-    path.join(root, "docs", "adr", "README.md"),
-    [
-      "# ADRs",
-      "",
-      "- **Audience:** Contributors",
-      "- **Status:** Living index",
-      "- **Owner:** Maintainers",
-      "- **Last reviewed:** 2026-07-10",
-    ].join("\n"),
-  );
-
-  const errors = validateRepository(root, [
-    "docs/README.md",
-    "docs/adr/README.md",
-  ]);
-  assert.equal(
-    errors.some((error) =>
-      error.message.includes("links to ignored/private content"),
-    ),
-    true,
-  );
-});
-
-test("skill files may name canonical commands like agent files", (context) => {
-  const root = mkdtempSync(path.join(tmpdir(), "leasebook-docs-"));
-  context.after(() => rmSync(root, { recursive: true, force: true }));
-  const skill = ".claude/skills/ship/SKILL.md";
-  mkdirSync(path.join(root, ".claude", "skills", "ship"), { recursive: true });
-  writeFileSync(
-    path.join(root, skill),
-    ["# Ship", "", "Run `npm run typecheck` before pushing."].join("\n"),
-  );
-
-  const errors = validateRepository(root, [skill]);
-  assert.equal(
-    errors.some(
-      (error) =>
-        error.file === skill && error.message.includes("Mutable command"),
-    ),
-    false,
-  );
-});
-
-test("canonicalDocs excludes skills, ADR records, and .github", () => {
-  const files = [
-    "AGENTS.md",
-    "docs/runbooks/diagnostics.md",
-    "infra/README.md",
-    ".claude/agents/dotnet-api.md",
-    "docs/adr/ADR-041-durable-keyring-and-proxy-trust.md",
-    "docs/adr/README.md",
-    ".agents/skills/ship/SKILL.md",
-    ".claude/skills/ship/SKILL.md",
-    ".github/pull_request_template.md",
-  ];
-
-  assert.deepEqual(canonicalDocs(files), [
-    "AGENTS.md",
-    "docs/runbooks/diagnostics.md",
-    "infra/README.md",
-    ".claude/agents/dotnet-api.md",
-    "docs/adr/README.md",
+    "",
+    "a",
+    "",
+    "",
+    "",
+    "c",
   ]);
 });
 
-test("docsMissingFromTopology reports a canonical doc the Doc map never lists", () => {
-  const topology =
-    "- `AGENTS.md` — the contract\n  - `docs/runbooks/diagnostics.md` when\n";
-
-  assert.deepEqual(
-    docsMissingFromTopology(topology, [
-      "AGENTS.md",
-      "docs/runbooks/diagnostics.md",
-    ]),
-    ["docs/runbooks/diagnostics.md"],
-  );
+test("a fence closes only on the same character, at least as long, with nothing after it", () => {
+  assert.deepEqual(visibleLines("````\n```\n~~~~\n```` x\n````\na"), ["", "", "", "", "", "a"]);
 });
 
-test("extractTopology stops at the heading that ends the Doc map", () => {
-  const markdown =
-    "# Docs\n\n## Doc map\n\n- `AGENTS.md`\n\n## Drift probes\n\n- `README.md`\n";
-  const topology = extractTopology(markdown);
-
-  assert.ok(topology.includes("AGENTS.md"));
-  assert.ok(!topology.includes("README.md"));
-  assert.equal(extractTopology("# Docs\n\nno Doc map here\n"), null);
+test("finds inline links, images, titles, angle targets and reference definitions", () => {
+  assert.deepEqual(lineTargets('[a](b.md) ![c](d.png "t") [e](<f g.md>)'), ["b.md", "d.png", "f g.md"]);
+  assert.deepEqual(lineTargets("[![badge](a.svg)](b.md)"), ["a.svg", "b.md"]);
+  assert.deepEqual(lineTargets("[ref]: docs/x.md"), ["docs/x.md"]);
 });
 
-test("a missing Doc map fails instead of skipping the coverage rule", (context) => {
-  const root = mkdtempSync(path.join(tmpdir(), "leasebook-docs-"));
-  context.after(() => rmSync(root, { recursive: true, force: true }));
-  writeFileSync(path.join(root, "AGENTS.md"), "# AGENTS\n");
-
-  const errors = validateRepository(root, ["AGENTS.md"]);
-  assert.equal(
-    errors.some((error) =>
-      error.message.includes("`## Doc map` setting is missing"),
-    ),
-    true,
-  );
+test("ignores links in inline code", () => {
+  assert.deepEqual(lineTargets("write `[a](b.md)` or ``[c](d.md)``"), []);
 });
 
-test("reviewIsStale flags an edit after the review date but tolerates a one-day skew", () => {
-  // The real case: diagnostics.md, reviewed 2026-08-12 and edited six days later.
-  assert.equal(reviewIsStale("2026-08-12", "2026-08-18"), true);
-  // A commit either side of midnight UTC must not fail a document that was reviewed.
-  assert.equal(reviewIsStale("2026-08-18", "2026-08-19"), false);
-  // Reviewed after the edit is the healthy direction.
-  assert.equal(reviewIsStale("2026-08-19", "2026-08-18"), false);
-  // Missing either side is the metadata rule's problem, not this one's.
-  assert.equal(reviewIsStale(null, "2026-08-18"), false);
-  assert.equal(reviewIsStale("2026-08-18", null), false);
+test("slugs headings the way GitHub does", () => {
+  assert.equal(headingSlug("`vlab merge`: the Tool"), "vlab-merge-the-tool");
+  assert.equal(headingSlug("[Guide](guide.md) & more"), "guide--more");
+  assert.equal(headingSlug("snake_case _stays_"), "snake_case-stays");
 });
 
-test("a review date cannot be back-dated, because recording it is itself an edit", () => {
-  // Learned the hard way: the first version of this change set perf.md's date to 2026-08-10, the day
-  // its content was actually corrected. That commit touched the file, so its last-commit date became
-  // the day the date was written — and the rule failed the very document it had just been told was
-  // reviewed. `Last reviewed` records when a review was RECORDED, never when it happened.
-  assert.equal(reviewIsStale("2026-08-10", "2026-08-19"), true);
-  assert.equal(reviewIsStale("2026-08-19", "2026-08-19"), false);
+test("anchors number repeats, and include setext headings and explicit ids", () => {
+  const anchors = anchorsOf('# A\n\n# A\n\nTitle\n=====\n\n<a name="here"></a>\n\n```\n# fenced\n```\n');
+  assert.deepEqual([...anchors].sort(), ["a", "a-1", "here", "title"]);
 });
 
-test("obsolete authority claims are caught outside docs/", (context) => {
-  const root = mkdtempSync(path.join(tmpdir(), "leasebook-docs-"));
-  context.after(() => rmSync(root, { recursive: true, force: true }));
-  const file = "AGENTS.md";
-  writeFileSync(
-    path.join(root, file),
-    [
-      "# AGENTS",
-      "",
-      "Detailed sequencing lives in `private/roadmap.md` and `private/TODO.md`, with `private/TODO.md` canonical where they disagree.",
-    ].join("\n"),
-  );
-
-  // The real miss this pins: AGENTS.md is not under `docs/`, so scanning only living documents
-  // left this exact sentence in the contract with the gate green.
-  const errors = validateRepository(root, [file]);
-  assert.equal(
-    errors.some(
-      (error) =>
-        error.file === file &&
-        error.message.includes("obsolete canonical-authority claim"),
-    ),
-    true,
-  );
+test("reads the Doc map up to the next heading", () => {
+  assert.equal(docMapBody("## Doc map\r\n\r\n- `a`\r\n\r\n## Next\r\n- `b`").trim(), "- `a`");
+  assert.equal(docMapBody("# Docs\n"), null);
 });
 
-test("generated skill mirrors do not double-report an authored claim", (context) => {
-  const root = mkdtempSync(path.join(tmpdir(), "leasebook-docs-"));
-  context.after(() => rmSync(root, { recursive: true, force: true }));
-  const authored = ".agents/skills/demo/SKILL.md";
-  const mirror = ".claude/skills/demo/SKILL.md";
+test("a Doc map item lists only the names it opens with", () => {
   const body = [
-    "# Demo",
-    "",
-    "`private/TODO.md` is canonical for milestone state.",
+    "- `a.md`, `b.md` and `c/*.md` — owns `not-this.md`.",
+    "- `one.md`,",
+    "  `two.md` — wrapped.",
+    "- `docs/agents/` settings (`workspace`, `ship`) — prose follows the path.",
+    "  - `nested.md` — never counts.",
+    "- links to `docs/plans/` stay out of public docs",
+    "- The wiki's pages (`https://example.com`) — no path.",
   ].join("\n");
-  mkdirSync(path.join(root, ".agents", "skills", "demo"), { recursive: true });
-  mkdirSync(path.join(root, ".claude", "skills", "demo"), { recursive: true });
-  writeFileSync(path.join(root, authored), body);
-  writeFileSync(path.join(root, mirror), body);
+  assert.deepEqual(docMapPaths(body), [
+    "a.md",
+    "b.md",
+    "c/*.md",
+    "one.md",
+    "two.md",
+    "docs/agents/",
+  ]);
+});
 
-  const claims = validateRepository(root, [authored, mirror]).filter((error) =>
-    error.message.includes("obsolete canonical-authority claim"),
-  );
-  // One defect, reported once, against the file a human can actually fix.
+test("an entry matches by exact path, folder or glob", () => {
+  assert.ok(entryMatcher("README.md")("README.md"));
+  assert.ok(!entryMatcher("README.md")("web/README.md"));
+  assert.ok(entryMatcher("docs/schemas/")("docs/schemas/a/b.md"));
+  assert.ok(!entryMatcher("docs/schemas")("docs/schemas2/b.md"));
+  assert.ok(entryMatcher("docs/adr/*.md")("docs/adr/1.md"));
+  assert.ok(!entryMatcher("docs/adr/*.md")("docs/adr/old/1.md"));
+  assert.ok(entryMatcher("docs/**/*.md")("docs/a.md"));
+  assert.ok(entryMatcher("docs/**/*.md")("docs/a/b/c.md"));
+  assert.ok(entryMatcher(".agents/skills/*/**")(".agents/skills/x/SKILL.md"));
+  assert.ok(entryMatcher(".agents/skills/*/")(".agents/skills/x/a/SKILL.md"));
+  assert.ok(entryMatcher("docs/{a,b}.md")("docs/b.md"));
+});
+
+test("passes links that resolve, in every form", () => {
   assert.deepEqual(
-    claims.map((error) => error.file),
-    [authored],
+    problemsIn({
+      "README.md":
+        "# Top\n\n[a](docs/a.md) [folder](docs/) [root](/docs/a.md#section) [self](#top)\n" +
+        "[url](https://example.com/x.md) [mail](mailto:a@example.com) [line](docs/a.md#L12-L20)\n" +
+        "[query](docs/a.md?plain=1) [space](docs/a%20b.md) [any fragment](data.json#x)\n",
+      "docs/a.md": "## Section\n\n[back](../README.md#top)\n",
+      "docs/a b.md": "text\n",
+      "data.json": "{}\n",
+    }),
+    [],
   );
 });
 
-test("skill settings files need no lifecycle metadata but are still scanned for authority claims", (context) => {
-  const root = mkdtempSync(path.join(tmpdir(), "leasebook-docs-"));
-  context.after(() => rmSync(root, { recursive: true, force: true }));
-  const settings = "docs/agents/releases.md";
-  const living = "docs/agents/dev-flow.md";
-  mkdirSync(path.join(root, "docs", "agents"), { recursive: true });
-  writeFileSync(
-    path.join(root, settings),
-    [
-      "# Releases",
-      "",
-      "## Scheme",
-      "",
-      "Detailed sequencing lives in `private/roadmap.md` and `private/TODO.md`, with `private/TODO.md` canonical where they disagree.",
-    ].join("\n"),
-  );
-  writeFileSync(
-    path.join(root, living),
-    ["# Development flow", "", "Prose."].join("\n"),
-  );
+test("reports a missing file, a wrong case, an escape and a local absolute path", () => {
+  const problems = problemsIn({
+    "README.md":
+      "[a](missing.md)\n[b](docs/A.md)\n[c](../outside.md)\n[d](C:/Users/me/x.md)\n[e](%zz.md)\n",
+    "docs/a.md": "text\n",
+  });
+  assert.deepEqual(problems, [
+    "README.md:1: link target has no tracked file or folder: missing.md",
+    "README.md:2: link target has no tracked file or folder: docs/A.md",
+    "README.md:3: link target has escapes the repository: ../outside.md",
+    "README.md:4: link target has a local absolute path: C:/Users/me/x.md",
+    "README.md:5: link target has invalid URL encoding: %zz.md",
+  ]);
+});
 
-  const errors = validateRepository(root, [settings, living]);
-  const metadataErrors = (file) =>
-    errors.filter(
-      (error) =>
-        error.file === file && error.message.includes("lifecycle metadata"),
-    );
-  assert.equal(metadataErrors(settings).length, 0);
-  assert.ok(metadataErrors(living).length > 0);
-  assert.equal(
-    errors.some(
-      (error) =>
-        error.file === settings &&
-        error.message.includes("obsolete canonical-authority claim"),
-    ),
-    true,
+test("reports a link to an ignored path, which only resolves on this machine", () => {
+  const problems = problemsIn({
+    "README.md": "[a](ignored/secret.md)\n",
+    "ignored/secret.md": "secret\n",
+  });
+  assert.deepEqual(problems, ["README.md:1: link target has no tracked file or folder: ignored/secret.md"]);
+});
+
+test("reports a fragment no heading answers to, in this file or another", () => {
+  const problems = problemsIn({
+    "README.md": "[a](#nope)\n[b](docs/a.md#nope)\n",
+    "docs/a.md": "# Other\n",
+  });
+  assert.deepEqual(problems, [
+    "README.md:1: link target has no heading or anchor '#nope' in README.md: #nope",
+    "README.md:2: link target has no heading or anchor '#nope' in docs/a.md: docs/a.md#nope",
+  ]);
+});
+
+test("reports a document the Doc map omits, and an entry that matches nothing", () => {
+  const problems = problemsIn({
+    "README.md": "text\n",
+    "web/README.md": "text\n",
+    "docs/agents/docs.md": "## Doc map\n\n- `README.md`, `docs/**` — a.\n- `gone.md` — b.\n",
+  });
+  assert.deepEqual(problems, [
+    "docs/agents/docs.md:1: the Doc map does not list web/README.md",
+    "docs/agents/docs.md:1: the Doc map lists gone.md, which matches no file",
+  ]);
+});
+
+test("never asks a companion path or a URL to exist", () => {
+  assert.deepEqual(
+    problemsIn({
+      "README.md": "text\n",
+      "docs/agents/docs.md":
+        "## Doc map\n\n- `README.md`, `docs/**` — a.\n- `private/notes.md` — b.\n" +
+        "- `https://example.com/wiki` — c.\n",
+    }),
+    [],
+  );
+});
+
+test("fails closed when the Doc map is missing", () => {
+  assert.deepEqual(problemsIn({ "docs/agents/docs.md": "# Docs\n" }), [
+    "docs/agents/docs.md:1: the `## Doc map` setting is missing",
+  ]);
+});
+
+test("leaves installed skills and their mirrors out", () => {
+  assert.deepEqual(
+    problemsIn({
+      "README.md": "text\n",
+      ".agents/skills/x/SKILL.md": "[a](missing.md)\n",
+      ".claude/skills/x/SKILL.md": "[a](missing.md)\n",
+    }),
+    [],
   );
 });

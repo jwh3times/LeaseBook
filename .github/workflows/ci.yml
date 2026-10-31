@@ -146,6 +146,10 @@ jobs:
       - name: Check agent sources are tool-neutral
         working-directory: ${{ github.workspace }}
         run: node scripts/lint-agent-neutrality.mjs
+      # The docs check itself runs in `npm run docs:check`, with its test.
+      - name: Test the canonical sync and changelog scripts
+        working-directory: ${{ github.workspace }}
+        run: node --test scripts/sync-main.test.mjs scripts/next-version.test.mjs scripts/check-changelog.test.mjs
       # The Stripe sandbox probe never runs here: it needs a maintainer's sandbox key. Its tests do,
       # and one of them is the guard on what is committed: no recorded Stripe payload under
       # `tests/fixtures/stripe/` may hold a real identifier, an address or a URL.

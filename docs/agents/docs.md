@@ -6,8 +6,9 @@ Every committed Markdown document at the root, under `docs/`, under `infra/` or 
 `.claude/agents/` (except the `docs/adr/ADR-*.md` records) has its own top-level bullet here,
 opening with its path in backticks. `scripts/check-docs.mjs` fails `npm run docs:check` when one is
 missing: add the bullet in the change that adds the document. Editing a living document under
-`docs/` sets its `- **Last reviewed:**` to the day of the commit, except for the documents in that
-script's `reviewDateExempt`; the skill settings files in its `skillSettings` (this one among them)
+`docs/` sets its `- **Last reviewed:**` to the day of the commit, except for the documents in
+`reviewDateExempt` in `scripts/check-docs-policy.mjs`; the skill settings files in its
+`skillSettings` (this one among them)
 are not living documents and carry no such line. Work state — what is done, next or blocked — is an
 issue, never a doc edit, and no plan file (`private/TODO.md`, `private/roadmap.md` or a successor)
 is recreated.
@@ -48,7 +49,7 @@ is recreated.
   changes owner.
 - `docs/documentation-policy.md` — classification, ownership table, lifecycle metadata, link rules,
   automated enforcement. **When:** a documentation rule or owner changes, or what
-  `npm run docs:check` checks (`scripts/check-docs.mjs`, `cspell.json`, `.markdownlint-cli2.jsonc`,
+  `npm run docs:check` checks (`scripts/check-docs-policy.mjs`, `cspell.json`, `.markdownlint-cli2.jsonc`,
   the `docs:*` scripts in `web/package.json`).
 - `docs/product-scope.md` — the public product boundary and non-goals. `owner-only`: a change is a
   formal scope decision.
@@ -203,7 +204,8 @@ milestone-plan, retrospective and prototype content.
 ## Docs validation
 
 - `web/`: `npm run docs:check` — Prettier, markdownlint and cspell, the docs-policy tests, then
-  `scripts/check-docs.mjs` (lifecycle metadata and review dates, local and private links, copied
-  commands, authority claims, the ADR index, `Doc map` coverage)
+  `scripts/check-docs-policy.mjs` (lifecycle metadata and review dates, copied commands, authority
+  claims, the ADR index) and `scripts/check-docs.mjs` (local links and anchors, private links,
+  `Doc map` coverage)
 - repo root, when `private/.git` exists: `node private/scripts/check-docs.mjs` — the companion's own
   gate

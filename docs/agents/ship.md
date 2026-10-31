@@ -11,8 +11,8 @@ and the .NET SDK from `global.json`; `npm run api:generate` also installs `web/c
 - `web/`, only when `web/` changed: `npm run format:check` (**Web (lint + test + build)**), fixed
   by `npm run format`
 - `web/`: `npm run docs:check` (**Web**: Prettier, markdownlint and cspell over the Markdown,
-  `scripts/*.mjs`, `cspell.json` and `.markdownlint-cli2.jsonc`, then the docs-policy tests and
-  `scripts/check-docs.mjs`), a formatting failure fixed by `npm run docs:format`
+  `scripts/*.mjs`, `cspell.json` and `.markdownlint-cli2.jsonc`, then the docs-policy tests,
+  `scripts/check-docs-policy.mjs` and `scripts/check-docs.mjs`), a formatting failure fixed by `npm run docs:format`
 - repo root: `node scripts/sync-agents.mjs --check` (**Web**), fixed by `npm run docs:format` from
   `web/` then `node scripts/sync-agents.mjs`, committing `.claude/skills/` and `.codex/agents/`
 - repo root: `node scripts/lint-agent-neutrality.mjs` (**Web**)
@@ -65,7 +65,7 @@ stand-in)** (Postgres and a seeded host), **Container build + full-stack smoke**
    with the `Board` setting's owner and number).
 2. Every `docs/` Markdown file the branch or the working tree changes, except the ADR records,
    `docs/adr/template.md`, the documents in `reviewDateExempt` and the skill settings files in
-   `skillSettings` (both `scripts/check-docs.mjs`), carries today's date in
+   `skillSettings` (both `scripts/check-docs-policy.mjs`), carries today's date in
    `- **Last reviewed:**`. The local `npm run docs:check` cannot see a stale date until the change
    is committed; CI's can. Fix the date, then rerun `npm run docs:check`.
 3. An accounting-adjacent diff (`src/LeaseBook.Modules.Accounting/`, posting templates,
