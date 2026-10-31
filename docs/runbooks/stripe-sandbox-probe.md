@@ -137,8 +137,8 @@ is told to.
    `scripts/stripe-probe.mjs`.
 3. Run the probe and scrub the run, as above, and read the result.
 4. In `StripeSandboxProcessorTests.cs`, point `PinnedVersionRun` at the new run and change the version
-   the first test expects. In `StripeSandboxPinnedVersionTests.cs`, change the file names, ids and
-   generation to the new run's.
+   the first test expects. In `StripeSandboxPinnedVersionTests.cs`, change the version, file names, ids
+   and generation to the new run's.
 5. Run `node --test scripts/stripe-probe.test.mjs`. It fails if no committed run is at `API_VERSION`,
    and it names every field an earlier run holds that the new one lost. A field lost is one the suite's
    older payloads no longer show truthfully: read what the adapter does with it, and re-record those

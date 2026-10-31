@@ -87,4 +87,44 @@ public sealed partial class StripeSandboxProcessorTests
         now.Items.Sum(x => x.Net).ShouldBe(now.Amount);
         ShouldCarryOnlyPayoutIds(h.Stripe.Requests, h.Binding.Account, "po_synthetic000003");
     }
+
+    // The first refunds recorded in a payout, each with its own refund as the source. Stored under a
+    // kind nothing posts.
+    [Fact]
+    public async Task The_refund_lines_stripe_recorded_in_a_payout_are_read_as_refunds_of_the_payments_they_name()
+    {
+        var h = new Adapter(("Payments:Fixtures:0:Generation", PinnedGeneration));
+        h.Stripe.Answer = sent => sent.Path switch
+        {
+            Lines => StripeReplay.Recorded("095-payout-lines.json", PinnedRun),
+            "/v1/charges/ch_synthetic000009" => CardCharge("ch_synthetic000009", "pi_synthetic000012"),
+            _ => throw new InvalidOperationException("Unexpected request " + sent.Path),
+        };
+        var paid = (JsonObject)StripeReplay.RecordedBody("099-payout-events.json", PinnedRun)["data"]!.AsArray()
+            .Single(x => (string)x!["type"]! == "payout.paid" && (string)x["data"]!["object"]!["id"]! == "po_synthetic000001")!.DeepClone();
+
+        var payout = (await ReadPayout(h, paid)).Value.ShouldNotBeNull();
+
+        (payout.PayoutId, payout.Amount, payout.State).ShouldBe(("po_synthetic000001", 665.16m, "Paid"));
+        payout.Items.Where(x => x.Kind == "Refund").ShouldBe(
+        [
+            new("txn_synthetic000017", "Refund", "pi_synthetic000010", -10.00m, 0m, -10.00m, "USD"),
+            new("txn_synthetic000021", "Refund", "pi_synthetic000014", -50.00m, 0m, -50.00m, "USD"),
+            new("txn_synthetic000022", "Refund", "pi_synthetic000015", -200.00m, 0m, -200.00m, "USD"),
+        ]);
+        // A card dispute stays a dispute, and every other line is a payment. Nothing was left out.
+        payout.Items.Single(x => x.Kind == "Dispute").ShouldBe(new("txn_synthetic000019", "Dispute", "pi_synthetic000012", -200.00m, 15.00m, -215.00m, "USD"));
+        payout.Items.Count(x => x.Kind == "Payment").ShouldBe(9);
+        payout.Items.Count.ShouldBe(13);
+        payout.Items.Sum(x => x.Net).ShouldBe(payout.Amount);
+    }
+
+    private static (int Status, string Body) CardCharge(string id, string payment)
+    {
+        var charge = StripeReplay.RecordedBody("060-card-dispute-charge.json", PinnedRun);
+        ((string)charge["payment_method_details"]!["type"]!).ShouldBe("card");
+        charge["id"] = id;
+        charge["payment_intent"] = payment;
+        return (200, charge.ToJsonString());
+    }
 }

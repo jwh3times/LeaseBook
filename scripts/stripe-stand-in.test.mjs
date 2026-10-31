@@ -352,7 +352,7 @@ test("a request that is not one the adapter makes is refused and kept as unexpec
     const refused = await h.ask(method, url, { json: {} });
     assert.ok(refused.status >= 400, url);
   }
-  // Recorded at one API version, and answered at no other.
+  // Answered at the pinned API version and at no other.
   const other = await h.handle({
     method: "GET",
     url: "/v1/account",

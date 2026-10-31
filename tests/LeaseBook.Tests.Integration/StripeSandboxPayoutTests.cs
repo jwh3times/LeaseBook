@@ -191,8 +191,8 @@ public sealed partial class StripeSandboxProcessorTests
     }
 
     // Each is one line beside one good payment line. None is left out, and none can post: only a
-    // charge's line, an ACH dispute and that dispute's fee are kinds the engine posts. No refund line
-    // has been recorded in a payout, so those two are a recorded charge line under Stripe's type name.
+    // charge's line, an ACH dispute and that dispute's fee are kinds the engine posts. The two refunds
+    // are a recorded charge line under Stripe's type name; StripeSandboxPinnedVersionTests reads real ones.
     [Theory]
     [InlineData("a refund", "Refund")]
     [InlineData("a refund of an ACH debit", "Refund")]
@@ -763,7 +763,7 @@ public sealed partial class StripeSandboxHostTests
         switch (line)
         {
             case "a refund":
-                // No refund line has been recorded in a payout: a recorded charge line under Stripe's type for one.
+                // A recorded charge line under Stripe's type for one, pointed at this host's payment.
                 odd = PaymentLine(h, other, 0m, "txn_odd");
                 (odd["type"], odd["amount"], odd["net"]) = ("refund", -20000L, -20000L);
                 kind = "Refund";
