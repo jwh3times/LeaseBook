@@ -21,6 +21,14 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   The test suite now fails if the pinned version has no recording, or if an earlier recording holds
   a field the newest one has lost. This affects only the development fixture.
 
+### Fixed
+
+- **A bank statement row with no amount is now a row error, not a 0.00 line.** A row whose amount was
+  empty, blank or cut off by a short row, or a debit/credit row with neither side filled in, used to
+  import at 0.00 with no warning, ready to be matched and confirmed. Such a row now counts among the
+  import's row errors and is not stored, and the other rows still import. A row with one side of a
+  debit/credit pair, and a stated `0.00`, import as before.
+
 ## [0.27.0] - 2026-10-30
 
 ### Added
