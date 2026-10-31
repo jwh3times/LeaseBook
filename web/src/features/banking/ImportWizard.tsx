@@ -106,7 +106,7 @@ export function ImportWizard({ bankAccountId, onClose, onConfirmed }: ImportWiza
 
   // A missing column stops blocking once the operator maps that field from this file. Only the fields
   // the chosen layout sends count: one side of a debit/credit pair would otherwise satisfy `canMap`,
-  // and the other side would import as 0.00 on every row.
+  // and every row carrying only the other side would be a row error.
   const chosen: Record<MapField, string> = {
     date: dateCol,
     description: descCol,
