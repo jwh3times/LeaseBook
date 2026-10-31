@@ -1074,7 +1074,7 @@ export type ResidentLedgerRow = {
 };
 
 export type RowError = {
-    rowNumber: number | string;
+    lineNumber: number | string;
     message: string;
 };
 

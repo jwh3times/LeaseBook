@@ -1,5 +1,5 @@
 import { expect, type Page } from '@playwright/test';
-import { visualSnapshot } from './helpers';
+import { runA11y, visualSnapshot } from './helpers';
 import { test } from './test';
 
 // The M4 banking budgeted flows (§D step 5), run against the seeded demo org. The seeded admin (Renée
@@ -77,6 +77,50 @@ test.describe.serial('M4 banking', () => {
     await wizard2.getByRole('button', { name: 'Preview matches' }).click();
     await expect(wizard2.getByText(/duplicate skipped/)).toBeVisible();
     await wizard2.getByRole('button', { name: 'Cancel' }).click();
+  });
+
+  test('lists the rows a statement import left out, by file line @scenario:bank-statement-import-and-match', async ({
+    page,
+  }) => {
+    await login(page);
+    await gotoBanking(page);
+
+    // No row here is readable, so the import stores no line for the specs after this one. The long cell
+    // and the row count are what jsdom cannot judge: the reason wraps, and the list scrolls inside the dialog.
+    const csv = [
+      'Date,Description,Amount',
+      `2026-06-03,Unreadable,${'9'.repeat(200)}x`,
+      ...Array.from({ length: 40 }, (_, i) => `2026-06-03,No amount ${i},`),
+      '',
+    ].join('\n');
+    await page.getByRole('button', { name: 'Import statement' }).click();
+    const wizard = page.getByRole('dialog', { name: 'Import bank statement' });
+    await wizard.getByLabel('Statement CSV').setInputFiles({
+      name: 'statement.csv',
+      mimeType: 'text/csv',
+      buffer: Buffer.from(csv),
+    });
+    await mapAmountColumns(wizard);
+    await wizard.getByRole('button', { name: 'Preview matches' }).click();
+
+    await expect(wizard.getByRole('alert')).toContainText('41 rows were not imported.');
+    await expect(wizard.getByRole('alert')).toContainText('Correct the file and import it again.');
+    const list = wizard.getByRole('region', { name: 'Rows not imported' });
+    await expect(list.getByRole('row', { name: '3 amount is empty.', exact: true })).toBeVisible();
+    const size = await list.evaluate((el) => ({
+      scrollWidth: el.scrollWidth,
+      clientWidth: el.clientWidth,
+      scrollHeight: el.scrollHeight,
+      clientHeight: el.clientHeight,
+    }));
+    expect(size.scrollWidth).toBeLessThanOrEqual(size.clientWidth);
+    expect(size.scrollHeight).toBeGreaterThan(size.clientHeight);
+    await expect(wizard.getByRole('button', { name: /Confirm/ })).toBeInViewport();
+    await expect(wizard.getByRole('button', { name: /Confirm/ })).toBeDisabled();
+    await runA11y(page);
+    await page.screenshot({ path: 'e2e-results/m4-import-row-errors.png' });
+
+    await wizard.getByRole('button', { name: 'Cancel' }).click();
   });
 
   test('reconciles Operating Trust to $0.00, finalizes, and locks the month against new postings @scenario:bank-reconcile-finalize-and-lock', async ({

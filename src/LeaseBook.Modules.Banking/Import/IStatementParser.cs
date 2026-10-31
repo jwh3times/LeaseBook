@@ -17,8 +17,11 @@ public sealed record ColumnMap(
 /// <summary>A normalized statement row. <see cref="Amount"/> is signed: deposit +, withdrawal − (P67).</summary>
 public sealed record ParsedRow(int RowNumber, DateOnly Date, string Description, decimal Amount);
 
-/// <summary>A row the parser could not read (1-based data-row index + reason). Reported, never fatal.</summary>
-public sealed record RowError(int RowNumber, string Message);
+/// <summary>
+/// A row the parser could not read: the 1-based file line where it starts, so the operator can find it, and the
+/// reason. Reported, never fatal.
+/// </summary>
+public sealed record RowError(int LineNumber, string Message);
 
 /// <summary>
 /// A column the map names that the file's header row does not have: <see cref="Field"/> is the

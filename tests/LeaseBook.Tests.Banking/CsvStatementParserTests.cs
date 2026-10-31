@@ -59,7 +59,7 @@ public sealed class CsvStatementParserTests
         var result = _parser.Parse(csv, new ColumnMap(Date: "Date", Description: "Description", Amount: "Amount"));
 
         result.Rows.Count.ShouldBe(1);
-        result.Errors.ShouldHaveSingleItem().RowNumber.ShouldBe(2);
+        result.Errors.ShouldHaveSingleItem().LineNumber.ShouldBe(3);
     }
 
     [Fact]
@@ -76,7 +76,7 @@ public sealed class CsvStatementParserTests
         result.Rows.Count.ShouldBe(2);
         result.Rows.Select(r => r.Description).ShouldBe(["Good row", "Another good"]);
         result.Errors.Count.ShouldBe(1);
-        result.Errors[0].RowNumber.ShouldBe(2);
+        result.Errors[0].LineNumber.ShouldBe(3);
     }
 
     [Fact]
@@ -206,7 +206,7 @@ public sealed class CsvStatementParserTests
         var result = _parser.Parse(csv, new ColumnMap(Date: "Date", Description: "Description", Amount: "Amount"));
 
         result.Rows.Select(r => r.Description).ShouldBe(["Good row", "Another good"]);
-        result.Errors.ShouldBe([new RowError(2, "amount is empty.")]);
+        result.Errors.ShouldBe([new RowError(3, "amount is empty.")]);
     }
 
     [Theory]
@@ -219,7 +219,7 @@ public sealed class CsvStatementParserTests
             new ColumnMap(Date: "Date", Description: "Description", Amount: "Amount"));
 
         result.Rows.ShouldBeEmpty();
-        result.Errors.ShouldBe([new RowError(1, "amount is empty.")]);
+        result.Errors.ShouldBe([new RowError(2, "amount is empty.")]);
     }
 
     [Theory]
@@ -234,7 +234,7 @@ public sealed class CsvStatementParserTests
             new ColumnMap(Date: "Date", Description: "Description", Debit: "Debit", Credit: "Credit"));
 
         result.Rows.ShouldBeEmpty();
-        result.Errors.ShouldBe([new RowError(1, "amount is empty.")]);
+        result.Errors.ShouldBe([new RowError(2, "amount is empty.")]);
     }
 
     [Fact]
@@ -250,7 +250,7 @@ public sealed class CsvStatementParserTests
             Date: "Date", Description: "Description", Debit: "Debit", Credit: "Credit"));
 
         result.Rows.Select(r => r.Amount).ShouldBe([-25.00m, 1.25m]);
-        result.Errors.ShouldBe([new RowError(2, "amount is empty.")]);
+        result.Errors.ShouldBe([new RowError(3, "amount is empty.")]);
     }
 
     [Fact]
@@ -265,7 +265,7 @@ public sealed class CsvStatementParserTests
         var result = _parser.Parse(csv, new ColumnMap(Date: "Date", Description: "Description", Debit: "Debit"));
 
         result.Rows.ShouldHaveSingleItem().Amount.ShouldBe(-25.00m);
-        result.Errors.ShouldBe([new RowError(2, "amount is empty.")]);
+        result.Errors.ShouldBe([new RowError(3, "amount is empty.")]);
     }
 
     public static TheoryData<string, string, decimal> RowsCarryingOneSide => new()
@@ -288,6 +288,22 @@ public sealed class CsvStatementParserTests
 
         result.Errors.ShouldBeEmpty();
         result.Rows.ShouldHaveSingleItem().Amount.ShouldBe(expected);
+    }
+
+    // #667: a row error names the line an operator finds in the file, where the row starts. The header, a blank
+    // line and a line inside a quoted field all count.
+    [Theory]
+    [InlineData("Date,Description,Amount\n2026-02-01,Good,1.00\n2026-02-02,Bad,\n2026-02-03,Good,3.00\n", 3)]
+    [InlineData("Date,Description,Amount\n2026-02-01,Good,1.00\n\n2026-02-02,Bad,\n2026-02-03,Good,3.00\n", 4)]
+    [InlineData("\nDate,Description,Amount\n2026-02-02,Bad,\n", 3)]
+    [InlineData("Date,Description,Amount\r\n2026-02-01,Good,1.00\r\n2026-02-02,Bad,\r\n", 3)]
+    [InlineData("Date,Description,Amount\n2026-02-01,\"Good\non two lines\",1.00\n2026-02-02,Bad,\n", 4)]
+    [InlineData("Date,Description,Amount\n2026-02-02,\"Bad\non two lines\",\n2026-02-03,Good,3.00\n", 2)]
+    public void A_row_error_names_the_file_line_where_the_row_starts(string csv, int expectedLine)
+    {
+        var result = _parser.Parse(csv, new ColumnMap(Date: "Date", Description: "Description", Amount: "Amount"));
+
+        result.Errors.ShouldBe([new RowError(expectedLine, "amount is empty.")]);
     }
 
     [Fact]
