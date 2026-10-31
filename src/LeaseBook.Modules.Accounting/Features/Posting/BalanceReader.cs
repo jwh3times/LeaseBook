@@ -22,6 +22,13 @@ internal sealed class BalanceReader(DbContext db)
               AND basis IN ('accrual', 'both')
             """).SingleAsync(ct);
 
+    /// <summary>
+    /// What a tenant owes: the open receivable, never below zero. An application or a credit may draw on
+    /// this and no more (ADR-011, #652); a net-prepaid tenant owes nothing.
+    /// </summary>
+    public async Task<decimal> TenantOwedAsync(Guid tenantId, CancellationToken ct) =>
+        Math.Max(await TenantReceivableAsync(tenantId, ct), 0m);
+
     /// <summary>Security deposit currently held for a tenant (CR-positive liability), cash+both.</summary>
     public Task<decimal> DepositsHeldAsync(Guid tenantId, CancellationToken ct) =>
         HeldLiabilityByCodeAsync(AccountCodes.SecurityDepositsHeld, tenantId, ct);

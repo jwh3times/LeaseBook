@@ -129,6 +129,17 @@
   color: var(--neg);
 }
 
+/* #652: a credit above what the tenant owes; aligned with the grid above it. */
+.pf-composer-limit {
+  align-items: flex-start;
+  padding: 0 18px 14px;
+  color: var(--text-2);
+}
+
+.pf-composer-limit-note {
+  color: var(--text-3);
+}
+
 .pf-api-error {
   display: inline-flex;
   align-items: center;

@@ -59,7 +59,10 @@ public sealed record FeeCharged(
 public sealed record CreditIssued(
     Guid TenantId, Guid PropertyId, Guid OwnerId,
     Money Amount, DateOnly Date, string Reason, string? SourceRef = null,
-    string? InternalNote = null) : AccountingEvent;
+    string? InternalNote = null, bool AllowUnappliedCredit = false) : AccountingEvent
+{
+    public const string UnappliedSubtype = "unapplied";
+}
 
 /// <summary>A tenant payment into a trust bank; auto-splits receivable vs. prepayment (P31).</summary>
 public sealed record PaymentReceived(

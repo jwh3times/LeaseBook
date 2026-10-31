@@ -1,6 +1,6 @@
 import { useMutation } from '@tanstack/react-query';
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
-import { Button, Icon, Input, Select } from '@/design';
+import { Button, formatMoneyPlain, Icon, Input, Money, Select } from '@/design';
 import { ApiErrorNotice } from '@/components/ApiErrorNotice';
 import { ErrorAction } from '@/components/ErrorAction';
 import { AudienceHint } from '@/components/InternalNote';
@@ -11,11 +11,11 @@ import {
   categoryNeedsBank,
   COMPOSER_CHARGE_CATEGORIES,
   type LedgerPostError,
-  LOCKED_PERIOD_MESSAGE,
   newSourceRef,
   PAYMENT_METHODS,
   type PostResult,
   submitLedgerEntry,
+  useLockedPeriodMessage,
 } from './ledgerMutations';
 
 export interface LedgerComposerProps {
@@ -30,12 +30,24 @@ export interface LedgerComposerProps {
    * refresh, a bookmark, a hand-typed `?compose=`) means nobody told us, so the count starts here.
    */
   initialInteractions?: number;
+  /**
+   * What a credit may draw on without an allowance — the ledger read's `owed`, never below zero. Absent
+   * while that read is pending or failed: the composer then claims no limit and the server decides.
+   * Deliberately not a blocking prerequisite read: nothing from it goes into the request, and without
+   * it an excess credit is refused by the server (409, never sent as allowed), so it fails safe.
+   */
+  owed?: number;
+  /** Whether this user may allow a credit larger than `owed` — only an administrator can (#652). */
+  canAllowUnappliedCredit?: boolean;
 }
 
 type Mode = 'payment' | 'charge';
 
 const LAST_METHOD_KEY = 'lb.lastPaymentMethod';
 const todayIso = () => new Date().toISOString().slice(0, 10);
+
+const creditLimitMessage = (owed: number) =>
+  `A credit can’t be more than the ${formatMoneyPlain(owed)} the tenant owes. Only an administrator can allow a larger credit.`;
 
 /**
  * The signature M3 interaction (§C.4 / P59): record a payment / add a charge in place, posting through
@@ -49,7 +61,10 @@ export function LedgerComposer({
   onPosted,
   initialMode,
   initialInteractions,
+  owed,
+  canAllowUnappliedCredit = false,
 }: LedgerComposerProps) {
+  const lockedMessage = useLockedPeriodMessage();
   const [mode, setMode] = useState<Mode | null>(initialMode ?? null);
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
@@ -59,6 +74,7 @@ export function LedgerComposer({
   const [date, setDate] = useState(todayIso);
   const [bankId, setBankId] = useState('');
   const [error, setError] = useState<LedgerPostError | null>(null);
+  const [allowExcess, setAllowExcess] = useState(false);
 
   const sourceRef = useRef('');
   const interactions = useRef(1);
@@ -73,6 +89,15 @@ export function LedgerComposer({
   const fieldId = useId();
   const activeCategory = mode === 'payment' ? 'Payment' : category;
   const needsBank = categoryNeedsBank(activeCategory);
+
+  // How far a credit goes past what the tenant owes, in cents, when that is known (#652).
+  const isCredit = activeCategory === 'Credit';
+  const knownOwed = isCredit ? owed : undefined;
+  const parsedAmount = Number.parseFloat(amount);
+  const excess =
+    knownOwed !== undefined && parsedAmount > knownOwed
+      ? Math.round((parsedAmount - knownOwed) * 100) / 100
+      : 0;
 
   const defaultBank = useMemo(() => {
     const purpose = bankPurposeFor(activeCategory);
@@ -93,6 +118,7 @@ export function LedgerComposer({
     setInternalNote('');
     setBankId('');
     setError(null);
+    setAllowExcess(false);
     setDate(todayIso());
   }, [mode, open, operatorOpened, initialMode, initialInteractions]);
 
@@ -107,6 +133,7 @@ export function LedgerComposer({
         method,
         bankAccountId: effectiveBankId,
         sourceRef: sourceRef.current,
+        allowUnappliedCredit: excess > 0 && allowExcess,
       }),
     onSuccess: (result) => finishPost(result.entryId),
     onError: (post) => {
@@ -116,9 +143,7 @@ export function LedgerComposer({
         return;
       }
       // The bank's month is reconciled (M4 lock): keep the composer open with the move-the-date hint.
-      setError(
-        post.code === 'account_period_locked' ? { ...post, message: LOCKED_PERIOD_MESSAGE } : post,
-      );
+      setError(post.code === 'account_period_locked' ? { ...post, message: lockedMessage } : post);
     },
   });
 
@@ -138,6 +163,14 @@ export function LedgerComposer({
     const value = Number.parseFloat(amount);
     if (!(value > 0)) {
       setError({ message: 'Enter an amount greater than zero.' });
+      return;
+    }
+    if (excess > 0 && knownOwed !== undefined && !(canAllowUnappliedCredit && allowExcess)) {
+      setError({
+        message: canAllowUnappliedCredit
+          ? 'Confirm the larger credit to post it.'
+          : creditLimitMessage(knownOwed),
+      });
       return;
     }
     if (needsBank && banksUnavailable) {
@@ -252,6 +285,11 @@ export function LedgerComposer({
                 onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ''))}
                 onKeyDown={onFieldKeyDown}
               />
+              {knownOwed !== undefined && (
+                <span className="t3 fs12">
+                  Tenant owes <Money value={knownOwed} plain />
+                </span>
+              )}
             </label>
 
             {needsBank &&
@@ -329,6 +367,37 @@ export function LedgerComposer({
               />
             </div>
           </div>
+          {excess > 0 && knownOwed !== undefined && (
+            <div
+              className="pf-composer-limit row gap8 fs13"
+              role="status"
+              aria-label="Credit limit"
+            >
+              <Icon name="alert" size={14} />
+              {canAllowUnappliedCredit ? (
+                <div className="col gap4">
+                  <label className="row gap8">
+                    <input
+                      type="checkbox"
+                      className="pf-check"
+                      checked={allowExcess}
+                      onChange={(e) => {
+                        interactions.current += 1;
+                        setAllowExcess(e.target.checked);
+                      }}
+                    />
+                    Allow a credit <Money value={excess} plain /> more than the tenant owes
+                  </label>
+                  <span className="pf-composer-limit-note">
+                    The extra <Money value={excess} plain /> leaves the tenant with a credit balance
+                    for money they don’t owe.
+                  </span>
+                </div>
+              ) : (
+                <span>{creditLimitMessage(knownOwed)}</span>
+              )}
+            </div>
+          )}
           <div className="pf-composer-foot">
             {error ? (
               <ApiErrorNotice error={error} />

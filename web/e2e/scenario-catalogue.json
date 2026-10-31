@@ -166,6 +166,15 @@
       ]
     },
     {
+      "id": "property-ownership-transfer",
+      "workflow": "Transfer a property to another owner, dated today or earlier with a future date refused, and see the held security deposits move to the buyer",
+      "area": "Directory",
+      "spec": "property-ownership-transfer.spec.ts",
+      "org": "scenario",
+      "events": ["DepositResponsibilityTransferred"],
+      "routes": ["POST /api/directory/properties/{id}/ownership-transfers"]
+    },
+    {
       "id": "directory-palette-jump",
       "workflow": "Jump to an owner, a property, a tenant and a unit from the command palette",
       "area": "Directory",
@@ -246,12 +255,15 @@
     },
     {
       "id": "ledger-issue-credit",
-      "workflow": "Issue a tenant a credit from the ledger composer by keyboard, and see the balance fall by the amount",
+      "workflow": "Charge a tenant, then issue a credit within what they owe from the ledger composer by keyboard, and see the balance fall by the amount",
       "area": "Accounting",
       "spec": "ledger-postings.spec.ts",
       "org": "scenario",
-      "events": ["CreditIssued"],
-      "routes": ["POST /api/accounting/tenants/{tenantId}/credits"]
+      "events": ["FeeCharged", "CreditIssued"],
+      "routes": [
+        "POST /api/accounting/tenants/{tenantId}/charges",
+        "POST /api/accounting/tenants/{tenantId}/credits"
+      ]
     },
     {
       "id": "ledger-collect-and-apply-held-funds",
@@ -367,6 +379,15 @@
         "POST /api/accounting/reconciliations/{id}/finalize",
         "POST /api/accounting/tenants/{tenantId}/payments"
       ]
+    },
+    {
+      "id": "bank-reconciliation-unlock-and-refinalize",
+      "workflow": "As an administrator, unlock a finalized month with a reason, post into it, and finalize it again",
+      "area": "Banking",
+      "spec": "m4-banking.spec.ts",
+      "org": "demo",
+      "events": ["PaymentReceived", "EntryVoided"],
+      "routes": ["POST /api/accounting/reconciliations/{id}/unlock"]
     },
     {
       "id": "owner-statement-view-export-deliver",
@@ -795,12 +816,6 @@
         "issue": 553
       },
       {
-        "event": "DepositResponsibilityTransferred",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 555
-      },
-      {
         "event": "InterestEarned",
         "reason": "baseline gap",
         "date": "2026-10-12",
@@ -859,12 +874,6 @@
         "issue": 553
       },
       {
-        "route": "POST /api/accounting/reconciliations/{id}/unlock",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 554
-      },
-      {
         "route": "PUT /api/directory/owners/{id}",
         "reason": "baseline gap",
         "date": "2026-10-12",
@@ -875,12 +884,6 @@
         "reason": "baseline gap",
         "date": "2026-10-12",
         "issue": 558
-      },
-      {
-        "route": "POST /api/directory/properties/{id}/ownership-transfers",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 555
       },
       {
         "route": "GET /api/directory/units",

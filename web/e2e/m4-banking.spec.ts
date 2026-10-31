@@ -3,11 +3,12 @@ import { visualSnapshot } from './helpers';
 import { test } from './test';
 
 // The M4 banking budgeted flows (§D step 5), run against the seeded demo org. The seeded admin (Renée
-// Calloway) has no MFA, so login is email + password. These two specs are SERIAL and designed to run
+// Calloway) has no MFA, so login is email + password. These specs are SERIAL and designed to run
 // against a FRESHLY SEEDED org: finalizing a reconciliation is a per-account-month lock that only a
 // PMAdmin unlock can release, so the flow is intentionally single-run per seed (the §D gate runs
 // `reset-db` + `seed --org demo` before `npm run e2e`). The import spec runs first; the reconcile spec
-// finalizes whatever remains uncleared, so it is robust to the import spec having cleared a line.
+// finalizes whatever remains uncleared, so it is robust to the import spec having cleared a line. The
+// unlock spec ends with the month finalized again, so the specs after this file see it locked.
 const ADMIN = 'renee.calloway@tarheelpg.test';
 const PASSWORD = 'Tarheel-Trust-2026!';
 
@@ -115,5 +116,59 @@ test.describe.serial('M4 banking', () => {
     await expect(
       page.getByRole('row').filter({ hasText: '$123.45' }).filter({ hasText: 'Payment' }),
     ).toBeVisible();
+  });
+
+  // #554: the month the spec above locked is unlocked from its history row, takes a posting, and is
+  // finalized again from the same reconcile-in-place screen. The posting is voided before the month
+  // closes again, so Jasmine Carter's balance ends where it began.
+  test('an administrator unlocks the finalized month with a reason, posts into it, and finalizes it again @scenario:bank-reconciliation-unlock-and-refinalize', async ({
+    page,
+  }) => {
+    const now = new Date();
+    const month = `${now.toLocaleString('en-US', { month: 'short' })} ${now.getFullYear()}`;
+    await login(page);
+    await gotoBanking(page);
+
+    const historyRow = page.locator('.pf-recon-histrow').filter({ hasText: month });
+    // The status badge, not the row: its "Finalized {date}" line outlives an unlock.
+    const status = historyRow.locator('.pf-badge');
+    await expect(status).toHaveText('Finalized');
+    await historyRow.getByRole('button', { name: `Unlock ${month}` }).click();
+    const dialog = page.getByRole('dialog', { name: `Unlock ${month}` });
+    await dialog.getByLabel('Reason').fill('e2e: bank statement showed a missing deposit');
+    await dialog.getByRole('button', { name: 'Unlock month' }).click();
+    await expect(dialog).toBeHidden();
+    await expect(status).toHaveText('Reopened');
+    await expect(historyRow.getByRole('button', { name: `Unlock ${month}` })).toHaveCount(0);
+
+    // A payment dated today, which the lock refused in the spec above, now posts.
+    await page.getByRole('button', { name: 'Tenants' }).click();
+    await page.getByText('Jasmine Carter').click();
+    await expect(page.getByRole('heading', { name: 'Jasmine Carter' })).toBeVisible();
+    await page.getByRole('button', { name: 'Record payment' }).click();
+    await page.getByLabel('Amount').fill('67.89');
+    await page.getByRole('button', { name: 'Post payment' }).click();
+    const paymentRow = page
+      .getByRole('row')
+      .filter({ hasText: '$67.89' })
+      .filter({ hasText: 'Payment' })
+      .filter({ hasNotText: 'Void —' });
+    await expect(paymentRow).toBeVisible();
+
+    await paymentRow.getByRole('button', { name: 'Void entry' }).click();
+    const voidDialog = page.getByRole('dialog', { name: 'Void entry' });
+    await voidDialog.getByLabel('Reason (internal note)').fill('e2e cleanup');
+    await voidDialog.getByRole('button', { name: 'Void entry' }).click();
+    await expect(paymentRow).toContainText('Voided');
+
+    // Finalize the month again: the history row reads Finalized and offers Unlock once more.
+    await gotoBanking(page);
+    await page.getByRole('button', { name: 'Reconcile account' }).click();
+    await page.getByRole('button', { name: 'Select all uncleared' }).click();
+    await expect(page.getByLabel('Difference')).toHaveText('$0.00');
+    await page.getByRole('button', { name: 'Finalize' }).click();
+    await expect(page.getByRole('button', { name: 'Reconcile account' })).toBeVisible();
+    await expect(status).toHaveText('Finalized');
+    await expect(historyRow.getByRole('button', { name: `Unlock ${month}` })).toBeVisible();
   });
 });

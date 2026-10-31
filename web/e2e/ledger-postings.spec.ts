@@ -89,9 +89,19 @@ test('issues a credit from the composer by keyboard: the ledger shows the line a
 }) => {
   await openLedger(page);
   const balance = headerFigure(page, 'Current balance');
-  const before = await readCents(balance);
-
   const amount = randomCents(3);
+
+  // A credit may not exceed what the tenant owes (#652), and staff cannot allow more. Charge the amount
+  // first, so the credit always fits and the tenant ends each run where it began.
+  const start = await readCents(balance);
+  const charge = await openComposer(page, 'Other');
+  await charge.getByLabel('Amount').fill(dollars(amount));
+  await charge.getByLabel('Statement description').fill(describe('credit setup charge'));
+  await charge.getByRole('button', { name: 'Post charge' }).click();
+  await expect(charge).toBeHidden();
+  await expectFigure(balance, start + amount);
+  const before = start + amount;
+
   const reason = describe('goodwill credit');
   const composer = await openComposer(page, 'Credit');
   // A credit's free text is its reason, and it prints on the owner statement (ADR-047).

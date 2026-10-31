@@ -1,4 +1,5 @@
 using FluentValidation;
+using FluentValidation.Results;
 using LeaseBook.Modules.Directory.Contracts;
 using LeaseBook.Modules.Directory.Domain;
 using LeaseBook.Modules.Directory.Features.Shared;
@@ -127,8 +128,8 @@ internal sealed class TransferPropertyOwnershipHandler(DbContext db, IPropertyDe
                 || existing.ToOwnerId != command.ToOwnerId
                 || existing.EffectiveDate != command.EffectiveDate)
             {
-                throw new ValidationException(
-                    "The source reference already identifies a different property ownership transfer.");
+                throw Refused(
+                    "sourceRef", "The source reference already identifies a different property ownership transfer.");
             }
 
             return new PropertyOwnershipTransferResult(
@@ -150,12 +151,12 @@ internal sealed class TransferPropertyOwnershipHandler(DbContext db, IPropertyDe
             .AnyAsync(owner => owner.Id == command.ToOwnerId, ct);
         if (!ownerExists)
         {
-            throw new ValidationException("The succeeding owner does not exist in this organization.");
+            throw Refused("toOwnerId", "The succeeding owner does not exist in this organization.");
         }
 
         if (property.OwnerId == command.ToOwnerId)
         {
-            throw new ValidationException("The succeeding owner must differ from the current owner.");
+            throw Refused("toOwnerId", "The succeeding owner must differ from the current owner.");
         }
 
         var latestEffectiveDate = await db.Set<PropertyOwnershipTransfer>()
@@ -165,8 +166,8 @@ internal sealed class TransferPropertyOwnershipHandler(DbContext db, IPropertyDe
             .FirstOrDefaultAsync(ct);
         if (latestEffectiveDate is not null && command.EffectiveDate <= latestEffectiveDate)
         {
-            throw new ValidationException(
-                "A property ownership transfer must be effective after its preceding transfer.");
+            throw Refused(
+                "effectiveDate", "A property ownership transfer must be effective after its preceding transfer.");
         }
 
         var fromOwnerId = property.OwnerId;
@@ -193,4 +194,9 @@ internal sealed class TransferPropertyOwnershipHandler(DbContext db, IPropertyDe
         return new PropertyOwnershipTransferResult(
             property.Id, fromOwnerId, command.ToOwnerId, command.EffectiveDate, depositEntryId);
     }
+
+    // A failure, not a bare message: the 400 body carries only failures, and the transfer screen shows
+    // each refusal's reason inline (#555).
+    private static ValidationException Refused(string field, string message) =>
+        new([new ValidationFailure(field, message)]);
 }

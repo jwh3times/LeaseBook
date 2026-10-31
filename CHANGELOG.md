@@ -14,7 +14,41 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 ## [Unreleased]
 
+No unreleased changes.
+
+## [0.27.0] - 2026-10-30
+
 ### Added
+
+- **A property can be transferred to a new owner from its page.** The property page now offers
+  Transfer ownership: choose another owner and an effective date of today or earlier. Before
+  anything posts, the dialog says that the security deposits held for the property's tenants move
+  to the new owner and that the current owner's equity is not settled by the transfer. Once it is
+  recorded, the property names the new owner, each owner's deposits held change by what moved, and a
+  notice says whether any deposits moved. A future date is refused before anything is sent. A
+  backdated transfer that later deposit activity would contradict, a date no later than the
+  property's previous transfer, a closed period and a reconciled bank month are each refused in the
+  dialog with the reason, and nothing is recorded. Until now a sale could be recorded only by calling
+  the API.
+
+### Fixed
+
+- **A refused ownership transfer now says why.** The refusals for a transfer to the current owner,
+  to an owner that does not exist, dated no later than the previous transfer, reusing another
+  transfer's reference, or backdated across later deposit activity reached the client with no reason
+  in the response. Each now carries its message.
+
+## [0.26.0] - 2026-10-30
+
+### Added
+
+- **An administrator can unlock a reconciled month from its reconciliation history.** On Banking, a
+  finalized month in the reconciliation history now offers Unlock to an administrator, and never to
+  staff. Unlocking asks for a reason, which the audit log keeps with the administrator's name, and a
+  refusal is shown in the dialog without losing what was typed. The month then reads Reopened, and
+  postings dated into it land on that account again until it is finalized again. Reconcile-in-place
+  finalizes only the current month, so a past month that is unlocked cannot yet be finalized again
+  from a screen.
 
 - **A development host in Stripe sandbox mode can be pointed at a local stand-in for Stripe.** The
   new setting `Payments:Stripe:ApiBase` takes a loopback `http` address with a port and nothing else,
@@ -194,6 +228,24 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   credentials is refused. An existing fixture manifest is unaffected.
 
 ### Fixed
+
+- **The locked-month message offers only what its reader can do.** A posting dated into a reconciled
+  month was refused with advice to "unlock the reconciliation first", which no screen could do. An
+  administrator is now pointed to the reconciliation history on Banking, and staff are told to post
+  into the open month or ask an administrator to unlock it.
+
+- **Tab no longer leaves an open dialog.** The dialogs declared themselves modal, but Tab moved on to
+  the page behind them. In every dialog, Tab and Shift+Tab now wrap at either end, and focus left on
+  the page comes back into the dialog.
+
+- **A tenant credit can no longer exceed what the tenant owes, unless an administrator allows it.**
+  A credit larger than the tenant's open charges left them owing less than nothing, with no money
+  held behind it, and anyone who could post to the ledger could issue one. A credit above what the
+  tenant owes is now refused and posts nothing, as an application of a deposit or a prepayment
+  already is. The ledger's credit form shows what the tenant owes, and staff see why a larger
+  credit can't post before they submit. An administrator can confirm the larger credit, and is told
+  it leaves the tenant a credit balance; the entry is marked as an allowed excess, and its audit
+  trail names who allowed it. No existing figure changes.
 
 - **A bank statement import no longer reads a missing column as 0.00.** When a column mapping named
   a column the file did not have, such as a saved mapping from another export of the same bank, every
@@ -1535,7 +1587,9 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.25.0...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.27.0...HEAD
+[0.27.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.27.0
+[0.26.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.26.0
 [0.25.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.25.0
 [0.24.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.24.0
 [0.23.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.23.0

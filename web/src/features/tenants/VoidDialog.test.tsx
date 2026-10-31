@@ -49,6 +49,34 @@ describe('VoidDialog', () => {
     expect(onVoided).not.toHaveBeenCalled();
     expect(screen.getByLabelText('Reason (internal note)')).toBeInTheDocument();
   });
+
+  // #554: the message offers only what the reader's screens can do. Only an administrator can unlock.
+  it.each([
+    [
+      'PMAdmin',
+      "This account's month is reconciled and locked — post into the open month, or unlock the month from its reconciliation history on Banking.",
+    ],
+    [
+      'PMStaff',
+      "This account's month is reconciled and locked — post into the open month, or ask an administrator to unlock it.",
+    ],
+  ])('words the account-lock refusal for a %s', async (role, message) => {
+    server.use(
+      http.get('/api/auth/me', () => HttpResponse.json({ email: 'a@b.test', role })),
+      http.post('/api/accounting/entries/:entryId/void', () =>
+        HttpResponse.json(
+          { code: 'account_period_locked', detail: 'Locked for 2026-02.' },
+          { status: 409 },
+        ),
+      ),
+    );
+    renderDialog();
+
+    await userEvent.type(screen.getByLabelText('Reason (internal note)'), 'entered in error');
+    await userEvent.click(screen.getByRole('button', { name: 'Void entry' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(message);
+  });
 });
 
 // #468 (ADR-047): a void's reason is staff-only. The owner statement shows what was corrected, not why.

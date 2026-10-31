@@ -71,6 +71,7 @@ git fetch origin --prune
 git branch --show-current
 git status --porcelain
 git stash list
+before="$(git rev-parse HEAD)"
 ```
 
 Run the `Workspace status command` too. Then compare with the document's **Where you are** and
@@ -84,11 +85,19 @@ Run the `Workspace status command` too. Then compare with the document's **Where
 - **The handoff continues on a branch** — `git switch <branch>`, then `git pull --ff-only`. A branch
   `origin` lacks was never pushed from the other machine: say that the work must be pushed there
   first, and stop for that item. The same holds for any local-only item the work depends on.
-- **The pull changed a dependency lockfile** — install dependencies as the repository's
-  `AGENTS.md` says, asking first where it gates installs.
+- **The companion has diverged from its upstream** (commits on both sides) — stop and report it;
+  never merge, rebase, reset or force-push the companion.
+- **The companion checkout is absent and the work needs it** — offer the
+  `Companion restore command`; never create the directory by hand.
 - **Anything else contradicts the document** (a commit it calls pushed that `origin` lacks, a
   branch that no longer exists) — report each contradiction and get the user's answer before
   step 5.
+
+After the switch and update, list what they changed with `git diff --name-only "$before" HEAD`.
+For each dependency lockfile in it, install from that lockfile in its folder, in the frozen form
+the repository's `AGENTS.md` gives (`npm ci`, `pnpm install --frozen-lockfile`,
+`dotnet tool restore`), asking first where `AGENTS.md` gates installs. Then run
+`Hook: after sync` from `docs/agents/workspace.md`.
 
 The step is complete when the checkout matches the document or every mismatch has the user's
 answer.

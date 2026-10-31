@@ -11,9 +11,14 @@ namespace LeaseBook.Modules.Accounting.Features.LedgerPosting;
 /// <c>Reason</c> is the <b>owner-facing</b> description: it prints on the owner statement.
 /// <c>InternalNote</c> is optional and staff-only; it never reaches an owner or resident (#468).
 /// </para>
+/// <para>
+/// A credit above what the tenant owes is refused unless <c>AllowUnappliedCredit</c> is set (#652); the
+/// endpoint lets only a PMAdmin set it.
+/// </para>
 /// </summary>
 public sealed record IssueCredit(
-    Guid TenantId, decimal Amount, DateOnly Date, string Reason, string SourceRef, string? InternalNote = null)
+    Guid TenantId, decimal Amount, DateOnly Date, string Reason, string SourceRef, string? InternalNote = null,
+    bool AllowUnappliedCredit = false)
     : ICommand<PostResult>;
 
 public sealed class IssueCreditValidator : AbstractValidator<IssueCredit>
@@ -36,7 +41,7 @@ internal sealed class IssueCreditHandler(ITenantPostingDimensions dimensions, IA
         var id = await events.PostAsync(
             new CreditIssued(
                 command.TenantId, dims.PropertyId, dims.OwnerId, LedgerPostingMaps.Money(command.Amount),
-                command.Date, command.Reason, command.SourceRef, command.InternalNote),
+                command.Date, command.Reason, command.SourceRef, command.InternalNote, command.AllowUnappliedCredit),
             ct);
         return new PostResult(id);
     }

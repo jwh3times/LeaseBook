@@ -1,8 +1,17 @@
+import { useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
 import { Badge, type BadgeTone, Button, Card, EmptyState, Money } from '@/design';
 import { QueryErrorState } from '@/components/QueryErrorState';
+import { useSession } from '@/features/auth/useSession';
 import { localDate } from '@/lib/dates';
 import { num } from '@/lib/directory';
-import { downloadReconciliationReport, useReconciliationHistory } from './banking';
+import {
+  downloadReconciliationReport,
+  reconciliationHistoryKey,
+  type ReconciliationSummary,
+  useReconciliationHistory,
+} from './banking';
+import { UnlockReconciliationDialog } from './UnlockReconciliationDialog';
 
 const STATUS_TONE: Record<string, BadgeTone> = {
   in_progress: 'warn',
@@ -18,9 +27,20 @@ const STATUS_LABEL: Record<string, string> = {
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-/** Past reconciliations for the account, newest first; finalized ones expose their stored report (P64). */
+const periodLabel = (row: ReconciliationSummary) =>
+  `${MONTHS[num(row.month) - 1] ?? row.month} ${row.year}`;
+
+/**
+ * Past reconciliations for the account, newest first; finalized ones expose their stored report (P64),
+ * and a PMAdmin can unlock one with a reason (#554). The server enforces the role; hiding Unlock from
+ * staff only keeps them from being offered what they cannot do.
+ */
 export function ReconciliationHistory({ bankAccountId }: { bankAccountId: string }) {
   const history = useReconciliationHistory(bankAccountId);
+  const session = useSession();
+  const queryClient = useQueryClient();
+  const isAdmin = session.data?.role === 'PMAdmin';
+  const [unlockTarget, setUnlockTarget] = useState<ReconciliationSummary | null>(null);
 
   return (
     <Card className="pf-ledger-card">
@@ -69,9 +89,7 @@ export function ReconciliationHistory({ bankAccountId }: { bankAccountId: string
           {history.data?.map((row) => (
             <div key={row.id} className="pf-recon-histrow">
               <div className="grow col gap2">
-                <span className="fw6">
-                  {MONTHS[num(row.month) - 1] ?? row.month} {row.year}
-                </span>
+                <span className="fw6">{periodLabel(row)}</span>
                 <span className="t3 fs12">
                   {row.finalizedAt ? `Finalized ${localDate(row.finalizedAt)}` : 'Not finalized'}
                 </span>
@@ -90,9 +108,33 @@ export function ReconciliationHistory({ bankAccountId }: { bankAccountId: string
                   Report
                 </Button>
               )}
+              {isAdmin && row.status === 'finalized' && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  icon="lock"
+                  aria-label={`Unlock ${periodLabel(row)}`}
+                  onClick={() => setUnlockTarget(row)}
+                >
+                  Unlock
+                </Button>
+              )}
             </div>
           ))}
         </div>
+      )}
+      {unlockTarget && (
+        <UnlockReconciliationDialog
+          reconciliationId={unlockTarget.id}
+          period={periodLabel(unlockTarget)}
+          onClose={() => setUnlockTarget(null)}
+          onUnlocked={() => {
+            setUnlockTarget(null);
+            void queryClient.invalidateQueries({
+              queryKey: reconciliationHistoryKey(bankAccountId),
+            });
+          }}
+        />
       )}
     </Card>
   );

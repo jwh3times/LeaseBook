@@ -3,7 +3,7 @@
 - **Audience:** Contributors, operators, and reviewers
 - **Status:** Living accounting guide
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-29
+- **Last reviewed:** 2026-10-30
 
 This is the canonical public explanation of the shipped trust-accounting model, written so a
 property manager, bookkeeper, or attorney can evaluate it without reading C#. The Accounting module
@@ -137,7 +137,7 @@ different — it is money held against that tenant's own future rent, so it carr
 either direction, and a prepayment refund does not invent one.
 
 If the property is sold while a deposit remains held, the explicit ownership-transfer workflow
-posts `DepositResponsibilityTransferred`: one balanced entry debits the seller's held-deposit bucket and
+(**Transfer ownership** on the property page) posts `DepositResponsibilityTransferred`: one balanced entry debits the seller's held-deposit bucket and
 credits the buyer's bucket for each tenant and deposit bank as of the effective date. No cash moves,
 and the seller's owner equity does not move; a sale settlement is separate work. The handoff is
 rejected in a closed accounting period or a reconciled deposit-bank month. See
@@ -258,6 +258,14 @@ excess into a prepayment. An _application_ has no such overflow, so applying a d
 income** (damages) is deliberately _not_ capped — damages legitimately exceed any rent owed. This sits
 alongside the existing rule that an application can never exceed the deposit/prepayment actually held.
 
+**A credit is bounded the same way (ADR-011 addendum).** A goodwill credit moves no cash, so one larger
+than what the tenant owes would leave them owing less than nothing with no money held behind it. The
+engine refuses it (`insufficient_receivable`) unless the request sets `allowUnappliedCredit`, which only an
+administrator may do: anyone else is refused with a 403 (`unapplied_credit_requires_admin`). A credit
+that went past the receivable this way is marked `unapplied` on its entry. The tenant ledger read reports
+`owed`, the open receivable never below zero, and the credit form shows it and checks against it. It can
+be more than the ledger balance, because a held prepayment is not yet applied to anything.
+
 **Which bank a prepayment is applied from.** Applying a prepayment draws on the bank that **holds** it,
 as a refund does ([ADR-050](adr/ADR-050-refund-checks.md), addendum) — the liability release and the
 owner's income both land on the bank the cash was collected into, never on one that did not receive
@@ -350,9 +358,13 @@ lines marked cleared or reconciled; **uncleared** is the difference. Absence of 
 **difference reaches $0.00**, then **finalizes**. Finalize is rejected unless the difference is zero; on
 success it marks the ticked lines `reconciled`, stores an **immutable report snapshot**, and **locks that
 account for that month**. A later post carrying that bank account dated into a locked month is rejected
-(`account_period_locked`) and surfaced in the composer the way an over-application is. A `PMAdmin` can
-**unlock** a finalized month with a reason (written to the audit log); items stay reconciled until the month
-is finalized again. There is no bulk un-reconcile.
+(`account_period_locked`) and surfaced in the composer the way an over-application is, offering only what
+the reader can do: an administrator is pointed at the month's reconciliation history on Banking, and staff
+are told to ask an administrator. A `PMAdmin` can **unlock** a finalized month from its row in that history,
+giving a reason the audit log keeps with the acting user. The month then reads **Reopened**: postings dated
+into it land again until it is finalized again, and items stay reconciled meanwhile. Reconcile-in-place
+finalizes only the current month, so a reopened past month has no screen to finalize it again (#656). There
+is no bulk un-reconcile.
 
 **Bank-only adjustments.** Three posting templates cover the statement lines reconciliation needs that are
 not tenant/owner activity: `BankFeeCharged` (a service charge — a PM operating cost), `InterestEarned`

@@ -98,14 +98,18 @@ Sections, in order:
 4. **Next steps** — concrete and ordered; the first one startable without asking.
 5. **Open decisions** — what the user still owes.
 6. **Machine-local knowledge** — agent memory and the session scratchpad stay on this machine:
-   write out the facts and traps the next steps need.
+   write out the facts and traps the next steps need. Name the untracked files the work needs that
+   the other machine must have (env files, local credentials, fixture data) and how they are
+   recreated, never their values. When the work needs the `Private companion`, name its
+   `Companion restore command` for a machine without the checkout.
 7. **Suggested skills** — the skills the next agent should invoke, and at which step.
 
 Add everything `Extra document content` lists. Reference, never restate, what other records
 already hold — specs, ADRs, issues, PRs, commits, diffs — by path or URL. The document leaves the
 repository for a personal cloud drive: write the home directory as `<home>`; leave out secrets,
-tokens, passwords and personal data; link companion content and private issues rather than
-quoting them.
+tokens, passwords and personal data; link private issues rather than quoting them. The companion
+appears as its state (clean, ahead/behind) and commit hash, and its documents by path, never their
+contents.
 
 The step is complete when reading the file back shows the whole document.
 

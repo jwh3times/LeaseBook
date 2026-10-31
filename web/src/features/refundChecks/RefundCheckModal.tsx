@@ -17,7 +17,7 @@ import { Modal } from '@/components/Modal';
 import { num, useOwners, useProperties } from '@/lib/directory';
 import { useBankAccounts } from '@/lib/settings';
 import { trackInteraction, type BudgetTask } from '@/lib/telemetry';
-import { LOCKED_PERIOD_MESSAGE } from '@/features/tenants/ledgerMutations';
+import { useLockedPeriodMessage } from '@/features/tenants/ledgerMutations';
 import {
   amountInputValue,
   centsToAmount,
@@ -82,6 +82,7 @@ const fundKey = (fund: RefundCheckFund) =>
  * under that key.
  */
 export function RefundCheckModal({ tenantId, tenant, onClose, onIssued }: RefundCheckModalProps) {
+  const lockedMessage = useLockedPeriodMessage();
   const fieldId = useId();
   const issueKey = useRef(newIssueKey());
   // The open is the first interaction; a fund choice is a committing choice (P59).
@@ -217,7 +218,7 @@ export function RefundCheckModal({ tenantId, tenant, onClose, onIssued }: Refund
           });
           break;
         case 'account_period_locked':
-          setError({ ...err, field: 'date', message: LOCKED_PERIOD_MESSAGE });
+          setError({ ...err, field: 'date', message: lockedMessage });
           break;
         case 'period_closed':
           setError({

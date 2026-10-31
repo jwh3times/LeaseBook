@@ -87,6 +87,22 @@ public sealed class PostingConcurrencyTests(PostgresFixture fixture)
     }
 
     [Fact]
+    public async Task Two_credits_racing_for_one_receivable_cannot_both_draw_on_it()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var scope = await ScopeAsync(ct);
+        await PostAsync(scope, new RentCharged(_tenant, _property, _owner, _unit, new Money(1000m), D(1), "rent"), ct);
+
+        var race = await Lanes.RaceAsync(fixture, scope,
+            lane => lane.Events.PostAsync(Credit(), ct),
+            lane => lane.Events.PostAsync(Credit(), ct), ct);
+
+        var refused = race.SecondError.ShouldBeOfType<InsufficientReceivableException>();
+        (refused.Kind, refused.Requested, refused.Owed).ShouldBe((ReceivableSource.Credit, 600m, 400m));
+        (await BalanceAsync(scope, b => b.TenantReceivableAsync(_tenant, ct), ct)).ShouldBe(400m);
+    }
+
+    [Fact]
     public async Task Two_fee_sweeps_racing_for_the_same_held_fees_cannot_both_take_them()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -288,6 +304,8 @@ public sealed class PostingConcurrencyTests(PostgresFixture fixture)
 
     private PrepaymentApplied PrepaymentApplied(OrgScope scope) =>
         new(_tenant, _property, _owner, new Money(600m), D(5), scope.TrustBankId, "apply");
+
+    private CreditIssued Credit() => new(_tenant, _property, _owner, new Money(600m), D(5), "goodwill");
 
     private static PMFeesSwept Sweep(OrgScope scope) =>
         new(new Money(200m), D(5), scope.TrustBankId, scope.OperatingBankId, "sweep");

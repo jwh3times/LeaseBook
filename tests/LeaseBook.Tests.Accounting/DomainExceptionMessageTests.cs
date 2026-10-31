@@ -153,6 +153,8 @@ public sealed class DomainExceptionMessageTests
             "Deposit application of 75.00 exceeds the 60.00 currently owed by this tenant.");
         yield return (new InsufficientReceivableException(ReceivableSource.Prepayment, 40m, 10m), "insufficient_receivable",
             "Prepayment application of 40.00 exceeds the 10.00 currently owed by this tenant.");
+        yield return (new InsufficientReceivableException(ReceivableSource.Credit, 90m, 85m), "insufficient_receivable",
+            "A credit of 90.00 exceeds the 85.00 currently owed by this tenant. Only an administrator can allow a larger credit.");
 
         yield return (new ReserveFloorException(500m, 1200m, 800m, SampleId), "reserve_floor",
             "This disbursement of 500.00 would take the owner's equity from 1200.00 below their 800.00 reserve floor.");

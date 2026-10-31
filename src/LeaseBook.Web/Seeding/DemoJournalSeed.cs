@@ -97,7 +97,10 @@ internal static class DemoJournalSeed
         // February (focal tenant).
         await events.PostAsync(new RentCharged(DemoIds.T1, DemoIds.P1, DemoIds.O1, null, M(1_450m), D(2, 1), "Rent — February 2026"), ct);
         await events.PostAsync(new PaymentReceived(DemoIds.T1, DemoIds.P1, DemoIds.O1, M(1_450m), D(2, 3), PaymentMethod.Ach, o, "ACH payment · ••4021"), ct);
-        await events.PostAsync(new CreditIssued(DemoIds.T1, DemoIds.P1, DemoIds.O1, M(85m), D(2, 17), "Goodwill credit — maintenance delay"), ct);
+        // The prototype's goodwill credit lands after February is paid in full, so nothing is owed: an
+        // unapplied credit, which the engine posts only when it is explicitly allowed (#652).
+        await events.PostAsync(new CreditIssued(DemoIds.T1, DemoIds.P1, DemoIds.O1, M(85m), D(2, 17), "Goodwill credit — maintenance delay",
+            AllowUnappliedCredit: true), ct);
         await events.PostAsync(new FeeCharged(DemoIds.T1, DemoIds.P1, DemoIds.O1, null, M(85m), D(2, 18), FeeKind.MaintenanceRecharge, "Recharge — garbage disposal repair"), ct);
 
         // March.

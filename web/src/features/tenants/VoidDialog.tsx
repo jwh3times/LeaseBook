@@ -7,9 +7,9 @@ import { AudienceHint } from '@/components/InternalNote';
 import { Modal } from '@/components/Modal';
 import {
   type LedgerPostError,
-  LOCKED_PERIOD_MESSAGE,
   newSourceRef,
   type PostResult,
+  useLockedPeriodMessage,
   voidDescription,
   voidEntry,
 } from './ledgerMutations';
@@ -34,6 +34,7 @@ interface VoidDialogProps {
  * statement shows `Void — {description}` — that a correction happened, and to what, but not why.
  */
 export function VoidDialog({ entryId, description, onClose, onVoided }: VoidDialogProps) {
+  const lockedMessage = useLockedPeriodMessage();
   const fieldId = useId();
   const [reason, setReason] = useState('');
   const [error, setError] = useState<LedgerPostError | null>(null);
@@ -56,7 +57,7 @@ export function VoidDialog({ entryId, description, onClose, onVoided }: VoidDial
         onVoided(err.existingEntryId);
       } else if (err.code === 'account_period_locked') {
         // Reversal lands a bank line in the original's month; if it's reconciled, the lock blocks it.
-        setError({ ...err, message: LOCKED_PERIOD_MESSAGE });
+        setError({ ...err, message: lockedMessage });
       } else {
         setError(err);
       }

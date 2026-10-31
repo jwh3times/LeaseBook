@@ -141,8 +141,8 @@ uncommitted work.
 - **Companion.** When the `Private companion` is set and its checkout exists, inspect it from its
   own root: the outer repository's `git log`, `git show` and `git diff` cannot see inside it. When
   the checkout is absent, report that companion docs could not be reconciled, and create no
-  directory in its place. Commit companion changes as the `Companion commit policy` says, as their
-  own commit in the companion repository.
+  directory in its place. Commit companion changes by the `## Procedure` in
+  `.agents/skills/end-session/settings/workspace.md`.
 - **Changelog debt.** A behavior change committed this session without its `Unreleased` entry is
   debt to report; `ship` writes the changelog.
 - **One tracker.** A backlog, roadmap, or TODO file the session added to the tree duplicates the
@@ -158,7 +158,9 @@ git stash list
 ```
 
 Run the same in the companion when it exists. For each change, ask: commit it on its branch, stash
-it with a named message, or leave it. Leaving it is a valid answer; say so in the report.
+it with a named message, or leave it. Leaving it is a valid answer; say so in the report. A
+companion change is committed only by the `## Procedure` in
+`.agents/skills/end-session/settings/workspace.md`.
 
 **Branches.** A branch is finished when its PR merged at or after the branch's local tip — true for
 squash and merge commits alike, where `git branch --merged` misses every squashed branch:
@@ -189,9 +191,14 @@ prune gets the same check before `git push origin --delete`. Remove a finished w
 `git worktree remove <path>`, then `git worktree prune`.
 
 **Return to `main`** last, after the tidying below, unless the tree has uncommitted tracked changes
-or the user is continuing on this branch in this checkout. Run `git switch main`, then
-`Sync with main`, then `Hook: after sync` from `docs/agents/workspace.md`. If the sync refuses to
-fast-forward, local `main` has commits of its own: report it and leave `main` as it is.
+or the user is continuing on this branch in this checkout. Record `before="$(git rev-parse HEAD)"`,
+run `git switch main`, then `Sync with main`. If the sync refuses to fast-forward, local `main` has
+commits of its own: report it and leave `main` as it is. A companion that has diverged from its
+upstream (commits on both sides) is reported, never merged, rebased, reset or force-pushed. For
+each dependency lockfile in `git diff --name-only "$before" HEAD`, install from that lockfile in its
+folder, in the frozen form the repository's `AGENTS.md` gives (`npm ci`,
+`pnpm install --frozen-lockfile`, `dotnet tool restore`), asking first where `AGENTS.md` gates
+installs. Then run `Hook: after sync` from `docs/agents/workspace.md`.
 
 **Files.** Delete `Safe-to-remove paths`, and stray scratch files the session left in the tree, by
 explicit path after listing them. `Never-remove paths` stay unless the user explicitly asks;
@@ -201,7 +208,7 @@ blanket deletes such as `git clean -x` would take them too, so delete only by pa
 
 - `Dev stack` — report what is running and ask before stopping it; a running database may be
   deliberate. Never run its **Never run** commands here.
-- `Generated-config check` — when it applies and reports drift, regenerate, and commit both sides.
+- `Generated-config check` — when it reports drift, regenerate, and commit both sides.
 - `Hook: end-session cleanup` from `docs/agents/workspace.md`.
 - `Final portability check`, last. Name the exact state of each repository rather than calling the
   checkout synchronized.

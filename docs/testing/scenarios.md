@@ -3,7 +3,7 @@
 - **Audience:** Contributors, reviewers and maintainers
 - **Status:** Living catalogue and method
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-26
+- **Last reviewed:** 2026-10-30
 
 A scenario is one workflow a person carries out in the product, driven through a real browser by
 one or more Playwright tests. This page records how scenarios are catalogued, what CI checks about
@@ -228,7 +228,7 @@ not edit between the markers.
 <!-- scenario-catalogue:start -->
 <!-- prettier-ignore-start -->
 
-73 scenarios, 1 of them an expected failure that shows a known limit. 8 journal event types and 22 routes are exempt.
+75 scenarios, 1 of them an expected failure that shows a known limit. 7 journal event types and 20 routes are exempt.
 
 ### Scenarios
 
@@ -250,6 +250,7 @@ not edit between the markers.
 | `list-row-opens-detail` | Open a record from its list row in 2 interactions | Directory | `budgeted-flows.spec.ts` |  |  | `GET /api/directory/tenants`<br>`GET /api/directory/tenants/{id}` |
 | `settings-accounting-basis` | Change the accounting basis in settings and keep it across a reload | Settings | `budgeted-flows.spec.ts` |  |  | `GET /api/settings/org`<br>`PUT /api/settings/org` |
 | `directory-browse-records` | Browse owners, properties and tenants from list to detail and page with the quick-switcher | Directory | `directory-navigation.spec.ts` |  |  | `GET /api/directory/owners`<br>`GET /api/directory/owners/{id}`<br>`GET /api/directory/properties`<br>`GET /api/directory/properties/{id}`<br>`GET /api/directory/tenants`<br>`GET /api/directory/tenants/{id}` |
+| `property-ownership-transfer` | Transfer a property to another owner, dated today or earlier with a future date refused, and see the held security deposits move to the buyer | Directory | `property-ownership-transfer.spec.ts` | scenario | `DepositResponsibilityTransferred` | `POST /api/directory/properties/{id}/ownership-transfers` |
 | `directory-palette-jump` | Jump to an owner, a property, a tenant and a unit from the command palette | Directory | `directory-navigation.spec.ts` |  |  | `GET /api/search` |
 | `directory-create-owner` | Create an owner from the owner list by keyboard, with a fee over 100% refused, and see it on its page and in the list | Directory | `directory-records.spec.ts` |  |  | `POST /api/directory/owners` |
 | `directory-create-property` | Create a property for a new owner by keyboard, with a blank address refused, and see it on its page, in the list and under its owner | Directory | `directory-records.spec.ts` |  |  | `POST /api/directory/properties` |
@@ -259,7 +260,7 @@ not edit between the markers.
 | `keyboard-navigation-and-focus` | Move through the palette, close a dialog and see the focus ring by keyboard | Accessibility | `keyboard-only.spec.ts` |  |  |  |
 | `keyboard-reconcile-select-all` | Drive a reconciliation to a $0.00 difference by keyboard | Banking | `keyboard-only.spec.ts` |  |  | `GET /api/accounting/banks/{bankAccountId}/register`<br>`GET /api/accounting/reconciliations` |
 | `bank-account-deactivation-guard` | Deactivating a bank account with uncleared items is refused | Settings | `keyboard-only.spec.ts` |  |  | `GET /api/settings/banks`<br>`PUT /api/settings/banks/{id}/active` |
-| `ledger-issue-credit` | Issue a tenant a credit from the ledger composer by keyboard, and see the balance fall by the amount | Accounting | `ledger-postings.spec.ts` | scenario | `CreditIssued` | `POST /api/accounting/tenants/{tenantId}/credits` |
+| `ledger-issue-credit` | Charge a tenant, then issue a credit within what they owe from the ledger composer by keyboard, and see the balance fall by the amount | Accounting | `ledger-postings.spec.ts` | scenario | `FeeCharged`<br>`CreditIssued` | `POST /api/accounting/tenants/{tenantId}/charges`<br>`POST /api/accounting/tenants/{tenantId}/credits` |
 | `ledger-collect-and-apply-held-funds` | Collect a security deposit and a prepayment, then apply both against a charge, with an over-application refused | Accounting | `ledger-postings.spec.ts` | scenario | `DepositCollected`<br>`PrepaymentReceived`<br>`FeeCharged`<br>`DepositApplied`<br>`PrepaymentApplied` | `POST /api/accounting/tenants/{tenantId}/deposits`<br>`POST /api/accounting/tenants/{tenantId}/prepayments`<br>`POST /api/accounting/tenants/{tenantId}/charges`<br>`POST /api/accounting/tenants/{tenantId}/deposit-applications`<br>`POST /api/accounting/tenants/{tenantId}/prepayment-applications` |
 | `ledger-deposit-into-locked-month` | Collect a deposit dated into a reconciled month and get the lock refusal, with nothing posted | Accounting | `ledger-postings.spec.ts` |  |  | `POST /api/accounting/tenants/{tenantId}/deposits` |
 | `ledger-export-csv` | Export a tenant ledger as CSV and get the rows and the balance the screen shows | Accounting | `ledger-postings.spec.ts` |  |  | `GET /api/accounting/tenants/{tenantId}/ledger.csv` |
@@ -269,6 +270,7 @@ not edit between the markers.
 | `ledger-void-reason-staff-only` | A void's reason stays off the owner statement and shows only as a staff annotation | Accounting | `m3-ledger.spec.ts` | demo | `PaymentReceived`<br>`EntryVoided` | `POST /api/accounting/entries/{entryId}/void`<br>`GET /api/statements/{ownerId}`<br>`GET /api/statements/{ownerId}/internal-notes` |
 | `bank-statement-import-and-match` | Import a bank CSV, auto-match and clear a register line, and skip duplicates on re-import | Banking | `m4-banking.spec.ts` |  |  | `POST /api/banking/banks/{bankAccountId}/imports`<br>`POST /api/banking/imports/{importId}/confirm`<br>`GET /api/banking/imports/{importId}/matches`<br>`GET /api/banking/banks/{bankAccountId}/mappings`<br>`GET /api/accounting/banks/{bankAccountId}/register` |
 | `bank-reconcile-finalize-and-lock` | Reconcile a trust account to $0.00, finalize, and see the locked month refuse a posting | Banking | `m4-banking.spec.ts` | demo | `PaymentReceived` | `GET /api/accounting/banks/balances`<br>`GET /api/accounting/reconciliations`<br>`POST /api/accounting/banks/clearances`<br>`POST /api/accounting/reconciliations`<br>`POST /api/accounting/reconciliations/{id}/finalize`<br>`POST /api/accounting/tenants/{tenantId}/payments` |
+| `bank-reconciliation-unlock-and-refinalize` | As an administrator, unlock a finalized month with a reason, post into it, and finalize it again | Banking | `m4-banking.spec.ts` | demo | `PaymentReceived`<br>`EntryVoided` | `POST /api/accounting/reconciliations/{id}/unlock` |
 | `owner-statement-view-export-deliver` | View an owner statement with its fiduciary checks, export it as PDF and CSV, and deliver it | Reporting | `m5-reports.spec.ts` |  |  | `GET /api/statements/{ownerId}`<br>`GET /api/statements/{ownerId}/internal-notes`<br>`GET /api/statements/{ownerId}/pdf`<br>`GET /api/statements/{ownerId}/csv`<br>`POST /api/statements/{ownerId}/deliver` |
 | `report-catalog-preview-and-export` | Open the report catalog, preview a report with filters, and export it as CSV | Reporting | `m5-reports.spec.ts` |  |  | `GET /api/reports`<br>`GET /api/reports/{id}/preview`<br>`GET /api/reports/{id}/csv` |
 | `month-cycle-rent-run` | Preview and confirm the monthly rent run | Operations | `m6-bulk-operations.spec.ts` | demo | `RentCharged` | `GET /api/operations/runs/{type}/preview`<br>`GET /api/operations/runs/{type}/preview/issued-coverage`<br>`POST /api/operations/runs/{type}/confirm` |
@@ -319,7 +321,7 @@ not edit between the markers.
 | The control appears only after six failed attempts with waits of up to ten minutes, and the simulated processor accepts every payment. | 1 |
 | The control appears only for a notice held for ten minutes, which a test would have to wait out. | 1 |
 | The control appears only when delivery to the local test inbox failed, and no screen makes a delivery fail. | 1 |
-| baseline gap | 20 |
+| baseline gap | 17 |
 
 #### Journal event types with no scenario
 
@@ -327,7 +329,6 @@ not edit between the markers.
 | :-- | :-- | :-- | :-- |
 | `BalanceForward` | baseline gap | 2026-10-12 | #556 |
 | `BankFeeCharged` | baseline gap | 2026-10-12 | #553 |
-| `DepositResponsibilityTransferred` | baseline gap | 2026-10-12 | #555 |
 | `InterestEarned` | baseline gap | 2026-10-12 | #553 |
 | `OwnerContribution` | baseline gap | 2026-10-12 | #556 |
 | `PMFeesSwept` | baseline gap | 2026-10-12 | #556 |
@@ -343,10 +344,8 @@ not edit between the markers.
 | `GET /api/accounting/deposits` | No screen requests it; the screens that show these figures get them from other routes. | 2026-10-12 |  |
 | `GET /api/accounting/trust-equation` | No screen requests it; the screens that show these figures get them from other routes. | 2026-10-12 |  |
 | `POST /api/accounting/banks/{bankAccountId}/adjustments` | baseline gap | 2026-10-12 | #553 |
-| `POST /api/accounting/reconciliations/{id}/unlock` | baseline gap | 2026-10-12 | #554 |
 | `PUT /api/directory/owners/{id}` | baseline gap | 2026-10-12 | #558 |
 | `PUT /api/directory/properties/{id}` | baseline gap | 2026-10-12 | #558 |
-| `POST /api/directory/properties/{id}/ownership-transfers` | baseline gap | 2026-10-12 | #555 |
 | `GET /api/directory/units` | baseline gap | 2026-10-12 | #558 |
 | `POST /api/directory/units` | baseline gap | 2026-10-12 | #558 |
 | `PUT /api/directory/units/{id}` | baseline gap | 2026-10-12 | #558 |

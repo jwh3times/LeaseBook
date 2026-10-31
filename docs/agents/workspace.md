@@ -12,26 +12,15 @@ is one setting.
 `discover: git -C private remote get-url origin` — the locator stays out of public files
 (`AGENTS.md`). `private/README.md` indexes it.
 
-## Workspace status command
+## Companion commit checks
 
-`git status --short --branch`, then, when `private/.git` exists,
-`git -C private fetch -q --prune origin` and `git -C private status --short --branch` — the fetch
-makes the companion's ahead/behind counts current.
-
-## Companion commit policy
-
-ask — show the companion's diff and commit and push it, inside `private/` as its own repository,
-only when the user says so. Public first (`private/README.md`, "Two-repository workflow"): the
-public change is committed and its PR number or SHA recorded on the private follow-up issue before
-the private update is committed.
-
-- **Before committing:**
-  - review the diff from `private/`'s own root: no resolved secret, token, recovery material or
-    plaintext `.env` content (the `op://` references in `private/config/*.env.op` are allowed);
-  - `node private/scripts/check-docs.mjs`, from the public root, passes;
-  - `git ls-files private`, from the public root, prints nothing;
-  - before pushing confidential content, `gh repo view` on the discovered repository reports its
-    visibility as `PRIVATE`.
+- Public first (`private/README.md`, "Two-repository workflow"): the public change is committed and
+  its PR number or SHA recorded on the private follow-up issue before the private update is
+  committed.
+- `node private/scripts/check-docs.mjs`, from the public root, passes.
+- `git ls-files private`, from the public root, prints nothing.
+- No recovery material or plaintext `.env` content is staged (the `op://` references in
+  `private/config/*.env.op` are allowed).
 
 ## Sync with main
 
@@ -80,17 +69,11 @@ reported and skipped. `npm run sync:main -- --skip-private` updates only the pub
 
 `node scripts/sync-agents.mjs --check` (run inside the required **Web (lint + test + build)**
 check), regenerated with `npm run docs:format` from `web/` then `node scripts/sync-agents.mjs`,
-committing `.claude/skills/` and `.codex/agents/` — when agent sources changed (`.agents/skills/`,
-`.claude/agents/`).
-
-## Final portability check
-
-none
+committing `.claude/skills/` and `.codex/agents/` — always: it is quick, and it also catches an orphaned mirror.
 
 ## Hook: after sync
 
-1. When the sync changed `web/package-lock.json`, run `npm ci` in `web/`; when it changed
-   `.config/dotnet-tools.json`, run `dotnet tool restore`.
+1. When the sync changed `.config/dotnet-tools.json`, run `dotnet tool restore`.
 2. When it brought new files under `src/LeaseBook.Web/Migrations/` and the local database is
    running, say so and offer the migrator-role `dotnet ef database update` from `AGENTS.md`
    ("Database"). Never `reset-db`.

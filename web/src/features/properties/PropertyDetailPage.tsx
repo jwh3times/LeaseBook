@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
-import { Card, CardHeader, Money, Table, type TableColumn } from '@/design';
+import { Button, Card, CardHeader, Money, Table, type TableColumn } from '@/design';
 import { DetailPage } from '@/components/DetailPage';
+import { InfoNotice } from '@/components/InfoNotice';
 import {
   TenantFinancialStandingBadges,
   TenantLifecycleBadge,
@@ -14,6 +16,7 @@ import {
   type TenantListRow,
   type UnitRow,
 } from '@/lib/directory';
+import { TransferOwnershipDialog, type TransferredOwnership } from './TransferOwnershipDialog';
 
 const unitColumns: TableColumn<UnitRow>[] = [
   { key: 'label', header: 'Unit', render: (r) => <span className="strong">{r.label}</span> },
@@ -34,6 +37,8 @@ export function PropertyDetailPage() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
   const query = usePropertyDetail(id);
+  const [transferring, setTransferring] = useState(false);
+  const [transferred, setTransferred] = useState<TransferredOwnership | null>(null);
 
   const tenantColumns: TableColumn<TenantListRow>[] = [
     {
@@ -75,9 +80,33 @@ export function PropertyDetailPage() {
       toPath={(propertyId) => `/properties/${propertyId}`}
       title={(p) => p.address}
       sub={(p) => `${[p.city, p.state, p.zip].filter(Boolean).join(', ')} · Owner: ${p.ownerName}`}
+      actions={() => (
+        <Button variant="ghost" size="sm" icon="owners" onClick={() => setTransferring(true)}>
+          Transfer ownership
+        </Button>
+      )}
     >
       {(p) => (
         <div className="col gap16">
+          {transferring && (
+            <TransferOwnershipDialog
+              property={p}
+              onClose={() => setTransferring(false)}
+              onTransferred={(transfer) => {
+                setTransferring(false);
+                setTransferred(transfer);
+              }}
+            />
+          )}
+          {/* The route element is reused across properties, so the notice names the one it was for. */}
+          {transferred?.result.propertyId === p.id && (
+            <InfoNotice onDismiss={() => setTransferred(null)}>
+              Transferred to {transferred.ownerName}, effective {transferred.result.effectiveDate}.{' '}
+              {transferred.result.depositEntryId
+                ? 'The held security deposits moved with it.'
+                : 'No security deposits were held for this property, so none moved.'}
+            </InfoNotice>
+          )}
           <Card>
             <CardHeader title="Units" sub={`${p.units.length} unit(s)`} />
             {p.units.length > 0 ? (

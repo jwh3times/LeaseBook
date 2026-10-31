@@ -110,14 +110,28 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
     private Task<Guid> PostFeeChargedAsync(FeeCharged e, CancellationToken ct) =>
         posting.PostAsync(RunEventEntryBuilder.Build(e), ct);
 
-    private Task<Guid> PostCreditIssuedAsync(CreditIssued e, CancellationToken ct) =>
-        posting.PostAsync(new PostEntryRequest(e.Date, "CreditIssued", null, e.Reason, e.SourceRef,
+    // A credit has no excess path, as an application has none, so one above the open receivable would leave
+    // the tenant owing less than nothing with no money held behind it (ADR-011 addendum, #652). The excess
+    // posts only when the caller allows it, and the entry is then marked so the allowance stays visible.
+    private async Task<Guid> PostCreditIssuedAsync(CreditIssued e, CancellationToken ct)
+    {
+        await postingLock.AcquireAsync(ct);
+        var owed = await _balances.TenantOwedAsync(e.TenantId, ct);
+        var unapplied = e.Amount.Amount > owed;
+        if (unapplied && !e.AllowUnappliedCredit)
+        {
+            throw new InsufficientReceivableException(ReceivableSource.Credit, e.Amount.Amount, owed, e.TenantId);
+        }
+
+        return await posting.PostAsync(new PostEntryRequest(e.Date, "CreditIssued",
+            unapplied ? CreditIssued.UnappliedSubtype : null, e.Reason, e.SourceRef,
             [
                 new(AccountCodes.OwnerEquity, e.Amount, null, EntryBasis.Accrual,
                     PropertyId: e.PropertyId, OwnerId: e.OwnerId),
                 new(AccountCodes.TenantReceivable, null, e.Amount, EntryBasis.Accrual,
                     PropertyId: e.PropertyId, OwnerId: e.OwnerId, TenantId: e.TenantId),
             ], InternalNote: e.InternalNote), ct);
+    }
 
     // ----- Cash receipts --------------------------------------------------------------------------
 
@@ -211,7 +225,7 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
         // (ToOwnerIncome) legitimately exceed any receivable and stay unguarded. Read under the held lock.
         if (e.Target == DepositApplication.AgainstCharges)
         {
-            var owed = Math.Max(await _balances.TenantReceivableAsync(e.TenantId, ct), 0m);
+            var owed = await _balances.TenantOwedAsync(e.TenantId, ct);
             if (e.Amount.Amount > owed)
             {
                 throw new InsufficientReceivableException(
@@ -270,7 +284,7 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
 
         // A prepayment clears charges and likewise has no excess path — it may not exceed the open
         // receivable (ADR-011 / P51). Read under the held lock.
-        var owed = Math.Max(await _balances.TenantReceivableAsync(e.TenantId, ct), 0m);
+        var owed = await _balances.TenantOwedAsync(e.TenantId, ct);
         if (e.Amount.Amount > owed)
         {
             throw new InsufficientReceivableException(

@@ -141,7 +141,7 @@ follow-up never lives only in a doc.
 ## 6. Validate
 
 - `Docs validation`, each command from its folder (the repository root when none is named).
-- `Generated-config check`, when its setting says to run it.
+- `Generated-config check`.
 - `git diff --check` for whitespace errors.
 - Links and anchors in every edited document resolve: relative paths exist, and `#anchors` match a
   heading in their target.

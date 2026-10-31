@@ -241,7 +241,8 @@ public sealed class PostingTemplatesTests(PostgresFixture fixture)
         await using var scope = await ProvisionedScopeAsync(
             fixture, ct, owners: [Owner], tenants: [Tenant], properties: [Property], units: [Unit]);
 
-        var id = await PostAsync(scope, new CreditIssued(Tenant, Property, Owner, new Money(85m), Feb(17), "goodwill"), ct);
+        var id = await PostAsync(scope, new CreditIssued(Tenant, Property, Owner, new Money(85m), Feb(17), "goodwill",
+            AllowUnappliedCredit: true), ct);
         var lines = await ReadLinesAsync(scope, id, ct);
 
         lines.Count.ShouldBe(2);

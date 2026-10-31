@@ -24,7 +24,8 @@ import { test } from './test';
  * that also appear there). Waiting for the list's own heading closes that race.
  */
 async function openList(page: Page, name: 'Owners' | 'Properties' | 'Tenants'): Promise<void> {
-  await page.getByRole('button', { name }).click();
+  // The sidebar item, by its exact name: a property page's "Transfer ownership" contains "Owners".
+  await page.getByRole('navigation').getByRole('button', { name, exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`/${name.toLowerCase()}$`));
   await expect(page.getByRole('heading', { name, level: 2 })).toBeVisible();
 }
