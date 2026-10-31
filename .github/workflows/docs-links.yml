@@ -63,6 +63,12 @@ jobs:
           # So, like the FSF page, each is checked by the weekly sweep and not on every PR and
           # push. Each pattern names its one URL, anchored at both ends, so a new link on any of
           # those hosts is checked everywhere.
+          #
+          # The same file's two IDAutomation pages, the font's license and its product page, began
+          # answering 403 on 2026-10-31 (main at ba173f2, PRs #661 and #662): the site put a
+          # Cloudflare bot challenge in front of every page, and a laptop is refused too, so unlike
+          # the four above a re-run does not pass. They join the list on the same terms: Monday's
+          # sweep keeps checking them, and goes green again when the challenge lifts.
           if [[ "$GITHUB_EVENT_NAME" == "schedule" ]]; then
             echo 'compare=^$' >> "$GITHUB_OUTPUT"
             echo 'release=^$' >> "$GITHUB_OUTPUT"
@@ -74,6 +80,8 @@ jobs:
             refusing+='|^https://web\.archive\.org/web/20030411213628/http://sandeen\.net:80/GnuMICR/$'
             refusing+='|^https://web\.archive\.org/web/20070106015053/http://sandeen\.net:80/GnuMICR/download/GnuMICR-0\.30\.tar\.gz$'
             refusing+='|^https://www\.frbservices\.org/binaries/content/assets/crsocms/financial-services/check/setup/frb-x937-standards-reference\.pdf$'
+            refusing+='|^https://www\.idautomation\.com/licensing/software-license/$'
+            refusing+='|^https://www\.idautomation\.com/micr-fonts/e13b$'
             echo "refusing=$refusing" >> "$GITHUB_OUTPUT"
             echo "compare=^https://github\\.com/jwh3times/LeaseBook/compare/v${version}\\.\\.\\.HEAD$" >> "$GITHUB_OUTPUT"
             echo "release=^https://github\\.com/jwh3times/LeaseBook/releases/tag/v${version}$" >> "$GITHUB_OUTPUT"

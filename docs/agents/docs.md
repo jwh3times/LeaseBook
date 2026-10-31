@@ -24,8 +24,9 @@ is recreated.
     `skills-lock.json`): Domain Guidance Files and Agent skills.
 - `CLAUDE.md` — the Claude Code adapter: imports `AGENTS.md` and lists the specialist subagents.
   **When:** the subagent roster or a Claude-only mechanic changes; never repository state.
-- `CONTEXT.md` — the domain glossary; a term settles here or nowhere. **When:** a term is resolved
-  (`/domain-modeling`); never to rename code.
+- `CONTEXT.md` — the domain glossary; a term settles here or nowhere, through `/domain-modeling`.
+  `frozen` for this skill: report a term the code contradicts instead of editing it, and never
+  rename code to match it.
 - `CONTRIBUTING.md` — Definition of Done, local workflow, review expectations, CI gates, versioning
   and releases. **When:** the Definition of Done, a required check, a formatter, the versioning rule
   or the development flow changes.
@@ -132,6 +133,10 @@ is recreated.
   **When:** `infra/**/*.bicep`, a parameter file or a deploy workflow changes.
 - `infra/db/azure-bootstrap.md` — Postgres role bootstrap against a live server. **When:**
   `infra/db/bootstrap.sql` or the role model changes.
+- `web/ICONS.md` — the icon pack in `web/public/`: colors, files, the two crops and the manifest's
+  background. **When:** an icon file, a crop or `site.webmanifest` changes.
+- `tests/LeaseBook.Tests.Web/Fixtures/MicrE13BReference/*.md` — the provenance and licence of the
+  third-party E-13B outlines `E13BGlyphTests` checks against. `frozen`.
 - `.claude/agents/dotnet-api.md` — backend patterns, CQRS slices, module boundaries. **When:** the
   endpoint or slice pattern, or a boundary rule, changes. Mirrored to `.codex/agents/`, like every
   agent file.
