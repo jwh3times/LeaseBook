@@ -37,8 +37,13 @@ updates:
         update-types:
           - "major"
 
+      # Stripe.net stays out and gets its own PR. A release can move the pinned API version, and
+      # that PR stays red until a maintainer has run the probe
+      # (docs/runbooks/stripe-sandbox-probe.md), so in the group it would hold up every other update.
       dotnet-minor-and-patch:
         applies-to: version-updates
+        exclude-patterns:
+          - "Stripe.net"
         update-types:
           - "minor"
           - "patch"

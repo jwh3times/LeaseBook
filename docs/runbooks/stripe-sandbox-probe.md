@@ -130,8 +130,9 @@ else.
 ## Raise the pinned API version
 
 A new Stripe.net can move the API version the adapter sends: its changelog says so, and continuous
-integration goes red on the bump. The recording comes first, because the probe sends the version it
-is told to.
+integration goes red on the bump. Dependabot opens each Stripe.net update as its own pull request,
+outside the .NET group, so a red one holds up no other package. The recording comes first, because
+the probe sends the version it is told to.
 
 1. Check that no payout of a [sandbox fixture run](payment-simulation.md#wait-for-stripes-payout) is
    forming on the account. The probe's charges would land in it.
