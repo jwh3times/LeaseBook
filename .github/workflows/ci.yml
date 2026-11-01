@@ -177,6 +177,11 @@ jobs:
       - name: Test the e2e database script
         working-directory: ${{ github.workspace }}
         run: node --test scripts/e2e-db.test.mjs
+      # The weekly link sweep's signal for the links it excludes (#665): which answers end an
+      # exclude. Only docs-links.yml runs the script against the real links.
+      - name: Test the challenged links script
+        working-directory: ${{ github.workspace }}
+        run: node --test scripts/challenged-links.test.mjs
       # The scenario catalogue's static check (ADR-056, docs/testing/scenarios.md), the part that
       # needs no API contract: every journal event type in the product source has a scenario or a
       # recorded exemption, every catalogue id has a tagged Playwright test and every test a known

@@ -124,7 +124,9 @@ has an entry in the `Doc map` of `docs/agents/docs.md`, which the `docs-updater`
 The ordinary CI web job runs the same command on every pull request. The separate Lychee workflow
 checks external links and anchors on documentation changes and on its weekly schedule. A few URLs are
 checked by the weekly run only: the current release's own links, which do not exist until the merge,
-and one external page that intermittently stalls on CI runners. The workflow file lists them and why.
+and external pages that intermittently stall on or refuse CI runners. Two pages behind a bot challenge
+are excluded on every run instead, and the weekly run fails once lychee stops being refused by either
+(`scripts/challenged-links.mjs`). The workflow file and that script list them and why.
 
 Project-specific spelling belongs in `cspell.json`; add stable domain terms, product names, or fixture
 names, not accidental misspellings or arbitrary code identifiers. Markdownlint is a structural check;
