@@ -2,6 +2,7 @@ import { useMutation } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { Badge, type BadgeTone, Button, EmptyState, Icon, Money, Select } from '@/design';
 import { ApiErrorNotice } from '@/components/ApiErrorNotice';
+import { ErrorAction } from '@/components/ErrorAction';
 import { Modal } from '@/components/Modal';
 import {
   type BankingError,
@@ -13,6 +14,7 @@ import {
   type ImportResult,
   type MatchPreviewResponse,
   type MatchPreviewRow,
+  readStatementHeaders,
   useColumnMappings,
 } from './banking';
 
@@ -42,11 +44,6 @@ interface MissingColumn {
   name: string;
 }
 
-function parseHeaders(csv: string): string[] {
-  const firstLine = csv.split(/\r?\n/).find((line) => line.trim() !== '') ?? '';
-  return firstLine.split(',').map((h) => h.trim().replace(/^"|"$/g, ''));
-}
-
 /**
  * The CSV import wizard (ADR-015): upload → map columns (with saved-mapping shortcuts) → match preview
  * (matched / suggested / unmatched groups) → confirm, which clears the matched lines through the clearance
@@ -56,7 +53,6 @@ export function ImportWizard({ bankAccountId, onClose, onConfirmed }: ImportWiza
   const [step, setStep] = useState<Step>('upload');
   const [filename, setFilename] = useState('');
   const [csv, setCsv] = useState('');
-  const [headers, setHeaders] = useState<string[]>([]);
 
   const [dateCol, setDateCol] = useState(NONE);
   const [descCol, setDescCol] = useState(NONE);
@@ -73,15 +69,24 @@ export function ImportWizard({ bankAccountId, onClose, onConfirmed }: ImportWiza
 
   const savedMappings = useColumnMappings(bankAccountId);
 
+  // The server is the one reader of the header row, so any column offered maps (#651). A mutation, not a
+  // query: the file's text would make a poor cache key. Its variables are that text too, so the cache
+  // keeps nothing once the wizard closes.
+  const headersRead = useMutation<string[], BankingError, string>({
+    mutationFn: readStatementHeaders,
+    gcTime: 0,
+  });
+  const headers = headersRead.data ?? [];
+
   const onFile = async (file: File | undefined) => {
     if (!file) return;
     const text = await file.text();
     setFilename(file.name);
     setCsv(text);
-    setHeaders(parseHeaders(text));
     setMissingFromFile([]);
     setError(null);
     setStep('map');
+    headersRead.mutate(text);
   };
 
   // A saved mapping can name a column this file lacks (#645). Such a column is left unmapped and named
@@ -217,105 +222,127 @@ export function ImportWizard({ bankAccountId, onClose, onConfirmed }: ImportWiza
               onChange={(e) => void onFile(e.target.files?.[0])}
             />
             <span className="t3 fs12">
-              The file is read in your browser; columns are mapped next.
+              Columns are mapped next. Nothing is stored until you preview the matches.
             </span>
           </label>
         )}
 
-        {step === 'map' && (
-          <>
-            {savedMappings.isPending ? (
-              <div role="status" aria-label="Loading saved mappings">
-                <div className="pf-skeleton" style={{ height: 20 }} />
-              </div>
-            ) : savedMappings.isError ? (
-              <div className="col gap6">
-                <ApiErrorNotice error={savedMappings.error} kind="read" />
-                <p className="t3 fs12">You can still map the columns manually below.</p>
-              </div>
-            ) : (savedMappings.data?.length ?? 0) === 0 ? (
-              <EmptyState
-                icon="doc"
-                title="No saved mappings yet"
-                description="Map the columns below."
+        {step === 'map' &&
+          (headersRead.isError ? (
+            <div className="col gap6">
+              <ApiErrorNotice error={headersRead.error} kind="read" />
+              {/* A 400 is about the file itself, such as its size, and sending it again changes nothing. */}
+              <ErrorAction
+                error={headersRead.error}
+                onRetry={
+                  headersRead.error.status === 400 ? undefined : () => headersRead.mutate(csv)
+                }
               />
-            ) : (
-              <label className="col gap6">
-                <span className="pf-eyebrow">Saved mapping</span>
-                <Select
-                  aria-label="Saved mapping"
-                  defaultValue=""
-                  onChange={(e) => {
-                    const found = savedMappings.data?.find((m) => m.id === e.target.value);
-                    if (found) applySaved(found.columnMap);
-                  }}
-                >
-                  <option value="">Choose a saved mapping…</option>
-                  {savedMappings.data?.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.name}
-                    </option>
-                  ))}
-                </Select>
-              </label>
-            )}
-            {unresolved.length > 0 && (
-              <p role="status" aria-label="Saved mapping does not fit this file" className="fs12">
-                <Icon name="alert" size={14} /> This file has no column named{' '}
-                {unresolved.map(({ name }) => `“${name}”`).join(', ')}. Choose a column from this
-                file for {unresolved.length === 1 ? 'it' : 'each'} below.
-              </p>
-            )}
-            <p className="t3 fs12">{filename}</p>
-            <div className="pf-map-grid">
-              <ColumnSelect
-                label="Date column"
-                value={dateCol}
-                onChange={setDateCol}
-                headers={headers}
-              />
-              <ColumnSelect
-                label="Description column"
-                value={descCol}
-                onChange={setDescCol}
-                headers={headers}
-              />
-              {useDebitCredit ? (
-                <>
-                  <ColumnSelect
-                    label="Debit column"
-                    value={debitCol}
-                    onChange={setDebitCol}
-                    headers={headers}
-                  />
-                  <ColumnSelect
-                    label="Credit column"
-                    value={creditCol}
-                    onChange={setCreditCol}
-                    headers={headers}
-                  />
-                </>
+            </div>
+          ) : !headersRead.isSuccess ? (
+            <div role="status" aria-label="Reading the file">
+              <div className="pf-skeleton" style={{ height: 20 }} />
+            </div>
+          ) : headers.length === 0 ? (
+            <EmptyState
+              icon="doc"
+              title="No columns in this file"
+              description={`${filename} has no column names, so there is nothing to map. Check the file, then cancel and import it again.`}
+            />
+          ) : (
+            <>
+              {savedMappings.isPending ? (
+                <div role="status" aria-label="Loading saved mappings">
+                  <div className="pf-skeleton" style={{ height: 20 }} />
+                </div>
+              ) : savedMappings.isError ? (
+                <div className="col gap6">
+                  <ApiErrorNotice error={savedMappings.error} kind="read" />
+                  <p className="t3 fs12">You can still map the columns manually below.</p>
+                </div>
+              ) : (savedMappings.data?.length ?? 0) === 0 ? (
+                <EmptyState
+                  icon="doc"
+                  title="No saved mappings yet"
+                  description="Map the columns below."
+                />
               ) : (
+                <label className="col gap6">
+                  <span className="pf-eyebrow">Saved mapping</span>
+                  <Select
+                    aria-label="Saved mapping"
+                    defaultValue=""
+                    onChange={(e) => {
+                      const found = savedMappings.data?.find((m) => m.id === e.target.value);
+                      if (found) applySaved(found.columnMap);
+                    }}
+                  >
+                    <option value="">Choose a saved mapping…</option>
+                    {savedMappings.data?.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name}
+                      </option>
+                    ))}
+                  </Select>
+                </label>
+              )}
+              {unresolved.length > 0 && (
+                <p role="status" aria-label="Saved mapping does not fit this file" className="fs12">
+                  <Icon name="alert" size={14} /> This file has no column named{' '}
+                  {unresolved.map(({ name }) => `“${name}”`).join(', ')}. Choose a column from this
+                  file for {unresolved.length === 1 ? 'it' : 'each'} below.
+                </p>
+              )}
+              <p className="t3 fs12">{filename}</p>
+              <div className="pf-map-grid">
                 <ColumnSelect
-                  label="Amount column"
-                  value={amountCol}
-                  onChange={setAmountCol}
+                  label="Date column"
+                  value={dateCol}
+                  onChange={setDateCol}
                   headers={headers}
                 />
-              )}
-            </div>
-            <label className="row gap8 fs13">
-              <input
-                type="checkbox"
-                className="pf-check"
-                checked={useDebitCredit}
-                onChange={(e) => setUseDebitCredit(e.target.checked)}
-                aria-label="Separate debit and credit columns"
-              />
-              This statement uses separate debit / credit columns
-            </label>
-          </>
-        )}
+                <ColumnSelect
+                  label="Description column"
+                  value={descCol}
+                  onChange={setDescCol}
+                  headers={headers}
+                />
+                {useDebitCredit ? (
+                  <>
+                    <ColumnSelect
+                      label="Debit column"
+                      value={debitCol}
+                      onChange={setDebitCol}
+                      headers={headers}
+                    />
+                    <ColumnSelect
+                      label="Credit column"
+                      value={creditCol}
+                      onChange={setCreditCol}
+                      headers={headers}
+                    />
+                  </>
+                ) : (
+                  <ColumnSelect
+                    label="Amount column"
+                    value={amountCol}
+                    onChange={setAmountCol}
+                    headers={headers}
+                  />
+                )}
+              </div>
+              <label className="row gap8 fs13">
+                <input
+                  type="checkbox"
+                  className="pf-check"
+                  checked={useDebitCredit}
+                  onChange={(e) => setUseDebitCredit(e.target.checked)}
+                  aria-label="Separate debit and credit columns"
+                />
+                This statement uses separate debit / credit columns
+              </label>
+            </>
+          ))}
 
         {step === 'preview' && preview && (
           <>

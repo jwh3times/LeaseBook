@@ -49,4 +49,10 @@ public sealed record ParsedStatement(
 public interface IStatementParser
 {
     ParsedStatement Parse(string content, ColumnMap map);
+
+    /// <summary>
+    /// The column names the file offers a <see cref="ColumnMap"/>, in file order: each is one
+    /// <see cref="Parse"/> finds (#651). A file with no named column has none.
+    /// </summary>
+    IReadOnlyList<string> ReadHeaders(string content);
 }

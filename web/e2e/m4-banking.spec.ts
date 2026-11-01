@@ -123,6 +123,36 @@ test.describe.serial('M4 banking', () => {
     await wizard.getByRole('button', { name: 'Cancel' }).click();
   });
 
+  test('offers a quoted column holding a comma, and the import accepts it @scenario:bank-statement-import-and-match', async ({
+    page,
+  }) => {
+    await login(page);
+    await gotoBanking(page);
+
+    // Its one row has no amount, so the import stores no line for the specs after this one. Reaching that
+    // row error is the proof: a name the server could not find would refuse the whole file instead.
+    await page.getByRole('button', { name: 'Import statement' }).click();
+    const wizard = page.getByRole('dialog', { name: 'Import bank statement' });
+    await wizard.getByLabel('Statement CSV').setInputFiles({
+      name: 'statement.csv',
+      mimeType: 'text/csv',
+      buffer: Buffer.from('Date,Description,"Amount, USD"\n2026-06-03,No amount,\n'),
+    });
+    await wizard.getByLabel('Date column').selectOption('Date');
+    await wizard.getByLabel('Description column').selectOption('Description');
+    await wizard.getByLabel('Amount column').selectOption('Amount, USD');
+    await wizard.getByRole('button', { name: 'Preview matches' }).click();
+
+    await expect(wizard.getByRole('alert')).toContainText('1 row was not imported.');
+    await expect(
+      wizard
+        .getByRole('region', { name: 'Rows not imported' })
+        .getByRole('row', { name: '2 amount is empty.', exact: true }),
+    ).toBeVisible();
+
+    await wizard.getByRole('button', { name: 'Cancel' }).click();
+  });
+
   test('offers the line of a cancelled import again when the file is uploaded again @scenario:bank-statement-import-and-match', async ({
     page,
   }) => {

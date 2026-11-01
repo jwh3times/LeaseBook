@@ -24,18 +24,7 @@ public sealed class CsvStatementParser : IStatementParser
         var rows = new List<ParsedRow>();
         var errors = new List<RowError>();
 
-        // CsvHelper 34 guesses the separator from the first lines unless one is named, and matches a header
-        // name ignoring case when there is no exact match. A statement is comma separated, and its columns are
-        // looked up exactly (see Field).
-        var options = new CsvReaderOptions
-        {
-            HasHeader = true,
-            Separator = ',',
-            MalformedData = CsvMalformedDataHandling.Recover, // a stray quote never aborts the import
-            TrackLineNumbers = true, // a row error names the line the operator finds in the file (#667)
-        };
-
-        using var csv = CsvReader.Create(new StringReader(content ?? string.Empty), options);
+        using var csv = Open(content);
 
         if (csv.Headers.Count == 0)
         {
@@ -70,6 +59,58 @@ public sealed class CsvStatementParser : IStatementParser
         return new ParsedStatement(rows, errors);
     }
 
+    public IReadOnlyList<string> ReadHeaders(string content)
+    {
+        using var csv = Open(content);
+
+        // The names IndexOf can find: it ignores surrounding spaces, a blank name maps nothing, and of a
+        // repeated name it finds the first column.
+        return csv.Headers
+            .Select(header => header.Trim())
+            .Where(IsMapped)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+    }
+
+    // The one reading of a statement, for its header names and for its rows.
+    private static CsvReader Open(string? content)
+    {
+        // CsvHelper 34 guesses the separator from the first lines unless one is named, and matches a header
+        // name ignoring case when there is no exact match. A statement is comma separated, and its columns are
+        // looked up exactly (see Field).
+        var options = new CsvReaderOptions
+        {
+            HasHeader = true,
+            Separator = ',',
+            MalformedData = CsvMalformedDataHandling.Recover, // a stray quote never aborts the import
+            TrackLineNumbers = true, // a row error names the line the operator finds in the file (#667)
+        };
+
+        return CsvReader.Create(new StringReader(BlankLinesBeforeHeader(content ?? string.Empty)), options);
+    }
+
+    // CsvHelper skips an empty line but reads a line of only spaces as the header row, so the lines before the
+    // header keep their line breaks and lose the rest: a row error still names its line in the file.
+    private static string BlankLinesBeforeHeader(string content)
+    {
+        var firstText = content.StartsWith('\uFEFF') ? 1 : 0;
+        var afterMark = firstText;
+        while (firstText < content.Length && char.IsWhiteSpace(content[firstText]))
+        {
+            firstText++;
+        }
+
+        if (firstText == content.Length)
+        {
+            return string.Empty;
+        }
+
+        var headerLine = content.LastIndexOfAny(['\r', '\n'], firstText) + 1;
+        return headerLine == 0
+            ? content
+            : string.Concat(content[afterMark..headerLine].Where(c => c is '\r' or '\n')) + content[headerLine..];
+    }
+
     private static List<MissingColumn> MissingColumns(CsvReader csv, ColumnMap map)
     {
         (string Field, string? Name)[] mapped =
@@ -95,8 +136,8 @@ public sealed class CsvStatementParser : IStatementParser
     }
 
     // The first column whose header is the mapped name. Case counts — a header differing only in case is
-    // absent, and the refusal names it — but surrounding spaces on either side do not: the import wizard
-    // offers header names trimmed, so "Date, Amount" maps as "Amount".
+    // absent, and the refusal names it — but surrounding spaces on either side do not: ReadHeaders offers the
+    // names trimmed, so "Date, Amount" maps as "Amount".
     private static int IndexOf(CsvReader csv, string name)
     {
         var wanted = name.Trim();

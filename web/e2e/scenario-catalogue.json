@@ -357,6 +357,7 @@
       "spec": "m4-banking.spec.ts",
       "events": [],
       "routes": [
+        "POST /api/banking/imports/headers",
         "POST /api/banking/banks/{bankAccountId}/imports",
         "POST /api/banking/imports/{importId}/confirm",
         "GET /api/banking/imports/{importId}/matches",

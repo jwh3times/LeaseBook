@@ -15,6 +15,7 @@ import {
   postApiBankingBanksByBankAccountIdImports,
   postApiBankingBanksByBankAccountIdMappings,
   postApiBankingImportsByImportIdConfirm,
+  postApiBankingImportsHeaders,
   unwrap,
   type ApiError,
   type BankBalanceRow,
@@ -200,6 +201,16 @@ export async function recordBankAdjustment(
     }),
     'Failed to record the adjustment',
   );
+}
+
+/** The column names the server reads from this file, which are the ones a column map can name (#651). */
+export async function readStatementHeaders(csvContent: string): Promise<string[]> {
+  return (
+    await unwrap(
+      postApiBankingImportsHeaders({ body: { csvContent } }),
+      'Failed to read the columns of this file',
+    )
+  ).headers;
 }
 
 export async function importStatement(

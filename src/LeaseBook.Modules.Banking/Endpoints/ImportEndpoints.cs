@@ -9,10 +9,10 @@ using Microsoft.AspNetCore.Routing;
 namespace LeaseBook.Modules.Banking.Endpoints;
 
 /// <summary>
-/// The M4 CSV statement-import surface (ADR-015 / P71): upload + dedup, saved column mappings, the match
-/// preview, and confirm (which clears matched lines through the Accounting clearance port). All
-/// <c>RequirePMStaff</c>, thin (bind → dispatch → <c>TypedResults</c>); validation failures flow to the
-/// host's <c>ValidationExceptionHandler</c> (→ 400).
+/// The M4 CSV statement-import surface (ADR-015 / P71): reading a file's column names, upload + dedup, saved
+/// column mappings, the match preview, and confirm (which clears matched lines through the Accounting
+/// clearance port). All <c>RequirePMStaff</c>, thin (bind → dispatch → <c>TypedResults</c>); validation
+/// failures flow to the host's <c>ValidationExceptionHandler</c> (→ 400).
 /// </summary>
 public sealed class ImportEndpoints : IEndpointModule
 {
@@ -27,6 +27,12 @@ public sealed class ImportEndpoints : IEndpointModule
                     TypedResults.Ok(await sender.Send(body with { BankAccountId = bankAccountId }, ct)))
             .WithCsvImportLimit()
             .Produces<ImportResult>();
+
+        group.MapPost("/imports/headers",
+                async (ReadStatementHeaders body, ISender sender, CancellationToken ct) =>
+                    TypedResults.Ok(await sender.Query(body, ct)))
+            .WithCsvImportLimit()
+            .Produces<StatementHeaders>();
 
         group.MapGet("/banks/{bankAccountId:guid}/mappings",
                 async (Guid bankAccountId, ISender sender, CancellationToken ct) =>
