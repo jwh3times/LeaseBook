@@ -9,13 +9,16 @@ on:
     paths:
       - '**/*.md'
       - '.github/workflows/docs-links.yml'
+      - 'scripts/challenged-links.mjs'
   push:
     branches: [main]
     paths:
       - '**/*.md'
       - '.github/workflows/docs-links.yml'
+      - 'scripts/challenged-links.mjs'
   schedule:
     - cron: '0 6 * * 1' # Mondays 06:00 UTC — external link rot sweep
+  workflow_dispatch: {} # runs the sweep by hand, so a change to it need not wait for Monday
 
 permissions:
   contents: read
@@ -29,8 +32,11 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Prepare event-scoped link exclusions
-        id: release-links
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '26'
+      - name: Prepare link exclusions
+        id: link-exclusions
         shell: bash
         run: |
           version=$(tr -d '[:space:]' < VERSION)
@@ -64,12 +70,19 @@ jobs:
           # push. Each pattern names its one URL, anchored at both ends, so a new link on any of
           # those hosts is checked everywhere.
           #
-          # The same file's two IDAutomation pages, the font's license and its product page, began
-          # answering 403 on 2026-10-31 (main at ba173f2, PRs #661 and #662): the site put a
-          # Cloudflare bot challenge in front of every page, and a laptop is refused too, so unlike
-          # the four above a re-run does not pass. They join the list on the same terms: Monday's
-          # sweep keeps checking them, and goes green again when the challenge lifts.
-          if [[ "$GITHUB_EVENT_NAME" == "schedule" ]]; then
+          # challenged: the same file's two IDAutomation pages, the font's license and its product
+          # page, began answering 403 on 2026-10-31 (main at ba173f2, PRs #661 and #662): the site
+          # put a Cloudflare bot challenge in front of every page, so unlike the four above a re-run
+          # does not pass and a sweep could stay red for as long as it stands. A sweep that is always
+          # red hides real link rot, so these two are excluded on every event (#665). Their un-mute
+          # signal is the sweep's last step, which fails when lychee stops being refused.
+          # scripts/challenged-links.mjs holds the two URLs for both, and says what each answer means.
+          # An assignment, not echo "...$(...)": echo would succeed when the script fails, and an
+          # empty exclude matches every link, so the check would pass having checked nothing.
+          challenged=$(node scripts/challenged-links.mjs pattern)
+          echo "challenged=$challenged" >> "$GITHUB_OUTPUT"
+
+          if [[ "$GITHUB_EVENT_NAME" == "schedule" || "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
             echo 'compare=^$' >> "$GITHUB_OUTPUT"
             echo 'release=^$' >> "$GITHUB_OUTPUT"
             echo 'stalling=^$' >> "$GITHUB_OUTPUT"
@@ -80,8 +93,6 @@ jobs:
             refusing+='|^https://web\.archive\.org/web/20030411213628/http://sandeen\.net:80/GnuMICR/$'
             refusing+='|^https://web\.archive\.org/web/20070106015053/http://sandeen\.net:80/GnuMICR/download/GnuMICR-0\.30\.tar\.gz$'
             refusing+='|^https://www\.frbservices\.org/binaries/content/assets/crsocms/financial-services/check/setup/frb-x937-standards-reference\.pdf$'
-            refusing+='|^https://www\.idautomation\.com/licensing/software-license/$'
-            refusing+='|^https://www\.idautomation\.com/micr-fonts/e13b$'
             echo "refusing=$refusing" >> "$GITHUB_OUTPUT"
             echo "compare=^https://github\\.com/jwh3times/LeaseBook/compare/v${version}\\.\\.\\.HEAD$" >> "$GITHUB_OUTPUT"
             echo "release=^https://github\\.com/jwh3times/LeaseBook/releases/tag/v${version}$" >> "$GITHUB_OUTPUT"
@@ -110,7 +121,9 @@ jobs:
           # genuinely rots, and this repository does not add open-ended ignores without an un-mute
           # signal. If resets persist despite this, the next step is a scoped exclude PLUS a check
           # that fails when the excluded link starts working again. (The four event-scoped
-          # excludes below are not open-ended: the weekly sweep checks every one of those URLs.)
+          # excludes below are not open-ended: the weekly sweep checks every one of those URLs. The
+          # `challenged` exclude applies to every event, the sweep included, and is that pattern:
+          # the step after this one is its un-mute signal.)
           #
           # --remap github.com/<owner>/<repo>/blob/<ref>/<path> → raw.githubusercontent.com: GitHub's
           # rendered file page answers bots with a sustained 503 (every source-file citation failed on
@@ -126,10 +139,22 @@ jobs:
             --accept '200..=299, 429'
             --remap '^https://github\.com/([^/]+)/([^/]+)/blob/(.+)$ https://raw.githubusercontent.com/$1/$2/$3'
             --exclude '^https?://(localhost|127\.0\.0\.1)'
-            --exclude '${{ steps.release-links.outputs.compare }}'
-            --exclude '${{ steps.release-links.outputs.release }}'
-            --exclude '${{ steps.release-links.outputs.stalling }}'
-            --exclude '${{ steps.release-links.outputs.refusing }}'
+            --exclude '${{ steps.link-exclusions.outputs.compare }}'
+            --exclude '${{ steps.link-exclusions.outputs.release }}'
+            --exclude '${{ steps.link-exclusions.outputs.stalling }}'
+            --exclude '${{ steps.link-exclusions.outputs.refusing }}'
+            --exclude '${{ steps.link-exclusions.outputs.challenged }}'
             'README.md' 'CHANGELOG.md' 'CONTRIBUTING.md' 'SECURITY.md' 'SUPPORT.md'
             'CODE_OF_CONDUCT.md' 'AGENTS.md' 'CLAUDE.md'
             'docs/**/*.md' 'infra/**/*.md' '.github/**/*.md' '.claude/**/*.md'
+      # Sweep only, and whether or not the check above passed: real link rot and a recovered link are
+      # two separate findings, and one must not hide the other. The action above put lychee on the
+      # PATH. It exits non-zero on any link it is refused by, which is the expected case here, so only
+      # the script's reading of the report decides, and a run that wrote no report fails there.
+      - name: Check lychee is still refused by the challenged links
+        if: ${{ !cancelled() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
+        run: |
+          node scripts/challenged-links.mjs urls > "$RUNNER_TEMP/challenged-links.txt"
+          lychee --no-progress --verbose --retry-wait-time 3 --format json \
+            --output "$RUNNER_TEMP/challenged-links.json" "$RUNNER_TEMP/challenged-links.txt" || true
+          node scripts/challenged-links.mjs check "$RUNNER_TEMP/challenged-links.json"

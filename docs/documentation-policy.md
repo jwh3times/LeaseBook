@@ -122,9 +122,12 @@ mutable commands, obsolete authority claims and ADR index consistency
 has an entry in the `Doc map` of `docs/agents/docs.md`, which the `docs-updater` skill audits from
 (`scripts/check-docs.mjs`, shared with the other repositories that install these skills).
 The ordinary CI web job runs the same command on every pull request. The separate Lychee workflow
-checks external links and anchors on documentation changes and on its weekly schedule. A few URLs are
-checked by the weekly run only: the current release's own links, which do not exist until the merge,
-and one external page that intermittently stalls on CI runners. The workflow file lists them and why.
+checks external links and anchors on documentation changes and in a weekly sweep, which can also be
+run by hand. A few URLs are checked by the sweep only: the current release's own links, which do not
+exist until the merge, and external pages that intermittently stall on or refuse CI runners. Two pages
+behind a bot challenge are excluded on every run instead, and the sweep fails once lychee stops being
+refused by either, or either page has gone (`scripts/challenged-links.mjs`). The workflow file and
+that script list them and why.
 
 Project-specific spelling belongs in `cspell.json`; add stable domain terms, product names, or fixture
 names, not accidental misspellings or arbitrary code identifiers. Markdownlint is a structural check;

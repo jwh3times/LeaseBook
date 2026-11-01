@@ -50,7 +50,8 @@ is recreated.
 - `docs/documentation-policy.md` — classification, ownership table, lifecycle metadata, link rules,
   automated enforcement. **When:** a documentation rule or owner changes, or what
   `npm run docs:check` checks (`scripts/check-docs-policy.mjs`, `cspell.json`, `.markdownlint-cli2.jsonc`,
-  the `docs:*` scripts in `web/package.json`).
+  the `docs:*` scripts in `web/package.json`), or how the link check behaves
+  (`.github/workflows/docs-links.yml`, `scripts/challenged-links.mjs`).
 - `docs/product-scope.md` — the public product boundary and non-goals. `owner-only`: a change is a
   formal scope decision.
 - `docs/ROADMAP.md` — public shipped state and broad direction. **When:** a milestone or roadmap
