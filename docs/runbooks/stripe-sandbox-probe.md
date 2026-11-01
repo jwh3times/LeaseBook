@@ -85,7 +85,7 @@ replacement works from patterns.
 
 Stripe pays out on its own schedule, so the first run usually finds no payout. Expect to wait up to
 a week or more, though a payout has come within hours;
-[Wait for Stripe's payout](payment-simulation.md#wait-for-stripes-payout) has the dates recorded.
+[Wait for Stripe's payout](payment-simulation.md#wait-for-stripes-payout) says what was recorded.
 Once Stripe has paid, add payout evidence to the same run:
 
 ```
