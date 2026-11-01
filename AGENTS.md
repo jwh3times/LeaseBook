@@ -275,35 +275,54 @@ business events, check documentation drift and update the relevant docs in the s
 
 ### Development flow
 
-The engineering skill flow is the binding development process. Every code change starts from a
-**ready issue**: a `ready-for-agent` issue carrying a `/to-spec` spec, a `/to-tickets` ticket or a
-`/triage` agent brief, or a bug issue worked through `/diagnosing-bugs`. With none, stop before the
-first edit to code and route the user. Reading code, running tests and answering questions need no
-issue.
+<!-- shared:development-flow -->
 
-The flow skills — `/wayfinder`, `/grill-with-docs`, `/to-spec`, `/to-tickets`, `/implement`,
-`/triage` — stay user-invoked (`disable-model-invocation: true`); the human starts every phase. At a
-phase boundary, name the next command, say in one line why, and wait. Inside a phase, use `/tdd`,
-`/code-review`, `/diagnosing-bugs`, `/domain-modeling`, `/codebase-design`, `/prototype` and
-`/research` whenever they fit.
+The flow skills are this repository's binding process for changing code. Read
+`.agents/skills/ship/settings/dev-flow.md` (the routing, exemptions and issue linking) and
+`docs/agents/dev-flow.md` (what this repository adds) before the first edit of a change, and whenever
+no ready issue exists. `/ask-matt` maps the flow itself.
 
-Exempt: dependency bumps, changes touching only docs and agent config, release-prep commits, and an
-explicit user waiver recorded in the PR body as `Flow waived by the user: <reason>`. What counts as
-code, routing, exemptions and branch/PR linking: [`docs/agents/dev-flow.md`](docs/agents/dev-flow.md).
+- **The gate.** Every code edit starts from a ready issue: an open `ready-for-agent` issue whose body
+  is a `/to-spec` spec or a `/to-tickets` ticket or that carries a `/triage` brief, or a `bug` issue
+  worked through `/diagnosing-bugs`, which needs the number and no spec. With none, stop before the
+  first edit and route the user. Reading code, running tests and answering questions need no issue.
+- **Private work.** A ready issue in the private tracker counts. Its number stays out of the branch,
+  the PR, commits and public issues, and it is closed by hand after the merge.
+- **The human starts every phase.** `/wayfinder`, `/grill-with-docs`, `/to-spec`, `/to-tickets`,
+  `/implement` and `/triage` stay user-invoked. At a phase boundary, name the next command, say in
+  one line why, and wait. Inside a phase, use `/tdd`, `/code-review`, `/diagnosing-bugs`,
+  `/domain-modeling`, `/codebase-design`, `/prototype` and `/research` whenever they fit.
+- **Exempt from the gate:** dependency bumps, changes touching only docs and agent config, release
+  prep, and an explicit user waiver recorded in the PR body as `Flow waived by the user: <reason>`.
+- **Linking.** Branches are `<type>/<issue#>-<slug>`; the PR body opens with `Closes #N` or
+  `Part of #N`.
+
+<!-- /shared:development-flow -->
 
 ### Shared skills
 
-`ship`, `end-session`, `handoff`, `lets-go` and `docs-updater` are installed from the public
-`jwh3times/skills` repository (recorded in `skills-lock.json`), identical in every repository that
-installs them. What is particular to LeaseBook is in their settings files under `docs/agents/`:
-`workspace.md`, `issue-tracker.md` (its settings sections), `human-follow-up.md`, `docs.md` (the
-`Doc map` of every canonical document, which `npm run docs:check` requires), `releases.md`, `ship.md`
-and `handoffs.md`. Each skill's `settings/` folder defines what it reads.
+<!-- shared:shared-skills -->
 
-Never edit the installed copies: a reinstall overwrites them. A LeaseBook behavior goes into a
-setting; a fix goes upstream. To update them, re-run
-`npx skills add jwh3times/skills -s end-session -s handoff -s lets-go -s ship -s docs-updater -a codex --copy -y`,
-then `npm run sync:agents`; never `npx skills update`.
+`end-session`, `handoff`, `lets-go`, `ship` and `docs-updater` install from `jwh3times/skills`, and
+are never edited here: reinstalling overwrites a local edit. A fix goes upstream, and what they need
+to know about this repository goes in the settings files under `docs/agents/`, which each skill
+proposes on first run. Re-running the install is the update; never run `npx skills update`, which
+leaves `.claude/skills/` linked to its source instead of copied:
+
+```bash
+npx skills add jwh3times/skills -s end-session -s handoff -s lets-go -s ship -s docs-updater -a codex --copy -y
+node scripts/sync-agents.mjs
+```
+
+`scripts/sync-agents.mjs`, `lint-agent-neutrality.mjs`, `check-docs.mjs`, and `sync-main.mjs`,
+`next-version.mjs` and `check-changelog.mjs` where this repository carries them, are canonical in
+`jwh3times/skills` with their tests: fix them there, then copy them here. `sync-agents.mjs` also
+writes the marked blocks in this file: change them in `jwh3times/skills`, not here.
+
+<!-- /shared:shared-skills -->
+
+The `Doc map` in `docs/agents/docs.md` lists every canonical document, and `npm run docs:check`
+requires it.
 
 ### Issue tracker
 

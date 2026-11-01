@@ -2,7 +2,7 @@
 name: end-session
 description: Close out a work session — capture what was learned into memory, bring GitHub issues, the board, human follow-ups and docs up to date, and clean the local workspace. Use when the user says "end session", "wrap up" or "done for the day", or when the handoff skill reaches its end-session step.
 metadata:
-  settings: workspace issue-tracker human-follow-up docs
+  settings: workspace issue-tracker human-follow-up docs triage-labels
 ---
 
 # End session
@@ -32,7 +32,7 @@ Three rules hold throughout:
 ## 0. Settings
 
 This skill reads `docs/agents/workspace.md`, `docs/agents/issue-tracker.md`,
-`docs/agents/human-follow-up.md` and `docs/agents/docs.md`. Follow
+`docs/agents/human-follow-up.md`, `docs/agents/docs.md` and `docs/agents/triage-labels.md`. Follow
 `.agents/skills/end-session/settings/README.md` to read them and complete any that are missing; the
 definitions sit beside it. Resolve each `discover:` value once, here, and reuse it below.
 
@@ -84,9 +84,9 @@ half-decided work.
 
 ## 3. Issues and the board
 
-Issues carry the work; the `Board` carries its state. Labels come from the repository's triage
-label vocabulary: `docs/agents/triage-labels.md`, or the section of `docs/agents/issue-tracker.md`
-that holds it.
+Issues carry the work; the `Board` carries its state. Labels are the five in
+`.agents/skills/end-session/settings/triage-labels.md`, plus any `Extra labels` in
+`docs/agents/triage-labels.md`.
 
 Board writes need the `gh` token's `project` scope, and fail silently without it. Check
 `gh auth status` for `project` (not just `read:project`). If it is missing, report it and skip board

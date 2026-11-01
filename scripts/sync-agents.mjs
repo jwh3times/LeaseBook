@@ -9,6 +9,9 @@
 // there, so installing or updating a skill stays a one-way operation. Generated files are committed
 // so a fresh clone works in both harnesses; CI runs this with `--check` and fails on drift.
 //
+// It also writes the shared blocks in AGENTS.md: the text between each pair of `shared:<name>`
+// markers comes from the block file `ship` installs, so every repository says the same thing.
+//
 //   node scripts/sync-agents.mjs          # rewrite the generated trees
 //   node scripts/sync-agents.mjs --check  # verify only; exit 1 if anything is stale
 //   node scripts/sync-agents.mjs --hook   # Claude Code PostToolUse hook: sync only when an
@@ -36,6 +39,10 @@ const agentSourceDir = ".claude/agents";
 const agentTargetDir = ".codex/agents";
 const skillSourceDir = ".agents/skills";
 const skillTargetDir = ".claude/skills";
+const blockSource = ".agents/skills/ship/settings/agents-md.md";
+const blockTarget = "AGENTS.md";
+const blockSetting = "docs/agents/workspace.md";
+const blockSettingHeading = "## AGENTS.md blocks";
 
 // Claude Code tools that can change files. An agent whose `tools:` list names none of them is
 // read-only, and Codex is told so; an agent with no `tools:` line inherits every tool.
@@ -239,6 +246,74 @@ export function stripSkillBanner(raw) {
   return `---\n${normalized.slice(4).replace(skillBannerPattern, "")}`;
 }
 
+// --- AGENTS.md blocks ----------------------------------------------------------------------------
+
+function findBlocks(text) {
+  const pattern = /^<!-- shared:([a-z-]+) -->\n(?:([\s\S]*?)\n)?<!-- \/shared:\1 -->$/gm;
+  return [...text.matchAll(pattern)].map(([, name, body = ""]) => ({ name, body }));
+}
+
+// The `AGENTS.md blocks` setting: every block when the heading is missing, none for `none`, or the
+// backticked names written under it.
+export function takenBlocks(settings, available) {
+  const lines = normalizeNewlines(settings).split("\n");
+  const start = lines.indexOf(blockSettingHeading);
+  if (start === -1) return available;
+  const rest = lines.slice(start + 1);
+  const end = rest.findIndex((line) => line.startsWith("#"));
+  const value = (end === -1 ? rest : rest.slice(0, end)).join("\n").trim();
+  if (value === "none") return [];
+  const names = [...value.matchAll(/`([a-z-]+)`/g)].map((match) => match[1]);
+  const unknown = names.filter((name) => !available.includes(name));
+  if (names.length === 0 || unknown.length > 0) {
+    throw new Error(
+      `${blockSetting}: '${blockSettingHeading.slice(3)}' must be 'none' or block names from ${blockSource}; got ${JSON.stringify(value)}`,
+    );
+  }
+  return names;
+}
+
+// AGENTS.md with each taken block's text written between its markers. Everything outside the
+// markers is the repository's own and stays as it is.
+export function renderSharedBlocks(raw, source, taken) {
+  let text = normalizeNewlines(raw);
+  const present = findBlocks(text).map((block) => block.name);
+  for (const name of present) {
+    if (!taken.includes(name)) {
+      throw new Error(
+        `${blockTarget}: block '${name}' is not one this repository takes; remove its markers or see '${blockSettingHeading.slice(3)}' in ${blockSetting}`,
+      );
+    }
+  }
+  for (const name of taken) {
+    const count = present.filter((other) => other === name).length;
+    if (count !== 1) {
+      throw new Error(
+        `${blockTarget}: expected the markers of shared block '${name}' once, found ${count}; add <!-- shared:${name} --> and <!-- /shared:${name} --> on their own lines`,
+      );
+    }
+    const body = source.find((block) => block.name === name).body;
+    text = text.replace(
+      new RegExp(`^<!-- shared:${name} -->\\n(?:[\\s\\S]*?\\n)?<!-- /shared:${name} -->$`, "m"),
+      () => `<!-- shared:${name} -->\n${body}\n<!-- /shared:${name} -->`,
+    );
+  }
+  return text;
+}
+
+function buildAgentsFile(root) {
+  const sourcePath = path.join(root, blockSource);
+  if (!existsSync(sourcePath)) return null;
+  const source = findBlocks(normalizeNewlines(readFileSync(sourcePath, "utf8")));
+  const settingsPath = path.join(root, blockSetting);
+  const settings = existsSync(settingsPath) ? readFileSync(settingsPath, "utf8") : "";
+  const taken = takenBlocks(settings, source.map((block) => block.name));
+  if (taken.length === 0) return null;
+  const targetPath = path.join(root, blockTarget);
+  if (!existsSync(targetPath)) throw new Error(`${blockTarget}: not found`);
+  return renderSharedBlocks(readFileSync(targetPath, "utf8"), source, taken);
+}
+
 // --- Tree walking --------------------------------------------------------------------------------
 
 // Lists regular files under `dir` as POSIX paths relative to `root`. Symlinks are never followed:
@@ -319,6 +394,9 @@ export function buildMirrors(root = defaultRoot) {
         : readFileSync(absolute),
     );
   }
+
+  const agentsFile = buildAgentsFile(root);
+  if (agentsFile !== null) mirrors.set(blockTarget, agentsFile);
 
   return mirrors;
 }
@@ -441,7 +519,7 @@ function main(argv) {
 
   if (!check) {
     console.log(
-      `Synced ${count} generated file(s) (.codex/agents, .claude/skills).`,
+      `Synced ${count} generated file(s) (.codex/agents, .claude/skills, ${blockTarget} blocks).`,
     );
     return 0;
   }
@@ -453,7 +531,8 @@ function main(argv) {
   console.error("Generated agent files are out of date:");
   for (const file of stale) console.error(`  ${file}`);
   console.error(
-    `\n.codex/agents is generated from .claude/agents; .claude/skills from .agents/skills.\n` +
+    `\n.codex/agents is generated from .claude/agents; .claude/skills from .agents/skills;\n` +
+      `the marked blocks in ${blockTarget} from ${blockSource}.\n` +
       `Run '${regenerateCommand}' and commit the result.`,
   );
   if (process.env.GITHUB_ACTIONS === "true") {

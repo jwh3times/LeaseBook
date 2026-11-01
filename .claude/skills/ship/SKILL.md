@@ -3,7 +3,7 @@
 name: ship
 description: Ship the current branch — evaluate its SemVer release impact, refresh the docs, write the changelog entry for the version this merge will mint, file its human follow-ups, run the fast checks, push, and open or update the PR. Use when a feature branch is ready for review, or when the user says "ship it", "open a PR", or "push this".
 metadata:
-  settings: workspace issue-tracker human-follow-up releases ship
+  settings: workspace issue-tracker human-follow-up releases ship dev-flow triage-labels agents-md
 ---
 
 # Ship
@@ -23,7 +23,8 @@ runs the full test suites: CI owns them, and running them here makes the skill s
 ## 0. Settings
 
 This skill reads `docs/agents/workspace.md`, `docs/agents/issue-tracker.md`,
-`docs/agents/human-follow-up.md`, `docs/agents/releases.md` and `docs/agents/ship.md`. Follow
+`docs/agents/human-follow-up.md`, `docs/agents/releases.md`, `docs/agents/ship.md` and
+`docs/agents/dev-flow.md`. Follow
 `.agents/skills/ship/settings/README.md` to read them and complete any that are missing; the
 definitions sit beside it. Resolve each `discover:` value once, here, and
 reuse it below.
@@ -286,12 +287,12 @@ template leaves for it:
   when it is one slice of a spec that stays open. Each finished issue gets its own keyword:
   GitHub links only the first issue in `Closes #1 and #2`.
 - A branch with no number: the **Waiver line** when the user waived the flow; no link line for an
-  **Exempt** kind.
+  **Exempt** kind, or for work from a ready issue in the `Private issue repository`.
 - When the branch's number and the issue disagree, or finishing versus slice is unclear, ask before
   creating the PR. A refreshed body keeps its link line. A number in the title alone links nothing.
 
-Warn, never block, when the PR opens with no link line and is not exempt, or when the `Board` is set
-and the linked issue is not on it. An issue in the `Private issue repository` is never named in a
+Warn, never block, when the PR opens with no link line and neither of those applies, or when the
+`Board` is set and the linked issue is not on it. An issue in the `Private issue repository` is never named in a
 public PR body, commit message or public issue; it is closed by hand after the merge.
 
 Nothing this step writes in public carries a private repository name, link, board number or

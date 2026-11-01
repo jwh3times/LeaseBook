@@ -37,6 +37,7 @@ setting below is a `##` heading in that file.
   - **Exempt** — bulleted kinds of work whose branch carries no number and whose body has no link
     line (e.g. dependency bumps, docs-and-agent-config-only changes, release prep).
   - **Defined in** — the repository document that states the convention, when there is one.
-- **Discover:** `AGENTS.md`, `CONTRIBUTING.md`, `.github/PULL_REQUEST_TEMPLATE.md` and the docs
-  they point to for a branch-name or issue-link rule; recent merged PRs' branch names and first
-  body lines. Propose `none` when no rule exists.
+- **Default:** what `Linking work to its issue` and `Exemptions` in `dev-flow.md` state: branch
+  `<type>/<issue#>-<slug>`, with the `Branch types`; link line `Closes #N` or `Part of #N`; waiver
+  line `Flow waived by the user: <reason>`; exempt as listed there.
+- **Discover:** write the heading only for `none`, in a repository without the flow skills.

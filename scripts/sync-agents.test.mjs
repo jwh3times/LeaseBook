@@ -17,9 +17,11 @@ import {
   hookTouchesAuthoredTree,
   injectSkillBanner,
   renderCodexAgent,
+  renderSharedBlocks,
   splitFrontmatter,
   stripSkillBanner,
   syncMirrors,
+  takenBlocks,
   tomlMultiline,
 } from "./sync-agents.mjs";
 
@@ -308,4 +310,91 @@ test("the hook fires only for edits under an authored tree", () => {
     false,
   );
   assert.equal(hookTouchesAuthoredTree(null, root), false);
+});
+
+const blockFile = ".agents/skills/ship/settings/agents-md.md";
+const blockSource = [
+  "# Topic",
+  "",
+  "<!-- shared:flow -->",
+  "The shared flow costs $1 and `$&` stays literal.",
+  "<!-- /shared:flow -->",
+  "",
+  "<!-- shared:skills -->",
+  "The shared skills.",
+  "<!-- /shared:skills -->",
+  "",
+].join("\n");
+const agentsWithMarkers = [
+  "# Rules",
+  "",
+  "<!-- shared:flow -->",
+  "stale",
+  "<!-- /shared:flow -->",
+  "",
+  "Our own rule.",
+  "",
+  "<!-- shared:skills -->",
+  "<!-- /shared:skills -->",
+  "",
+].join("\n");
+
+test("the shared blocks are written between their markers, and nothing else changes", () => {
+  withFixture((root) => {
+    write(root, blockFile, blockSource);
+    write(root, "AGENTS.md", agentsWithMarkers);
+
+    assert.ok(syncMirrors(root, { check: true }).stale.includes("AGENTS.md"));
+    syncMirrors(root);
+    const written = read(root, "AGENTS.md");
+    assert.ok(written.includes("costs $1 and `$&` stays literal.\n<!-- /shared:flow -->"));
+    assert.ok(written.includes("The shared skills.\n<!-- /shared:skills -->"));
+    assert.ok(written.includes("\nOur own rule.\n"));
+    assert.ok(!written.includes("stale"));
+    assert.deepEqual(syncMirrors(root, { check: true }).stale, []);
+
+    write(root, "AGENTS.md", written.replace("The shared skills.", "Edited here."));
+    assert.ok(syncMirrors(root, { check: true }).stale.includes("AGENTS.md"));
+  });
+});
+
+test("a repository with no block file keeps its AGENTS.md untouched", () => {
+  withFixture((root) => {
+    write(root, "AGENTS.md", "# Rules\n");
+    assert.deepEqual(syncMirrors(root, { check: true }).stale.filter((f) => f === "AGENTS.md"), []);
+    syncMirrors(root);
+    assert.equal(read(root, "AGENTS.md"), "# Rules\n");
+  });
+});
+
+test("a missing or repeated block is an error naming the markers", () => {
+  const source = [{ name: "flow", body: "Text." }];
+  assert.throws(() => renderSharedBlocks("# Rules\n", source, ["flow"]), /<!-- shared:flow -->/);
+  const twice = "<!-- shared:flow -->\na\n<!-- /shared:flow -->\n\n<!-- shared:flow -->\nb\n<!-- /shared:flow -->\n";
+  assert.throws(() => renderSharedBlocks(twice, source, ["flow"]), /found 2/);
+});
+
+test("markers of a block the repository does not take are an error", () => {
+  const source = [{ name: "flow", body: "Text." }];
+  const raw = "<!-- shared:other -->\na\n<!-- /shared:other -->\n";
+  assert.throws(() => renderSharedBlocks(raw, source, []), /block 'other'/);
+});
+
+test("the setting takes every block by default, none, or the names it lists", () => {
+  const all = ["flow", "skills"];
+  assert.deepEqual(takenBlocks("# Workspace\n", all), all);
+  assert.deepEqual(takenBlocks("## AGENTS.md blocks\n\nnone\n", all), []);
+  assert.deepEqual(takenBlocks("## AGENTS.md blocks\r\n\r\n`skills`\r\n\r\n## Next\r\n\r\n`flow`\r\n", all), ["skills"]);
+  assert.throws(() => takenBlocks("## AGENTS.md blocks\n\n`nope`\n", all), /must be 'none'/);
+});
+
+test("the setting's none leaves AGENTS.md alone, whatever the block file holds", () => {
+  withFixture((root) => {
+    write(root, blockFile, blockSource);
+    write(root, "docs/agents/workspace.md", "## AGENTS.md blocks\n\nnone\n");
+    write(root, "AGENTS.md", "# Rules\n");
+    syncMirrors(root);
+    assert.equal(read(root, "AGENTS.md"), "# Rules\n");
+    assert.deepEqual(syncMirrors(root, { check: true }).stale, []);
+  });
 });

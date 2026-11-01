@@ -46,7 +46,7 @@ dotnet test --project tests/LeaseBook.Tests.Integration/LeaseBook.Tests.Integrat
 
 1. **Open an issue first** for any code change, small fixes included, so the approach can be discussed
    before you invest time. Docs-only changes and dependency bumps need none
-   ([exemptions](docs/agents/dev-flow.md#exemptions)). For non-trivial design decisions, expect to
+   ([exemptions](.agents/skills/ship/settings/dev-flow.md#exemptions)). For non-trivial design decisions, expect to
    record an ADR (see below).
 2. **Branch** off `main` as `<type>/<issue#>-<slug>` (e.g. `feat/464-owner-portal`,
    `fix/611-adjustment-destination`). Keep branches focused — one logical change per pull request.
@@ -56,7 +56,7 @@ dotnet test --project tests/LeaseBook.Tests.Integration/LeaseBook.Tests.Integrat
    PR is one slice of a larger issue — a number in the title alone does not link the issue. Fill in
    what changed and how you verified it. CI must be green and the PR reviewed before merge. The full
    linking rules, and the changes that need no issue, are in
-   [`docs/agents/dev-flow.md`](docs/agents/dev-flow.md#linking-work-to-its-issue).
+   [the development flow](.agents/skills/ship/settings/dev-flow.md#linking-work-to-its-issue).
 
 ---
 
