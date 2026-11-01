@@ -59,6 +59,20 @@ count; the unique index is the database backstop. **Plan §B.6 listed the dedup 
 `statement_lines` but omitted `bank_account_id` from its column list — the column is required for the
 constraint to span imports, so it was added.**
 
+The one exception is an **undecided line**: a stored line with no `statement_matches` row, so nobody
+has confirmed it. An import stores its lines before the preview is read, so leaving the wizard at any
+point after that leaves them undecided, and a preview is the only way to reach a confirm. A row that
+collides with an undecided line therefore moves that line into the new import and is counted as
+brought back, not skipped, so the new preview offers it again (#671). A line confirmed as `unmatched` is
+decided and stays skipped. An undecided line whose date, amount or description the corrected file
+changed no longer collides; it stays stored and clears nothing.
+
+A preview left open can then name a line that has since moved or been decided, so a confirmation is
+refused whole unless every decision names an undecided line still in that import. One statement line
+answers for one decision, and otherwise it could clear a second register line. Imports and
+confirmations for a bank account take the same transaction-scoped advisory lock, so each sees what the
+other has committed.
+
 ### 5. Auto-match heuristic (P67)
 
 `AutoMatcher` is a **pure, deterministic** function (unit-tested, no DB): for each statement line, against
@@ -96,7 +110,7 @@ runtime role keeps its INSERT/UPDATE grants. FKs to `bank_accounts` are composit
 ## Consequences
 
 - A reconciliation can start from imported data: import → preview → confirm clears the matched lines
-  through the same clearance path the register UI uses; a re-import is a no-op.
+  through the same clearance path the register UI uses; re-importing a confirmed statement is a no-op.
 - The matcher is a pure function, cheap to test exhaustively and to tune (`N`, the read margin) later.
 - Banking stays extractable: it owns no cross-module SQL and depends only on SharedKernel + its own
   Contracts.

@@ -31,10 +31,19 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
 - **A bank statement import now says which rows it left out and why.** Its preview used to show only
   a count of row errors. It now lists each of those rows with the line it starts on in the file and
-  the reason, and says what to do next: confirm the imported lines, then import a corrected file, or,
-  with nothing to confirm, correct the file and import it again. In the import response, each error
+  the reason, and says to correct the file and import it again. In the import response, each error
   now carries `lineNumber`, which counts the header and blank lines, in place of `rowNumber`, which
   counted only data rows.
+
+- **Uploading a bank statement again now brings back lines nobody confirmed.** An import stores its
+  lines before the preview appears, so cancelling there, or a preview that failed to load, left those
+  lines with no way to be confirmed: another upload skipped them as duplicates and its preview left
+  them out. That upload now offers them for review, and the preview counts them separately as lines
+  from an earlier import not yet confirmed; the import response carries this count as `broughtBack`.
+  A line already confirmed, even as unmatched, is still skipped. A preview left open can no longer
+  confirm a line that has since been confirmed or brought into a later import: the confirmation is
+  refused and nothing clears, because one line of a bank statement must never clear two register
+  lines.
 
 ## [0.27.0] - 2026-10-30
 

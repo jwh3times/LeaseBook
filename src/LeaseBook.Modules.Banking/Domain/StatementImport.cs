@@ -21,7 +21,10 @@ public sealed class StatementImport : IOrgScoped
 
     public Guid? ImportedBy { get; set; }
 
-    /// <summary>The number of new statement lines stored (duplicates skipped are not counted).</summary>
+    /// <summary>
+    /// The statement lines this import stored or brought back (#671), as of when it ran: duplicates skipped are
+    /// not counted, and a later import that takes a line from this one does not change it.
+    /// </summary>
     public int RowCount { get; set; }
 
     public string Status { get; set; } = "completed";

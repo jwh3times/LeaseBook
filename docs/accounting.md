@@ -3,7 +3,7 @@
 - **Audience:** Contributors, operators, and reviewers
 - **Status:** Living accounting guide
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-30
+- **Last reviewed:** 2026-10-31
 
 This is the canonical public explanation of the shipped trust-accounting model, written so a
 property manager, bookkeeper, or attorney can evaluate it without reading C#. The Accounting module
@@ -391,7 +391,10 @@ reference begins `payout:{payout reference}:`. The Payments simulation calls it 
 **Statement import.** A bank CSV can be imported (column-mapped, with saved per-bank mappings) and
 auto-matched against uncleared register lines: an exact amount on a nearby date is a confident match that
 clears the line on confirm; an exact amount on a far date is a suggestion; no amount match offers to create a
-transaction. Re-importing the same statement is de-duplicated, never double-counted. Matching and clearing
+transaction. Re-importing the same statement is de-duplicated, never double-counted: a row repeating a line
+already decided is skipped, and one repeating an undecided line brings that line into the new import for
+review (ADR-015). A confirmation is refused whole unless every decision names an undecided line still in
+that import, so one statement line never clears two register lines. Matching and clearing
 always run through the accounting engine — the importer never writes the journal directly. A mapping that
 names a column the file does not have is refused whole, naming each missing column, and nothing is stored;
 the wizard fills a saved mapping only with the columns the file has and asks for the rest.
