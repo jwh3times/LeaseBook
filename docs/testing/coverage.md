@@ -3,7 +3,7 @@
 - **Audience:** Contributors, reviewers and maintainers
 - **Status:** Living measurement record
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-30
+- **Last reviewed:** 2026-11-01
 
 LeaseBook measures what its test suites exercise: which lines and branches of each module ran, and
 which API routes the browser tests called. This page records how that is measured, how to run each
@@ -118,7 +118,7 @@ Each route ends in one of three states:
 
 Three limits are worth knowing when reading the list:
 
-- The contract holds 131 routes. The host maps four more that the contract leaves out:
+- The contract holds 132 routes. The host maps four more that the contract leaves out:
   the readiness probe `/api/health/ready`, the development-only `/openapi/v1.json`, the Stripe
   callback `/callbacks/payments/stripe` (mapped only in the Stripe sandbox mode), and the fallback
   that serves the SPA. A request that matches no contract route is listed in its own section of the

@@ -3,7 +3,7 @@
 - **Audience:** Contributors, operators, and reviewers
 - **Status:** Living accounting guide
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-31
+- **Last reviewed:** 2026-11-01
 
 This is the canonical public explanation of the shipped trust-accounting model, written so a
 property manager, bookkeeper, or attorney can evaluate it without reading C#. The Accounting module
@@ -397,7 +397,8 @@ review (ADR-015). A confirmation is refused whole unless every decision names an
 that import, so one statement line never clears two register lines. Matching and clearing
 always run through the accounting engine — the importer never writes the journal directly. A mapping that
 names a column the file does not have is refused whole, naming each missing column, and nothing is stored;
-the wizard fills a saved mapping only with the columns the file has and asks for the rest.
+the wizard fills a saved mapping only with the columns the file has and asks for the rest. The columns it
+offers come from the server, read by the same reader the import uses, so every column offered maps.
 
 A processor payout is one deposit at the bank and several lines in the register: a receipt for each
 payment, and a line for each fee difference or return. Those lines are one group. A statement line
