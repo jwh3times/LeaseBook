@@ -44,6 +44,12 @@ const rejected = (code, reason, url = URL_A) => ({
 });
 const errors = (...entries) => ({ error_map: { "links.txt": entries } });
 
+/** Whether a line of the log is about `url`: it opens the line, after any annotation prefix. */
+const logsLink = (stdout, url) =>
+  stdout
+    .split("\n")
+    .some((line) => line.replace(/^::\w+::/, "").startsWith(`${url}: `));
+
 test("the exclude pattern for the real list names exactly the two links, anchored at both ends", () => {
   const { code, stdout } = run("pattern");
 
@@ -103,7 +109,7 @@ for (const [status, text] of [
     assert.match(stdout, /::error::/);
     assert.match(stdout, /remove it from scripts\/challenged-links\.mjs/i);
     assert.match(stdout, /re-read/i);
-    assert.ok(stdout.includes(URL_A));
+    assert.ok(logsLink(stdout, URL_A));
   });
 }
 
@@ -133,7 +139,7 @@ for (const [status, reason] of [
 
     assert.equal(code, 0);
     assert.match(stdout, /::warning::/);
-    assert.ok(stdout.includes(URL_A));
+    assert.ok(logsLink(stdout, URL_A));
     assert.ok(stdout.includes(String(status)));
   });
 }
@@ -153,7 +159,7 @@ test("a link that timed out does not fail, and is logged", () => {
   assert.equal(code, 0);
   assert.match(stdout, /::warning::/);
   assert.match(stdout, /Timeout/);
-  assert.ok(stdout.includes(URL_A));
+  assert.ok(logsLink(stdout, URL_A));
 });
 
 test("a link that could not be reached does not fail, and is logged", () => {
@@ -197,8 +203,8 @@ test("one recovered link fails the run, and every link is still reported", () =>
   );
 
   assert.equal(code, 1);
-  assert.ok(stdout.includes(URL_A));
-  assert.ok(stdout.includes(URL_B));
+  assert.ok(logsLink(stdout, URL_A));
+  assert.ok(logsLink(stdout, URL_B));
 });
 
 test("a recovered link listed first does not hide a refused one listed second, or the reverse", () => {
