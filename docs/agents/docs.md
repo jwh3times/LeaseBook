@@ -41,6 +41,8 @@ is recreated.
 - `VERSION` — the requested release line. `ship-owned`.
 - `CODE_OF_CONDUCT.md` — community standards. `owner-only`.
 - `LICENSE` — `owner-only`.
+- `THIRD_PARTY_NOTICES.md` — the license notices of third-party files kept here. `owner-only`: report
+  the change when a skill's source changes.
 - `SECURITY.md` — vulnerability reporting, supported versions, security-critical scope. **When:** the
   reporting route or a scope area's description changes; never finding detail (`Security findings`
   in `issue-tracker.md`).
