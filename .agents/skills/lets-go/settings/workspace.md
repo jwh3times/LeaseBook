@@ -85,8 +85,8 @@ that file.
 - **Read by:** docs-updater, end-session
 - **Value:** the command that verifies generated agent config and the command that regenerates it,
   run every time: the check is quick, and it also catches an orphaned mirror.
-- **Default:** `node scripts/sync-agents.mjs --check`, regenerated with
-  `node scripts/sync-agents.mjs`.
+- **Default:** `node scripts/sync-agents.mjs --check && node scripts/check-skills.mjs`, regenerated
+  with `node scripts/sync-agents.mjs`.
 - **Discover:** `scripts/sync-agents.mjs` and the CI workflow that runs it. Write the heading only
   when regenerating needs more, such as a formatter run first.
 

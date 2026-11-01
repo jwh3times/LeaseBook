@@ -30,8 +30,8 @@ they are checked against the code. Each setting below is a `##` heading in that 
   `end-session` routing tables. A script that parses the docs-updater file for this list (a docs
   check) must be pointed at this file instead: name it when proposing. Search scripts and test
   fixtures for document paths beside a hash (`sha256`, `Sha256`) to find `pinned` documents.
-  Propose each skill `skills-lock.json` lists as `frozen`, since a reinstall overwrites it, unless
-  the repository forks and edits it in place (an ADR or `AGENTS.md` says so).
+  Propose each skill `skills-lock.json` lists as `frozen`: a reinstall overwrites it, and
+  `scripts/check-skills.mjs` fails on an edited copy.
 
 ## Drift probes
 

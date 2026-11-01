@@ -2,8 +2,8 @@
 # Topic: issue-tracker
 
 `docs/agents/issue-tracker.md` — where work is tracked. The file usually exists already (from the
-`mattpocock/skills` setup flow) with its own sections; these settings are added beside them. Labels
-are the `triage-labels` topic.
+`mattpocock/skills` setup flow) with its own sections, which `/triage`, `/to-tickets` and
+`/wayfinder` read; these settings are added beside them. Labels are the `triage-labels` topic.
 
 ## Public repository
 
