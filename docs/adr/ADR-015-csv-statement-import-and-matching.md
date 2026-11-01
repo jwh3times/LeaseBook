@@ -16,7 +16,8 @@ invariant, and the append-only/RLS posture every M4 table inherits.
 
 ### 1. CSV only, behind a parser seam; OFX/QFX deferred (P66)
 
-The importer parses **CSV** through an `IStatementParser` interface (`Parse(content, ColumnMap)`), with
+The importer parses **CSV** through an `IStatementParser` interface (`Parse(content, ColumnMap)`, and
+`ReadHeaders(content)` for the names §3 describes), with
 `CsvStatementParser` (CsvHelper — already in the stack for the M3 ledger export, no new package) as the
 only implementation this milestone. OFX/QFX is a later add: a second implementation behind the same
 interface, no change to the import pipeline. A **column map** (`Date`, `Description`, plus either a
@@ -42,10 +43,19 @@ spaces. An absent column used to read as an empty field, so a missing amount col
 ### 3. The CSV arrives as text in a JSON body, not multipart
 
 The import endpoint takes the CSV **as text** in a JSON body (`{ filename, csvContent, columnMap }`), not
-a multipart file upload. The SPA reads the file client-side (it already needs the parsed header row to
-offer column mapping), so the server stays stateless about file storage, and the request maps cleanly to
-the OpenAPI/TS-client + MSW test path. Bank-statement CSVs are kilobytes; size is a non-issue. (Plan
-§B.6 left transport unspecified; this records the choice.)
+a multipart file upload. The SPA reads the file client-side, so the server stays stateless about file
+storage, and the request maps cleanly to the OpenAPI/TS-client + MSW test path. Bank-statement CSVs are
+kilobytes; size is a non-issue. (Plan §B.6 left transport unspecified; this records the choice.)
+
+The server also supplies the column names the wizard offers. The SPA sends the same text to
+`POST /api/banking/imports/headers`, which stores nothing and answers with the names
+`IStatementParser.ReadHeaders` reads through the reader the import uses: trimmed, with blank and
+repeated names left out, because a map can name none of those. There is one reader of the header row
+and nothing to keep in step, so every column offered maps. The wizard used to split the first line on
+commas itself, which offered names the server refused and could not offer a quoted name holding a
+comma (#651). Lines of only whitespace before the header are skipped like empty ones, and still count
+toward a row error's line number. A file with no named column answers with no names, and the wizard
+says why.
 
 ### 4. Dedup is a content hash, unique per (org, bank account)
 

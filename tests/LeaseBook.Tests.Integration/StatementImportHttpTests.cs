@@ -313,6 +313,120 @@ public sealed class StatementImportHttpTests(PostgresFixture fixture)
         import.SkippedDuplicates.ShouldBe(0);
     }
 
+    private const string HeadersUrl = "/api/banking/imports/headers";
+
+    // #651: what a file's first line can be, and the column in it that holds the amount.
+    public static TheoryData<string, string> HeaderLines => new()
+    {
+        { "Date,Description,Amount\n", "Amount" },
+        { "Date,Description,\"Amount\"\n", "Amount" },
+        { "Date,Description, \"Amount\"\n", "\"Amount\"" },
+        { "Date,Description,\"Amount, USD\"\n", "Amount, USD" },
+        { "   \nDate,Description,Amount\n", "Amount" },
+        { "\nDate,Description,Amount\n", "Amount" },
+    };
+
+    [Theory]
+    [MemberData(nameof(HeaderLines))]
+    public async Task Every_column_the_server_names_maps_and_the_files_real_columns_are_named(string headerLine, string amountColumn)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var setup = await SetupAsync(ct);
+        var client = await LoggedInClientAsync(setup, ct);
+        var csv = headerLine + "2026-02-01,Interest,100.00\n";
+
+        var offered = (await PostOkAsync<StatementHeaders>(client, HeadersUrl, new { csvContent = csv }, ct)).Headers;
+
+        offered.ShouldBe(["Date", "Description", amountColumn]);
+        foreach (var name in offered)
+        {
+            // Mapped to every field, the row may not read, but the file is not refused for lacking the column.
+            await PostOkAsync<ImportResult>(client, $"/api/banking/banks/{setup.TrustBankId}/imports",
+                new { filename = "s.csv", csvContent = csv, columnMap = new { date = name, description = name, amount = name } }, ct);
+        }
+
+        var import = await PostOkAsync<ImportResult>(client, $"/api/banking/banks/{setup.TrustBankId}/imports",
+            new { filename = "s.csv", csvContent = csv, columnMap = new { date = "Date", description = "Description", amount = amountColumn } }, ct);
+        import.Imported.ShouldBe(1);
+        import.Errors.ShouldBeEmpty();
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("  \n\t\n")]
+    public async Task A_file_with_no_header_row_names_no_columns(string csv)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var setup = await SetupAsync(ct);
+        var client = await LoggedInClientAsync(setup, ct);
+
+        (await PostOkAsync<StatementHeaders>(client, HeadersUrl, new { csvContent = csv }, ct)).Headers.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Reading_header_names_without_the_file_is_refused()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var setup = await SetupAsync(ct);
+        var client = await LoggedInClientAsync(setup, ct);
+
+        (await client.PostAsJsonAsync(HeadersUrl, new { }, ct)).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+    }
+
+    [Theory]
+    [InlineData(Roles.Tenant)]
+    [InlineData(Roles.Owner)]
+    public async Task Reading_header_names_refuses_a_role_the_import_refuses(string role)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (_, client) = await AuthTestSupport.SignedInToNewOrgAsync(fixture, role, ct);
+
+        var import = await client.PostAsJsonAsync($"/api/banking/banks/{UuidV7.NewId()}/imports",
+            new { filename = "s.csv", csvContent = "Date\n", columnMap = AmountColumnMap }, ct);
+        var headers = await client.PostAsJsonAsync(HeadersUrl, new { csvContent = "Date\n" }, ct);
+
+        (import.StatusCode, headers.StatusCode).ShouldBe((HttpStatusCode.Forbidden, HttpStatusCode.Forbidden));
+    }
+
+    [Fact]
+    public async Task Reading_header_names_refuses_a_caller_who_is_not_signed_in()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var client = fixture.Api.CreateClient();
+        await client.PrimeCsrfAsync(ct);
+
+        var import = await client.PostAsJsonAsync($"/api/banking/banks/{UuidV7.NewId()}/imports",
+            new { filename = "s.csv", csvContent = "Date\n", columnMap = AmountColumnMap }, ct);
+        var headers = await client.PostAsJsonAsync(HeadersUrl, new { csvContent = "Date\n" }, ct);
+
+        (import.StatusCode, headers.StatusCode).ShouldBe((HttpStatusCode.Unauthorized, HttpStatusCode.Unauthorized));
+    }
+
+    [Theory]
+    [InlineData(Roles.PMStaff)]
+    [InlineData(Roles.PMAdmin)]
+    public async Task Staff_can_read_header_names(string role)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (_, client) = await AuthTestSupport.SignedInToNewOrgAsync(fixture, role, ct);
+
+        (await PostOkAsync<StatementHeaders>(client, HeadersUrl, new { csvContent = "Date,Amount\n" }, ct))
+            .Headers.ShouldBe(["Date", "Amount"]);
+    }
+
+    [Fact]
+    public async Task Reading_header_names_is_refused_without_an_organization_context()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var scope = fixture.Api.Services.CreateAsyncScope();
+        var sender = scope.ServiceProvider.GetRequiredService<ISender>();
+
+        var refused = await Should.ThrowAsync<InvalidOperationException>(() =>
+            sender.Query(new ReadStatementHeaders("Date,Amount\n"), ct));
+
+        refused.Message.ShouldBe("ReadStatementHeaders requires an ambient organization context.");
+    }
+
     private sealed record ValidationProblemBody(
         string? Code, string? CorrelationId, Dictionary<string, string[]> Errors);
 

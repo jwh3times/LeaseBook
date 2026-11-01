@@ -3,7 +3,7 @@
 - **Audience:** Contributors, reviewers and maintainers
 - **Status:** Living catalogue and method
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-30
+- **Last reviewed:** 2026-11-01
 
 A scenario is one workflow a person carries out in the product, driven through a real browser by
 one or more Playwright tests. This page records how scenarios are catalogued, what CI checks about
@@ -268,7 +268,7 @@ not edit between the markers.
 | `ledger-payment-into-issued-month` | Record a payment into a month whose owner statement is already issued, and see the notice | Accounting | `m3-ledger.spec.ts` | demo | `PaymentReceived`<br>`EntryVoided` | `POST /api/accounting/tenants/{tenantId}/payments`<br>`GET /api/statements/issued-coverage`<br>`POST /api/statements/{ownerId}/deliver` |
 | `ledger-composer-guards` | The ledger composer blocks an over-application of held funds, and renders in the dark theme | Accounting | `m3-ledger.spec.ts` |  |  | `POST /api/accounting/tenants/{tenantId}/deposit-applications` |
 | `ledger-void-reason-staff-only` | A void's reason stays off the owner statement and shows only as a staff annotation | Accounting | `m3-ledger.spec.ts` | demo | `PaymentReceived`<br>`EntryVoided` | `POST /api/accounting/entries/{entryId}/void`<br>`GET /api/statements/{ownerId}`<br>`GET /api/statements/{ownerId}/internal-notes` |
-| `bank-statement-import-and-match` | Import a bank CSV, auto-match and clear a register line, and skip duplicates on re-import | Banking | `m4-banking.spec.ts` |  |  | `POST /api/banking/banks/{bankAccountId}/imports`<br>`POST /api/banking/imports/{importId}/confirm`<br>`GET /api/banking/imports/{importId}/matches`<br>`GET /api/banking/banks/{bankAccountId}/mappings`<br>`GET /api/accounting/banks/{bankAccountId}/register` |
+| `bank-statement-import-and-match` | Import a bank CSV, auto-match and clear a register line, and skip duplicates on re-import | Banking | `m4-banking.spec.ts` |  |  | `POST /api/banking/imports/headers`<br>`POST /api/banking/banks/{bankAccountId}/imports`<br>`POST /api/banking/imports/{importId}/confirm`<br>`GET /api/banking/imports/{importId}/matches`<br>`GET /api/banking/banks/{bankAccountId}/mappings`<br>`GET /api/accounting/banks/{bankAccountId}/register` |
 | `bank-reconcile-finalize-and-lock` | Reconcile a trust account to $0.00, finalize, and see the locked month refuse a posting | Banking | `m4-banking.spec.ts` | demo | `PaymentReceived` | `GET /api/accounting/banks/balances`<br>`GET /api/accounting/reconciliations`<br>`POST /api/accounting/banks/clearances`<br>`POST /api/accounting/reconciliations`<br>`POST /api/accounting/reconciliations/{id}/finalize`<br>`POST /api/accounting/tenants/{tenantId}/payments` |
 | `bank-reconciliation-unlock-and-refinalize` | As an administrator, unlock a finalized month with a reason, post into it, and finalize it again | Banking | `m4-banking.spec.ts` | demo | `PaymentReceived`<br>`EntryVoided` | `POST /api/accounting/reconciliations/{id}/unlock` |
 | `owner-statement-view-export-deliver` | View an owner statement with its fiduciary checks, export it as PDF and CSV, and deliver it | Reporting | `m5-reports.spec.ts` |  |  | `GET /api/statements/{ownerId}`<br>`GET /api/statements/{ownerId}/internal-notes`<br>`GET /api/statements/{ownerId}/pdf`<br>`GET /api/statements/{ownerId}/csv`<br>`POST /api/statements/{ownerId}/deliver` |

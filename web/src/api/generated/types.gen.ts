@@ -898,6 +898,10 @@ export type PropertyOwnershipTransferResult = {
     depositEntryId: null | string;
 };
 
+export type ReadStatementHeaders = {
+    csvContent: string;
+};
+
 export type ReconciliationHistoryResponse = {
     rows: Array<ReconciliationSummary>;
 };
@@ -1185,6 +1189,10 @@ export type StartReconciliation = {
     year: number | string;
     month: number | string;
     statementEndingBalance: number | string;
+};
+
+export type StatementHeaders = {
+    headers: Array<string>;
 };
 
 export type StatementInternalNote = {
@@ -2642,6 +2650,22 @@ export type PostApiBankingBanksByBankAccountIdImportsResponses = {
 };
 
 export type PostApiBankingBanksByBankAccountIdImportsResponse = PostApiBankingBanksByBankAccountIdImportsResponses[keyof PostApiBankingBanksByBankAccountIdImportsResponses];
+
+export type PostApiBankingImportsHeadersData = {
+    body: ReadStatementHeaders;
+    path?: never;
+    query?: never;
+    url: '/api/banking/imports/headers';
+};
+
+export type PostApiBankingImportsHeadersResponses = {
+    /**
+     * OK
+     */
+    200: StatementHeaders;
+};
+
+export type PostApiBankingImportsHeadersResponse = PostApiBankingImportsHeadersResponses[keyof PostApiBankingImportsHeadersResponses];
 
 export type GetApiBankingBanksByBankAccountIdMappingsData = {
     body?: never;

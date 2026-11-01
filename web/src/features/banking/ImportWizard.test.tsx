@@ -39,9 +39,14 @@ function renderWizard() {
   return { onConfirmed };
 }
 
+/** The server's reading of a file's header row (#651). */
+const serverReadsHeaders = (headers: string[]) =>
+  http.post('/api/banking/imports/headers', () => HttpResponse.json({ headers }));
+
 beforeEach(() => {
   document.body.innerHTML = '';
   vi.clearAllMocks();
+  server.use(serverReadsHeaders(['Date', 'Description', 'Amount']));
 });
 
 const EMPTY_PREVIEW = { rows: [], summary: { matched: 0, suggested: 0, unmatched: 0 } };
@@ -86,6 +91,188 @@ async function mapAndPreview() {
 }
 
 describe('ImportWizard', () => {
+  // #651: the wizard split the first line on commas and stripped quotes, so it could offer a name the
+  // server would refuse, and could not offer a quoted name holding a comma. The server now names them.
+  describe('the columns it offers', () => {
+    const noMappings = http.get('/api/banking/banks/:id/mappings', () =>
+      HttpResponse.json({ mappings: [] }),
+    );
+    const upload = (content = CSV) =>
+      userEvent.upload(
+        screen.getByLabelText('Statement CSV'),
+        new File([content], 'statement.csv', { type: 'text/csv' }),
+      );
+    const optionsOf = (label: string) =>
+      within(screen.getByLabelText(label))
+        .getAllByRole('option')
+        .map((option) => option.textContent);
+
+    it('asks the server about the file and offers exactly the names it returns', async () => {
+      const quoted = 'Date,Description,"Amount, USD"\n2026-02-01,Interest,100.00\n';
+      let body: unknown;
+      let importBody: { columnMap?: Record<string, unknown> } | undefined;
+      server.use(
+        noMappings,
+        http.post('/api/banking/imports/headers', async ({ request }) => {
+          body = await request.json();
+          return HttpResponse.json({ headers: ['Date', 'Description', 'Amount, USD'] });
+        }),
+        http.post('/api/banking/banks/:id/imports', async ({ request }) => {
+          importBody = (await request.json()) as { columnMap?: Record<string, unknown> };
+          return HttpResponse.json({ importId: 'imp1', imported: 1, errors: [] });
+        }),
+        http.get('/api/banking/imports/:id/matches', () => HttpResponse.json(PREVIEW)),
+      );
+      renderWizard();
+
+      await upload(quoted);
+      await userEvent.selectOptions(await screen.findByLabelText('Date column'), 'Date');
+
+      expect(body).toEqual({ csvContent: quoted });
+      expect(optionsOf('Amount column')).toEqual(['Select…', 'Date', 'Description', 'Amount, USD']);
+
+      await userEvent.selectOptions(screen.getByLabelText('Description column'), 'Description');
+      await userEvent.selectOptions(screen.getByLabelText('Amount column'), 'Amount, USD');
+      await userEvent.click(screen.getByRole('button', { name: 'Preview matches' }));
+      await screen.findByText(/^Imported/);
+
+      expect(importBody?.columnMap).toMatchObject({ amount: 'Amount, USD' });
+    });
+
+    it('offers a name the way the server read it, even when it looks odd', async () => {
+      server.use(noMappings, serverReadsHeaders(['Date', 'Description', '"Amount"']));
+      renderWizard();
+
+      await upload('Date,Description, "Amount"\n');
+      await screen.findByLabelText('Amount column');
+
+      expect(optionsOf('Amount column')).toContain('"Amount"');
+      expect(optionsOf('Amount column')).not.toContain('Amount');
+    });
+
+    it('selects a saved mapping whose columns the file has, naming none as missing', async () => {
+      server.use(
+        http.get('/api/banking/banks/:id/mappings', () =>
+          HttpResponse.json({
+            mappings: [
+              {
+                id: 'm1',
+                name: 'Plain export',
+                columnMap: { date: 'Date', description: 'Description', amount: 'Amount' },
+              },
+            ],
+          }),
+        ),
+      );
+      renderWizard();
+      await upload();
+
+      await userEvent.selectOptions(await screen.findByLabelText('Saved mapping'), 'm1');
+
+      expect(screen.getByLabelText('Date column')).toHaveValue('Date');
+      expect(screen.getByLabelText('Description column')).toHaveValue('Description');
+      expect(screen.getByLabelText('Amount column')).toHaveValue('Amount');
+      expect(
+        screen.queryByRole('status', { name: 'Saved mapping does not fit this file' }),
+      ).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Preview matches' })).toBeEnabled();
+    });
+
+    it('offers no column and no saved mapping while the server is reading the file', async () => {
+      let answer = () => {};
+      const answered = new Promise<void>((resolve) => {
+        answer = resolve;
+      });
+      server.use(
+        noMappings,
+        http.post('/api/banking/imports/headers', async () => {
+          await answered;
+          return HttpResponse.json({ headers: ['Date', 'Description', 'Amount'] });
+        }),
+      );
+      renderWizard();
+
+      await upload();
+
+      expect(await screen.findByRole('status', { name: 'Reading the file' })).toBeInTheDocument();
+      expect(screen.queryByLabelText('Date column')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('Saved mapping')).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Preview matches' })).toBeDisabled();
+
+      answer();
+
+      expect(await screen.findByLabelText('Date column')).toBeInTheDocument();
+      expect(screen.queryByRole('status', { name: 'Reading the file' })).not.toBeInTheDocument();
+    });
+
+    it('shows a failed read with its reference, offers no column, and can retry', async () => {
+      let reads = 0;
+      server.use(
+        noMappings,
+        http.post('/api/banking/imports/headers', () => {
+          reads += 1;
+          return reads === 1
+            ? HttpResponse.json(
+                { title: 'internal_error', detail: 'Boom.', correlationId: 'op-651' },
+                { status: 500 },
+              )
+            : HttpResponse.json({ headers: ['Date', 'Description', 'Amount'] });
+        }),
+      );
+      renderWizard();
+
+      await upload();
+
+      const alert = await screen.findByRole('alert');
+      expect(alert).toHaveTextContent('Reference: op-651');
+      // A read saves nothing, so its failure has no business saying so.
+      expect(alert).not.toHaveTextContent(/nothing was saved/i);
+      expect(screen.queryByLabelText('Date column')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('Saved mapping')).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Preview matches' })).toBeDisabled();
+
+      await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+
+      expect(await screen.findByLabelText('Date column')).toBeInTheDocument();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    it('says why when the file has no columns to offer', async () => {
+      server.use(noMappings, serverReadsHeaders([]));
+      renderWizard();
+
+      await upload(' ');
+
+      expect(await screen.findByText('No columns in this file')).toBeInTheDocument();
+      expect(screen.getByText(/statement\.csv has no column names/)).toBeInTheDocument();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('Date column')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('Saved mapping')).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Preview matches' })).toBeDisabled();
+    });
+
+    it('offers no retry when the server refuses the file itself', async () => {
+      server.use(
+        noMappings,
+        http.post('/api/banking/imports/headers', () =>
+          HttpResponse.json(
+            { errors: { CsvContent: ['The file is too large to import.'] } },
+            { status: 400 },
+          ),
+        ),
+      );
+      renderWizard();
+
+      await upload();
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        'The file is too large to import.',
+      );
+      expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('Date column')).not.toBeInTheDocument();
+    });
+  });
+
   // #671: a line stored by an import stays reachable, whichever way the operator left its preview.
   describe('lines from an earlier import', () => {
     it('counts them apart from the lines this file added and the duplicates it skipped', async () => {
@@ -352,6 +539,7 @@ describe('ImportWizard', () => {
   it('blocks a saved debit/credit mapping until the side this file lacks is mapped', async () => {
     const PAIR_CSV = 'Date,Description,Withdrawal,In\n2026-02-01,Fee,25.00,\n';
     server.use(
+      serverReadsHeaders(['Date', 'Description', 'Withdrawal', 'In']),
       http.get('/api/banking/banks/:id/mappings', () =>
         HttpResponse.json({
           mappings: [
@@ -406,11 +594,11 @@ describe('ImportWizard', () => {
     );
     const { onConfirmed } = renderWizard();
 
-    // Step 1 — upload (the file is read in-browser).
+    // Step 1 — upload.
     const file = new File([CSV], 'statement.csv', { type: 'text/csv' });
     await userEvent.upload(screen.getByLabelText('Statement CSV'), file);
 
-    // Step 2 — map columns from the parsed header.
+    // Step 2 — map columns from the names the server read.
     await userEvent.selectOptions(await screen.findByLabelText('Date column'), 'Date');
     await userEvent.selectOptions(screen.getByLabelText('Description column'), 'Description');
     await userEvent.selectOptions(screen.getByLabelText('Amount column'), 'Amount');

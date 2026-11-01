@@ -45,6 +45,14 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   refused and nothing clears, because one line of a bank statement must never clear two register
   lines.
 
+- **The bank statement import now offers only columns it can use.** The wizard used to read the
+  file's first line itself, so it could offer a column name the import then refused, and could not
+  offer a quoted name holding a comma, such as `"Amount, USD"`. It now asks the server, through the
+  new `POST /api/banking/imports/headers`, which reads the file the way the import does and stores
+  nothing, so every column offered maps. The wizard shows while it reads the file, says when the read
+  failed, and says when the file has no column names. A line of only spaces before the header row is
+  now skipped like an empty one, and row errors still name the right line in the file.
+
 ## [0.27.0] - 2026-10-30
 
 ### Added

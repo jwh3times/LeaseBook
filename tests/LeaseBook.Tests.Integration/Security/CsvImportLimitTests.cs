@@ -22,6 +22,7 @@ public sealed class CsvImportLimitTests(PostgresFixture fixture)
     public static TheoryData<string> ImportRoutes() =>
     [
         "/api/banking/banks/{0}/imports",
+        "/api/banking/imports/headers",
         "/api/onboarding/import/owners",
         "/api/onboarding/import-balances/bank_balances",
         "/api/onboarding/import-balances/bank_balances/supersede",
@@ -62,10 +63,11 @@ public sealed class CsvImportLimitTests(PostgresFixture fixture)
             .OfType<RouteEndpoint>()
             .Where(e => e.RoutePattern.RawText is { } raw
                 && (raw.EndsWith("/imports", StringComparison.Ordinal)
+                    || raw.EndsWith("/imports/headers", StringComparison.Ordinal)
                     || raw.StartsWith("/api/onboarding/import", StringComparison.Ordinal)))
             .ToList();
 
-        endpoints.Count.ShouldBe(4, string.Join(", ", endpoints.Select(e => e.RoutePattern.RawText)));
+        endpoints.Count.ShouldBe(5, string.Join(", ", endpoints.Select(e => e.RoutePattern.RawText)));
         foreach (var endpoint in endpoints)
         {
             var limit = endpoint.Metadata.GetMetadata<IRequestSizeLimitMetadata>();

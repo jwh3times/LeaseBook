@@ -306,6 +306,86 @@ public sealed class CsvStatementParserTests
         result.Errors.ShouldBe([new RowError(expectedLine, "amount is empty.")]);
     }
 
+    // #651: the wizard offers these names, so each is one a map can name. A quote opens a quoted field only at
+    // the start of a field, so a padded quoted name keeps its quotes.
+    public static TheoryData<string, string[]> HeaderRows => new()
+    {
+        { "Date,Description,Amount\n2026-02-01,Rent,1.00\n", ["Date", "Description", "Amount"] },
+        { "Date, Description , Amount\n", ["Date", "Description", "Amount"] },
+        { "Date,Description,\"Amount\"\n", ["Date", "Description", "Amount"] },
+        { "Date,Description, \"Amount\"\n", ["Date", "Description", "\"Amount\""] },
+        { "Date,Description,\"Amount, USD\"\n", ["Date", "Description", "Amount, USD"] },
+        { "\nDate,Description,Amount\n", ["Date", "Description", "Amount"] },
+        { "   \nDate,Description,Amount\n", ["Date", "Description", "Amount"] },
+        { "\t \r\n  \r\nDate,Description,Amount\r\n", ["Date", "Description", "Amount"] },
+        { "\uFEFFDate,Description,Amount\n", ["Date", "Description", "Amount"] },
+        { "\uFEFF  \nDate,Description,Amount\n", ["Date", "Description", "Amount"] },
+    };
+
+    [Theory]
+    [MemberData(nameof(HeaderRows))]
+    public void Reads_the_header_names_a_map_can_name(string csv, string[] expected)
+    {
+        var headers = _parser.ReadHeaders(csv);
+
+        headers.ShouldBe(expected);
+        foreach (var name in headers)
+        {
+            _parser.Parse(csv, new ColumnMap(Date: name, Description: name, Amount: name))
+                .MissingColumns.ShouldBeEmpty();
+        }
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("\n\n")]
+    [InlineData("   ")]
+    [InlineData("  \r\n\t\n")]
+    [InlineData("\uFEFF")]
+    [InlineData(",,")]
+    public void A_file_with_no_named_column_has_no_header_names(string csv)
+    {
+        _parser.ReadHeaders(csv).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void A_blank_column_is_not_a_header_name()
+    {
+        // A blank name maps nothing, so it could never be chosen.
+        _parser.ReadHeaders("Date,,Amount,\n").ShouldBe(["Date", "Amount"]);
+    }
+
+    [Fact]
+    public void A_repeated_header_name_is_read_once()
+    {
+        // A map finds the first column of a name, so the second could never be chosen.
+        _parser.ReadHeaders("Date,Amount, Amount\n").ShouldBe(["Date", "Amount"]);
+    }
+
+    [Fact]
+    public void A_line_of_only_spaces_before_the_header_is_skipped_like_an_empty_one()
+    {
+        const string csv = "   \nDate,Description,Amount\n2026-02-01,Rent,1500.00\n";
+
+        var result = _parser.Parse(csv, new ColumnMap(Date: "Date", Description: "Description", Amount: "Amount"));
+
+        result.MissingColumns.ShouldBeEmpty();
+        result.Rows.ShouldHaveSingleItem().Amount.ShouldBe(1500.00m);
+    }
+
+    // #667's promise holds across the skipped line: an error still names the line in the file.
+    [Theory]
+    [InlineData("   \nDate,Description,Amount\n2026-02-02,Bad,\n", 3)]
+    [InlineData("  \r\n\t\r\nDate,Description,Amount\r\n2026-02-02,Bad,\r\n", 4)]
+    [InlineData("\uFEFF  \nDate,Description,Amount\n2026-02-02,Bad,\n", 3)]
+    [InlineData("  \rDate,Description,Amount\r2026-02-02,Bad,\r", 3)]
+    public void A_row_error_counts_a_skipped_line_of_spaces(string csv, int expectedLine)
+    {
+        var result = _parser.Parse(csv, new ColumnMap(Date: "Date", Description: "Description", Amount: "Amount"));
+
+        result.Errors.ShouldBe([new RowError(expectedLine, "amount is empty.")]);
+    }
+
     [Fact]
     public void A_stated_zero_amount_is_an_amount()
     {
