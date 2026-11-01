@@ -49,6 +49,7 @@ const EMPTY_PREVIEW = { rows: [], summary: { matched: 0, suggested: 0, unmatched
 /** Takes the wizard through upload and mapping to the preview of an import with these results. */
 async function previewImport(result: {
   imported: number;
+  broughtBack?: number;
   skippedDuplicates?: number;
   errors: ImportResult['errors'];
   preview: typeof PREVIEW | typeof EMPTY_PREVIEW;
@@ -59,6 +60,7 @@ async function previewImport(result: {
       HttpResponse.json({
         importId: 'imp1',
         imported: result.imported,
+        broughtBack: result.broughtBack ?? 0,
         skippedDuplicates: result.skippedDuplicates ?? 0,
         errors: result.errors,
       }),
@@ -66,6 +68,12 @@ async function previewImport(result: {
     http.get('/api/banking/imports/:id/matches', () => HttpResponse.json(result.preview)),
   );
   renderWizard();
+  await mapAndPreview();
+  await screen.findByText(/^Imported/);
+}
+
+/** Uploads the CSV, maps its columns and asks for the preview. */
+async function mapAndPreview() {
   await userEvent.upload(
     screen.getByLabelText('Statement CSV'),
     new File([CSV], 'statement.csv', { type: 'text/csv' }),
@@ -75,13 +83,79 @@ async function previewImport(result: {
   await userEvent.selectOptions(screen.getByLabelText('Description column'), 'Description');
   await userEvent.selectOptions(screen.getByLabelText('Amount column'), 'Amount');
   await userEvent.click(screen.getByRole('button', { name: 'Preview matches' }));
-  await screen.findByText(/^Imported/);
 }
 
 describe('ImportWizard', () => {
+  // #671: a line stored by an import stays reachable, whichever way the operator left its preview.
+  describe('lines from an earlier import', () => {
+    it('counts them apart from the lines this file added and the duplicates it skipped', async () => {
+      await previewImport({
+        imported: 1,
+        broughtBack: 2,
+        skippedDuplicates: 1,
+        errors: [],
+        preview: PREVIEW,
+      });
+
+      expect(
+        screen.getByText(
+          'Imported 1 line · 2 lines from an earlier import not yet confirmed · 1 duplicate skipped',
+        ),
+      ).toBeInTheDocument();
+    });
+
+    it('says one in the singular', async () => {
+      await previewImport({ imported: 0, broughtBack: 1, errors: [], preview: PREVIEW });
+
+      expect(
+        screen.getByText('Imported 0 lines · 1 line from an earlier import not yet confirmed'),
+      ).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /confirm/i })).toBeEnabled();
+    });
+
+    it('offers the line again after the first preview could not be read', async () => {
+      let imports = 0;
+      let reads = 0;
+      server.use(
+        http.get('/api/banking/banks/:id/mappings', () => HttpResponse.json({ mappings: [] })),
+        http.post('/api/banking/banks/:id/imports', () => {
+          imports += 1;
+          return HttpResponse.json({
+            importId: `imp${imports}`,
+            imported: imports === 1 ? 1 : 0,
+            broughtBack: imports === 1 ? 0 : 1,
+            skippedDuplicates: 0,
+            errors: [],
+          });
+        }),
+        http.get('/api/banking/imports/:id/matches', () => {
+          reads += 1;
+          return reads === 1
+            ? HttpResponse.json({ code: 'unavailable', detail: 'Try again.' }, { status: 503 })
+            : HttpResponse.json(PREVIEW);
+        }),
+      );
+      renderWizard();
+      await mapAndPreview();
+
+      await screen.findByRole('alert');
+      expect(screen.queryByText(/^Imported/)).not.toBeInTheDocument();
+
+      await userEvent.click(screen.getByRole('button', { name: 'Preview matches' }));
+
+      expect(
+        await screen.findByText(
+          'Imported 0 lines · 1 line from an earlier import not yet confirmed',
+        ),
+      ).toBeInTheDocument();
+      expect(screen.getByText('Interest')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /confirm/i })).toBeEnabled();
+    });
+  });
+
   // #667: the preview used to say only "1 row error(s)", so the operator had to hunt for the row.
   describe('rows that were not imported', () => {
-    it('lists each with its file line and reason, and says to confirm before importing a corrected file', async () => {
+    it('lists each with its file line and reason, and says to correct the file', async () => {
       await previewImport({
         imported: 1,
         errors: [
@@ -93,9 +167,9 @@ describe('ImportWizard', () => {
 
       const notice = screen.getByRole('alert');
       expect(notice).toHaveTextContent('2 rows were not imported.');
-      expect(notice).toHaveTextContent(
-        'Confirm the imported lines first, then import a corrected file. Rows already imported are skipped.',
-      );
+      // The order no longer matters: the corrected file brings back any line not yet confirmed (#671).
+      expect(notice).toHaveTextContent('Correct the file and import it again.');
+      expect(notice).not.toHaveTextContent(/confirm/i);
 
       const list = screen.getByRole('region', { name: 'Rows not imported' });
       expect(

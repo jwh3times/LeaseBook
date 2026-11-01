@@ -442,6 +442,7 @@ export type ImportOutcomeCounts = {
 export type ImportResult = {
     importId: string;
     imported: number | string;
+    broughtBack: number | string;
     skippedDuplicates: number | string;
     errors: Array<RowError>;
 };

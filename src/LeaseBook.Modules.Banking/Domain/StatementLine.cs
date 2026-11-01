@@ -4,10 +4,9 @@ namespace LeaseBook.Modules.Banking.Domain;
 
 /// <summary>
 /// One parsed line from an imported statement (ADR-015). <see cref="Amount"/> is signed (deposit +,
-/// withdrawal −). <see cref="DedupHash"/> + the <c>UNIQUE (org_id, bank_account_id, dedup_hash)</c> make
-/// re-imports idempotent — a colliding line is skipped, never stored twice. <see cref="BankAccountId"/> is
-/// carried on the row (denormalized from the import) so dedup spans <i>all</i> imports for that account,
-/// not just one file. Org-scoped (P70).
+/// withdrawal −). <see cref="DedupHash"/> + the <c>UNIQUE (org_id, bank_account_id, dedup_hash)</c> keep a
+/// colliding line from being stored twice. <see cref="BankAccountId"/> is carried on the row (denormalized
+/// from the import) so dedup spans <i>all</i> imports for that account, not just one file. Org-scoped (P70).
 /// </summary>
 public sealed class StatementLine : IOrgScoped
 {

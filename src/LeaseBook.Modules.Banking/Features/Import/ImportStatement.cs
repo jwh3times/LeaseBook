@@ -13,15 +13,19 @@ namespace LeaseBook.Modules.Banking.Features.Import;
 /// <summary>
 /// Imports a bank-statement CSV for one account (ADR-015): parses it against the column map, dedups against
 /// every prior line for that account (P67), and stores the new lines under one <see cref="StatementImport"/>.
-/// Idempotent on re-import — colliding lines are skipped and counted, never stored twice. The CSV arrives as
-/// text (the SPA reads the file client-side); parse errors are reported per row, never fatal. The one
-/// file-level refusal is a column map naming a column the file lacks (a 400, nothing stored; #645).
+/// A colliding line is never stored twice: one with a recorded decision is skipped and counted, and one with
+/// none joins this import, so the preview offers it again (#671). The CSV arrives as text (the SPA reads the
+/// file client-side); parse errors are reported per row, never fatal. The one file-level refusal is a column
+/// map naming a column the file lacks (a 400, nothing stored; #645).
 /// </summary>
 public sealed record ImportStatement(
     Guid BankAccountId, string Filename, string CsvContent, ColumnMap ColumnMap) : ICommand<ImportResult>;
 
+/// <param name="Imported">Lines this file added.</param>
+/// <param name="BroughtBack">Earlier lines still waiting for a decision that this file brought back (#671).</param>
+/// <param name="SkippedDuplicates">Rows that added nothing and brought nothing back.</param>
 public sealed record ImportResult(
-    Guid ImportId, int Imported, int SkippedDuplicates, IReadOnlyList<RowError> Errors);
+    Guid ImportId, int Imported, int BroughtBack, int SkippedDuplicates, IReadOnlyList<RowError> Errors);
 
 public sealed class ImportStatementValidator : AbstractValidator<ImportStatement>
 {
@@ -63,12 +67,21 @@ internal sealed class ImportStatementHandler(
                 $"The file has no column named '{c.Name}'. Check the column mapping against the file's header row.")));
         }
 
+        await StatementImportLock.AcquireAsync(db, command.BankAccountId, ct);
+
         // Dedup spans every prior import for this account (RLS scopes the read to the org).
         var existingHashes = await db.Set<StatementLine>()
             .Where(l => l.BankAccountId == command.BankAccountId)
             .Select(l => l.DedupHash)
             .ToListAsync(ct);
         var seen = new HashSet<string>(existingHashes, StringComparer.Ordinal);
+
+        // A line with no recorded decision can only reach a confirm through an import's preview, so one this
+        // file repeats joins this import rather than being skipped (#671).
+        var undecided = await db.Set<StatementLine>()
+            .Where(l => l.BankAccountId == command.BankAccountId
+                        && !db.Set<StatementMatch>().Any(m => m.StatementLineId == l.Id))
+            .ToDictionaryAsync(l => l.DedupHash, StringComparer.Ordinal, ct);
 
         var import = new StatementImport
         {
@@ -81,13 +94,24 @@ internal sealed class ImportStatementHandler(
         };
 
         var newLines = new List<StatementLine>();
+        var broughtBack = 0;
         var skipped = 0;
         foreach (var row in parsed.Rows)
         {
             var hash = DedupHash.Compute(row.Date, row.Amount, row.Description);
             if (!seen.Add(hash))
             {
-                skipped++; // collides with a prior import, or an identical earlier row in this same file
+                // Removed once found, so a row repeated in this file returns its line only once.
+                if (undecided.Remove(hash, out var line))
+                {
+                    line.ImportId = import.Id;
+                    broughtBack++;
+                }
+                else
+                {
+                    skipped++; // collides with a decided line, or an identical earlier row in this same file
+                }
+
                 continue;
             }
 
@@ -103,11 +127,11 @@ internal sealed class ImportStatementHandler(
             });
         }
 
-        import.RowCount = newLines.Count;
+        import.RowCount = newLines.Count + broughtBack;
         db.Set<StatementImport>().Add(import);
         db.Set<StatementLine>().AddRange(newLines);
         await db.SaveChangesAsync(ct);
 
-        return new ImportResult(import.Id, newLines.Count, skipped, parsed.Errors);
+        return new ImportResult(import.Id, newLines.Count, broughtBack, skipped, parsed.Errors);
     }
 }
