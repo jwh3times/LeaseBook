@@ -90,9 +90,9 @@ is recreated.
 - `docs/runbooks/local-dev.md` — the complete command reference: dev commands, seed workflow,
   common operations. **When:** a `scripts/dev.ps1` or `scripts/dev.sh` command, a seed target, a CLI
   verb, a migration step or a port changes.
-- `docs/runbooks/payment-simulation.md` — the payment fixture, signed driver, restart and reset.
-  **When:** `scripts/payment-fixture.ps1`, a fixture manifest or a simulated-payment command
-  changes.
+- `docs/runbooks/payment-simulation.md` — the payment fixture, signed driver, Stripe stand-in, restart
+  and reset. **When:** `scripts/payment-fixture.ps1`, `scripts/stripe-stand-in.mjs`, a fixture manifest
+  or a simulated-payment command changes.
 - `docs/runbooks/stripe-sandbox-probe.md` — the maintainer's Stripe sandbox probe. **When:**
   `scripts/stripe-probe.mjs` or `scripts/stripe-sandbox-run.mjs` changes.
 - `docs/runbooks/blank-stock-checks.md` — blank-stock refund checks, from the bank's spec sheet to
