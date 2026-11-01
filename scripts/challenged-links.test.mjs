@@ -50,24 +50,32 @@ const logsLink = (stdout, url) =>
     .split("\n")
     .some((line) => line.replace(/^::\w+::/, "").startsWith(`${url}: `));
 
-test("the exclude pattern for the real list names exactly the two links, anchored at both ends", () => {
+/** The real list, as the workflow gets it. An empty list prints one blank line. */
+const realLinks = () => run("urls").stdout.split("\n").filter(Boolean);
+
+test("the exclude pattern for the real list is never empty, and spares an ordinary link", () => {
   const { code, stdout } = run("pattern");
 
   assert.equal(code, 0);
-  assert.equal(
-    stdout.trim(),
-    String.raw`^https://www\.idautomation\.com/licensing/software-license/$|^https://www\.idautomation\.com/micr-fonts/e13b$`,
-  );
+  assert.notEqual(stdout.trim(), "");
+  assert.doesNotMatch("https://example.test/", new RegExp(stdout.trim()));
 });
 
 test("the links lychee is asked about are the links the exclude names", () => {
-  const { code, stdout } = run("urls");
+  assert.equal(run("urls").code, 0);
+  assert.equal(excludePattern(realLinks()), run("pattern").stdout.trim());
+});
 
-  assert.equal(code, 0);
-  assert.equal(
-    excludePattern(stdout.trim().split("\n")),
-    run("pattern").stdout.trim(),
+test("the sweep's step passes on the real list while every link on it is still refused", () => {
+  const report = join(dir, "real-list.json");
+  writeFileSync(
+    report,
+    JSON.stringify(
+      errors(...realLinks().map((url) => rejected(403, "Forbidden", url))),
+    ),
   );
+
+  assert.equal(run("check", report).code, 0);
 });
 
 test("the exclude pattern matches neither a sibling page nor a longer path", () => {
