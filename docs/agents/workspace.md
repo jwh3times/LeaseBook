@@ -59,8 +59,8 @@ is one setting.
 
 ## Generated-config check
 
-`node scripts/sync-agents.mjs --check` (run inside the required **Web (lint + test + build)**
-check), regenerated with `npm run docs:format` from `web/` then `node scripts/sync-agents.mjs`,
+`node scripts/sync-agents.mjs --check && node scripts/check-skills.mjs` (run inside the required
+**Web (lint + test + build)** check), regenerated with `npm run docs:format` from `web/` then `node scripts/sync-agents.mjs`,
 committing `.claude/skills/` and `.codex/agents/` — always: it is quick, and it also catches an orphaned mirror.
 
 ## Hook: after sync

@@ -243,7 +243,7 @@ committed mirror is stale. The same job runs `scripts/lint-agent-neutrality.mjs`
 (`npm run lint:agents` from the root), which reject agent and skill sources that read wrongly from
 their mirrored copies: a bare `$0`–`$9` in a `SKILL.md`, a relative link that breaks under
 `.claude/skills/`. `scripts/sync-agents.mjs`, `lint-agent-neutrality.mjs`, `sync-main.mjs`,
-`next-version.mjs`, `check-changelog.mjs`, `check-docs.mjs` and their tests are shared verbatim
+`next-version.mjs`, `check-changelog.mjs`, `check-docs.mjs`, `check-skills.mjs` and their tests are shared verbatim
 across repositories — don't edit them here; change the canonical copy in
 `jwh3times/skills` and re-copy it. Run `npm run docs:format` (from `web/`) **before** the sync, not
 after — formatting the generated copy instead of the authored source just re-drifts it on the next
@@ -296,6 +296,17 @@ no ready issue exists. `/ask-matt` maps the flow itself.
   prep, and an explicit user waiver recorded in the PR body as `Flow waived by the user: <reason>`.
 - **Linking.** Branches are `<type>/<issue#>-<slug>`; the PR body opens with `Closes #N` or
   `Part of #N`.
+- **The flow ends at `/ship`.** `/implement` stops at a commit; `/ship` refreshes the docs, writes the
+  changelog and the PR body, and opens the PR. `/ask-matt` also routes to `/pr`, `/retro` and
+  `/implement-spec`, which are not installed here.
+- **`/handoff` is the shared skill.** It parks the session for another machine or harness, closes it
+  out with `/end-session`, and `/lets-go` resumes it. It does not write the portable file `/ask-matt`
+  describes, so a `/prototype` detour stays in the session or uses a branch.
+- **A wizard is not the record.** A step only a human can take follows the `## Procedure` in
+  `.agents/skills/ship/settings/human-follow-up.md`, whose instructions stand without the script.
+- **Research goes where it is safe to keep.** `/research` findings that would expose private material
+  go to the private companion, where there is one, never to an ignored folder with no repository
+  behind it. Details of an unpublished vulnerability are a draft advisory, never a research file.
 
 <!-- /shared:development-flow -->
 
@@ -306,18 +317,33 @@ no ready issue exists. `/ask-matt` maps the flow itself.
 `end-session`, `handoff`, `lets-go`, `ship` and `docs-updater` install from `jwh3times/skills`, and
 are never edited here: reinstalling overwrites a local edit. A fix goes upstream, and what they need
 to know about this repository goes in the settings files under `docs/agents/`, which each skill
-proposes on first run. Re-running the install is the update; never run `npx skills update`, which
-leaves `.claude/skills/` linked to its source instead of copied:
+proposes on first run.
+
+The other shared skills come from one `mattpocock/skills` snapshot (v1.3.2, pinned by commit), the
+same in every repository, and are never edited here either: what they need to know goes in this
+file or `docs/agents/`. Moving to a newer snapshot is a change in `jwh3times/skills`. Keep
+`.agents/skills/` out of every formatter: `scripts/check-skills.mjs` fails when an installed copy
+differs from `skills-lock.json`, or the lock from these commands.
+
+Re-running the install is the update; never run `npx skills update`, which leaves `.claude/skills/`
+linked to its source instead of copied:
 
 ```bash
 npx skills add jwh3times/skills -s end-session -s handoff -s lets-go -s ship -s docs-updater -a codex --copy -y
+npx skills add mattpocock/skills#d1478fcb140db0b93c0c8df17bcfd311844749d0 \
+  -s ask-matt -s code-review -s codebase-design -s diagnosing-bugs -s domain-modeling -s grill-me \
+  -s grill-with-docs -s grilling -s implement -s improve-codebase-architecture -s prototype \
+  -s research -s setup-matt-pocock-skills -s tdd -s teach -s to-questionnaire -s to-spec \
+  -s to-tickets -s triage -s wait-what -s wayfinder -s wizard -s writing-for-agents \
+  -a codex --copy -y
 node scripts/sync-agents.mjs
 ```
 
-`scripts/sync-agents.mjs`, `lint-agent-neutrality.mjs`, `check-docs.mjs`, and `sync-main.mjs`,
-`next-version.mjs` and `check-changelog.mjs` where this repository carries them, are canonical in
-`jwh3times/skills` with their tests: fix them there, then copy them here. `sync-agents.mjs` also
-writes the marked blocks in this file: change them in `jwh3times/skills`, not here.
+`scripts/sync-agents.mjs`, `lint-agent-neutrality.mjs`, `check-docs.mjs`, `check-skills.mjs`, and
+`sync-main.mjs`, `next-version.mjs` and `check-changelog.mjs` where this repository carries them, are
+canonical in `jwh3times/skills` with their tests: fix them there, then copy them here.
+`sync-agents.mjs` also writes the marked blocks in this file: change them in `jwh3times/skills`, not
+here.
 
 <!-- /shared:shared-skills -->
 
