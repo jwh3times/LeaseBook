@@ -15,6 +15,7 @@ and the .NET SDK from `global.json`; `npm run api:generate` also installs `web/c
   `scripts/check-docs-policy.mjs` and `scripts/check-docs.mjs`), a formatting failure fixed by `npm run docs:format`
 - repo root: `node scripts/sync-agents.mjs --check` (**Web**), fixed by `npm run docs:format` from
   `web/` then `node scripts/sync-agents.mjs`, committing `.claude/skills/` and `.codex/agents/`
+- repo root: `node scripts/check-skills.mjs` (**Web**)
 - repo root: `node scripts/lint-agent-neutrality.mjs` (**Web**)
 - repo root: `node --test scripts/*.test.mjs` (**Web**'s script tests, a few seconds)
 - repo root: `node scripts/scenario-catalogue.mjs check` (**Web**; needs `web/node_modules`)

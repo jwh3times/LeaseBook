@@ -9,11 +9,7 @@ playwright-report-stand-in
 
 # Installed from jwh3times/skills and copied verbatim from its canonical scripts: their bytes are the
 # source, so the root docs format check must not rewrite them.
-../.agents/skills/docs-updater/
-../.agents/skills/end-session/
-../.agents/skills/handoff/
-../.agents/skills/lets-go/
-../.agents/skills/ship/
+../.agents/skills/
 ../scripts/sync-agents.mjs
 ../scripts/sync-agents.test.mjs
 ../scripts/lint-agent-neutrality.mjs
@@ -26,3 +22,5 @@ playwright-report-stand-in
 ../scripts/check-changelog.test.mjs
 ../scripts/check-docs.mjs
 ../scripts/check-docs.test.mjs
+../scripts/check-skills.mjs
+../scripts/check-skills.test.mjs

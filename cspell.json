@@ -8,18 +8,9 @@
     "docs/**/*.md",
     "infra/**/*.md",
     ".github/**/*.md",
-    ".claude/agents/**/*.md",
-    ".agents/**/*.md"
+    ".claude/agents/**/*.md"
   ],
-  "ignorePaths": [
-    "private/**",
-    "web/node_modules/**",
-    ".agents/skills/docs-updater/**",
-    ".agents/skills/end-session/**",
-    ".agents/skills/handoff/**",
-    ".agents/skills/lets-go/**",
-    ".agents/skills/ship/**"
-  ],
+  "ignorePaths": ["private/**", "web/node_modules/**"],
   "ignoreRegExpList": ["/`[^`]*`/g", "/```[\\s\\S]*?```/g"],
   "words": [
     "AppFolio",
@@ -94,6 +85,7 @@
     "Scrutor",
     "Shouldly",
     "specced",
+    "startable",
     "subledger",
     "TanStack",
     "Tarheel",
