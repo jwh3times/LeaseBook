@@ -22,8 +22,7 @@ finds today's values.
 - **Value:** the label a follow-up issue carries (`ready-for-human`, `human-action-required`, …),
   or `none` for a tracking-issue checkbox.
 - **Default:** `ready-for-human`; a conflicting `ready-for-agent` or `needs-triage` comes off.
-- **Discover:** as above, and the triage label vocabulary (`docs/agents/triage-labels.md`, or its
-  section of `docs/agents/issue-tracker.md`).
+- **Discover:** as above, and the `triage-labels` topic.
 
 ## Follow-up board
 

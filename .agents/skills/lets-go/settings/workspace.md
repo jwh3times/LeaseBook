@@ -90,6 +90,14 @@ that file.
 - **Discover:** `scripts/sync-agents.mjs` and the CI workflow that runs it. Write the heading only
   when regenerating needs more, such as a formatter run first.
 
+## AGENTS.md blocks
+
+- **Read by:** `scripts/sync-agents.mjs`
+- **Value:** `none`, or the backticked names of the blocks in `agents-md.md` this repository takes.
+- **Default:** every block, so `AGENTS.md` carries the markers of each.
+- **Discover:** write the heading only when the shared text does not fit this repository yet, or at
+  all, as in a repository without the flow skills.
+
 ## Final portability check
 
 - **Read by:** end-session

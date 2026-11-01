@@ -38,26 +38,6 @@ stand-in)** (Postgres and a seeded host), **Container build + full-stack smoke**
 (gitleaks is not installed here), and the ruleset's CodeQL, code-quality and Copilot review.
 **CHANGELOG [Unreleased] updated** is the `Changelog check` in `releases.md`.
 
-## Issue link
-
-- **Branch pattern:** `<type>/<issue#>-<slug>`, `<type>` one of `feat`, `fix`, `test`, `refactor`,
-  `docs`, `ci`, `build`, `perf`, `security`, `chore` (`fix/611-adjustment-destination`). Exempt work
-  and work on a private-tracker issue drop the number (`docs/dotnet-test-solution`); Dependabot
-  names its own.
-- **Link line:** `Closes #<n>` when the PR finishes the ticket; `Part of #<n>` for one slice of a
-  spec that stays open (`Part of #547 (step 4: …)`). It replaces the template's `Closes #` first
-  line.
-- **Waiver line:** `Flow waived by the user: <reason>`.
-- **Exempt:**
-  - dependency bumps — Dependabot PRs and hand bumps titled `build(deps):` or `chore(deps):`
-  - changes touching only docs and agent config: any `*.md`, `.claude/`, `.agents/`, `.codex/`,
-    `skills-lock.json`, `cspell.json`, `.markdownlint-cli2.jsonc`
-  - release prep — a `chore(release): cut <version> — <headline>` commit touching only
-    `CHANGELOG.md` and `VERSION`
-  - work on a private-tracker issue: the body names no issue, and the issue is closed by hand after
-    the merge
-- **Defined in:** `docs/agents/dev-flow.md`.
-
 ## Hook: before PR
 
 1. When the linked issue is on the board with `Track` or `Gate` unset, warn (`Board fields` in

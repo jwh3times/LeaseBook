@@ -112,12 +112,12 @@ is recreated.
   `amend-only`.
 - `docs/research/stripe-connect-payment-lifecycle.md` — dated provider evidence for the payment
   design. `amend-only`.
-- `docs/agents/dev-flow.md` — the development-flow gate, what counts as code, routing, exemptions,
-  branch and PR linking. **When:** any of those changes; `Issue link` in `ship.md` with it.
+- `docs/agents/dev-flow.md` — what this repository adds to the shared development flow: docs
+  tooling paths, the `security` branch type, bump and release details. **When:** any of those changes.
 - `docs/agents/domain.md` — the domain-docs layout. **When:** the glossary or ADR layout changes.
 - `docs/agents/issue-tracker.md` — tracker conventions, which tracker, the one rule, wayfinding
   operations, and its settings. **When:** a convention, the board or a board field changes.
-- `docs/agents/triage-labels.md` — the triage labels, plus `blocked-by-human` and `operator`.
+- `docs/agents/triage-labels.md` — `blocked-by-human`, `operator` and the other label families.
   **When:** a label is added or its meaning changes.
 - `docs/agents/human-follow-up.md` — follow-up settings for the shared skills. **When:** the
   follow-up destination, labels, board fields or wiki change.

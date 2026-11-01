@@ -6,7 +6,8 @@ every repository; what differs is written in that repository's settings files an
 
 ## Where settings live
 
-Each topic is one file, `docs/agents/<topic>.md`, in the repository. A setting is a `##` heading
+Each topic is one file, `docs/agents/<topic>.md`, in the repository, except `agents-md`, which holds
+shared text and has no such file. A setting is a `##` heading
 carrying the setting's exact name from its definition, followed by its value. The definitions are
 the `<topic>.md` files beside this one: each `##` heading with a **Read by** line is a setting; a
 `## Procedure` section is a shared procedure that uses them. A settings file may hold other headings too — `issue-tracker.md` already
