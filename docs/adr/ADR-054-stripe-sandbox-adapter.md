@@ -595,7 +595,9 @@ says "to revisit", this list is where the item now lives.
   against a receipt an earlier payout made. Such a payout goes to review as `unsupported_settlement`,
   decided for the payout as a whole so that its reason does not follow the order of its lines, and is
   offered no Post action. Stripe's ACH dispute test method disputes a payment minutes after it succeeds,
-  so in a sandbox the two usually reach the same payout, as they did in the one payout recorded.
+  so in a sandbox the two usually reach the same payout. Of the three payouts recorded, the two that
+  hold ACH payments each hold an ACH dispute beside the payment it disputes; the third holds only
+  card payments.
 - **Closing a payment's review for an ACH return, before the payout that carries the return arrives,
   stops that payout from posting.** The payout then contradicts a closed review and can only be
   closed. The staff text in the sandbox says to leave such a review open.

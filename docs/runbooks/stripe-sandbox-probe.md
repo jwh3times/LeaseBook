@@ -4,7 +4,7 @@
 - **Status:** Implemented tooling; first run recorded 2026-10-08, first payout recorded 2026-10-09,
   latest run recorded 2026-10-31 at API version `2026-10-28.endive`
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-30
+- **Last reviewed:** 2026-11-01
 
 The probe asks a Stripe sandbox the questions the payment adapter depends on and records what Stripe
 sends. [ADR-054](../adr/ADR-054-stripe-sandbox-adapter.md) lists the questions. The probe is a
@@ -83,8 +83,10 @@ replacement works from patterns.
 
 ## Payouts, on a later day
 
-Stripe pays out on its own schedule, so the first run usually finds no payout. A day or two later,
-add payout evidence to the same run:
+Stripe pays out on its own schedule, so the first run usually finds no payout. Expect to wait up to
+a week or more, though a payout has come within hours;
+[Wait for Stripe's payout](payment-simulation.md#wait-for-stripes-payout) has the dates recorded.
+Once Stripe has paid, add payout evidence to the same run:
 
 ```
 node scripts/stripe-probe.mjs payouts stripe-probe.local/<run>
