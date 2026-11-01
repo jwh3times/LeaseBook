@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living policy
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-31
+- **Last reviewed:** 2026-11-01
 
 This policy keeps LeaseBook documentation public-safe, navigable, and maintainable. It applies to
 Markdown, runbooks, diagrams, planning artifacts, and documentation embedded in source or automation.
@@ -124,10 +124,10 @@ has an entry in the `Doc map` of `docs/agents/docs.md`, which the `docs-updater`
 The ordinary CI web job runs the same command on every pull request. The separate Lychee workflow
 checks external links and anchors on documentation changes and in a weekly sweep, which can also be
 run by hand. A few URLs are checked by the sweep only: the current release's own links, which do not
-exist until the merge, and external pages that intermittently stall on or refuse CI runners. Two pages
-behind a bot challenge are excluded on every run instead, and the sweep fails once lychee stops being
-refused by either, or either page has gone (`scripts/challenged-links.mjs`). The workflow file and
-that script list them and why.
+exist until the merge, and external pages that intermittently stall on or refuse CI runners. The
+workflow file lists them and why. A page that a bot challenge goes on refusing can be excluded on
+every run instead by listing it in `scripts/challenged-links.mjs`, and the sweep then fails once
+lychee stops being refused or the page has gone.
 
 Project-specific spelling belongs in `cspell.json`; add stable domain terms, product names, or fixture
 names, not accidental misspellings or arbitrary code identifiers. Markdownlint is a structural check;

@@ -70,13 +70,11 @@ jobs:
           # push. Each pattern names its one URL, anchored at both ends, so a new link on any of
           # those hosts is checked everywhere.
           #
-          # challenged: the same file's two IDAutomation pages, the font's license and its product
-          # page, began answering 403 on 2026-10-31 (main at ba173f2, PRs #661 and #662): the site
-          # put a Cloudflare bot challenge in front of every page, so unlike the four above a re-run
-          # does not pass and a sweep could stay red for as long as it stands. A sweep that is always
-          # red hides real link rot, so these two are excluded on every event (#665). Their un-mute
-          # signal is the sweep's last step, which fails when lychee stops being refused.
-          # scripts/challenged-links.mjs holds the two URLs for both, and says what each answer means.
+          # challenged: links a site's bot challenge goes on refusing, so unlike the four above a
+          # re-run does not pass and a sweep could stay red for as long as it stands. A sweep that is
+          # always red hides real link rot, so a link listed in scripts/challenged-links.mjs is
+          # excluded on every event. Its un-mute signal is the sweep's last step, which fails when
+          # lychee stops being refused. The script says what each answer means (#665).
           # An assignment, not echo "...$(...)": echo would succeed when the script fails, and an
           # empty exclude matches every link, so the check would pass having checked nothing.
           challenged=$(node scripts/challenged-links.mjs pattern)
@@ -150,7 +148,8 @@ jobs:
       # Sweep only, and whether or not the check above passed: real link rot and a recovered link are
       # two separate findings, and one must not hide the other. The action above put lychee on the
       # PATH. It exits non-zero on any link it is refused by, which is the expected case here, so only
-      # the script's reading of the report decides, and a run that wrote no report fails there.
+      # the script's reading of the report decides, and a run that wrote no report fails there. With
+      # nothing listed, lychee has nothing to ask and the step passes.
       - name: Check lychee is still refused by the challenged links
         if: ${{ !cancelled() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
         run: |

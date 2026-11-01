@@ -33,11 +33,9 @@
 import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
-// Both cited by docs/research/micr-e13b-refund-checks.md.
-const LINKS = [
-  "https://www.idautomation.com/licensing/software-license/",
-  "https://www.idautomation.com/micr-fonts/e13b",
-];
+// None at present. IDAutomation's two pages, cited by docs/research/micr-e13b-refund-checks.md,
+// answered 403 to lychee on 2026-10-31 and 200 on 2026-11-01 (#665).
+const LINKS = [];
 
 const USAGE =
   "Usage: node scripts/challenged-links.mjs pattern | urls | check <report.json> [url...]";
@@ -83,13 +81,13 @@ function passes(url, status) {
   }
   if (code >= 200 && code < 300) {
     console.log(
-      `::error::${url}: answered ${code}, so lychee is no longer refused. Remove it from scripts/challenged-links.mjs and re-read the page against what docs/research/micr-e13b-refund-checks.md quotes.`,
+      `::error::${url}: answered ${code}, so lychee is no longer refused. Remove it from scripts/challenged-links.mjs and re-read the page against what the citing document quotes.`,
     );
     return false;
   }
   if (code === 404 || code === 410) {
     console.log(
-      `::error::${url}: answered ${code}, so the citation has gone. Update docs/research/micr-e13b-refund-checks.md and scripts/challenged-links.mjs.`,
+      `::error::${url}: answered ${code}, so the citation has gone. Update the citing document and scripts/challenged-links.mjs.`,
     );
     return false;
   }
