@@ -2,9 +2,10 @@
 # Security updates are enabled separately in repo Settings → Code security; the daily
 # version-update sweep below also picks up fixed advisories as they ship.
 #
-# Noise control: minor + patch bumps are grouped into one PR per ecosystem; major
-# versions open individual PRs — EXCEPT for peer-locked families where a lone bump
-# would leave an unsatisfiable peer range. Those families travel together as one major PR.
+# Noise control: minor + patch bumps are grouped into one PR per ecosystem (Stripe.net
+# alone keeps its own PR, see the .NET block); major versions open individual PRs — EXCEPT
+# for peer-locked families where a lone bump would leave an unsatisfiable peer range. Those
+# families travel together as one major PR.
 # Docs: https://docs.github.com/code-security/dependabot/dependabot-version-updates
 version: 2
 updates:
@@ -23,8 +24,8 @@ updates:
     commit-message:
       prefix: "build(deps)"
     groups:
-      # --- Peer-locked families — majors only. All minor/patch bumps land in the
-      #     catch-all group at the bottom. ---
+      # --- Peer-locked families — majors only. All minor/patch bumps but Stripe.net's land
+      #     in the catch-all group at the bottom. ---
 
       # The xunit.v3 packages ship as one release train and pin each other to an exact
       # version: xunit.v3.mtp-v2's transitives require `xunit.v3.extensibility.core (= X)`
@@ -37,8 +38,13 @@ updates:
         update-types:
           - "major"
 
+      # Stripe.net stays out and gets its own PR. A release can move the pinned API version, and
+      # that PR stays red until a maintainer has run the probe
+      # (docs/runbooks/stripe-sandbox-probe.md), so in the group it would hold up every other update.
       dotnet-minor-and-patch:
         applies-to: version-updates
+        exclude-patterns:
+          - "Stripe.net"
         update-types:
           - "minor"
           - "patch"
