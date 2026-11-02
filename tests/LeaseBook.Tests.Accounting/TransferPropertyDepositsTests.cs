@@ -86,7 +86,9 @@ public sealed class TransferPropertyDepositsTests(PostgresFixture fixture)
 
         var refused = await Should.ThrowAsync<ValidationException>(() => TransferAsync(scope, Feb1, ct));
 
-        refused.Errors.ShouldHaveSingleItem().ErrorMessage.ShouldBe(
+        var failure = refused.Errors.ShouldHaveSingleItem();
+        failure.PropertyName.ShouldBe("effectiveDate");
+        failure.ErrorMessage.ShouldBe(
             "Later seller-attributed deposit activity must be reversed before recording this backdated ownership transfer.");
         await scope.RunAsync(async () => (await scope.Db.Set<JournalEntry>().CountAsync(ct)).ShouldBe(2), ct);
     }
