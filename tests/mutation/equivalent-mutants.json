@@ -94,6 +94,13 @@
         "reason": "GroupBy yields only groups with at least one element, so First and FirstOrDefault return the same row and FirstOrDefault never reaches its default."
       },
       {
+        "file": "src/LeaseBook.Modules.Accounting/Features/Ledgers/TenantLedgerCsv.cs",
+        "mutator": "Boolean mutation",
+        "original": "using (var csv = CsvWriter.Create(buffer, Options, leaveOpen: true))",
+        "replacement": "false",
+        "reason": "A disposed StringWriter keeps its text and ToString still returns it, and ToString is all that is called on it after the CsvWriter is disposed, so Write returns the same bytes whether or not that disposal closes it."
+      },
+      {
         "file": "src/LeaseBook.Modules.Accounting/Features/Statements/GetProspectiveOwnerEquityLines.cs",
         "mutator": "Linq method mutation (Single() to SingleOrDefault())",
         "original": "var line = entry.Lines.Single(line => line.AccountCode == AccountCodes.OwnerEquity);",
