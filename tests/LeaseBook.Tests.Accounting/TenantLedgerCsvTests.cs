@@ -84,7 +84,7 @@ public sealed class TenantLedgerCsvTests
     [Theory]
     [InlineData(" Feb rent", "\" Feb rent\"")]
     [InlineData("Feb rent ", "\"Feb rent \"")]
-    public void Write_quotes_a_value_with_a_space_at_only_one_end(string description, string quoted)
+    public void Write_quotes_a_value_with_a_space_at_only_one_end(string description, string expectedField)
     {
         var ledger = new TenantLedgerResponse(
             Guid.NewGuid(), 0m,
@@ -96,6 +96,6 @@ public sealed class TenantLedgerCsvTests
 
         var lines = Encoding.UTF8.GetString(TenantLedgerCsv.Write(ledger)).Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
 
-        lines[1].ShouldBe($"2026-02-01,Rent,{quoted},,1000.00,0.00,1000.00,Posted");
+        lines[1].ShouldBe($"2026-02-01,Rent,{expectedField},,1000.00,0.00,1000.00,Posted");
     }
 }

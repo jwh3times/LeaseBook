@@ -98,7 +98,7 @@
         "mutator": "Boolean mutation",
         "original": "using (var csv = CsvWriter.Create(buffer, Options, leaveOpen: true))",
         "replacement": "false",
-        "reason": "With false, disposing the CsvWriter also disposes the StringWriter it writes to. A disposed StringWriter keeps its text and ToString still returns it, ToString is all that is called on it afterward, and its using disposes it a second time with no effect, so Write returns the same bytes."
+        "reason": "A disposed StringWriter keeps its text and ToString still returns it, and ToString is all that is called on it after the CsvWriter is disposed, so Write returns the same bytes whether or not that disposal closes it."
       },
       {
         "file": "src/LeaseBook.Modules.Accounting/Features/Statements/GetProspectiveOwnerEquityLines.cs",
