@@ -4,7 +4,7 @@
 - **Status:** Implemented tooling; first run recorded 2026-10-08, first payout recorded 2026-10-09,
   latest run recorded 2026-10-31 at API version `2026-10-28.endive`
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-11-01
+- **Last reviewed:** 2026-11-02
 
 The probe asks a Stripe sandbox the questions the payment adapter depends on and records what Stripe
 sends. [ADR-054](../adr/ADR-054-stripe-sandbox-adapter.md) lists the questions. The probe is a
