@@ -240,7 +240,7 @@ describe("an expected failure, from Playwright through the scenario check", () =
     symlinkSync(
       path.join(webRoot, "node_modules"),
       path.join(directory, "node_modules"),
-      "dir",
+      "junction",
     );
     writeFileSync(
       path.join(directory, "playwright.config.mjs"),
