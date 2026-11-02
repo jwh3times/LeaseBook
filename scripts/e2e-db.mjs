@@ -40,12 +40,12 @@ import { createHash } from "node:crypto";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { spawnPlaywright } from "./playwright-cli.mjs";
 
 const repoRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "..",
 );
-const webRoot = path.join(repoRoot, "web");
 
 export const TEMPLATE = "leasebook_e2e_template";
 export const COPY = "leasebook_e2e";
@@ -355,8 +355,7 @@ async function main(argv) {
     return 0;
   }
   step(`Running the suite on ${COPY}`);
-  const result = spawnSync("npx", ["playwright", "test", ...args.playwright], {
-    cwd: webRoot,
+  const result = spawnPlaywright(["test", ...args.playwright], {
     stdio: "inherit",
     env: { ...process.env, ConnectionStrings__Default: connection },
   });

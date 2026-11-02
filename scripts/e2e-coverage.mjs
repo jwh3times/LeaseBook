@@ -57,6 +57,7 @@ import {
 } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { spawnPlaywright } from "./playwright-cli.mjs";
 
 const repoRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -281,8 +282,7 @@ function runOrThrow(command, args, options = {}) {
  * on the second, from the outcome each test recorded.
  */
 export function playwright(args, env, options = {}) {
-  const result = spawnSync("npx", ["playwright", "test", ...args], {
-    cwd: webRoot,
+  const result = spawnPlaywright(["test", ...args], {
     stdio: "inherit",
     ...options,
     env: { ...process.env, ...env },
