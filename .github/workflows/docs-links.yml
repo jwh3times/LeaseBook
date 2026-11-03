@@ -32,6 +32,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # every tag, so next-version.mjs can name the version this merge mints
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '26'
@@ -39,16 +41,21 @@ jobs:
         id: link-exclusions
         shell: bash
         run: |
-          version=$(tr -d '[:space:]' < VERSION)
-          if [[ ! "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
-            echo "::error file=VERSION::Version '$version' must be plain SemVer."
-            exit 1
+          # Every PR writes the changelog section, with its release links, for the version its merge
+          # will mint (ADR-057), before version.yml creates that tag; a push to main can race the
+          # tag too. So a PR or push excludes only those two links for that version: the one
+          # next-version.mjs predicts and, on a push the tag already reached, the one on HEAD. The
+          # weekly sweep uses a never-matching regex and checks every release link.
+          next=$(node scripts/next-version.mjs) || exit 1
+          versions="$next"
+          current=$(git tag --points-at HEAD --list 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1 || true)
+          if [[ -n "$current" ]]; then
+            versions+="|${current#v}"
           fi
+          # The dots are literal in the patterns below. sed, not ${versions//./...}: bash drops the
+          # backslash from a replacement inside double quotes.
+          versions=$(sed 's/\./\\./g' <<<"$versions")
 
-          # A major/minor PR cuts the changelog before the merge-only release workflow creates
-          # its tag. Push workflows can race that tag too. Exclude only those two current-version
-          # URLs there; the weekly sweep uses a never-matching regex and checks every release link.
-          #
           # stalling: one cited page, the FSF font-exception FAQ, intermittently never answers a
           # given runner. Each failure (main on 2026-10-03, PRs #489 and #493) spent the whole
           # ~60 s of timeout-and-retries on it alone, in a branch that did not touch the citing
@@ -92,8 +99,8 @@ jobs:
             refusing+='|^https://web\.archive\.org/web/20070106015053/http://sandeen\.net:80/GnuMICR/download/GnuMICR-0\.30\.tar\.gz$'
             refusing+='|^https://www\.frbservices\.org/binaries/content/assets/crsocms/financial-services/check/setup/frb-x937-standards-reference\.pdf$'
             echo "refusing=$refusing" >> "$GITHUB_OUTPUT"
-            echo "compare=^https://github\\.com/jwh3times/LeaseBook/compare/v${version}\\.\\.\\.HEAD$" >> "$GITHUB_OUTPUT"
-            echo "release=^https://github\\.com/jwh3times/LeaseBook/releases/tag/v${version}$" >> "$GITHUB_OUTPUT"
+            echo "compare=^https://github\\.com/jwh3times/LeaseBook/compare/v(${versions})\\.\\.\\.HEAD$" >> "$GITHUB_OUTPUT"
+            echo "release=^https://github\\.com/jwh3times/LeaseBook/releases/tag/v(${versions})$" >> "$GITHUB_OUTPUT"
           fi
       - uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
         env:

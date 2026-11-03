@@ -25,6 +25,9 @@ No unreleased changes.
 - The owner-portal leak test hides timestamps as well as IDs before it searches the responses for
   seeded free text, so a timestamp whose digits spell the four-digit bank mask no longer fails it by
   chance; a failure now quotes the text around the match (#695).
+- The link check no longer fails a pull request on the two release links of the version its merge
+  will mint, which do not exist until the merge: since the per-merge switch that version comes from
+  `scripts/next-version.mjs`, not `VERSION`.
 
 ## [0.28.0] - 2026-11-03
 
