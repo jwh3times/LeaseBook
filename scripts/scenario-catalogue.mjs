@@ -38,7 +38,6 @@
  * `eventCatalogueFromSource`.
  */
 
-import { spawnSync } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
@@ -48,6 +47,7 @@ import {
 } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { spawnPlaywright } from "./playwright-cli.mjs";
 import {
   matchRoute,
   parseRequestLines,
@@ -891,15 +891,10 @@ function readJson(file) {
 }
 
 function listPlaywrightTests() {
-  const result = spawnSync(
-    "npx",
-    ["playwright", "test", "--list", "--reporter=json"],
-    {
-      cwd: path.join(repoRoot, "web"),
-      encoding: "utf8",
-      maxBuffer: 64 * 1024 * 1024,
-    },
-  );
+  const result = spawnPlaywright(["test", "--list", "--reporter=json"], {
+    encoding: "utf8",
+    maxBuffer: 64 * 1024 * 1024,
+  });
   if (result.error) throw result.error;
   if (result.status !== 0) {
     throw new Error(
