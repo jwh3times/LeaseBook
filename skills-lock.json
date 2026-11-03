@@ -33,7 +33,8 @@
       "source": "jwh3times/skills",
       "sourceType": "github",
       "skillPath": "skills/docs-updater/SKILL.md",
-      "computedHash": "698e98aa510d3a19eea57e68f27ca5f691dd184e91bb522b12cc4dc4736aa41b"
+      "computedHash": "fa882c972a8c8354ef055b2f9ca915e77bbc98deff3f2995822596a421f3d748",
+      "installMode": "copy"
     },
     "domain-modeling": {
       "source": "mattpocock/skills",
@@ -46,7 +47,8 @@
       "source": "jwh3times/skills",
       "sourceType": "github",
       "skillPath": "skills/end-session/SKILL.md",
-      "computedHash": "5f784037d8c60507331a57d07d33f55983248adf35f67dc51e9cdcf5b173bf43"
+      "computedHash": "2444b94a456ba9c73f414487d605c09dcc6930457dbbd986658971c22ea88f2b",
+      "installMode": "copy"
     },
     "grill-me": {
       "source": "mattpocock/skills",
@@ -73,7 +75,8 @@
       "source": "jwh3times/skills",
       "sourceType": "github",
       "skillPath": "skills/handoff/SKILL.md",
-      "computedHash": "ccf6719de647c4c39690a68fcbb0dffdb9677e50bfa0d24507993a81a067d786"
+      "computedHash": "ccf6719de647c4c39690a68fcbb0dffdb9677e50bfa0d24507993a81a067d786",
+      "installMode": "copy"
     },
     "implement": {
       "source": "mattpocock/skills",
@@ -93,7 +96,8 @@
       "source": "jwh3times/skills",
       "sourceType": "github",
       "skillPath": "skills/lets-go/SKILL.md",
-      "computedHash": "08a1932192677faa2ea7f722c3e740cfe290955bc42d8613c1876ccf1394710e"
+      "computedHash": "08a1932192677faa2ea7f722c3e740cfe290955bc42d8613c1876ccf1394710e",
+      "installMode": "copy"
     },
     "prototype": {
       "source": "mattpocock/skills",
@@ -120,7 +124,8 @@
       "source": "jwh3times/skills",
       "sourceType": "github",
       "skillPath": "skills/ship/SKILL.md",
-      "computedHash": "29af54e9eacfae1847f693c7a25090b83fc3b82f883a93d9c0b51774d0d780d9"
+      "computedHash": "29af54e9eacfae1847f693c7a25090b83fc3b82f883a93d9c0b51774d0d780d9",
+      "installMode": "copy"
     },
     "tdd": {
       "source": "mattpocock/skills",

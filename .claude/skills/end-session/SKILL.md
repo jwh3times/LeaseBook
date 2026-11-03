@@ -137,7 +137,7 @@ Tell it this is `end-session`, and give it the session's discoveries as a list o
 the diff: decisions and findings land in the `Doc map`
 documents whose **when** they match, honoring each one's marker. Run step 4's procedure for any
 human actions it returns. Its edits come back uncommitted, and join step 6's question about
-uncommitted work.
+uncommitted work. Keep its report for step 7.
 
 - **Companion.** When the `Private companion` is set and its checkout exists, inspect it from its
   own root: the outer repository's `git log`, `git show` and `git diff` cannot see inside it. When
@@ -216,17 +216,98 @@ blanket deletes such as `git clean -x` would take them too, so delete only by pa
 
 ## 7. Report
 
-Close with a short, honest account:
+Run this last, so the counts are the session's final state. Set `public_repository` from
+`Public repository` and `companion_repository` from `Private issue repository` (empty for `none`).
+For each other repository the session wrote to (pushed to, or opened a PR or issue in), run it again
+with that repository's own settings.
 
-- Memories added, updated, or deleted, each with its one-line reason.
-- Issues commented, closed, labelled, or opened, by number.
-- Human follow-ups: verified issue and wiki links, what is unpublished and why, or that none
-  remain.
-- Docs updated; companion changes and their commit state, or that the companion was absent.
-- Settings files written in step 0.
-- Workspace: what was deleted, what was deliberately kept and why.
-- **Still open:** uncommitted changes, unpushed branches, PRs awaiting review, running containers,
-  decisions the user owes, and — when handoff invoked this skill — the handoff document's path.
+```bash
+count_open() {
+  if result="$(gh api --paginate "$endpoint" --jq "$field" 2>&1)"; then
+    printf '%s' "$result" | grep -c .
+  else
+    case "$result" in
+      *disabled*|*"not enabled"*|*"no analysis found"*|*"must be enabled"*) echo disabled ;;
+      *) echo "not readable" ;;
+    esac
+  fi
+}
+for column in "public $public_repository" "companion $companion_repository"; do
+  read -r role repository <<< "$column"
+  [ -n "$repository" ] || continue
+  echo "$role open PRs: $(gh pr list -R "$repository" --state open --limit 500 --json number --jq length 2>/dev/null || echo 'not readable')"
+  field='.[].number'
+  for kind in dependabot code-scanning secret-scanning; do
+    endpoint="repos/$repository/$kind/alerts?state=open&per_page=100"
+    echo "$role $kind: $(count_open)"
+  done
+  if [ "$role" = public ]; then
+    endpoint="repos/$repository/security-advisories?state=draft&per_page=100"
+    field='.[].ghsa_id'
+    echo "$role draft advisories: $(count_open)"
+  elif ! labels="$(gh label list -R "$repository" --limit 500 --json name --jq '.[].name' 2>/dev/null)"; then
+    echo "$role security issues: not readable"
+  elif ! printf '%s\n' "$labels" | grep -qx security; then
+    echo "$role security issues: no label"
+  else
+    gh issue list -R "$repository" --state open --label security --limit 500 --json labels --jq "
+      [.[] | [.labels[].name] | any(. == \"wontfix\" or . == \"deferred-trigger\")] |
+      \"$role security issues: open \(map(select(. | not)) | length), accepted risk \(map(select(.)) | length)\"" \
+      2>/dev/null || echo "$role security issues: not readable"
+  fi
+done
+```
+
+Then print this template, every section every time, with `none` where there is nothing to say:
+
+```markdown
+## End of session: <repository>, <date>
+
+### What this session did
+- Memory: <added, updated or deleted, each with its reason; or why this step was skipped>
+- Issues: <commented, closed, labelled or opened, by number>
+- Workspace: <deleted; kept and why; uncommitted changes, unpushed branches, running containers>
+- Settings files written: <list from step 0>
+- Handoff document: <its path, when handoff invoked this skill>
+- Not done: <everything skipped or left unfinished, and changelog debt>
+
+### Docs
+- Searched: <documents checked, the terms searched for, and where, from docs-updater's report>
+- Updated: <documents and their commit state, the companion's too, or that it was absent>
+- Drift reported, not fixed: <list>
+
+### Repository status
+| | Public | Private companion |
+|---|---|---|
+| Open PRs: this session | n | n |
+| Open PRs: others and bots | n | n |
+| Dependabot alerts | n | n |
+| Code scanning alerts | n | n |
+| Secret scanning alerts | n | n |
+| Draft advisories | n | n/a |
+| `security` issues: open | n/a | n |
+| `security` issues: accepted risk | n/a | n |
+
+### Human steps before the next session
+- <what, where, and why it blocks>
+
+### Human follow-ups
+- <verified issue or wiki link, or what is unpublished and why>
+```
+
+- **Status cells** hold a count, `n/a`, or what the snippet printed: `disabled`, `not readable` or
+  `no label`. Those three are never written as `0`: none of them says nothing is open. `this session`
+  counts the PRs this session opened that are still open, and `others and bots` is the rest of the
+  total. An open `security` issue also labelled `wontfix` or `deferred-trigger` is an accepted risk.
+- **Columns.** Leave out the companion column when there is no companion. Each other repository
+  gets its own pair, headed by its public name; a companion whose repository cannot be resolved has
+  `not readable` in every cell.
+- **Human steps before the next session** holds only what stops the next session: a PR to merge, an
+  expired login, work to push from this machine, a decision the user owes. Tracked work with no such
+  urgency is a follow-up.
+- **Counts and roles only.** The security rows carry no title, identifier or package name, and the
+  report names a companion by its role, never its repository. A report holding a companion's counts
+  stays out of public issues, PRs and commits.
 
 Name plainly what was not done. An accurate "these three things are still open" is the point of the
 skill.
