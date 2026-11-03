@@ -159,6 +159,7 @@ text:
 - **drift** — what disagrees and with which source: left unfixed in check mode, or not resolvable
   from the code alone (a feature disabled or removed?), or in an `owner-only` or `frozen` document.
 
-Then the changes no `Doc map` item's **when** matched, the human actions found (and, run on its
-own, their follow-up links or the publication blocker), validation results, companion checks that
-could not run, and that the edits are uncommitted.
+Then the terms step 2 searched for and where (tracked Markdown, the companion, each wiki), or that
+it searched for none; the changes no `Doc map` item's **when** matched; the human actions found
+(and, run on its own, their follow-up links or the publication blocker); validation results;
+companion checks that could not run; and that the edits are uncommitted.
