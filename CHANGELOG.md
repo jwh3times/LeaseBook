@@ -4,17 +4,29 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). LeaseBook is pre-release;
-released builds are tagged automatically from `VERSION` on merges to `main` in
-`v<major>.<minor>.<build>` format, with the third component auto-incremented per major/minor line.
-For a major or minor bump, `x.y.0` is a valid first release when that line has no existing tag.
+every merge to `main` is tagged automatically from `VERSION` in `v<major>.<minor>.<build>` format,
+with the third component auto-incremented per major/minor line. For a major or minor bump, `x.y.0`
+is a valid first release when that line has no existing tag.
 
-**Cut policy:** `[Unreleased]` is cut into a dated version section at each **deliberate
-major/minor bump** (the `VERSION` file changing its line); the per-merge build tags
-(`vX.Y.<build>`) do not get their own sections and roll up into the next cut.
+**Per-merge policy (ADR-057):** every merge writes a dated section for the version it mints, and
+`[Unreleased]` stays empty between merges. A Dependabot merge gets its section from the next human
+pull request. Up to 0.27.0, sections were cut only at a deliberate major/minor bump, and the build
+tags in between (`v0.27.1` and the like) have no section of their own: their changes are in the
+next section.
 
 ## [Unreleased]
 
+No unreleased changes.
+
+## [0.28.0] - 2026-11-03
+
 ### Changed
+
+- **Every merge to `main` now gets its own changelog section.** A pull request names the version
+  its merge will mint in a dated section, and the required changelog check fails it otherwise;
+  Dependabot's merges are backfilled by the next pull request. Until now a section was cut only at a
+  deliberate major or minor bump. The `skip-changelog` label no longer exempts a pull request. This
+  section collects the changes merged since 0.27.0 (ADR-057).
 
 - **The Stripe sandbox adapter now talks to Stripe at API version `2026-10-28.endive`.** Stripe.net
   moved to 53.1.0 together with a fresh recording from a sandbox. Nothing the adapter reads changed.
@@ -1615,8 +1627,8 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
   so an imported AppFolio value cannot execute as a formula when staff open the export in Excel.
 
 <!-- Section vocabulary (Keep a Changelog): Added, Changed, Deprecated, Removed, Fixed, Security.
-     When you prepare a release-line changelog entry, move the relevant Unreleased entries into a
-     dated version section, e.g.:
+     Each merge adds the dated section for the version it mints (node scripts/next-version.mjs),
+     e.g.:
 
 ## [0.1.0] - YYYY-MM-DD
 ### Added
@@ -1624,7 +1636,8 @@ major/minor bump** (the `VERSION` file changing its line); the per-merge build t
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.27.0...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.28.0...HEAD
+[0.28.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.28.0
 [0.27.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.27.0
 [0.26.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.26.0
 [0.25.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.25.0

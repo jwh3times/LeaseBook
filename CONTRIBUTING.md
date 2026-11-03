@@ -180,9 +180,9 @@ Before requesting review, confirm:
 - [ ] When `.claude/agents/` or `.agents/skills/` changed, the regenerated mirrors are committed
       (`npm run sync:agents`), and `npm run sync:agents:check` and `npm run lint:agents` from the
       repository root are green.
-- [ ] `CHANGELOG.md`'s `[Unreleased]` section records any user-visible change under `src/` or `web/src/`
-      (CI's `CHANGELOG [Unreleased] updated` job enforces this; apply the `skip-changelog` label when a
-      product-source change has no user-visible effect).
+- [ ] `CHANGELOG.md`'s newest section names the version this merge will mint
+      (`node scripts/next-version.mjs`), with the change's entries (CI's `CHANGELOG [Unreleased] updated`
+      job enforces this with `node scripts/check-changelog.mjs`).
 - [ ] Accounting-adjacent changes keep the invariant/property/golden suites green.
 - [ ] New org-scoped tables have their RLS policy; the schema guard passes.
 - [ ] A regenerated, committed `web/src/api/generated` accompanies any API-contract change (CI's `schema-drift` job enforces it).
@@ -238,11 +238,13 @@ If the major/minor line already has tags, the workflow increments the third comp
 minor bump sets `VERSION` to `x.y.0` and no `vX.Y.*` tag exists yet, the first release is `vX.Y.0`, not
 `vX.Y.1`.
 
-`CHANGELOG.md` follows the same rhythm (see its cut policy): `[Unreleased]` is cut into a dated
-section only at a deliberate major/minor bump; the per-merge build tags roll up into the next cut.
-A CI gate (`CHANGELOG [Unreleased] updated`) fails any pull request that changes product source
-(`src/` or `web/src/`) without adding to `[Unreleased]`; Dependabot PRs and PRs labeled
-`skip-changelog` are exempt.
+`CHANGELOG.md` follows the same rhythm (see its per-merge policy and ADR-057): every merge writes a
+dated section for the version it mints, which `node scripts/next-version.mjs` prints with the same
+computation `version.yml` makes. A CI gate (`CHANGELOG [Unreleased] updated`, a name kept from the
+earlier policy) fails any pull request whose newest section names another version, and any pull
+request that leaves a released tag without a section. Dependabot PRs are exempt, and the next pull
+request backfills their sections. When another merge lands first and takes the number, the branch
+renumbers its section.
 
 ---
 

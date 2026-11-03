@@ -36,8 +36,8 @@ is recreated.
   changes; a port changes — check the map against `src/LeaseBook.Web/Properties/launchSettings.json`,
   `web/vite.config.ts`, `docker-compose.yml`, the `Dockerfile` and the `infra/` ingress in the same
   change.
-- `CHANGELOG.md` — Keep a Changelog; `Unreleased` accumulates and a dated section is cut only on a
-  major or minor line. `ship-owned`.
+- `CHANGELOG.md` — Keep a Changelog; every merge writes a dated section for the version it mints
+  (ADR-057). `ship-owned`.
 - `VERSION` — the requested release line. `ship-owned`.
 - `CODE_OF_CONDUCT.md` — community standards. `owner-only`.
 - `LICENSE` — `owner-only`.
@@ -127,7 +127,7 @@ is recreated.
 - `docs/agents/workspace.md` — workspace settings. **When:** the companion, a sync or dev-stack
   command, or an ignored path changes (`.gitignore`, `scripts/dev.ps1`, `scripts/sync-main.mjs`).
 - `docs/agents/releases.md` — release settings. **When:** `.github/workflows/version.yml`,
-  `.github/workflows/changelog.yml` or the cut policy changes.
+  `.github/workflows/changelog.yml` or the changelog policy changes.
 - `docs/agents/ship.md` — fast checks and the issue link. **When:** a required check or a CI step it
   mirrors changes (`.github/workflows/ci.yml`, the ruleset), or the linking rule changes.
 - `docs/agents/handoffs.md` — handoff settings. **When:** machine-local state a session depends on

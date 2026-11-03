@@ -1,27 +1,25 @@
 name: Changelog
 
-# Enforces the CHANGELOG cut policy: a PR that changes product source (src/** or web/src/**)
-# must add to the [Unreleased] section, unless the PR is the deliberate major/minor cut that moves
-# [Unreleased] into a matching dated section. Per-merge build tags don't get their own sections —
-# they roll up into the next deliberate cut (see CHANGELOG.md and .claude/skills/ship/SKILL.md).
+# Verifies that CHANGELOG.md documents the version this PR's merge will mint (ADR-057).
 #
-# Exemptions: dependabot (its bumps roll up into the next cut) and a visible `skip-changelog`
-# label (for product-source changes with no user-visible effect, e.g. a pure refactor).
+# Every merge to main is tagged v<major>.<minor>.<build> by version.yml. scripts/next-version.mjs
+# predicts that tag from VERSION and the existing tags, the same computation version.yml makes, and
+# scripts/check-changelog.mjs fails the PR unless the newest `## [x.y.z]` section names it, and
+# unless every tag released since the per-merge switch has a section. The ruleset requires branches
+# to be up to date with main, so a merge that lands first forces a re-run here.
 #
-# The job always runs so branch protection always gets a conclusion; mark
-# "CHANGELOG [Unreleased] updated" a required status check on main for this to enforce.
+# Dependabot PRs are exempt: a bot writes no entry, and the next human PR backfills its section. The
+# exemption is checked inside the step, not with a job-level `if`, so the required check always
+# reports a conclusion.
 #
-# The label is read from the pull request as it is NOW, not from the event that started the run, and
-# the workflow also runs when a label is added or removed. A label is attached a moment after a pull
-# request is opened, so the "opened" event's own payload often does not carry it yet: PR #505 failed
-# this gate with skip-changelog visibly on it, and re-running the job only replayed the same payload.
+# The job keeps its name from the accumulator policy (ADR-024): the ruleset requires
+# "CHANGELOG [Unreleased] updated" by name, and a renamed job would leave that check pending.
 on:
   pull_request:
-    types: [opened, synchronize, reopened, labeled, unlabeled]
+    types: [opened, synchronize, reopened]
 
 permissions:
   contents: read
-  pull-requests: read # the current labels
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -31,125 +29,23 @@ jobs:
   changelog:
     name: CHANGELOG [Unreleased] updated
     runs-on: ubuntu-latest
-    # Typically ~5 s (a checkout and a diff). See ci.yml for why every job carries a bound.
+    # Typically ~10 s (a checkout and a tag fetch). See ci.yml for why every job carries a bound.
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0 # need base + head commits to diff the [Unreleased] section
+          fetch-depth: 0 # full history + tags, needed to predict the build number
 
-      - name: Require an [Unreleased] entry for product-source changes
-        shell: bash
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '26'
+
+      - name: Require a section for the version this merge will mint
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          EVENT_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
-          GH_TOKEN: ${{ github.token }}
         run: |
-          set -uo pipefail
-
-          # The labels on the pull request now. If the read fails, fall back to the event's own list:
-          # that can only miss a label, which fails the gate, never passes it wrongly.
-          if ! PR_LABELS="$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/labels" --paginate --jq '.[].name' | paste -sd, -)"; then
-            echo "::warning::Could not read the pull request's current labels; using the event payload."
-            PR_LABELS="$EVENT_LABELS"
-          fi
-
-          # Dependabot bumps roll up into the next release cut — no [Unreleased] entry required.
-          if [[ "$PR_AUTHOR" == "dependabot[bot]" ]]; then
-            echo "Author is dependabot[bot]; changelog entry not required."
+          if [ "$PR_AUTHOR" = "dependabot[bot]" ]; then
+            echo "Dependabot PR: the next human PR backfills its section."
             exit 0
           fi
-
-          # Explicit, visible escape hatch for product-source changes with no user-visible effect.
-          if [[ ",${PR_LABELS}," == *",skip-changelog,"* ]]; then
-            echo "skip-changelog label present; changelog entry not required."
-            exit 0
-          fi
-
-          # Only product-source changes must be documented; docs/CI/test-only PRs are exempt.
-          needs_entry=false
-          while IFS= read -r f; do
-            case "$f" in
-              src/* | web/src/*) needs_entry=true ;;
-            esac
-          done < <(git diff --name-only "$BASE_SHA...$HEAD_SHA")
-
-          if [[ "$needs_entry" != true ]]; then
-            echo "No changes under src/ or web/src/; changelog entry not required."
-            exit 0
-          fi
-
-          # A deliberate major/minor cut empties [Unreleased], so comparing that section alone would
-          # reject the exact shape the cut policy requires. Accept only the next x.y.0 line, with a
-          # new, non-empty dated section and links that all name the same version.
-          if ! git diff --quiet "$BASE_SHA" "$HEAD_SHA" -- VERSION; then
-            base_version="$(git show "$BASE_SHA:VERSION" 2>/dev/null | tr -d '\r\n')"
-            head_version="$(git show "$HEAD_SHA:VERSION" 2>/dev/null | tr -d '\r\n')"
-            valid_next_line=false
-
-            if [[ "$base_version" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
-              base_major=$((10#${BASH_REMATCH[1]}))
-              base_minor=$((10#${BASH_REMATCH[2]}))
-              if [[ "$head_version" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
-                head_major=$((10#${BASH_REMATCH[1]}))
-                head_minor=$((10#${BASH_REMATCH[2]}))
-                head_patch=$((10#${BASH_REMATCH[3]}))
-                if (( head_patch == 0 )) &&
-                   { (( head_major == base_major && head_minor == base_minor + 1 )) ||
-                     (( head_major == base_major + 1 && head_minor == 0 )); }; then
-                  valid_next_line=true
-                fi
-              fi
-            fi
-
-            head_changelog="$(git show "$HEAD_SHA:CHANGELOG.md" 2>/dev/null || true)"
-            base_changelog="$(git show "$BASE_SHA:CHANGELOG.md" 2>/dev/null || true)"
-            escaped_version="${head_version//./\\.}"
-            # Here-strings, never `printf … | awk`: awk exits at the section after the new release, so a
-            # printf producer is left writing into a closed pipe. Under the step's `bash -e -o pipefail`
-            # that SIGPIPE kills the job with no ::error line once CHANGELOG.md outgrows the ~64 KiB
-            # pipe buffer — which is exactly how the 0.14.0 cut first failed.
-            release_body="$(awk -v prefix="## [$head_version] - " '
-              index($0, prefix) == 1 { capture = 1; next }
-              /^## \[/ && capture   { exit }
-              capture               { print }
-            ' <<<"$head_changelog")"
-            # An entry is a bullet. The empty-Unreleased placeholder (`No unreleased changes.`) is a
-            # bare line, so a cut of an empty section has no entry; a bulleted copy is ignored too.
-            release_entry="$(grep -E '^- ' <<<"$release_body" | grep -Fvx -- '- No unreleased changes.' || true)"
-
-            # Here-strings keep grep from closing a printf producer early under pipefail. A valid
-            # match near the top of a long changelog must not turn into a broken-pipe failure.
-            if [[ "$valid_next_line" == true ]] &&
-               grep -Eq "^## \\[${escaped_version}\\] - [0-9]{4}-[0-9]{2}-[0-9]{2}$" <<<"$head_changelog" &&
-               ! grep -Fq "## [$head_version] - " <<<"$base_changelog" &&
-               [[ -n "$release_entry" ]] &&
-               grep -Fqx "[Unreleased]: https://github.com/${GITHUB_REPOSITORY}/compare/v${head_version}...HEAD" <<<"$head_changelog" &&
-               grep -Fqx "[$head_version]: https://github.com/${GITHUB_REPOSITORY}/releases/tag/v${head_version}" <<<"$head_changelog"; then
-              echo "Valid deliberate release cut from $base_version to $head_version."
-              exit 0
-            fi
-
-            echo "::error file=CHANGELOG.md::VERSION changed from '$base_version' to '$head_version', but the deliberate release cut is incomplete or invalid. Use the next major/minor x.y.0 line, add a new non-empty dated section, and update both release links."
-            exit 1
-          fi
-
-          # The [Unreleased] section body at a ref: lines after '## [Unreleased]' up to the next
-          # '## [' heading. Comparing base vs head is not fooled by edits to an older section.
-          extract_unreleased() {
-            git show "$1:CHANGELOG.md" 2>/dev/null | awk '
-              /^## \[Unreleased\]/ { capture = 1; next }
-              /^## \[/ && capture   { exit }
-              capture               { print }
-            ' || true
-          }
-
-          if [[ "$(extract_unreleased "$BASE_SHA")" == "$(extract_unreleased "$HEAD_SHA")" ]]; then
-            echo "::error file=CHANGELOG.md::This PR changes src/ or web/src/ but the [Unreleased] section is unchanged. Add an entry (run /ship), or apply the 'skip-changelog' label if there is no user-visible change."
-            exit 1
-          fi
-
-          echo "CHANGELOG [Unreleased] section updated."
+          node scripts/check-changelog.mjs

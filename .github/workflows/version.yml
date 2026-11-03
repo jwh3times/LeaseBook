@@ -7,6 +7,9 @@ name: Version
 # to 1.2.0 creates v1.2.0 when no v1.2.0 tag exists. Later merges on the same line
 # increment the third component: v1.2.1, v1.2.2, and so on.
 #
+# scripts/next-version.mjs makes that computation, the same one the changelog check makes
+# when it requires the PR's newest CHANGELOG section to name this tag (ADR-057).
+#
 # Why tags/releases instead of committing a bump back to main:
 #   - it works identically on protected branches (no bypass actor or bump-commit needed);
 #   - it never re-triggers CI or needs [skip ci] loops;
@@ -37,6 +40,10 @@ jobs:
         with:
           fetch-depth: 0 # full history + tags, needed to compute the next build number
 
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '26'
+
       - name: Compute SemVer build tag
         id: version
         shell: bash
@@ -49,7 +56,6 @@ jobs:
 
           major="${BASH_REMATCH[1]}"
           minor="${BASH_REMATCH[2]}"
-          requested_build="${BASH_REMATCH[3]}"
           prefix="v${major}.${minor}."
 
           # Idempotency for workflow reruns: if this commit already has a release tag
@@ -65,21 +71,12 @@ jobs:
           if [[ -n "$current_build" ]]; then
             build="$current_build"
           else
-            last_build=$(
-              git tag --list "${prefix}*" |
-                awk -v prefix="$prefix" 'index($0, prefix) == 1 { print substr($0, length(prefix) + 1) }' |
-                grep -E '^(0|[1-9][0-9]*)$' |
-                sort -n |
-                tail -1 || true
-            )
-
-            if [[ -z "$last_build" ]]; then
-              build="$requested_build"
-            elif (( requested_build > last_build )); then
-              build="$requested_build"
-            else
-              build=$((last_build + 1))
+            next=$(node scripts/next-version.mjs) || exit 1
+            if [[ "$next" != "${major}.${minor}."* ]]; then
+              echo "::error file=VERSION::next-version.mjs printed '$next', not a build on the ${major}.${minor} line."
+              exit 1
             fi
+            build="${next##*.}"
           fi
 
           tag="${prefix}${build}"

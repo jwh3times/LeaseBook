@@ -1,6 +1,6 @@
 # ADR-024: Enforce the changelog cut policy with a CI gate
 
-- **Status:** Accepted
+- **Status:** Superseded by ADR-057
 - **Date:** 2026-07-16
 - **Deciders:** Engineering
 

@@ -37,7 +37,8 @@ Left to CI: the backend tests (`dotnet test` needs Docker for Testcontainers), *
 a blank DB**, **Load fixture seeds + pin holds**, **E2E (Playwright + a11y)** and **E2E (Stripe
 stand-in)** (Postgres and a seeded host), **Container build + full-stack smoke**, **Secret scan**
 (gitleaks is not installed here), and the ruleset's CodeQL, code-quality and Copilot review.
-**CHANGELOG [Unreleased] updated** is the `Changelog check` in `releases.md`.
+**CHANGELOG [Unreleased] updated** is the `Changelog check` in `releases.md`, which `ship` runs after
+writing the changelog.
 
 ## Hook: before PR
 
@@ -53,10 +54,8 @@ stand-in)** (Postgres and a seeded host), **Container build + full-stack smoke**
    `src/LeaseBook.Web/Migrations/`, `seed/`): report that the invariant, property-based and
    golden-file suites run only in CI here and were due during development (Definition of Done), and
    that a changed seed figure needs its golden tests changed in the same diff.
-4. A product-source change with no user-visible effect and no `Unreleased` entry: add the
-   `skip-changelog` label once the PR exists (`gh pr edit <n> --add-label skip-changelog`).
-5. Fill the template: the link line in its `Closes #` slot (deleted for exempt work); **What & why**;
+4. Fill the template: the link line in its `Closes #` slot (deleted for exempt work); **What & why**;
    tick a **Definition of Done** item only on evidence from the diff or the fast checks;
    **Verification** with the fast checks run and the checks left to CI.
-6. Report that CodeQL (medium-or-higher alerts), code quality and the Copilot review also run on the
+5. Report that CodeQL (medium-or-higher alerts), code quality and the Copilot review also run on the
    PR and can block it, and that the ruleset requires the branch to be up to date with `main`.
