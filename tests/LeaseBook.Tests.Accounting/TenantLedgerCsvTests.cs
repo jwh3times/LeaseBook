@@ -80,4 +80,22 @@ public sealed class TenantLedgerCsvTests
 
         lines[1].ShouldBe("2026-02-01,Rent,\" Feb rent \",tab\tinside,1000.00,0.00,1000.00,Posted");
     }
+
+    [Theory]
+    [InlineData(" Feb rent", "\" Feb rent\"")]
+    [InlineData("Feb rent ", "\"Feb rent \"")]
+    public void Write_quotes_a_value_with_a_space_at_only_one_end(string description, string expectedField)
+    {
+        var ledger = new TenantLedgerResponse(
+            Guid.NewGuid(), 0m,
+            [
+                new TenantLedgerEntry(
+                    Guid.NewGuid(), new DateOnly(2026, 2, 1), "RentCharged", null, "Rent", description, null,
+                    1000m, 0m, 1000m, IsVoided: false, ReversesEntryId: null),
+            ], Owed: 0m);
+
+        var lines = Encoding.UTF8.GetString(TenantLedgerCsv.Write(ledger)).Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
+
+        lines[1].ShouldBe($"2026-02-01,Rent,{expectedField},,1000.00,0.00,1000.00,Posted");
+    }
 }

@@ -183,6 +183,12 @@ jobs:
       - name: Test the e2e database script
         working-directory: ${{ github.workspace }}
         run: node --test scripts/e2e-db.test.mjs
+      # The launcher those scripts and the scenario check run Playwright through (#664), and the guard
+      # on the two things that fail only on a Windows checkout, which this Linux job reads from the
+      # source because it cannot see them happen. Windows behavior itself is checked by hand.
+      - name: Test the Playwright launcher and the Windows checkout guard
+        working-directory: ${{ github.workspace }}
+        run: node --test scripts/playwright-cli.test.mjs scripts/windows-checkout.test.mjs
       # The weekly link sweep's signal for the links it excludes (#665): which answers end an
       # exclude. Only docs-links.yml runs the script against the real links.
       - name: Test the challenged links script
