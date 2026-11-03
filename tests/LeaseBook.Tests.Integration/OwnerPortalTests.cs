@@ -201,12 +201,17 @@ public sealed partial class OwnerPortalTests(PostgresFixture fixture)
                 }
             }
 
+            // IDs and timestamps differ on every run, and their digits can spell a numeric secret such
+            // as the bank mask by chance (#695), so both are hidden before the search.
             foreach (var json in new[] { summaryJson, statementsJson })
             {
-                var text = GuidPattern().Replace(json, "<id>");
+                var text = TimestampPattern().Replace(GuidPattern().Replace(json, "<id>"), "<time>");
                 foreach (var secret in SeededSecrets)
                 {
-                    text.ShouldNotContain(secret, Case.Insensitive, $"{name}'s owner-portal response leaked \"{secret}\"");
+                    var at = text.IndexOf(secret, StringComparison.OrdinalIgnoreCase);
+                    var start = Math.Max(0, at - 40);
+                    var context = at < 0 ? "" : $" in \"…{text[start..Math.Min(text.Length, at + secret.Length + 40)]}…\"";
+                    text.ShouldNotContain(secret, Case.Insensitive, $"{name}'s owner-portal response leaked \"{secret}\"{context}");
                 }
             }
 
@@ -540,6 +545,10 @@ public sealed partial class OwnerPortalTests(PostgresFixture fixture)
 
     [GeneratedRegex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")]
     private static partial Regex GuidPattern();
+
+    // An ISO 8601 date-time as System.Text.Json writes it, with any fraction and offset.
+    [GeneratedRegex(@"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})?")]
+    private static partial Regex TimestampPattern();
 
     /// <summary>
     /// A new org with a user in <paramref name="role"/> linked to "First owner", a "Second owner", and
