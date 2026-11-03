@@ -18,6 +18,23 @@ next section.
 
 No unreleased changes.
 
+## [0.28.3] - 2026-11-03
+
+### Security
+
+- The documentation lint chain now uses `re2js` 2.8.7, which fixes a high-severity advisory
+  (GHSA-gg6h-894w-4m9c: quadratic-time matching of lookbehind patterns). The latest `markdownlint`
+  still asks for 2.8.6, so Dependabot could not update it, and a scoped npm override under
+  `markdownlint-cli2` pins the patched release instead. This is a development dependency only;
+  nothing shipped in the product changes. The override can be removed once a `markdownlint` release
+  depends on 2.8.7 or later.
+
+## [0.28.2] - 2026-11-03
+
+### Changed
+
+- Bumped the test dependency `CsCheck` from 5.0.0 to 5.0.1 (Dependabot).
+
 ## [0.28.1] - 2026-11-03
 
 ### Fixed
@@ -1647,7 +1664,9 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.28.1...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.28.3...HEAD
+[0.28.3]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.28.3
+[0.28.2]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.28.2
 [0.28.1]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.28.1
 [0.28.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.28.0
 [0.27.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.27.0
