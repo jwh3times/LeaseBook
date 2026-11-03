@@ -21,7 +21,7 @@ for a dependency bump, a docs-only change or release prep. See .agents/skills/sh
 - [ ] New org-scoped tables go through the RLS helper (schema guard stays green)
 - [ ] No new MediatR / AutoMapper / FluentAssertions (licensed); no float/double for money
 - [ ] Demoable on the seed org
-- [ ] User-visible `src/` / `web/src/` changes recorded in `CHANGELOG.md` `[Unreleased]` (or `skip-changelog` label if none) — the `CHANGELOG [Unreleased] updated` gate enforces this
+- [ ] `CHANGELOG.md` has a dated section for the version this merge will mint (`node scripts/next-version.mjs`) — the `CHANGELOG [Unreleased] updated` gate enforces this
 - [ ] Scope changes captured as an issue rather than only in this PR; ADR added for any `docs/blueprint.md` default deviation
 
 ## Verification
