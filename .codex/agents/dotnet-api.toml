@@ -31,10 +31,10 @@ Modules reference `SharedKernel` only. Cross-module calls go through Contracts p
 
 ## Vertical slice anatomy
 
-One feature = one file. All three live together, no separate layer folders:
+One feature = one file. Every part lives together, no separate layer folders:
 
 ```csharp
-// Features/Import/ConfirmMatches.cs
+// Features/Import/ConfirmMatches.cs (abridged; check that file when they differ)
 namespace LeaseBook.Modules.Banking.Features.Import;
 
 // 1. Command / Query record
@@ -74,9 +74,9 @@ internal sealed class ConfirmMatchesHandler(
 ```
 
 - Handlers implement `Task<TResult> Handle(TCommand command, CancellationToken ct)`, declared in
-  `SharedKernel/Cqrs/Messages.cs`; the method has no `Async` suffix
+  `SharedKernel/Cqrs/Messages.cs`, so the method is named `Handle`
 - Queries use `IQuery<TResult>` + `IQueryHandler<TQuery, TResult>`
-- There is no result-less `ICommand`: every command declares `ICommand<TResult>`
+- Every command declares `ICommand<TResult>`, with a result even when it is trivial (`bool`, `Guid`)
 - Never split into separate Command/Handler/Validator files
 
 ---
