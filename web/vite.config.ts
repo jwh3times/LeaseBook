@@ -29,6 +29,10 @@ export default defineConfig({
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
     css: false,
+    // A US zone on every machine (#643). CI runs in UTC, where taking an instant's date by slicing its
+    // ISO string happens to be right, so a test of that bug passed there. setup.ts also starts each
+    // test at 22:00 here, when the local date is a day behind UTC's.
+    env: { TZ: 'America/New_York' },
     // Measurement only (ADR-055): collected by `npm run test:coverage`, never by `npm run test`,
     // and no threshold is set, so a figure cannot fail a run. `include` names the whole source tree
     // so a file no test imports counts as uncovered instead of going missing from the report.
