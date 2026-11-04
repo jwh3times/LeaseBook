@@ -168,6 +168,15 @@ jobs:
       - name: Test the Stripe stand-in
         working-directory: ${{ github.workspace }}
         run: node --test scripts/stripe-stand-in.test.mjs
+      # A maintainer's run of a host against a real Stripe sandbox (#585) never happens here: it
+      # needs a sandbox key, and the script refuses to start in CI at all. Its tests do run, on fake
+      # dependencies: what it refuses before anything starts, that a fixture database is only ever
+      # copied, what it masks, which environment each process gets, how it reads the manifest,
+      # the check that the account is quiet, one Stripe CLI process at a time, and the order in
+      # which start, resume and discard stop things and decide whether to keep a run's copy.
+      - name: Test the Stripe sandbox run
+        working-directory: ${{ github.workspace }}
+        run: node --test scripts/stripe-sandbox-run.test.mjs
       # The coverage scripts (ADR-055): the per-module summary every coverage step prints, the route
       # matcher behind the route inventory, and the e2e coverage runner's guard that every spec
       # takes `test` from the recording fixture. The runner itself only runs in coverage.yml.
@@ -194,6 +203,11 @@ jobs:
       - name: Test the challenged links script
         working-directory: ${{ github.workspace }}
         run: node --test scripts/challenged-links.test.mjs
+      # The guard on the named steps above (#692): its own header says what it checks and what it
+      # cannot. This step is what puts the guard's own file under it.
+      - name: Test that every script test file runs in a step
+        working-directory: ${{ github.workspace }}
+        run: node --test scripts/script-tests-listed.test.mjs
       # The scenario catalogue's static check (ADR-056, docs/testing/scenarios.md), the part that
       # needs no API contract: every journal event type in the product source has a scenario or a
       # recorded exemption, every catalogue id has a tagged Playwright test and every test a known

@@ -18,6 +18,16 @@ next section.
 
 No unreleased changes.
 
+## [0.28.4] - 2026-11-03
+
+### Fixed
+
+- The Stripe sandbox run's own tests now run in continuous integration. CI names each script test
+  file in a step, and this one was named in none, so a change that broke it could merge with every
+  check green. A new guard fails, naming the file, when a `scripts/*.test.mjs` is named in no
+  workflow and no `web/package.json` script, so the next new test file cannot be missed the same way
+  (#692).
+
 ## [0.28.3] - 2026-11-03
 
 ### Security
@@ -1664,7 +1674,8 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.28.3...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.28.4...HEAD
+[0.28.4]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.28.4
 [0.28.3]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.28.3
 [0.28.2]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.28.2
 [0.28.1]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.28.1
