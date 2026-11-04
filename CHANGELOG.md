@@ -18,6 +18,16 @@ next section.
 
 No unreleased changes.
 
+## [0.28.5] - 2026-11-03
+
+### Fixed
+
+- The Stripe sandbox run's `start` now tells the maintainer that Stripe's payout can take up to a
+  week or more, not "a few hours to a few days", and that running `resume` too early does no harm.
+  That is the wait the payment-simulation runbook records, and the runbook's own overview of the run
+  now says the same. A test pins the message and fails if either it or the runbook's "How long"
+  paragraph changes on its own, so the two cannot drift apart again (#687).
+
 ## [0.28.4] - 2026-11-03
 
 ### Fixed
@@ -1674,7 +1684,8 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.28.4...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.28.5...HEAD
+[0.28.5]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.28.5
 [0.28.4]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.28.4
 [0.28.3]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.28.3
 [0.28.2]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.28.2
