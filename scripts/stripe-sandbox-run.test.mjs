@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
 import {
@@ -564,6 +565,24 @@ describe("start", () => {
     );
     assert.match(summary, /check-invariants --all: all clean/);
     assert.match(summary, new RegExp(`resume ${RUN}`));
+  });
+
+  it("tells the maintainer to expect the payout wait the runbook records", async () => {
+    const wait = /up to a week or more/;
+    const { deps, printed } = fakes();
+    await start(deps);
+    const next = printed.find((line) => line.startsWith("Next:"));
+    assert.ok(next, "start printed no Next: line");
+    assert.match(next, wait);
+    const runbook = readFileSync(
+      new URL("../docs/runbooks/payment-simulation.md", import.meta.url),
+      "utf8",
+    );
+    const howLong = runbook
+      .split(/\r?\n\r?\n/)
+      .find((paragraph) => paragraph.startsWith("**How long.**"));
+    assert.ok(howLong, "the runbook has no **How long.** paragraph");
+    assert.match(howLong.replace(/\s+/g, " "), wait);
   });
 
   it("waits for one sweep of each fixture, and fails on a sweep that failed", async () => {

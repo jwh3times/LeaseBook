@@ -3,7 +3,7 @@
 - **Audience:** Developers and test operators
 - **Status:** Implemented, non-live only
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-30
+- **Last reviewed:** 2026-11-03
 
 The simulator exercises the real Payments and Accounting path. It has no provider network client
 and cannot move real money. Production and Staging reject Simulation; live/provider configuration
@@ -182,8 +182,8 @@ only when that amount is Stripe's.
 ### The run, in order
 
 `scripts/stripe-sandbox-run.mjs` does the run up to a held payout, in two halves: `start` charges
-one ACH payment and one card payment, and `resume`, hours or days later, finds Stripe's payout of
-them. Each step has its own part below.
+one ACH payment and one card payment, and `resume`, up to a week or more later, finds Stripe's
+payout of them. Each step has its own part below.
 
 1. Check [what you need](#what-you-need), and [create the sandbox fixture](#create-the-sandbox-fixture)
    once.
