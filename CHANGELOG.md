@@ -18,6 +18,18 @@ next section.
 
 No unreleased changes.
 
+## [0.28.7] - 2026-11-04
+
+### Changed
+
+- The web unit suite now runs in the `America/New_York` time zone on every machine, and each test
+  starts at 22:00 local time, when the UTC date is already the next day. CI runs in UTC, where code
+  that takes "today" from the UTC date gets the right day, so a test of that kind of bug passed
+  there and failed only on a US machine in the evening. Now such a test fails wherever the suite
+  runs, which is the guard the upcoming fixes for those dates need. Only `Date` is faked and it
+  keeps moving, so timers and waits behave as before. A new test fails if either setting is removed,
+  and the `react-frontend` guidance explains how to write date tests under it (#643).
+
 ## [0.28.6] - 2026-11-04
 
 ### Fixed
@@ -1696,7 +1708,8 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.28.6...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.28.7...HEAD
+[0.28.7]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.28.7
 [0.28.6]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.28.6
 [0.28.5]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.28.5
 [0.28.4]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.28.4
