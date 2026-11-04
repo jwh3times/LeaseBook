@@ -240,3 +240,71 @@ describe('LoginPage', () => {
     queryClient = renderLogin();
   });
 });
+
+// #574: each step of sign-in mounts fresh and puts focus on its first field (WCAG 2.4.3). The steps
+// were unkeyed siblings, so React reused the email input as the code input, `autoFocus` never ran,
+// and focus fell to the page body.
+describe('LoginPage focus between steps', () => {
+  function requireMfa() {
+    server.use(
+      http.post('/api/auth/login', () =>
+        HttpResponse.json({ status: 'mfa-required', mfaToken: 'tok-123' }),
+      ),
+    );
+  }
+
+  async function passwordThenEnter() {
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText('Email'), 'admin@example.com');
+    await user.type(screen.getByLabelText('Password'), 'Tarheel-Trust-2026!{Enter}');
+    return user;
+  }
+
+  beforeEach(() => {
+    renderLogin();
+  });
+
+  it('starts on the email field', () => {
+    expect(screen.getByLabelText('Email')).toHaveFocus();
+  });
+
+  it('focuses the authentication code after Enter on the password, on a new form', async () => {
+    requireMfa();
+    const signIn = screen.getByRole('button', { name: 'Sign in' });
+    await passwordThenEnter();
+
+    expect(await screen.findByLabelText('Authentication code')).toHaveFocus();
+    // A reused button would still be in the page, relabelled.
+    expect(signIn).not.toBeInTheDocument();
+  });
+
+  it('focuses the recovery code when switching to it, and the authentication code when switching back', async () => {
+    requireMfa();
+    const user = await passwordThenEnter();
+    const toRecovery = await screen.findByRole('button', { name: 'Use a recovery code' });
+
+    await user.click(toRecovery);
+    expect(screen.getByLabelText('Recovery code')).toHaveFocus();
+    expect(toRecovery).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Use authenticator code' }));
+    expect(screen.getByLabelText('Authentication code')).toHaveFocus();
+  });
+
+  it('focuses the email field when an expired sign-in attempt returns to the password step', async () => {
+    requireMfa();
+    server.use(
+      http.post('/api/auth/mfa', () =>
+        HttpResponse.json(
+          { code: 'mfa_session_expired', detail: 'Your sign-in attempt timed out.' },
+          { status: 401 },
+        ),
+      ),
+    );
+    const user = await passwordThenEnter();
+    await user.type(await screen.findByLabelText('Authentication code'), '123456{Enter}');
+
+    expect(await screen.findByText(/timed out/i)).toBeInTheDocument();
+    expect(screen.getByLabelText('Email')).toHaveFocus();
+  });
+});

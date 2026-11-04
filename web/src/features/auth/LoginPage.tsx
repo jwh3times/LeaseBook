@@ -165,8 +165,19 @@ export function LoginPage({ onSignedIn }: { onSignedIn?: () => void } = {}) {
             </div>
           </div>
 
+          {/*
+            Each step, and each kind of code, is keyed so it mounts fresh and `autoFocus` puts focus
+            on its first field (#574). Unkeyed, React reused one step's elements for the next: the
+            email input became the code input without ever being focused, focus fell to the page
+            body when the password field went, and "Sign in" turned into "Use a recovery code" in
+            place.
+          */}
           {onMfaStep ? (
-            <form className="col gap12" onSubmit={submitMfa}>
+            <form
+              key={useRecoveryCode ? 'recovery-code' : 'authenticator-code'}
+              className="col gap12"
+              onSubmit={submitMfa}
+            >
               <label className="col gap6 fs13 t2">
                 {useRecoveryCode ? 'Recovery code' : 'Authentication code'}
                 <Input
@@ -202,7 +213,7 @@ export function LoginPage({ onSignedIn }: { onSignedIn?: () => void } = {}) {
               </Button>
             </form>
           ) : (
-            <form className="col gap12" onSubmit={submitPassword}>
+            <form key="password" className="col gap12" onSubmit={submitPassword}>
               <label className="col gap6 fs13 t2">
                 Email
                 <Input
