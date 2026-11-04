@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-// The suite runs in a US time zone at an evening instant, when the local date is already behind the
-// UTC date (#643). CI's machines run in UTC, where slicing an ISO string gives the right date, so a
-// date bug that only shows in US evenings would otherwise pass everywhere the suite runs.
+// Guards the suite's zone (`test.env` in vite.config.ts) and evening clock (setup.ts), #643.
 describe('the unit suite clock', () => {
   it('runs in America/New_York whatever zone the machine has', () => {
+    // The variable as well as the resolved zone: on a machine already in New York, the zone alone
+    // would stay right with the setting gone.
+    expect(process.env.TZ).toBe('America/New_York');
     expect(Intl.DateTimeFormat().resolvedOptions().timeZone).toBe('America/New_York');
   });
 
