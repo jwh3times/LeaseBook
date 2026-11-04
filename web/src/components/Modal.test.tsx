@@ -56,6 +56,58 @@ describe('Modal', () => {
   });
 });
 
+// #561: a dialog given `onSubmit` is one form, footer included, so its submit button is the form's
+// default button. Enter in a field then submits it, and the fields' own constraints run first.
+describe('Modal as a form', () => {
+  function FormModal({ onSubmit }: { onSubmit: () => void }) {
+    return (
+      <Modal
+        title="Form modal"
+        onClose={() => {}}
+        onSubmit={(event) => {
+          event.preventDefault();
+          onSubmit();
+        }}
+        footer={
+          <>
+            <button type="button">Cancel</button>
+            <button type="submit">Save</button>
+          </>
+        }
+      >
+        <input aria-label="Name" required />
+        <input aria-label="Email" type="email" />
+      </Modal>
+    );
+  }
+
+  it('submits once when Enter is pressed in a field', async () => {
+    const onSubmit = vi.fn();
+    render(<FormModal onSubmit={onSubmit} />);
+    await userEvent.type(screen.getByLabelText('Name'), 'Ada');
+    await userEvent.type(screen.getByLabelText('Email'), 'ada@example.test{Enter}');
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+
+  it('submits once from the footer button', async () => {
+    const onSubmit = vi.fn();
+    render(<FormModal onSubmit={onSubmit} />);
+    await userEvent.type(screen.getByLabelText('Name'), 'Ada');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not submit while a field fails its own constraint', async () => {
+    const onSubmit = vi.fn();
+    render(<FormModal onSubmit={onSubmit} />);
+    await userEvent.type(screen.getByLabelText('Name'), 'Ada');
+    await userEvent.type(screen.getByLabelText('Email'), 'not-an-email{Enter}');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(screen.getByLabelText('Email')).toBeInvalid();
+  });
+});
+
 // #554: Tab never leaves an open dialog for the page behind it, as aria-modal promises.
 describe('Modal focus trap', () => {
   function renderWithFooter() {

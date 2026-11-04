@@ -45,6 +45,26 @@ function listHandler(items = TENANTS) {
   );
 }
 
+/** The record a successful create opens on. */
+function newTenantHandler() {
+  return http.get('/api/directory/tenants/tNew', () =>
+    HttpResponse.json({
+      id: 'tNew',
+      displayName: 'New Renter',
+      contact: { email: null, phone: null },
+      lifecycleStatus: 'current',
+      financialStanding: { delinquentBalance: 0, unappliedCredit: 0 },
+      lease: null,
+      unitLabel: null,
+      propertyAddress: null,
+      ownerId: null,
+      ownerName: null,
+      balance: 0,
+      depositHeld: 0,
+    }),
+  );
+}
+
 function renderTenants() {
   // The detail route is the M3 LedgerPage, which loads the tenant's ledger; a benign empty ledger keeps
   // these navigation tests focused on routing.
@@ -161,28 +181,53 @@ describe('TenantsPage', () => {
       listHandler(),
       http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 })),
       http.post('/api/directory/tenants', () => HttpResponse.json({ id: 'tNew' })),
-      http.get('/api/directory/tenants/tNew', () =>
-        HttpResponse.json({
-          id: 'tNew',
-          displayName: 'New Renter',
-          contact: { email: null, phone: null },
-          lifecycleStatus: 'current',
-          financialStanding: { delinquentBalance: 0, unappliedCredit: 0 },
-          lease: null,
-          unitLabel: null,
-          propertyAddress: null,
-          ownerId: null,
-          ownerName: null,
-          balance: 0,
-          depositHeld: 0,
-        }),
-      ),
+      newTenantHandler(),
     );
     renderTenants();
     await userEvent.click(await screen.findByRole('button', { name: /new tenant/i }));
     await userEvent.type(screen.getByLabelText('Display name'), 'New Renter');
     await userEvent.click(screen.getByRole('button', { name: /create tenant/i }));
     expect(await screen.findByRole('heading', { name: 'New Renter' })).toBeInTheDocument();
+  });
+
+  // #561: Enter in a field submits the dialog, and the fields' own constraints run before any request.
+  it('creates the tenant once when Enter is pressed in a field', async () => {
+    let posts = 0;
+    server.use(
+      listHandler(),
+      newTenantHandler(),
+      http.post('/api/directory/tenants', () => {
+        posts += 1;
+        return HttpResponse.json({ id: 'tNew' });
+      }),
+    );
+    renderTenants();
+    await userEvent.click(await screen.findByRole('button', { name: 'New tenant' }));
+    await userEvent.type(screen.getByLabelText('Display name'), 'New Renter');
+    await userEvent.type(screen.getByLabelText('Phone'), '919-555-0100{Enter}');
+
+    expect(await screen.findByRole('heading', { name: 'New Renter' })).toBeInTheDocument();
+    expect(posts).toBe(1);
+  });
+
+  it('sends nothing for a malformed email, from Enter or the button, and marks the email field', async () => {
+    let posts = 0;
+    server.use(
+      listHandler(),
+      http.post('/api/directory/tenants', () => {
+        posts += 1;
+        return HttpResponse.json({ id: 'tNew' });
+      }),
+    );
+    renderTenants();
+    await userEvent.click(await screen.findByRole('button', { name: 'New tenant' }));
+    await userEvent.type(screen.getByLabelText('Display name'), 'New Renter');
+    await userEvent.type(screen.getByLabelText('Email'), 'not-an-email{Enter}');
+    await userEvent.click(screen.getByRole('button', { name: 'Create tenant' }));
+
+    expect(screen.getByLabelText('Email')).toBeInvalid();
+    expect(screen.getByRole('dialog', { name: 'New tenant' })).toBeInTheDocument();
+    expect(posts).toBe(0);
   });
 
   it('shows the server reason and support reference when the create fails', async () => {

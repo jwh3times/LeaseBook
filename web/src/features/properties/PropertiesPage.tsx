@@ -115,6 +115,7 @@ function NewPropertyModal({
     <Modal
       title="New property"
       onClose={onClose}
+      onSubmit={submit}
       footer={
         <>
           <Button variant="ghost" size="sm" onClick={onClose}>
@@ -123,7 +124,7 @@ function NewPropertyModal({
           <Button
             variant="primary"
             size="sm"
-            onClick={submit}
+            type="submit"
             disabled={create.isPending || !address || !ownerId}
           >
             {create.isPending ? 'Creating…' : 'Create property'}
@@ -131,7 +132,7 @@ function NewPropertyModal({
         </>
       }
     >
-      <form className="pf-modal-body" onSubmit={submit}>
+      <div className="pf-modal-body">
         <div className="pf-formrow">
           <label htmlFor="p-owner">Owner</label>
           {/*
@@ -208,7 +209,7 @@ function NewPropertyModal({
           ) : (
             <ApiErrorNotice error={error} fallback="Could not create the property." />
           ))}
-      </form>
+      </div>
     </Modal>
   );
 }

@@ -48,14 +48,16 @@ function countPosts(page: Page, path: string): () => number {
 }
 
 /**
- * Creates from the keyboard. These dialogs have no submit button inside the form, so Enter in a
- * field submits nothing; the keyboard path is Tab past Cancel to the create button, and Enter there.
+ * A field the browser refused before anything was sent (#561): submitting runs the fields' own
+ * constraints, reports the first that fails and moves focus to it. The message is the browser's
+ * own, in its own words, so only the failed constraint is asserted.
  */
-async function createByKeyboard(page: Page, create: Locator): Promise<void> {
-  await page.keyboard.press('Tab');
-  await page.keyboard.press('Tab');
-  await expect(create).toBeFocused();
-  await page.keyboard.press('Enter');
+async function expectRefusedInPlace(
+  field: Locator,
+  constraint: 'rangeOverflow' | 'typeMismatch',
+): Promise<void> {
+  await expect(field).toBeFocused();
+  expect(await field.evaluate((el: HTMLInputElement, c) => el.validity[c], constraint)).toBe(true);
 }
 
 test('creates an owner by keyboard: a fee over 100% is refused, and the new owner shows on its page and in the list @scenario:directory-create-owner', async ({
@@ -76,32 +78,32 @@ test('creates an owner by keyboard: a fee over 100% is refused, and the new owne
   await expect(dialog.getByLabel('Name')).toBeFocused();
   await expect(create).toBeDisabled();
 
-  // A management fee over 100% is refused by the server, in place, and no owner is created.
+  // A management fee over 100% is refused in the browser, from Enter in a field or from the button,
+  // and nothing is sent.
   await dialog.getByLabel('Name').fill(name);
   await dialog.getByLabel('Mgmt fee %').fill('150');
+  await page.keyboard.press('Enter');
   await create.click();
-  await expect(dialog.getByRole('alert')).toContainText(
-    'The management fee must be between 0 and 10000 basis points.',
-  );
+  await expectRefusedInPlace(dialog.getByLabel('Mgmt fee %'), 'rangeOverflow');
   await expect(dialog).toBeVisible();
-  expect(posts()).toBe(1);
+  expect(posts()).toBe(0);
 
-  // Keyboard path: correct the fee, fill the rest, and create from the keyboard. Email is the last
-  // field, so the footer's buttons follow it.
-  await dialog.getByLabel('Mgmt fee %').fill('7.5');
+  // Keyboard path: correct the fee to one with two decimals, fill the rest, and press Enter in the
+  // last field.
+  await dialog.getByLabel('Mgmt fee %').fill('7.25');
   await dialog.getByLabel('Initials').fill('eo');
   await expect(dialog.getByLabel('Initials')).toHaveValue('EO');
   await dialog.getByLabel('Email').fill(email);
-  await createByKeyboard(page, create);
+  await page.keyboard.press('Enter');
 
   // Creating opens the owner's page, which shows what was entered.
   await expect(page).toHaveURL(/\/owners\/[0-9a-f-]+$/);
   await expect(page.getByRole('heading', { name, level: 2 })).toBeVisible();
   const content = page.locator('.pf-page');
-  await expect(content).toContainText('Default management fee · 7.50%');
+  await expect(content).toContainText('Default management fee · 7.25%');
   await expect(content.locator('.pf-kv').filter({ hasText: 'Email' })).toContainText(email);
   await expect(content).toContainText('0 on file.');
-  expect(posts()).toBe(2);
+  expect(posts()).toBe(1);
 
   // And it is in the list, with no units or properties yet.
   await content.getByRole('button', { name: 'Owners' }).click();
@@ -138,7 +140,8 @@ test('creates a property for a new owner by keyboard: a blank address is refused
   await dialog.getByLabel('Address').fill(address);
   await expect(create).toBeDisabled();
 
-  // The owner list offers the new owner. A blank address is refused by the server, in place.
+  // The owner list offers the new owner. An address of only spaces satisfies the browser's
+  // `required`, so it is the server that refuses it, in place.
   await dialog.getByLabel('Owner').selectOption({ label: owner });
   await dialog.getByLabel('Address').fill('   ');
   await create.click();
@@ -146,13 +149,12 @@ test('creates a property for a new owner by keyboard: a blank address is refused
   await expect(dialog).toBeVisible();
   expect(posts()).toBe(1);
 
-  // Keyboard path: fill the address and the city, keep the default state, and create from the
-  // keyboard. State is the last field, so the footer's buttons follow it.
+  // Keyboard path: fill the address and the city, keep the default state, and press Enter in the
+  // city.
   await dialog.getByLabel('Address').fill(address);
   await dialog.getByLabel('City').fill('Durham');
   await expect(dialog.getByLabel('State')).toHaveValue('NC');
-  await dialog.getByLabel('State').focus();
-  await createByKeyboard(page, create);
+  await page.keyboard.press('Enter');
 
   // Creating opens the property's page: the address, the city and state, the owner, and no units.
   await expect(page).toHaveURL(/\/properties\/[0-9a-f-]+$/);
@@ -207,22 +209,22 @@ test('creates a tenant by keyboard: a malformed email is refused, and the new te
   await expect(dialog.getByLabel('Display name')).toBeFocused();
   await expect(create).toBeDisabled();
 
-  // A malformed email is refused by the server, in place, and no tenant is created.
+  // A malformed email is refused in the browser, from Enter in a field or from the button, and
+  // nothing is sent.
   await dialog.getByLabel('Display name').fill(name);
   await dialog.getByLabel('Email').fill('not-an-email');
+  await page.keyboard.press('Enter');
   await create.click();
-  await expect(dialog.getByRole('alert')).toContainText('is not a valid email address.');
+  await expectRefusedInPlace(dialog.getByLabel('Email'), 'typeMismatch');
   await expect(dialog).toBeVisible();
-  expect(posts()).toBe(1);
+  expect(posts()).toBe(0);
 
-  // Keyboard path: correct the email, fill the rest, and create from the keyboard. Lifecycle is the
-  // last field, so the footer's buttons follow it. The tenant is created as a past one, with no
-  // lease, so no rent run or late-fee run picks it up.
+  // Keyboard path: correct the email, fill the rest, and press Enter in the phone field. The tenant
+  // is created as a past one, with no lease, so no rent run or late-fee run picks it up.
   await dialog.getByLabel('Email').fill(`e2e-tenant-${id}@example.test`);
-  await dialog.getByLabel('Phone').fill(phone);
   await dialog.getByLabel('Lifecycle').selectOption('Past');
-  await dialog.getByLabel('Lifecycle').focus();
-  await createByKeyboard(page, create);
+  await dialog.getByLabel('Phone').fill(phone);
+  await page.keyboard.press('Enter');
 
   // Creating opens the tenant's ledger, whose header shows what was entered and an empty position.
   await expect(page).toHaveURL(/\/tenants\/[0-9a-f-]+$/);
@@ -234,7 +236,7 @@ test('creates a tenant by keyboard: a malformed email is refused, and the new te
   await expect(header.locator('.pf-tstat').filter({ hasText: 'Current balance' })).toContainText(
     '—',
   );
-  expect(posts()).toBe(2);
+  expect(posts()).toBe(1);
 
   // And it is in the list, with no unit, no rent and no balance.
   await openList(page, 'Tenants');
