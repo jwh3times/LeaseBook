@@ -18,6 +18,18 @@ next section.
 
 No unreleased changes.
 
+## [0.28.6] - 2026-11-04
+
+### Fixed
+
+- The `dotnet-api` guidance's worked example of a feature file now matches the file it names,
+  `Features/Import/ConfirmMatches.cs`. It showed a `HandleAsync` method where the code has `Handle`,
+  so a handler copied from it would not implement `ICommandHandler`, and its command key, result
+  record and handler constructor were all out of date. The note beneath it also described a
+  result-less `ICommand` that does not exist; it now says every command declares
+  `ICommand<TResult>`. The example is marked as abridged, so a reader knows which file to check
+  (#679).
+
 ## [0.28.5] - 2026-11-03
 
 ### Fixed
@@ -1684,7 +1696,8 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.28.5...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.28.6...HEAD
+[0.28.6]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.28.6
 [0.28.5]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.28.5
 [0.28.4]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.28.4
 [0.28.3]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.28.3

@@ -33,44 +33,52 @@ Modules reference `SharedKernel` only. Cross-module calls go through Contracts p
 
 ## Vertical slice anatomy
 
-One feature = one file. All three live together, no separate layer folders:
+One feature = one file. Every part lives together, no separate layer folders:
 
 ```csharp
-// Features/Import/ConfirmMatches.cs
+// Features/Import/ConfirmMatches.cs (abridged; check that file when they differ)
 namespace LeaseBook.Modules.Banking.Features.Import;
 
 // 1. Command / Query record
-public sealed record ConfirmMatches(
-    Guid BankAccountId,
-    IReadOnlyList<MatchDecision> Decisions
-) : ICommand<ConfirmMatchesResult>;
+public sealed record ConfirmMatches(Guid ImportId, IReadOnlyList<MatchDecision> Decisions)
+    : ICommand<ConfirmMatchesResult>;
 
-// 2. FluentValidation validator — same file, named {Command}Validator
+public sealed record MatchDecision(Guid StatementLineId, Guid? JournalLineId, string Kind, string? GroupRef = null);
+
+// 2. Result record(s) — same file
+public sealed record ConfirmMatchesResult(int Cleared, int Recorded, IReadOnlyList<Guid> UnmatchedLineIds);
+
+// 3. FluentValidation validator — same file, named {Command}Validator
 public sealed class ConfirmMatchesValidator : AbstractValidator<ConfirmMatches>
 {
     public ConfirmMatchesValidator()
     {
-        RuleFor(x => x.BankAccountId).NotEmpty();
+        RuleFor(x => x.ImportId).NotEmpty();
         RuleFor(x => x.Decisions).NotEmpty();
+        RuleForEach(x => x.Decisions).ChildRules(d =>
+        {
+            d.RuleFor(x => x.StatementLineId).NotEmpty();
+            // … per-decision rules for Kind, JournalLineId and GroupRef
+        });
     }
 }
 
-// 3. Handler — internal sealed
-internal sealed class ConfirmMatchesHandler(AppDbContext db, IBankClearing clearing)
+// 4. Handler — internal sealed; the module's own tables through DbContext, other modules through ports
+internal sealed class ConfirmMatchesHandler(
+    DbContext db, IActorContext actor, IBankClearing clearing, IBankRegister register)
     : ICommandHandler<ConfirmMatches, ConfirmMatchesResult>
 {
-    public async Task<ConfirmMatchesResult> HandleAsync(ConfirmMatches cmd, CancellationToken ct)
+    public async Task<ConfirmMatchesResult> Handle(ConfirmMatches command, CancellationToken ct)
     {
         // … implementation
     }
 }
-
-// 4. Result record(s) — same file
-public sealed record ConfirmMatchesResult(int Cleared, int Skipped);
 ```
 
+- Handlers implement `Task<TResult> Handle(TCommand command, CancellationToken ct)`, declared in
+  `SharedKernel/Cqrs/Messages.cs`, so the method is named `Handle`
 - Queries use `IQuery<TResult>` + `IQueryHandler<TQuery, TResult>`
-- Commands that have no return value use `ICommand` (no type param) + `ICommandHandler<TCommand>`
+- Every command declares `ICommand<TResult>`, with a result even when it is trivial (`bool`, `Guid`)
 - Never split into separate Command/Handler/Validator files
 
 ---
