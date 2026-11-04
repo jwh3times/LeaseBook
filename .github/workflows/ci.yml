@@ -171,8 +171,9 @@ jobs:
       # A maintainer's run of a host against a real Stripe sandbox (#585) never happens here: it
       # needs a sandbox key, and the script refuses to start in CI at all. Its tests do run, on fake
       # dependencies: what it refuses before anything starts, that a fixture database is only ever
-      # copied, what it masks, which environment each process gets, and the order in which start,
-      # resume and discard stop things and decide whether to keep a run's copy.
+      # copied, what it masks, which environment each process gets, how it reads the manifest,
+      # the check that the account is quiet, one Stripe CLI process at a time, and the order in
+      # which start, resume and discard stop things and decide whether to keep a run's copy.
       - name: Test the Stripe sandbox run
         working-directory: ${{ github.workspace }}
         run: node --test scripts/stripe-sandbox-run.test.mjs
@@ -202,9 +203,8 @@ jobs:
       - name: Test the challenged links script
         working-directory: ${{ github.workspace }}
         run: node --test scripts/challenged-links.test.mjs
-      # Steps name each script test file, with no glob, so a new one that no step names would never
-      # run here (#692). This guard fails, naming the file, when a `scripts/*.test.mjs` is named in
-      # no workflow and no `web/package.json` script. It reads names only, so it covers itself too.
+      # The guard on the named steps above (#692): its own header says what it checks and what it
+      # cannot. This step is what puts the guard's own file under it.
       - name: Test that every script test file runs in a step
         working-directory: ${{ github.workspace }}
         run: node --test scripts/script-tests-listed.test.mjs
