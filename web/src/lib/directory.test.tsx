@@ -21,7 +21,7 @@ let reads: Record<string, number>;
 const page = { items: [], total: 0, page: 1, pageSize: 200 };
 
 /** Answers a read at `url` with `body`, counting each fetch under `name`. */
-function read(name: string, url: string, body: JsonBodyType) {
+function countedRead(name: string, url: string, body: JsonBodyType) {
   return http.get(url, () => {
     reads[name] = (reads[name] ?? 0) + 1;
     return HttpResponse.json(body);
@@ -31,12 +31,15 @@ function read(name: string, url: string, body: JsonBodyType) {
 beforeEach(() => {
   reads = {};
   server.use(
-    read('owners', '/api/directory/owners', page),
-    read('owner o1', '/api/directory/owners/o1', { id: 'o1', name: 'Hargrove Family Trust' }),
-    read('owner o2', '/api/directory/owners/o2', { id: 'o2', name: 'Pryor Holdings' }),
-    read('properties', '/api/directory/properties', page),
-    read('tenants', '/api/directory/tenants', page),
-    read('search', '/api/search', []),
+    countedRead('owners', '/api/directory/owners', page),
+    countedRead('owner o1', '/api/directory/owners/o1', {
+      id: 'o1',
+      name: 'Hargrove Family Trust',
+    }),
+    countedRead('owner o2', '/api/directory/owners/o2', { id: 'o2', name: 'Pryor Holdings' }),
+    countedRead('properties', '/api/directory/properties', page),
+    countedRead('tenants', '/api/directory/tenants', page),
+    countedRead('search', '/api/search', []),
     http.post('/api/directory/properties', () => HttpResponse.json({ id: 'pNew' })),
     http.post('/api/directory/owners', () => HttpResponse.json({ id: 'oNew' })),
     http.post('/api/directory/tenants', () => HttpResponse.json({ id: 'tNew' })),
