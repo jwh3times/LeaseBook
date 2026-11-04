@@ -176,12 +176,10 @@ test('creates a property for a new owner by keyboard: a blank address is refused
   row = await onlyRow(page, 'Properties', owner);
   await expect(row.locator('td').nth(0)).toHaveText(address);
 
-  // And the owner now has one property, on the list and on the owner's own page. Creating a
-  // property does not refresh the owner list or the owner's page, which the browser keeps for 30
-  // seconds, so the page is reloaded to read what is stored.
+  // And the owner now has one property, on the list and on the owner's own page, with no reload:
+  // creating the property refreshes both (#559). The owner's page was last read when the owner was
+  // created, with no properties, well inside the 30 seconds the browser would otherwise keep it.
   await openList(page, 'Owners');
-  await page.reload();
-  await expect(page.getByRole('heading', { name: 'Owners', level: 2 })).toBeVisible();
   row = await onlyRow(page, 'Owners', owner);
   await expect(row.locator('td').nth(2)).toHaveText('1');
   await row.click();

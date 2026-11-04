@@ -141,6 +141,11 @@ Rules:
   (ADR-025): a literal throw discards the `code` and `correlationId` the server already sent, which
   is exactly what kept failed reads from ever rendering a support reference.
 - Export the key fn so mutations can invalidate by the same key
+- A mutation invalidates every read whose result it changes, not only its own list. The default
+  `staleTime` is 30 seconds, so a read it misses shows the old state that long: creating a property
+  left its owner's property count at 0 because only `['properties']` was invalidated (#559). Name
+  the related records too (the owner list and `['owner', ownerId]` for a new property), and
+  `['search']` for anything the palette can find
 - **A write carrying a secret skips `useMutation`.** The mutation cache keeps each call's `variables`,
   so a bank routing or account number sent through `useMutation` stays in memory, readable from the
   query client, after the save. Call the write function directly with local pending/error state, clear

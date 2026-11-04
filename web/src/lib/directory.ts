@@ -138,13 +138,22 @@ export function useUpdateLease(tenantId: string) {
   });
 }
 
+// A create refreshes every read whose result it changes, so none of them shows the old state until
+// the 30-second stale time runs out (#559). Every create can change what the palette's search finds.
+// The dashboard's owner balances are summed from journal lines, so a record with no postings has no
+// row there and none of these touches it.
+
 export function useCreateTenant() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (body: CreateTenantBody) => {
       return unwrap(postApiDirectoryTenants({ body }), 'Failed to create the tenant');
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['tenants'] }),
+    onSuccess: () =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: ['tenants'] }),
+        qc.invalidateQueries({ queryKey: ['search'] }),
+      ]),
   });
 }
 
@@ -154,17 +163,28 @@ export function useCreateOwner() {
     mutationFn: async (body: CreateOwnerBody) => {
       return unwrap(postApiDirectoryOwners({ body }), 'Failed to create the owner');
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['owners'] }),
+    onSuccess: () =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: ['owners'] }),
+        qc.invalidateQueries({ queryKey: ['search'] }),
+      ]),
   });
 }
 
+/** The owner gains a property, so its row in the owners list and its own page change too. */
 export function useCreateProperty() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (body: CreatePropertyBody) => {
       return unwrap(postApiDirectoryProperties({ body }), 'Failed to create the property');
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['properties'] }),
+    onSuccess: (_created, body) =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: ['properties'] }),
+        qc.invalidateQueries({ queryKey: ['owners'] }),
+        qc.invalidateQueries({ queryKey: ['owner', body.ownerId] }),
+        qc.invalidateQueries({ queryKey: ['search'] }),
+      ]),
   });
 }
 

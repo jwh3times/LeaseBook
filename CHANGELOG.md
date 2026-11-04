@@ -18,6 +18,15 @@ next section.
 
 No unreleased changes.
 
+## [0.28.9] - 2026-11-04
+
+### Fixed
+
+- After a property is created, the owners list and the owner's own page show the owner's new
+  property count and list it straight away. Until now they kept the old count, 0 for an owner's first
+  property, for up to 30 seconds. Creating an owner, a property or a tenant also refreshes the command
+  palette's search results, so a new record can be found at once (#559).
+
 ## [0.28.8] - 2026-11-04
 
 ### Fixed
@@ -1721,7 +1730,8 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.28.8...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.28.9...HEAD
+[0.28.9]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.28.9
 [0.28.8]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.28.8
 [0.28.7]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.28.7
 [0.28.6]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.28.6
