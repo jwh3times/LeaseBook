@@ -1,6 +1,6 @@
 // Registers jest-dom matchers (e.g. toBeInTheDocument) with Vitest's expect, plus their types.
 import '@testing-library/jest-dom/vitest';
-import { afterAll, afterEach, beforeAll, expect, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, expect, vi } from 'vitest';
 import { server } from './mocks/server';
 import { createRequestLeakGuard, leakedRequestMessage } from './requestLeakGuard';
 
@@ -45,6 +45,20 @@ afterEach(async ({ task }) => {
   }
 });
 afterAll(() => server.close());
+
+// Start every test at 22:00 today in the suite's zone (America/New_York, vite.config.ts), when the UTC
+// date is already tomorrow's (#643). A "today" taken from the UTC date then gives the wrong day in
+// every test, not only in tests run in a US evening. Only Date is faked, and it keeps moving with real
+// time, so timers, waits and elapsed-time reads behave as before. A test that fakes timers itself
+// replaces this clock, and the next test gets it back.
+beforeEach(() => {
+  const evening = new Date();
+  evening.setHours(22, 0, 0, 0);
+  vi.useFakeTimers({ toFake: ['Date'], now: evening, shouldAdvanceTime: true });
+});
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 // This jsdom build does not provide localStorage; give tests an in-memory Storage so code that
 // persists preferences (e.g. ThemeProvider) is exercised rather than silently no-op'd.

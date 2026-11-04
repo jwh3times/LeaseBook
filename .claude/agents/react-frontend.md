@@ -423,6 +423,13 @@ test("records a payment", async () => {
   next test's handlers. A test fails with "sent a request that never reached the mock server" only
   when one never arrives. The guard covers dispatch, not completion — still wait for what a request
   produces before asserting on it
+- The suite runs in `America/New_York` (`test.env` in `vite.config.ts`), and setup.ts starts every
+  test at 22:00 today there, when the UTC date is already tomorrow's (#643). "Today" taken by slicing
+  `new Date().toISOString()` is then the wrong day in every test, on every machine and in CI, so test
+  a date by its local value and never pin `TZ=UTC` to make one pass. Only `Date` is faked, and it keeps
+  moving, so timers and waits behave as usual. To start a test at another instant, call
+  `vi.setSystemTime(…)` in it (the clock moves on from there). A test that fakes timers itself replaces
+  the clock until the next test, and its clock starts frozen at that 22:00, not at real time
 
 ---
 

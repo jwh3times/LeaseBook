@@ -8,6 +8,14 @@ afterEach(() => {
 });
 
 describe('localDate', () => {
+  // Sets no TZ of its own: the suite's zone and evening clock (#643) make this fail wherever it runs if
+  // localDate goes back to slicing the UTC string. The expected value names its zone on purpose.
+  it("gives today's local date at the suite's evening instant", () => {
+    expect(localDate(new Date().toISOString())).toBe(
+      new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date()),
+    );
+  });
+
   it('gives the date an evening in US Eastern falls on, not the UTC date', () => {
     process.env.TZ = 'America/New_York';
     // 9 pm Eastern on 12 October.
