@@ -65,6 +65,8 @@ describe('New owner dialog', () => {
     });
   });
 
+  // A refused value is corrected and sent, so the one request that reaches the server must carry the
+  // correction: a request the refusal let through would have been sent first.
   it('sends nothing for a fee over 100%, from Enter or the button, and marks the fee field', async () => {
     await openNewOwner();
     await setFee('150');
@@ -73,7 +75,11 @@ describe('New owner dialog', () => {
 
     expect(screen.getByLabelText('Mgmt fee %')).toBeInvalid();
     expect(screen.getByRole('dialog', { name: 'New owner' })).toBeInTheDocument();
-    expect(posts).toHaveLength(0);
+
+    await setFee('15');
+    await userEvent.click(screen.getByRole('button', { name: 'Create owner' }));
+    expect(await screen.findByText('owner page')).toBeInTheDocument();
+    expect(posts).toEqual([expect.objectContaining({ defaultMgmtFeeBps: 1500 })]);
   });
 
   it('sends nothing for a malformed email, and marks the email field', async () => {
@@ -82,6 +88,10 @@ describe('New owner dialog', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Create owner' }));
 
     expect(screen.getByLabelText('Email')).toBeInvalid();
-    expect(posts).toHaveLength(0);
+
+    await userEvent.clear(screen.getByLabelText('Email'));
+    await userEvent.type(screen.getByLabelText('Email'), 'trust@example.test{Enter}');
+    expect(await screen.findByText('owner page')).toBeInTheDocument();
+    expect(posts).toEqual([expect.objectContaining({ contactEmail: 'trust@example.test' })]);
   });
 });

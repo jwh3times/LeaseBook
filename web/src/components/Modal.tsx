@@ -70,6 +70,13 @@ export function Modal({ title, onClose, children, footer, onSubmit }: ModalProps
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
+  const content = (
+    <>
+      {children}
+      {footer && <div className="pf-modal-ft">{footer}</div>}
+    </>
+  );
+
   return (
     <div
       className="pf-modal-backdrop"
@@ -82,17 +89,7 @@ export function Modal({ title, onClose, children, footer, onSubmit }: ModalProps
           <h3>{title}</h3>
           <IconButton name="x" label="Close" onClick={onClose} />
         </div>
-        {onSubmit ? (
-          <form onSubmit={onSubmit}>
-            {children}
-            {footer && <div className="pf-modal-ft">{footer}</div>}
-          </form>
-        ) : (
-          <>
-            {children}
-            {footer && <div className="pf-modal-ft">{footer}</div>}
-          </>
-        )}
+        {onSubmit ? <form onSubmit={onSubmit}>{content}</form> : content}
       </div>
     </div>
   );

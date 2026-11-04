@@ -211,11 +211,12 @@ describe('TenantsPage', () => {
   });
 
   it('sends nothing for a malformed email, from Enter or the button, and marks the email field', async () => {
-    let posts = 0;
+    const posts: Record<string, unknown>[] = [];
     server.use(
       listHandler(),
-      http.post('/api/directory/tenants', () => {
-        posts += 1;
+      newTenantHandler(),
+      http.post('/api/directory/tenants', async ({ request }) => {
+        posts.push((await request.json()) as Record<string, unknown>);
         return HttpResponse.json({ id: 'tNew' });
       }),
     );
@@ -227,7 +228,13 @@ describe('TenantsPage', () => {
 
     expect(screen.getByLabelText('Email')).toBeInvalid();
     expect(screen.getByRole('dialog', { name: 'New tenant' })).toBeInTheDocument();
-    expect(posts).toBe(0);
+
+    // Corrected and sent: the one request must carry the correction, because a request the refusal
+    // let through would have been sent first.
+    await userEvent.clear(screen.getByLabelText('Email'));
+    await userEvent.type(screen.getByLabelText('Email'), 'renter@example.test{Enter}');
+    expect(await screen.findByRole('heading', { name: 'New Renter' })).toBeInTheDocument();
+    expect(posts).toEqual([expect.objectContaining({ contactEmail: 'renter@example.test' })]);
   });
 
   it('shows the server reason and support reference when the create fails', async () => {

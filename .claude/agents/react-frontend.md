@@ -381,7 +381,10 @@ actually goes red with the branch reverted.
   `type="email"` and `min`/`max`/`step` checks, so invalid values reach the server (#561). A dialog
   with fields passes its handler to `Modal`'s `onSubmit`, which makes the body and the footer one
   form; its body is then a `div`, never a second `<form>`. A `step` must admit every value the field
-  stores: a percentage kept in basis points takes `step="0.01"`
+  stores: a percentage kept in basis points takes `step="0.01"`. The dialogs that post or move money
+  still save from a click, with no form (refund check, apply, late-fee override, transfer of
+  ownership). Whether Enter may post money is a separate decision #561 left open, so they stay as
+  they are until it is made
 
 ---
 
