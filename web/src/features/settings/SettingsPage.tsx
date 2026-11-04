@@ -203,7 +203,7 @@ function OrgProfileForm({ initial }: { initial: OrgSettings }) {
         </div>
 
         <div className="row gap12">
-          <Button variant="primary" size="sm" onClick={save} disabled={update.isPending}>
+          <Button variant="primary" size="sm" type="submit" disabled={update.isPending}>
             {update.isPending ? 'Saving…' : 'Save changes'}
           </Button>
           {saved && (
@@ -366,7 +366,7 @@ function LateFeeForm({ initial }: { initial: OrgSettings }) {
         </p>
 
         <div className="row gap12">
-          <Button variant="primary" size="sm" onClick={save} disabled={update.isPending}>
+          <Button variant="primary" size="sm" type="submit" disabled={update.isPending}>
             {update.isPending ? 'Saving…' : 'Save late-fee policy'}
           </Button>
           {saved && (
@@ -528,18 +528,19 @@ function EditBankModal({ bank, onClose }: { bank: BankAccount; onClose: () => vo
     <Modal
       title="Edit bank account"
       onClose={onClose}
+      onSubmit={submit}
       footer={
         <>
           <Button variant="ghost" size="sm" onClick={onClose}>
             Cancel
           </Button>
-          <Button variant="primary" size="sm" onClick={submit} disabled={update.isPending || !name}>
+          <Button variant="primary" size="sm" type="submit" disabled={update.isPending || !name}>
             {update.isPending ? 'Saving…' : 'Save'}
           </Button>
         </>
       }
     >
-      <form className="pf-modal-body" onSubmit={submit}>
+      <div className="pf-modal-body">
         <div className="pf-formrow">
           <label htmlFor="eb-name">Name</label>
           <Input id="eb-name" value={name} onChange={(e) => setName(e.target.value)} required />
@@ -566,7 +567,7 @@ function EditBankModal({ bank, onClose }: { bank: BankAccount; onClose: () => vo
           />
         </div>
         {error && <ApiErrorNotice error={error} fallback="Could not save the account." />}
-      </form>
+      </div>
     </Modal>
   );
 }
@@ -602,18 +603,19 @@ function NewBankModal({ onClose }: { onClose: () => void }) {
     <Modal
       title="New bank account"
       onClose={onClose}
+      onSubmit={submit}
       footer={
         <>
           <Button variant="ghost" size="sm" onClick={onClose}>
             Cancel
           </Button>
-          <Button variant="primary" size="sm" onClick={submit} disabled={create.isPending || !name}>
+          <Button variant="primary" size="sm" type="submit" disabled={create.isPending || !name}>
             {create.isPending ? 'Creating…' : 'Create account'}
           </Button>
         </>
       }
     >
-      <form className="pf-modal-body" onSubmit={submit}>
+      <div className="pf-modal-body">
         <div className="pf-formrow">
           <label htmlFor="b-name">Name</label>
           <Input id="b-name" value={name} onChange={(e) => setName(e.target.value)} required />
@@ -660,7 +662,7 @@ function NewBankModal({ onClose }: { onClose: () => void }) {
           ) : (
             <ApiErrorNotice error={error} fallback="Could not create the account." />
           ))}
-      </form>
+      </div>
     </Modal>
   );
 }

@@ -110,18 +110,19 @@ function NewOwnerModal({
     <Modal
       title="New owner"
       onClose={onClose}
+      onSubmit={submit}
       footer={
         <>
           <Button variant="ghost" size="sm" onClick={onClose}>
             Cancel
           </Button>
-          <Button variant="primary" size="sm" onClick={submit} disabled={create.isPending || !name}>
+          <Button variant="primary" size="sm" type="submit" disabled={create.isPending || !name}>
             {create.isPending ? 'Creating…' : 'Create owner'}
           </Button>
         </>
       }
     >
-      <form className="pf-modal-body" onSubmit={submit}>
+      <div className="pf-modal-body">
         <div className="pf-formrow">
           <label htmlFor="o-name">Name</label>
           <Input id="o-name" value={name} onChange={(e) => setName(e.target.value)} required />
@@ -141,7 +142,8 @@ function NewOwnerModal({
             <Input
               id="o-fee"
               type="number"
-              step="0.1"
+              // Basis points: a fee is stored to the hundredth of a percent, so 8.25% is valid.
+              step="0.01"
               min="0"
               max="100"
               value={feePct}
@@ -166,7 +168,7 @@ function NewOwnerModal({
           ) : (
             <ApiErrorNotice error={error} fallback="Could not create the owner." />
           ))}
-      </form>
+      </div>
     </Modal>
   );
 }

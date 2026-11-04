@@ -115,6 +115,7 @@ function NewTenantModal({
     <Modal
       title="New tenant"
       onClose={onClose}
+      onSubmit={submit}
       footer={
         <>
           <Button variant="ghost" size="sm" onClick={onClose}>
@@ -123,8 +124,7 @@ function NewTenantModal({
           <Button
             variant="primary"
             size="sm"
-            form="new-tenant"
-            onClick={submit}
+            type="submit"
             disabled={create.isPending || !displayName}
           >
             {create.isPending ? 'Creating…' : 'Create tenant'}
@@ -132,7 +132,7 @@ function NewTenantModal({
         </>
       }
     >
-      <form id="new-tenant" className="pf-modal-body" onSubmit={submit}>
+      <div className="pf-modal-body">
         <div className="pf-formrow">
           <label htmlFor="t-name">Display name</label>
           <Input
@@ -181,7 +181,7 @@ function NewTenantModal({
           ) : (
             <ApiErrorNotice error={error} fallback="Could not create the tenant." />
           ))}
-      </form>
+      </div>
     </Modal>
   );
 }

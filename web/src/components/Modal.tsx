@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useRef, type FormEvent, type ReactNode } from 'react';
 import { IconButton } from '@/design';
 
 interface ModalProps {
@@ -6,6 +6,13 @@ interface ModalProps {
   onClose: () => void;
   children: ReactNode;
   footer?: ReactNode;
+  /**
+   * Makes the body and the footer one form, so a `type="submit"` button in the footer is the form's
+   * default button: Enter in a field submits, and the browser checks the fields' own constraints
+   * (`required`, `type="email"`, `min`/`max`/`step`) before this runs (#561). The handler calls
+   * `preventDefault()`. Without it a footer button outside the body's form submits nothing on Enter.
+   */
+  onSubmit?: (event: FormEvent<HTMLFormElement>) => void;
 }
 
 const FOCUSABLE =
@@ -35,7 +42,7 @@ function trapTab(event: KeyboardEvent, panel: HTMLElement) {
 }
 
 /** A focus-trapping modal: Escape and backdrop-click close it; the first field autofocuses. */
-export function Modal({ title, onClose, children, footer }: ModalProps) {
+export function Modal({ title, onClose, children, footer, onSubmit }: ModalProps) {
   const panelRef = useRef<HTMLDivElement>(null);
 
   // Move focus into the modal on open and restore it to the trigger on close (WCAG 2.4.3 focus order).
@@ -63,6 +70,13 @@ export function Modal({ title, onClose, children, footer }: ModalProps) {
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
+  const content = (
+    <>
+      {children}
+      {footer && <div className="pf-modal-ft">{footer}</div>}
+    </>
+  );
+
   return (
     <div
       className="pf-modal-backdrop"
@@ -75,8 +89,7 @@ export function Modal({ title, onClose, children, footer }: ModalProps) {
           <h3>{title}</h3>
           <IconButton name="x" label="Close" onClick={onClose} />
         </div>
-        {children}
-        {footer && <div className="pf-modal-ft">{footer}</div>}
+        {onSubmit ? <form onSubmit={onSubmit}>{content}</form> : content}
       </div>
     </div>
   );

@@ -43,6 +43,33 @@ async function openNewProperty() {
   await userEvent.click(await screen.findByRole('button', { name: /new property/i }));
 }
 
+// #561: Enter in a field submits the dialog once its required fields are filled.
+describe('NewPropertyModal from the keyboard', () => {
+  it('creates the property once when Enter is pressed in a field', async () => {
+    const posts: Record<string, unknown>[] = [];
+    server.use(
+      http.get('/api/directory/properties', () => HttpResponse.json(PROPERTIES)),
+      http.get('/api/directory/owners', () => HttpResponse.json(OWNERS)),
+      http.post('/api/directory/properties', async ({ request }) => {
+        posts.push((await request.json()) as Record<string, unknown>);
+        return HttpResponse.json({ id: 'pNew' });
+      }),
+    );
+    renderPage();
+    await openNewProperty();
+    await userEvent.selectOptions(
+      await screen.findByLabelText('Owner'),
+      await screen.findByRole('option', { name: 'Hargrove Family Trust' }),
+    );
+    await userEvent.type(screen.getByLabelText('Address'), '9 Cardinal Ct');
+    await userEvent.type(screen.getByLabelText('City'), 'Durham{Enter}');
+
+    expect(await screen.findByText('property page')).toBeInTheDocument();
+    expect(posts).toHaveLength(1);
+    expect(posts[0]).toMatchObject({ ownerId: 'o1', address: '9 Cardinal Ct', city: 'Durham' });
+  });
+});
+
 describe('NewPropertyModal when the owner list cannot load', () => {
   beforeEach(() => {
     document.body.innerHTML = '';

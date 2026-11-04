@@ -374,6 +374,15 @@ actually goes red with the branch reverted.
 - Pure cross-feature utilities and hooks (`.ts`) in `web/src/lib/`
 - Tests colocated: `Component.test.tsx` beside `Component.tsx`
 - Path alias: `@/` always — never relative `../../`
+- A form's save button is `type="submit"` and never calls the save from `onClick`. `Button` defaults
+  to `type="button"`, and a click handler skips both Enter in a field and the fields' own `required`,
+  `type="email"` and `min`/`max`/`step` checks, so invalid values reach the server (#561). A dialog
+  with fields passes its handler to `Modal`'s `onSubmit`, which makes the body and the footer one
+  form; its body is then a `div`, never a second `<form>`. A `step` must admit every value the field
+  stores: a percentage kept in basis points takes `step="0.01"`. The dialogs that post or move money
+  still save from a click, with no form (refund check, apply, late-fee override, transfer of
+  ownership). Whether Enter may post money is a separate decision #561 left open, so they stay as
+  they are until it is made
 
 ---
 
@@ -456,6 +465,7 @@ test("records a payment", async () => {
 | Relative import paths `../../`               | `@/design`, `@/components`, `@/api`, `@/lib`, `@/features/…` |
 | Ad-hoc `font-variant-numeric`                | `<td className="num">` / `<Money>` / `className="pf-num"`    |
 | New CSS custom properties in feature CSS     | Add to `web/src/design/tokens.css` only                      |
+| `onClick={submit}` on a form's save button   | `type="submit"`; a dialog passes `onSubmit` to `Modal`       |
 | Direct `fetch` for XSRF-protected endpoints  | Generated write functions (XSRF is configured automatically) |
 | Bare header `div` inside a `role="listbox"`  | Wrap the run in `<div role="group" aria-label>`              |
 | Visual-only selection in a `combobox` list   | `aria-activedescendant` → the selected option's `id`         |

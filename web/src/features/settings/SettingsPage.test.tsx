@@ -448,3 +448,90 @@ describe('SettingsPage', () => {
     document.body.innerHTML = '';
   });
 });
+
+// #561: Enter in a field submits each Settings form, and the fields' own constraints run before any
+// request.
+describe('SettingsPage forms from the keyboard', () => {
+  /** Answers the reads and records each write by method and path, with its body. */
+  function serveSettings() {
+    const writes: string[] = [];
+    const orgBodies: Record<string, unknown>[] = [];
+    server.use(
+      http.get('/api/settings/org', () => HttpResponse.json(ORG)),
+      http.get('/api/settings/banks', () => HttpResponse.json([ACTIVE_BANK])),
+      http.put('/api/settings/org', async ({ request }) => {
+        writes.push('PUT /api/settings/org');
+        const body = (await request.json()) as Record<string, unknown>;
+        orgBodies.push(body);
+        return HttpResponse.json({ ...ORG, ...body });
+      }),
+      http.post('/api/settings/banks', () => {
+        writes.push('POST /api/settings/banks');
+        return HttpResponse.json({ ...ACTIVE_BANK, id: 'b2', name: 'Reserve Trust' });
+      }),
+      http.put('/api/settings/banks/:id', () => {
+        writes.push('PUT /api/settings/banks/b1');
+        return HttpResponse.json(ACTIVE_BANK);
+      }),
+    );
+    renderSettings();
+    return { writes, orgBodies };
+  }
+
+  it('creates a bank account once when Enter is pressed in a field', async () => {
+    const { writes } = serveSettings();
+    await userEvent.click(await screen.findByRole('button', { name: 'New account' }));
+    const dialog = screen.getByRole('dialog', { name: 'New bank account' });
+    await userEvent.type(within(dialog).getByLabelText('Name'), 'Reserve Trust{Enter}');
+
+    await vi.waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(writes).toEqual(['POST /api/settings/banks']);
+  });
+
+  it('saves a bank account once when Enter is pressed in a field', async () => {
+    const { writes } = serveSettings();
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit Operating Trust' }));
+    const dialog = screen.getByRole('dialog', { name: 'Edit bank account' });
+    await userEvent.type(within(dialog).getByLabelText('Mask (last 4)'), '{Enter}');
+
+    await vi.waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(writes).toEqual(['PUT /api/settings/banks/b1']);
+  });
+
+  it('saves the organization profile once when Enter is pressed in a field', async () => {
+    const { writes } = serveSettings();
+    await userEvent.type(await screen.findByLabelText('Phone'), '828-555-0100{Enter}');
+
+    expect(await screen.findByText('Saved')).toBeInTheDocument();
+    expect(writes).toEqual(['PUT /api/settings/org']);
+  });
+
+  it('saves the late-fee policy once when Enter is pressed in a field', async () => {
+    const { writes } = serveSettings();
+    const grace = await screen.findByLabelText('Grace days');
+    await userEvent.clear(grace);
+    await userEvent.type(grace, '7{Enter}');
+
+    expect(await screen.findByText('Saved')).toBeInTheDocument();
+    expect(writes).toEqual(['PUT /api/settings/org']);
+  });
+
+  it('sends nothing for a rent due day past the 28th, from Enter or the button, and marks the field', async () => {
+    const { writes, orgBodies } = serveSettings();
+    const dueDay = await screen.findByLabelText('Rent due day');
+    await userEvent.clear(dueDay);
+    await userEvent.type(dueDay, '30{Enter}');
+    await userEvent.click(screen.getByRole('button', { name: /save late-fee policy/i }));
+
+    expect(dueDay).toBeInvalid();
+    expect(screen.queryByText('Saved')).toBeNull();
+
+    // Corrected and saved: the one write must carry the correction, because a write the refusal let
+    // through would have been sent first.
+    await userEvent.clear(dueDay);
+    await userEvent.type(dueDay, '15{Enter}');
+    expect(await screen.findByText('Saved')).toBeInTheDocument();
+    expect(writes).toEqual(['PUT /api/settings/org']);
+    expect(orgBodies).toEqual([expect.objectContaining({ rentDueDay: 15 })]);
+  });
+});
