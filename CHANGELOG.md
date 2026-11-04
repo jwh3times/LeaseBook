@@ -18,6 +18,19 @@ next section.
 
 No unreleased changes.
 
+## [0.28.8] - 2026-11-04
+
+### Fixed
+
+- Pressing Enter in a field now submits the New owner, New property and New tenant dialogs, the New
+  and Edit bank-account dialogs, and the Organization and Late fees cards in Settings. Before, Enter
+  did nothing, and the only keyboard path was to Tab to the button. The fields' own checks now run
+  before anything is sent, so a management fee over 100%, a malformed email or a rent due day past
+  the 28th is refused in place without a request. These were refused by the server before, so
+  nothing wrong was stored. A two-decimal management fee such as 8.25% is now accepted. The dialogs
+  that post or move money (refund check, apply, late-fee override, transfer of ownership) are
+  unchanged (#561).
+
 ## [0.28.7] - 2026-11-04
 
 ### Changed
@@ -1708,7 +1721,8 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.28.7...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.28.8...HEAD
+[0.28.8]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.28.8
 [0.28.7]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.28.7
 [0.28.6]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.28.6
 [0.28.5]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.28.5
