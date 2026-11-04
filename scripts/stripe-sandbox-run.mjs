@@ -722,7 +722,7 @@ export async function start(deps) {
       `  check-invariants --all: ${clean ? "all clean" : "FAILED (output above)"}`,
     );
     say(
-      "Next: leave the connected account alone until Stripe pays these out, from a few hours to a few days. Then:",
+      "Next: leave the connected account alone until Stripe pays these out, which can take up to a week or more. Running resume too early does no harm. Then:",
     );
     say(`  node scripts/stripe-sandbox-run.mjs resume ${state.run}`);
     say(`The copy ${state.run} is kept; \`discard ${state.run}\` drops it.`);
