@@ -18,6 +18,17 @@ next section.
 
 No unreleased changes.
 
+## [0.28.10] - 2026-11-04
+
+### Fixed
+
+- On the two-factor step of sign-in, focus now starts in the "Authentication code" field. A keyboard
+  user who pressed Enter on their password used to land on nothing and had to Tab to the field.
+  Switching to a recovery code focuses the "Recovery code" field, switching back focuses the
+  authentication code again, and an expired sign-in attempt returns focus to the Email field. Each
+  step is now drawn fresh, so the "Sign in" button no longer turns into "Use a recovery code" in
+  place (#574).
+
 ## [0.28.9] - 2026-11-04
 
 ### Fixed
@@ -1730,7 +1741,8 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.28.9...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.28.10...HEAD
+[0.28.10]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.28.10
 [0.28.9]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.28.9
 [0.28.8]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.28.8
 [0.28.7]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.28.7

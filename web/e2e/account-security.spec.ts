@@ -202,25 +202,12 @@ async function submitPassword(page: Page, credentials: Credentials): Promise<voi
   await page.getByLabel('Password').press('Enter');
 }
 
-// Waits for the sign-in card to stop moving before it is scanned. The code step is drawn into the
-// password step's elements, so the button that was "Sign in" becomes "Use a recovery code" and its
-// colors take 0.14 seconds to change. A scan inside that time reads a contrast between two colors
-// that are never shown together.
-async function settled(page: Page): Promise<void> {
-  await expect
-    .poll(() =>
-      page.evaluate(
-        () => document.getAnimations().filter((motion) => motion.playState === 'running').length,
-      ),
-    )
-    .toBe(0);
-}
-
-// The password step for an account with an authenticator: it stops at the code.
+// The password step for an account with an authenticator: it stops at the code, with focus already
+// in the code field, so Enter on the password leads straight on to typing the code (#574).
 async function reachCodeStep(page: Page, credentials: Credentials): Promise<void> {
   await submitPassword(page, credentials);
   await expect(page.getByText('Two-factor verification')).toBeVisible();
-  await expect(page.getByLabel('Authentication code')).toBeVisible();
+  await expect(page.getByLabel('Authentication code')).toBeFocused();
 }
 
 test('a new portal user sets up an authenticator, then signs in with its code and with recovery codes that each work once @scenario:mfa-enrollment-and-sign-in', async ({
@@ -271,7 +258,6 @@ test('a new portal user sets up an authenticator, then signs in with its code an
     // Signing in now takes the password and then a code.
     await signOut(own);
     await reachCodeStep(own, person.credentials);
-    await settled(own);
     await runA11y(own);
     await own.getByLabel('Authentication code').fill(wrongCode(setupKey));
     await own.getByLabel('Authentication code').press('Enter');
@@ -285,8 +271,7 @@ test('a new portal user sets up an authenticator, then signs in with its code an
     await reachCodeStep(own, person.credentials);
     await own.getByRole('button', { name: 'Use a recovery code' }).focus();
     await own.keyboard.press('Enter');
-    await expect(own.getByLabel('Recovery code')).toBeVisible();
-    await settled(own);
+    await expect(own.getByLabel('Recovery code')).toBeFocused();
     await runA11y(own);
     await own.getByLabel('Recovery code').fill(firstCode);
     await own.getByLabel('Recovery code').press('Enter');
@@ -374,9 +359,9 @@ test('a portal user changes their password, which signs their other browser out 
 test('an enrolled administrator signs in with a password and an authenticator code, by keyboard @scenario:staff-mfa-sign-in', async ({
   page,
 }) => {
+  // Focus is already in the code field after Enter on the password, so the code is typed straight in.
   await reachCodeStep(page, SCENARIO_ADMIN_MFA);
   const code = page.getByLabel('Authentication code');
-  await code.focus();
 
   // A code that is not the authenticator's is refused, and the code step stays open.
   await page.keyboard.type(wrongCode(SCENARIO_ADMIN_MFA_KEY));
