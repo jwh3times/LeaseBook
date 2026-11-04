@@ -287,8 +287,10 @@ describe('LoginPage focus between steps', () => {
     expect(screen.getByLabelText('Recovery code')).toHaveFocus();
     expect(toRecovery).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'Use authenticator code' }));
+    const toAuthenticator = screen.getByRole('button', { name: 'Use authenticator code' });
+    await user.click(toAuthenticator);
     expect(screen.getByLabelText('Authentication code')).toHaveFocus();
+    expect(toAuthenticator).not.toBeInTheDocument();
   });
 
   it('focuses the email field when an expired sign-in attempt returns to the password step', async () => {
@@ -302,9 +304,13 @@ describe('LoginPage focus between steps', () => {
       ),
     );
     const user = await passwordThenEnter();
-    await user.type(await screen.findByLabelText('Authentication code'), '123456{Enter}');
+    await user.type(await screen.findByLabelText('Authentication code'), '123456');
+    const codeStepButtons = screen.getAllByRole('button');
+    await user.keyboard('{Enter}');
 
     expect(await screen.findByText(/timed out/i)).toBeInTheDocument();
     expect(screen.getByLabelText('Email')).toHaveFocus();
+    // The password step is a new form: reused, the code step's last button became its "Sign in".
+    for (const button of codeStepButtons) expect(button).not.toBeInTheDocument();
   });
 });
