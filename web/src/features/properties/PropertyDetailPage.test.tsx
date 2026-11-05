@@ -193,7 +193,8 @@ describe('Transfer ownership (#555, ADR-036)', () => {
 
   // #642: the server refuses a date after the organization's today the way it refuses money dated so.
   it('shows the server’s refusal of a date after the organization’s today inline', async () => {
-    const message = 'The date 2026-11-01 is after today, 2026-10-31, in the organization’s time zone.';
+    const message =
+      'The date 2026-11-01 is after today, 2026-10-31, in the organization’s time zone.';
     serve({
       refuse: {
         status: 422,
@@ -215,7 +216,11 @@ describe('Transfer ownership (#555, ADR-036)', () => {
     server.use(
       http.get('/api/settings/org', () =>
         HttpResponse.json(
-          { code: 'boom', detail: 'Settings are down for maintenance.', correlationId: 'corr-settings' },
+          {
+            code: 'boom',
+            detail: 'Settings are down for maintenance.',
+            correlationId: 'corr-settings',
+          },
           { status: 503, headers: { 'content-type': 'application/problem+json' } },
         ),
       ),
@@ -223,7 +228,9 @@ describe('Transfer ownership (#555, ADR-036)', () => {
     renderProperty();
     const dialog = await openTransfer();
 
-    expect(await within(dialog).findByText(/Settings are down for maintenance\./)).toBeInTheDocument();
+    expect(
+      await within(dialog).findByText(/Settings are down for maintenance\./),
+    ).toBeInTheDocument();
     expect(within(dialog).getByText(/Reference: corr-settings/)).toBeInTheDocument();
     expect(confirmButton(dialog)).toBeDisabled();
     expect(posted).toHaveLength(0);
@@ -235,7 +242,9 @@ describe('Transfer ownership (#555, ADR-036)', () => {
     vi.setSystemTime(new Date('2026-11-01T06:30:00Z'));
     const posted = serve();
     server.use(
-      http.get('/api/settings/org', () => HttpResponse.json({ ...ORG_SETTINGS, timeZone: 'America/Los_Angeles' })),
+      http.get('/api/settings/org', () =>
+        HttpResponse.json({ ...ORG_SETTINGS, timeZone: 'America/Los_Angeles' }),
+      ),
     );
     renderProperty();
     const dialog = await openTransfer();
@@ -248,7 +257,9 @@ describe('Transfer ownership (#555, ADR-036)', () => {
     await userEvent.clear(date);
     await userEvent.type(date, '2026-11-01');
     await userEvent.click(confirmButton(dialog));
-    expect(within(dialog).getByRole('alert')).toHaveTextContent('The effective date can’t be in the future.');
+    expect(within(dialog).getByRole('alert')).toHaveTextContent(
+      'The effective date can’t be in the future.',
+    );
     expect(posted).toHaveLength(0);
   });
 

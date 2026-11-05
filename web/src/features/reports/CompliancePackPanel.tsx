@@ -7,7 +7,6 @@ import { useOrgToday } from '@/lib/orgCalendar';
 import { SelectChip, type SelectChipOption } from './chips';
 import { downloadCompliancePack, type ReportDescriptor, type ReportsError } from './reports';
 
-
 /**
  * Operator-facing copy for the pack's three known failures. This keys off status as well as `code`
  * because the server states the domain code in `title` on some of these and not at all on a 404 —

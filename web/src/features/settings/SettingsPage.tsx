@@ -223,8 +223,8 @@ function OrgProfileForm({ initial }: { initial: OrgSettings }) {
             ))}
           </Select>
           <span id="s-zone-hint" className="t3 fs12">
-            Which day it is for the books: the default date of a posting, and the current month. Changing
-            it moves no date already posted.
+            Which day it is for the books: the default date of a posting, and the current month.
+            Changing it moves no date already posted.
           </span>
         </div>
 

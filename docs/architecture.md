@@ -56,7 +56,9 @@ transition, current Directory owner and deposit-responsibility handoff commit or
 [ADR-036](adr/ADR-036-effective-dated-property-ownership-transfer.md).
 
 Payments uses its own `IPaymentEligibility` batch port to resolve tenant/date/bank eligibility through
-Directory, and `IPaymentLedger` to dispatch Accounting's existing `RecordPayment` command. The receipt,
+Directory, and `IPaymentLedger` to dispatch Accounting's `RecordSettledReceipt` command, which no route maps and which
+posts a receipt exactly as `RecordPayment` does but is dated by the bank's evidence and so is not
+refused for falling after the organization's today. The receipt,
 payment effect and operation summary share one org transaction. The same port carries a returned
 payment to Accounting's guarded `ReturnTenantPayment`, which an administrator starts and which posts
 the receipt's linked reversal or refuses by name

@@ -87,7 +87,11 @@ describe('SettingsPage', () => {
     renderSettings();
     const zone = await screen.findByLabelText('Time zone');
     expect(zone).toHaveValue('America/New_York');
-    expect(within(zone).getAllByRole('option').map((o) => [o.getAttribute('value'), o.textContent])).toEqual([
+    expect(
+      within(zone)
+        .getAllByRole('option')
+        .map((o) => [o.getAttribute('value'), o.textContent]),
+    ).toEqual([
       ['America/New_York', 'Eastern'],
       ['America/Chicago', 'Central'],
       ['America/Denver', 'Mountain'],
@@ -107,7 +111,9 @@ describe('SettingsPage', () => {
   it('leaves the stored time zone alone when the late-fee policy is saved', async () => {
     let saved: Record<string, unknown> | null = null;
     server.use(
-      http.get('/api/settings/org', () => HttpResponse.json({ ...ORG, timeZone: 'Pacific/Honolulu' })),
+      http.get('/api/settings/org', () =>
+        HttpResponse.json({ ...ORG, timeZone: 'Pacific/Honolulu' }),
+      ),
       http.get('/api/settings/banks', () => HttpResponse.json([])),
       http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 })),
       http.put('/api/settings/org', async ({ request }) => {

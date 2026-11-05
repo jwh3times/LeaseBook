@@ -75,7 +75,9 @@ describe('CompliancePackPanel', () => {
     vi.setSystemTime(new Date('2027-01-01T09:30:00Z'));
     server.use(
       banksHandler(),
-      http.get('/api/settings/org', () => HttpResponse.json({ ...ORG_SETTINGS, timeZone: 'Pacific/Honolulu' })),
+      http.get('/api/settings/org', () =>
+        HttpResponse.json({ ...ORG_SETTINGS, timeZone: 'Pacific/Honolulu' }),
+      ),
     );
     renderPanel(true);
 

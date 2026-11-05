@@ -134,7 +134,9 @@ describe('VoidDialog as-of date', () => {
     const localToday = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 
     await userEvent.type(screen.getByLabelText('Reason (internal note)'), 'keyed twice');
-    await vi.waitFor(() => expect(screen.getByRole('button', { name: 'Void entry' })).toBeEnabled());
+    await vi.waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Void entry' })).toBeEnabled(),
+    );
     await userEvent.keyboard('{Enter}');
 
     await vi.waitFor(() => expect(onVoided).toHaveBeenCalledWith('rev1'));

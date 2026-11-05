@@ -3,7 +3,7 @@
 - **Audience:** Implementers and reviewers of issues #456 and #513
 - **Status:** Implemented contract for both non-live payment modes: the payment simulation (#456) and the Stripe sandbox (#513, ADR-054 proposed). Live payments remain unapproved
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-26
+- **Last reviewed:** 2026-11-05
 
 ## Evidence and boundary
 
@@ -173,7 +173,9 @@ shows a code.
 
 ## Accounting contract
 
-Use the existing `RecordPayment` command through the host adapter. Resolve effective property and
+Use Accounting's `RecordSettledReceipt` command through the host adapter. It posts exactly as
+`RecordPayment` does, without `RecordPayment`'s refusal of a date after the organization's today: the
+bank's date is evidence, bounded by the processor's own rules (#642). Resolve effective property and
 owner at the evidence's accounting date using the existing Accounting-to-Directory port. Resolve
 these when executing the receipt command, not from the tenant's present lease or request
 time. Missing/ambiguous date-effective attribution is Needs review. No fallback to the oldest bank
@@ -323,7 +325,8 @@ owning modules via `ISender` on the ambient transaction. They neither query anot
 tables nor create connections/transactions:
 
 - `IPaymentLedger.RecordSettledReceiptAsync`: accepts the trusted tenant/bank/date/amount/source
-  reference and returns the journal ID by calling `RecordPayment`. No raw line-writing API.
+  reference and returns the journal ID by sending `RecordSettledReceipt`, which no route maps. No raw
+  line-writing API.
 - `IPaymentEligibility.ReadAsync`: batch tenant/date/bank requests returning a map of eligibility
   facts via Directory queries; failures distinguish unavailable data from no eligibility.
   This gives early feedback; posting still performs authoritative date-effective validation.

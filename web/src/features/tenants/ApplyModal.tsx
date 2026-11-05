@@ -28,7 +28,6 @@ interface ApplyModalProps {
   onApplied: (entryId: string) => void;
 }
 
-
 /**
  * Guided deposit/prepayment application (§C.4). A deposit resolves the deposit/operating trust banks by
  * purpose; a prepayment names no bank, because only the server knows which bank holds it (#475) — when

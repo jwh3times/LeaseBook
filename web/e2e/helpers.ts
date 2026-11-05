@@ -210,6 +210,7 @@ export function orgToday(now: Date = new Date()): string {
     month: '2-digit',
     day: '2-digit',
   }).formatToParts(now);
-  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value ?? '';
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((p) => p.type === type)?.value ?? '';
   return `${part('year')}-${part('month')}-${part('day')}`;
 }

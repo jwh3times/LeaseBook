@@ -195,7 +195,9 @@ describe('RefundCheckModal check date', () => {
     vi.setSystemTime(new Date('2026-11-01T06:30:00Z'));
     server.use(
       ...readsFor([DEPOSIT]),
-      http.get('/api/settings/org', () => HttpResponse.json({ ...ORG_SETTINGS, timeZone: 'America/Los_Angeles' })),
+      http.get('/api/settings/org', () =>
+        HttpResponse.json({ ...ORG_SETTINGS, timeZone: 'America/Los_Angeles' }),
+      ),
     );
     renderModal();
 
