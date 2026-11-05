@@ -92,7 +92,10 @@ test('a staff member replaces a pending invitation, then cancels the replacement
     // nothing more; the new one is pending and is delivered in its turn.
     await page.goto(tenantUrl);
     panel = accessPanel(page);
-    await invitations(panel).first().getByRole('button', { name: 'Replace invitation' }).focus();
+    await invitations(panel)
+      .first()
+      .getByRole('button', { name: `Replace invitation for ${email},` })
+      .focus();
     await page.keyboard.press('Enter');
     await expect(invitations(panel)).toHaveCount(2);
     await expect(invitations(panel).nth(0)).toContainText('pending');
@@ -122,7 +125,10 @@ test('a staff member replaces a pending invitation, then cancels the replacement
     // Cancel the replacement, from the keyboard. Nothing for the address is left to accept.
     await page.goto(tenantUrl);
     panel = accessPanel(page);
-    await invitations(panel).first().getByRole('button', { name: 'Cancel invitation' }).focus();
+    await invitations(panel)
+      .first()
+      .getByRole('button', { name: `Cancel invitation for ${email},` })
+      .focus();
     await page.keyboard.press('Enter');
     await expect(invitations(panel).nth(0)).toContainText('cancelled');
     await expect(invitations(panel).nth(1)).toContainText('replaced');

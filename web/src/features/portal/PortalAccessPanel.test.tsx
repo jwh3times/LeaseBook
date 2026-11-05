@@ -140,9 +140,10 @@ it('names each invitation action by its address and expiry, keeping the visible 
   );
   expect(buttons).toHaveLength(9);
   for (const email of ['ana@example.test', 'ben@example.test']) {
-    expect(
-      screen.getAllByRole('button', { name: new RegExp(`^Replace invitation for ${email}`) }),
-    ).toHaveLength(email.startsWith('ana') ? 2 : 1);
+    const forEmail = buttons.filter((button) =>
+      button.getAttribute('aria-label')?.startsWith(`Replace invitation for ${email},`),
+    );
+    expect(forEmail).toHaveLength(email.startsWith('ana') ? 2 : 1);
   }
   const names = screen
     .getAllByRole('button')

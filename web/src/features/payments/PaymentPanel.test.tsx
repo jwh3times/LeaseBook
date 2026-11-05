@@ -268,9 +268,7 @@ describe('simulated payments', () => {
     ).toBeVisible();
     // Not the fallback for a reason the page does not know, and nothing to send again.
     expect(screen.queryByText(/Contact the fixture operator/)).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole('button', { name: 'Retry operation for payment operation' }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Retry operation/ })).not.toBeInTheDocument();
   });
   it('describes a late return without claiming a reversal or offering a force-post action', async () => {
     server.use(
@@ -298,13 +296,9 @@ describe('simulated payments', () => {
       await screen.findByText('Simulated payment needs review — original receipt remains recorded'),
     ).toBeVisible();
     expect(screen.getByText(/No automatic reversal was made/)).toBeVisible();
-    expect(
-      screen.queryByRole('button', { name: 'Retry operation for payment operation' }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Retry operation/ })).not.toBeInTheDocument();
     // Signed out in this test: the review actions belong to an administrator.
-    expect(
-      screen.queryByRole('button', { name: 'Post return for payment operation' }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Post return/ })).not.toBeInTheDocument();
   });
 
   const inReview = {
@@ -366,9 +360,7 @@ describe('simulated payments', () => {
     ).toBeVisible();
     expect(screen.getByText('Receipt entry: receipt-entry')).toBeVisible();
     expect(screen.getByText('Reversal entry: reversal-entry')).toBeVisible();
-    expect(
-      screen.queryByRole('button', { name: 'Post return for payment operation' }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Post return/ })).not.toBeInTheDocument();
   });
 
   it('shows why a return was refused, with its support reference, and keeps the close action', async () => {
@@ -747,9 +739,7 @@ describe('payments by mode', () => {
     expect(
       await screen.findByRole('button', { name: 'Close review of payment operation' }),
     ).toBeVisible();
-    expect(
-      screen.queryByRole('button', { name: 'Post return for payment operation' }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Post return/ })).not.toBeInTheDocument();
     expect(document.body).not.toHaveTextContent(/can post a full return/);
   });
 
@@ -774,9 +764,7 @@ describe('payments by mode', () => {
     expect(
       await screen.findByRole('button', { name: 'Close review of payment operation' }),
     ).toBeVisible();
-    expect(
-      screen.queryByRole('button', { name: 'Post return for payment operation' }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Post return/ })).not.toBeInTheDocument();
     expect(document.body).not.toHaveTextContent(/after the receipt posted/);
   });
 });
