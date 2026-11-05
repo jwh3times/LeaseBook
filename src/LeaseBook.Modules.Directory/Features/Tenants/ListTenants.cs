@@ -1,5 +1,6 @@
 using LeaseBook.Modules.Directory.Contracts;
 using LeaseBook.Modules.Directory.Domain;
+using LeaseBook.Modules.Directory.Features.Settings;
 using LeaseBook.Modules.Directory.Features.Shared;
 using LeaseBook.Modules.Directory.Persistence;
 using LeaseBook.SharedKernel.Cqrs;
@@ -23,7 +24,7 @@ public sealed record TenantListRow(
     string LifecycleStatus,
     TenantFinancialStanding FinancialStanding);
 
-internal sealed class ListTenantsHandler(DbContext db, ITenantFinancials tenantFinancials, TimeProvider clock)
+internal sealed class ListTenantsHandler(DbContext db, ITenantFinancials tenantFinancials, OrgCalendar calendar)
     : IQueryHandler<ListTenants, PagedResponse<TenantListRow>>
 {
     public async Task<PagedResponse<TenantListRow>> Handle(ListTenants query, CancellationToken ct)
@@ -50,7 +51,7 @@ internal sealed class ListTenantsHandler(DbContext db, ITenantFinancials tenantF
             .ToListAsync(ct);
         var ids = rows.Select(r => r.Id).ToList();
 
-        var today = DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
+        var today = await calendar.TodayAsync(ct); // the organization's today, not the UTC date (#642)
         var leaseByTenant = await LeaseLookup.EffectiveByTenantAsync(db, ids, today, ct);
         var balances = await tenantFinancials.BalancesAsync(ct);
         var standing = await tenantFinancials.StandingAsync(today, ct);

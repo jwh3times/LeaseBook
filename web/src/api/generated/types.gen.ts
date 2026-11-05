@@ -601,6 +601,7 @@ export type OrgSettingsResponse = {
     achFeeRateBps?: number | string;
     achFeeFixed?: number | string;
     achFeeCap?: null | number | string;
+    timeZone?: string;
 };
 
 export type OwnerBalanceHeroRow = {
@@ -1404,6 +1405,7 @@ export type UpdateOrgSettings = {
     lateFeeAmount?: null | number | string;
     lateFeeRateBps?: null | number | string;
     staffCanManagePortalAccess?: null | boolean;
+    timeZone?: null | string;
 };
 
 export type UpdateOwner = {

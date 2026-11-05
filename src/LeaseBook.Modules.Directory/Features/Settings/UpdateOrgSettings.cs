@@ -4,6 +4,7 @@ using LeaseBook.Modules.Directory.Features.Shared;
 using LeaseBook.Modules.Directory.Persistence;
 using LeaseBook.SharedKernel;
 using LeaseBook.SharedKernel.Cqrs;
+using LeaseBook.SharedKernel.Time;
 using Microsoft.EntityFrameworkCore;
 
 namespace LeaseBook.Modules.Directory.Features.Settings;
@@ -29,7 +30,10 @@ public sealed record UpdateOrgSettings(
     string? LateFeeKind = null,
     decimal? LateFeeAmount = null,
     int? LateFeeRateBps = null,
-    bool? StaffCanManagePortalAccess = null) : ICommand<OrgSettingsResponse>;
+    bool? StaffCanManagePortalAccess = null,
+    // The books' calendar (#642). Optional — null = keep the stored zone, so saving the card's other
+    // fields never resets it.
+    string? TimeZone = null) : ICommand<OrgSettingsResponse>;
 
 public sealed class UpdateOrgSettingsValidator : AbstractValidator<UpdateOrgSettings>
 {
@@ -55,6 +59,9 @@ public sealed class UpdateOrgSettingsValidator : AbstractValidator<UpdateOrgSett
         RuleFor(x => x.LateFeeKind).LateFeeKindValue();
         RuleFor(x => x.LateFeeAmount).LateFeeAmountValue();
         RuleFor(x => x.LateFeeRateBps).LateFeeRateBpsValue();
+        RuleFor(x => x.TimeZone)
+            .Must(v => v is null || OrgTimeZones.IsSupported(v))
+            .WithMessage($"Time zone must be one of: {string.Join(", ", OrgTimeZones.Supported.Select(zone => zone.Id))}.");
     }
 }
 
@@ -89,6 +96,7 @@ internal sealed class UpdateOrgSettingsHandler(DbContext db) : ICommandHandler<U
         if (command.LateFeeRateBps.HasValue) settings.LateFeeRateBps = command.LateFeeRateBps.Value;
         if (command.StaffCanManagePortalAccess.HasValue)
             settings.StaffCanManagePortalAccess = command.StaffCanManagePortalAccess.Value;
+        if (command.TimeZone is not null) settings.TimeZone = command.TimeZone;
 
         await db.SaveChangesAsync(ct);
         return OrgSettingsResponse.From(settings);

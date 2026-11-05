@@ -2,6 +2,7 @@ using FluentValidation;
 using FluentValidation.Results;
 using LeaseBook.Modules.Directory.Contracts;
 using LeaseBook.Modules.Directory.Domain;
+using LeaseBook.Modules.Directory.Features.Settings;
 using LeaseBook.Modules.Directory.Features.Shared;
 using LeaseBook.SharedKernel;
 using LeaseBook.SharedKernel.Cqrs;
@@ -48,15 +49,16 @@ public sealed class UpdatePropertyValidator : AbstractValidator<UpdateProperty>
     }
 }
 
-public sealed class TransferPropertyOwnershipValidator : AbstractValidator<TransferPropertyOwnership>
+internal sealed class TransferPropertyOwnershipValidator : AbstractValidator<TransferPropertyOwnership>
 {
-    public TransferPropertyOwnershipValidator()
+    public TransferPropertyOwnershipValidator(OrgCalendar calendar)
     {
         RuleFor(command => command.PropertyId).NotEmpty();
         RuleFor(command => command.ToOwnerId).NotEmpty();
+        // "Future" is after the organization's today, not the UTC date (#642).
         RuleFor(command => command.EffectiveDate)
             .NotEmpty()
-            .Must(effectiveDate => effectiveDate <= DateOnly.FromDateTime(DateTime.UtcNow))
+            .MustAsync(async (effectiveDate, ct) => effectiveDate <= await calendar.TodayAsync(ct))
             .WithMessage("A property ownership transfer cannot be scheduled for a future date.");
         RuleFor(command => command.SourceRef).NotEmpty().MaximumLength(200);
     }

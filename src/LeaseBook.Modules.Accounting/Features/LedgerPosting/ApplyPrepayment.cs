@@ -44,11 +44,14 @@ public sealed class ApplyPrepaymentValidator : AbstractValidator<ApplyPrepayment
 }
 
 internal sealed class ApplyPrepaymentHandler(
-    ITenantPostingDimensions dimensions, DbContext db, IPostingLock postingLock, IAccountingEvents events)
+    ITenantPostingDimensions dimensions, DbContext db, IPostingLock postingLock, IAccountingEvents events,
+    PostingCalendar calendar)
     : ICommandHandler<ApplyPrepayment, PostResult>
 {
     public async Task<PostResult> Handle(ApplyPrepayment command, CancellationToken ct)
     {
+        // Applying prepaid credit recognises income on the day it is applied, never ahead (#642).
+        await calendar.EnsureNotAfterTodayAsync(command.Date, ct);
         var dims = await LedgerPostingMaps.ResolveAsync(dimensions, command.TenantId, command.Date, ct);
         var bankAccountId = command.BankAccountId ?? await HoldingBankAsync(command, ct);
         var id = await events.PostAsync(

@@ -81,12 +81,37 @@ public sealed class LateFeeRunStrategyTests
             }),
             new StubPostedSourceRefs(),
             new StubFundsInTransit(),
+            new StubOrgTimeZone(),
             new FixedTimeProvider(assessmentDate));
 
         var preview = await strategy.PreviewAsync(Period, ct);
 
         data.AsOf.ShouldBe(assessmentDate);
         preview.Rows.ShouldBeEmpty();
+    }
+
+    [Theory]
+    // 21:00 EDT on 31 Oct 2026 is 01:00 UTC on 1 Nov: the fee is assessed on 31 October.
+    [InlineData("America/New_York", 2026, 10, 31)]
+    // At that instant it is 18:00 on 31 Oct in Los Angeles, too.
+    [InlineData("America/Los_Angeles", 2026, 10, 31)]
+    public async Task The_assessment_date_is_the_organizations_today_not_the_utc_date(
+        string zone, int year, int month, int day)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var data = new RecordingDelinquencyData([]);
+        var strategy = new LateFeeRunStrategy(
+            data,
+            new StubLateFeePolicyData(new Dictionary<Guid, LateFeePolicy>()),
+            new StubPostedSourceRefs(),
+            new StubFundsInTransit(),
+            new StubOrgTimeZone(zone),
+            new StoppedClock(new DateTimeOffset(2026, 11, 1, 1, 0, 0, TimeSpan.Zero)));
+
+        await strategy.PreviewAsync(new RunPeriod(2026, 10), ct);
+        await strategy.PlanAsync(new RunPeriod(2026, 10), [], ct);
+
+        data.AsOf.ShouldBe(new DateOnly(year, month, day));
     }
 
     [Fact]
@@ -257,6 +282,7 @@ public sealed class LateFeeRunStrategyTests
             new StubLateFeePolicyData(policies.ToDictionary(x => x.LeaseId, x => x.Policy)),
             new StubPostedSourceRefs(),
             new StubFundsInTransit(fundsInTransit),
+            new StubOrgTimeZone(),
             new FixedTimeProvider(assessmentDate ?? new DateOnly(2026, 3, 7)));
 
     private static DelinquentLedgerRow DelinquentLease(Guid leaseId) =>
@@ -272,10 +298,16 @@ public sealed class LateFeeRunStrategyTests
             Balance: 1_000m,
             Attribution: new DelinquencyAttribution.AttributedToLease(Guid.NewGuid()));
 
+    /// <summary>Noon UTC on the date: the same calendar date in every organization time zone.</summary>
     private sealed class FixedTimeProvider(DateOnly date) : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() =>
-            new(date.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+            new(date.ToDateTime(new TimeOnly(12, 0)), TimeSpan.Zero);
+    }
+
+    private sealed class StoppedClock(DateTimeOffset now) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => now;
     }
 
     private sealed class RecordingDelinquencyData(IReadOnlyList<DelinquentLedgerRow> rows)

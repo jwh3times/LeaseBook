@@ -1,4 +1,5 @@
 using LeaseBook.Modules.Directory.Domain;
+using LeaseBook.SharedKernel.Time;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -24,6 +25,9 @@ public sealed class OrgSettingsConfiguration : IEntityTypeConfiguration<OrgSetti
                 "ck_org_settings_ach_fee",
                 "ach_fee_rate_bps >= 0 AND ach_fee_rate_bps < 10000 AND ach_fee_fixed >= 0 "
                 + "AND (ach_fee_cap IS NULL OR ach_fee_cap > 0)");
+            t.HasCheckConstraint(
+                "ck_org_settings_time_zone",
+                $"time_zone IN ({DirectorySql.Quote(OrgTimeZones.Supported.Select(zone => zone.Id))})");
         });
 
         builder.HasKey(e => e.Id);
@@ -63,6 +67,10 @@ public sealed class OrgSettingsConfiguration : IEntityTypeConfiguration<OrgSetti
         builder.Property(e => e.AchFeeRateBps).IsRequired().HasDefaultValue(0);
         builder.Property(e => e.AchFeeFixed).IsRequired().HasColumnType("numeric(14,2)").HasDefaultValue(0m);
         builder.Property(e => e.AchFeeCap).HasColumnType("numeric(14,2)");
+
+        // The books' calendar (#642). The check restates the validator's list, so no write path can
+        // store a zone the host is not guaranteed to resolve.
+        builder.Property(e => e.TimeZone).IsRequired().HasMaxLength(64).HasDefaultValue(OrgTimeZones.Default);
 
         // One settings row per org — unique org_id (§C.1, P46).
         builder.HasIndex(e => e.OrgId).IsUnique();

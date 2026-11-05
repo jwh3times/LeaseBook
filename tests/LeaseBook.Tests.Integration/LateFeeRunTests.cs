@@ -15,6 +15,7 @@ using LeaseBook.Modules.Operations.Runs;
 using LeaseBook.SharedKernel;
 using LeaseBook.SharedKernel.Cqrs;
 using LeaseBook.SharedKernel.Tenancy;
+using LeaseBook.SharedKernel.Time;
 using LeaseBook.Tests.Common;
 using LeaseBook.Tests.Integration.Fixtures;
 using Microsoft.EntityFrameworkCore;
@@ -52,7 +53,8 @@ public sealed class LateFeeRunTests(PostgresFixture fixture)
         var ct = TestContext.Current.CancellationToken;
         var ctx = await SetupAsync(HighRentRent, flatFeeOverride: 50m, ct);
         var rentEntryId = await PostRentChargeAsync(ctx, ct);
-        var earliestAssessmentDate = DateOnly.FromDateTime(DateTime.UtcNow);
+        // The fee is dated the organization's today, in its zone (#642), not the UTC date.
+        var earliestAssessmentDate = OrgTodayNow();
 
         JournalEntry? feeEntry = null;
         await RunAsync(ctx.OrgId, async (engine, services) =>
@@ -87,7 +89,7 @@ public sealed class LateFeeRunTests(PostgresFixture fixture)
         feeEntry.ShouldNotBeNull();
         feeEntry!.EntryDate.ShouldBeInRange(
             earliestAssessmentDate,
-            DateOnly.FromDateTime(DateTime.UtcNow));
+            OrgTodayNow());
         feeEntry.AssessesEntryId.ShouldBe(rentEntryId);
     }
 
@@ -467,4 +469,7 @@ public sealed class LateFeeRunTests(PostgresFixture fixture)
         await executor.RunAsSystemAsync(orgId, "test-harness", async () => { result = await work(sender, scope.ServiceProvider); }, ct);
         return result;
     }
+
+    private static DateOnly OrgTodayNow() =>
+        TimeProvider.System.TodayIn(OrgTimeZones.Resolve(OrgTimeZones.Default));
 }

@@ -73,6 +73,10 @@ CMD ["./efbundle"]
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled@sha256:c89a6a61f494f20a5ae302990e814627a8d91b332fd4a8e7c1707c2d4da9555d AS runtime
 WORKDIR /app
 COPY --from=build /app/publish ./
+# The chiseled base ships no tz database, and the host refuses to start without one: every
+# organization's books keep a US time zone (#642, ADR-037). The SDK stage runs the same Ubuntu
+# release, so its tzdata is the one this runtime would have installed.
+COPY --from=build /usr/share/zoneinfo /usr/share/zoneinfo
 ENV ASPNETCORE_HTTP_PORTS=8080
 EXPOSE 8080
 USER $APP_UID

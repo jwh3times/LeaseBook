@@ -17,7 +17,7 @@ namespace LeaseBook.Web.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.12")
+                .HasAnnotation("ProductVersion", "10.0.14")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -1034,6 +1034,14 @@ namespace LeaseBook.Web.Migrations
                         .HasColumnType("text")
                         .HasColumnName("state");
 
+                    b.Property<string>("TimeZone")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasDefaultValue("America/New_York")
+                        .HasColumnName("time_zone");
+
                     b.Property<string>("Zip")
                         .HasColumnType("text")
                         .HasColumnName("zip");
@@ -1054,6 +1062,8 @@ namespace LeaseBook.Web.Migrations
                             t.HasCheckConstraint("ck_org_settings_card_fee", "card_fee_rate_bps >= 0 AND card_fee_rate_bps < 10000 AND card_fee_fixed >= 0 AND (card_fee_cap IS NULL OR card_fee_cap > 0)");
 
                             t.HasCheckConstraint("ck_org_settings_money_negative_display", "money_negative_display IN ('minus','parens')");
+
+                            t.HasCheckConstraint("ck_org_settings_time_zone", "time_zone IN ('America/New_York','America/Chicago','America/Denver','America/Phoenix','America/Los_Angeles','America/Anchorage','Pacific/Honolulu')");
                         });
                 });
 

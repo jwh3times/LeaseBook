@@ -23,6 +23,7 @@ public static class AccountingModuleServiceCollectionExtensions
         services.AddScoped<IReversalService, ReversalService>();
         services.AddScoped<IPostingLock, PostingLock>();
         services.AddScoped<IReconciliationLock, ReconciliationLock>();
+        services.AddScoped<PostingCalendar>();
 
         // One event-template instance behind both surfaces (the catalog and the cutover-only contract).
         services.AddScoped<AccountingEventService>();

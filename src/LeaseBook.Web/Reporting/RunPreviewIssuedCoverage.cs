@@ -8,6 +8,7 @@ using LeaseBook.Modules.Reporting.Delivery;
 using LeaseBook.SharedKernel;
 using LeaseBook.SharedKernel.Cqrs;
 using LeaseBook.Web.Adapters;
+using LeaseBook.Web.Calendar;
 using LeaseBook.Web.Operations;
 using LeaseBook.Web.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -80,7 +81,7 @@ internal sealed class GetRunPreviewIssuedCoverageHandler(
         GetRunPreviewIssuedCoverage query,
         CancellationToken ct)
     {
-        var periodNow = clock.GetUtcNow();
+        var periodNow = await OrgToday.ReadAsync(sender, clock, ct); // the organization's month (#642)
         var runType = RunTypeRoute.Parse(query.Type);
         var period = new RunPeriod(query.Year ?? periodNow.Year, query.Month ?? periodNow.Month);
         var candidates = await engine.EligibleTargetsAsync(runType, period, ct);

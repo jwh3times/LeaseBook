@@ -6,6 +6,7 @@ using LeaseBook.Modules.Directory.Features.Reporting;
 using LeaseBook.Modules.Reporting.Catalog;
 using LeaseBook.Modules.Reporting.Rendering;
 using LeaseBook.SharedKernel.Cqrs;
+using LeaseBook.Web.Calendar;
 
 namespace LeaseBook.Web.Reporting;
 
@@ -16,7 +17,7 @@ namespace LeaseBook.Web.Reporting;
 /// (the composition-root pattern, same as <c>DashboardService</c>). The Reporting module supplies
 /// the catalog and statement assembler; the host supplies the cross-module dispatch.
 /// </summary>
-public sealed class ReportPreviewService(ISender sender)
+public sealed class ReportPreviewService(ISender sender, TimeProvider clock)
 {
     /// <summary>
     /// Runs the named report with the provided filters and returns a generic preview result.
@@ -93,7 +94,7 @@ public sealed class ReportPreviewService(ISender sender)
     private async Task<ReportPreviewResult> PreviewDelinquencyAsync(
         ReportDescriptor descriptor, ReportFilters filters, CancellationToken ct)
     {
-        var asOf = filters.AsOf ?? DateOnly.FromDateTime(DateTime.UtcNow);
+        var asOf = filters.AsOf ?? await OrgToday.ReadAsync(sender, clock, ct); // #642
         var response = await sender.Query(new GetDelinquencyAging(asOf), ct);
         var table = ReportTable.Project(response.Rows,
             new ReportColumn<DelinquencyRow>("tenantId", row => row.TenantId),
@@ -112,7 +113,7 @@ public sealed class ReportPreviewService(ISender sender)
     private async Task<ReportPreviewResult> PreviewMgmtFeeAsync(
         ReportDescriptor descriptor, ReportFilters filters, CancellationToken ct)
     {
-        var now = DateTime.UtcNow;
+        var now = await OrgToday.ReadAsync(sender, clock, ct); // the organization's month (#642)
         var year = filters.Year ?? now.Year;
         var month = filters.Month ?? now.Month;
 

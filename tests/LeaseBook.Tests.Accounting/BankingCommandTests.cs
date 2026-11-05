@@ -4,6 +4,7 @@ using LeaseBook.Modules.Accounting.Domain;
 using LeaseBook.Modules.Accounting.Features.Banking;
 using LeaseBook.Modules.Accounting.Features.LedgerPosting;
 using LeaseBook.Modules.Accounting.Features.Posting.Events;
+using LeaseBook.Modules.Accounting.Posting;
 using LeaseBook.SharedKernel;
 using LeaseBook.SharedKernel.Cqrs;
 using LeaseBook.SharedKernel.Tenancy;
@@ -81,7 +82,7 @@ public sealed class BankingCommandTests(PostgresFixture fixture)
     {
         // Unreachable past the validator; the handler still refuses rather than posting nothing.
         var refused = await Should.ThrowAsync<ValidationException>(() =>
-            new RecordBankAdjustmentHandler(new NoEvents()).Handle(Fee with { Kind = "wire" }, TestContext.Current.CancellationToken));
+            new RecordBankAdjustmentHandler(new NoEvents(), new PostingCalendar(new FixedOrgTimeZone(), TimeProvider.System)).Handle(Fee with { Kind = "wire" }, TestContext.Current.CancellationToken));
 
         refused.Message.ShouldBe("Unknown bank-adjustment kind.");
     }

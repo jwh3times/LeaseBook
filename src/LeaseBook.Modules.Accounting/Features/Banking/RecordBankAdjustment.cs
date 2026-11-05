@@ -3,6 +3,7 @@ using FluentValidation;
 using LeaseBook.Modules.Accounting.Contracts;
 using LeaseBook.Modules.Accounting.Features.LedgerPosting;
 using LeaseBook.Modules.Accounting.Features.Posting.Events;
+using LeaseBook.Modules.Accounting.Posting;
 using LeaseBook.SharedKernel;
 using LeaseBook.SharedKernel.Cqrs;
 
@@ -53,11 +54,13 @@ public sealed class RecordBankAdjustmentValidator : AbstractValidator<RecordBank
     }
 }
 
-internal sealed class RecordBankAdjustmentHandler(IAccountingEvents events)
+internal sealed class RecordBankAdjustmentHandler(IAccountingEvents events, PostingCalendar calendar)
     : ICommandHandler<RecordBankAdjustment, PostResult>
 {
     public async Task<PostResult> Handle(RecordBankAdjustment command, CancellationToken ct)
     {
+        // A bank fee, interest or transfer appears on the bank's statement by the day it is recorded (#642).
+        await calendar.EnsureNotAfterTodayAsync(command.Date, ct);
         var money = new Money(command.Amount);
         var id = command.Kind.ToLowerInvariant() switch
         {

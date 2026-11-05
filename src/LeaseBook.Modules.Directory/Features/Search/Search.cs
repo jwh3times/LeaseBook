@@ -1,4 +1,5 @@
 using FluentValidation;
+using LeaseBook.Modules.Directory.Features.Settings;
 using LeaseBook.SharedKernel.Cqrs;
 using Microsoft.EntityFrameworkCore;
 
@@ -27,13 +28,13 @@ public sealed class SearchValidator : AbstractValidator<Search>
     }
 }
 
-internal sealed class SearchHandler(DbContext db, TimeProvider clock) : IQueryHandler<Search, IReadOnlyList<SearchResult>>
+internal sealed class SearchHandler(DbContext db, OrgCalendar calendar) : IQueryHandler<Search, IReadOnlyList<SearchResult>>
 {
     public async Task<IReadOnlyList<SearchResult>> Handle(Search query, CancellationToken ct)
     {
         var limit = Math.Clamp(query.Limit ?? 20, 1, 50);
         var q = query.Q.Trim();
-        var today = DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
+        var today = await calendar.TodayAsync(ct); // the organization's today, not the UTC date (#642)
 
         // word_similarity (the `<%` operator) finds the query as a fuzzy *substring/word* of the column —
         // so "carter" matches "Jasmine Carter" where whole-string `%` similarity would not. `<%` is

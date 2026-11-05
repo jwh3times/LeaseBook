@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 using FluentValidation;
 using LeaseBook.Modules.Accounting.Contracts;
 using LeaseBook.Modules.Accounting.Features.Posting.Events;
+using LeaseBook.Modules.Accounting.Posting;
 using LeaseBook.SharedKernel.Cqrs;
 
 namespace LeaseBook.Modules.Accounting.Features.LedgerPosting;
@@ -31,11 +32,14 @@ public sealed class CollectDepositValidator : AbstractValidator<CollectDeposit>
     }
 }
 
-internal sealed class CollectDepositHandler(ITenantPostingDimensions dimensions, IAccountingEvents events)
+internal sealed class CollectDepositHandler(
+    ITenantPostingDimensions dimensions, IAccountingEvents events, PostingCalendar calendar)
     : ICommandHandler<CollectDeposit, PostResult>
 {
     public async Task<PostResult> Handle(CollectDeposit command, CancellationToken ct)
     {
+        // A deposit is received by the day it is recorded (#642).
+        await calendar.EnsureNotAfterTodayAsync(command.Date, ct);
         var dims = await LedgerPostingMaps.ResolveAsync(dimensions, command.TenantId, command.Date, ct);
         var id = await events.PostAsync(
             new DepositCollected(

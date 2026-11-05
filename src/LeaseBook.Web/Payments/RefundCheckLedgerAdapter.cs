@@ -5,7 +5,7 @@ using LeaseBook.SharedKernel.Cqrs;
 namespace LeaseBook.Web.Payments;
 
 /// <summary>Delegates Payments' refund-check ledger port to Accounting's refund commands (ADR-007, #473).</summary>
-internal sealed class RefundCheckLedgerAdapter(ISender sender, TimeProvider clock) : IRefundCheckLedger
+internal sealed class RefundCheckLedgerAdapter(ISender sender) : IRefundCheckLedger
 {
     public async Task<IReadOnlyList<RefundableFunds>> GetRefundableAsync(
         IReadOnlyCollection<Guid> tenantIds, CancellationToken ct) =>
@@ -23,7 +23,8 @@ internal sealed class RefundCheckLedgerAdapter(ISender sender, TimeProvider cloc
     }
 
     public async Task<Guid> VoidAsync(Guid entryId, string reason, CancellationToken ct) =>
-        (await sender.Send(new VoidRefundCheck(entryId, reason, DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime)), ct))
+        // No as-of: Accounting dates the void the organization's today, not the UTC date (#642).
+        (await sender.Send(new VoidRefundCheck(entryId, reason, null), ct))
         .EntryId;
 
     public async Task<IReadOnlyDictionary<Guid, RefundLedgerStatus>> GetStatusesAsync(

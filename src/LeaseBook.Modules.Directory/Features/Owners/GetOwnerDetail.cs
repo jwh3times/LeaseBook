@@ -1,6 +1,7 @@
 using LeaseBook.Modules.Directory.Contracts;
 using LeaseBook.Modules.Directory.Domain;
 using LeaseBook.Modules.Directory.Features.Properties;
+using LeaseBook.Modules.Directory.Features.Settings;
 using LeaseBook.Modules.Directory.Features.Shared;
 using LeaseBook.Modules.Directory.Features.Units;
 using LeaseBook.SharedKernel.Cqrs;
@@ -17,7 +18,7 @@ public sealed record OwnerDetail(
     Guid Id, string Name, OwnerContact Contact, int? DefaultMgmtFeeBps, decimal ReserveAmount,
     IReadOnlyList<PropertyListRow> Properties, decimal Operating, decimal Deposits, decimal Total);
 
-internal sealed class GetOwnerDetailHandler(DbContext db, IOwnerFinancials ownerFinancials, TimeProvider clock)
+internal sealed class GetOwnerDetailHandler(DbContext db, IOwnerFinancials ownerFinancials, OrgCalendar calendar)
     : IQueryHandler<GetOwnerDetail, OwnerDetail?>
 {
     public async Task<OwnerDetail?> Handle(GetOwnerDetail query, CancellationToken ct)
@@ -39,7 +40,7 @@ internal sealed class GetOwnerDetailHandler(DbContext db, IOwnerFinancials owner
             .Where(unit => propertyIds.Contains(unit.PropertyId))
             .Select(unit => new { unit.Id, unit.PropertyId })
             .ToListAsync(ct);
-        var today = DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
+        var today = await calendar.TodayAsync(ct); // the organization's today, not the UTC date (#642)
         var occupiedIds = await UnitOccupancy.OccupiedIdsAsync(db, units.Select(unit => unit.Id).ToList(), today, ct);
         var unitStats = units
             .GroupBy(unit => unit.PropertyId)
