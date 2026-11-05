@@ -18,6 +18,20 @@ next section.
 
 No unreleased changes.
 
+## [0.29.1] - 2026-11-04
+
+### Fixed
+
+- The `dotnet-api` guidance now gives the dispatcher's whole pipeline: telemetry outermost, then
+  validation, then the handler, for commands and queries alike. It named only the validation step,
+  which hid the decorator that records every dispatch's span, a validation failure or a handler's
+  exception included (#704).
+- The `react-frontend` guidance's form rule now cites #711 for the money dialogs: Enter does not post
+  money in them, and their save will run the fields' own checks first. It said the question was
+  still open under #561. The coverage baseline keeps what was measured before the import wizard could
+  save a column mapping, and adds that its map step now saves one and a browser test reaches the
+  route (#714).
+
 ## [0.29.0] - 2026-11-04
 
 ### Added

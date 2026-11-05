@@ -3,7 +3,7 @@
 - **Audience:** Contributors, reviewers and maintainers
 - **Status:** Living measurement record
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-11-01
+- **Last reviewed:** 2026-11-04
 
 LeaseBook measures what its test suites exercise: which lines and branches of each module ran, and
 which API routes the browser tests called. This page records how that is measured, how to run each
@@ -401,8 +401,9 @@ The 22 routes no test reached, by what they have in common:
   invitation whose delivery to the local test inbox failed, and no screen makes a delivery fail. The
   catalogue records it as a permanent exemption.
 - **One each:** saving a bank CSV mapping, one tenant-portal payment, one operations run, and
-  `GET /api/health`. No screen saves a CSV mapping: the import wizard offers the saved ones and has
-  no control that saves one (#567). The web client has a function that reads one tenant-portal
+  `GET /api/health`. No screen saved a CSV mapping when this was measured: the import wizard offered
+  the saved ones and had no control that saved one. Its map step now saves one, and a browser test
+  reaches the route (#567). The web client has a function that reads one tenant-portal
   payment and no screen calls it: the portal reads the tenant's whole list. The catalogue records it
   as a permanent exemption. The web client has a function that reads one operations run with its
   items and no screen calls it: run history lists each run's counts and total and opens nothing.
