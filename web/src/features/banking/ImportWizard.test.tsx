@@ -785,6 +785,35 @@ describe('ImportWizard saving a mapping', () => {
         name: 'First Citizens export',
       }),
     ).toBeInTheDocument();
+
+    // "Saved" describes the columns that were sent, so it goes once they change.
+    await userEvent.click(screen.getByLabelText('Separate debit and credit columns'));
+    expect(screen.queryByRole('status', { name: 'Mapping saved' })).not.toBeInTheDocument();
+  });
+
+  // The replace notice needs the saved list, so a save waits for it rather than guessing (#567).
+  it('does not save while the saved mappings cannot be read, and says why', async () => {
+    const saves: unknown[] = [];
+    server.use(
+      http.get('/api/banking/banks/:id/mappings', () =>
+        HttpResponse.json({ detail: 'Saved mappings unavailable.' }, { status: 503 }),
+      ),
+      http.post('/api/banking/banks/:id/mappings', async ({ request }) => {
+        saves.push(await request.json());
+        return HttpResponse.json({ id: 'm1' });
+      }),
+    );
+    renderWizard();
+    await uploadAndMap();
+    await userEvent.selectOptions(screen.getByLabelText('Amount column'), 'Amount');
+    await userEvent.type(screen.getByLabelText('Save this mapping as'), 'My export{Enter}');
+
+    expect(screen.getByRole('button', { name: 'Save mapping' })).toBeDisabled();
+    expect(screen.getByLabelText('Save this mapping as')).toHaveAccessibleDescription(
+      /could not be read, so this one cannot be saved now/,
+    );
+    expect(screen.getByRole('button', { name: 'Preview matches' })).toBeEnabled();
+    expect(saves).toEqual([]);
   });
 
   it('says a name already saved for the account will be replaced', async () => {
@@ -838,6 +867,10 @@ describe('ImportWizard saving a mapping', () => {
     expect(await screen.findByText('Saved mappings are unavailable.')).toBeInTheDocument();
     expect(screen.getByText('Reference: save-ref-1234')).toBeInTheDocument();
     expect(screen.queryByRole('status', { name: 'Mapping saved' })).not.toBeInTheDocument();
+
+    // The failure belongs to what was sent, and goes once the name changes.
+    await userEvent.type(screen.getByLabelText('Save this mapping as'), ' 2');
+    expect(screen.queryByText('Saved mappings are unavailable.')).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Preview matches' }));
     expect(await screen.findByText(/^Imported 1 line/)).toBeInTheDocument();

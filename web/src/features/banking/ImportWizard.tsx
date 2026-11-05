@@ -72,7 +72,9 @@ export function ImportWizard({ bankAccountId, onClose, onConfirmed }: ImportWiza
   const queryClient = useQueryClient();
   const savedMappings = useColumnMappings(bankAccountId);
   const [mappingName, setMappingName] = useState('');
-  const [savedAs, setSavedAs] = useState<string | null>(null);
+  // The name and columns last sent to be saved. Its outcome is shown only while the form still holds
+  // them, so "Saved" never describes columns changed since, and an old failure clears on an edit.
+  const [saveSent, setSaveSent] = useState<{ name: string; columns: string } | null>(null);
 
   // The server is the one reader of the header row, so any column offered maps (#651). A mutation, not a
   // query: the file's text would make a poor cache key. Its variables are that text too, so the cache
@@ -158,16 +160,18 @@ export function ImportWizard({ bankAccountId, onClose, onConfirmed }: ImportWiza
 
   // Saves the columns just chosen under a name, for the next import into this account (#567, ADR-015).
   // Its error is its own, so a failed save never stands in the way of the import.
+  // The mutation reports success only once the refetch below has settled, so the list already offers
+  // the mapping when "Saved" shows.
   const saveMapping = useMutation<unknown, BankingError, string>({
     mutationFn: (name) => saveColumnMapping(bankAccountId, { name, columnMap }),
-    onSuccess: async (_saved, name) => {
-      setSavedAs(name);
-      await queryClient.invalidateQueries({ queryKey: columnMappingsKey(bankAccountId) });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: columnMappingsKey(bankAccountId) }),
   });
   const nameToSave = mappingName.trim();
-  // The server keys a mapping by its exact name and overwrites one already saved under it.
-  const replaces = savedMappings.data?.some((m) => m.name === nameToSave) ?? false;
+  const columnsToSave = JSON.stringify(columnMap);
+  const saveShown = saveSent?.name === nameToSave && saveSent.columns === columnsToSave;
+  // The server keys a mapping by its exact name and overwrites one already saved under it. Whether this
+  // name is one of them is known only from the saved list, so saving waits for it.
+  const replaces = savedMappings.data?.some((m) => m.name === nameToSave) === true;
 
   const confirmMutation = useMutation<unknown, BankingError>({
     mutationFn: () => confirmMatches(importId, buildDecisions(preview)),
@@ -363,7 +367,7 @@ export function ImportWizard({ bankAccountId, onClose, onConfirmed }: ImportWiza
                 className="col gap6"
                 onSubmit={(event) => {
                   event.preventDefault();
-                  setSavedAs(null);
+                  setSaveSent({ name: nameToSave, columns: columnsToSave });
                   saveMapping.mutate(nameToSave);
                 }}
               >
@@ -375,30 +379,46 @@ export function ImportWizard({ bankAccountId, onClose, onConfirmed }: ImportWiza
                     id="mapping-name"
                     value={mappingName}
                     placeholder="e.g. First Citizens export"
-                    aria-describedby={replaces ? 'mapping-name-replaces' : undefined}
-                    onChange={(e) => {
-                      setMappingName(e.target.value);
-                      setSavedAs(null);
-                    }}
+                    aria-describedby={
+                      savedMappings.isError
+                        ? 'mapping-name-unchecked'
+                        : replaces && !(saveShown && saveMapping.isSuccess)
+                          ? 'mapping-name-replaces'
+                          : undefined
+                    }
+                    onChange={(e) => setMappingName(e.target.value)}
                   />
                   <Button
                     type="submit"
-                    disabled={!canMap || nameToSave === '' || saveMapping.isPending}
+                    disabled={
+                      !canMap ||
+                      nameToSave === '' ||
+                      !savedMappings.isSuccess ||
+                      saveMapping.isPending
+                    }
                   >
                     Save mapping
                   </Button>
                 </div>
-                {replaces && (
-                  <span id="mapping-name-replaces" className="t3 fs12">
-                    “{nameToSave}” is already saved for this account. Saving replaces it.
+                {savedMappings.isError ? (
+                  <span id="mapping-name-unchecked" className="t3 fs12">
+                    The saved mappings could not be read, so this one cannot be saved now without
+                    risking replacing one. You can still import with it.
                   </span>
+                ) : (
+                  replaces &&
+                  !(saveShown && saveMapping.isSuccess) && (
+                    <span id="mapping-name-replaces" className="t3 fs12">
+                      “{nameToSave}” is already saved for this account. Saving replaces it.
+                    </span>
+                  )
                 )}
-                {savedAs !== null && (
+                {saveShown && saveMapping.isSuccess && (
                   <p role="status" aria-label="Mapping saved" className="fs12">
-                    Saved “{savedAs}” for this account.
+                    Saved “{saveSent.name}” for this account.
                   </p>
                 )}
-                {saveMapping.isError && (
+                {saveShown && saveMapping.isError && (
                   <ApiErrorNotice
                     error={saveMapping.error}
                     fallback="Couldn’t save the mapping. You can still import with it."

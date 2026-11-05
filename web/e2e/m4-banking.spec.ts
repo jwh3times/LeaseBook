@@ -1,4 +1,4 @@
-import { expect, type Page } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
 import { runA11y, visualSnapshot } from './helpers';
 import { test } from './test';
 
@@ -212,7 +212,7 @@ test.describe.serial('M4 banking', () => {
       });
       return dialog;
     };
-    const rowErrorShown = async (dialog: ReturnType<Page['getByRole']>) => {
+    const rowErrorShown = async (dialog: Locator) => {
       await dialog.getByRole('button', { name: 'Preview matches' }).click();
       await expect(dialog.getByRole('alert')).toContainText('1 row was not imported.');
       await dialog.getByRole('button', { name: 'Cancel' }).click();
