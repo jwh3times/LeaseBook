@@ -93,7 +93,7 @@ var result = await sender.Send(new MyCommand(…), ct);
 var result = await sender.Query(new MyQuery(…), ct);
 ```
 
-The pipeline runs: `ValidationCommandDecorator` → `Handler`. Validators run automatically — never call `.Validate()` manually in a handler.
+The pipeline runs, outermost first: `TelemetryCommandDecorator` → `ValidationCommandDecorator` → handler for a command, and `TelemetryQueryDecorator` → `ValidationQueryDecorator` → handler for a query. Telemetry times every dispatch, so its span records a validation failure and a handler's exception alike. Validators run automatically — never call `.Validate()` manually in a handler.
 
 ---
 
