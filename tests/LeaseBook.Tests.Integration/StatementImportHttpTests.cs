@@ -4,6 +4,7 @@ using LeaseBook.Modules.Accounting.Domain;
 using LeaseBook.Modules.Accounting.Features.LedgerPosting;
 using LeaseBook.Modules.Accounting.Features.Ledgers;
 using LeaseBook.Modules.Banking.Features.Import;
+using LeaseBook.Modules.Banking.Import;
 using LeaseBook.Modules.Directory.Features.BankAccounts;
 using LeaseBook.SharedKernel;
 using LeaseBook.SharedKernel.Cqrs;
@@ -425,6 +426,40 @@ public sealed class StatementImportHttpTests(PostgresFixture fixture)
             sender.Query(new ReadStatementHeaders("Date,Amount\n"), ct));
 
         refused.Message.ShouldBe("ReadStatementHeaders requires an ambient organization context.");
+    }
+
+    // #567: the import wizard saves the columns it was given under a name, so the next import into the
+    // same account can pick them (ADR-015). A mapping belongs to its bank account, and saving a name that
+    // account already has replaces that mapping's columns rather than adding a second one.
+    [Fact]
+    public async Task A_saved_mapping_is_offered_for_its_account_and_saving_its_name_again_replaces_it()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var setup = await SetupAsync(ct);
+        var client = await LoggedInClientAsync(setup, ct);
+        var otherBankId = await AddBankAccountAsync(setup, ct);
+        var url = $"/api/banking/banks/{setup.TrustBankId}/mappings";
+
+        var first = await PostOkAsync<SaveColumnMappingResult>(client, url,
+            new { name = "Bank export", columnMap = AmountColumnMap }, ct);
+        var saved = (await GetAsync<ColumnMappingsResponse>(client, url, ct)).Mappings.ShouldHaveSingleItem();
+        (saved.Id, saved.Name).ShouldBe((first.Id, "Bank export"));
+        saved.ColumnMap.ShouldBe(new ColumnMap("Date", "Description", Amount: "Amount"));
+
+        // The same name again, now with debit and credit columns: one mapping, the new columns.
+        var again = await PostOkAsync<SaveColumnMappingResult>(client, url,
+            new { name = "Bank export", columnMap = new { date = "Posted", description = "Memo", debit = "Out", credit = "In" } }, ct);
+        again.Id.ShouldBe(first.Id);
+        var replaced = (await GetAsync<ColumnMappingsResponse>(client, url, ct)).Mappings.ShouldHaveSingleItem();
+        replaced.ColumnMap.ShouldBe(new ColumnMap("Posted", "Memo", Debit: "Out", Credit: "In"));
+
+        // Another name is a second mapping; another account has none of them.
+        await PostOkAsync<SaveColumnMappingResult>(client, url,
+            new { name = "Another export", columnMap = AmountColumnMap }, ct);
+        (await GetAsync<ColumnMappingsResponse>(client, url, ct)).Mappings.Select(m => m.Name)
+            .ShouldBe(["Another export", "Bank export"]);
+        (await GetAsync<ColumnMappingsResponse>(client, $"/api/banking/banks/{otherBankId}/mappings", ct))
+            .Mappings.ShouldBeEmpty();
     }
 
     private sealed record ValidationProblemBody(

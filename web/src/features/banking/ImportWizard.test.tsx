@@ -721,3 +721,125 @@ describe('ImportWizard', () => {
     ]);
   });
 });
+
+// #567: the map step saves the columns just chosen under a name (ADR-015), so the saved-mapping list
+// the wizard offers can hold something. Nothing else in the product saves one.
+describe('ImportWizard saving a mapping', () => {
+  /** Serves the saved mappings from `stored` and records each save, keeping `stored` in step. */
+  function serveMappings(stored: { id: string; name: string; columnMap: object }[]) {
+    const saves: unknown[] = [];
+    let reads = 0;
+    server.use(
+      http.get('/api/banking/banks/:id/mappings', () => {
+        reads += 1;
+        return HttpResponse.json({ mappings: stored });
+      }),
+      http.post('/api/banking/banks/:id/mappings', async ({ request }) => {
+        const body = (await request.json()) as { name: string; columnMap: object };
+        saves.push(body);
+        stored.push({ id: `m${stored.length + 1}`, name: body.name, columnMap: body.columnMap });
+        return HttpResponse.json({ id: `m${stored.length}` });
+      }),
+    );
+    return { saves, reads: () => reads };
+  }
+
+  async function uploadAndMap() {
+    await userEvent.upload(
+      screen.getByLabelText('Statement CSV'),
+      new File([CSV], 'statement.csv', { type: 'text/csv' }),
+    );
+    await userEvent.selectOptions(await screen.findByLabelText('Date column'), 'Date');
+    await userEvent.selectOptions(screen.getByLabelText('Description column'), 'Description');
+  }
+
+  it('saves the chosen columns under a name, and offers the mapping straight away', async () => {
+    const { saves, reads } = serveMappings([]);
+    renderWizard();
+    await uploadAndMap();
+    const save = screen.getByRole('button', { name: 'Save mapping' });
+    const name = screen.getByLabelText('Save this mapping as');
+
+    // Not yet: the amount column is unmapped, and then no name is entered.
+    await userEvent.type(name, 'First Citizens export');
+    expect(save).toBeDisabled();
+    await userEvent.selectOptions(screen.getByLabelText('Amount column'), 'Amount');
+    expect(save).toBeEnabled();
+    await userEvent.clear(name);
+    expect(save).toBeDisabled();
+
+    await userEvent.type(name, '  First Citizens export  {Enter}');
+    expect(await screen.findByRole('status', { name: 'Mapping saved' })).toHaveTextContent(
+      'Saved “First Citizens export” for this account.',
+    );
+    expect(saves).toEqual([
+      {
+        bankAccountId: 'acct1',
+        name: 'First Citizens export',
+        columnMap: { date: 'Date', description: 'Description', amount: 'Amount' },
+      },
+    ]);
+    expect(reads()).toBe(2);
+    expect(
+      within(screen.getByLabelText('Saved mapping')).getByRole('option', {
+        name: 'First Citizens export',
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it('says a name already saved for the account will be replaced', async () => {
+    serveMappings([
+      {
+        id: 'm1',
+        name: 'Old export',
+        columnMap: { date: 'Date', description: 'Description', amount: 'Amount' },
+      },
+    ]);
+    renderWizard();
+    await uploadAndMap();
+    await userEvent.selectOptions(screen.getByLabelText('Amount column'), 'Amount');
+
+    await userEvent.type(screen.getByLabelText('Save this mapping as'), 'Old export');
+    expect(screen.getByLabelText('Save this mapping as')).toHaveAccessibleDescription(
+      '“Old export” is already saved for this account. Saving replaces it.',
+    );
+    await userEvent.type(screen.getByLabelText('Save this mapping as'), ' 2');
+    expect(screen.getByLabelText('Save this mapping as')).not.toHaveAccessibleDescription(
+      /already saved/,
+    );
+  });
+
+  it('shows a failed save with its reference, and the import still goes ahead', async () => {
+    server.use(
+      http.get('/api/banking/banks/:id/mappings', () => HttpResponse.json({ mappings: [] })),
+      http.post('/api/banking/banks/:id/mappings', () =>
+        HttpResponse.json(
+          { detail: 'Saved mappings are unavailable.', correlationId: 'save-ref-1234' },
+          { status: 503 },
+        ),
+      ),
+      http.post('/api/banking/banks/:id/imports', () =>
+        HttpResponse.json({
+          importId: 'imp1',
+          imported: 1,
+          broughtBack: 0,
+          skippedDuplicates: 0,
+          errors: [],
+        }),
+      ),
+      http.get('/api/banking/imports/:id/matches', () => HttpResponse.json(PREVIEW)),
+    );
+    renderWizard();
+    await uploadAndMap();
+    await userEvent.selectOptions(screen.getByLabelText('Amount column'), 'Amount');
+    await userEvent.type(screen.getByLabelText('Save this mapping as'), 'My export');
+    await userEvent.click(screen.getByRole('button', { name: 'Save mapping' }));
+
+    expect(await screen.findByText('Saved mappings are unavailable.')).toBeInTheDocument();
+    expect(screen.getByText('Reference: save-ref-1234')).toBeInTheDocument();
+    expect(screen.queryByRole('status', { name: 'Mapping saved' })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Preview matches' }));
+    expect(await screen.findByText(/^Imported 1 line/)).toBeInTheDocument();
+  });
+});

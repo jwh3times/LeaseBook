@@ -1,12 +1,13 @@
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
-import { Badge, type BadgeTone, Button, EmptyState, Icon, Money, Select } from '@/design';
+import { Badge, type BadgeTone, Button, EmptyState, Icon, Input, Money, Select } from '@/design';
 import { ApiErrorNotice } from '@/components/ApiErrorNotice';
 import { ErrorAction } from '@/components/ErrorAction';
 import { Modal } from '@/components/Modal';
 import {
   type BankingError,
   type ColumnMap,
+  columnMappingsKey,
   confirmMatches,
   type ConfirmDecision,
   fetchMatchPreview,
@@ -15,6 +16,7 @@ import {
   type MatchPreviewResponse,
   type MatchPreviewRow,
   readStatementHeaders,
+  saveColumnMapping,
   useColumnMappings,
 } from './banking';
 
@@ -67,7 +69,10 @@ export function ImportWizard({ bankAccountId, onClose, onConfirmed }: ImportWiza
   const [preview, setPreview] = useState<MatchPreviewResponse | null>(null);
   const [error, setError] = useState<BankingError | null>(null);
 
+  const queryClient = useQueryClient();
   const savedMappings = useColumnMappings(bankAccountId);
+  const [mappingName, setMappingName] = useState('');
+  const [savedAs, setSavedAs] = useState<string | null>(null);
 
   // The server is the one reader of the header row, so any column offered maps (#651). A mutation, not a
   // query: the file's text would make a poor cache key. Its variables are that text too, so the cache
@@ -150,6 +155,19 @@ export function ImportWizard({ bankAccountId, onClose, onConfirmed }: ImportWiza
     },
     onError: (err) => setError(err),
   });
+
+  // Saves the columns just chosen under a name, for the next import into this account (#567, ADR-015).
+  // Its error is its own, so a failed save never stands in the way of the import.
+  const saveMapping = useMutation<unknown, BankingError, string>({
+    mutationFn: (name) => saveColumnMapping(bankAccountId, { name, columnMap }),
+    onSuccess: async (_saved, name) => {
+      setSavedAs(name);
+      await queryClient.invalidateQueries({ queryKey: columnMappingsKey(bankAccountId) });
+    },
+  });
+  const nameToSave = mappingName.trim();
+  // The server keys a mapping by its exact name and overwrites one already saved under it.
+  const replaces = savedMappings.data?.some((m) => m.name === nameToSave) ?? false;
 
   const confirmMutation = useMutation<unknown, BankingError>({
     mutationFn: () => confirmMatches(importId, buildDecisions(preview)),
@@ -341,6 +359,52 @@ export function ImportWizard({ bankAccountId, onClose, onConfirmed }: ImportWiza
                 />
                 This statement uses separate debit / credit columns
               </label>
+              <form
+                className="col gap6"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  setSavedAs(null);
+                  saveMapping.mutate(nameToSave);
+                }}
+              >
+                <label htmlFor="mapping-name" className="pf-eyebrow">
+                  Save this mapping as
+                </label>
+                <div className="row gap8">
+                  <Input
+                    id="mapping-name"
+                    value={mappingName}
+                    placeholder="e.g. First Citizens export"
+                    aria-describedby={replaces ? 'mapping-name-replaces' : undefined}
+                    onChange={(e) => {
+                      setMappingName(e.target.value);
+                      setSavedAs(null);
+                    }}
+                  />
+                  <Button
+                    type="submit"
+                    disabled={!canMap || nameToSave === '' || saveMapping.isPending}
+                  >
+                    Save mapping
+                  </Button>
+                </div>
+                {replaces && (
+                  <span id="mapping-name-replaces" className="t3 fs12">
+                    “{nameToSave}” is already saved for this account. Saving replaces it.
+                  </span>
+                )}
+                {savedAs !== null && (
+                  <p role="status" aria-label="Mapping saved" className="fs12">
+                    Saved “{savedAs}” for this account.
+                  </p>
+                )}
+                {saveMapping.isError && (
+                  <ApiErrorNotice
+                    error={saveMapping.error}
+                    fallback="Couldn’t save the mapping. You can still import with it."
+                  />
+                )}
+              </form>
             </>
           ))}
 
