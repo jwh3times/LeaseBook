@@ -60,7 +60,11 @@ it('refreshes queued delivery until a failure exposes the retry action', async (
   renderPanel();
   expect(await screen.findByText('Queued for test inbox')).toBeInTheDocument();
   expect(
-    await screen.findByRole('button', { name: 'Retry test delivery' }, { timeout: 4000 }),
+    await screen.findByRole(
+      'button',
+      { name: /^Retry test delivery for delayed@example\.test,/ },
+      { timeout: 4000 },
+    ),
   ).toBeInTheDocument();
 });
 
@@ -97,9 +101,53 @@ it.each([
     ),
   );
   renderPanel();
-  await userEvent.click(await screen.findByRole('button', { name: label }));
+  await userEvent.click(
+    await screen.findByRole('button', {
+      name: new RegExp(`^${label} for pending@example\\.test,`),
+    }),
+  );
   expect(await screen.findByText('Reference: permission-changed')).toBeInTheDocument();
   expect(screen.getByText('Only administrators can manage portal access.')).toBeInTheDocument();
+});
+
+// #571: a screen reader lists the buttons by name, so each invitation's buttons say which invitation
+// they act on. The name starts with what the button shows (WCAG 2.5.3) and carries the address. The
+// server lets one address hold two open invitations, so the expiry each row shows tells those apart.
+it('names each invitation action by its address and expiry, keeping the visible label', async () => {
+  const invitation = { status: 'pending', deliveryStatus: 'failed' };
+  server.use(
+    http.get('/api/portal-access/tenant/tenant-a', () =>
+      HttpResponse.json({
+        canManage: true,
+        users: [],
+        invitations: [
+          { ...invitation, id: 'a1', email: 'ana@example.test', expiresAt: '2026-10-03T12:00:00Z' },
+          { ...invitation, id: 'b1', email: 'ben@example.test', expiresAt: '2026-10-03T12:00:00Z' },
+          { ...invitation, id: 'a2', email: 'ana@example.test', expiresAt: '2026-10-04T09:30:00Z' },
+        ],
+      }),
+    ),
+  );
+  renderPanel();
+  await screen.findByText('ben@example.test');
+
+  const buttons = ['Replace invitation', 'Cancel invitation', 'Retry test delivery'].flatMap(
+    (label) => {
+      const found = screen.getAllByRole('button', { name: new RegExp(`^${label} for `) });
+      for (const button of found) expect(button).toHaveTextContent(label);
+      return found;
+    },
+  );
+  expect(buttons).toHaveLength(9);
+  for (const email of ['ana@example.test', 'ben@example.test']) {
+    expect(
+      screen.getAllByRole('button', { name: new RegExp(`^Replace invitation for ${email}`) }),
+    ).toHaveLength(email.startsWith('ana') ? 2 : 1);
+  }
+  const names = screen
+    .getAllByRole('button')
+    .map((button) => button.getAttribute('aria-label') ?? button.textContent);
+  expect(new Set(names).size).toBe(names.length);
 });
 
 it('revokes an active user only after confirmation and refreshes the access list', async () => {

@@ -332,8 +332,14 @@ export function PaymentPanel({ staff = false }: { staff?: boolean }) {
                     {payment.reviewNote && (
                       <span>Review closed by staff: {payment.reviewNote}</span>
                     )}
+                    {/* Each row action names its payment, so a screen reader's list of buttons tells
+                        the rows apart; the name starts with the visible label (#571). */}
                     {payment.canRetry && admin && (
-                      <Button disabled={retry.isPending} onClick={() => retry.mutate(payment.id)}>
+                      <Button
+                        disabled={retry.isPending}
+                        onClick={() => retry.mutate(payment.id)}
+                        aria-label={`Retry operation for payment ${payment.id}`}
+                      >
                         Retry operation
                       </Button>
                     )}
@@ -341,6 +347,7 @@ export function PaymentPanel({ staff = false }: { staff?: boolean }) {
                       <Button
                         disabled={postReturn.isPending}
                         onClick={() => postReturn.mutate(payment.id)}
+                        aria-label={`Post return for payment ${payment.id}`}
                       >
                         Post return
                       </Button>
@@ -382,7 +389,10 @@ export function PaymentPanel({ staff = false }: { staff?: boolean }) {
                           </div>
                         </form>
                       ) : (
-                        <Button onClick={() => setClosing({ id: payment.id, note: '' })}>
+                        <Button
+                          onClick={() => setClosing({ id: payment.id, note: '' })}
+                          aria-label={`Close review of payment ${payment.id}`}
+                        >
                           Close review…
                         </Button>
                       ))}

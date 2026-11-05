@@ -455,7 +455,12 @@ test('a card dispute sends the payment to staff review, posts nothing, and an ad
   await expect(review.getByRole('button')).toHaveCount(1);
   await scanStaff(admin);
 
-  await closeReview(admin, review, review.getByRole('button', { name: 'Close review…' }), note);
+  await closeReview(
+    admin,
+    review,
+    review.getByRole('button', { name: `Close review of payment ${payment.id}`, exact: true }),
+    note,
+  );
   await expect(review).toContainText('Test payment review closed — no receipt recorded');
   await expect(review.getByRole('button')).toHaveCount(0);
   await scanStaff(admin);
@@ -553,7 +558,12 @@ test('a refund in full and a refund of part each send a receipted payment to sta
     if (how === 'in full') await scanStaff(admin);
 
     const note = `Refunded ${how} at the processor; ledger corrected ${run}`;
-    await closeReview(admin, review, review.getByRole('button', { name: 'Close review…' }), note);
+    await closeReview(
+      admin,
+      review,
+      review.getByRole('button', { name: `Close review of payment ${made.id}`, exact: true }),
+      note,
+    );
     await expect(review).toContainText(
       'Test payment review closed — original receipt remains recorded',
     );
@@ -687,7 +697,9 @@ test('a payout that fails goes to staff review whether or not it had posted, and
   await expect(stranded).toContainText(
     'The payout carrying this payment was closed with nothing posted, so it will not bring this payment to the bank.',
   );
-  await expect(stranded.getByRole('button', { name: 'Close review…' })).toBeVisible();
+  await expect(
+    stranded.getByRole('button', { name: `Close review of payment ${first.id}`, exact: true }),
+  ).toBeVisible();
   await scanStaff(admin);
   await staff.close();
 
