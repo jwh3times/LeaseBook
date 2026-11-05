@@ -189,44 +189,53 @@ export function PortalAccessPanel({
           {query.data.invitations.length === 0 ? (
             <p>No invitations yet.</p>
           ) : (
-            query.data.invitations.map((invitation) => (
-              <div key={invitation.id} className="col gap6">
-                <strong>{invitation.email}</strong>
-                <span>
-                  <Badge dot>{invitation.status}</Badge> ·{' '}
-                  <span>{deliveryLabel(invitation.deliveryStatus)}</span>
-                </span>
-                <span className="t3 fs13">
-                  Expires {new Date(invitation.expiresAt).toLocaleString()}
-                </span>
-                {query.data.canManage &&
-                  (invitation.status === 'pending' || invitation.status === 'expired') && (
-                    <div className="row gap8">
-                      <Button
-                        disabled={busy}
-                        onClick={() => void changeInvitation(invitation.id, 'replace')}
-                      >
-                        Replace invitation
-                      </Button>
-                      <Button
-                        disabled={busy}
-                        onClick={() => void changeInvitation(invitation.id, 'cancel')}
-                      >
-                        Cancel invitation
-                      </Button>
-                      {invitation.status === 'pending' &&
-                        invitation.deliveryStatus === 'failed' && (
-                          <Button
-                            disabled={busy}
-                            onClick={() => void changeInvitation(invitation.id, 'retry')}
-                          >
-                            Retry test delivery
-                          </Button>
-                        )}
-                    </div>
-                  )}
-              </div>
-            ))
+            query.data.invitations.map((invitation) => {
+              const expires = new Date(invitation.expiresAt).toLocaleString();
+              // Each action names the invitation it acts on, so a screen reader's list of buttons
+              // tells the rows apart; the name starts with the visible label (#571). One address can
+              // hold two open invitations, so the expiry the row shows is part of the name.
+              const actionName = (label: string) =>
+                `${label} for ${invitation.email}, expires ${expires}`;
+              return (
+                <div key={invitation.id} className="col gap6">
+                  <strong>{invitation.email}</strong>
+                  <span>
+                    <Badge dot>{invitation.status}</Badge> ·{' '}
+                    <span>{deliveryLabel(invitation.deliveryStatus)}</span>
+                  </span>
+                  <span className="t3 fs13">Expires {expires}</span>
+                  {query.data.canManage &&
+                    (invitation.status === 'pending' || invitation.status === 'expired') && (
+                      <div className="row gap8">
+                        <Button
+                          disabled={busy}
+                          onClick={() => void changeInvitation(invitation.id, 'replace')}
+                          aria-label={actionName('Replace invitation')}
+                        >
+                          Replace invitation
+                        </Button>
+                        <Button
+                          disabled={busy}
+                          onClick={() => void changeInvitation(invitation.id, 'cancel')}
+                          aria-label={actionName('Cancel invitation')}
+                        >
+                          Cancel invitation
+                        </Button>
+                        {invitation.status === 'pending' &&
+                          invitation.deliveryStatus === 'failed' && (
+                            <Button
+                              disabled={busy}
+                              onClick={() => void changeInvitation(invitation.id, 'retry')}
+                              aria-label={actionName('Retry test delivery')}
+                            >
+                              Retry test delivery
+                            </Button>
+                          )}
+                      </div>
+                    )}
+                </div>
+              );
+            })
           )}
         </div>
       )}

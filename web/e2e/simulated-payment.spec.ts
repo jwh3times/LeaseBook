@@ -269,7 +269,9 @@ test('simulation survives reload and posts only after separate bank evidence @sc
   await signIn(admin, { email: 'admin-a@payments.test', password: 'Payment-Fixture-2026!' });
   await admin.goto('/operations');
   const payment = admin.getByRole('listitem').filter({ hasText: operation.id });
-  await payment.getByRole('button', { name: 'Post return', exact: true }).click();
+  await payment
+    .getByRole('button', { name: `Post return for payment ${operation.id}`, exact: true })
+    .click();
   await expect(
     payment.getByText('Simulated payment returned by the bank — the receipt was reversed'),
   ).toBeVisible();
@@ -369,7 +371,9 @@ test('an administrator closes the review of a disputed payment with a note @scen
   await expect(review.getByRole('button', { name: 'Post return' })).toHaveCount(0);
   await expect(review.getByRole('button', { name: 'Retry operation' })).toHaveCount(0);
 
-  await review.getByRole('button', { name: 'Close review…' }).focus();
+  await review
+    .getByRole('button', { name: `Close review of payment ${payment.id}`, exact: true })
+    .focus();
   await admin.keyboard.press('Enter');
   const resolution = review.getByLabel('How was this resolved? (staff only)');
   await expect(resolution).toBeFocused();
